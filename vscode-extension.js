@@ -1,8 +1,32 @@
 const vscode = require('vscode')
-const { SemanticTokensLegend, SemanticTokensBuilder, Position, Range, languages } = vscode
+const { SemanticTokensLegend, SemanticTokensBuilder, languages } = vscode
 
-const tokenTypes = ['function', 'method', 'macro', 'variable', 'parameter', 'keyword', 'number', 'property', 'operator']
+const tokenTypes = ['function', 'macro', 'variable', 'parameter', 'keyword', 'method', 'number', 'property', 'operator']
+
+const tokenTypesToIndexMap = new Map(tokenTypes.map((type, idx) => [type, idx]))
+
+const encodeTokenType = (tokenType) => {
+  if (tokenTypesToIndexMap.has(tokenType)) return tokenTypesToIndexMap.get(tokenType)
+  if (tokenType === 'notInLegend') return tokenTypesToIndexMap.size + 2
+  return 0
+}
+
 const tokenModifiers = ['declaration', 'definition', 'defaultLibrary', 'static', 'local']
+
+const tokenModifiersToIndex = new Map(tokenModifiers.map((mod, idx) => [mod, idx]))
+
+const encodeTokenModifiers = (strTokenModifiers = []) => {
+  let result = 0
+  for (let i = 0; i < strTokenModifiers.length; i++) {
+    const tokenModifier = strTokenModifiers[i]
+    if (tokenModifiersToIndex.has(tokenModifier)) {
+      result = result | (1 << tokenModifiersToIndex.get(tokenModifier))
+    } else if (tokenModifier === 'notInLegend') {
+      result = result | (1 << (tokenModifiers.size + 2))
+    }
+  }
+  return result
+}
 const legend = new SemanticTokensLegend(tokenTypes, tokenModifiers)
 
 const assert = (cond, msg) => {
@@ -29,22 +53,26 @@ const lexerFromDocument = (document) => {
         character = 0
         continue
       }
-      const tokStart = new Position(line, character)
       const c = lineText[character]
       if (isWhitespace(c)) {
         character++
         continue
       }
       if (c === '[' || c === ']') {
-        const before = new Position(line, character)
-        const after = new Position(line, character + 1)
+        const startCol = character
         character++
-        return { tokenType: c, range: new Range(before, after) }
+        return { tokenType: c, line, character: startCol, length: 1 }
       }
+      const tokStartCol = character
       assert(isWordChar(c), `illegal character ${c}`)
       while (character < lineText.length && isWordChar(lineText[character])) character++
-      const range = new Range(tokStart, new Position(line, character))
-      return { tokenType: 'word', text: document.getText(range), range }
+      return {
+        tokenType: 'word',
+        text: lineText.slice(tokStartCol, character),
+        line,
+        character: tokStartCol - 1,
+        length: character - tokStartCol + 1,
+      }
     }
     return null
   }
@@ -57,6 +85,10 @@ const specialForms = new Set(['quote', 'if', 'let', 'loop', 'cont', 'func', 'mac
  */
 const provideDocumentSemanticTokens = (document) => {
   const tokensBuilder = new SemanticTokensBuilder(legend)
+  const pushToken = (token, tokenType, tokenModifiers) => {
+    const { line, character, length } = token
+    tokensBuilder.push(line, character + 1, length - 1, encodeTokenType(tokenType))
+  }
 
   const lexNext = lexerFromDocument(document)
   let token = lexNext()
@@ -67,25 +99,26 @@ const provideDocumentSemanticTokens = (document) => {
       const peekTok = token
       nextToken()
       if (peekTok.tokenType !== '[') {
-        tokensBuilder.push(peekTok.range, 'variable')
+        pushToken(peekTok, 'variable')
         return
       }
     }
     let listIndex = 0
     while (true) {
       if (token === null) return
-      const { tokenType, range, text } = token
+      const { tokenType } = token
       if (tokenType === ']') break
 
       if (tokenType === 'word') {
+        const { text } = token
         if (listIndex === 0) {
-          if (specialForms.has(text)) tokensBuilder.push(range, 'keyword')
+          if (specialForms.has(text)) pushToken(token, 'keyword')
           else {
             // todo check in env if its a macro else assume function
-            tokensBuilder.push(range, 'function')
+            pushToken(token, 'function')
           }
         } else {
-          tokensBuilder.push(range, 'variable')
+          pushToken(token, 'variable')
         }
       }
       go()
