@@ -63,15 +63,15 @@ const lexerFromDocument = (document) => {
         character++
         return { tokenType: c, line, character: startCol, length: 1 }
       }
-      const tokStartCol = character
+      const tokStartCol = character - 1
       assert(isWordChar(c), `illegal character ${c}`)
       while (character < lineText.length && isWordChar(lineText[character])) character++
       return {
         tokenType: 'word',
-        text: lineText.slice(tokStartCol, character),
+        text: lineText.slice(tokStartCol + 1, character),
         line,
-        character: tokStartCol - 1,
-        length: character - tokStartCol + 1,
+        character: tokStartCol,
+        length: character - tokStartCol,
       }
     }
     return null
