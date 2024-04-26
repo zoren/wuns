@@ -20,7 +20,8 @@
         "id": "wuns",
         "extensions": [
           ".wuns"
-        ]
+        ],
+        "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
