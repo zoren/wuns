@@ -63,12 +63,12 @@ const lexerFromDocument = (document) => {
         character++
         return { tokenType: c, line, character: startCol, length: 1 }
       }
-      const tokStartCol = character - 1
       assert(isWordChar(c), `illegal character ${c}`)
+      const tokStartCol = character
       while (character < lineText.length && isWordChar(lineText[character])) character++
       return {
         tokenType: 'word',
-        text: lineText.slice(tokStartCol + 1, character),
+        text: lineText.slice(tokStartCol, character),
         line,
         character: tokStartCol,
         length: character - tokStartCol,
@@ -87,7 +87,7 @@ const provideDocumentSemanticTokens = (document) => {
   const tokensBuilder = new SemanticTokensBuilder(legend)
   const pushToken = (token, tokenType, tokenModifiers) => {
     const { line, character, length } = token
-    tokensBuilder.push(line, character + 1, length - 1, encodeTokenType(tokenType))
+    tokensBuilder.push(line, character, length, encodeTokenType(tokenType))
   }
 
   const lexNext = lexerFromDocument(document)
