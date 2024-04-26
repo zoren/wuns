@@ -78,8 +78,12 @@ const provideDocumentSemanticTokens = (document) => {
       if (tokenType === ']') break
 
       if (tokenType === 'word') {
-        if (listIndex === 0 && specialForms.has(text)) {
-          tokensBuilder.push(range, 'keyword')
+        if (listIndex === 0) {
+          if (specialForms.has(text)) tokensBuilder.push(range, 'keyword')
+          else {
+            // todo check in env if its a macro else assume function
+            tokensBuilder.push(range, 'function')
+          }
         } else {
           tokensBuilder.push(range, 'variable')
         }
