@@ -3,6 +3,9 @@
   "patterns": [
     {
       "include": "#form"
+    },
+    {
+      "include": "#word"
     }
   ],
   "repository": {
@@ -18,7 +21,7 @@
     },
     "word": {
       "match": "[a-z0-9.-=]+",
-      "name": "keyword.word"
+      "name": "variable.other.wuns"
     },
     "bracket-form": {
       "begin": "\\[",
