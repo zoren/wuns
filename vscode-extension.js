@@ -10,7 +10,10 @@ const assert = (cond, msg) => {
 }
 
 const isWhitespace = (c) => c === ' ' || c === '\n'
-const isWordChar = (c) => /[a-z0-9.=]|-/.test(c)
+const isWordChar = (c) => {
+  const cc = c.charCodeAt(0)
+  return (cc >= 97 && cc <= 122) || (cc >= 48 && cc <= 57) || cc === 46 || cc === 61 || cc === 45
+}
 
 /**
  * @param {vscode.TextDocument} document
