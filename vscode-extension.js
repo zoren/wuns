@@ -16,29 +16,31 @@ const isWordChar = (c) => /[a-z0-9.=]|-/.test(c)
  * @param {vscode.TextDocument} document
  */
 const lexerFromDocument = (document) => {
-  let position = new Position(0, 0)
+  let line = 0
+  let character = 0
   return () => {
-    while (position.line < document.lineCount) {
-      const lineText = document.lineAt(position.line).text
-      if (position.character >= lineText.length) {
-        position = new Position(position.line + 1, 0)
+    while (line < document.lineCount) {
+      const lineText = document.lineAt(line).text
+      if (character >= lineText.length) {
+        line++
+        character = 0
         continue
       }
-      const tokStart = position
-      const c = lineText[position.character]
+      const tokStart = new Position(line, character)
+      const c = lineText[character]
       if (isWhitespace(c)) {
-        position = new Position(position.line, position.character + 1)
+        character++
         continue
       }
       if (c === '[' || c === ']') {
-        const oldPos = position
-        position = new Position(position.line, position.character + 1)
-        return { tokenType: c, range: new Range(oldPos, position) }
+        const before = new Position(line, character)
+        const after = new Position(line, character + 1)
+        character++
+        return { tokenType: c, range: new Range(before, after) }
       }
       assert(isWordChar(c), `illegal character ${c}`)
-      while (position.character < lineText.length && isWordChar(lineText[position.character]))
-        position = new Position(position.line, position.character + 1)
-      const range = new Range(tokStart, position)
+      while (character < lineText.length && isWordChar(lineText[character])) character++
+      const range = new Range(tokStart, new Position(line, character))
       return { tokenType: 'word', text: document.getText(range), range }
     }
     return null
