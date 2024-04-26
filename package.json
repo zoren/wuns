@@ -5,6 +5,9 @@
   "engines": {
     "vscode": "^1.88.0"
   },
+  "activationEvents": [
+    "onLanguage:wuns"
+  ],
   "contributes": {
     "commands": [
       {
