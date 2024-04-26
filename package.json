@@ -1,0 +1,32 @@
+{
+  "name": "wuns",
+  "version": "0.0.1",
+  "description": "the wuns programming language extension",
+  "engines": {
+    "vscode": "^1.88.0"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "wunslang.helloWorld",
+        "title": "Hello World"
+      }
+    ],
+    "languages": [
+      {
+        "id": "wuns",
+        "extensions": [
+          ".wuns"
+        ]
+      }
+    ],
+    "grammars": [
+      {
+        "language": "wuns",
+        "scopeName": "source.wuns",
+        "path": "./wuns.tmGrammar.json"
+      }
+    ]
+  },
+  "main": "./vscode-extension.js"
+}
