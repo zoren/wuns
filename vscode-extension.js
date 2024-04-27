@@ -38,7 +38,9 @@ const isWordCharCode = (cc) => {
 }
 
 const specialForms = new Set(['quote', 'if', 'let', 'loop', 'cont', 'func', 'macro'])
-
+const keywordTokenType = encodeTokenType('keyword')
+const functionTokenType = encodeTokenType('function')
+const variableTokenType = encodeTokenType('variable')
 /**
  * @param {vscode.TextDocument} document
  */
@@ -61,32 +63,35 @@ const makeAllTokensBuilder = (document) => {
         continue
       }
       const cc = lineText.charCodeAt(character)
-      if (cc === 32 || cc === 9) {
-        character++
-        continue
+      switch (cc) {
+        case 32:
+        case 9:
+          character++
+          continue
+        case 91:
+        case 93:
+          startCol = character
+          tokenType = cc
+          character++
+          return
       }
       startCol = character
-      if (cc === 91 || cc === 93) {
-        tokenType = lineText[character]
-        character++
-        return
-      }
       if (!isWordCharCode(cc)) throw new Error(`illegal character code ${cc}`)
       character++
       while (character < lineText.length && isWordCharCode(lineText.charCodeAt(character))) character++
-      tokenType = 'word'
+      tokenType = 97
       return
     }
     done = true
   }
   nextToken()
   const pushToken = (tokenType) => {
-    tokensBuilder.push(line, startCol, character - startCol, encodeTokenType(tokenType))
+    tokensBuilder.push(line, startCol, character - startCol, tokenType)
   }
   const go = () => {
     if (done) return
-    if (tokenType !== '[') {
-      pushToken('variable')
+    if (tokenType !== 91) {
+      pushToken(variableTokenType)
       nextToken()
       return
     }
@@ -94,17 +99,17 @@ const makeAllTokensBuilder = (document) => {
     let listIndex = 0
     while (true) {
       if (done) return
-      if (tokenType === ']') break
-      if (tokenType === 'word') {
+      if (tokenType === 93) break
+      if (tokenType === 97) {
         if (listIndex === 0) {
           const text = lineText.slice(startCol, character)
-          if (specialForms.has(text)) pushToken('keyword')
+          if (specialForms.has(text)) pushToken(keywordTokenType)
           else {
             // todo check in env if its a macro else assume function
-            pushToken('function')
+            pushToken(functionTokenType)
           }
         } else {
-          pushToken('variable')
+          pushToken(variableTokenType)
         }
       }
       go()
