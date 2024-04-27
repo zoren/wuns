@@ -360,10 +360,7 @@ const mkFuncEnv = (outputChannel) => {
 
   funcEnv.set('bit-and', (a, b) => String((Number(a) & Number(b)) | 0))
   funcEnv.set('bit-or', (a, b) => String(Number(a) | Number(b) | 0))
-  funcEnv.set('bit-xor', (a, b) => {
-    console.log('bit-xor', a, b, Number(a), Number(b), Number(a) | 0)
-    return String((Number(a) ^ Number(b)) | 0)
-  })
+  funcEnv.set('bit-xor', (a, b) => String((Number(a) ^ Number(b)) | 0))
 
   funcEnv.set('eq', (a, b) => {
     assert(typeof a === 'string', 'eq expects strings')
@@ -443,7 +440,7 @@ const interpretCurrentFile = () => {
   const funcEnv = mkFuncEnv(outputChannel)
   const { gogoeval } = makeEvaluator(funcEnv)
   for (const form of topLevelList) gogoeval(flattenForm(form))
-  window.showInformationMessage('interpret ' + topLevelList.length + ' forms')
+  window.showInformationMessage('interpreted ' + topLevelList.length + ' forms')
 }
 
 /**
@@ -451,14 +448,13 @@ const interpretCurrentFile = () => {
  */
 function activate(context) {
   console.log('starting wuns lang extension: ' + context.extensionPath)
-  {
-    context.subscriptions.push(
-      commands.registerCommand('wunslang.helloWorld', () => {
-        window.showInformationMessage('wuns [here] 007 [if [quote 32]]')
-      }),
-      commands.registerCommand('wunslang.interpret', interpretCurrentFile),
-    )
-  }
+
+  context.subscriptions.push(
+    commands.registerCommand('wunslang.helloWorld', () => {
+      window.showInformationMessage('wuns [here] 007 [if [quote 32]]')
+    }),
+    commands.registerCommand('wunslang.interpret', interpretCurrentFile),
+  )
 
   const provider = {
     provideDocumentSemanticTokens,
