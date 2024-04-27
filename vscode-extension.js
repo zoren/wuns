@@ -1,4 +1,72 @@
+const parseDocument = (document) => {
+  let line = 0
+  let character = 0
+  let startCol = 0
+  let lineText = ''
+  let tokenType = ''
+  let done = false
+
+  const nextToken = () => {
+    while (line < document.lineCount) {
+      lineText = document.lineAt(line).text
+      if (character >= lineText.length) {
+        line++
+        character = 0
+        continue
+      }
+      const c = lineText[character]
+      switch (c) {
+        case ' ':
+          character++
+          continue
+        case '[':
+        case ']':
+          startCol = character
+          tokenType = c
+          character++
+          return
+      }
+      startCol = character
+      if (!isWordCharCode(c.charCodeAt(0))) throw new Error(`illegal character code ${c}`)
+      character++
+      while (character < lineText.length && isWordCharCode(lineText.charCodeAt(character))) character++
+      tokenType = 'word'
+      return
+    }
+    tokenType = ''
+    done = true
+  }
+  nextToken()
+  const go = () => {
+    while (tokenType === ']') nextToken()
+    if (tokenType === 'word') {
+      const wordToken = { line, character: startCol, text: lineText.slice(startCol, character) }
+      nextToken()
+      return wordToken
+    }
+    if (tokenType !== '[') throw new Error('unexpected token type ' + tokenType)
+    nextToken()
+    const list = []
+    list.startToken = { line, character }
+    while (true) {
+      if (done) return list
+      if (tokenType === ']') {
+        list.endToken = { line, character }
+        nextToken()
+        return list
+      }
+      list.push(go())
+    }
+  }
+  const topLevelList = []
+  while (!done) {
+    topLevelList.push(go())
+  }
+  return topLevelList
+}
+
 const vscode = require('vscode')
+
 const { SemanticTokensLegend, SemanticTokensBuilder, languages } = vscode
 
 const tokenTypes = [
@@ -50,116 +118,76 @@ const keywordTokenType = encodeTokenType('keyword')
 const functionTokenType = encodeTokenType('function')
 const macroTokenType = encodeTokenType('macro')
 const variableTokenType = encodeTokenType('variable')
+const parameterTokenType = encodeTokenType('parameter')
 const stringTokenType = encodeTokenType('string')
 
 const declarationTokenModifier = encodeTokenModifiers(['declaration'])
 const localDeclarationTokenModifier = encodeTokenModifiers(['declaration', 'local'])
-/**
- * @param {vscode.TextDocument} document
- */
-const makeAllTokensBuilder = (document) => {
+
+const tokenBuilderForParseTree = () => {
   const tokensBuilder = new SemanticTokensBuilder(legend)
-
-  let line = 0
-  let character = 0
-  let startCol = 0
-  let lineText = ''
-  let tokenType = ''
-  let done = false
-
-  const nextToken = () => {
-    while (line < document.lineCount) {
-      lineText = document.lineAt(line).text
-      if (character >= lineText.length) {
-        line++
-        character = 0
-        continue
-      }
-      const cc = lineText.charCodeAt(character)
-      switch (cc) {
-        case 32:
-        case 9:
-          character++
-          continue
-        case 91:
-        case 93:
-          startCol = character
-          tokenType = cc
-          character++
-          return
-      }
-      startCol = character
-      if (!isWordCharCode(cc)) throw new Error(`illegal character code ${cc}`)
-      character++
-      while (character < lineText.length && isWordCharCode(lineText.charCodeAt(character))) character++
-      tokenType = 97
+  const pushToken = ({ line, character, text }, tokenType, tokenModifiers) => {
+    if (text) tokensBuilder.push(line, character, text.length, tokenType, tokenModifiers)
+  }
+  const go = (node) => {
+    const { text } = node
+    if (text) {
+      pushToken(node, variableTokenType)
       return
     }
-    done = true
-  }
-  nextToken()
-  const pushToken = (tokenType, tokenModifiers) => {
-    tokensBuilder.push(line, startCol, character - startCol, tokenType, tokenModifiers)
-  }
-  const stack = []
-  const go = () => {
-    if (done) return
-    if (tokenType !== 91) {
-      pushToken(variableTokenType)
-      nextToken()
-      return
-    }
-    nextToken()
-    let listIndex = 0
-    while (true) {
-      if (done) {
-        stack.length = 0
-        return
-      }
-      if (tokenType === 93) {
-        stack.pop()
-        break
-      }
-      if (tokenType === 97) {
-        if (stack.findIndex((frame) => frame === 'quote') !== -1) pushToken(stringTokenType)
-        else if(stack.at(-1) === 'let' || stack.at(-1) === 'loop') {
-          if (listIndex % 2 === 0) pushToken(variableTokenType, localDeclarationTokenModifier)
-          else pushToken(variableTokenType)
-        } else if (listIndex === 0) {
-          const text = lineText.slice(startCol, character)
-          stack.push(text)
-          if (specialForms.has(text)) {
-            pushToken(keywordTokenType)
-          } else {
-            pushToken(functionTokenType)
+    if (Array.isArray(node)) {
+      if (node.length === 0) return
+      const [head, ...tail] = node
+      const headText = head.text
+      if (!headText) return
+      switch (headText) {
+        case 'quote': {
+          pushToken(head, keywordTokenType)
+          const goQ = (node) => {
+            if (node.text) pushToken(node, stringTokenType)
+            else {
+              for (const child of node) goQ(child)
+            }
           }
-        } else if (listIndex === 1) {
-          if (stack.length > 0) {
-            const stackTop = stack.at(-1)
-            if (stackTop === 'macro') pushToken(macroTokenType, declarationTokenModifier)
-            else if (stackTop === 'func') pushToken(functionTokenType, declarationTokenModifier)
-            else if (stackTop === 'quote') pushToken(stringTokenType)
-            else pushToken(variableTokenType)
-          } else pushToken(variableTokenType)
-        } else {
-          if (stack.length > 1) {
-            const stackTop = stack.at(-1)
-            if (stackTop === 'macro') pushToken(macroTokenType)
-            else if (stackTop === 'func') pushToken(functionTokenType)
-            else pushToken(variableTokenType)
-          } else pushToken(variableTokenType)
+          if (tail.length >= 1) goQ(tail[0])
+          break
         }
+        case 'if':
+          pushToken(head, keywordTokenType)
+          for (const child of tail) go(child)
+          break
+        case 'let':
+        case 'loop': {
+          pushToken(head, keywordTokenType)
+          const [bindings, ...body] = tail
+          for (let i = 0; i < bindings.length - 1; i += 2) {
+            pushToken(bindings[i], variableTokenType, localDeclarationTokenModifier)
+            go(bindings[i + 1])
+          }
+          for (const child of body) go(child)
+          break
+        }
+        case 'cont':
+          pushToken(head, keywordTokenType)
+          for (const child of tail) go(child)
+          break
+        case 'func':
+        case 'macro': {
+          pushToken(head, keywordTokenType)
+          const [fmName, parameters, ...body] = tail
+          pushToken(fmName, headText === 'func' ? functionTokenType : macroTokenType, declarationTokenModifier)
+          for (const parameter of parameters) pushToken(parameter, parameterTokenType)
+          for (const child of body) go(child)
+          break
+        }
+        default:
+          pushToken(head, functionTokenType)
+          for (const child of tail) go(child)
+          break
       }
-      go()
-      listIndex++
     }
-    nextToken()
   }
-  while (!done) {
-    go()
-  }
-
-  return tokensBuilder
+  return { tokensBuilder, build: go }
 }
 
 let prevSemTokens = null
@@ -168,9 +196,33 @@ let prevSemTokens = null
  * @param {vscode.TextDocument} document
  */
 const provideDocumentSemanticTokens = (document, cancellingToken) => {
-  const tokensBuilder = makeAllTokensBuilder(document)
-  return (prevSemTokens = tokensBuilder.build('1'))
+  const before = performance.now()
+  // if (prevSemTokens !== null && prevSemTokens.version === document.version) return prevSemTokens
+  const topLevelList = parseDocument(document)
+  const { tokensBuilder, build } = tokenBuilderForParseTree()
+  for (const node of topLevelList) {
+    build(node)
+  }
+  // const tokensBuilder = makeAllTokensBuilder(document)
+  prevSemTokens = tokensBuilder.build('1')
+  prevSemTokens.version = document.version
+  const after = performance.now()
+  const elapsed = after - before
+  console.log('time taken', Math.round(elapsed * 1000) / 1000, 'ms', document.version)
+  return prevSemTokens
 }
+
+// provideDocumentSemanticTokensEdits?(document: TextDocument, previousResultId: string, token: CancellationToken): ProviderResult<SemanticTokens | SemanticTokensEdits>;
+// const provideDocumentSemanticTokensEdits = (document, previousResultId, cancellingToken) => {
+//   if (prevSemTokens === null) return provideDocumentSemanticTokens(document, cancellingToken)
+//   if (prevSemTokens.resultId !== previousResultId) return provideDocumentSemanticTokens(document, cancellingToken)
+//   const { data } = prevSemTokens
+//   const prevResult = Number(previousResultId)
+//   console.log({ prevResult, documentVersion: document.version })
+//   const tokensBuilder = makeAllTokensBuilder(document)
+//   return (prevSemTokens = tokensBuilder.build(String(prevResult + 1)))
+// }
+
 /**
  * @param {vscode.ExtensionContext} context
  */
@@ -187,10 +239,11 @@ function activate(context) {
 
   const provider = {
     provideDocumentSemanticTokens,
+    // provideDocumentSemanticTokensEdits,
   }
 
   const selector = { language: 'wuns', scheme: 'file' }
-
+  languages.registerOnTypeFormattingEditProvider
   context.subscriptions.push(languages.registerDocumentSemanticTokensProvider(selector, provider, legend))
   console.log('Congratulations, your extension "wunslang" is now active!')
 }
