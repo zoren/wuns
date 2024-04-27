@@ -10,6 +10,10 @@
       {
         "command": "wunslang.helloWorld",
         "title": "Hello World"
+      },
+      {
+        "command": "wunslang.interpret",
+        "title": "Interpret current file"
       }
     ],
     "languages": [
