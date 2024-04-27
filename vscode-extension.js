@@ -80,10 +80,7 @@ const lexerFromDocument = (document) => {
 
 const specialForms = new Set(['quote', 'if', 'let', 'loop', 'cont', 'func', 'macro'])
 
-/**
- * @param {vscode.TextDocument} document
- */
-const provideDocumentSemanticTokens = (document) => {
+const makeAllTokensBuilder = (document) => {
   const tokensBuilder = new SemanticTokensBuilder(legend)
   const pushToken = (token, tokenType, tokenModifiers) => {
     const { line, character, length } = token
@@ -130,9 +127,18 @@ const provideDocumentSemanticTokens = (document) => {
     go()
   }
 
-  return tokensBuilder.build()
+  return tokensBuilder
 }
 
+let prevSemTokens = null
+
+/**
+ * @param {vscode.TextDocument} document
+ */
+const provideDocumentSemanticTokens = (document, cancellingToken) => {
+  const tokensBuilder = makeAllTokensBuilder(document)
+  return (prevSemTokens = tokensBuilder.build('1'))
+}
 /**
  * @param {vscode.ExtensionContext} context
  */
