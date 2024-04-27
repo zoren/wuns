@@ -63,9 +63,7 @@ const parseDocument = (document) => {
     }
   }
   const topLevelList = []
-  while (!done) {
-    topLevelList.push(go())
-  }
+  while (!done) topLevelList.push(go())
   return topLevelList
 }
 
@@ -200,13 +198,10 @@ let prevSemTokens = null
  */
 const provideDocumentSemanticTokens = (document, cancellingToken) => {
   const before = performance.now()
-  // if (prevSemTokens !== null && prevSemTokens.version === document.version) return prevSemTokens
+  if (prevSemTokens !== null && prevSemTokens.version === document.version) return prevSemTokens
   const topLevelList = parseDocument(document)
   const { tokensBuilder, build } = tokenBuilderForParseTree()
-  for (const node of topLevelList) {
-    build(node)
-  }
-  // const tokensBuilder = makeAllTokensBuilder(document)
+  for (const node of topLevelList) build(node)
   prevSemTokens = tokensBuilder.build('1')
   prevSemTokens.version = document.version
   const after = performance.now()
@@ -352,7 +347,7 @@ const print = (x) => {
   return `[${x.map(print).join(' ')}]`
 }
 
-const mkFuncEnv = () => {
+const mkFuncEnv = (outputChannel) => {
   const funcEnv = new Map()
   const assert = (cond, msg) => {
     if (!cond) throw new Error('built in failed: ' + msg)
@@ -421,7 +416,7 @@ const mkFuncEnv = () => {
   })
   let gensym = 0
   funcEnv.set('gensym', () => String(gensym++))
-  funcEnv.set('log', (a) => console.log(print(a)) || a)
+  funcEnv.set('log', (a) => outputChannel.appendLine(print(a)))
 
   funcEnv.set('abort', () => {
     throw new Error("wuns 'abort'")
@@ -439,11 +434,13 @@ const flattenForm = (form) => {
 const { commands, window } = vscode
 
 const interpretCurrentFile = () => {
+  const outputChannel = window.createOutputChannel('wuns output')
+  outputChannel.show()
   const { activeTextEditor } = window
   if (!activeTextEditor) return
   const { document } = activeTextEditor
   const topLevelList = parseDocument(document)
-  const funcEnv = mkFuncEnv()
+  const funcEnv = mkFuncEnv(outputChannel)
   const { gogoeval } = makeEvaluator(funcEnv)
   for (const form of topLevelList) gogoeval(flattenForm(form))
   window.showInformationMessage('interpret ' + topLevelList.length + ' forms')
