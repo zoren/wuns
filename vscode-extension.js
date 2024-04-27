@@ -1,7 +1,18 @@
 const vscode = require('vscode')
 const { SemanticTokensLegend, SemanticTokensBuilder, languages } = vscode
 
-const tokenTypes = ['function', 'macro', 'variable', 'parameter', 'keyword', 'method', 'number', 'property', 'operator']
+const tokenTypes = [
+  'function',
+  'macro',
+  'variable',
+  'parameter',
+  'keyword',
+  'method',
+  'string',
+  'number',
+  'property',
+  'operator',
+]
 
 const tokenTypesToIndexMap = new Map(tokenTypes.map((type, idx) => [type, idx]))
 
@@ -39,6 +50,7 @@ const keywordTokenType = encodeTokenType('keyword')
 const functionTokenType = encodeTokenType('function')
 const macroTokenType = encodeTokenType('macro')
 const variableTokenType = encodeTokenType('variable')
+const stringTokenType = encodeTokenType('string')
 
 const declarationTokenModifier = encodeTokenModifiers(['declaration'])
 /**
@@ -108,12 +120,13 @@ const makeAllTokensBuilder = (document) => {
         break
       }
       if (tokenType === 97) {
+        if (stack.findIndex((frame) => frame === 'quote') !== -1) pushToken(stringTokenType)
         if (listIndex === 0) {
           const text = lineText.slice(startCol, character)
           stack.push(text)
-          if (specialForms.has(text)) pushToken(keywordTokenType)
-          else {
-            // todo check in env if its a macro else assume function
+          if (specialForms.has(text)) {
+            pushToken(keywordTokenType)
+          } else {
             pushToken(functionTokenType)
           }
         } else if (listIndex === 1) {
@@ -121,6 +134,7 @@ const makeAllTokensBuilder = (document) => {
             const stackTop = stack.at(-1)
             if (stackTop === 'macro') pushToken(macroTokenType, declarationTokenModifier)
             else if (stackTop === 'func') pushToken(functionTokenType, declarationTokenModifier)
+            else if (stackTop === 'quote') pushToken(stringTokenType)
             else pushToken(variableTokenType)
           } else pushToken(variableTokenType)
         } else {
