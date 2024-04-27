@@ -227,8 +227,7 @@ const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
 const symbolContinue = Symbol.for('wuns-continue')
 
 const makeEvaluator = (funcEnv) => {
-  const apply = (f, args) => {
-    const { params, restParam, bodies } = f
+  const apply = ({ params, restParam, bodies }, args) => {
     const varValues = new Map()
     for (let i = 0; i < params.length; i++) varValues.set(params[i], args[i])
     if (restParam) varValues.set(restParam, makeList(...args.slice(params.length)))
@@ -352,39 +351,44 @@ const mkFuncEnv = ({ log }) => {
   const assert = (cond, msg) => {
     if (!cond) throw new Error('built in failed: ' + msg)
   }
-
+  const number = (s) => {
+    const n = Number(s)
+    assert(!isNaN(n), 'number expected: ' + s)
+    return n
+  }
   // would be cool to do in a host-func special form
-  funcEnv.set('add', (a, b) => String((Number(a) + Number(b)) | 0))
-  funcEnv.set('sub', (a, b) => String((Number(a) - Number(b)) | 0))
-  funcEnv.set('mul', (a, b) => String((Number(a) * Number(b)) | 0))
+  funcEnv.set('add', (a, b) => String((number(a) + number(b)) | 0))
+  funcEnv.set('sub', (a, b) => String((number(a) - number(b)) | 0))
+  funcEnv.set('mul', (a, b) => String((number(a) * number(b)) | 0))
 
-  funcEnv.set('bit-and', (a, b) => String((Number(a) & Number(b)) | 0))
-  funcEnv.set('bit-or', (a, b) => String(Number(a) | Number(b) | 0))
-  funcEnv.set('bit-xor', (a, b) => String((Number(a) ^ Number(b)) | 0))
+  funcEnv.set('bit-and', (a, b) => String((number(a) & number(b)) | 0))
+  funcEnv.set('bit-or', (a, b) => String(number(a) | number(b) | 0))
+  funcEnv.set('bit-xor', (a, b) => String((number(a) ^ number(b)) | 0))
 
   const boolToWord = (b) => (b ? '1' : '0')
 
   funcEnv.set('eq', (a, b) => {
+    // should we allow eq to compare non numbers?
     assert(typeof a === 'string', 'eq expects strings')
     assert(typeof b === 'string', 'eq expects strings')
     return boolToWord(a === b)
   })
-  funcEnv.set('lt', (a, b) => boolToWord(Number(a) < Number(b)))
-  funcEnv.set('gt', (a, b) => boolToWord(Number(a) > Number(b)))
-  funcEnv.set('ge', (a, b) => boolToWord(Number(a) >= Number(b)))
-  funcEnv.set('le', (a, b) => boolToWord(Number(a) <= Number(b)))
+  funcEnv.set('lt', (a, b) => boolToWord(number(a) < number(b)))
+  funcEnv.set('gt', (a, b) => boolToWord(number(a) > number(b)))
+  funcEnv.set('ge', (a, b) => boolToWord(number(a) >= number(b)))
+  funcEnv.set('le', (a, b) => boolToWord(number(a) <= number(b)))
 
   funcEnv.set('is-word', (s) => boolToWord(typeof s === 'string'))
   funcEnv.set('is-list', (f) => boolToWord(Array.isArray(f)))
 
   funcEnv.set('size', (a) => String(Number(a.length)))
   funcEnv.set('at', (v, i) => {
-    const ni = Number(i)
+    const ni = number(i)
     assert(ni >= -v.length && ni < v.length, 'index out of bounds: ' + i)
     if (typeof v === 'string') return String(v.at(ni).charCodeAt(0))
     return v.at(ni)
   })
-  funcEnv.set('slice', (v, i, j) => Object.freeze(v.slice(Number(i), Number(j))))
+  funcEnv.set('slice', (v, i, j) => Object.freeze(v.slice(number(i), number(j))))
   // would be nice to do without these two, as we would prefer no builtin var args
   funcEnv.set('concat', (...args) => Object.freeze(args.flat()))
   funcEnv.set('concat-words', (...ws) => ws.join(''))
@@ -407,7 +411,7 @@ const mkFuncEnv = ({ log }) => {
       .map((c) => {
         if (typeof c !== 'string') throw new Error('word expects words')
         assert(isDecIntWord(c), 'word expects word chars: ' + c)
-        const s = String.fromCharCode(parseInt(c, 10))
+        const s = String.fromCharCode(number(c))
         // assert(isWordChar(s), 'word expects word chars: '+s)
         return s
       })
