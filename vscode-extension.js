@@ -33,9 +33,7 @@ const assert = (cond, msg) => {
   if (!cond) throw new Error('assert failed: ' + msg)
 }
 
-const isWhitespace = (c) => c === ' ' || c === '\n'
-const isWordChar = (c) => {
-  const cc = c.charCodeAt(0)
+const isWordCharCode = (cc) => {
   return (cc >= 97 && cc <= 122) || (cc >= 48 && cc <= 57) || cc === 46 || cc === 61 || cc === 45
 }
 
@@ -63,18 +61,20 @@ const makeAllTokensBuilder = (document) => {
         continue
       }
       const c = lineText[character]
-      if (isWhitespace(c)) {
+      const cc = lineText.charCodeAt(character)
+      if (cc === 32 || cc === 9) {
         character++
         continue
       }
       startCol = character
-      if (c === '[' || c === ']') {
+      if (cc === 91 || cc === 93) {
         character++
         tokenType = c
         return
       }
-      assert(isWordChar(c), `illegal character ${c}`)
-      while (character < lineText.length && isWordChar(lineText[character])) character++
+      assert(isWordCharCode(cc), `illegal character ${c}`)
+      character++
+      while (character < lineText.length && isWordCharCode(lineText.charCodeAt(character))) character++
       tokenType = 'word'
       return
     }
