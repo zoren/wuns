@@ -50,11 +50,11 @@ const makeAllTokensBuilder = (document) => {
   let line = 0
   let character = 0
   let startCol = 0
-  let tokenLength = 0
   let lineText = ''
   let tokenType = ''
+  let done = false
 
-  const lexNext = () => {
+  const nextToken = () => {
     while (line < document.lineCount) {
       lineText = document.lineAt(line).text
       if (character >= lineText.length) {
@@ -67,29 +67,25 @@ const makeAllTokensBuilder = (document) => {
         character++
         continue
       }
+      startCol = character
       if (c === '[' || c === ']') {
-        startCol = character
         character++
-        tokenLength = 1
         tokenType = c
-        return tokenType
+        return
       }
       assert(isWordChar(c), `illegal character ${c}`)
-      startCol = character
       while (character < lineText.length && isWordChar(lineText[character])) character++
-      tokenLength = character - startCol
       tokenType = 'word'
-      return tokenType
+      return
     }
-    return null
+    done = true
   }
-  let token = lexNext()
+  nextToken()
   const pushToken = (tokenType) => {
-    tokensBuilder.push(line, startCol, tokenLength, encodeTokenType(tokenType))
+    tokensBuilder.push(line, startCol, character - startCol, encodeTokenType(tokenType))
   }
-  const nextToken = () => (token = lexNext())
   const go = () => {
-    if (token === null) return
+    if (done) return
     if (tokenType !== '[') {
       pushToken('variable')
       nextToken()
@@ -98,10 +94,9 @@ const makeAllTokensBuilder = (document) => {
     nextToken()
     let listIndex = 0
     while (true) {
-      if (token === null) return
+      if (done) return
       if (tokenType === ']') break
       if (tokenType === 'word') {
-        // const { text } = token
         if (listIndex === 0) {
           const text = lineText.slice(startCol, character)
           if (specialForms.has(text)) pushToken('keyword')
@@ -118,7 +113,7 @@ const makeAllTokensBuilder = (document) => {
     }
     nextToken()
   }
-  while (token !== null) {
+  while (!done) {
     go()
   }
 
