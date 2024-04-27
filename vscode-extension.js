@@ -60,7 +60,6 @@ const makeAllTokensBuilder = (document) => {
         character = 0
         continue
       }
-      const c = lineText[character]
       const cc = lineText.charCodeAt(character)
       if (cc === 32 || cc === 9) {
         character++
@@ -68,11 +67,11 @@ const makeAllTokensBuilder = (document) => {
       }
       startCol = character
       if (cc === 91 || cc === 93) {
+        tokenType = lineText[character]
         character++
-        tokenType = c
         return
       }
-      assert(isWordCharCode(cc), `illegal character ${c}`)
+      if (!isWordCharCode(cc)) throw new Error(`illegal character code ${cc}`)
       character++
       while (character < lineText.length && isWordCharCode(lineText.charCodeAt(character))) character++
       tokenType = 'word'
