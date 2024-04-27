@@ -39,13 +39,17 @@ const isWordChar = (c) => {
   return (cc >= 97 && cc <= 122) || (cc >= 48 && cc <= 57) || cc === 46 || cc === 61 || cc === 45
 }
 
+const specialForms = new Set(['quote', 'if', 'let', 'loop', 'cont', 'func', 'macro'])
+
 /**
  * @param {vscode.TextDocument} document
  */
-const lexerFromDocument = (document) => {
+const makeAllTokensBuilder = (document) => {
+  const tokensBuilder = new SemanticTokensBuilder(legend)
+
   let line = 0
   let character = 0
-  return () => {
+  const lexNext = () => {
     while (line < document.lineCount) {
       const lineText = document.lineAt(line).text
       if (character >= lineText.length) {
@@ -76,14 +80,6 @@ const lexerFromDocument = (document) => {
     }
     return null
   }
-}
-
-const specialForms = new Set(['quote', 'if', 'let', 'loop', 'cont', 'func', 'macro'])
-
-const makeAllTokensBuilder = (document) => {
-  const tokensBuilder = new SemanticTokensBuilder(legend)
-
-  const lexNext = lexerFromDocument(document)
   let token = lexNext()
   const pushToken = (tokenType, tokenModifiers) => {
     const { line, character, length } = token
