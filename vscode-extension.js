@@ -347,7 +347,7 @@ const print = (x) => {
   return `[${x.map(print).join(' ')}]`
 }
 
-const mkFuncEnv = (outputChannel) => {
+const mkFuncEnv = ({ log }) => {
   const funcEnv = new Map()
   const assert = (cond, msg) => {
     if (!cond) throw new Error('built in failed: ' + msg)
@@ -362,12 +362,13 @@ const mkFuncEnv = (outputChannel) => {
   funcEnv.set('bit-or', (a, b) => String(Number(a) | Number(b) | 0))
   funcEnv.set('bit-xor', (a, b) => String((Number(a) ^ Number(b)) | 0))
 
+  const boolToWord = (b) => (b ? '1' : '0')
+
   funcEnv.set('eq', (a, b) => {
     assert(typeof a === 'string', 'eq expects strings')
     assert(typeof b === 'string', 'eq expects strings')
     return boolToWord(a === b)
   })
-  const boolToWord = (b) => (b ? '1' : '0')
   funcEnv.set('lt', (a, b) => boolToWord(Number(a) < Number(b)))
   funcEnv.set('gt', (a, b) => boolToWord(Number(a) > Number(b)))
   funcEnv.set('ge', (a, b) => boolToWord(Number(a) >= Number(b)))
@@ -397,7 +398,8 @@ const mkFuncEnv = (outputChannel) => {
   })
 
   funcEnv.set('freeze', (ar) => Object.freeze(ar))
-  const isDecIntWord = (s) => /^[0-9]+$/.test(s)
+  const inDecIntRegex = /^[0-9]+$/
+  const isDecIntWord = (s) => inDecIntRegex.test(s)
   funcEnv.set('word', (cs) => {
     assert(Array.isArray(cs), 'word expects array: ' + cs)
     // assert(cs.length > 0, 'word expects non-empty array')
@@ -413,7 +415,7 @@ const mkFuncEnv = (outputChannel) => {
   })
   let gensym = 0
   funcEnv.set('gensym', () => String(gensym++))
-  funcEnv.set('log', (a) => outputChannel.appendLine(print(a)))
+  funcEnv.set('log', (a) => log(print(a)))
 
   funcEnv.set('abort', () => {
     throw new Error("wuns 'abort'")
@@ -437,7 +439,7 @@ const interpretCurrentFile = () => {
   if (!activeTextEditor) return
   const { document } = activeTextEditor
   const topLevelList = parseDocument(document)
-  const funcEnv = mkFuncEnv(outputChannel)
+  const funcEnv = mkFuncEnv({ log: (s) => outputChannel.appendLine(s) })
   const { gogoeval } = makeEvaluator(funcEnv)
   for (const form of topLevelList) gogoeval(flattenForm(form))
   window.showInformationMessage('interpreted ' + topLevelList.length + ' forms')
