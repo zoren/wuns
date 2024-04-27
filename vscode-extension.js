@@ -22,7 +22,7 @@ const encodeTokenType = (tokenType) => {
   return 0
 }
 
-const tokenModifiers = ['declaration', 'definition', 'defaultLibrary', 'static', 'local']
+const tokenModifiers = ['local', 'declaration', 'definition', 'defaultLibrary', 'static']
 
 const tokenModifiersToIndex = new Map(tokenModifiers.map((mod, idx) => [mod, idx]))
 
@@ -53,6 +53,7 @@ const variableTokenType = encodeTokenType('variable')
 const stringTokenType = encodeTokenType('string')
 
 const declarationTokenModifier = encodeTokenModifiers(['declaration'])
+const localDeclarationTokenModifier = encodeTokenModifiers(['declaration', 'local'])
 /**
  * @param {vscode.TextDocument} document
  */
@@ -121,7 +122,10 @@ const makeAllTokensBuilder = (document) => {
       }
       if (tokenType === 97) {
         if (stack.findIndex((frame) => frame === 'quote') !== -1) pushToken(stringTokenType)
-        if (listIndex === 0) {
+        else if(stack.at(-1) === 'let' || stack.at(-1) === 'loop') {
+          if (listIndex % 2 === 0) pushToken(variableTokenType, localDeclarationTokenModifier)
+          else pushToken(variableTokenType)
+        } else if (listIndex === 0) {
           const text = lineText.slice(startCol, character)
           stack.push(text)
           if (specialForms.has(text)) {
