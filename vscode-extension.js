@@ -176,7 +176,12 @@ const tokenBuilderForParseTree = () => {
           pushToken(head, keywordTokenType)
           const [fmName, parameters, ...body] = tail
           pushToken(fmName, headText === 'func' ? functionTokenType : macroTokenType, declarationTokenModifier)
-          for (const parameter of parameters) pushToken(parameter, parameterTokenType)
+          let pi = 0
+          for (const parameter of parameters) {
+            if (pi++ === parameters.length - 2 && parameter.text === '..') {
+              pushToken(parameter, keywordTokenType)
+            } else pushToken(parameter, parameterTokenType)
+          }
           for (const child of body) go(child)
           break
         }
