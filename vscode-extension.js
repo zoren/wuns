@@ -34,10 +34,13 @@ const isWordCharCode = (cc) => {
 }
 
 const specialForms = new Set(['quote', 'if', 'let', 'loop', 'cont', 'func', 'macro'])
+
 const keywordTokenType = encodeTokenType('keyword')
 const functionTokenType = encodeTokenType('function')
 const macroTokenType = encodeTokenType('macro')
 const variableTokenType = encodeTokenType('variable')
+
+const declarationTokenModifier = encodeTokenModifiers(['declaration'])
 /**
  * @param {vscode.TextDocument} document
  */
@@ -82,8 +85,8 @@ const makeAllTokensBuilder = (document) => {
     done = true
   }
   nextToken()
-  const pushToken = (tokenType) => {
-    tokensBuilder.push(line, startCol, character - startCol, tokenType)
+  const pushToken = (tokenType, tokenModifiers) => {
+    tokensBuilder.push(line, startCol, character - startCol, tokenType, tokenModifiers)
   }
   const stack = []
   const go = () => {
@@ -116,8 +119,8 @@ const makeAllTokensBuilder = (document) => {
         } else if (listIndex === 1) {
           if (stack.length > 0) {
             const stackTop = stack.at(-1)
-            if (stackTop === 'macro') pushToken(macroTokenType)
-            else if (stackTop === 'func') pushToken(functionTokenType)
+            if (stackTop === 'macro') pushToken(macroTokenType, declarationTokenModifier)
+            else if (stackTop === 'func') pushToken(functionTokenType, declarationTokenModifier)
             else pushToken(variableTokenType)
           } else pushToken(variableTokenType)
         } else {
