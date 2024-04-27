@@ -82,19 +82,19 @@ const specialForms = new Set(['quote', 'if', 'let', 'loop', 'cont', 'func', 'mac
 
 const makeAllTokensBuilder = (document) => {
   const tokensBuilder = new SemanticTokensBuilder(legend)
-  const pushToken = (token, tokenType, tokenModifiers) => {
-    const { line, character, length } = token
-    tokensBuilder.push(line, character, length, encodeTokenType(tokenType))
-  }
 
   const lexNext = lexerFromDocument(document)
   let token = lexNext()
+  const pushToken = (tokenType, tokenModifiers) => {
+    const { line, character, length } = token
+    tokensBuilder.push(line, character, length, encodeTokenType(tokenType))
+  }
   const nextToken = () => (token = lexNext())
   const go = () => {
     if (token === null) return
     {
       if (token.tokenType !== '[') {
-        pushToken(token, 'variable')
+        pushToken('variable')
         nextToken()
         return
       }
@@ -109,13 +109,13 @@ const makeAllTokensBuilder = (document) => {
       if (tokenType === 'word') {
         const { text } = token
         if (listIndex === 0) {
-          if (specialForms.has(text)) pushToken(token, 'keyword')
+          if (specialForms.has(text)) pushToken('keyword')
           else {
             // todo check in env if its a macro else assume function
-            pushToken(token, 'function')
+            pushToken('function')
           }
         } else {
-          pushToken(token, 'variable')
+          pushToken('variable')
         }
       }
       go()
