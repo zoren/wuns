@@ -49,9 +49,14 @@ const makeAllTokensBuilder = (document) => {
 
   let line = 0
   let character = 0
+  let startCol = 0
+  let tokenLength = 0
+  let lineText = ''
+  let tokenType = ''
+
   const lexNext = () => {
     while (line < document.lineCount) {
-      const lineText = document.lineAt(line).text
+      lineText = document.lineAt(line).text
       if (character >= lineText.length) {
         line++
         character = 0
@@ -63,48 +68,42 @@ const makeAllTokensBuilder = (document) => {
         continue
       }
       if (c === '[' || c === ']') {
-        const startCol = character
+        startCol = character
         character++
-        return { tokenType: c, line, character: startCol, length: 1 }
+        tokenLength = 1
+        tokenType = c
+        return tokenType
       }
       assert(isWordChar(c), `illegal character ${c}`)
-      const tokStartCol = character
+      startCol = character
       while (character < lineText.length && isWordChar(lineText[character])) character++
-      return {
-        tokenType: 'word',
-        text: lineText.slice(tokStartCol, character),
-        line,
-        character: tokStartCol,
-        length: character - tokStartCol,
-      }
+      tokenLength = character - startCol
+      tokenType = 'word'
+      return tokenType
     }
     return null
   }
   let token = lexNext()
-  const pushToken = (tokenType, tokenModifiers) => {
-    const { line, character, length } = token
-    tokensBuilder.push(line, character, length, encodeTokenType(tokenType))
+  const pushToken = (tokenType) => {
+    tokensBuilder.push(line, startCol, tokenLength, encodeTokenType(tokenType))
   }
   const nextToken = () => (token = lexNext())
   const go = () => {
     if (token === null) return
-    {
-      if (token.tokenType !== '[') {
-        pushToken('variable')
-        nextToken()
-        return
-      }
+    if (tokenType !== '[') {
+      pushToken('variable')
       nextToken()
+      return
     }
+    nextToken()
     let listIndex = 0
     while (true) {
       if (token === null) return
-      const { tokenType } = token
       if (tokenType === ']') break
-
       if (tokenType === 'word') {
-        const { text } = token
+        // const { text } = token
         if (listIndex === 0) {
+          const text = lineText.slice(startCol, character)
           if (specialForms.has(text)) pushToken('keyword')
           else {
             // todo check in env if its a macro else assume function
