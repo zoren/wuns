@@ -29,10 +29,6 @@ const encodeTokenModifiers = (strTokenModifiers = []) => {
 }
 const legend = new SemanticTokensLegend(tokenTypes, tokenModifiers)
 
-const assert = (cond, msg) => {
-  if (!cond) throw new Error('assert failed: ' + msg)
-}
-
 const isWordCharCode = (cc) => {
   return (cc >= 97 && cc <= 122) || (cc >= 48 && cc <= 57) || cc === 46 || cc === 61 || cc === 45
 }
@@ -40,6 +36,7 @@ const isWordCharCode = (cc) => {
 const specialForms = new Set(['quote', 'if', 'let', 'loop', 'cont', 'func', 'macro'])
 const keywordTokenType = encodeTokenType('keyword')
 const functionTokenType = encodeTokenType('function')
+const macroTokenType = encodeTokenType('macro')
 const variableTokenType = encodeTokenType('variable')
 /**
  * @param {vscode.TextDocument} document
@@ -88,6 +85,7 @@ const makeAllTokensBuilder = (document) => {
   const pushToken = (tokenType) => {
     tokensBuilder.push(line, startCol, character - startCol, tokenType)
   }
+  const stack = []
   const go = () => {
     if (done) return
     if (tokenType !== 91) {
@@ -98,18 +96,37 @@ const makeAllTokensBuilder = (document) => {
     nextToken()
     let listIndex = 0
     while (true) {
-      if (done) return
-      if (tokenType === 93) break
+      if (done) {
+        stack.length = 0
+        return
+      }
+      if (tokenType === 93) {
+        stack.pop()
+        break
+      }
       if (tokenType === 97) {
         if (listIndex === 0) {
           const text = lineText.slice(startCol, character)
+          stack.push(text)
           if (specialForms.has(text)) pushToken(keywordTokenType)
           else {
             // todo check in env if its a macro else assume function
             pushToken(functionTokenType)
           }
+        } else if (listIndex === 1) {
+          if (stack.length > 0) {
+            const stackTop = stack.at(-1)
+            if (stackTop === 'macro') pushToken(macroTokenType)
+            else if (stackTop === 'func') pushToken(functionTokenType)
+            else pushToken(variableTokenType)
+          } else pushToken(variableTokenType)
         } else {
-          pushToken(variableTokenType)
+          if (stack.length > 1) {
+            const stackTop = stack.at(-1)
+            if (stackTop === 'macro') pushToken(macroTokenType)
+            else if (stackTop === 'func') pushToken(functionTokenType)
+            else pushToken(variableTokenType)
+          } else pushToken(variableTokenType)
         }
       }
       go()
