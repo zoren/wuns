@@ -93,12 +93,12 @@ const makeAllTokensBuilder = (document) => {
   const go = () => {
     if (token === null) return
     {
-      const peekTok = token
-      nextToken()
-      if (peekTok.tokenType !== '[') {
-        pushToken(peekTok, 'variable')
+      if (token.tokenType !== '[') {
+        pushToken(token, 'variable')
+        nextToken()
         return
       }
+      nextToken()
     }
     let listIndex = 0
     while (true) {
