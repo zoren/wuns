@@ -1,3 +1,7 @@
+const isWordCharCode = (cc) => {
+  return (cc >= 97 && cc <= 122) || (cc >= 48 && cc <= 57) || cc === 46 || cc === 61 || cc === 45
+}
+
 const parseDocument = (document) => {
   let line = 0
   let character = 0
@@ -108,12 +112,6 @@ const encodeTokenModifiers = (strTokenModifiers = []) => {
 }
 const legend = new SemanticTokensLegend(tokenTypes, tokenModifiers)
 
-const isWordCharCode = (cc) => {
-  return (cc >= 97 && cc <= 122) || (cc >= 48 && cc <= 57) || cc === 46 || cc === 61 || cc === 45
-}
-
-const specialForms = new Set(['quote', 'if', 'let', 'loop', 'cont', 'func', 'macro'])
-
 const keywordTokenType = encodeTokenType('keyword')
 const functionTokenType = encodeTokenType('function')
 const macroTokenType = encodeTokenType('macro')
@@ -187,7 +185,7 @@ const tokenBuilderForParseTree = () => {
         }
         default:
           pushToken(head, functionTokenType)
-          for (const child of tail) go(child)
+          for (const arg of tail) go(arg)
           break
       }
     }
