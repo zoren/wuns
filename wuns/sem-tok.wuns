@@ -82,18 +82,6 @@
             gs
             [concat [quote [or]] [rest clauses]]]]]]]]
 
-[func = [a b]
-  [if
-    [and [is-word a] [is-word b]]
-    [eq a b]
-
-    [and [is-list a] [is-list b]
-      [let [s [size a]]
-        [and [eq s [size b]]
-          [loop [i [quote 0]]
-            [or [ge i s]
-              [and [= [at a i] [at b i]] [cont [inc i]]]]]]]]]]
-
 [func is-whitespace [c]
   [or [eq c [quote 32]] [eq c [quote 10]]]]
 
@@ -112,87 +100,6 @@
     [is-between-inclusive [quote 45] c [quote 46]]
     [eq c [quote 61]]]]
 
-[func get-token [code-points start end]
-  [loop [i start]
-    [if [ge i end]
-      [list [quote eof] i i]
-
-      [let [tok-start i
-            c [at code-points i]]
-        [ifs
-          [is-whitespace c]
-          [cont [inc i]]
-
-          [is-square-bracket c]
-          [list [word [list c]] i [inc i]]
-
-          [is-ident-char c]
-          [loop [j [inc i]]
-            [if [and [lt j end] [is-ident-char [at code-points j]]]
-              [cont [inc j]]
-              [list [quote ident] tok-start j]]]
-
-          [do
-            [log [list [quote [unexpected character]] c]]
-            [abort]]]]]]]
-
-[func lex [code-points]
-  [let [s [size code-points]
-        tokens [mutable-list]]
-    [loop [i [quote 0]]
-      [if [ge i s]
-        [freeze tokens]
-        [let [tup [get-token code-points i s]
-              c [first tup]
-              end [third tup]]
-            [if [eq c [quote eof]]
-              [freeze tokens]
-              [do
-                [push tokens
-                  [if [eq c [quote ident]]
-                      [word [slice code-points [second tup] end]]
-                      c]]
-                [cont end]]]]]]]]
-
-[func is-single-char [word c]
-  [and [eq [size word] [quote 1]] [eq [first word] c]]]
-
-[func parse1 [tokens i]
-  [assert [lt i [size tokens]] unexpected end of input]
-  [let [token [at tokens i]
-        s-toks [size tokens]]
-    [if-not [is-single-char token [quote 91]]
-      [list token [inc i]]
-      [let
-        [ls [mutable-list]
-         new-j
-          [loop [j [inc i]]
-            [ifs
-              [ge j s-toks]
-              j
-
-              [is-single-char [at tokens j] [quote 93]]
-              [inc j]
-
-              [let [res [parse1 tokens j]]
-                [push ls [first res]]
-                [cont [second res]]]]]]
-          [list [freeze ls] new-j]]]]]
-
-[func parse-all [code-points]
-  [let [tokens [lex code-points]
-        n-toks [size tokens]
-        forms [mutable-list]]
-    [loop [i [quote 0]]
-      [if [ge i n-toks]
-        [freeze forms]
-        [let [res1 [parse1 tokens i]]
-          [push forms [first res1]]
-          [cont [second res1]]]]]]]
-
-[func parse-chars [code-points]
-  [first [parse1 [lex code-points] [quote 0]]]]
-
 [func print [f]
   [if [is-word f]
     f
@@ -208,61 +115,7 @@
               [concat-words res [print [at f [dec s]]]]]]]
         [word [quote [93]]]]]]]
 
-[func lookup [ctx sym]
-  [let [s [size ctx]]
-    [loop [i [quote 0]]
-      [if [ge i s]
-        []
-        [let [k [at ctx i]
-              v [at ctx [inc i]]]
-          [if [eq k sym]
-            v
-            [cont [add i [quote 2]]]]]]]]]
-
 [macro comment [.. -] []]
-
-[func analyse [ctx form]
-  [log [list [quote analysing] form [is-word form]]]
-  [if [is-word form]
-    [lookup ctx form]
-    [let [s [size form]]
-      [if [eq s [quote 0]]
-        []
-        [let [first-word [first form]
-              args [slice form [quote 1] s]
-              n-of-args [size args]]
-          [assert [is-word first-word] non symbol first in form]
-          [ifs
-            [eq first-word [quote quote]]
-            [do
-              [log [quote quoteeling]]
-              [assert [eq n-of-args [quote 1]] quote requires one arg]
-              [comment check if arg is a word and if it is decimal integer]
-              []]
-
-            [eq first-word [quote if]]
-            [do
-              [assert [eq n-of-args [quote 3]] if requires three args]
-              [let [cond [analyse ctx [first args]]
-                    then [analyse ctx [second args]]
-                    else [analyse ctx [third args]]]
-                []]
-              ]
-
-            [eq first-word [quote let]]
-            [do
-              [assert [ge n-of-args [quote 2]] let requires at least two args]
-              [let [bindings [first args]
-                    bodies [slice args [quote 1] n-of-args]]
-                [assert [is-list bindings] let requires a list of bindings]
-                [let [n-of-bindings [size bindings]]
-                  [assert [is-even n-of-bindings] let requires an even number of bindings]]
-              ]
-              ]
-
-            []
-
-            ]]]]]]
 
 [comment
   [import document-line-text line]
@@ -271,49 +124,6 @@
         [push-token line-no [quote 0] [quote 1337] [quote 0] [quote 0]]
         [cont [inc line-no] [quote 0]]]
 ]
-
-[func get-line-token [code-points start end]
-  [loop [i start]
-    [if [ge i end]
-      [list [quote 0] i i]
-
-      [let [c [at code-points i]]
-        [ifs
-          [eq c [quote 32]]
-          [cont [inc i]]
-
-          [is-square-bracket c]
-          [list c i [inc i]]
-
-          [is-ident-char c]
-          [let [tok-start i]
-            [loop [j [inc i]]
-              [if [and [lt j end] [is-ident-char [at code-points j]]]
-                [cont [inc j]]
-                [list [quote 97] tok-start j]]]]
-
-          [do
-            [log [list [quote [unexpected character]] c]]
-            [abort]]]]]]]
-
-[func lex-document [document-line-count]
-  [loop
-    [line-no [quote 0]
-     tokens [mutable-list]]
-    [if [lt line-no document-line-count]
-      [let
-        [code-points [document-line-text line-no]
-         line-length [size code-points]]
-        [loop [column [quote 0]]
-          [when [lt column line-length]
-            [let [tup [get-line-token code-points column line-length]
-                  class [first tup]
-                  start [second tup]
-                  end [third tup]]
-              [push tokens [list line-no start end class]]
-              [cont end]]]]
-        [cont [inc line-no]]]
-      [freeze tokens]]]]
 
 [func skip-line-spaces [code-points column]
   [loop [column column]

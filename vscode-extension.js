@@ -219,17 +219,6 @@ const provideDocumentSemanticTokens = (document, cancellingToken) => {
   return prevSemTokens
 }
 
-// provideDocumentSemanticTokensEdits?(document: TextDocument, previousResultId: string, token: CancellationToken): ProviderResult<SemanticTokens | SemanticTokensEdits>;
-// const provideDocumentSemanticTokensEdits = (document, previousResultId, cancellingToken) => {
-//   if (prevSemTokens === null) return provideDocumentSemanticTokens(document, cancellingToken)
-//   if (prevSemTokens.resultId !== previousResultId) return provideDocumentSemanticTokens(document, cancellingToken)
-//   const { data } = prevSemTokens
-//   const prevResult = Number(previousResultId)
-//   console.log({ prevResult, documentVersion: document.version })
-//   const tokensBuilder = makeAllTokensBuilder(document)
-//   return (prevSemTokens = tokensBuilder.build(String(prevResult + 1)))
-// }
-
 const unit = Object.freeze([])
 const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
 
