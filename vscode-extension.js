@@ -444,12 +444,19 @@ const flattenForm = (form) => {
 
 const { commands, window } = vscode
 
+/**
+ * @returns {vscode.TextDocument}
+ */
+const getActiveTextEditorDocument = () => {
+  const { activeTextEditor } = window
+  if (!activeTextEditor) return null
+  return activeTextEditor.document
+}
+
 const interpretCurrentFile = () => {
   const outputChannel = window.createOutputChannel('wuns output')
   outputChannel.show()
-  const { activeTextEditor } = window
-  if (!activeTextEditor) return
-  const { document } = activeTextEditor
+  const document = getActiveTextEditorDocument()
   const topLevelList = parseDocument(document)
   const funcEnv = mkFuncEnv({ log: (s) => outputChannel.appendLine(s) })
   const { gogoeval } = makeEvaluator(funcEnv)
