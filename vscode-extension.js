@@ -369,8 +369,7 @@ const mkFuncEnv = ({ log }) => {
 
   funcEnv.set('eq', (a, b) => {
     // should we allow eq to compare non numbers?
-    assert(typeof a === 'string', 'eq expects strings')
-    assert(typeof b === 'string', 'eq expects strings')
+    assert(typeof a === 'string' && typeof b === 'string', 'eq expects strings only' + a + ' ' + b)
     return boolToWord(a === b)
   })
   funcEnv.set('lt', (a, b) => boolToWord(number(a) < number(b)))
@@ -386,9 +385,15 @@ const mkFuncEnv = ({ log }) => {
     const ni = number(i)
     assert(ni >= -v.length && ni < v.length, 'index out of bounds: ' + i)
     if (typeof v === 'string') return String(v.at(ni).charCodeAt(0))
-    return v.at(ni)
+    const elem = v.at(ni)
+    if (typeof elem === 'number') return String(elem)
+    return elem
   })
-  funcEnv.set('slice', (v, i, j) => Object.freeze(v.slice(number(i), number(j))))
+  funcEnv.set('slice', (v, i, j) => {
+    let s = v.slice(number(i), number(j))
+    if (s instanceof Uint8Array) return Object.freeze(Array.from(s, (n) => String(n)))
+    return Object.freeze(s)
+  })
   // would be nice to do without these two, as we would prefer no builtin var args
   funcEnv.set('concat', (...args) => Object.freeze(args.flat()))
   funcEnv.set('concat-words', (...ws) => ws.join(''))
@@ -419,7 +424,10 @@ const mkFuncEnv = ({ log }) => {
   })
   let gensym = 0
   funcEnv.set('gensym', () => String(gensym++))
-  funcEnv.set('log', (a) => log(print(a)))
+  funcEnv.set('log', (a) => {
+    log(print(a))
+    return unit
+  })
 
   funcEnv.set('abort', () => {
     throw new Error("wuns 'abort'")
