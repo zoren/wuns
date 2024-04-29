@@ -225,7 +225,10 @@ const unit = Object.freeze([])
 const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
 
 const symbolContinue = Symbol.for('wuns-continue')
-
+const tryMap = (arr, f) => {
+  if (arr) return arr.map(f)
+  return unit
+}
 const makeEvaluator = (funcEnv) => {
   const apply = ({ params, restParam, bodies }, args) => {
     const varValues = new Map()
@@ -280,7 +283,8 @@ const makeEvaluator = (funcEnv) => {
       }
       case 'func':
       case 'macro': {
-        const [fname, origParams, ...bodies] = args
+        const [fname, origParams0, ...bodies] = args
+        const origParams = origParams0 || unit
         let params = origParams
         let restParam = null
         if (origParams.at(-2) === '..') {
@@ -312,13 +316,13 @@ const makeEvaluator = (funcEnv) => {
       case 'quote':
         return form
       case 'if':
-        return makeList(firstWord, ...args.map(gogomacro))
+        return makeList(firstWord, ...tryMap(args, gogomacro))
       case 'let':
       case 'loop': {
         const [bindings, ...bodies] = args
         return makeList(
           firstWord,
-          bindings.map((borf, i) => (i % 2 === 0 ? borf : gogomacro(borf))),
+          tryMap(bindings, (borf, i) => (i % 2 === 0 ? borf : gogomacro(borf))),
           ...bodies.map(gogomacro),
         )
       }
