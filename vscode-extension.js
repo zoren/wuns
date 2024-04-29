@@ -86,11 +86,11 @@ const tokenTypes = [
   'variable',
   'parameter',
   'keyword',
-  'method',
+  // 'method',
   'string',
   'number',
-  'property',
-  'operator',
+  // 'property',
+  // 'operator',
 ]
 
 const tokenTypesToIndexMap = new Map(tokenTypes.map((type, idx) => [type, idx]))
@@ -540,15 +540,60 @@ const parseAll = (s) => {
   }
   return forms
 }
+
+const { watchFile, readFileSync } = require('fs')
+
 /**
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
   console.log('starting wuns lang extension: ' + context.extensionPath)
 
+  const wunsFilePath = context.extensionPath + '/wuns/sem-tok.wuns'
+  let activeDocument = null
+  const textEncoder = new TextEncoder()
+  const getDocumentText = (line) => {
+    const lineNum = Number(line)
+    if (isNaN(lineNum) || lineNum < 0 || !activeDocument) return new Uint8Array(0)
+    const lineText = activeDocument.lineAt(lineNum)
+    if (!lineText) return new Uint8Array(0)
+    return textEncoder.encode(lineText.text)
+  }
+  const pushToken = (...args) => {
+    const [line, column, length, tokenType, tokenModifiers] = args.map(Number)
+    console.log('push-token', { line, column, length, tokenType, tokenModifiers })
+  }
+  const funcEnv = mkFuncEnv({ log: (s) => console.log(s) })
+  funcEnv.set('document-line-text', getDocumentText)
+  funcEnv.set('push-token', pushToken)
+  const { gogoeval, apply } = makeEvaluator(funcEnv)
+
+  const load = () => {
+    const content = readFileSync(wunsFilePath, 'utf8')
+    const topLevelList = parseAll(content)
+    try {
+      for (const form of topLevelList) {
+        // console.dir(form, { depth: null })
+        gogoeval(form)
+      }
+    } catch (e) {
+      console.error('interpret error', e)
+    }
+  }
+  load()
+  watchFile(wunsFilePath, { interval: 100 }, load)
+
   context.subscriptions.push(
     commands.registerCommand('wunslang.helloWorld', () => {
-      window.showInformationMessage('wuns [here] 007 [if [quote 32]]')
+      const f = funcEnv.get('provide-document-semantic-tokens')
+      if (!f) return
+      activeDocument = getActiveTextEditorDocument()
+      if (!activeDocument) return
+      console.log('active document', activeDocument.fileName)
+      {
+        const res = apply(f, [String(activeDocument.lineCount)])
+        window.showInformationMessage('eval result: ' + print(res))
+      }
     }),
     commands.registerCommand('wunslang.interpret', interpretCurrentFile),
   )

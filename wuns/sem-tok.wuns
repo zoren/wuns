@@ -1,0 +1,462 @@
+[func inc [x] [add x [quote 1]]]
+
+[func dec [x] [sub x [quote 1]]]
+
+[func not [c] [eq c [quote 0]]]
+
+[func is-zero [x] [eq x [quote 0]]]
+
+[func is-odd [x] [bit-and x [quote 1]]]
+
+[func is-even [x] [not [is-odd x]]]
+
+[func is-negative [x] [lt x [quote 0]]]
+
+[func first [l] [at l [quote 0]]]
+[func second [l] [at l [quote 1]]]
+[func third [l] [at l [quote 2]]]
+
+[func rest [l] [slice l [quote 1] [size l]]]
+
+[func list [.. l] l]
+
+[macro if-not [cond then else]
+  [list [quote if] cond else then]]
+
+[macro do [.. forms]
+  [concat [quote [let []]] forms]]
+
+[macro when [cond .. forms]
+  [list
+    [quote if] cond
+    [concat [quote [do]] forms]
+    []]]
+
+[macro when-not [cond .. forms]
+  [list
+    [quote if] cond
+    []
+    [concat [quote [do]] forms]]]
+
+[macro assert [cond .. lmsg]
+  [list [quote when-not] cond
+    [list [quote log] [list [quote quote] [concat [list [quote assert-fail]] lmsg]]]
+    [quote [abort]]]]
+
+[macro ifs [.. clauses]
+  [let [s [size clauses]]
+    [assert [not [is-zero s]] ifs requires an odd number of arguments]
+    [if [eq s [quote 1]]
+        [first clauses]
+        [list [quote if] [first clauses]
+          [second clauses]
+          [concat [quote [ifs]] [slice clauses [quote 2] [size clauses]]]]]]]
+
+[macro and [.. clauses]
+  [let [s [size clauses]]
+    [ifs
+      [is-zero s]
+      [quote 1]
+
+      [eq s [quote 1]]
+      [first clauses]
+
+      [let [gs [gensym]]
+        [list [quote let] [list gs [first clauses]]
+          [list [quote if] gs
+            [concat [quote [and]] [rest clauses]]
+            gs]]]]]]
+
+[macro or [.. clauses]
+  [let [s [size clauses]]
+    [ifs
+      [is-zero s]
+      [quote 0]
+
+      [eq s [quote 1]]
+      [first clauses]
+
+      [let [gs [gensym]]
+        [list [quote let] [list gs [first clauses]]
+          [list [quote if] gs
+            gs
+            [concat [quote [or]] [rest clauses]]]]]]]]
+
+[func = [a b]
+  [if
+    [and [is-word a] [is-word b]]
+    [eq a b]
+
+    [and [is-list a] [is-list b]
+      [let [s [size a]]
+        [and [eq s [size b]]
+          [loop [i [quote 0]]
+            [or [ge i s]
+              [and [= [at a i] [at b i]] [cont [inc i]]]]]]]]]]
+
+[func is-whitespace [c]
+  [or [eq c [quote 32]] [eq c [quote 10]]]]
+
+[func is-square-bracket [c]
+  [or [eq c [quote 91]] [eq c [quote 93]]]]
+
+[func is-between-inclusive [lower c upper]
+  [and [le lower c] [le c upper]]]
+
+[func is-digit [c] [is-between-inclusive [quote 48] c [quote 57]]]
+
+[func is-ident-char [c]
+  [or
+    [is-between-inclusive [quote 97] c [quote 122]]
+    [is-digit c]
+    [is-between-inclusive [quote 45] c [quote 46]]
+    [eq c [quote 61]]]]
+
+[func get-token [code-points start end]
+  [loop [i start]
+    [if [ge i end]
+      [list [quote eof] i i]
+
+      [let [tok-start i
+            c [at code-points i]]
+        [ifs
+          [is-whitespace c]
+          [cont [inc i]]
+
+          [is-square-bracket c]
+          [list [word [list c]] i [inc i]]
+
+          [is-ident-char c]
+          [loop [j [inc i]]
+            [if [and [lt j end] [is-ident-char [at code-points j]]]
+              [cont [inc j]]
+              [list [quote ident] tok-start j]]]
+
+          [do
+            [log [list [quote [unexpected character]] c]]
+            [abort]]]]]]]
+
+[func lex [code-points]
+  [let [s [size code-points]
+        tokens [mutable-list]]
+    [loop [i [quote 0]]
+      [if [ge i s]
+        [freeze tokens]
+        [let [tup [get-token code-points i s]
+              c [first tup]
+              end [third tup]]
+            [if [eq c [quote eof]]
+              [freeze tokens]
+              [do
+                [push tokens
+                  [if [eq c [quote ident]]
+                      [word [slice code-points [second tup] end]]
+                      c]]
+                [cont end]]]]]]]]
+
+[func is-single-char [word c]
+  [and [eq [size word] [quote 1]] [eq [first word] c]]]
+
+[func parse1 [tokens i]
+  [assert [lt i [size tokens]] unexpected end of input]
+  [let [token [at tokens i]
+        s-toks [size tokens]]
+    [if-not [is-single-char token [quote 91]]
+      [list token [inc i]]
+      [let
+        [ls [mutable-list]
+         new-j
+          [loop [j [inc i]]
+            [ifs
+              [ge j s-toks]
+              j
+
+              [is-single-char [at tokens j] [quote 93]]
+              [inc j]
+
+              [let [res [parse1 tokens j]]
+                [push ls [first res]]
+                [cont [second res]]]]]]
+          [list [freeze ls] new-j]]]]]
+
+[func parse-all [code-points]
+  [let [tokens [lex code-points]
+        n-toks [size tokens]
+        forms [mutable-list]]
+    [loop [i [quote 0]]
+      [if [ge i n-toks]
+        [freeze forms]
+        [let [res1 [parse1 tokens i]]
+          [push forms [first res1]]
+          [cont [second res1]]]]]]]
+
+[func parse-chars [code-points]
+  [first [parse1 [lex code-points] [quote 0]]]]
+
+[func print [f]
+  [if [is-word f]
+    f
+    [let [s [size f]]
+      [concat-words
+        [word [quote [91]]]
+        [if [is-zero s]
+          [word []]
+          [loop [i [quote 0]
+                 res []]
+            [if [lt i [dec s]]
+              [cont [inc i] [concat res [print [at f i]] [word [quote [93]]]]]
+              [concat-words res [print [at f [dec s]]]]]]]
+        [word [quote [93]]]]]]]
+
+[func lookup [ctx sym]
+  [let [s [size ctx]]
+    [loop [i [quote 0]]
+      [if [ge i s]
+        []
+        [let [k [at ctx i]
+              v [at ctx [inc i]]]
+          [if [eq k sym]
+            v
+            [cont [add i [quote 2]]]]]]]]]
+
+[macro comment [.. -] []]
+
+[func analyse [ctx form]
+  [log [list [quote analysing] form [is-word form]]]
+  [if [is-word form]
+    [lookup ctx form]
+    [let [s [size form]]
+      [if [eq s [quote 0]]
+        []
+        [let [first-word [first form]
+              args [slice form [quote 1] s]
+              n-of-args [size args]]
+          [assert [is-word first-word] non symbol first in form]
+          [ifs
+            [eq first-word [quote quote]]
+            [do
+              [log [quote quoteeling]]
+              [assert [eq n-of-args [quote 1]] quote requires one arg]
+              [comment check if arg is a word and if it is decimal integer]
+              []]
+
+            [eq first-word [quote if]]
+            [do
+              [assert [eq n-of-args [quote 3]] if requires three args]
+              [let [cond [analyse ctx [first args]]
+                    then [analyse ctx [second args]]
+                    else [analyse ctx [third args]]]
+                []]
+              ]
+
+            [eq first-word [quote let]]
+            [do
+              [assert [ge n-of-args [quote 2]] let requires at least two args]
+              [let [bindings [first args]
+                    bodies [slice args [quote 1] n-of-args]]
+                [assert [is-list bindings] let requires a list of bindings]
+                [let [n-of-bindings [size bindings]]
+                  [assert [is-even n-of-bindings] let requires an even number of bindings]]
+              ]
+              ]
+
+            []
+
+            ]]]]]]
+
+[comment
+  [import document-line-text line]
+  [import push-token line column length token-type token-modifier]
+  [when [lt line-no document-line-count]
+        [push-token line-no [quote 0] [quote 1337] [quote 0] [quote 0]]
+        [cont [inc line-no] [quote 0]]]
+]
+
+[func get-line-token [code-points start end]
+  [loop [i start]
+    [if [ge i end]
+      [list [quote 0] i i]
+
+      [let [c [at code-points i]]
+        [ifs
+          [eq c [quote 32]]
+          [cont [inc i]]
+
+          [is-square-bracket c]
+          [list c i [inc i]]
+
+          [is-ident-char c]
+          [let [tok-start i]
+            [loop [j [inc i]]
+              [if [and [lt j end] [is-ident-char [at code-points j]]]
+                [cont [inc j]]
+                [list [quote 97] tok-start j]]]]
+
+          [do
+            [log [list [quote [unexpected character]] c]]
+            [abort]]]]]]]
+
+[func lex-document [document-line-count]
+  [loop
+    [line-no [quote 0]
+     tokens [mutable-list]]
+    [if [lt line-no document-line-count]
+      [let
+        [code-points [document-line-text line-no]
+         line-length [size code-points]]
+        [loop [column [quote 0]]
+          [when [lt column line-length]
+            [let [tup [get-line-token code-points column line-length]
+                  class [first tup]
+                  start [second tup]
+                  end [third tup]]
+              [push tokens [list line-no start end class]]
+              [cont end]]]]
+        [cont [inc line-no]]]
+      [freeze tokens]]]]
+
+[func skip-line-spaces [code-points column]
+  [loop [column column]
+      [if [and [lt column [size code-points]] [eq [at code-points column] [quote 32]]]
+        [cont [inc column]]
+        column]]]
+
+[func skip-spaces [document-line-count line-no column]
+  [loop [line-no line-no]
+    [if [lt line-no document-line-count]
+      [let
+        [code-points [document-line-text line-no]
+         col [skip-line-spaces code-points column]]
+        [if [lt col [size code-points]]
+          [list line-no col]
+          [cont [inc line-no] [quote 0]]]]
+      [list document-line-count [quote 0]]]]]
+
+[func lex-document-line-one-token [code-points column]
+  [loop [column column]
+    [if [lt column [size code-points]]
+      [let [c [at code-points column]]
+        [ifs
+          [eq c [quote 32]]
+          [cont [inc column]]
+
+          [is-square-bracket c]
+          [list column [inc column] c]
+
+          [do
+            [assert [is-ident-char c] unexpected non-word character]
+            [let [tok-start column]
+              [loop [j [inc tok-start]]
+                [if [and [lt j [size code-points]] [is-ident-char [at code-points j]]]
+                  [cont [inc j]]
+                  [list tok-start j [quote 97]]]]]]]]
+        [list [quote -1] [quote 0] [quote 0]]]]]
+
+[func lex-document-one-token [document-line-count line-no column]
+  [loop
+    [line-no line-no
+     column column]
+    [if [lt line-no document-line-count]
+      [let
+        [code-points [document-line-text line-no]]
+        [if [lt column [size code-points]]
+          [let [token [lex-document-line-one-token code-points column]
+                start [first token]
+                end [second token]
+                class [third token]]
+              [if [eq class [quote 0]]
+                [cont [inc line-no] [quote 0]]
+                [list line-no start end class]]]
+          [cont [inc line-no] [quote 0]]]]
+      [quote [0 0 0 0]]]]]
+
+[func token-line [token] [first token]]
+
+[func token-start [token] [second token]]
+
+[func token-end [token] [third token]]
+
+[func token-class [token] [at token [quote 3]]]
+
+[func log-document-tokens-one-at-a-time [document-line-count]
+  [loop
+    [line-no [quote 0]
+     column [quote 0]]
+    [when [lt line-no document-line-count]
+      [let [token [lex-document-one-token document-line-count line-no column]]
+        [if [token-class token]
+          [do
+            [log [list line-no token]]
+            [cont [first token] [third token]]]
+          [cont [inc line-no] [quote 0]]]]]]]
+
+[func is-done [document-line-count line-no column]
+  [token-class [lex-document-one-token document-line-count line-no column]]]
+
+[func word-from-doc [token]
+  [let [code-points [document-line-text [token-line token]]]
+    [word [slice code-points [token-start token] [token-end token]]]]]
+
+[func parse1-doc [document-line-count line-no column]
+  [let [token [lex-document-one-token document-line-count line-no column]
+        class [token-class token]
+        token-line [token-line token]
+        start [token-start token]
+        end [token-end token]]
+    [assert class unexpected end of input]
+    [ifs
+      [eq class [quote 97]]
+      [list [word-from-doc token] token-line end]
+
+      [eq class [quote 91]]
+      [let [ls [mutable-list]]
+        [loop [line-no token-line
+               column end]
+          [let [peek-token [lex-document-one-token document-line-count line-no column]]
+            [ifs
+              [not [token-class peek-token]]
+              [list [freeze ls] [inc document-line-count] [quote 0]]
+
+              [eq [token-class peek-token] [quote 93]]
+              [list [freeze ls] [token-line peek-token] [token-end peek-token]]
+
+              [let [trip [parse1-doc document-line-count line-no column]
+                    form [first trip]
+                    new-line [second trip]
+                    new-column [third trip]]
+                [push ls form]
+                [cont new-line new-column]]]]]]
+
+      [do
+        [log [quote [fail fail here]]]
+        [list [] [inc document-line-count] [quote 0]]]]]]
+
+[func parse-all-doc [document-line-count]
+  [let [forms [mutable-list]]
+    [loop [line-no [quote 0]
+           column [quote 0]]
+      [if [and [lt line-no document-line-count]
+               [token-class [lex-document-one-token document-line-count line-no column]]]
+        [let [trip [parse1-doc document-line-count line-no column]
+              form [first trip]
+              new-line [second trip]
+              new-column [third trip]]
+          [push forms form]
+          [do
+            [log [list new-line new-column]]
+            [cont new-line new-column]]]
+        [freeze forms]]]]]
+
+[comment
+  [loop [i [quote 0]]
+    [when [lt i document-line-count]
+      [let [code-points [document-line-text i]]
+        [log [list i [quote line-length] [size code-points]]]
+        [cont [inc i]]]]]
+
+ [log-document-tokens-one-at-a-time document-line-count]]
+
+[func provide-document-semantic-tokens [document-line-count]
+  [log [list document-line-count]]
+  [log-document-tokens-one-at-a-time document-line-count]
+  [log [list [parse-all-doc document-line-count]]]]

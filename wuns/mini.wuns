@@ -1,0 +1,5 @@
+[func inc [x] [add x [quote 1]]]
+
+[func dec [x] [sub x [quote 1]]]
+
+[func not [c] [eq c [quote 0]]]
