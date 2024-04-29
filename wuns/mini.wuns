@@ -1,2 +1,5 @@
-[func inc [x]
- [add x [quote 1]]]
+hej
+[quote 1337]
+[if [] [] []]
+[let [] 3]
+

@@ -8,8 +8,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "wunslang.helloWorld",
-        "title": "Hello World"
+        "command": "wunslang.semanticTokens",
+        "title": "Semantic tokens with wuns"
       },
       {
         "command": "wunslang.interpret",

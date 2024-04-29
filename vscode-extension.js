@@ -81,11 +81,11 @@ const vscode = require('vscode')
 const { SemanticTokensLegend, SemanticTokensBuilder, languages } = vscode
 
 const tokenTypes = [
+  'variable',
+  'keyword',
   'function',
   'macro',
-  'variable',
   'parameter',
-  'keyword',
   // 'method',
   'string',
   'number',
@@ -198,21 +198,6 @@ const tokenBuilderForParseTree = () => {
     }
   }
   return { tokensBuilder, build: go }
-}
-
-/**
- * @param {vscode.TextDocument} document
- */
-const provideDocumentSemanticTokens = (document, cancellingToken) => {
-  const before = performance.now()
-  const topLevelList = parseDocument(document)
-  const { tokensBuilder, build } = tokenBuilderForParseTree()
-  for (const node of topLevelList) build(node)
-  const semtoks = tokensBuilder.build('1')
-  const after = performance.now()
-  const elapsed = after - before
-  console.log('time taken', Math.round(elapsed * 1000) / 1000, 'ms', document.version)
-  return semtoks
 }
 
 const unit = Object.freeze([])
@@ -344,15 +329,16 @@ const print = (x) => {
   return `[${x.map(print).join(' ')}]`
 }
 
+const number = (s) => {
+  const n = Number(s)
+  if (isNaN(n)) throw new Error('expected number, found: ' + s)
+  return n
+}
+
 const mkFuncEnv = ({ log }) => {
   const funcEnv = new Map()
   const assert = (cond, msg) => {
     if (!cond) throw new Error('built in failed: ' + msg)
-  }
-  const number = (s) => {
-    const n = Number(s)
-    if (isNaN(n)) throw new Error('expected number, found: ' + s)
-    return n
   }
   // would be cool to do in a host-func special form
   funcEnv.set('add', (a, b) => String((number(a) + number(b)) | 0))
@@ -535,17 +521,19 @@ function activate(context) {
 
   const wunsFilePath = context.extensionPath + '/wuns/sem-tok.wuns'
   let activeDocument = null
+  let tokensBuilder = null
   const textEncoder = new TextEncoder()
   const getDocumentText = (line) => {
-    const lineNum = Number(line)
+    const lineNum = number(line)
     if (isNaN(lineNum) || lineNum < 0 || !activeDocument) return new Uint8Array(0)
     const lineText = activeDocument.lineAt(lineNum)
     if (!lineText) return new Uint8Array(0)
     return textEncoder.encode(lineText.text)
   }
   const pushToken = (...args) => {
-    const [line, column, length, tokenType, tokenModifiers] = args.map(Number)
+    const [line, column, length, tokenType, tokenModifiers] = args.map(number)
     console.log('push-token', { line, column, length, tokenType, tokenModifiers })
+    tokensBuilder.push(line, column, length, tokenType, tokenModifiers)
   }
   const funcEnv = mkFuncEnv({ log: (s) => console.log(s) })
   funcEnv.set('document-line-text', getDocumentText)
@@ -565,18 +553,46 @@ function activate(context) {
   watchFile(wunsFilePath, { interval: 100 }, load)
 
   const onDidChangeSemanticTokensListeners = []
+  let overrideSymToks = null
+
+  /**
+   * @param {vscode.TextDocument} document
+   */
+  const provideDocumentSemanticTokens = (document, cancellingToken) => {
+    if (overrideSymToks && overrideSymToks.fileName === document.fileName) {
+      const symToks = overrideSymToks.data
+      overrideSymToks = null
+      console.log('overriding semantic tokens', symToks)
+      return symToks
+    }
+    const before = performance.now()
+    const topLevelList = parseDocument(document)
+    const { tokensBuilder, build } = tokenBuilderForParseTree()
+    for (const node of topLevelList) build(node)
+    const semtoks = tokensBuilder.build('1')
+    console.log({ semtoks })
+    const after = performance.now()
+    const elapsed = after - before
+    console.log('time taken', Math.round(elapsed * 1000) / 1000, 'ms', document.version)
+    return semtoks
+  }
 
   context.subscriptions.push(
-    commands.registerCommand('wunslang.helloWorld', () => {
+    commands.registerCommand('wunslang.semanticTokens', () => {
       const f = funcEnv.get('provide-document-semantic-tokens')
       if (!f) return
       activeDocument = getActiveTextEditorDocument()
       if (!activeDocument) return
       console.log('active document', activeDocument.fileName)
+      tokensBuilder = new SemanticTokensBuilder(legend)
       {
         const res = apply(f, [String(activeDocument.lineCount)])
         window.showInformationMessage('eval result: ' + print(res))
       }
+      const semtoks = tokensBuilder.build('1')
+      overrideSymToks = { fileName: activeDocument.fileName, data: semtoks }
+      tokensBuilder = null
+      console.log('wuns semtoks', semtoks)
       console.log('calling listeners', onDidChangeSemanticTokensListeners.length)
       for (const listener of onDidChangeSemanticTokensListeners) listener()
     }),

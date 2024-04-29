@@ -215,10 +215,11 @@
     [assert class unexpected end of input]
     [ifs
       [eq class [quote 97]]
-      [list [list [word-from-doc token] token-line start end] token-line end]
+      [list [list [quote w] token] token-line end]
 
       [eq class [quote 91]]
       [let [ls [mutable-list]]
+        [push ls [quote l]]
         [loop [line-no token-line
                column end]
           [let [peek-token [lex-document-one-token document-line-count line-no column]]
@@ -265,7 +266,37 @@
 
  [log-document-tokens-one-at-a-time document-line-count]]
 
+[func push-token-as-sem-tok [token token-type token-modifiers]
+  [log [list [quote pushing] token token-type token-modifiers]]
+  [push-token [token-line token] [token-start token] [token-end token] token-type token-modifiers]]
+
+[func provide-form-sem-toks [form]
+  [ifs
+    [eq [first form] [quote w]]
+    [push-token-as-sem-tok [second form] [quote 0] [quote 0]]
+    
+    [eq [first form] [quote l]]
+    [let [sli [rest form]]
+      [when [and [size sli] [eq [first [first sli]] [quote w]]]
+        [let [head-token [second [first sli]]
+              head-word [word-from-doc head-token]
+              tail [rest sli]]
+          [ifs
+            [eq head-word [quote quote]]
+            [push-token-as-sem-tok head-token [quote 1] [quote 0]]
+
+            [eq head-word [quote if]]
+            [push-token-as-sem-tok head-token [quote 1] [quote 0]]
+
+            []
+          ]]]]
+
+    []]]
+
 [func provide-document-semantic-tokens [document-line-count]
-  [log [list document-line-count]]
-  [log-document-tokens-one-at-a-time document-line-count]
-  [log [list [parse-all-doc document-line-count]]]]
+  [let [trees [parse-all-doc document-line-count]]
+    [loop [i [quote 0]]
+      [when [lt i [size trees]]
+        [log [at trees i]]
+        [provide-form-sem-toks [at trees i]]
+        [cont [inc i]]]]]]
