@@ -86,9 +86,9 @@ const tokenTypes = [
   'function',
   'macro',
   'parameter',
-  // 'method',
   'string',
   'number',
+  // 'method',
   // 'property',
   // 'operator',
 ]

@@ -1,5 +1,6 @@
 hej
 [quote 1337]
-[if [] [] []]
+[quote [007 1337]]
+[if [quote 0] [] []]
 [let [] 3]
 
