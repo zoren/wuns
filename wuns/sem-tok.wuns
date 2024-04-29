@@ -270,9 +270,11 @@
   [log [list [quote pushing] token token-type token-modifiers]]
   [push-token [token-line token] [token-start token] [token-end token] token-type token-modifiers]]
 
+[global token-type-string [quote 5]]
+
 [func push-form-as-quoted [form]
   [if [eq [first form] [quote w]]
-    [push-token-as-sem-tok [second form] [quote 5] [quote 0]]
+    [push-token-as-sem-tok [second form] token-type-string [quote 0]]
     [do
       [assert [eq [first form] [quote l]]]
       [loop [i [quote 1]]

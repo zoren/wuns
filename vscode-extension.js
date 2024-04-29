@@ -209,11 +209,13 @@ const tryMap = (arr, f) => {
   return unit
 }
 const makeEvaluator = (funcEnv) => {
+  const globalVarValues = new Map()
+  const globalEnv = { varValues: globalVarValues, outer: null }
   const apply = ({ params, restParam, bodies }, args) => {
     const varValues = new Map()
     for (let i = 0; i < params.length; i++) varValues.set(params[i], args[i])
     if (restParam) varValues.set(restParam, makeList(...args.slice(params.length)))
-    const inner = { varValues, outer: null }
+    const inner = { varValues, outer: globalEnv }
     let result = unit
     for (const body of bodies) result = wunsEval(body, inner)
     return result
@@ -272,6 +274,11 @@ const makeEvaluator = (funcEnv) => {
         }
         const fObj = { isMacro: firstWord === 'macro', params, restParam, bodies }
         funcEnv.set(fname, fObj)
+        return unit
+      }
+      case 'global': {
+        const [varName, value] = args
+        globalVarValues.set(varName, wunsEval(value, env))
         return unit
       }
     }
