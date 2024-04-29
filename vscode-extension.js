@@ -200,23 +200,19 @@ const tokenBuilderForParseTree = () => {
   return { tokensBuilder, build: go }
 }
 
-let prevSemTokens = null
-
 /**
  * @param {vscode.TextDocument} document
  */
 const provideDocumentSemanticTokens = (document, cancellingToken) => {
   const before = performance.now()
-  if (prevSemTokens !== null && prevSemTokens.version === document.version) return prevSemTokens
   const topLevelList = parseDocument(document)
   const { tokensBuilder, build } = tokenBuilderForParseTree()
   for (const node of topLevelList) build(node)
-  prevSemTokens = tokensBuilder.build('1')
-  prevSemTokens.version = document.version
+  const semtoks = tokensBuilder.build('1')
   const after = performance.now()
   const elapsed = after - before
   console.log('time taken', Math.round(elapsed * 1000) / 1000, 'ms', document.version)
-  return prevSemTokens
+  return semtoks
 }
 
 const unit = Object.freeze([])
@@ -466,7 +462,6 @@ const interpretCurrentFile = () => {
   window.showInformationMessage('interpreted ' + topLevelList.length + ' forms')
 }
 
-
 const parseAll = (s) => {
   const assert = (cond, msg) => {
     if (!cond) throw new Error('assert failed: ' + msg)
@@ -561,16 +556,15 @@ function activate(context) {
     const content = readFileSync(wunsFilePath, 'utf8')
     const topLevelList = parseAll(content)
     try {
-      for (const form of topLevelList) {
-        // console.dir(form, { depth: null })
-        gogoeval(form)
-      }
+      for (const form of topLevelList) gogoeval(form)
     } catch (e) {
       console.error('interpret error', e)
     }
   }
   load()
   watchFile(wunsFilePath, { interval: 100 }, load)
+
+  const onDidChangeSemanticTokensListeners = []
 
   context.subscriptions.push(
     commands.registerCommand('wunslang.helloWorld', () => {
@@ -583,11 +577,19 @@ function activate(context) {
         const res = apply(f, [String(activeDocument.lineCount)])
         window.showInformationMessage('eval result: ' + print(res))
       }
+      console.log('calling listeners', onDidChangeSemanticTokensListeners.length)
+      for (const listener of onDidChangeSemanticTokensListeners) listener()
     }),
     commands.registerCommand('wunslang.interpret', interpretCurrentFile),
   )
 
+  const onDidChangeSemanticTokens = (listener, thisArgs, disposables) => {
+    console.log('onDidChangeSemanticTokens')
+    onDidChangeSemanticTokensListeners.push(listener)
+    return { dispose: () => {} }
+  }
   const provider = {
+    onDidChangeSemanticTokens,
     provideDocumentSemanticTokens,
     // provideDocumentSemanticTokensEdits,
   }

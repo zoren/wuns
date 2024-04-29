@@ -167,16 +167,15 @@
     [line-no line-no
      column column]
     [if [lt line-no document-line-count]
-      [let
-        [code-points [document-line-text line-no]]
+      [let [code-points [document-line-text line-no]]
         [if [lt column [size code-points]]
           [let [token [lex-document-line-one-token code-points column]
                 start [first token]
                 end [second token]
                 class [third token]]
-              [if [eq class [quote 0]]
-                [cont [inc line-no] [quote 0]]
-                [list line-no start end class]]]
+              [if class
+                [list line-no start end class]
+                [cont [inc line-no] [quote 0]]]]
           [cont [inc line-no] [quote 0]]]]
       [quote [0 0 0 0]]]]]
 
@@ -216,7 +215,7 @@
     [assert class unexpected end of input]
     [ifs
       [eq class [quote 97]]
-      [list [word-from-doc token] token-line end]
+      [list [list [word-from-doc token] token-line start end] token-line end]
 
       [eq class [quote 91]]
       [let [ls [mutable-list]]
