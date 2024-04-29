@@ -1,22 +1,26 @@
-[func inc [x] [add x [quote 1]]]
+[global 0 [quote 0]]
+[global 1 [quote 1]]
+[global 2 [quote 2]]
 
-[func dec [x] [sub x [quote 1]]]
+[func inc [x] [add x 1]]
 
-[func not [c] [eq c [quote 0]]]
+[func dec [x] [sub x 1]]
 
-[func is-zero [x] [eq x [quote 0]]]
+[func not [c] [eq c 0]]
 
-[func is-odd [x] [bit-and x [quote 1]]]
+[func is-zero [x] [eq x 0]]
+
+[func is-odd [x] [bit-and x 1]]
 
 [func is-even [x] [not [is-odd x]]]
 
-[func is-negative [x] [lt x [quote 0]]]
+[func is-negative [x] [lt x 0]]
 
-[func first [l] [at l [quote 0]]]
-[func second [l] [at l [quote 1]]]
-[func third [l] [at l [quote 2]]]
+[func first [l] [at l 0]]
+[func second [l] [at l 1]]
+[func third [l] [at l 2]]
 
-[func rest [l] [slice l [quote 1] [size l]]]
+[func rest [l] [slice l 1 [size l]]]
 
 [func list [.. l] l]
 
@@ -46,19 +50,19 @@
 [macro ifs [.. clauses]
   [let [s [size clauses]]
     [assert [not [is-zero s]] ifs requires an odd number of arguments]
-    [if [eq s [quote 1]]
+    [if [eq s 1]
         [first clauses]
         [list [quote if] [first clauses]
           [second clauses]
-          [concat [quote [ifs]] [slice clauses [quote 2] [size clauses]]]]]]]
+          [concat [quote [ifs]] [slice clauses 2 [size clauses]]]]]]]
 
 [macro and [.. clauses]
   [let [s [size clauses]]
     [ifs
       [is-zero s]
-      [quote 1]
+      1
 
-      [eq s [quote 1]]
+      [eq s 1]
       [first clauses]
 
       [let [gs [gensym]]
@@ -71,9 +75,9 @@
   [let [s [size clauses]]
     [ifs
       [is-zero s]
-      [quote 0]
+      0
 
-      [eq s [quote 1]]
+      [eq s 1]
       [first clauses]
 
       [let [gs [gensym]]
@@ -108,7 +112,7 @@
         [word [quote [91]]]
         [if [is-zero s]
           [word []]
-          [loop [i [quote 0]
+          [loop [i 0
                  res []]
             [if [lt i [dec s]]
               [cont [inc i] [concat res [print [at f i]] [word [quote [93]]]]]
@@ -116,14 +120,6 @@
         [word [quote [93]]]]]]]
 
 [macro comment [.. -] []]
-
-[comment
-  [import document-line-text line]
-  [import push-token line column length token-type token-modifier]
-  [when [lt line-no document-line-count]
-        [push-token line-no [quote 0] [quote 1337] [quote 0] [quote 0]]
-        [cont [inc line-no] [quote 0]]]
-]
 
 [func skip-line-spaces [code-points column]
   [loop [column column]
@@ -139,8 +135,8 @@
          col [skip-line-spaces code-points column]]
         [if [lt col [size code-points]]
           [list line-no col]
-          [cont [inc line-no] [quote 0]]]]
-      [list document-line-count [quote 0]]]]]
+          [cont [inc line-no] 0]]]
+      [list document-line-count 0]]]]
 
 [func lex-document-line-one-token [code-points column]
   [loop [column column]
@@ -160,7 +156,7 @@
                 [if [and [lt j [size code-points]] [is-ident-char [at code-points j]]]
                   [cont [inc j]]
                   [list tok-start j [quote 97]]]]]]]]
-        [list [quote -1] [quote 0] [quote 0]]]]]
+        [list [quote -1] 0 0]]]]
 
 [func lex-document-one-token [document-line-count line-no column]
   [loop
@@ -175,8 +171,8 @@
                 class [third token]]
               [if class
                 [list line-no start end class]
-                [cont [inc line-no] [quote 0]]]]
-          [cont [inc line-no] [quote 0]]]]
+                [cont [inc line-no] 0]]]
+          [cont [inc line-no] 0]]]
       [quote [0 0 0 0]]]]]
 
 [func token-line [token] [first token]]
@@ -189,15 +185,15 @@
 
 [func log-document-tokens-one-at-a-time [document-line-count]
   [loop
-    [line-no [quote 0]
-     column [quote 0]]
+    [line-no 0
+     column 0]
     [when [lt line-no document-line-count]
       [let [token [lex-document-one-token document-line-count line-no column]]
         [if [token-class token]
           [do
             [log [list line-no token]]
             [cont [first token] [third token]]]
-          [cont [inc line-no] [quote 0]]]]]]]
+          [cont [inc line-no] 0]]]]]]
 
 [func is-done [document-line-count line-no column]
   [token-class [lex-document-one-token document-line-count line-no column]]]
@@ -225,7 +221,7 @@
           [let [peek-token [lex-document-one-token document-line-count line-no column]]
             [ifs
               [not [token-class peek-token]]
-              [list [freeze ls] [inc document-line-count] [quote 0]]
+              [list [freeze ls] [inc document-line-count] 0]
 
               [eq [token-class peek-token] [quote 93]]
               [list [freeze ls] [token-line peek-token] [token-end peek-token]]
@@ -239,12 +235,12 @@
 
       [do
         [log [quote [fail fail here]]]
-        [list [] [inc document-line-count] [quote 0]]]]]]
+        [list [] [inc document-line-count] 0]]]]]
 
 [func parse-all-doc [document-line-count]
   [let [forms [mutable-list]]
-    [loop [line-no [quote 0]
-           column [quote 0]]
+    [loop [line-no 0
+           column 0]
       [if [and [lt line-no document-line-count]
                [token-class [lex-document-one-token document-line-count line-no column]]]
         [let [trip [parse1-doc document-line-count line-no column]
@@ -258,7 +254,7 @@
         [freeze forms]]]]]
 
 [comment
-  [loop [i [quote 0]]
+  [loop [i 0]
     [when [lt i document-line-count]
       [let [code-points [document-line-text i]]
         [log [list i [quote line-length] [size code-points]]]
@@ -266,18 +262,23 @@
 
  [log-document-tokens-one-at-a-time document-line-count]]
 
-[func push-token-as-sem-tok [token token-type token-modifiers]
-  [log [list [quote pushing] token token-type token-modifiers]]
-  [push-token [token-line token] [token-start token] [token-end token] token-type token-modifiers]]
+[func push-token-as-sem-tok [token token-type]
+  [push-token [token-line token] [token-start token] [token-end token] token-type 0]]
 
+[global token-type-variable [quote 0]]
+[global token-type-keyword [quote 1]]
+[global token-type-function [quote 2]]
+[global token-type-macro [quote 3]]
+[global token-type-parameter [quote 4]]
 [global token-type-string [quote 5]]
+[global token-type-number [quote 6]]
 
 [func push-form-as-quoted [form]
   [if [eq [first form] [quote w]]
-    [push-token-as-sem-tok [second form] token-type-string [quote 0]]
+    [push-token-as-sem-tok [second form] token-type-string]
     [do
-      [assert [eq [first form] [quote l]]]
-      [loop [i [quote 1]]
+      [assert [eq [first form] [quote l]] has to be a list here]
+      [loop [i 1]
         [when [lt i [size form]]
           [push-form-as-quoted [at form i]]
           [cont [inc i]]]]]]]
@@ -285,10 +286,10 @@
 [func provide-form-sem-toks [form]
   [ifs
     [eq [first form] [quote w]]
-    [push-token-as-sem-tok [second form] [quote 0] [quote 0]]
-    
-    [eq [first form] [quote l]]
+    [push-token-as-sem-tok [second form] token-type-variable]
+
     [let [sli [rest form]]
+      [assert [eq [first form] [quote l]] has to be a list here]
       [when [and [size sli] [eq [first [first sli]] [quote w]]]
         [let [head-token [second [first sli]]
               head-word [word-from-doc head-token]
@@ -296,30 +297,76 @@
           [ifs
             [eq head-word [quote quote]]
             [do
-              [push-token-as-sem-tok head-token [quote 1] [quote 0]]
-              [loop [i [quote 0]]
-                [when [lt i [size tail]]
-                  [push-form-as-quoted [at tail i]]
-                  [cont [inc i]]]]]
+              [push-token-as-sem-tok head-token token-type-keyword]
+              [push-form-as-quoted [first tail]]
+              ]
 
             [eq head-word [quote if]]
             [do
-              [push-token-as-sem-tok head-token [quote 1] [quote 0]]
-              [loop [i [quote 0]]
+              [push-token-as-sem-tok head-token token-type-keyword]
+              [loop [i 0]
                 [when [lt i [size tail]]
                   [provide-form-sem-toks [at tail i]]
-                  [cont [inc i]]]]
-              ]
+                  [cont [inc i]]]]]
 
-            []
-          ]]]]
+            [or [eq head-word [quote let]] [eq head-word [quote loop]]]
+            [let [bindings [if [size tail] [first tail] []]
+                  bodies [rest tail]
+                  s-minus [dec [size bindings]]]
+                [push-token-as-sem-tok head-token token-type-keyword]
+                [loop [i 0]
+                  [when [lt i s-minus]
+                    [let [binder [at bindings i]]
+                      [when [eq [first binder] [quote w]]
+                        [push-token-as-sem-tok [second binder] token-type-variable]]]
+                    [provide-form-sem-toks [at bindings [inc i]]]
+                    [cont [add i 2]]]]
+                [loop [i 0]
+                  [when [lt i [size bodies]]
+                    [provide-form-sem-toks [at bodies i]]
+                    [cont [inc i]]]]]
 
-    []]]
+            [eq head-word [quote cont]]
+            [do
+              [push-token-as-sem-tok head-token token-type-keyword]
+              [loop [i 0]
+                [when [lt i [size tail]]
+                  [provide-form-sem-toks [at tail i]]
+                  [cont [inc i]]]]]
+
+            [or [eq head-word [quote func]] [eq head-word [quote macro]]]
+            [let [name [first tail]
+                  params [second tail]
+                  body [slice tail 1 [size tail]]]
+                [log [list [quote params] params]]
+                [push-token-as-sem-tok head-token token-type-keyword]
+                [push-token-as-sem-tok [second name]
+                  [if [eq head-word [quote func]] token-type-function token-type-macro]]
+                [loop [i 1]
+                  [when [lt i [size params]]
+                    [let [param [at params i]]
+                      [when [eq [first param] [quote w]]
+                        [push-token-as-sem-tok [second param] token-type-parameter]]]
+                    [cont [inc i]]]]
+                [loop [i 0]
+                  [when [lt i [size body]]
+                    [provide-form-sem-toks [at body i]]
+                    [cont [inc i]]]]
+                
+                  ]
+                    
+              [do
+                [log [quote [fail fail here]]]
+                [push-token-as-sem-tok head-token token-type-function]
+                [loop [i 0]
+                  [when [lt i [size tail]]
+                    [provide-form-sem-toks [at tail i]]
+                    [cont [inc i]]]
+                ]]]]]]]]
 
 [func provide-document-semantic-tokens [document-line-count]
   [let [trees [parse-all-doc document-line-count]]
-    [loop [i [quote 0]]
+    [loop [i 0]
       [when [lt i [size trees]]
-        [log [at trees i]]
         [provide-form-sem-toks [at trees i]]
         [cont [inc i]]]]]]
