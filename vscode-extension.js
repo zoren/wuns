@@ -2,6 +2,15 @@ const isWordCharCode = (cc) => {
   return (cc >= 97 && cc <= 122) || (cc >= 48 && cc <= 57) || cc === 46 || cc === 61 || cc === 45
 }
 
+const isWordString = (s) => {
+  if (s.length === 0) return false
+  for (let i = 0; i < s.length; i++) if (!isWordCharCode(s.charCodeAt(i))) return false
+  return true
+}
+
+/**
+ * @param {vscode.TextDocument} document
+ */
 const parseDocument = (document) => {
   let line = 0
   let character = 0
@@ -357,7 +366,7 @@ const mkFuncEnv = ({ log }) => {
   }
   const number = (s) => {
     const n = Number(s)
-    assert(!isNaN(n), 'number expected: ' + s)
+    if (isNaN(n)) throw new Error('expected number, found: ' + s)
     return n
   }
   // would be cool to do in a host-func special form
@@ -468,6 +477,69 @@ const interpretCurrentFile = () => {
   window.showInformationMessage('interpreted ' + topLevelList.length + ' forms')
 }
 
+
+const parseAll = (s) => {
+  const assert = (cond, msg) => {
+    if (!cond) throw new Error('assert failed: ' + msg)
+  }
+
+  const isWhitespace = (c) => c === ' ' || c === '\n'
+
+  const isWordChar = (c) => /[a-z0-9.=]|-/.test(c)
+
+  let index = 0
+  const lexNext = () => {
+    while (index < s.length) {
+      const tokStart = index
+      const c = s[index++]
+      if (isWhitespace(c)) continue
+      if (c === '[' || c === ']') return c
+      assert(isWordChar(c), `illegal character ${c}`)
+      while (index < s.length && isWordChar(s[index])) index++
+      return s.slice(tokStart, index)
+    }
+    return null
+  }
+
+  let token
+  const nextToken = () => {
+    token = lexNext()
+    return null
+  }
+  nextToken()
+  const go = () => {
+    {
+      const peekTok = token
+      nextToken()
+      if (peekTok !== '[') {
+        if (peekTok === ']') throw new Error('unexpected ]')
+        if (!isWordString(peekTok)) throw new Error('unexpected token: ' + peekTok)
+        return peekTok
+      }
+    }
+    const list = []
+    while (true) {
+      if (token === null) break
+      if (token === ']') {
+        nextToken()
+        break
+      }
+      list.push(go())
+    }
+    return makeList(...list)
+  }
+
+  const forms = []
+  while (true) {
+    if (token === null) break
+    if (token === ']') {
+      nextToken()
+      continue
+    }
+    forms.push(go())
+  }
+  return forms
+}
 /**
  * @param {vscode.ExtensionContext} context
  */
