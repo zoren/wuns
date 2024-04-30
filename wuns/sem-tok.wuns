@@ -263,7 +263,7 @@
  [log-document-tokens-one-at-a-time document-line-count]]
 
 [func push-token-as-sem-tok [token token-type]
-  [push-token [token-line token] [token-start token] [token-end token] token-type 0]]
+  [push-token [token-line token] [token-start token] [sub [token-end token] [token-start token]] token-type 0]]
 
 [global token-type-variable [quote 0]]
 [global token-type-keyword [quote 1]]
