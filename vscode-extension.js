@@ -571,27 +571,18 @@ function activate(context) {
    * @param {vscode.CancellationToken} token
    */
   const provideSelectionRanges = (document, positions) => {
-    console.log(
-      'provideSelectionRanges',
-      positions.map((p) => p.line + ':' + p.character),
-    )
     const topLevelList = parseDocument(document)
-    console.log('topLevelList', topLevelList)
-    const rangeToString = (range) =>
-      `${range.start.line}:${range.start.character} - ${range.end.line}:${range.end.character}`
     const tryFindRange = (pos) => {
       const go = (node, parentRange) => {
         const { line, character, text } = node
         if (text) {
           const tokenRange = new Range(line, character, line, character + text.length)
-          // console.log('token range', rangeToString(tokenRange), { contains: tokenRange.contains(pos) })
           if (!tokenRange.contains(pos)) return null
           return new SelectionRange(tokenRange, parentRange)
         }
         if (!Array.isArray(node)) throw new Error('expected array')
         const { startToken, endToken } = node
         const listRange = new Range(startToken.line, startToken.character, endToken.line, endToken.character)
-        // console.log('list range', rangeToString(listRange), { contains: listRange.contains(pos) })
         if (!listRange.contains(pos)) return null
         const selRange = new SelectionRange(listRange, parentRange)
         for (const child of node) {
