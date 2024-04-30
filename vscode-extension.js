@@ -58,9 +58,10 @@ const parseDocument = (document) => {
       return wordToken
     }
     if (tokenType !== '[') throw new Error('unexpected token type ' + tokenType)
+    const tokenPos = { line, character }
     nextToken()
     const list = []
-    list.startToken = { line, character }
+    list.startToken = tokenPos
     while (true) {
       if (done) return list
       if (tokenType === ']') {
