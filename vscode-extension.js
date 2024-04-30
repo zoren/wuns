@@ -53,24 +53,30 @@ const parseDocument = (document) => {
   const go = () => {
     while (tokenType === ']') nextToken()
     if (tokenType === 'word') {
-      const wordToken = { line, character: startCol, text: lineText.slice(startCol, character) }
+      const wordToken = Object.freeze({
+        range: new Range(line, startCol, line, character),
+        text: lineText.slice(startCol, character),
+      })
       nextToken()
       return wordToken
     }
     if (tokenType !== '[') throw new Error('unexpected token type ' + tokenType)
-    const tokenPos = { line, character: startCol }
+    const startTokenPos = new vscode.Position(line, startCol)
     nextToken()
     const list = []
-    list.startToken = tokenPos
     while (true) {
-      if (done) return list
+      if (done) {
+        list.range = new vscode.Range(startTokenPos, new vscode.Position(line, character))
+        break
+      }
       if (tokenType === ']') {
-        list.endToken = { line, character }
+        list.range = new vscode.Range(startTokenPos, new vscode.Position(line, character + 1))
         nextToken()
-        return list
+        break
       }
       list.push(go())
     }
+    return Object.freeze(list)
   }
   const topLevelList = []
   while (!done) topLevelList.push(go())
@@ -81,64 +87,21 @@ const vscode = require('vscode')
 
 const { SemanticTokensLegend, SemanticTokensBuilder, languages, SelectionRange, Range } = vscode
 
-const tokenTypes = [
-  'variable',
-  'keyword',
-  'function',
-  'macro',
-  'parameter',
-  'string',
-  'number',
-  // 'method',
-  // 'property',
-  // 'operator',
-]
-
-const tokenTypesToIndexMap = new Map(tokenTypes.map((type, idx) => [type, idx]))
-
-const encodeTokenType = (tokenType) => {
-  if (tokenTypesToIndexMap.has(tokenType)) return tokenTypesToIndexMap.get(tokenType)
-  if (tokenType === 'notInLegend') return tokenTypesToIndexMap.size + 2
-  return 0
-}
+const tokenTypes = ['variable', 'keyword', 'function', 'macro', 'parameter', 'string', 'number']
 
 const tokenModifiers = ['local', 'declaration', 'definition', 'defaultLibrary', 'static']
 
-const tokenModifiersToIndex = new Map(tokenModifiers.map((mod, idx) => [mod, idx]))
-
-const encodeTokenModifiers = (strTokenModifiers = []) => {
-  let result = 0
-  for (let i = 0; i < strTokenModifiers.length; i++) {
-    const tokenModifier = strTokenModifiers[i]
-    if (tokenModifiersToIndex.has(tokenModifier)) {
-      result = result | (1 << tokenModifiersToIndex.get(tokenModifier))
-    } else if (tokenModifier === 'notInLegend') {
-      result = result | (1 << (tokenModifiers.size + 2))
-    }
-  }
-  return result
-}
 const legend = new SemanticTokensLegend(tokenTypes, tokenModifiers)
-
-const keywordTokenType = encodeTokenType('keyword')
-const functionTokenType = encodeTokenType('function')
-const macroTokenType = encodeTokenType('macro')
-const variableTokenType = encodeTokenType('variable')
-const parameterTokenType = encodeTokenType('parameter')
-const stringTokenType = encodeTokenType('string')
-
-const declarationTokenModifier = encodeTokenModifiers(['declaration'])
-const localDeclarationTokenModifier = encodeTokenModifiers(['declaration', 'local'])
 
 const tokenBuilderForParseTree = () => {
   const tokensBuilder = new SemanticTokensBuilder(legend)
-  const pushToken = ({ line, character, text }, tokenType, tokenModifiers) => {
-    if (text) tokensBuilder.push(line, character, text.length, tokenType, tokenModifiers)
+  const pushToken = ({ range, text }, tokenType, ...tokenModifiers) => {
+    if (text) tokensBuilder.push(range, tokenType, tokenModifiers)
   }
   const go = (node) => {
     const { text } = node
     if (text) {
-      pushToken(node, variableTokenType)
+      pushToken(node, 'variable')
       return
     }
     if (Array.isArray(node)) {
@@ -148,9 +111,9 @@ const tokenBuilderForParseTree = () => {
       if (!headText) return
       switch (headText) {
         case 'quote': {
-          pushToken(head, keywordTokenType)
+          pushToken(head, 'keyword')
           const goQ = (node) => {
-            if (node.text) pushToken(node, stringTokenType)
+            if (node.text) pushToken(node, 'string')
             else {
               for (const child of node) goQ(child)
             }
@@ -159,40 +122,40 @@ const tokenBuilderForParseTree = () => {
           break
         }
         case 'if':
-          pushToken(head, keywordTokenType)
+          pushToken(head, 'keyword')
           for (const child of tail) go(child)
           break
         case 'let':
         case 'loop': {
-          pushToken(head, keywordTokenType)
+          pushToken(head, 'keyword')
           const [bindings, ...body] = tail
           for (let i = 0; i < bindings.length - 1; i += 2) {
-            pushToken(bindings[i], variableTokenType, localDeclarationTokenModifier)
+            pushToken(bindings[i], 'variable', 'declaration', 'local')
             go(bindings[i + 1])
           }
           for (const child of body) go(child)
           break
         }
         case 'cont':
-          pushToken(head, keywordTokenType)
+          pushToken(head, 'keyword')
           for (const child of tail) go(child)
           break
         case 'func':
         case 'macro': {
-          pushToken(head, keywordTokenType)
+          pushToken(head, 'keyword')
           const [fmName, parameters, ...body] = tail
-          pushToken(fmName, headText === 'func' ? functionTokenType : macroTokenType, declarationTokenModifier)
+          pushToken(fmName, headText === 'func' ? 'function' : 'macro', 'declaration')
           let pi = 0
           for (const parameter of parameters) {
             if (pi++ === parameters.length - 2 && parameter.text === '..') {
-              pushToken(parameter, keywordTokenType)
-            } else pushToken(parameter, parameterTokenType)
+              pushToken(parameter, 'keyword')
+            } else pushToken(parameter, 'parameter')
           }
           for (const child of body) go(child)
           break
         }
         default:
-          pushToken(head, functionTokenType)
+          pushToken(head, 'function')
           for (const arg of tail) go(arg)
           break
       }
@@ -573,23 +536,18 @@ function activate(context) {
   const provideSelectionRanges = (document, positions) => {
     const topLevelList = parseDocument(document)
     const tryFindRange = (pos) => {
-      const go = (node, parentRange) => {
-        const { line, character, text } = node
-        if (text) {
-          const tokenRange = new Range(line, character, line, character + text.length)
-          if (!tokenRange.contains(pos)) return null
-          return new SelectionRange(tokenRange, parentRange)
+      const go = (node, parentSelectionRange) => {
+        const { range } = node
+        if (!range.contains(pos)) return null
+        if (Array.isArray(node)) {
+          const selRange = new SelectionRange(range, parentSelectionRange)
+          for (const child of node) {
+            const found = go(child, selRange)
+            if (found) return found
+          }
+          return selRange
         }
-        if (!Array.isArray(node)) throw new Error('expected array')
-        const { startToken, endToken } = node
-        const listRange = new Range(startToken.line, startToken.character, endToken.line, endToken.character)
-        if (!listRange.contains(pos)) return null
-        const selRange = new SelectionRange(listRange, parentRange)
-        for (const child of node) {
-          const found = go(child, selRange)
-          if (found) return found
-        }
-        return selRange
+        return new SelectionRange(range, parentSelectionRange)
       }
       for (const node of topLevelList) {
         const found = go(node, undefined)

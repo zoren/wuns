@@ -1,4 +1,4 @@
-hej
+lex-document-one-token
 [quote 1337]
 [quote [007 1337 [] 23 ]]
 [list [quote [0 7 1337]]]
@@ -11,3 +11,6 @@ hej
     [quote if] cond
     [concat [quote [do]] forms]
     []]]
+[func is-done [document-line-count line-no column]
+  [token-class [lex-document-one-token document-line-count line-no column]]]
+ 
