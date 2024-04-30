@@ -70,7 +70,7 @@ const parseDocument = (document) => {
         break
       }
       if (tokenType === ']') {
-        list.range = new vscode.Range(startTokenPos, new vscode.Position(line, character + 1))
+        list.range = new vscode.Range(startTokenPos, new vscode.Position(line, startCol + 1))
         nextToken()
         break
       }
@@ -95,8 +95,8 @@ const legend = new SemanticTokensLegend(tokenTypes, tokenModifiers)
 
 const tokenBuilderForParseTree = () => {
   const tokensBuilder = new SemanticTokensBuilder(legend)
-  const pushToken = ({ range, text }, tokenType, ...tokenModifiers) => {
-    if (text) tokensBuilder.push(range, tokenType, tokenModifiers)
+  const pushToken = ({ range }, tokenType, ...tokenModifiers) => {
+    tokensBuilder.push(range, tokenType, tokenModifiers)
   }
   const go = (node) => {
     const { text } = node
@@ -114,9 +114,7 @@ const tokenBuilderForParseTree = () => {
           pushToken(head, 'keyword')
           const goQ = (node) => {
             if (node.text) pushToken(node, 'string')
-            else {
-              for (const child of node) goQ(child)
-            }
+            else node.forEach(goQ)
           }
           if (tail.length >= 1) goQ(tail[0])
           break
@@ -149,7 +147,7 @@ const tokenBuilderForParseTree = () => {
           for (const parameter of parameters) {
             if (pi++ === parameters.length - 2 && parameter.text === '..') {
               pushToken(parameter, 'keyword')
-            } else pushToken(parameter, 'parameter')
+            } else pushToken(parameter, 'parameter', 'declaration')
           }
           for (const child of body) go(child)
           break
