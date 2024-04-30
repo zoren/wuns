@@ -96,29 +96,17 @@
 [func is-between-inclusive [lower c upper]
   [and [le lower c] [le c upper]]]
 
+[func is-a-to-z [c]
+  [is-between-inclusive [quote 97] c [quote 122]]]
+
 [func is-digit [c] [is-between-inclusive [quote 48] c [quote 57]]]
 
 [func is-ident-char [c]
   [or
-    [is-between-inclusive [quote 97] c [quote 122]]
+    [is-a-to-z c]
     [is-digit c]
     [is-between-inclusive [quote 45] c [quote 46]]
     [eq c [quote 61]]]]
-
-[func print [f]
-  [if [is-word f]
-    f
-    [let [s [size f]]
-      [concat-words
-        [word [quote [91]]]
-        [if [is-zero s]
-          [word []]
-          [loop [i 0
-                 res []]
-            [if [lt i [dec s]]
-              [cont [inc i] [concat res [print [at f i]] [word [quote [93]]]]]
-              [concat-words res [print [at f [dec s]]]]]]]
-        [word [quote [93]]]]]]]
 
 [macro comment [.. -] []]
 
@@ -182,19 +170,7 @@
 
 [func token-end [token] [third token]]
 
-[func token-class [token] [at token [quote 3]]]
-
-[func log-document-tokens-one-at-a-time [document-line-count]
-  [loop
-    [line-no 0
-     column 0]
-    [when [lt line-no document-line-count]
-      [let [token [lex-document-one-token document-line-count line-no column]]
-        [if [token-class token]
-          [do
-            [log [list line-no token]]
-            [cont [first token] [third token]]]
-          [cont [inc line-no] 0]]]]]]
+[func token-class [token] [at token 3]]
 
 [func is-done [document-line-count line-no column]
   [token-class [lex-document-one-token document-line-count line-no column]]]
@@ -253,15 +229,6 @@
             [log [list new-line new-column]]
             [cont new-line new-column]]]
         [freeze forms]]]]]
-
-[comment
-  [loop [i 0]
-    [when [lt i document-line-count]
-      [let [code-points [document-line-text i]]
-        [log [list i [quote line-length] [size code-points]]]
-        [cont [inc i]]]]]
-
- [log-document-tokens-one-at-a-time document-line-count]]
 
 [func push-token-as-sem-tok [token token-type]
   [push-token [token-line token] [token-start token] [sub [token-end token] [token-start token]] token-type 0]]
@@ -358,18 +325,14 @@
                 [loop [i 0]
                   [when [lt i [size body]]
                     [provide-form-sem-toks [at body i]]
-                    [cont [inc i]]]]
-                
-                  ]
-                    
+                    [cont [inc i]]]]]
+
               [do
-                [log [quote [fail fail here]]]
                 [push-token-as-sem-tok head-token token-type-function]
                 [loop [i 0]
                   [when [lt i [size tail]]
                     [provide-form-sem-toks [at tail i]]
-                    [cont [inc i]]]
-                ]]]]]]]]
+                    [cont [inc i]]]]]]]]]]]
 
 [func provide-document-semantic-tokens [document-line-count]
   [let [trees [parse-all-doc document-line-count]]
