@@ -83,6 +83,17 @@ const parseDocument = (document) => {
   return topLevelList
 }
 
+const cache = new Map()
+
+const cacheFetchOrParse = (document) => {
+  const { version } = document
+  const cached = cache.get(document)
+  if (cached && cached.version === version) return cached.forms
+  const forms = parseDocument(document)
+  cache.set(document, { forms, version })
+  return forms
+}
+
 const vscode = require('vscode')
 
 const { SemanticTokensLegend, SemanticTokensBuilder, languages, SelectionRange, Range } = vscode
@@ -410,7 +421,7 @@ const interpretCurrentFile = () => {
   const outputChannel = window.createOutputChannel('wuns output')
   outputChannel.show()
   const document = getActiveTextEditorDocument()
-  const topLevelList = parseDocument(document)
+  const topLevelList = cacheFetchOrParse(document)
   const funcEnv = mkFuncEnv({ log: (s) => outputChannel.appendLine(s) })
   const { gogoeval } = makeEvaluator(funcEnv)
   for (const form of topLevelList) gogoeval(flattenForm(form))
@@ -532,7 +543,7 @@ function activate(context) {
    * @param {vscode.CancellationToken} token
    */
   const provideSelectionRanges = (document, positions) => {
-    const topLevelList = parseDocument(document)
+    const topLevelList = cacheFetchOrParse(document)
     const tryFindRange = (pos) => {
       const go = (node, parentSelectionRange) => {
         const { range } = node
@@ -573,7 +584,7 @@ function activate(context) {
       return symToks
     }
     const before = performance.now()
-    const topLevelList = parseDocument(document)
+    const topLevelList = cacheFetchOrParse(document)
     const { tokensBuilder, build } = tokenBuilderForParseTree()
     for (const node of topLevelList) build(node)
     const semtoks = tokensBuilder.build('1')
