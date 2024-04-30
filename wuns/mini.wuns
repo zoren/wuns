@@ -1,6 +1,13 @@
 hej
 [quote 1337]
-[quote [007 1337]]
-[if [quote 0] [] []]
-[let [] 3]
-
+[quote [007 1337 [] 23 ]]
+[list [quote [0 7 1337]]]
+[if [quote 0] x [add y z]]
+[let [d []] 3]
+[loop [i []] [cont [quote 0] x y]]
+[func f [x1 y2 z3 .. rest] [add x 1]]
+[macro when [cond .. forms]
+  [list
+    [quote if] cond
+    [concat [quote [do]] forms]
+    []]]

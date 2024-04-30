@@ -1,6 +1,7 @@
 [global 0 [quote 0]]
 [global 1 [quote 1]]
 [global 2 [quote 2]]
+[global 3 [quote 3]]
 
 [func inc [x] [add x 1]]
 
@@ -346,7 +347,13 @@
                   [when [lt i [size params]]
                     [let [param [at params i]]
                       [when [eq [first param] [quote w]]
-                        [push-token-as-sem-tok [second param] token-type-parameter]]]
+                        [let [param-token [second param]]
+                          [push-token-as-sem-tok param-token
+                          [if [and [eq i [sub [size params] 2]]
+                              [eq [sub [token-end param-token] [token-start param-token]] 2]
+                              [eq [word-from-doc param-token] [quote ..]]]
+                            token-type-keyword
+                            token-type-parameter]]]]]
                     [cont [inc i]]]]
                 [loop [i 0]
                   [when [lt i [size body]]
@@ -370,3 +377,4 @@
       [when [lt i [size trees]]
         [provide-form-sem-toks [at trees i]]
         [cont [inc i]]]]]]
+
