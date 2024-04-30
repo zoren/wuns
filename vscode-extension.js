@@ -115,59 +115,57 @@ const tokenBuilderForParseTree = () => {
       pushToken(node, 'variable')
       return
     }
-    if (Array.isArray(node)) {
-      if (node.length === 0) return
-      const [head, ...tail] = node
-      const headText = head.text
-      if (!headText) return
-      switch (headText) {
-        case 'quote': {
-          pushToken(head, 'keyword')
-          const goQ = (node) => {
-            if (node.text) pushToken(node, 'string')
-            else node.forEach(goQ)
-          }
-          if (tail.length >= 1) goQ(tail[0])
-          break
+    if (!Array.isArray(node) || node.length === 0) return
+    const [head, ...tail] = node
+    const headText = head.text
+    if (!headText) return
+    switch (headText) {
+      case 'quote': {
+        pushToken(head, 'keyword')
+        const goQ = (node) => {
+          if (node.text) pushToken(node, 'string')
+          else node.forEach(goQ)
         }
-        case 'if':
-          pushToken(head, 'keyword')
-          for (const child of tail) go(child)
-          break
-        case 'let':
-        case 'loop': {
-          pushToken(head, 'keyword')
-          const [bindings, ...body] = tail
-          for (let i = 0; i < bindings.length - 1; i += 2) {
-            pushToken(bindings[i], 'variable', 'declaration', 'local')
-            go(bindings[i + 1])
-          }
-          for (const child of body) go(child)
-          break
-        }
-        case 'cont':
-          pushToken(head, 'keyword')
-          for (const child of tail) go(child)
-          break
-        case 'func':
-        case 'macro': {
-          pushToken(head, 'keyword')
-          const [fmName, parameters, ...body] = tail
-          pushToken(fmName, headText === 'func' ? 'function' : 'macro', 'declaration')
-          let pi = 0
-          for (const parameter of parameters) {
-            if (pi++ === parameters.length - 2 && parameter.text === '..') {
-              pushToken(parameter, 'keyword')
-            } else pushToken(parameter, 'parameter', 'declaration')
-          }
-          for (const child of body) go(child)
-          break
-        }
-        default:
-          pushToken(head, 'function')
-          for (const arg of tail) go(arg)
-          break
+        if (tail.length >= 1) goQ(tail[0])
+        break
       }
+      case 'if':
+        pushToken(head, 'keyword')
+        for (const child of tail) go(child)
+        break
+      case 'let':
+      case 'loop': {
+        pushToken(head, 'keyword')
+        const [bindings, ...body] = tail
+        for (let i = 0; i < bindings.length - 1; i += 2) {
+          pushToken(bindings[i], 'variable', 'declaration', 'local')
+          go(bindings[i + 1])
+        }
+        for (const child of body) go(child)
+        break
+      }
+      case 'cont':
+        pushToken(head, 'keyword')
+        for (const child of tail) go(child)
+        break
+      case 'func':
+      case 'macro': {
+        pushToken(head, 'keyword')
+        const [fmName, parameters, ...body] = tail
+        pushToken(fmName, headText === 'func' ? 'function' : 'macro', 'declaration')
+        let pi = 0
+        for (const parameter of parameters) {
+          if (pi++ === parameters.length - 2 && parameter.text === '..') {
+            pushToken(parameter, 'keyword')
+          } else pushToken(parameter, 'parameter', 'declaration')
+        }
+        for (const child of body) go(child)
+        break
+      }
+      default:
+        pushToken(head, 'function')
+        for (const arg of tail) go(arg)
+        break
     }
   }
   return { tokensBuilder, build: go }
