@@ -58,7 +58,7 @@ const parseDocument = (document) => {
       return wordToken
     }
     if (tokenType !== '[') throw new Error('unexpected token type ' + tokenType)
-    const tokenPos = { line, character }
+    const tokenPos = { line, character: startCol }
     nextToken()
     const list = []
     list.startToken = tokenPos
@@ -79,7 +79,7 @@ const parseDocument = (document) => {
 
 const vscode = require('vscode')
 
-const { SemanticTokensLegend, SemanticTokensBuilder, languages } = vscode
+const { SemanticTokensLegend, SemanticTokensBuilder, languages, SelectionRange, Range } = vscode
 
 const tokenTypes = [
   'variable',
@@ -540,7 +540,7 @@ function activate(context) {
   }
   const pushToken = (...args) => {
     const [line, column, length, tokenType, tokenModifiers] = args.map(number)
-    console.log('push-token', { line, column, length, tokenType, tokenModifiers })
+    // console.log('push-token', { line, column, length, tokenType, tokenModifiers })
     tokensBuilder.push(line, column, length, tokenType, tokenModifiers)
   }
   const funcEnv = mkFuncEnv({ log: (s) => console.log(s) })
@@ -562,6 +562,58 @@ function activate(context) {
 
   const onDidChangeSemanticTokensListeners = []
   let overrideSymToks = null
+
+  // 		provideSelectionRanges(document: TextDocument, positions: readonly Position[], token: CancellationToken): ProviderResult<SelectionRange[]>;
+  /**
+   *
+   * @param {vscode.TextDocument} document
+   * @param {vscode.Position[]} positions
+   * @param {vscode.CancellationToken} token
+   */
+  const provideSelectionRanges = (document, positions) => {
+    console.log(
+      'provideSelectionRanges',
+      positions.map((p) => p.line + ':' + p.character),
+    )
+    const topLevelList = parseDocument(document)
+    console.log('topLevelList', topLevelList)
+    const rangeToString = (range) =>
+      `${range.start.line}:${range.start.character} - ${range.end.line}:${range.end.character}`
+    const tryFindRange = (pos) => {
+      const go = (node, parentRange) => {
+        const { line, character, text } = node
+        if (text) {
+          const tokenRange = new Range(line, character, line, character + text.length)
+          // console.log('token range', rangeToString(tokenRange), { contains: tokenRange.contains(pos) })
+          if (!tokenRange.contains(pos)) return null
+          return new SelectionRange(tokenRange, parentRange)
+        }
+        if (!Array.isArray(node)) throw new Error('expected array')
+        const { startToken, endToken } = node
+        const listRange = new Range(startToken.line, startToken.character, endToken.line, endToken.character)
+        // console.log('list range', rangeToString(listRange), { contains: listRange.contains(pos) })
+        if (!listRange.contains(pos)) return null
+        const selRange = new SelectionRange(listRange, parentRange)
+        for (const child of node) {
+          const found = go(child, selRange)
+          if (found) return found
+        }
+        return selRange
+      }
+      for (const node of topLevelList) {
+        const found = go(node, undefined)
+        if (found) return found
+      }
+      return null
+    }
+
+    const selRanges = []
+    for (const pos of positions) {
+      const found = tryFindRange(pos)
+      if (found) selRanges.push(found)
+    }
+    return selRanges
+  }
 
   /**
    * @param {vscode.TextDocument} document
@@ -612,15 +664,18 @@ function activate(context) {
     onDidChangeSemanticTokensListeners.push(listener)
     return { dispose: () => {} }
   }
-  const provider = {
+  const semanticTokensProvider = {
     onDidChangeSemanticTokens,
     provideDocumentSemanticTokens,
     // provideDocumentSemanticTokensEdits,
   }
 
   const selector = { language: 'wuns', scheme: 'file' }
-  languages.registerOnTypeFormattingEditProvider
-  context.subscriptions.push(languages.registerDocumentSemanticTokensProvider(selector, provider, legend))
+
+  context.subscriptions.push(
+    languages.registerDocumentSemanticTokensProvider(selector, semanticTokensProvider, legend),
+    languages.registerSelectionRangeProvider(selector, { provideSelectionRanges }),
+  )
   console.log('Congratulations, your extension "wunslang" is now active!')
 }
 
