@@ -1,6 +1,6 @@
 {
   "name": "wuns",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "the wuns programming language extension",
   "engines": {
     "vscode": "^1.88.0"
