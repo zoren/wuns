@@ -1,0 +1,10 @@
+lex-document-one-token
+[let [x [f 2 3]
+      y [f 2 3]]
+  [add 2 [d d d]    d d 3]
+ ]
+ 
+[func is-done [document-line-count line-no column]
+  [token-class [lex-document-one-token document-line-count line-no column]]]
+[quote [007 1337
+[] 23 ]]
