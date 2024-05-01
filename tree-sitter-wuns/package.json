@@ -1,0 +1,47 @@
+{
+  "name": "tree-sitter-wuns",
+  "version": "1.0.0",
+  "description": "",
+  "main": "bindings/node",
+  "types": "bindings/node",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "install": "node-gyp-build",
+    "prebuildify": "prebuildify --napi --strip"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "node-addon-api": "^7.1.0",
+    "node-gyp-build": "^4.8.0"
+  },
+  "peerDependencies": {
+    "tree-sitter": "^0.21.1"
+  },
+  "peerDependenciesMeta": {
+    "tree_sitter": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "prebuildify": "^6.0.0",
+    "tree-sitter-cli": "^0.22.5"
+  },
+  "files": [
+    "grammar.js",
+    "binding.gyp",
+    "prebuilds/**",
+    "bindings/node/*",
+    "queries/*",
+    "src/**"
+  ],
+  "tree-sitter": [
+    {
+      "scope": "source.wuns",
+      "injection-regex": "^wuns$"
+    }
+  ]
+}

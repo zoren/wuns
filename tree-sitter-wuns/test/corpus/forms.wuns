@@ -1,0 +1,12 @@
+==================|||
+Basic module
+==================|||
+
+[func inc [x] [add x [quote 1]]]
+
+---|||
+(source_file
+  (list_special_form
+    (word)
+    (list (word))
+    (list (word) (word) (list_special_form (word)))))

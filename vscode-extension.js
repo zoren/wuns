@@ -1,87 +1,47 @@
-const isWordCharCode = (cc) => {
-  return (cc >= 97 && cc <= 122) || (cc >= 48 && cc <= 57) || cc === 46 || cc === 61 || cc === 45
-}
+const vscode = require('vscode')
+const { SemanticTokensLegend, SemanticTokensBuilder, SelectionRange, Range, Position } = vscode
 
-const isWordString = (s) => {
-  if (s.length === 0) return false
-  for (let i = 0; i < s.length; i++) if (!isWordCharCode(s.charCodeAt(i))) return false
-  return true
-}
+const TSParser = require('tree-sitter')
+const parser = new TSParser()
+
+const Wuns = require('tree-sitter-wuns')
+parser.setLanguage(Wuns)
+
+const pointToPosition = ({ row, column }) => new Position(row, column)
+
+const rangeFromNode = ({ startPosition, endPosition }) =>
+  new Range(pointToPosition(startPosition), pointToPosition(endPosition))
 
 /**
- * @param {vscode.TextDocument} document
+ *
+ * @param {TSParser.SyntaxNode} node
+ * @returns
  */
-const parseDocument = (document) => {
-  let line = 0
-  let character = 0
-  let startCol = 0
-  let lineText = ''
-  let tokenType = ''
-  let done = false
-
-  const nextToken = () => {
-    while (line < document.lineCount) {
-      lineText = document.lineAt(line).text
-      if (character >= lineText.length) {
-        line++
-        character = 0
-        continue
-      }
-      const c = lineText[character]
-      switch (c) {
-        case ' ':
-          character++
-          continue
-        case '[':
-        case ']':
-          startCol = character
-          tokenType = c
-          character++
-          return
-      }
-      startCol = character
-      if (!isWordCharCode(c.charCodeAt(0))) throw new Error(`illegal character code ${c}`)
-      character++
-      while (character < lineText.length && isWordCharCode(lineText.charCodeAt(character))) character++
-      tokenType = 'word'
-      return
+const treeToOurForm = (node) => {
+  const { type, text, namedChildren } = node
+  let form
+  switch (type) {
+    case 'word':
+      form = { text }
+      break
+    case 'list': {
+      form = namedChildren.map(treeToOurForm)
+      break
     }
-    tokenType = ''
-    done = true
+    default:
+      throw new Error('unexpected node type: ' + type)
   }
-  nextToken()
-  const go = () => {
-    while (tokenType === ']') nextToken()
-    if (tokenType === 'word') {
-      const wordToken = Object.freeze({
-        range: new Range(line, startCol, line, character),
-        text: lineText.slice(startCol, character),
-      })
-      nextToken()
-      return wordToken
-    }
-    if (tokenType !== '[') throw new Error('unexpected token type ' + tokenType)
-    const startTokenPos = new vscode.Position(line, startCol)
-    nextToken()
-    const list = []
-    while (true) {
-      if (done) {
-        list.range = new vscode.Range(startTokenPos, new vscode.Position(line, character))
-        break
-      }
-      if (tokenType === ']') {
-        list.range = new vscode.Range(startTokenPos, new vscode.Position(line, startCol + 1))
-        nextToken()
-        break
-      }
-      list.push(go())
-    }
-    return Object.freeze(list)
-  }
-  const topLevelList = []
-  while (!done) topLevelList.push(go())
-  return topLevelList
+  form.range = rangeFromNode(node)
+  return form
 }
+
+const parseString = (sourceCodeString) => {
+  const tree = parser.parse(sourceCodeString)
+  const root = tree.rootNode
+  return root.children.map(treeToOurForm)
+}
+
+const parseDocument = (document) => parseString(document.getText())
 
 const cache = new Map()
 
@@ -93,10 +53,6 @@ const cacheFetchOrParse = (document) => {
   cache.set(document, { forms, version })
   return forms
 }
-
-const vscode = require('vscode')
-
-const { SemanticTokensLegend, SemanticTokensBuilder, languages, SelectionRange, Range } = vscode
 
 const tokenTypes = ['variable', 'keyword', 'function', 'macro', 'parameter', 'string', 'number']
 
@@ -404,7 +360,7 @@ const flattenForm = (form) => {
   return form.map(flattenForm)
 }
 
-const { commands, window } = vscode
+const { commands, window, languages } = vscode
 
 /**
  * @returns {vscode.TextDocument}
@@ -426,68 +382,7 @@ const interpretCurrentFile = () => {
   window.showInformationMessage('interpreted ' + topLevelList.length + ' forms')
 }
 
-const parseAll = (s) => {
-  const assert = (cond, msg) => {
-    if (!cond) throw new Error('assert failed: ' + msg)
-  }
-
-  const isWhitespace = (c) => c === ' ' || c === '\n'
-
-  const isWordChar = (c) => /[a-z0-9.=]|-/.test(c)
-
-  let index = 0
-  const lexNext = () => {
-    while (index < s.length) {
-      const tokStart = index
-      const c = s[index++]
-      if (isWhitespace(c)) continue
-      if (c === '[' || c === ']') return c
-      assert(isWordChar(c), `illegal character ${c}`)
-      while (index < s.length && isWordChar(s[index])) index++
-      return s.slice(tokStart, index)
-    }
-    return null
-  }
-
-  let token
-  const nextToken = () => {
-    token = lexNext()
-    return null
-  }
-  nextToken()
-  const go = () => {
-    {
-      const peekTok = token
-      nextToken()
-      if (peekTok !== '[') {
-        if (peekTok === ']') throw new Error('unexpected ]')
-        if (!isWordString(peekTok)) throw new Error('unexpected token: ' + peekTok)
-        return peekTok
-      }
-    }
-    const list = []
-    while (true) {
-      if (token === null) break
-      if (token === ']') {
-        nextToken()
-        break
-      }
-      list.push(go())
-    }
-    return makeList(...list)
-  }
-
-  const forms = []
-  while (true) {
-    if (token === null) break
-    if (token === ']') {
-      nextToken()
-      continue
-    }
-    forms.push(go())
-  }
-  return forms
-}
+const parseAll = (s) => parseString(s).map(flattenForm)
 
 const { watchFile, readFileSync } = require('fs')
 

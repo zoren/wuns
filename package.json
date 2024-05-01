@@ -39,5 +39,9 @@
     "trailingComma": "all",
     "semi": false,
     "printWidth": 120
+  },
+  "dependencies": {
+    "tree-sitter": "^0.21.1",
+    "tree-sitter-wuns": "file:tree-sitter-wuns"
   }
 }
