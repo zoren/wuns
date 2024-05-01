@@ -1,6 +1,6 @@
 {
   "name": "tree-sitter-wuns",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "bindings/node",
   "types": "bindings/node",

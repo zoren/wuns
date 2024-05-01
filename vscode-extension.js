@@ -28,6 +28,11 @@ const treeToOurForm = (node) => {
       form = namedChildren.map(treeToOurForm)
       break
     }
+    case 'list_special_form': {
+      const specialForm = node.child(1)
+      form = [{ text: specialForm.text, range: rangeFromNode(specialForm) }, ...namedChildren.map(treeToOurForm)]
+      break
+    }
     default:
       throw new Error('unexpected node type: ' + type)
   }
