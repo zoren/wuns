@@ -243,7 +243,6 @@
 [global token-type-macro [quote 3]]
 [global token-type-parameter [quote 4]]
 [global token-type-string [quote 5]]
-[global token-type-number [quote 6]]
 
 [func push-form-as-quoted [form]
   [if [eq [first form] [quote w]]

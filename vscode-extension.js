@@ -105,18 +105,44 @@ const onDidChangeTextDocument = (e) => {
   cacheObj.version = version
 }
 
-const tokenTypes = ['variable', 'keyword', 'function', 'macro', 'parameter', 'string', 'number']
+const tokenTypes = ['variable', 'keyword', 'function', 'macro', 'parameter', 'string']
 
 const tokenModifiers = ['local', 'declaration', 'definition', 'defaultLibrary', 'static']
 
 const legend = new SemanticTokensLegend(tokenTypes, tokenModifiers)
 
+const tokenTypesMap = new Map(tokenTypes.map((type, index) => [type, index]))
+
+const tokenModifiersMap = new Map(tokenModifiers.map((mod, index) => [mod, index]))
+
+const variableTokenType = tokenTypesMap.get('variable')
+const keywordTokenType = tokenTypesMap.get('keyword')
+const functionTokenType = tokenTypesMap.get('function')
+const macroTokenType = tokenTypesMap.get('macro')
+const parameterTokenType = tokenTypesMap.get('parameter')
+const stringTokenType = tokenTypesMap.get('string')
+
+// from https://github.com/microsoft/vscode-extension-samples/blob/main/semantic-tokens-sample/src/extension.ts#L54
+const encodeTokenModifiers = (...strTokenModifiers) => {
+  let result = 0
+  for (const tokenModifier of strTokenModifiers)
+    if (tokenModifiersMap.has(tokenModifier)) result = result | (1 << tokenModifiersMap.get(tokenModifier))
+  return result
+}
+
+const declarationModifier = encodeTokenModifiers('declaration')
+const localDeclarationTokenModifier = encodeTokenModifiers('local', 'declaration')
+
 const tokenBuilderForParseTree = () => {
   const tokensBuilder = new SemanticTokensBuilder(legend)
-  const pushToken = (syntaxNode, tokenType, ...tokenModifiers) => {
-    const range = rangeFromNode(syntaxNode)
-    // console.log('push-token', { range, tokenType, tokenModifiers })
-    tokensBuilder.push(range, tokenType, tokenModifiers)
+  const pushToken = ({ startPosition, endPosition }, tokenType, tokenModifiers) => {
+    tokensBuilder.push(
+      startPosition.row,
+      startPosition.column,
+      endPosition.column - startPosition.column,
+      tokenType,
+      tokenModifiers,
+    )
   }
   /**
    * @param {TSParser.SyntaxNode} node
@@ -124,7 +150,7 @@ const tokenBuilderForParseTree = () => {
   const go = (node) => {
     const { type, namedChildCount } = node
     if (type === 'word') {
-      pushToken(node, 'variable')
+      pushToken(node, variableTokenType)
       return
     }
     if (namedChildCount === 0) return
@@ -133,56 +159,56 @@ const tokenBuilderForParseTree = () => {
     const headText = head.text
     switch (headText) {
       case 'quote': {
-        pushToken(head, 'keyword')
+        pushToken(head, keywordTokenType)
         const goQ = (node) => {
-          if (node.type === 'word') pushToken(node, 'string')
+          if (node.type === 'word') pushToken(node, stringTokenType)
           else node.namedChildren.forEach(goQ)
         }
         if (tail.length >= 1) goQ(tail[0])
         break
       }
       case 'if':
-        pushToken(head, 'keyword')
+        pushToken(head, keywordTokenType)
         for (const child of tail) go(child)
         break
       case 'let':
       case 'loop': {
-        pushToken(head, 'keyword')
+        pushToken(head, keywordTokenType)
         const [bindings, ...body] = tail
         for (let i = 0; i < bindings.length - 1; i += 2) {
-          pushToken(bindings[i], 'variable', 'declaration', 'local')
+          pushToken(bindings[i], variableTokenType, localDeclarationTokenModifier)
           go(bindings[i + 1])
         }
         for (const child of body) go(child)
         break
       }
       case 'cont':
-        pushToken(head, 'keyword')
+        pushToken(head, keywordTokenType)
         for (const child of tail) go(child)
         break
       case 'func':
       case 'macro': {
-        pushToken(head, 'keyword')
+        pushToken(head, keywordTokenType)
         const [fmName, parameters, ...body] = tail
-        pushToken(fmName, headText === 'func' ? 'function' : 'macro', 'declaration')
+        pushToken(fmName, headText === 'func' ? functionTokenType : macroTokenType, declarationModifier)
         if (parameters.type === 'list') {
           let pi = 0
           const dotdotIndex = parameters.namedChildCount - 2
           for (const parameter of parameters.namedChildren) {
             if (pi++ === dotdotIndex && parameter.text === '..') {
-              pushToken(parameter, 'keyword')
-            } else pushToken(parameter, 'parameter', 'declaration')
+              pushToken(parameter, keywordTokenType)
+            } else pushToken(parameter, parameterTokenType, declarationModifier)
           }
         }
         for (const child of body) go(child)
         break
       }
       case 'global':
-        pushToken(head, 'keyword')
+        pushToken(head, keywordTokenType)
         for (const child of tail) go(child)
         break
       default:
-        pushToken(head, 'function')
+        pushToken(head, functionTokenType)
         for (const arg of tail) go(arg)
         break
     }
