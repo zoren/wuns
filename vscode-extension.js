@@ -9,6 +9,8 @@ parser.setLanguage(Wuns)
 
 const pointToPosition = ({ row, column }) => new Position(row, column)
 
+const positionToPoint = ({ line, character }) => ({ row: line, column: character })
+
 const rangeFromNode = ({ startPosition, endPosition }) =>
   new Range(pointToPosition(startPosition), pointToPosition(endPosition))
 
@@ -28,11 +30,6 @@ const treeToOurForm = (node) => {
       form = namedChildren.map(treeToOurForm)
       break
     }
-    case 'list_special_form': {
-      const specialForm = node.child(1)
-      form = [{ text: specialForm.text, range: rangeFromNode(specialForm) }, ...namedChildren.map(treeToOurForm)]
-      break
-    }
     default:
       throw new Error('unexpected node type: ' + type)
   }
@@ -40,23 +37,22 @@ const treeToOurForm = (node) => {
   return form
 }
 
-const parseString = (sourceCodeString) => {
-  const tree = parser.parse(sourceCodeString)
-  const root = tree.rootNode
-  return root.children.map(treeToOurForm)
-}
-
-const parseDocument = (document) => parseString(document.getText())
-
 const cache = new Map()
 
+/**
+ *
+ * @param {vscode.TextDocument} document
+ * @returns
+ */
 const cacheFetchOrParse = (document) => {
   const { version } = document
   const cached = cache.get(document)
-  if (cached && cached.version === version) return cached.forms
-  const forms = parseDocument(document)
-  cache.set(document, { forms, version })
-  return forms
+  if (cached && cached.version === version) return cached
+  const sourceCodeString = document.getText()
+  const tree = parser.parse(sourceCodeString)
+  const obj = { version, tree }
+  cache.set(document, obj)
+  return obj
 }
 
 const tokenTypes = ['variable', 'keyword', 'function', 'macro', 'parameter', 'string', 'number']
@@ -67,25 +63,30 @@ const legend = new SemanticTokensLegend(tokenTypes, tokenModifiers)
 
 const tokenBuilderForParseTree = () => {
   const tokensBuilder = new SemanticTokensBuilder(legend)
-  const pushToken = ({ range }, tokenType, ...tokenModifiers) => {
+  const pushToken = (syntaxNode, tokenType, ...tokenModifiers) => {
+    const range = rangeFromNode(syntaxNode)
+    // console.log('push-token', { range: rangeToString(range), tokenType, tokenModifiers })
     tokensBuilder.push(range, tokenType, tokenModifiers)
   }
+  /**
+   * @param {TSParser.SyntaxNode} node
+   */
   const go = (node) => {
-    const { text } = node
-    if (text) {
+    const { type, namedChildCount } = node
+    if (type === 'word') {
       pushToken(node, 'variable')
       return
     }
-    if (!Array.isArray(node) || node.length === 0) return
-    const [head, ...tail] = node
+    if (namedChildCount === 0) return
+    const [head, ...tail] = node.namedChildren
+    if (head.type !== 'word') return
     const headText = head.text
-    if (!headText) return
     switch (headText) {
       case 'quote': {
         pushToken(head, 'keyword')
         const goQ = (node) => {
-          if (node.text) pushToken(node, 'string')
-          else node.forEach(goQ)
+          if (node.type === 'word') pushToken(node, 'string')
+          else node.namedChildren.forEach(goQ)
         }
         if (tail.length >= 1) goQ(tail[0])
         break
@@ -114,11 +115,14 @@ const tokenBuilderForParseTree = () => {
         pushToken(head, 'keyword')
         const [fmName, parameters, ...body] = tail
         pushToken(fmName, headText === 'func' ? 'function' : 'macro', 'declaration')
-        let pi = 0
-        for (const parameter of parameters) {
-          if (pi++ === parameters.length - 2 && parameter.text === '..') {
-            pushToken(parameter, 'keyword')
-          } else pushToken(parameter, 'parameter', 'declaration')
+        if (parameters.type === 'list') {
+          let pi = 0
+          const dotdotIndex = parameters.namedChildCount - 2
+          for (const parameter of parameters.namedChildren) {
+            if (pi++ === dotdotIndex && parameter.text === '..') {
+              pushToken(parameter, 'keyword')
+            } else pushToken(parameter, 'parameter', 'declaration')
+          }
         }
         for (const child of body) go(child)
         break
@@ -365,7 +369,7 @@ const flattenForm = (form) => {
   return form.map(flattenForm)
 }
 
-const { commands, window, languages } = vscode
+const { commands, window, languages, workspace } = vscode
 
 /**
  * @returns {vscode.TextDocument}
@@ -380,11 +384,17 @@ const interpretCurrentFile = () => {
   const outputChannel = window.createOutputChannel('wuns output')
   outputChannel.show()
   const document = getActiveTextEditorDocument()
-  const topLevelList = cacheFetchOrParse(document)
+  const { tree } = cacheFetchOrParse(document)
   const funcEnv = mkFuncEnv({ log: (s) => outputChannel.appendLine(s) })
   const { gogoeval } = makeEvaluator(funcEnv)
-  for (const form of topLevelList) gogoeval(flattenForm(form))
-  window.showInformationMessage('interpreted ' + topLevelList.length + ' forms')
+  for (const child of tree.rootNode.children) gogoeval(flattenForm(treeToOurForm(child)))
+  window.showInformationMessage('interpreted ' + tree.rootNode.children.length + ' forms')
+}
+
+const parseString = (sourceCodeString) => {
+  const tree = parser.parse(sourceCodeString)
+  const root = tree.rootNode
+  return root.children.map(treeToOurForm)
 }
 
 const parseAll = (s) => parseString(s).map(flattenForm)
@@ -441,22 +451,21 @@ function activate(context) {
    * @param {vscode.CancellationToken} token
    */
   const provideSelectionRanges = (document, positions) => {
-    const topLevelList = cacheFetchOrParse(document)
+    const { tree } = cacheFetchOrParse(document)
+    const topLevelNodes = tree.rootNode.children
     const tryFindRange = (pos) => {
       const go = (node, parentSelectionRange) => {
-        const { range } = node
+        const range = rangeFromNode(node)
         if (!range.contains(pos)) return null
-        if (Array.isArray(node)) {
-          const selRange = new SelectionRange(range, parentSelectionRange)
-          for (const child of node) {
-            const found = go(child, selRange)
-            if (found) return found
-          }
-          return selRange
+        if (node.type === 'word') return new SelectionRange(range, parentSelectionRange)
+        const selRange = new SelectionRange(range, parentSelectionRange)
+        for (const child of node.namedChildren) {
+          const found = go(child, selRange)
+          if (found) return found
         }
-        return new SelectionRange(range, parentSelectionRange)
+        return selRange
       }
-      for (const node of topLevelList) {
+      for (const node of topLevelNodes) {
         const found = go(node, undefined)
         if (found) return found
       }
@@ -482,14 +491,14 @@ function activate(context) {
       return symToks
     }
     const before = performance.now()
-    const topLevelList = cacheFetchOrParse(document)
+    const { tree } = cacheFetchOrParse(document)
     const { tokensBuilder, build } = tokenBuilderForParseTree()
-    for (const node of topLevelList) build(node)
+    tree.rootNode.children.forEach(build)
     const semtoks = tokensBuilder.build('1')
     console.log({ semtoks })
     const after = performance.now()
     const elapsed = after - before
-    console.log('time taken', Math.round(elapsed * 1000) / 1000, 'ms', document.version)
+    console.log('semantic tokens time taken', Math.round(elapsed * 1000) / 1000, 'ms', document.version)
     return semtoks
   }
 
