@@ -2,7 +2,8 @@
 
 [func list [.. l] l]
 
-[macro global-id [name] [list [quote global] name [list [quote quote] name]]]
+[macro global-id [name]
+  [list [quote global] name [list [quote quote] name]]]
 
 [global-id 0]
 [global-id 1]
@@ -103,7 +104,8 @@
 [func is-a-to-z [c]
   [is-between-inclusive [quote 97] c [quote 122]]]
 
-[func is-digit [c] [is-between-inclusive [quote 48] c [quote 57]]]
+[func is-digit [c]
+  [is-between-inclusive [quote 48] c [quote 57]]]
 
 [func is-ident-char [c]
   [or
