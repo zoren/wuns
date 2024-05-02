@@ -37,6 +37,14 @@ const treeToOurForm = (node) => {
   return form
 }
 
+const makeStopWatch = () => {
+  const before = performance.now()
+  return () => {
+    const elapsed = performance.now() - before
+    return Math.round(elapsed * 1000) / 1000
+  }
+}
+
 const cache = new Map()
 
 /**
@@ -46,13 +54,55 @@ const cache = new Map()
  */
 const cacheFetchOrParse = (document) => {
   const { version } = document
-  const cached = cache.get(document)
-  if (cached && cached.version === version) return cached
+  const cacheObj = cache.get(document)
+  if (!cacheObj) {
+    const sourceCodeString = document.getText()
+    const watch = makeStopWatch()
+    const tree = parser.parse(sourceCodeString)
+    console.log('parse initial took', watch(), 'ms')
+    const obj = { version, tree }
+    cache.set(document, obj)
+    return obj
+  }
+  if (cacheObj.version === version) return cacheObj
   const sourceCodeString = document.getText()
-  const tree = parser.parse(sourceCodeString)
-  const obj = { version, tree }
-  cache.set(document, obj)
-  return obj
+  const oldTree = cacheObj.tree
+  const watch = makeStopWatch()
+  const newTree = parser.parse(sourceCodeString, oldTree)
+  console.log('parse time taken', watch(), 'ms', document.version)
+  cacheObj.tree = newTree
+  cacheObj.version = version
+  return cacheObj
+}
+
+/**
+ * @param {vscode.TextDocumentChangeEvent} document
+ */
+const onDidChangeTextDocument = (e) => {
+  const { document, contentChanges, reason } = e
+  const { languageId, uri, version } = document
+  if (languageId !== 'wuns') return
+  if (contentChanges.length === 0) return
+  const cacheObj = cache.get(document)
+  const oldTree = cacheObj.tree
+  for (const { range, rangeLength, rangeOffset, text } of contentChanges) {
+    // from https://github.com/microsoft/vscode-anycode/blob/main/anycode/server/src/common/trees.ts#L109
+    const tsEdit = {
+      startPosition: positionToPoint(range.start),
+      oldEndPosition: positionToPoint(range.end),
+      newEndPosition: positionToPoint(document.positionAt(rangeOffset + text.length)),
+      startIndex: rangeOffset,
+      oldEndIndex: rangeOffset + rangeLength,
+      newEndIndex: rangeOffset + text.length,
+    }
+    oldTree.edit(tsEdit)
+  }
+  console.log('tree edited', { version: document.version, nOfChanges: contentChanges.length })
+  const watch = makeStopWatch()
+  const newTree = parser.parse(document.getText(), oldTree)
+  console.log('parse incremental took', watch(), 'ms')
+  cacheObj.tree = newTree
+  cacheObj.version = version
 }
 
 const tokenTypes = ['variable', 'keyword', 'function', 'macro', 'parameter', 'string', 'number']
@@ -65,7 +115,7 @@ const tokenBuilderForParseTree = () => {
   const tokensBuilder = new SemanticTokensBuilder(legend)
   const pushToken = (syntaxNode, tokenType, ...tokenModifiers) => {
     const range = rangeFromNode(syntaxNode)
-    // console.log('push-token', { range: rangeToString(range), tokenType, tokenModifiers })
+    // console.log('push-token', { range, tokenType, tokenModifiers })
     tokensBuilder.push(range, tokenType, tokenModifiers)
   }
   /**
@@ -127,6 +177,10 @@ const tokenBuilderForParseTree = () => {
         for (const child of body) go(child)
         break
       }
+      case 'global':
+        pushToken(head, 'keyword')
+        for (const child of tail) go(child)
+        break
       default:
         pushToken(head, 'function')
         for (const arg of tail) go(arg)
@@ -254,6 +308,10 @@ const makeEvaluator = (funcEnv) => {
       case 'macro': {
         const [fname, origParams, ...bodies] = args
         return makeList(firstWord, fname, origParams, ...bodies.map(gogomacro))
+      }
+      case 'global': {
+        const [varName, value] = args
+        return makeList(firstWord, varName, gogomacro(value))
       }
     }
     const funcOrMacro = funcEnv.get(firstWord)
@@ -401,6 +459,8 @@ const parseAll = (s) => parseString(s).map(flattenForm)
 
 const { watchFile, readFileSync } = require('fs')
 
+const crypto = require('crypto')
+
 /**
  * @param {vscode.ExtensionContext} context
  */
@@ -420,7 +480,6 @@ function activate(context) {
   }
   const pushToken = (...args) => {
     const [line, column, length, tokenType, tokenModifiers] = args.map(number)
-    // console.log('push-token', { line, column, length, tokenType, tokenModifiers })
     tokensBuilder.push(line, column, length, tokenType, tokenModifiers)
   }
   const funcEnv = mkFuncEnv({ log: (s) => console.log(s) })
@@ -443,7 +502,6 @@ function activate(context) {
   const onDidChangeSemanticTokensListeners = []
   let overrideSymToks = null
 
-  // 		provideSelectionRanges(document: TextDocument, positions: readonly Position[], token: CancellationToken): ProviderResult<SelectionRange[]>;
   /**
    *
    * @param {vscode.TextDocument} document
@@ -490,15 +548,15 @@ function activate(context) {
       console.log('overriding semantic tokens', symToks)
       return symToks
     }
-    const before = performance.now()
+    const stopWatch = makeStopWatch()
     const { tree } = cacheFetchOrParse(document)
     const { tokensBuilder, build } = tokenBuilderForParseTree()
     tree.rootNode.children.forEach(build)
-    const semtoks = tokensBuilder.build('1')
-    console.log({ semtoks })
-    const after = performance.now()
-    const elapsed = after - before
-    console.log('semantic tokens time taken', Math.round(elapsed * 1000) / 1000, 'ms', document.version)
+    const semtoks = tokensBuilder.build()
+    console.log('semantic tokens time taken', stopWatch(), 'ms', document.version)
+    const semtokHash = crypto.createHash('sha256').update(semtoks.data).digest('hex')
+    console.log({ semtoksCount: semtoks.data.length, semtokHash, file: document.fileName, version: document.version })
+
     return semtoks
   }
 
@@ -541,6 +599,7 @@ function activate(context) {
     languages.registerDocumentSemanticTokensProvider(selector, semanticTokensProvider, legend),
     languages.registerSelectionRangeProvider(selector, { provideSelectionRanges }),
   )
+  workspace.onDidChangeTextDocument(onDidChangeTextDocument)
   console.log('Congratulations, your extension "wunslang" is now active!')
 }
 
