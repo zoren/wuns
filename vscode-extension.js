@@ -14,29 +14,6 @@ const positionToPoint = ({ line, character }) => ({ row: line, column: character
 const rangeFromNode = ({ startPosition, endPosition }) =>
   new Range(pointToPosition(startPosition), pointToPosition(endPosition))
 
-/**
- *
- * @param {TSParser.SyntaxNode} node
- * @returns
- */
-const treeToOurForm = (node) => {
-  const { type, text, namedChildren } = node
-  let form
-  switch (type) {
-    case 'word':
-      form = { text }
-      break
-    case 'list': {
-      form = namedChildren.map(treeToOurForm)
-      break
-    }
-    default:
-      throw new Error('unexpected node type: ' + type)
-  }
-  form.range = rangeFromNode(node)
-  return form
-}
-
 const makeStopWatch = () => {
   const before = performance.now()
   return () => {
@@ -462,6 +439,29 @@ const getActiveTextEditorDocument = () => {
   const { activeTextEditor } = window
   if (!activeTextEditor) return null
   return activeTextEditor.document
+}
+
+/**
+ *
+ * @param {TSParser.SyntaxNode} node
+ * @returns
+ */
+const treeToOurForm = (node) => {
+  const { type, text, namedChildren } = node
+  let form
+  switch (type) {
+    case 'word':
+      form = { text }
+      break
+    case 'list': {
+      form = namedChildren.map(treeToOurForm)
+      break
+    }
+    default:
+      throw new Error('unexpected node type: ' + type)
+  }
+  form.range = rangeFromNode(node)
+  return form
 }
 
 const interpretCurrentFile = () => {
