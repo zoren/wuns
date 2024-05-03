@@ -2,6 +2,7 @@ const unit = Object.freeze([])
 const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
 
 const symbolContinue = Symbol.for('wuns-continue')
+const symbolVarargs = Symbol.for('wuns-varargs')
 const tryMap = (arr, f) => {
   if (arr) return arr.map(f)
   return unit
@@ -82,7 +83,12 @@ const makeEvaluator = (funcEnv) => {
     }
     const funcOrMacro = funcEnv.get(firstWord)
     assert(funcOrMacro, `function ${firstWord} not found ${print(form)}`)
-    if (typeof funcOrMacro === 'function') return funcOrMacro(...args.map((arg) => wunsEval(arg, env)))
+    if (typeof funcOrMacro === 'function') {
+      if (funcOrMacro[symbolVarargs]) return funcOrMacro(...args.map((arg) => wunsEval(arg, env)))
+      const parameterCount = funcOrMacro.length
+      assert(args.length === parameterCount, `${firstWord} expected ${parameterCount} arguments, got ${args.length}`)
+      return funcOrMacro(...args.map((arg) => wunsEval(arg, env)))
+    }
     assert(typeof funcOrMacro === 'object', `expected function or object ${funcOrMacro}`)
     const { isMacro } = funcOrMacro
     if (isMacro) return wunsEval(apply(funcOrMacro, args), env)
@@ -143,7 +149,7 @@ const number = (s) => {
   if (isNaN(n)) throw new Error('expected number, found: ' + s)
   const normalised = n | 0
   if (n !== normalised) throw new Error('expected 32-bit signed integer, found: ' + s)
-  if (String(normalised) !== s) throw new Error('expected normalized integer, found: ' + s)
+  // if (String(normalised) !== s) throw new Error('expected normalized integer, found: ' + s)
   return n
 }
 
@@ -154,10 +160,16 @@ const mkFuncEnv = ({ log }, instructions) => {
   }
   for (const [name, func] of Object.entries(instructions)) {
     const parameterCount = func.length
-    funcEnv.set(name, (...args) => {
-      assert(args.length === parameterCount, `expected ${parameterCount} arguments, got ${args.length}`)
-      return String(func(...args.map(number)) | 0)
-    })
+    switch (parameterCount) {
+      case 1:
+        funcEnv.set(name, (a) => String(func(number(a)) | 0))
+        break
+      case 2:
+        funcEnv.set(name, (a, b) => String(func(number(a), number(b)) | 0))
+        break
+      default:
+        throw new Error('unsupported parameter count: ' + parameterCount)
+    }
   }
   const boolToWord = (b) => (b ? '1' : '0')
   // would be cool to do in a host-func special form
@@ -178,9 +190,14 @@ const mkFuncEnv = ({ log }, instructions) => {
     if (s instanceof Uint8Array) return Object.freeze(Array.from(s, (n) => String(n)))
     return Object.freeze(s)
   })
+
+  const concat = (...args) => Object.freeze(args.flat())
+  concat[symbolVarargs] = true
   // would be nice to do without these two, as we would prefer no builtin var args
-  funcEnv.set('concat', (...args) => Object.freeze(args.flat()))
-  funcEnv.set('concat-words', (...ws) => ws.join(''))
+  funcEnv.set('concat', concat)
+  const concatWords = (...ws) => ws.join('')
+  concatWords[symbolVarargs] = true
+  funcEnv.set('concat-words', concatWords)
 
   funcEnv.set('mutable-list', () => [])
   funcEnv.set('push', (ar, e) => {
