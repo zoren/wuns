@@ -144,32 +144,19 @@ const number = (s) => {
   return n
 }
 
-const mkFuncEnv = ({ log }) => {
+const mkFuncEnv = ({ log }, instructions) => {
   const funcEnv = new Map()
   const assert = (cond, msg) => {
     if (!cond) throw new Error('built in failed: ' + msg)
   }
+  for (const [name, func] of Object.entries(instructions)) {
+    const parameterCount = func.length
+    funcEnv.set(name, (...args) => {
+      assert(args.length === parameterCount, `expected ${parameterCount} arguments, got ${args.length}`)
+      return String(func(...args.map(number)))
+    })
+  }
   // would be cool to do in a host-func special form
-  funcEnv.set('add', (a, b) => String((number(a) + number(b)) | 0))
-  funcEnv.set('sub', (a, b) => String((number(a) - number(b)) | 0))
-  funcEnv.set('mul', (a, b) => String((number(a) * number(b)) | 0))
-
-  funcEnv.set('bit-and', (a, b) => String((number(a) & number(b)) | 0))
-  funcEnv.set('bit-or', (a, b) => String(number(a) | number(b) | 0))
-  funcEnv.set('bit-xor', (a, b) => String((number(a) ^ number(b)) | 0))
-
-  const boolToWord = (b) => (b ? '1' : '0')
-
-  funcEnv.set('eq', (a, b) => {
-    // should we allow eq to compare non numbers?
-    assert(typeof a === 'string' && typeof b === 'string', 'eq expects strings only' + a + ' ' + b)
-    return boolToWord(a === b)
-  })
-  funcEnv.set('lt', (a, b) => boolToWord(number(a) < number(b)))
-  funcEnv.set('gt', (a, b) => boolToWord(number(a) > number(b)))
-  funcEnv.set('le', (a, b) => boolToWord(number(a) <= number(b)))
-  funcEnv.set('ge', (a, b) => boolToWord(number(a) >= number(b)))
-
   funcEnv.set('is-word', (s) => boolToWord(typeof s === 'string'))
   funcEnv.set('is-list', (f) => boolToWord(Array.isArray(f)))
 
@@ -229,8 +216,8 @@ const mkFuncEnv = ({ log }) => {
   return funcEnv
 }
 
-const evalForms = (forms, importObject) => {
-  const funcEnv = mkFuncEnv(importObject)
+const evalForms = (forms, { importObject, instructions }) => {
+  const funcEnv = mkFuncEnv(importObject, instructions)
   const { gogoeval } = makeEvaluator(funcEnv)
   for (const form of forms) gogoeval(form)
 }

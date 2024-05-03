@@ -214,32 +214,41 @@ const getActiveTextEditorDocument = () => {
 
 const { evalForms } = require('./src/interpreter')
 
-const interpretCurrentFile = () => {
+const makeInterpretCurrentFile = async (instructionsWasmUri) => {
+  const uint8arInstructions = await workspace.fs.readFile(instructionsWasmUri)
+  const wasm = await WebAssembly.instantiate(uint8arInstructions)
+  const instructions = wasm.instance.exports
   const outputChannel = window.createOutputChannel('wuns output')
-  outputChannel.show()
-  const document = getActiveTextEditorDocument()
-  const { tree } = cacheFetchOrParse(document)
-  const importObject = { log: (s) => outputChannel.appendLine(s) }
-  {
-    const treeToOurForm = (node) => {
-      const { type, text, namedChildren } = node
-      switch (type) {
-        case 'word':
-          return text
-        case 'list': {
-          const form = namedChildren.map(treeToOurForm)
-          form.range = rangeFromNode(node)
-          return form
-        }
-        default:
-          throw new Error('unexpected node type: ' + type)
-      }
+  return () => {
+    const document = getActiveTextEditorDocument()
+    const { tree } = cacheFetchOrParse(document)
+    const importObject = {
+      log: (s) => {
+        outputChannel.show()
+        outputChannel.appendLine(s)
+      },
     }
-    const forms = tree.rootNode.children.map(treeToOurForm)
-    evalForms(forms, importObject)
-  }
+    {
+      const treeToOurForm = (node) => {
+        const { type, text, namedChildren } = node
+        switch (type) {
+          case 'word':
+            return text
+          case 'list': {
+            const form = namedChildren.map(treeToOurForm)
+            form.range = rangeFromNode(node)
+            return form
+          }
+          default:
+            throw new Error('unexpected node type: ' + type)
+        }
+      }
+      const forms = tree.rootNode.children.map(treeToOurForm)
+      evalForms(forms, { importObject, instructions })
+    }
 
-  window.showInformationMessage('interpreted ' + tree.rootNode.children.length + ' forms')
+    window.showInformationMessage('interpreted ' + tree.rootNode.children.length + ' forms')
+  }
 }
 
 const crypto = require('crypto')
@@ -299,9 +308,10 @@ const provideDocumentSemanticTokens = (document) => {
 /**
  * @param {vscode.ExtensionContext} context
  */
-function activate(context) {
+async function activate(context) {
   console.log('starting wuns lang extension: ' + context.extensionPath)
-
+  const instructionsWasmUri = vscode.Uri.file(context.extensionPath + '/src/instructions.wasm')
+  const interpretCurrentFile = await makeInterpretCurrentFile(instructionsWasmUri)
   context.subscriptions.push(commands.registerCommand('wunslang.interpret', interpretCurrentFile))
 
   const selector = { language: 'wuns', scheme: 'file' }
