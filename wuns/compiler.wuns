@@ -89,6 +89,20 @@
             gs
             [concat [quote [or]] [rest clauses]]]]]]]]
 
+[func concat-lists [lists]
+  [let [res [mutable-list] s [size lists]]
+    [loop [i 0]
+      [when [lt i s]
+        [let [l [at lists i]]
+          [loop [j 0]
+            [when [lt j [size l]]
+              [push res [at l j]]
+              [cont [inc j]]]]
+          [cont [inc i]]]]]
+    [freeze res]]]
+
+[log [concat-lists [quote [[1 2] [3 4]]]]]
+
 [func u32-word-to-leb-128 [w]
   [assert [not [is-negative w]] expected 32 bit ints]
   [let [res [mutable-list]]
@@ -157,7 +171,7 @@
 
 [func eq-word [a b]
   [and [eq [size a] [size b]]
-    [loop [i [size a]]
+    [loop [i 0]
       [if [lt i [size a]]
         [if [eq [at a i] [at b i]]
           [cont [inc i]]
@@ -187,3 +201,147 @@
 [comment wikipedia says 0xc0 0xbb 0x78]
 
 [test [quote [0xc0 0xbb 0x78]] [dec-words-to-hex [s32-word-to-leb-128 [quote -123456]]]]
+
+[global i32.const [quote 65]]
+[global local.get [quote 32]]
+
+[func constant [n]
+  [concat [i32.const] [s32-word-to-leb-128 n]]]
+
+[func lookup [ctx sym]
+  [let [s [size ctx]]
+    [loop [i [quote 0]]
+      [if [ge i s]
+        []
+        [let [k [at ctx i]
+              v [at ctx [inc i]]]
+          [if [eq k sym]
+            v
+            [cont [add i 2]]]]]]]]
+
+[func get-local-index [ctx sym]
+  [let [s [size ctx]]
+    [loop [i [sub s 2]]
+      [if [lt i [quote -1]]
+        [abort]
+        [let [k [at ctx i]]
+          [log [list [quote key] k sym]]
+          [if [eq-word k sym]
+            [bit-shift-right-signed i 1]
+            [cont [sub i 2]]]]]]]]
+[log [list [quote eq-test] [eq-word [quote a] [quote b]]]]
+[log [get-local-index [quote [x [param i32] y [param i32]]] [quote x]]]
+[log [get-local-index [quote [x [param i32] y [param i32]]] [quote y]]]
+
+[global local.get [quote 32]]
+
+[global i32.const [quote 65]]
+[global i32.add [quote 106]]
+
+[func comp-form [ctx form]
+  [if [is-word form]
+    [let [i [get-local-index ctx form]]
+      [concat [list local.get] [u32-word-to-leb-128 i]]]
+    [let [inst [first form]
+          args [rest form]]
+      [ifs
+        [eq-word inst [quote add]]
+        [concat [comp-form ctx [first args]] [comp-form ctx [second args]] [list i32.add]]
+
+        [log [quote error]]]]]]
+
+[func type-function [params results]
+  [concat
+    [quote 0x60]
+    [u32-word-to-leb-128 [size params]]
+    params
+    [u32-word-to-leb-128 [size results]]
+    results]]
+
+[func code [locals instructions]
+  [assert [is-zero [size locals]] locals not supported yet]
+  [let
+    [bytes
+      [concat
+        [u32-word-to-leb-128 [size locals]]
+        [comment missing locals here]
+        instructions]]
+    [concat [u32-word-to-leb-128 [size bytes]] bytes]]]
+
+[func vector-section [section-id content]
+  [concat [list section-id] [u32-word-to-leb-128 [size content]] content]]
+
+[func type-section [.. types]
+  [vector-section 1 [concat [u32-word-to-leb-128 [size types]] [concat-lists types]]]]
+
+[func func-section [.. func-indexes]
+  [vector-section 3 [concat [u32-word-to-leb-128 [size func-indexes]] func-indexes]]]
+
+[func kind-to-tag [kind]
+  [ifs
+    [eq-word kind [quote function]]
+    0
+
+    [eq-word kind [quote memory]]
+    1
+
+    [eq-word kind [quote global]]
+    2
+    
+    [do
+      [log [list [quote [kind-to-tag no expected]] kind]]
+      [abort]]]]
+
+[func export-section [.. exports]
+  [vector-section [quote 7]
+    [concat
+      [u32-word-to-leb-128 [size exports]]
+      [concat-lists exports]]]]
+
+[func code-section [.. codes]
+  [vector-section [quote 10] [concat [u32-word-to-leb-128 [size codes]] [concat-lists codes]]]]
+
+[global i32 [quote 0x7f]]
+[global end [quote 0x0b]]
+
+[func word-to-codepoints [w]
+  [let [ml [mutable-list]]
+    [loop [i 0]
+      [when [lt i [size w]]
+        [push ml [at w i]]
+        [cont [inc i]]]]
+    [freeze ml]
+        ]]
+
+[func export [name kind index]
+  [concat
+    [u32-word-to-leb-128 [size name]]
+    [word-to-codepoints name]
+    [kind-to-tag kind]
+    [u32-word-to-leb-128 index]]]
+
+[func module []
+  [comment wasm magic and version 1]
+  [concat
+    [quote [0 97 115 109
+            1 0 0 0]]
+    [type-section
+      [type-function [list i32 i32] [list i32]]]
+    
+    [func-section 0]
+
+    [export-section
+      [export [quote xyz] [quote function] 0]]
+
+    [code-section
+      [code []
+        [concat 
+          [comp-form [quote [x [param i32] y [param i32]]] [quote [add x y]]]
+          end]]]]]
+
+[log [comp-form [quote [x [param i32] y [param i32]]] [quote [add x y]]]]
+[log [quote mod]]
+[log [word-to-codepoints [quote xyz]]]
+[log [export [quote xyz] [quote function] 0]]
+[log [module]]
+[log [wasm-module [module]]]

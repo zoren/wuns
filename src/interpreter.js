@@ -239,6 +239,14 @@ const mkFuncEnv = ({ log }, instructions) => {
     return cs.map((c) => String.fromCharCode(number(c))).join('')
   })
 
+  funcEnv.set('wasm-module', (s) => {
+    const module = new WebAssembly.Module(new Uint8Array(s.map(number)))
+    
+    const instance = new WebAssembly.Instance(module, {})
+    console.log(instance.exports)
+    return String(Object.entries(instance.exports).length)
+  })
+
   return funcEnv
 }
 
