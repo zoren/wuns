@@ -141,7 +141,9 @@ const print = (x) => {
 const number = (s) => {
   const n = Number(s)
   if (isNaN(n)) throw new Error('expected number, found: ' + s)
-  if (n !== (n | 0)) throw new Error('expected 32-bit signed integer, found: ' + s)
+  const normalised = n | 0
+  if (n !== normalised) throw new Error('expected 32-bit signed integer, found: ' + s)
+  if (String(normalised) !== s) throw new Error('expected normalized integer, found: ' + s)
   return n
 }
 
@@ -157,8 +159,9 @@ const mkFuncEnv = ({ log }, instructions) => {
       return String(func(...args.map(number)) | 0)
     })
   }
+  const boolToWord = (b) => (b ? '1' : '0')
   // would be cool to do in a host-func special form
-  funcEnv.set('is-word', (s) => boolToWord(typeof s === 'string'))
+  funcEnv.set('is-word', (f) => boolToWord(typeof f === 'string'))
   funcEnv.set('is-list', (f) => boolToWord(Array.isArray(f)))
 
   funcEnv.set('size', (a) => String(Number(a.length)))
