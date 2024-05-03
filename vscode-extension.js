@@ -212,36 +212,7 @@ const getActiveTextEditorDocument = () => {
   return activeTextEditor.document
 }
 
-/**
- *
- * @param {TSParser.SyntaxNode} node
- * @returns
- */
-const treeToOurForm = (node) => {
-  const { type, text, namedChildren } = node
-  let form
-  switch (type) {
-    case 'word':
-      form = { text }
-      break
-    case 'list': {
-      form = namedChildren.map(treeToOurForm)
-      break
-    }
-    default:
-      throw new Error('unexpected node type: ' + type)
-  }
-  form.range = rangeFromNode(node)
-  return form
-}
-
 const { evalForms } = require('./src/interpreter')
-
-const flattenForm = (form) => {
-  if (form.text) return form.text
-  if (!Array.isArray(form)) throw new Error('flattenForm expects array or text')
-  return form.map(flattenForm)
-}
 
 const interpretCurrentFile = () => {
   const outputChannel = window.createOutputChannel('wuns output')
@@ -249,8 +220,24 @@ const interpretCurrentFile = () => {
   const document = getActiveTextEditorDocument()
   const { tree } = cacheFetchOrParse(document)
   const importObject = { log: (s) => outputChannel.appendLine(s) }
-  const forms = tree.rootNode.children.map((f) => flattenForm(treeToOurForm(f)))
-  evalForms(forms, importObject)
+  {
+    const treeToOurForm = (node) => {
+      const { type, text, namedChildren } = node
+      switch (type) {
+        case 'word':
+          return text
+        case 'list': {
+          const form = namedChildren.map(treeToOurForm)
+          form.range = rangeFromNode(node)
+          return form
+        }
+        default:
+          throw new Error('unexpected node type: ' + type)
+      }
+    }
+    const forms = tree.rootNode.children.map(treeToOurForm)
+    evalForms(forms, importObject)
+  }
 
   window.showInformationMessage('interpreted ' + tree.rootNode.children.length + ' forms')
 }
