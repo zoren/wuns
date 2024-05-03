@@ -201,14 +201,6 @@ const tokenBuilderForParseTree = () => {
   return { tokensBuilder, build: go }
 }
 
-const { makeEvaluator, mkFuncEnv, print } = require('./src/interpreter')
-
-const flattenForm = (form) => {
-  if (form.text) return form.text
-  if (!Array.isArray(form)) throw new Error('flattenForm expects array or text')
-  return form.map(flattenForm)
-}
-
 const { commands, window, languages, workspace } = vscode
 
 /**
@@ -243,14 +235,23 @@ const treeToOurForm = (node) => {
   return form
 }
 
+const { evalForms } = require('./src/interpreter')
+
+const flattenForm = (form) => {
+  if (form.text) return form.text
+  if (!Array.isArray(form)) throw new Error('flattenForm expects array or text')
+  return form.map(flattenForm)
+}
+
 const interpretCurrentFile = () => {
   const outputChannel = window.createOutputChannel('wuns output')
   outputChannel.show()
   const document = getActiveTextEditorDocument()
   const { tree } = cacheFetchOrParse(document)
-  const funcEnv = mkFuncEnv({ log: (s) => outputChannel.appendLine(s) })
-  const { gogoeval } = makeEvaluator(funcEnv)
-  for (const child of tree.rootNode.children) gogoeval(flattenForm(treeToOurForm(child)))
+  const importObject = { log: (s) => outputChannel.appendLine(s) }
+  const forms = tree.rootNode.children.map((f) => flattenForm(treeToOurForm(f)))
+  evalForms(forms, importObject)
+
   window.showInformationMessage('interpreted ' + tree.rootNode.children.length + ' forms')
 }
 

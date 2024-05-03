@@ -167,8 +167,8 @@ const mkFuncEnv = ({ log }) => {
   })
   funcEnv.set('lt', (a, b) => boolToWord(number(a) < number(b)))
   funcEnv.set('gt', (a, b) => boolToWord(number(a) > number(b)))
-  funcEnv.set('ge', (a, b) => boolToWord(number(a) >= number(b)))
   funcEnv.set('le', (a, b) => boolToWord(number(a) <= number(b)))
+  funcEnv.set('ge', (a, b) => boolToWord(number(a) >= number(b)))
 
   funcEnv.set('is-word', (s) => boolToWord(typeof s === 'string'))
   funcEnv.set('is-list', (f) => boolToWord(Array.isArray(f)))
@@ -229,4 +229,10 @@ const mkFuncEnv = ({ log }) => {
   return funcEnv
 }
 
-module.exports = { makeEvaluator, mkFuncEnv, print }
+const evalForms = (forms, importObject) => {
+  const funcEnv = mkFuncEnv(importObject)
+  const { gogoeval } = makeEvaluator(funcEnv)
+  for (const form of forms) gogoeval(form)
+}
+
+module.exports = { evalForms }
