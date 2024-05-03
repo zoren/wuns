@@ -127,7 +127,7 @@ const makeEvaluator = (funcEnv) => {
     return makeList(firstWord, ...args.map(gogomacro))
   }
   return {
-    gogoeval: (form) => wunsEval(gogomacro(form), null),
+    gogoeval: (form) => wunsEval(gogomacro(form), globalEnv),
     apply,
   }
 }
