@@ -25,6 +25,13 @@ const makeStopWatch = () => {
 const cache = new Map()
 
 /**
+ * @param {vscode.TextDocument} document
+ * @param {TSParser.Tree} oldTree
+ * @returns
+ */
+const parseDocument = (document, oldTree) => parser.parse(document.getText(), oldTree)
+
+/**
  *
  * @param {vscode.TextDocument} document
  * @returns
@@ -33,19 +40,20 @@ const cacheFetchOrParse = (document) => {
   const { version } = document
   const cacheObj = cache.get(document)
   if (!cacheObj) {
-    const sourceCodeString = document.getText()
     const watch = makeStopWatch()
-    const tree = parser.parse(sourceCodeString)
+    const tree = parseDocument(document)
     console.log('parse initial took', watch(), 'ms')
     const obj = { version, tree }
     cache.set(document, obj)
     return obj
   }
-  if (cacheObj.version === version) return cacheObj
-  const sourceCodeString = document.getText()
+  if (cacheObj.version === version) {
+    console.log('cache hit', document.uri, document.version)
+    return cacheObj
+  }
   const oldTree = cacheObj.tree
   const watch = makeStopWatch()
-  const newTree = parser.parse(sourceCodeString, oldTree)
+  const newTree = parseDocument(document, oldTree)
   console.log('parse time taken', watch(), 'ms', document.version)
   cacheObj.tree = newTree
   cacheObj.version = version
@@ -65,18 +73,18 @@ const onDidChangeTextDocument = (e) => {
   for (const { range, rangeLength, rangeOffset, text } of contentChanges) {
     // from https://github.com/microsoft/vscode-anycode/blob/main/anycode/server/src/common/trees.ts#L109
     const tsEdit = {
-      startPosition: positionToPoint(range.start),
-      oldEndPosition: positionToPoint(range.end),
-      newEndPosition: positionToPoint(document.positionAt(rangeOffset + text.length)),
       startIndex: rangeOffset,
       oldEndIndex: rangeOffset + rangeLength,
       newEndIndex: rangeOffset + text.length,
+      startPosition: positionToPoint(range.start),
+      oldEndPosition: positionToPoint(range.end),
+      newEndPosition: positionToPoint(document.positionAt(rangeOffset + text.length)),
     }
     oldTree.edit(tsEdit)
   }
   console.log('tree edited', { version: document.version, nOfChanges: contentChanges.length })
   const watch = makeStopWatch()
-  const newTree = parser.parse(document.getText(), oldTree)
+  const newTree = parseDocument(document, oldTree)
   console.log('parse incremental took', watch(), 'ms')
   cacheObj.tree = newTree
   cacheObj.version = version
@@ -246,17 +254,59 @@ const interpretCurrentFile = () => {
   window.showInformationMessage('interpreted ' + tree.rootNode.children.length + ' forms')
 }
 
-const parseString = (sourceCodeString) => {
-  const tree = parser.parse(sourceCodeString)
-  const root = tree.rootNode
-  return root.children.map(treeToOurForm)
+const crypto = require('crypto')
+
+/**
+ *
+ * @param {vscode.TextDocument} document
+ * @param {vscode.Position[]} positions
+ * @param {vscode.CancellationToken} token
+ */
+const provideSelectionRanges = (document, positions) => {
+  const { tree } = cacheFetchOrParse(document)
+  const topLevelNodes = tree.rootNode.children
+  const tryFindRange = (pos) => {
+    const go = (node, parentSelectionRange) => {
+      const range = rangeFromNode(node)
+      if (!range.contains(pos)) return null
+      if (node.type === 'word') return new SelectionRange(range, parentSelectionRange)
+      const selRange = new SelectionRange(range, parentSelectionRange)
+      for (const child of node.namedChildren) {
+        const found = go(child, selRange)
+        if (found) return found
+      }
+      return selRange
+    }
+    for (const node of topLevelNodes) {
+      const found = go(node, undefined)
+      if (found) return found
+    }
+    return null
+  }
+
+  const selRanges = []
+  for (const pos of positions) {
+    const found = tryFindRange(pos)
+    if (found) selRanges.push(found)
+  }
+  return selRanges
 }
 
-const parseAll = (s) => parseString(s).map(flattenForm)
+/**
+ * @param {vscode.TextDocument} document
+ */
+const provideDocumentSemanticTokens = (document) => {
+  const stopWatch = makeStopWatch()
+  const { tree } = cacheFetchOrParse(document)
+  const { tokensBuilder, build } = tokenBuilderForParseTree()
+  tree.rootNode.children.forEach(build)
+  const semtoks = tokensBuilder.build()
+  console.log('semantic tokens time taken', stopWatch(), 'ms', document.version)
+  const semtokHash = crypto.createHash('sha256').update(semtoks.data).digest('hex')
+  console.log({ semtoksCount: semtoks.data.length, semtokHash, file: document.fileName, version: document.version })
 
-const { watchFile, readFileSync } = require('fs')
-
-const crypto = require('crypto')
+  return semtoks
+}
 
 /**
  * @param {vscode.ExtensionContext} context
@@ -264,136 +314,18 @@ const crypto = require('crypto')
 function activate(context) {
   console.log('starting wuns lang extension: ' + context.extensionPath)
 
-  const wunsFilePath = context.extensionPath + '/wuns/sem-tok.wuns'
-  let activeDocument = null
-  let tokensBuilder = null
-  const textEncoder = new TextEncoder()
-  const getDocumentText = (line) => {
-    const lineNum = number(line)
-    if (isNaN(lineNum) || lineNum < 0 || !activeDocument) return new Uint8Array(0)
-    const lineText = activeDocument.lineAt(lineNum)
-    if (!lineText) return new Uint8Array(0)
-    return textEncoder.encode(lineText.text)
-  }
-  const pushToken = (...args) => {
-    const [line, column, length, tokenType, tokenModifiers] = args.map(number)
-    tokensBuilder.push(line, column, length, tokenType, tokenModifiers)
-  }
-  const funcEnv = mkFuncEnv({ log: (s) => console.log(s) })
-  funcEnv.set('document-line-text', getDocumentText)
-  funcEnv.set('push-token', pushToken)
-  const { gogoeval, apply } = makeEvaluator(funcEnv)
-
-  const load = () => {
-    const content = readFileSync(wunsFilePath, 'utf8')
-    const topLevelList = parseAll(content)
-    try {
-      for (const form of topLevelList) gogoeval(form)
-    } catch (e) {
-      console.error('interpret error', e)
-    }
-  }
-  load()
-  watchFile(wunsFilePath, { interval: 100 }, load)
-
-  const onDidChangeSemanticTokensListeners = []
-  let overrideSymToks = null
-
-  /**
-   *
-   * @param {vscode.TextDocument} document
-   * @param {vscode.Position[]} positions
-   * @param {vscode.CancellationToken} token
-   */
-  const provideSelectionRanges = (document, positions) => {
-    const { tree } = cacheFetchOrParse(document)
-    const topLevelNodes = tree.rootNode.children
-    const tryFindRange = (pos) => {
-      const go = (node, parentSelectionRange) => {
-        const range = rangeFromNode(node)
-        if (!range.contains(pos)) return null
-        if (node.type === 'word') return new SelectionRange(range, parentSelectionRange)
-        const selRange = new SelectionRange(range, parentSelectionRange)
-        for (const child of node.namedChildren) {
-          const found = go(child, selRange)
-          if (found) return found
-        }
-        return selRange
-      }
-      for (const node of topLevelNodes) {
-        const found = go(node, undefined)
-        if (found) return found
-      }
-      return null
-    }
-
-    const selRanges = []
-    for (const pos of positions) {
-      const found = tryFindRange(pos)
-      if (found) selRanges.push(found)
-    }
-    return selRanges
-  }
-
-  /**
-   * @param {vscode.TextDocument} document
-   */
-  const provideDocumentSemanticTokens = (document, cancellingToken) => {
-    if (overrideSymToks && overrideSymToks.fileName === document.fileName) {
-      const symToks = overrideSymToks.data
-      overrideSymToks = null
-      console.log('overriding semantic tokens', symToks)
-      return symToks
-    }
-    const stopWatch = makeStopWatch()
-    const { tree } = cacheFetchOrParse(document)
-    const { tokensBuilder, build } = tokenBuilderForParseTree()
-    tree.rootNode.children.forEach(build)
-    const semtoks = tokensBuilder.build()
-    console.log('semantic tokens time taken', stopWatch(), 'ms', document.version)
-    const semtokHash = crypto.createHash('sha256').update(semtoks.data).digest('hex')
-    console.log({ semtoksCount: semtoks.data.length, semtokHash, file: document.fileName, version: document.version })
-
-    return semtoks
-  }
-
-  context.subscriptions.push(
-    commands.registerCommand('wunslang.semanticTokens', () => {
-      const f = funcEnv.get('provide-document-semantic-tokens')
-      if (!f) return
-      activeDocument = getActiveTextEditorDocument()
-      if (!activeDocument) return
-      console.log('active document', activeDocument.fileName)
-      tokensBuilder = new SemanticTokensBuilder(legend)
-      {
-        const res = apply(f, [String(activeDocument.lineCount)])
-        window.showInformationMessage('eval result: ' + print(res))
-      }
-      const semtoks = tokensBuilder.build('1')
-      overrideSymToks = { fileName: activeDocument.fileName, data: semtoks }
-      tokensBuilder = null
-      console.log('wuns semtoks', semtoks)
-      console.log('calling listeners', onDidChangeSemanticTokensListeners.length)
-      for (const listener of onDidChangeSemanticTokensListeners) listener()
-    }),
-    commands.registerCommand('wunslang.interpret', interpretCurrentFile),
-  )
-
-  const onDidChangeSemanticTokens = (listener, thisArgs, disposables) => {
-    console.log('onDidChangeSemanticTokens')
-    onDidChangeSemanticTokensListeners.push(listener)
-    return { dispose: () => {} }
-  }
-  const semanticTokensProvider = {
-    onDidChangeSemanticTokens,
-    provideDocumentSemanticTokens,
-    // provideDocumentSemanticTokensEdits,
-  }
+  context.subscriptions.push(commands.registerCommand('wunslang.interpret', interpretCurrentFile))
 
   const selector = { language: 'wuns', scheme: 'file' }
 
   context.subscriptions.push(
-    languages.registerDocumentSemanticTokensProvider(selector, semanticTokensProvider, legend),
+    languages.registerDocumentSemanticTokensProvider(
+      selector,
+      {
+        provideDocumentSemanticTokens,
+      },
+      legend,
+    ),
     languages.registerSelectionRangeProvider(selector, { provideSelectionRanges }),
   )
   workspace.onDidChangeTextDocument(onDidChangeTextDocument)
