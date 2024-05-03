@@ -141,6 +141,7 @@ const print = (x) => {
 const number = (s) => {
   const n = Number(s)
   if (isNaN(n)) throw new Error('expected number, found: ' + s)
+  if (n !== (n | 0)) throw new Error('expected 32-bit signed integer, found: ' + s)
   return n
 }
 
@@ -153,7 +154,7 @@ const mkFuncEnv = ({ log }, instructions) => {
     const parameterCount = func.length
     funcEnv.set(name, (...args) => {
       assert(args.length === parameterCount, `expected ${parameterCount} arguments, got ${args.length}`)
-      return String(func(...args.map(number)))
+      return String(func(...args.map(number)) | 0)
     })
   }
   // would be cool to do in a host-func special form
