@@ -214,6 +214,11 @@ const mkFuncEnv = ({ log }, instructions) => {
     throw new Error("wuns 'abort'")
   })
 
+  funcEnv.set('word-from-codepoints', (cs) => {
+    assert(Array.isArray(cs), 'word-from-codepoints expects array')
+    return cs.map((c) => String.fromCharCode(number(c))).join('')
+  })
+
   return funcEnv
 }
 
