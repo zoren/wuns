@@ -52,7 +52,7 @@ const cacheFetchOrParse = (document) => {
     return cacheObj
   }
   const oldTree = cacheObj.tree
-  const watch = makeStopWatch()
+  // const watch = makeStopWatch()
   const newTree = parseDocument(document, oldTree)
   // console.log('parse time taken', watch(), 'ms', document.version)
   cacheObj.tree = newTree
@@ -149,7 +149,7 @@ const tokenBuilderForParseTree = () => {
           if (node.type === 'word') pushToken(node, stringTokenType)
           else node.namedChildren.forEach(goQ)
         }
-        if (tail.length >= 1) goQ(tail[0])
+        for (const child of tail) goQ(child)
         break
       }
       case 'if':
@@ -251,7 +251,7 @@ const makeInterpretCurrentFile = async (instructionsWasmUri) => {
   }
 }
 
-const crypto = require('crypto')
+// const crypto = require('crypto')
 
 /**
  *
@@ -293,7 +293,7 @@ const provideSelectionRanges = (document, positions) => {
  * @param {vscode.TextDocument} document
  */
 const provideDocumentSemanticTokens = (document) => {
-  const stopWatch = makeStopWatch()
+  // const stopWatch = makeStopWatch()
   const { tree } = cacheFetchOrParse(document)
   const { tokensBuilder, build } = tokenBuilderForParseTree()
   tree.rootNode.children.forEach(build)
