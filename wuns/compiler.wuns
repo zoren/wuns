@@ -259,6 +259,7 @@
 
 [global i32.const [quote 65]]
 [global i32.add [quote 106]]
+[global i32.sub [quote 107]]
 
 [func comp-form [ctx form]
   [if [is-word form]
@@ -269,6 +270,9 @@
       [ifs
         [eq-word inst [quote add]]
         [concat [comp-form ctx [first args]] [comp-form ctx [second args]] [list i32.add]]
+
+        [eq-word inst [quote sub]]
+        [concat [comp-form ctx [first args]] [comp-form ctx [second args]] [list i32.sub]]
 
         [log [quote error]]]]]]
 
@@ -357,13 +361,9 @@
     [code-section
       [code []
         [concat 
-          [comp-form [quote [x [param i32] y [param i32]]] [quote [add x y]]]
+          [comp-form [quote [x [param i32] y [param i32]]] [quote [sub x y]]]
           [list end]]]]]]
 
-[log [comp-form [quote [x [param i32] y [param i32]]] [quote [add x y]]]]
-[log [quote mod]]
-[log [word-to-codepoints [quote xyz]]]
-[log [export [quote xyz] [quote function] 0]]
 [log [module]]
 
 [let
@@ -371,4 +371,6 @@
    wi [wasm-instance wm]]
   [wasm-import wi xyz]
 ]
-[log [xyz 1 2]]
+[log [xyz 2 1]]
+[log [xyz 0 1]]
+[log [xyz 1 3]]
