@@ -10,9 +10,17 @@ const makeEvaluator = (funcEnv) => {
   const globalVarValues = new Map()
   const globalEnv = { varValues: globalVarValues, outer: null }
   const apply = ({ params, restParam, bodies }, args) => {
+    const arity = params.length
+    const numberOfGivenArgs = args.length
+    if (restParam === null) {
+      if (arity !== numberOfGivenArgs) throw new Error(`expected ${arity} arguments, got ${numberOfGivenArgs}`)
+    } else {
+      if (arity > numberOfGivenArgs)
+        throw new Error(`expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
+    }
     const varValues = new Map()
-    for (let i = 0; i < params.length; i++) varValues.set(params[i], args[i])
-    if (restParam) varValues.set(restParam, makeList(...args.slice(params.length)))
+    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+    if (restParam) varValues.set(restParam, makeList(...args.slice(arity)))
     const inner = { varValues, outer: globalEnv }
     let result = unit
     for (const body of bodies) result = wunsEval(body, inner)
@@ -210,7 +218,7 @@ const mkFuncEnv = ({ log }, instructions) => {
   })
 
   funcEnv.set('freeze', (ar) => Object.freeze(ar))
-  
+
   let gensym = 0
   funcEnv.set('gensym', () => String(gensym++))
   funcEnv.set('log', (a) => {
