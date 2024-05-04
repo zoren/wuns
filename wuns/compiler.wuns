@@ -230,14 +230,14 @@
 [func constant [n]
   [concat [i32.const] [s32-word-to-leb-128 n]]]
 
-[func lookup [ctx sym]
+[func lookup-assoc-list [ctx sym]
   [let [s [size ctx]]
     [loop [i [quote 0]]
       [if [ge i s]
-        []
+        [abort]
         [let [k [at ctx i]
               v [at ctx [inc i]]]
-          [if [eq k sym]
+          [if [eq-word k sym]
             v
             [cont [add i 2]]]]]]]]
 
@@ -257,25 +257,27 @@
 
 [constant instructions
   [quote
-    [name i32.add op-code 0x6a parameters [i32 i32] results [i32]]
-    [name i32.sub op-code 0x6b parameters [i32 i32] results [i32]]]]
+    [name i32.add opcode 0x6a parameters [i32 i32] results [i32]]
+    [name i32.sub opcode 0x6b parameters [i32 i32] results [i32]]]]
 
-[func get-opcode [name]
-  []
-]
+[func get-instruction [name]
+  [loop [i 0]
+    [if [lt i [size instructions]]
+      [let [o [at instructions i]]
+        [if [eq-word [lookup-assoc-list o [quote name]] name]
+          o
+          [cont [inc i]]]]
+      0]]]
 
 [func comp-form [ctx form]
   [if [is-word form]
     [let [i [get-local-index ctx form]]
       [concat [list local.get] [u32-word-to-leb-128 i]]]
-    [let [inst [first form]
+    [let [instruction [get-instruction [first form]]
           args [rest form]]
-      [ifs
-        [eq-word inst [quote i32.add]]
-        [concat [comp-form ctx [first args]] [comp-form ctx [second args]] [quote [0x6a]]]
-
-        [eq-word inst [quote i32.sub]]
-        [concat [comp-form ctx [first args]] [comp-form ctx [second args]] [quote [0x6b]]]
+      [if instruction
+        [concat [comp-form ctx [first args]] [comp-form ctx [second args]]
+          [list [lookup-assoc-list instruction [quote opcode]]]]
 
         [log [quote error]]]]]]
 
