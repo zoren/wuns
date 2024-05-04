@@ -30,6 +30,28 @@
 
 [func rest [l] [slice l 1 [size l]]]
 
+[func concat [.. lists]
+  [let [result [mutable-list]
+        s-lists [size lists]]    
+    [loop [i 0]
+      [if [lt i s-lists]
+        [let [list [at lists i]
+              s-list [size list]]
+          [if [not [is-list list]]
+            [let []
+              [log [list [quote [concat not a list]] list]]
+              [abort]]
+            []
+          ]
+          [loop [j 0]
+            [if [lt j s-list]
+              [let []
+                [push result [at list j]]
+                [cont [inc j]]]
+              []]]
+          [cont [inc i]]]
+        [freeze result]]]]]
+
 [macro do [.. forms]
   [concat [quote [let []]] forms]]
 
@@ -252,7 +274,7 @@
 
 [func type-function [params results]
   [concat
-    [quote 0x60]
+    [quote [0x60]]
     [u32-word-to-leb-128 [size params]]
     params
     [u32-word-to-leb-128 [size results]]
@@ -310,14 +332,13 @@
       [when [lt i [size w]]
         [push ml [at w i]]
         [cont [inc i]]]]
-    [freeze ml]
-        ]]
+    [freeze ml]]]
 
 [func export [name kind index]
   [concat
     [u32-word-to-leb-128 [size name]]
     [word-to-codepoints name]
-    [kind-to-tag kind]
+    [list [kind-to-tag kind]]
     [u32-word-to-leb-128 index]]]
 
 [func module []
@@ -337,11 +358,17 @@
       [code []
         [concat 
           [comp-form [quote [x [param i32] y [param i32]]] [quote [add x y]]]
-          end]]]]]
+          [list end]]]]]]
 
 [log [comp-form [quote [x [param i32] y [param i32]]] [quote [add x y]]]]
 [log [quote mod]]
 [log [word-to-codepoints [quote xyz]]]
 [log [export [quote xyz] [quote function] 0]]
 [log [module]]
-[log [wasm-module [module]]]
+
+[let
+  [wm [wasm-module [module]]
+   wi [wasm-instance wm]]
+  [wasm-import wi xyz]
+]
+[log [xyz 1 2]]

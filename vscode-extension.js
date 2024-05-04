@@ -48,13 +48,13 @@ const cacheFetchOrParse = (document) => {
     return obj
   }
   if (cacheObj.version === version) {
-    console.log('cache hit', document.uri, document.version)
+    // console.log('cache hit', document.uri, document.version)
     return cacheObj
   }
   const oldTree = cacheObj.tree
   const watch = makeStopWatch()
   const newTree = parseDocument(document, oldTree)
-  console.log('parse time taken', watch(), 'ms', document.version)
+  // console.log('parse time taken', watch(), 'ms', document.version)
   cacheObj.tree = newTree
   cacheObj.version = version
   return cacheObj
@@ -82,10 +82,10 @@ const onDidChangeTextDocument = (e) => {
     }
     oldTree.edit(tsEdit)
   }
-  console.log('tree edited', { version: document.version, nOfChanges: contentChanges.length })
+  // console.log('tree edited', { version: document.version, nOfChanges: contentChanges.length })
   const watch = makeStopWatch()
   const newTree = parseDocument(document, oldTree)
-  console.log('parse incremental took', watch(), 'ms')
+  // console.log('parse incremental took', watch(), 'ms')
   cacheObj.tree = newTree
   cacheObj.version = version
 }
@@ -298,9 +298,9 @@ const provideDocumentSemanticTokens = (document) => {
   const { tokensBuilder, build } = tokenBuilderForParseTree()
   tree.rootNode.children.forEach(build)
   const semtoks = tokensBuilder.build()
-  console.log('semantic tokens time taken', stopWatch(), 'ms', document.version)
-  const semtokHash = crypto.createHash('sha256').update(semtoks.data).digest('hex')
-  console.log({ semtoksCount: semtoks.data.length, semtokHash, file: document.fileName, version: document.version })
+  // console.log('semantic tokens time taken', stopWatch(), 'ms', document.version)
+  // const semtokHash = crypto.createHash('sha256').update(semtoks.data).digest('hex')
+  // console.log({ semtoksCount: semtoks.data.length, semtokHash, file: document.fileName, version: document.version })
 
   return semtoks
 }

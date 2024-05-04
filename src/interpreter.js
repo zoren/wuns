@@ -2,7 +2,6 @@ const unit = Object.freeze([])
 const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
 
 const symbolContinue = Symbol.for('wuns-continue')
-const symbolVarargs = Symbol.for('wuns-varargs')
 const tryMap = (arr, f) => {
   if (arr) return arr.map(f)
   return unit
@@ -80,14 +79,24 @@ const makeEvaluator = (funcEnv) => {
         globalVarValues.set(varName, wunsEval(value, env))
         return unit
       }
+      case 'wasm-import': {
+        const [instanceArg, exportFunctionName] = args
+        const instance = wunsEval(instanceArg, env)
+        assert(instance instanceof WebAssembly.Instance, `expected wasm instance, found ${instance}`)
+        const f = instance.exports[exportFunctionName]
+        if (typeof f !== 'function') throw new Error(`expected function, found ${f}`)
+        funcEnv.set(exportFunctionName, f)
+        return unit
+      }
     }
     const funcOrMacro = funcEnv.get(firstWord)
     assert(funcOrMacro, `function ${firstWord} not found ${print(form)}`)
     if (typeof funcOrMacro === 'function') {
-      if (funcOrMacro[symbolVarargs]) return funcOrMacro(...args.map((arg) => wunsEval(arg, env)))
       const parameterCount = funcOrMacro.length
       assert(args.length === parameterCount, `${firstWord} expected ${parameterCount} arguments, got ${args.length}`)
-      return funcOrMacro(...args.map((arg) => wunsEval(arg, env)))
+      const res = funcOrMacro(...args.map((arg) => wunsEval(arg, env)))
+      if (typeof res === 'number') return String(res)
+      return res
     }
     assert(typeof funcOrMacro === 'object', `expected function or object ${funcOrMacro}`)
     const { isMacro } = funcOrMacro
@@ -191,14 +200,6 @@ const mkFuncEnv = ({ log }, instructions) => {
     return Object.freeze(s)
   })
 
-  const concat = (...args) => Object.freeze(args.flat())
-  concat[symbolVarargs] = true
-  // would be nice to do without these two, as we would prefer no builtin var args
-  funcEnv.set('concat', concat)
-  const concatWords = (...ws) => ws.join('')
-  concatWords[symbolVarargs] = true
-  funcEnv.set('concat-words', concatWords)
-
   funcEnv.set('mutable-list', () => [])
   funcEnv.set('push', (ar, e) => {
     if (!Array.isArray(ar)) throw new Error('push expects array')
@@ -208,21 +209,7 @@ const mkFuncEnv = ({ log }, instructions) => {
   })
 
   funcEnv.set('freeze', (ar) => Object.freeze(ar))
-  const inDecIntRegex = /^[0-9]+$/
-  const isDecIntWord = (s) => inDecIntRegex.test(s)
-  funcEnv.set('word', (cs) => {
-    assert(Array.isArray(cs), 'word expects array: ' + cs)
-    // assert(cs.length > 0, 'word expects non-empty array')
-    return cs
-      .map((c) => {
-        if (typeof c !== 'string') throw new Error('word expects words')
-        assert(isDecIntWord(c), 'word expects word chars: ' + c)
-        const s = String.fromCharCode(number(c))
-        // assert(isWordChar(s), 'word expects word chars: '+s)
-        return s
-      })
-      .join('')
-  })
+  
   let gensym = 0
   funcEnv.set('gensym', () => String(gensym++))
   funcEnv.set('log', (a) => {
@@ -239,13 +226,9 @@ const mkFuncEnv = ({ log }, instructions) => {
     return cs.map((c) => String.fromCharCode(number(c))).join('')
   })
 
-  funcEnv.set('wasm-module', (s) => {
-    const module = new WebAssembly.Module(new Uint8Array(s.map(number)))
-    
-    const instance = new WebAssembly.Instance(module, {})
-    console.log(instance.exports)
-    return String(Object.entries(instance.exports).length)
-  })
+  funcEnv.set('wasm-module', (s) => new WebAssembly.Module(new Uint8Array(s.map(number))))
+
+  funcEnv.set('wasm-instance', (module) => new WebAssembly.Instance(module))
 
   return funcEnv
 }
