@@ -353,12 +353,17 @@
     [type-section
       [type-function [list i32 i32] [list i32]]]
     
-    [func-section 0]
+    [func-section 0 0]
 
     [export-section
-      [export [quote xyz] [quote function] 0]]
+      [export [quote add] [quote function] 0]
+      [export [quote sub] [quote function] 1]]
 
     [code-section
+      [code []
+        [concat 
+          [comp-form [quote [x [param i32] y [param i32]]] [quote [add x y]]]
+          [list end]]]    
       [code []
         [concat 
           [comp-form [quote [x [param i32] y [param i32]]] [quote [sub x y]]]
@@ -369,8 +374,13 @@
 [let
   [wm [wasm-module [module]]
    wi [wasm-instance wm]]
-  [wasm-import wi xyz my-sub]
-]
+  [wasm-import-func wi add my-add]
+  [wasm-import-func wi sub my-sub]]
+
+[log [my-add 2 1]]
+[log [my-add 0 1]]
+[log [my-add 1 3]]
+
 [log [my-sub 2 1]]
 [log [my-sub 0 1]]
 [log [my-sub 1 3]]

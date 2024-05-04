@@ -79,7 +79,7 @@ const makeEvaluator = (funcEnv) => {
         globalVarValues.set(varName, wunsEval(value, env))
         return unit
       }
-      case 'wasm-import': {
+      case 'wasm-import-func': {
         if (args.length !== 3) throw new Error('wasm-import expects 3 arguments')
         const [instanceArg, exportFunctionName, importName] = args
         const instance = wunsEval(instanceArg, env)
