@@ -2,13 +2,13 @@
 
 [func list [.. l] l]
 
-[macro global-id [name]
-  [list [quote global] name [list [quote quote] name]]]
+[macro constant-id [name]
+  [list [quote constant] name [list [quote quote] name]]]
 
-[global-id 0]
-[global-id 1]
-[global-id 2]
-[global-id 3]
+[constant-id 0]
+[constant-id 1]
+[constant-id 2]
+[constant-id 3]
 
 [func inc [x] [add x 1]]
 
@@ -163,7 +163,7 @@
         [cont [dec i]]]]
     [freeze res]]]
 
-[global ascii-x [quote 120]]
+[constant ascii-x [quote 120]]
 
 [func dec-word-to-hex-word [dw]
   [assert [not [is-negative dw]] expected non-negative decimal word]
@@ -224,8 +224,8 @@
 
 [test [quote [0xc0 0xbb 0x78]] [dec-words-to-hex [s32-word-to-leb-128 [quote -123456]]]]
 
-[global i32.const [quote 65]]
-[global local.get [quote 32]]
+[constant i32.const [quote 65]]
+[constant local.get [quote 32]]
 
 [func constant [n]
   [concat [i32.const] [s32-word-to-leb-128 n]]]
@@ -247,19 +247,22 @@
       [if [lt i [quote -1]]
         [abort]
         [let [k [at ctx i]]
-          [log [list [quote key] k sym]]
           [if [eq-word k sym]
             [bit-shift-right-signed i 1]
             [cont [sub i 2]]]]]]]]
-[log [list [quote eq-test] [eq-word [quote a] [quote b]]]]
-[log [get-local-index [quote [x [param i32] y [param i32]]] [quote x]]]
-[log [get-local-index [quote [x [param i32] y [param i32]]] [quote y]]]
 
-[global local.get [quote 32]]
+[constant local.get [quote 32]]
 
-[global i32.const [quote 65]]
-[global i32.add [quote 106]]
-[global i32.sub [quote 107]]
+[constant i32.const [quote 65]]
+
+[constant instructions
+  [quote
+    [name i32.add op-code 0x6a parameters [i32 i32] results [i32]]
+    [name i32.sub op-code 0x6b parameters [i32 i32] results [i32]]]]
+
+[func get-opcode [name]
+  []
+]
 
 [func comp-form [ctx form]
   [if [is-word form]
@@ -268,13 +271,17 @@
     [let [inst [first form]
           args [rest form]]
       [ifs
-        [eq-word inst [quote add]]
-        [concat [comp-form ctx [first args]] [comp-form ctx [second args]] [list i32.add]]
+        [eq-word inst [quote i32.add]]
+        [concat [comp-form ctx [first args]] [comp-form ctx [second args]] [quote [0x6a]]]
 
-        [eq-word inst [quote sub]]
-        [concat [comp-form ctx [first args]] [comp-form ctx [second args]] [list i32.sub]]
+        [eq-word inst [quote i32.sub]]
+        [concat [comp-form ctx [first args]] [comp-form ctx [second args]] [quote [0x6b]]]
 
         [log [quote error]]]]]]
+
+[func compile-form [ctx form]
+
+]
 
 [func type-function [params results]
   [concat
@@ -303,20 +310,19 @@
 [func func-section [.. func-indexes]
   [vector-section 3 [concat [u32-word-to-leb-128 [size func-indexes]] func-indexes]]]
 
+[func index-of-word [words word]
+  [let [s-words [size words]]
+    [loop [i 0]
+      [if [lt i s-words]
+        [if [eq-word word [at words i]]
+          i
+          [cont [inc i]]]
+        [quote -1]]]]]
+
 [func kind-to-tag [kind]
-  [ifs
-    [eq-word kind [quote function]]
-    0
-
-    [eq-word kind [quote memory]]
-    1
-
-    [eq-word kind [quote global]]
-    2
-    
-    [do
-      [log [list [quote [kind-to-tag no expected]] kind]]
-      [abort]]]]
+  [let [index [index-of-word [quote function memory global] kind]]
+    [assert [not [is-negative index]] kind-to-tag unexpected kind]
+    index]]
 
 [func export-section [.. exports]
   [vector-section [quote 7]
@@ -327,8 +333,8 @@
 [func code-section [.. codes]
   [vector-section [quote 10] [concat [u32-word-to-leb-128 [size codes]] [concat-lists codes]]]]
 
-[global i32 [quote 0x7f]]
-[global end [quote 0x0b]]
+[constant i32 [quote 0x7f]]
+[constant end [quote 0x0b]]
 
 [func word-to-codepoints [w]
   [let [ml [mutable-list]]
@@ -362,11 +368,11 @@
     [code-section
       [code []
         [concat 
-          [comp-form [quote [x [param i32] y [param i32]]] [quote [add x y]]]
+          [comp-form [quote [x [param i32] y [param i32]]] [quote [i32.add x y]]]
           [list end]]]    
       [code []
         [concat 
-          [comp-form [quote [x [param i32] y [param i32]]] [quote [sub x y]]]
+          [comp-form [quote [x [param i32] y [param i32]]] [quote [i32.sub x y]]]
           [list end]]]]]]
 
 [log [module]]

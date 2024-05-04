@@ -82,7 +82,7 @@ const makeEvaluator = (funcEnv) => {
         funcEnv.set(fname, fObj)
         return unit
       }
-      case 'global': {
+      case 'constant': {
         const [varName, value] = args
         globalVarValues.set(varName, wunsEval(value, env))
         return unit
@@ -141,7 +141,7 @@ const makeEvaluator = (funcEnv) => {
         const [fname, origParams, ...bodies] = args
         return makeList(firstWord, fname, origParams, ...bodies.map(gogomacro))
       }
-      case 'global': {
+      case 'constant': {
         const [varName, value] = args
         return makeList(firstWord, varName, gogomacro(value))
       }

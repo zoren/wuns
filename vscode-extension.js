@@ -188,7 +188,7 @@ const tokenBuilderForParseTree = () => {
         for (const child of body) go(child)
         break
       }
-      case 'global':
+      case 'constant':
         pushToken(head, keywordTokenType)
         for (const child of tail) go(child)
         break
