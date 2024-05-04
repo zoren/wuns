@@ -9,6 +9,7 @@
 [constant-id 1]
 [constant-id 2]
 [constant-id 3]
+[constant-id -1]
 
 [func inc [x] [add x 1]]
 
@@ -111,16 +112,18 @@
             gs
             [concat [quote [or]] [rest clauses]]]]]]]]
 
+[func push-all [mut-list list]
+  [let [s-l [size list]]
+    [loop [i 0]
+      [when [lt i s-l]
+        [push mut-list [at list i]]
+        [cont [inc i]]]]]]
+
 [func concat-lists [lists]
   [let [res [mutable-list] s [size lists]]
     [loop [i 0]
       [when [lt i s]
-        [let [l [at lists i]]
-          [loop [j 0]
-            [when [lt j [size l]]
-              [push res [at l j]]
-              [cont [inc j]]]]
-          [cont [inc i]]]]]
+        [push-all res [at lists i]]]]
     [freeze res]]]
 
 [log [concat-lists [quote [[1 2] [3 4]]]]]
@@ -251,6 +254,16 @@
             [bit-shift-right-signed i 1]
             [cont [sub i 2]]]]]]]]
 
+[func get-local-and-index [ctx sym]
+  [let [s [size ctx]]
+    [loop [i [sub s 2]]
+      [if [lt i [quote -1]]
+        [assert 0 get-local-and-index not found]
+        [let [k [at ctx i]]
+          [if [eq-word k sym]
+            [list [at ctx [inc i]] [bit-shift-right-signed i 1]]
+            [cont [sub i 2]]]]]]]]
+
 [constant local.get [quote 32]]
 
 [constant i32.const [quote 65]]
@@ -281,9 +294,11 @@
 
         [log [quote error]]]]]]
 
-[func compile-form [ctx form]
-
-]
+[func make-mty-ctx []
+  [list
+    [quote types] [mutable-list]
+    [quote functions] [mutable-list]
+    [quote exports] [mutable-list]]]
 
 [func type-function [params results]
   [concat
@@ -292,6 +307,51 @@
     params
     [u32-word-to-leb-128 [size results]]
     results]]
+
+[func compile-form-mutable [ctx code form]
+  [if [is-word form]
+    [let [index [get-local-index ctx form]
+          local [at ctx [bit-shift-left index 1]]]
+      [push code local.get]
+      [push-all code [u32-word-to-leb-128 index]]
+      [list local]]
+    [let [instruction [get-instruction [first form]]
+          args [rest form]]
+      [assert instruction instruction not found]
+      [assert [eq [size [lookup-assoc-list instruction [quote parameters]]] [size args]]
+        instruction arity mismatch]
+      [loop [i 0]
+        [when [lt i [size args]]
+          [compile-form-mutable ctx code [at args i]]]]
+      [push code [lookup-assoc-list instruction [quote opcode]]]
+      [lookup-assoc-list instruction [quote results]]]]]
+
+[constant i32 [quote 0x7f]]
+
+[func params-to-ctx [params]
+  [let [ml [mutable-list]]
+    [loop [i 0]
+      [when [lt i [size params]]
+        [push ml [at params i]]
+        [push ml i32]
+        [cont [inc i]]]]
+    [freeze ml]]]
+
+[func compile-top-level-form [form]
+  [if [eq-word [quote func] [first form]]
+    [let [name [second form]
+          params [third form]
+          ctx [params-to-ctx params]
+          code [mutable-list]]
+      [loop [i 3]
+        [when [lt i [dec [size form]]]
+          [compile-form-mutable ctx code [at form i]]]]
+      [compile-form-mutable ctx code [at form -1]]
+      [list [quote code] code]]
+
+    [assert 0 not a top-level form]]]
+
+[log [compile-top-level-form [quote [func id [p q] q]]]]
 
 [func code [locals instructions]
   [assert [is-zero [size locals]] locals not supported yet]
@@ -335,7 +395,6 @@
 [func code-section [.. codes]
   [vector-section [quote 10] [concat [u32-word-to-leb-128 [size codes]] [concat-lists codes]]]]
 
-[constant i32 [quote 0x7f]]
 [constant end [quote 0x0b]]
 
 [func word-to-codepoints [w]
@@ -378,7 +437,7 @@
           [list end]]]]]]
 
 [log [module]]
-
+[comment 
 [let
   [wm [wasm-module [module]]
    wi [wasm-instance wm]]
@@ -392,3 +451,4 @@
 [log [my-sub 2 1]]
 [log [my-sub 0 1]]
 [log [my-sub 1 3]]
+]

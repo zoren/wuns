@@ -83,7 +83,7 @@ const onDidChangeTextDocument = (e) => {
     oldTree.edit(tsEdit)
   }
   // console.log('tree edited', { version: document.version, nOfChanges: contentChanges.length })
-  const watch = makeStopWatch()
+  // const watch = makeStopWatch()
   const newTree = parseDocument(document, oldTree)
   // console.log('parse incremental took', watch(), 'ms')
   cacheObj.tree = newTree
