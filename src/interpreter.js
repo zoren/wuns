@@ -35,7 +35,7 @@ const makeEvaluator = (funcEnv) => {
     const [firstWord, ...args] = form
     switch (firstWord) {
       case 'quote':
-        return args[0]
+        return args.length === 1 ? args[0] : args
       case 'if':
         return wunsEval(args[wunsEval(args[0], env) === '0' ? 2 : 1], env)
       case 'let':
