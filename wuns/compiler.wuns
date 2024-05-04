@@ -369,8 +369,8 @@
 [let
   [wm [wasm-module [module]]
    wi [wasm-instance wm]]
-  [wasm-import wi xyz]
+  [wasm-import wi xyz my-sub]
 ]
-[log [xyz 2 1]]
-[log [xyz 0 1]]
-[log [xyz 1 3]]
+[log [my-sub 2 1]]
+[log [my-sub 0 1]]
+[log [my-sub 1 3]]

@@ -80,12 +80,13 @@ const makeEvaluator = (funcEnv) => {
         return unit
       }
       case 'wasm-import': {
-        const [instanceArg, exportFunctionName] = args
+        if (args.length !== 3) throw new Error('wasm-import expects 3 arguments')
+        const [instanceArg, exportFunctionName, importName] = args
         const instance = wunsEval(instanceArg, env)
         assert(instance instanceof WebAssembly.Instance, `expected wasm instance, found ${instance}`)
         const f = instance.exports[exportFunctionName]
         if (typeof f !== 'function') throw new Error(`expected function, found ${f}`)
-        funcEnv.set(exportFunctionName, f)
+        funcEnv.set(importName, f)
         return unit
       }
     }
