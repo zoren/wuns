@@ -42,6 +42,6 @@
   },
   "dependencies": {
     "tree-sitter": "^0.21.1",
-    "tree-sitter-wuns": "file:tree-sitter-wuns/tree-sitter-wuns-1.0.1.tgz"
+    "tree-sitter-wuns": "file:tree-sitter-wuns/tree-sitter-wuns-1.0.2.tgz"
   }
 }
