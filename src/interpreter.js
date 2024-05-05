@@ -104,7 +104,7 @@ const makeEvaluator = (funcEnv) => {
       assert(args.length === parameterCount, `${firstWord} expected ${parameterCount} arguments, got ${args.length}`)
       const res = funcOrMacro(...args.map((arg) => wunsEval(arg, env)))
       if (typeof res === 'number') return String(res)
-      assert(res !== undefined, `undefined result from ${firstWord} ${print(form)}`)
+      if (res === undefined) return unit
       return res
     }
     assert(typeof funcOrMacro === 'object', `expected function or object ${funcOrMacro}`)
