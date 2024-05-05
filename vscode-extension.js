@@ -222,9 +222,10 @@ const makeInterpretCurrentFile = async (instructionsWasmUri) => {
   return () => {
     const document = getActiveTextEditorDocument()
     const { tree } = cacheFetchOrParse(document)
+    outputChannel.clear()
     const importObject = {
       log: (s) => {
-        outputChannel.show()
+        outputChannel.show(true)
         outputChannel.appendLine(s)
       },
     }
