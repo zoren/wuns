@@ -15,16 +15,20 @@ const makeEvaluator = (funcEnv) => {
     if (restParam === null) {
       if (arity !== numberOfGivenArgs) throw new Error(`expected ${arity} arguments, got ${numberOfGivenArgs}`)
     } else {
-      if (arity > numberOfGivenArgs)
-        throw new Error(`expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
+      if (arity > numberOfGivenArgs) throw new Error(`expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
     }
     const varValues = new Map()
     for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
     if (restParam) varValues.set(restParam, makeList(...args.slice(arity)))
     const inner = { varValues, outer: globalEnv }
-    let result = unit
-    for (const body of bodies) result = wunsEval(body, inner)
-    return result
+    try {
+      let result = unit
+      for (const body of bodies) result = wunsEval(body, inner)
+      return result
+    } catch (e) {
+      console.error(e)
+      return unit
+    }
   }
   const assert = (cond, msg) => {
     if (!cond) throw new Error('eval assert failed: ' + msg)
@@ -105,6 +109,7 @@ const makeEvaluator = (funcEnv) => {
       assert(args.length === parameterCount, `${firstWord} expected ${parameterCount} arguments, got ${args.length}`)
       const res = funcOrMacro(...args.map((arg) => wunsEval(arg, env)))
       if (typeof res === 'number') return String(res)
+      assert(res !== undefined, `undefined result from ${firstWord} ${print(form)}`)
       return res
     }
     assert(typeof funcOrMacro === 'object', `expected function or object ${funcOrMacro}`)
@@ -216,8 +221,7 @@ const mkFuncEnv = ({ log }, instructions) => {
     ar.push(e)
     return unit
   })
-
-  funcEnv.set('freeze', (ar) => Object.freeze(ar))
+  funcEnv.set('freeze', (ar) => Object.freeze([...ar]))
 
   let gensym = 0
   funcEnv.set('gensym', () => String(gensym++))
