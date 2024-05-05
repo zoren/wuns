@@ -28,6 +28,7 @@
 [func first [l] [at l 0]]
 [func second [l] [at l 1]]
 [func third [l] [at l 2]]
+[func last [l] [at l -1]]
 
 [func rest [l] [slice l 1 [size l]]]
 
@@ -131,8 +132,9 @@
         [byte [bit-and value1 [quote 127]]
          value2 [bit-shift-right-signed value1 [quote 7]]
          sign-bit [bit-and byte [quote 64]]]
-        [if [or [and [is-zero value2]       [not sign-bit]]
-                [and [eq value2 [quote -1]] sign-bit]]
+        [comment todo it seems we should swap the order here as we already have the sign bit]
+        [if [or [and [is-zero value2] [not sign-bit]]
+                [and [eq value2 -1]   sign-bit]]
           [push res byte]
           [do
             [push res [bit-or byte [quote 128]]]
@@ -225,7 +227,7 @@
 [func get-local-index [ctx sym]
   [let [s [size ctx]]
     [loop [i [sub s 2]]
-      [if [lt i [quote -1]]
+      [if [lt i -1]
         [abort]
         [let [k [at ctx i]]
           [if [eq-word k sym]
@@ -263,13 +265,6 @@
           o
           [cont [inc i]]]]
       0]]]
-
-[func make-mty-ctx []
-  [list
-    [quote types] [mutable-list]
-    [quote functions] [mutable-list]
-    [quote exports] [mutable-list]
-    [quote codes] [mutable-list]]]
 
 [func type-function [params results]
   [concat
@@ -316,7 +311,7 @@
         [if [eq-word word [at words i]]
           i
           [cont [inc i]]]
-        [quote -1]]]]]
+        -1]]]]
 
 [constant kind-function 0]
 
@@ -369,11 +364,13 @@
       [log [quote type-list-to-code unknown types]]
       [abort]]]]
 
-[func compile-form-mutable [ctx code form]
+[constant call [quote 0x10]]
+
+[func compile-form-mutable [global-ctx local-ctx code form]
   [ifs
     [is-word form]
-    [let [index [get-local-index ctx form]
-          local-type [at ctx [inc [bit-shift-left index 1]]]]
+    [let [index [get-local-index local-ctx form]
+          local-type [at local-ctx [inc [bit-shift-left index 1]]]]
       [push code local.get]
       [push-all code [u32-word-to-leb-128 index]]
       [list local-type]]
@@ -390,7 +387,7 @@
           [res-types [mutable-list]]
           [loop [i [quote 0]]
             [when [lt i [size args]]
-              [push-all res-types [compile-form-mutable ctx code [at args i]]]
+              [push-all res-types [compile-form-mutable global-ctx local-ctx code [at args i]]]
               [cont [inc i]]]]
           [freeze res-types]]
 
@@ -405,15 +402,15 @@
         [eq-word first-form [quote if]]
         [let
           [- [assert [eq [size args] 3] if needs a condition and two branches]
-           ct [compile-form-mutable ctx code [first args]]
+           ct [compile-form-mutable global-ctx local-ctx code [first args]]
            - [push code if]
            type-index [size code]
            dummy-type empty-type
            - [push code dummy-type]
            - [assert [and [eq [size ct] 1] [eq [at ct 0] i32]] condition not i32]
-           tt [compile-form-mutable ctx code [second args]]
+           tt [compile-form-mutable global-ctx local-ctx code [second args]]
            - [push code else]
-           ft [compile-form-mutable ctx code [third args]]
+           ft [compile-form-mutable global-ctx local-ctx code [third args]]
            - [assert [= tt ft] if branch types differ]
            enc-branch-type [type-list-to-code ft]]
           [push code end]
@@ -422,15 +419,31 @@
           tt]
 
         [let [instruction [get-instruction first-form]]
-          [assert instruction instruction not found]
-          [assert [eq [size [lookup-assoc-list instruction [quote parameters]]] [size args]]
-            instruction arity mismatch]
-          [loop [i 0]
-            [when [lt i [size args]]
-              [compile-form-mutable ctx code [at args i]]
-              [cont [inc i]]]]
-          [push code [lookup-assoc-list instruction [quote opcode]]]
-          [lookup-assoc-list instruction [quote results]]]]]]]
+          [if instruction
+            [do
+              [assert [eq [size [lookup-assoc-list instruction [quote parameters]]] [size args]]
+                instruction arity mismatch]
+              [loop [i 0]
+                [when [lt i [size args]]
+                  [comment todo also check types]
+                  [compile-form-mutable global-ctx local-ctx code [at args i]]
+                  [cont [inc i]]]]
+              [push code [lookup-assoc-list instruction [quote opcode]]]
+              [lookup-assoc-list instruction [quote results]]]
+            [let [func-sigs [lookup-assoc-list global-ctx [quote function-signatures]]
+                  func-sig [lookup-assoc-list func-sigs first-form]
+                  parameter-types [first func-sig]]
+              [assert [eq [size parameter-types] [size args]] parameter arity mismatch]
+              [loop [i 0]
+                [when [lt i [size args]]
+                  [comment todo also check types]
+                  [compile-form-mutable global-ctx local-ctx code [at args i]]
+                  [cont [inc i]]]]
+              [push code call]
+              [push code [u32-word-to-leb-128 [third func-sig]]]
+              [second func-sig]
+
+            ]]]]]]]
 
 [func compile-top-level-form [ctx form]
   [if [eq-word [quote func] [first form]]
@@ -438,26 +451,39 @@
           params [third form]
           func-ctx [params-to-ctx params]
           code [mutable-list]
+          func-sigs [lookup-assoc-list ctx [quote function-signatures]]
           -
           [loop [i 3]
             [when [lt i [dec [size form]]]
-              [compile-form-mutable ctx code [at form i]]]]
+              [compile-form-mutable ctx func-ctx code [at form i]]]]
+          parameter-type-list [params-to-list params]
+          result-type [compile-form-mutable ctx func-ctx code [last form]]
           type-index
           [push-type ctx
-            [type-function [params-to-list params] [compile-form-mutable func-ctx code [at form -1]]]]
+            [type-function parameter-type-list result-type]]
           functions [lookup-assoc-list ctx [quote functions]]
           func-index [size functions]]
+      [push func-sigs name]
+      [push func-sigs [list parameter-type-list result-type func-index]]
+
       [push functions type-index]
       [push [lookup-assoc-list ctx [quote exports]]
         [export name kind-function func-index]]
       [push code end]
       [push [lookup-assoc-list ctx [quote codes]] [code [] code]]
-      []
       ]
 
     [do
       [log [list form ]]
       [assert 0 not a top-level form]]]]
+
+[func make-mty-ctx []
+  [list
+    [quote types] [mutable-list]
+    [quote functions] [mutable-list]
+    [quote exports] [mutable-list]
+    [quote codes] [mutable-list]
+    [quote function-signatures] [mutable-list]]]
 
 [func compile-top-level-forms [forms]
   [let [ctx [make-mty-ctx]]
@@ -530,3 +556,19 @@
 [test [list 2 2] [my-id-pair 2]]
 [test [list 2 3] [my-pair 2 3]]
 [test [list 2 3] [my-pair 2 3]]
+
+[func compile-instantiate [funcs]
+  [let
+    [ctx [compile-top-level-forms funcs]
+     mod [ctx-to-module ctx]
+     wm [wasm-module mod]]
+    [wasm-instance wm]]]
+
+[wasm-import-func [compile-instantiate [quote [[func f [x] [] [quote 5]]]]] f my-f]
+
+[wasm-import-func [compile-instantiate
+  [quote
+    [func callee [] [quote 5]]
+    [func caller [] [callee]]]] caller my-caller]
+
+[test [quote 5] [my-caller]]
