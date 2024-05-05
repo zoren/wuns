@@ -114,16 +114,15 @@
   [assert [not [is-negative w]] expected 32 bit ints]
   [let [res [mutable-list]]
     [loop [n w]
-    [let
-      [byte [bit-and n [quote 127]]
-       nn [bit-shift-right-signed n [quote 7]]]
-      [if [is-zero nn]
-        [do
+      [let
+        [byte [bit-and n [quote 127]]
+        nn [bit-shift-right-signed n [quote 7]]]
+        [if [is-zero nn]
           [push res byte]
-          [freeze res]]
-        [do
-          [push res [bit-or byte [quote 128]]]
-          [cont nn]]]]]]]
+          [do
+            [push res [bit-or byte [quote 128]]]
+            [cont nn]]]]]
+    [freeze res]]]
 
 [func s32-word-to-leb-128 [value]
   [let [res [mutable-list]]
