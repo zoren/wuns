@@ -473,26 +473,20 @@
 [func vector-section [section-id content]
   [concat [list section-id] [u32-word-to-leb-128 [size content]] content]]
 
-[func type-section [types]
-  [vector-section 1 [concat [u32-word-to-leb-128 [size types]] [concat-lists types]]]]
+[func vector-section-concat [section-id elements]
+  [vector-section section-id [concat [u32-word-to-leb-128 [size elements]] [concat-lists elements]]]]
 
 [func func-section [func-indexes]
   [vector-section 3 [concat [u32-word-to-leb-128 [size func-indexes]] func-indexes]]]
-
-[func export-section [exports]
-  [vector-section [quote 7] [concat [u32-word-to-leb-128 [size exports]] [concat-lists exports]]]]
-
-[func code-section [codes]
-  [vector-section [quote 10] [concat [u32-word-to-leb-128 [size codes]] [concat-lists codes]]]]
 
 [func ctx-to-module [ctx]
   [concat
     [quote [0 97 115 109
             1 0 0 0]]
-    [type-section [lookup-assoc-list ctx [quote types]]]
+    [vector-section-concat [quote 1] [lookup-assoc-list ctx [quote types]]]
     [func-section [lookup-assoc-list ctx [quote functions]]]
-    [export-section [lookup-assoc-list ctx [quote exports]]]
-    [code-section [lookup-assoc-list ctx [quote codes]]]]]
+    [vector-section-concat [quote 7] [lookup-assoc-list ctx [quote exports]]]
+    [vector-section-concat [quote 10] [lookup-assoc-list ctx [quote codes]]]]]
 
 [let
   [ctx [compile-top-level-forms [quote
