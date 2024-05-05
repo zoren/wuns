@@ -245,10 +245,12 @@ const makeInterpretCurrentFile = async (instructionsWasmUri) => {
         }
       }
       const forms = tree.rootNode.children.map(treeToOurForm)
-      evalForms(forms, { importObject, instructions })
+      try {
+        evalForms(forms, { importObject, instructions })
+      } catch (e) {
+        outputChannel.appendLine(e.message)
+      }
     }
-
-    window.showInformationMessage('interpreted ' + tree.rootNode.children.length + ' forms')
   }
 }
 

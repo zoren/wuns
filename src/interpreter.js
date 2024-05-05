@@ -244,15 +244,7 @@ const mkFuncEnv = ({ log }, instructions) => {
 const evalForms = (forms, { importObject, instructions }) => {
   const funcEnv = mkFuncEnv(importObject, instructions)
   const { gogoeval } = makeEvaluator(funcEnv)
-  for (const form of forms) {
-    try {
-      gogoeval(form)
-    } catch (e) {
-      console.error('error in form:', print(form))
-      console.error(e)
-      break
-    }
-  }
+  for (const form of forms) gogoeval(form)
 }
 
 module.exports = { evalForms }

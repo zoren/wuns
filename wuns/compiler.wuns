@@ -250,10 +250,23 @@
 
 [constant i32 [quote 0x7f]]
 
+[func make-operation-obj [name opcode parameters results]
+  [concat
+    [quote [name]] [list name]
+    [quote [opcode]] [list opcode]
+    [quote [parameters]] [list parameters]
+    [quote [results]] [list results]]]
+
+[macro make-binary-i32 [name opcode]
+  [list [quote quote] [make-operation-obj name opcode [list i32 i32] [list i32]]]]
+
 [constant instructions
   [list
-    [concat [quote name i32.add opcode 0x6a parameters] [list [list i32 i32]] [quote [results]] [list [list i32]]]
-    [concat [quote name i32.sub opcode 0x6b parameters] [list [list i32 i32]] [quote [results]] [list [list i32]]]]]
+    [make-binary-i32 i32.eq  0x46]
+    [make-binary-i32 i32.add 0x6a]
+    [make-binary-i32 i32.sub 0x6b]
+    [make-binary-i32 i32.mul 0x6c]
+    ]]
 
 [func get-instruction [name]
   [loop [i 0]
