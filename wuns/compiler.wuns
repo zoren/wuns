@@ -208,11 +208,8 @@
 
 [test [quote [0xc0 0xbb 0x78]] [dec-words-to-hex [s32-word-to-leb-128 [quote -123456]]]]
 
-[constant i32.const [quote 65]]
+[constant i32.const [quote 0x41]]
 [constant local.get [quote 32]]
-
-[func constant [n]
-  [concat [i32.const] [s32-word-to-leb-128 n]]]
 
 [func lookup-assoc-list [ctx sym]
   [let [s [size ctx]]
@@ -401,7 +398,7 @@
         [let
           [- [assert [eq [size args] 1] only support decimal integers]
            dw [dec-word-to-i32 [at args 0]]]
-          [push code [quote 0x41]]
+          [push code i32.const]
           [push-all code [s32-word-to-leb-128 dw]]
           [list i32]]
 
