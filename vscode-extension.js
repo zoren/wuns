@@ -159,7 +159,8 @@ const tokenBuilderForParseTree = () => {
       case 'let':
       case 'loop': {
         pushToken(head, keywordTokenType)
-        const [bindings, ...body] = tail
+        const [bindingsNode, ...body] = tail
+        const bindings = bindingsNode.namedChildren
         for (let i = 0; i < bindings.length - 1; i += 2) {
           pushToken(bindings[i], variableTokenType, localDeclarationTokenModifier)
           go(bindings[i + 1])
