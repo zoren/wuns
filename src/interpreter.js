@@ -216,6 +216,12 @@ const mkFuncEnv = ({ log }, instructions) => {
     ar.push(e)
     return unit
   })
+  funcEnv.set('set-array', (ar, index, e) => {
+    if (!Array.isArray(ar)) throw new Error('push expects array')
+    if (Object.isFrozen(ar)) throw new Error('push expects mutable array')
+    ar[number(index)] = e
+    return unit
+  })
   funcEnv.set('freeze', (ar) => Object.freeze([...ar]))
 
   let gensym = 0

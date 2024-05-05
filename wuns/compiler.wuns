@@ -248,6 +248,7 @@
 
 [constant local.get [quote 32]]
 
+[constant empty-type [quote 0x40]]
 [constant i32 [quote 0x7f]]
 
 [func make-operation-obj [name opcode parameters results]
@@ -276,18 +277,6 @@
           o
           [cont [inc i]]]]
       0]]]
-
-[func comp-form [ctx form]
-  [if [is-word form]
-    [let [i [get-local-index ctx form]]
-      [concat [list local.get] [u32-word-to-leb-128 i]]]
-    [let [instruction [get-instruction [first form]]
-          args [rest form]]
-      [if instruction
-        [concat [comp-form ctx [first args]] [comp-form ctx [second args]]
-          [list [lookup-assoc-list instruction [quote opcode]]]]
-
-        [log [quote error]]]]]]
 
 [func make-mty-ctx []
   [list
@@ -321,6 +310,8 @@
         [cont [inc i]]]]
     [freeze ml]]]
 
+[constant if [quote 0x04]]
+[constant else [quote 0x05]]
 [constant end [quote 0x0b]]
 
 [func push-type [ctx type]
@@ -360,29 +351,75 @@
 
 [func dec-word-to-i32 [dw]
   [let [s [sub 0 [size dw]]]
-    [loop [i -1 res 0]
+    [loop [i -1 res 0 multi 1]
       [if [le s i]
         [let [c [at dw i]]
           [assert [and [le [quote 48] c] [le c [quote 57]]] not a decimal character]
           [assert [lt res [quote 214748364]] out of bounds]
-          [cont [dec i] [add [sub c [quote 48]] [mul [quote 10] res]]]]
+          [cont [dec i] [add res [mul [sub c [quote 48]] multi]] [mul multi [quote 10]]]]
         res]]]]
+
+[test [quote 1337] [dec-word-to-i32 [quote 1337]]]
+
+[func code [locals instructions]
+  [assert [is-zero [size locals]] locals not supported yet]
+  [let
+    [bytes
+      [concat
+        [u32-word-to-leb-128 [size locals]]
+        [comment missing locals here]
+        instructions]]
+    [concat [u32-word-to-leb-128 [size bytes]] bytes]]]
+
+[func type-list-to-code [type-list]
+  [ifs
+    [= type-list []]
+    0x40
+
+    [= type-list [list i32]]
+    i32
+
+    [do
+      [log [quote type-list-to-code unknown types]]
+      [abort]]]]
 
 [func compile-form-mutable [ctx code form]
   [if [is-word form]
     [let [index [get-local-index ctx form]
-          local [at ctx [inc [bit-shift-left index 1]]]]
+          local-type [at ctx [inc [bit-shift-left index 1]]]]
       [push code local.get]
       [push-all code [u32-word-to-leb-128 index]]
-      [list local]]
+      [list local-type]]
     [let [first-form [first form]
           args [rest form]]
+      [assert [is-word first-form] expected a word first]
       [ifs
         [eq-word first-form [quote quote]]
-        [do
-          [assert [eq [size args] 1] only support decimal integers]
+        [let
+          [- [assert [eq [size args] 1] only support decimal integers]
+           dw [dec-word-to-i32 [at args 0]]]
           [push code [quote 0x41]]
-          [push-all code [s32-word-to-leb-128 [dec-word-to-i32 [at args 0]]]]]
+          [push-all code [s32-word-to-leb-128 dw]]
+          [list i32]]
+
+        [eq-word first-form [quote if]]
+        [let
+          [- [assert [eq [size args] 3] if needs a condition and two branches]
+           ct [compile-form-mutable ctx code [first args]]
+           - [push code if]
+           type-index [size code]
+           dummy-type empty-type
+           - [push code dummy-type]
+           - [assert [and [eq [size ct] 1] [eq [at ct 0] i32]] condition not i32]
+           tt [compile-form-mutable ctx code [second args]]
+           - [push code else]
+           ft [compile-form-mutable ctx code [third args]]
+           - [assert [= tt ft] if branch types differ]
+           enc-branch-type [type-list-to-code ft]]
+          [push code end]
+          [when-not [eq dummy-type enc-branch-type]
+            [set-array code type-index enc-branch-type]]
+          tt]
 
         [let [instruction [get-instruction first-form]]
           [assert instruction instruction not found]
@@ -394,16 +431,6 @@
               [cont [inc i]]]]
           [push code [lookup-assoc-list instruction [quote opcode]]]
           [lookup-assoc-list instruction [quote results]]]]]]]
-
-[func code [locals instructions]
-  [assert [is-zero [size locals]] locals not supported yet]
-  [let
-    [bytes
-      [concat
-        [u32-word-to-leb-128 [size locals]]
-        [comment missing locals here]
-        instructions]]
-    [concat [u32-word-to-leb-128 [size bytes]] bytes]]]
 
 [func compile-top-level-form [ctx form]
   [if [eq-word [quote func] [first form]]
@@ -472,6 +499,8 @@
     [func add [x y] [i32.add x y]]
     [func sub [x y] [i32.sub x y]]
     [func inc [x] [i32.add x [quote 1]]]
+    [func five [] [quote 5]]
+    [func ifte [c] [if c [quote 1337] [quote 21]]]
   ]
   ]]
   - [log ctx]
@@ -485,9 +514,12 @@
   [wasm-import-func wi add my-add]
   [wasm-import-func wi sub my-sub]
   [wasm-import-func wi inc my-inc]
+  [wasm-import-func wi ifte my-ifte]
   [log [list [quote [my-fst 3 2]] [my-fst 3 2]]]
   [log [list [quote [my-snd 1 2]] [my-snd 1 2]]]
   [log [list [quote [my-add 1 2]] [my-add 1 2]]]
   [log [list [quote [my-sub 1 2]] [my-sub 1 2]]]
   [log [list [quote [my-inc 1]] [my-inc 1]]]
+  [log [list [quote [my-ifte 1]] [my-ifte 1]]]
+  [log [list [quote [my-ifte 0]] [my-ifte 0]]]
   ]
