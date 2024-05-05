@@ -33,7 +33,7 @@
 
 [func concat [.. lists]
   [let [result [mutable-list]
-        s-lists [size lists]]    
+        s-lists [size lists]]
     [loop [i 0]
       [if [lt i s-lists]
         [let [list [at lists i]
@@ -126,8 +126,6 @@
         [push-all res [at lists i]]
         [cont [inc i]]]]
     [freeze res]]]
-
-[log [concat-lists [quote [[1 2] [3 4]]]]]
 
 [func u32-word-to-leb-128 [w]
   [assert [not [is-negative w]] expected 32 bit ints]
@@ -267,12 +265,12 @@
 
 [constant local.get [quote 32]]
 
-[constant i32.const [quote 65]]
+[constant i32 [quote 0x7f]]
 
 [constant instructions
-  [quote
-    [name i32.add opcode 0x6a parameters [i32 i32] results [i32]]
-    [name i32.sub opcode 0x6b parameters [i32 i32] results [i32]]]]
+  [list
+    [concat [quote name i32.add opcode 0x6a parameters] [list [list i32 i32]] [quote [results]] [list [list i32]]]
+    [concat [quote name i32.sub opcode 0x6b parameters] [list [list i32 i32]] [quote [results]] [list [list i32]]]]]
 
 [func get-instruction [name]
   [loop [i 0]
@@ -309,8 +307,6 @@
     params
     [u32-word-to-leb-128 [size results]]
     results]]
-
-[constant i32 [quote 0x7f]]
 
 [func params-to-ctx [params]
   [let [ml [mutable-list]]
@@ -455,8 +451,8 @@
     [export-section [lookup-assoc-list ctx [quote exports]]]
     [code-section [lookup-assoc-list ctx [quote codes]]]]]
 
-[let 
-  [ctx [compile-top-level-forms [quote 
+[let
+  [ctx [compile-top-level-forms [quote
   [
     [func fst [x y] x]
     [func snd [x y] y]
@@ -474,7 +470,7 @@
   [wasm-import-func wi snd my-snd]
   [wasm-import-func wi add my-add]
   [wasm-import-func wi sub my-sub]
-  [log [list [quote [my-fst 1 2]] [my-fst 1 2]]]
+  [log [list [quote [my-fst 3 2]] [my-fst 3 2]]]
   [log [list [quote [my-snd 1 2]] [my-snd 1 2]]]
   [log [list [quote [my-add 1 2]] [my-add 1 2]]]
   [log [list [quote [my-sub 1 2]] [my-sub 1 2]]]
@@ -488,7 +484,7 @@
             1 0 0 0]]
     [type-section
       [type-function [list i32 i32] [list i32]]]
-    
+
     [func-section 0 0]
 
     [export-section
@@ -497,15 +493,15 @@
 
     [code-section
       [code []
-        [concat 
+        [concat
           [comp-form [quote [x [param i32] y [param i32]]] [quote [i32.add x y]]]
-          [list end]]]    
+          [list end]]]
       [code []
-        [concat 
+        [concat
           [comp-form [quote [x [param i32] y [param i32]]] [quote [i32.sub x y]]]
           [list end]]]]]]
 
-[comment 
+[comment
 [let
   [wm [wasm-module [module]]
    wi [wasm-instance wm]]

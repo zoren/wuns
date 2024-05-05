@@ -21,14 +21,9 @@ const makeEvaluator = (funcEnv) => {
     for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
     if (restParam) varValues.set(restParam, makeList(...args.slice(arity)))
     const inner = { varValues, outer: globalEnv }
-    try {
-      let result = unit
-      for (const body of bodies) result = wunsEval(body, inner)
-      return result
-    } catch (e) {
-      console.error(e)
-      return unit
-    }
+    let result = unit
+    for (const body of bodies) result = wunsEval(body, inner)
+    return result
   }
   const assert = (cond, msg) => {
     if (!cond) throw new Error('eval assert failed: ' + msg)
@@ -224,7 +219,7 @@ const mkFuncEnv = ({ log }, instructions) => {
   funcEnv.set('freeze', (ar) => Object.freeze([...ar]))
 
   let gensym = 0
-  funcEnv.set('gensym', () => String(gensym++))
+  funcEnv.set('gensym', () => 'v' + String(gensym++))
   funcEnv.set('log', (a) => {
     log(print(a))
     return unit
@@ -249,7 +244,15 @@ const mkFuncEnv = ({ log }, instructions) => {
 const evalForms = (forms, { importObject, instructions }) => {
   const funcEnv = mkFuncEnv(importObject, instructions)
   const { gogoeval } = makeEvaluator(funcEnv)
-  for (const form of forms) gogoeval(form)
+  for (const form of forms) {
+    try {
+      gogoeval(form)
+    } catch (e) {
+      console.error('error in form:', print(form))
+      console.error(e)
+      break
+    }
+  }
 }
 
 module.exports = { evalForms }
