@@ -30,9 +30,6 @@
 
 [func rest [l] [slice l 1 [size l]]]
 
-[macro if-not [cond then else]
-  [list [quote if] cond else then]]
-
 [macro do [.. forms]
   [concat [quote [let []]] forms]]
 
@@ -181,7 +178,7 @@
 
 [func word-from-doc [token]
   [let [code-points [document-line-text [token-line token]]]
-    [word [slice code-points [token-start token] [token-end token]]]]]
+    [word-from-codepoints [slice code-points [token-start token] [token-end token]]]]]
 
 [func parse1-doc [document-line-count line-no column]
   [let [token [lex-document-one-token document-line-count line-no column]
