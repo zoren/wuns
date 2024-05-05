@@ -93,7 +93,8 @@ const makeEvaluator = (funcEnv) => {
         assert(instance instanceof WebAssembly.Instance, `expected wasm instance, found ${instance}`)
         const f = instance.exports[exportFunctionName]
         if (typeof f !== 'function') throw new Error(`expected function, found ${f}`)
-        funcEnv.set(importName, f)
+        const fObj = { wasmFunc: true, f }
+        funcEnv.set(importName, fObj)
         return unit
       }
     }
@@ -108,7 +109,19 @@ const makeEvaluator = (funcEnv) => {
       return res
     }
     assert(typeof funcOrMacro === 'object', `expected function or object ${funcOrMacro}`)
-    const { isMacro } = funcOrMacro
+    const { isMacro, wasmFunc } = funcOrMacro
+    if (wasmFunc) {
+      const res = funcOrMacro.f(...args.map((arg) => wunsEval(arg, env)))
+      if (typeof res === 'undefined') return unit
+      if (typeof res === 'number') return String(res)
+      assert(Array.isArray(res), `expected array or undefined, found ${res}`)
+      return makeList(
+        ...res.map((r) => {
+          assert(typeof r === 'number', `expected number, found ${r}`)
+          return String(r)
+        }),
+      )
+    }
     if (isMacro) return wunsEval(apply(funcOrMacro, args), env)
     return apply(
       funcOrMacro,
