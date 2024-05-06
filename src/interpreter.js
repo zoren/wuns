@@ -1,5 +1,6 @@
 const unit = Object.freeze([])
 const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
+const isUnit = (x) => x === unit || (Array.isArray(x) && Object.isFrozen(x) && x.length === 0)
 
 const symbolContinue = Symbol.for('wuns-continue')
 const tryMap = (arr, f) => {
@@ -9,13 +10,14 @@ const tryMap = (arr, f) => {
 const makeEvaluator = (funcEnv) => {
   const globalVarValues = new Map()
   const globalEnv = { varValues: globalVarValues, outer: null }
-  const apply = ({ params, restParam, bodies }, args) => {
+  const apply = ({ name, params, restParam, bodies }, args) => {
     const arity = params.length
     const numberOfGivenArgs = args.length
     if (restParam === null) {
-      if (arity !== numberOfGivenArgs) throw new Error(`expected ${arity} arguments, got ${numberOfGivenArgs}`)
+      if (arity !== numberOfGivenArgs) throw new Error(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
     } else {
-      if (arity > numberOfGivenArgs) throw new Error(`expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
+      if (arity > numberOfGivenArgs)
+        throw new Error(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
     }
     const varValues = new Map()
     for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
@@ -50,7 +52,16 @@ const makeEvaluator = (funcEnv) => {
         const [bindings, ...bodies] = args
         const varValues = new Map()
         const inner = { varValues, outer: env }
-        for (let i = 0; i < bindings.length - 1; i += 2) varValues.set(bindings[i], wunsEval(bindings[i + 1], inner))
+        for (let i = 0; i < bindings.length - 1; i += 2) {
+          const varName = bindings[i]
+          const value = wunsEval(bindings[i + 1], inner)
+          if (varName === '-') {
+            if (!isUnit(value))
+              console.log(`warning: discarding non-unit value ${value} for varName ${varName} in ${print(form)}`)
+            continue
+          }
+          varValues.set(varName, value)
+        }
         let result = unit
         if (firstWord === 'let') {
           for (const body of bodies) result = wunsEval(body, inner)
@@ -69,7 +80,7 @@ const makeEvaluator = (funcEnv) => {
       }
       case 'func':
       case 'macro': {
-        const [fname, origParams0, ...bodies] = args
+        const [fmname, origParams0, ...bodies] = args
         const origParams = origParams0 || unit
         let params = origParams
         let restParam = null
@@ -77,8 +88,8 @@ const makeEvaluator = (funcEnv) => {
           params = origParams.slice(0, -2)
           restParam = origParams.at(-1)
         }
-        const fObj = { isMacro: firstWord === 'macro', params, restParam, bodies }
-        funcEnv.set(fname, fObj)
+        const fObj = { name: fmname, isMacro: firstWord === 'macro', params, restParam, bodies }
+        funcEnv.set(fmname, fObj)
         return unit
       }
       case 'constant': {
@@ -235,7 +246,7 @@ const mkFuncEnv = ({ log }, instructions) => {
     ar[number(index)] = e
     return unit
   })
-  funcEnv.set('freeze', (ar) => Object.freeze([...ar]))
+  funcEnv.set('freeze', (ar) => makeList(...ar))
 
   let gensym = 0
   funcEnv.set('gensym', () => 'v' + String(gensym++))
