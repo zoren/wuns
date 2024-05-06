@@ -2,14 +2,18 @@
 
 [func list [.. l] l]
 
-[macro constant-id [name]
-  [list [quote constant] name [list [quote quote] name]]]
+[macro constant-ids [.. id-constants]
+  [let [f [mutable-list]]
+    [push f [quote let]]
+    [push f []]
+    [loop [i [quote 0]]
+      [if [lt i [size id-constants]]
+        [let [name [at id-constants i]]
+          [push f [list [quote constant] name [list [quote quote] name]]]
+          [cont [add i [quote 1]]]]
+        f]]]]
 
-[constant-id 0]
-[constant-id 1]
-[constant-id 2]
-[constant-id 3]
-[constant-id -1]
+[constant-ids 0 1 2 3 -1]
 
 [func inc [x] [add x 1]]
 
@@ -293,6 +297,7 @@
 
 [constant if [quote 0x04]]
 [constant else [quote 0x05]]
+[constant call [quote 0x10]]
 [constant end [quote 0x0b]]
 
 [func push-type [ctx type]
@@ -355,7 +360,7 @@
 [func type-list-to-code [type-list]
   [ifs
     [= type-list []]
-    0x40
+    empty-type
 
     [= type-list [list i32]]
     i32
@@ -363,8 +368,6 @@
     [do
       [log [quote type-list-to-code unknown types]]
       [abort]]]]
-
-[constant call [quote 0x10]]
 
 [func compile-form-mutable [global-ctx local-ctx code form]
   [ifs
@@ -387,6 +390,7 @@
           [res-types [mutable-list]]
           [loop [i [quote 0]]
             [when [lt i [size args]]
+              [comment do we actually want to concat them [i32 i32] [i32] we be surprising]
               [push-all res-types [compile-form-mutable global-ctx local-ctx code [at args i]]]
               [cont [inc i]]]]
           [freeze res-types]]
@@ -394,7 +398,7 @@
         [eq-word first-form [quote quote]]
         [let
           [- [assert [eq [size args] 1] only support decimal integers]
-           dw [dec-word-to-i32 [at args 0]]]
+           dw [dec-word-to-i32 [first args]]]
           [push code i32.const]
           [push-all code [s32-word-to-leb-128 dw]]
           [list i32]]
