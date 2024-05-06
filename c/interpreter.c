@@ -84,13 +84,6 @@ const form_t two = {.tag = form_word, .len = 1, .word = "2"};
 
 const form_t unit = {.tag = form_list, .len = 0, .forms = NULL};
 
-form_t list(int len, form_t *forms)
-{
-  if (len == 0)
-    return unit;
-  form_t *new_forms = malloc(sizeof(form_t) * len);
-}
-
 form_t word_from_int(int n)
 {
   switch (n)
@@ -670,7 +663,7 @@ form_t eval(form_t form, const Env_t *env)
 
 form_t form_from_node(const char *file_content, TSNode node)
 {
-  const char* node_type_str = ts_node_type(node);
+  const char *node_type_str = ts_node_type(node);
   if (streq(node_type_str, "word"))
   {
     const uint32_t word = ts_node_start_byte(node);
@@ -693,6 +686,35 @@ form_t form_from_node(const char *file_content, TSNode node)
 }
 
 const TSLanguage *tree_sitter_wuns(void);
+
+void parse_eval(char *file_content, uint32_t file_size)
+{
+  TSParser *parser = ts_parser_new();
+
+  ts_parser_set_language(parser, tree_sitter_wuns());
+
+  TSTree *tree = ts_parser_parse_string(
+      parser,
+      NULL,
+      file_content,
+      file_size);
+
+  // Get the root node of the syntax tree.
+  TSNode root_node = ts_tree_root_node(tree);
+  for (int i = 0; i < ts_node_named_child_count(root_node); i++)
+  {
+    TSNode child = ts_node_named_child(root_node, i);
+    form_t form = form_from_node(file_content, child);
+    print_form(form);
+    printf("\n");
+    form_t result = eval(form, NULL);
+    print_form(result);
+    printf("\n");
+  }
+
+  ts_tree_delete(tree);
+  ts_parser_delete(parser);
+}
 
 int main(int argc, char **argv)
 {
@@ -739,40 +761,7 @@ int main(int argc, char **argv)
     exit(1);
   }
 
-  TSParser *parser = ts_parser_new();
-
-  ts_parser_set_language(parser, tree_sitter_wuns());
-
-  TSTree *tree = ts_parser_parse_string(
-      parser,
-      NULL,
-      file_content,
-      file_size);
-
-  // Get the root node of the syntax tree.
-  TSNode root_node = ts_tree_root_node(tree);
-  {
-    // Print the syntax tree as an S-expression.
-    char *syntax_tree_string = ts_node_string(root_node);
-    printf("Syntax tree: %s\n", syntax_tree_string);
-
-    // Free all of the heap-allocated memory.
-    free(syntax_tree_string);
-  }
-  for (int i = 0; i < ts_node_named_child_count(root_node); i++)
-  {
-    TSNode child = ts_node_named_child(root_node, i);
-    form_t form = form_from_node(file_content, child);
-    print_form(form);
-    printf("\n");
-    Env_t env = {NULL, 0, NULL};
-    // form_t result = eval(form, &env);
-    print_form(form);
-    printf("\n");
-  }
-
-  ts_tree_delete(tree);
-  ts_parser_delete(parser);
+  parse_eval(file_content, file_size);
 
   fclose(file);
 }
