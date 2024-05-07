@@ -7,12 +7,7 @@ const parser = new TSParser()
 const Wuns = require('tree-sitter-wuns')
 parser.setLanguage(Wuns)
 
-const pointToPosition = ({ row, column }) => new Position(row, column)
-
 const positionToPoint = ({ line, character }) => ({ row: line, column: character })
-
-const rangeFromNode = ({ startPosition, endPosition }) =>
-  new Range(pointToPosition(startPosition), pointToPosition(endPosition))
 
 const makeStopWatch = () => {
   const before = performance.now()
@@ -60,13 +55,15 @@ const cacheFetchOrParse = (document) => {
   return cacheObj
 }
 
+const wunsLanguageId = 'wuns'
+
 /**
  * @param {vscode.TextDocumentChangeEvent} document
  */
 const onDidChangeTextDocument = (e) => {
   const { document, contentChanges, reason } = e
   const { languageId, uri, version } = document
-  if (languageId !== 'wuns') return
+  if (languageId !== wunsLanguageId) return
   if (contentChanges.length === 0) return
   const cacheObj = cache.get(document)
   const oldTree = cacheObj.tree
@@ -213,23 +210,30 @@ const getActiveTextEditorDocument = () => {
   return activeTextEditor.document
 }
 
+const pointToPosition = ({ row, column }) => new Position(row, column)
+
+const rangeFromNode = ({ startPosition, endPosition }) =>
+  new Range(pointToPosition(startPosition), pointToPosition(endPosition))
+
 const { evalForms } = require('./src/interpreter')
 
 const makeInterpretCurrentFile = async (instructionsWasmUri) => {
   const uint8arInstructions = await workspace.fs.readFile(instructionsWasmUri)
   const wasm = await WebAssembly.instantiate(uint8arInstructions)
   const instructions = wasm.instance.exports
-  const outputChannel = window.createOutputChannel('wuns output')
+  const outputChannel = window.createOutputChannel('wuns output', wunsLanguageId)
+  outputChannel.show(true)
+  const importObject = {
+    log: (s) => {
+      outputChannel.show(true)
+      outputChannel.appendLine(s)
+    },
+  }
   return () => {
     const document = getActiveTextEditorDocument()
     const { tree } = cacheFetchOrParse(document)
     outputChannel.clear()
-    const importObject = {
-      log: (s) => {
-        outputChannel.show(true)
-        outputChannel.appendLine(s)
-      },
-    }
+    outputChannel.appendLine('interpreting: ' + document.fileName)
     {
       const treeToOurForm = (node) => {
         const { type, text, namedChildren } = node
@@ -285,7 +289,6 @@ const provideSelectionRanges = (document, positions) => {
     }
     return null
   }
-
   const selRanges = []
   for (const pos of positions) {
     const found = tryFindRange(pos)
