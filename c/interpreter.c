@@ -157,11 +157,11 @@ form_t bi_bit_shift_right_signed(form_t a, form_t b)
   return word_from_int(bit_shift_right_signed(word_to_int(a), word_to_int(b)));
 }
 
-form_t bi_eq(form_t a, form_t b)
-{
-  assert(is_word(a) && is_word(b) && "eq requires words");
-  return a.len == b.len && memcmp(a.word, b.word, a.len) == 0 ? one : zero;
-}
+// form_t bi_eq(form_t a, form_t b)
+// {
+//   assert(is_word(a) && is_word(b) && "eq requires words");
+//   return a.len == b.len && memcmp(a.word, b.word, a.len) == 0 ? one : zero;
+// }
 
 #define BUILTIN_TWO_DECIMAL_CMP(name, op)                 \
   form_t name(form_t a, form_t b)                         \
@@ -169,6 +169,7 @@ form_t bi_eq(form_t a, form_t b)
     return word_to_int(a) op word_to_int(b) ? one : zero; \
   }
 
+BUILTIN_TWO_DECIMAL_CMP(bi_eq, ==)
 BUILTIN_TWO_DECIMAL_CMP(bi_lt, <)
 BUILTIN_TWO_DECIMAL_CMP(bi_le, <=)
 BUILTIN_TWO_DECIMAL_CMP(bi_ge, >=)
