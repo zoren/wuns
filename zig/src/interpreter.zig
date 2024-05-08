@@ -42,7 +42,7 @@ const ParseError = error{
     UnexpectedEndOfInput,
     UnexpectedToken,
 };
-
+// thanks https://blog.mjgrzymek.com/blog/zigwasm
 fn parseOne() !Form {
     const buffer = try walloc.alloc(u8, 1024);
     const filled = fill(@ptrCast(buffer), 1024);

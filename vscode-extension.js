@@ -216,12 +216,9 @@ const pointToPosition = ({ row, column }) => new Position(row, column)
 const rangeFromNode = ({ startPosition, endPosition }) =>
   new Range(pointToPosition(startPosition), pointToPosition(endPosition))
 
-const { evalTree } = require('./src/interpreter')
+const { evalTree, treeToOurForm, makeEvaluator, mkFuncEnv } = require('./src/interpreter')
 
-const makeInterpretCurrentFile = async (instructionsWasmUri) => {
-  const uint8arInstructions = await workspace.fs.readFile(instructionsWasmUri)
-  const wasm = await WebAssembly.instantiate(uint8arInstructions)
-  const instructions = wasm.instance.exports
+const makeInterpretCurrentFile = async (instructions) => {
   const outputChannel = window.createOutputChannel('wuns output', wunsLanguageId)
   outputChannel.show(true)
   const importObject = {
@@ -242,6 +239,49 @@ const makeInterpretCurrentFile = async (instructionsWasmUri) => {
       } catch (e) {
         outputChannel.appendLine(e.message)
       }
+    }
+  }
+}
+
+const makeCheckCurrentFileCommand = async (instructions, context) => {
+  const checkUri = vscode.Uri.file(context.extensionPath + '/wuns/check.wuns')
+  const uint8 = await workspace.fs.readFile(checkUri)
+  const checkSource = new TextDecoder().decode(uint8)
+  const outputChannel = window.createOutputChannel('wuns output', wunsLanguageId)
+  outputChannel.show(true)
+  const importObject = {
+    log: (s) => {
+      outputChannel.show(true)
+      outputChannel.appendLine('check: ' + s)
+    },
+  }
+  return () => {
+    const funcEnv = mkFuncEnv(importObject, instructions)
+    const { gogoeval, apply } = makeEvaluator(funcEnv)
+
+    const document = getActiveTextEditorDocument()
+    if (!document) return
+    const { tree } = cacheFetchOrParse(document)
+    outputChannel.clear()
+    outputChannel.appendLine('checking: ' + document.fileName)
+    const checkTree = parser.parse(checkSource)
+    for (const node of checkTree.rootNode.children) {
+      const form = treeToOurForm(node)
+      try {
+        gogoeval(form)
+      } catch (e) {
+        console.error('error evaluating', print(form), e)
+        throw e
+      }
+    }
+    try {
+      // const outfunEnv = evalTree(checkTree, { importObject, instructions })
+      const outfun = funcEnv.get('test-diagnostics')
+      for (const node of tree.rootNode.children) apply(outfun, [treeToOurForm(node)])
+
+      outputChannel.appendLine('done checking: ' + tree.rootNode.children.length)
+    } catch (e) {
+      outputChannel.appendLine(e.message)
     }
   }
 }
@@ -305,8 +345,14 @@ const provideDocumentSemanticTokens = (document) => {
 async function activate(context) {
   console.log('starting wuns lang extension: ' + context.extensionPath)
   const instructionsWasmUri = vscode.Uri.file(context.extensionPath + '/src/instructions.wasm')
-  const interpretCurrentFile = await makeInterpretCurrentFile(instructionsWasmUri)
+  const uint8arInstructions = await workspace.fs.readFile(instructionsWasmUri)
+  const wasm = await WebAssembly.instantiate(uint8arInstructions)
+  const instructions = wasm.instance.exports
+  const interpretCurrentFile = await makeInterpretCurrentFile(instructions)
   context.subscriptions.push(commands.registerCommand('wunslang.interpret', interpretCurrentFile))
+  context.subscriptions.push(
+    commands.registerCommand('wunslang.check', await makeCheckCurrentFileCommand(instructions, context)),
+  )
 
   const selector = { language: 'wuns', scheme: 'file' }
 

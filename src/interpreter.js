@@ -19,6 +19,26 @@ const word = (s) => {
   return Object.freeze(new Word(s))
 }
 
+const symbolMeta = Symbol.for('wuns-meta')
+
+const wordWithMeta = (s, meta) => {
+  if (typeof s !== 'string') throw new Error('word expects string arguments only')
+  const w = new Word(s)
+  w[symbolMeta] = meta
+  return Object.freeze(w)
+}
+
+const listWithMeta = (l, meta) => {
+  const ll = [...l]
+  ll[symbolMeta] = meta
+  return Object.freeze(ll)
+}
+
+const meta = (form) => {
+  if (form[symbolMeta]) return form[symbolMeta]
+  return unit
+}
+
 const numberWord = (n) => {
   if (typeof n !== 'number') throw new Error('numberWord expects number')
   return word(String(n))
@@ -260,6 +280,7 @@ const mkFuncEnv = ({ log }, instructions) => {
   // would be cool to do in a host-func special form
   funcEnv.set('is-word', (f) => boolToWord(isWord(f)))
   funcEnv.set('is-list', (f) => boolToWord(Array.isArray(f)))
+  funcEnv.set('meta', (f) => meta(f))
 
   const getLength = (a) => {
     if (isWord(a)) return wordString(a).length
@@ -267,7 +288,7 @@ const mkFuncEnv = ({ log }, instructions) => {
     throw new Error('getLength expects word or list')
   }
   // todo maybe only allow for lists
-  funcEnv.set('size', a => numberWord(getLength(a)))
+  funcEnv.set('size', (a) => numberWord(getLength(a)))
   funcEnv.set('at', (v, i) => {
     const ni = number(i)
     const len = getLength(v)
@@ -339,12 +360,14 @@ const mkFuncEnv = ({ log }, instructions) => {
 }
 
 const treeToOurForm = (node) => {
-  const { type, text, namedChildren } = node
+  const { type, text, namedChildren, startPosition, endPosition } = node
+  const range = makeList(...[startPosition.row, startPosition.column, endPosition.row, endPosition.column].map(numberWord))
+  const metaData = makeList(word('range'), range)
   switch (type) {
     case 'word':
-      return word(text)
+      return wordWithMeta(text, metaData)
     case 'list':
-      return makeList(...namedChildren.map(treeToOurForm))
+      return listWithMeta(namedChildren.map(treeToOurForm), metaData)
     default:
       throw new Error('unexpected node type: ' + type)
   }
@@ -362,6 +385,7 @@ const evalTree = (tree, { importObject, instructions }) => {
       throw e
     }
   }
+  return funcEnv
 }
 
-module.exports = { evalTree }
+module.exports = { treeToOurForm, evalTree, makeEvaluator, mkFuncEnv }

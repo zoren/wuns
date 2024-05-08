@@ -352,6 +352,10 @@
         [cont [inc i]]]]
     ctx]]
 
+[func test-diagnostics [form]
+  [log form]
+  [log [meta form]]]
+
 [comment
 [let
   [ctx [compile-top-level-forms [quote
