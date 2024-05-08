@@ -46,6 +46,7 @@ const cacheFetchOrParse = (document) => {
     // console.log('cache hit', document.uri, document.version)
     return cacheObj
   }
+  // we don't expect to come here, onDidChangeTextDocument should have been called updating the tree
   const oldTree = cacheObj.tree
   // const watch = makeStopWatch()
   const newTree = parseDocument(document, oldTree)
@@ -215,7 +216,7 @@ const pointToPosition = ({ row, column }) => new Position(row, column)
 const rangeFromNode = ({ startPosition, endPosition }) =>
   new Range(pointToPosition(startPosition), pointToPosition(endPosition))
 
-const { evalForms } = require('./src/interpreter')
+const { evalTree } = require('./src/interpreter')
 
 const makeInterpretCurrentFile = async (instructionsWasmUri) => {
   const uint8arInstructions = await workspace.fs.readFile(instructionsWasmUri)
@@ -235,23 +236,8 @@ const makeInterpretCurrentFile = async (instructionsWasmUri) => {
     outputChannel.clear()
     outputChannel.appendLine('interpreting: ' + document.fileName)
     {
-      const treeToOurForm = (node) => {
-        const { type, text, namedChildren } = node
-        switch (type) {
-          case 'word':
-            return text
-          case 'list': {
-            const form = namedChildren.map(treeToOurForm)
-            form.range = rangeFromNode(node)
-            return form
-          }
-          default:
-            throw new Error('unexpected node type: ' + type)
-        }
-      }
-      const forms = tree.rootNode.children.map(treeToOurForm)
       try {
-        evalForms(forms, { importObject, instructions })
+        evalTree(tree, { importObject, instructions })
         outputChannel.appendLine('done interpreting: ' + forms.length + ' forms')
       } catch (e) {
         outputChannel.appendLine(e.message)

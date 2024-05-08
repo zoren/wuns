@@ -273,10 +273,22 @@ const mkFuncEnv = ({ log }, instructions) => {
   return funcEnv
 }
 
-const evalForms = (forms, { importObject, instructions }) => {
-  const funcEnv = mkFuncEnv(importObject, instructions)
-  const { gogoeval } = makeEvaluator(funcEnv)
-  for (const form of forms) gogoeval(form)
+const treeToOurForm = (node) => {
+  const { type, text, namedChildren } = node
+  switch (type) {
+    case 'word':
+      return text
+    case 'list':
+      return namedChildren.map(treeToOurForm)
+    default:
+      throw new Error('unexpected node type: ' + type)
+  }
 }
 
-module.exports = { evalForms }
+const evalTree = (tree, { importObject, instructions }) => {
+  const funcEnv = mkFuncEnv(importObject, instructions)
+  const { gogoeval } = makeEvaluator(funcEnv)
+  for (const node of tree.rootNode.children) gogoeval(treeToOurForm(node))
+}
+
+module.exports = { evalTree }
