@@ -238,9 +238,10 @@ const makeInterpretCurrentFile = async (instructionsWasmUri) => {
     {
       try {
         evalTree(tree, { importObject, instructions })
-        outputChannel.appendLine('done interpreting: ' + forms.length + ' forms')
+        outputChannel.appendLine('done interpreting')
       } catch (e) {
         outputChannel.appendLine(e.message)
+        console.error(e)
       }
     }
   }

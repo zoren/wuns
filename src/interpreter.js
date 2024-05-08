@@ -2,6 +2,39 @@ const unit = Object.freeze([])
 const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
 const isUnit = (x) => x === unit || (Array.isArray(x) && Object.isFrozen(x) && x.length === 0)
 
+class Word {
+  constructor(value) {
+    this.value = value
+  }
+
+  toString() {
+    return this.value
+  }
+}
+
+const isWord = (f) => f instanceof Word
+
+const word = (s) => {
+  if (typeof s !== 'string') throw new Error('word expects string arguments only')
+  return Object.freeze(new Word(s))
+}
+
+const numberWord = (n) => {
+  if (typeof n !== 'number') throw new Error('numberWord expects number')
+  return word(String(n))
+}
+
+const wordString = (w) => {
+  if (!isWord(w)) throw new Error('not a word: ' + w + ' ' + typeof w)
+  return w.value
+}
+
+const print = (x) => {
+  if (isWord(x)) return wordString(x)
+  if (!Array.isArray(x)) throw new Error(`cannot print ${x}`)
+  return `[${x.map(print).join(' ')}]`
+}
+
 const symbolContinue = Symbol.for('wuns-continue')
 const tryMap = (arr, f) => {
   if (arr) return arr.map(f)
@@ -20,8 +53,8 @@ const makeEvaluator = (funcEnv) => {
         throw new Error(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
     }
     const varValues = new Map()
-    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-    if (restParam) varValues.set(restParam, makeList(...args.slice(arity)))
+    for (let i = 0; i < arity; i++) varValues.set(wordString(params[i]), args[i])
+    if (restParam) varValues.set(wordString(restParam), makeList(...args.slice(arity)))
     const inner = { varValues, outer: globalEnv }
     let result = unit
     for (const body of bodies) result = wunsEval(body, inner)
@@ -31,23 +64,28 @@ const makeEvaluator = (funcEnv) => {
     if (!cond) throw new Error('eval assert failed: ' + msg)
   }
   const wunsEval = (form, env) => {
-    if (typeof form === 'string')
+    if (isWord(form)) {
+      const s = wordString(form)
       while (true) {
-        assert(env, 'undefined word: ' + form)
+        assert(env, 'undefined word: ' + s)
         const { varValues, outer } = env
-        if (varValues.has(form)) return varValues.get(form)
+        if (varValues.has(s)) return varValues.get(s)
         env = outer
       }
+    }
 
-    assert(Array.isArray(form), `cannot eval ${form} expected string or array`)
+    assert(Array.isArray(form), `cannot eval ${form} expected word or list`)
     if (form.length === 0) return unit
-    const [firstWord, ...args] = form
-    switch (firstWord) {
+    const [firstForm, ...args] = form
+    const firstWordString = wordString(firstForm)
+    switch (firstWordString) {
       case 'quote':
         return args.length === 1 ? args[0] : args
       case 'if': {
         const ifArgs = [...args, unit, unit, unit].slice(0, 3)
-        return wunsEval(ifArgs[wunsEval(ifArgs[0], env) === '0' ? 2 : 1], env)
+        const evaledCond = wunsEval(ifArgs[0], env)
+        const isZeroWord = isWord(evaledCond) && wordString(evaledCond) === '0'
+        return wunsEval(ifArgs[isZeroWord ? 2 : 1], env)
       }
       case 'let':
       case 'loop': {
@@ -55,7 +93,7 @@ const makeEvaluator = (funcEnv) => {
         const varValues = new Map()
         const inner = { varValues, outer: env }
         for (let i = 0; i < bindings.length - 1; i += 2) {
-          const varName = bindings[i]
+          const varName = wordString(bindings[i])
           const value = wunsEval(bindings[i + 1], inner)
           if (varName === '-') {
             if (!isUnit(value))
@@ -65,14 +103,15 @@ const makeEvaluator = (funcEnv) => {
           varValues.set(varName, value)
         }
         let result = unit
-        if (firstWord === 'let') {
+        if (firstWordString === 'let') {
           for (const body of bodies) result = wunsEval(body, inner)
           return result
         }
         while (true) {
           for (const body of bodies) result = wunsEval(body, inner)
           if (!result[symbolContinue]) return result
-          for (let i = 0; i < Math.min(result.length, varValues.size); i++) varValues.set(bindings[i * 2], result[i])
+          for (let i = 0; i < Math.min(result.length, varValues.size); i++)
+            varValues.set(wordString(bindings[i * 2]), result[i])
         }
       }
       case 'cont': {
@@ -86,17 +125,17 @@ const makeEvaluator = (funcEnv) => {
         const origParams = origParams0 || unit
         let params = origParams
         let restParam = null
-        if (origParams.at(-2) === '..') {
+        if (origParams.length > 1 && wordString(origParams.at(-2)) === '..') {
           params = origParams.slice(0, -2)
           restParam = origParams.at(-1)
         }
-        const fObj = { name: fmname, isMacro: firstWord === 'macro', params, restParam, bodies }
-        funcEnv.set(fmname, fObj)
+        const fObj = { name: fmname, isMacro: firstWordString === 'macro', params, restParam, bodies }
+        funcEnv.set(wordString(fmname), fObj)
         return unit
       }
       case 'constant': {
         const [varName, value] = args
-        globalVarValues.set(varName, wunsEval(value, env))
+        globalVarValues.set(wordString(varName), wunsEval(value, env))
         return unit
       }
       case 'wasm-import-func': {
@@ -104,20 +143,23 @@ const makeEvaluator = (funcEnv) => {
         const [instanceArg, exportFunctionName, importName] = args
         const instance = wunsEval(instanceArg, env)
         assert(instance instanceof WebAssembly.Instance, `expected wasm instance, found ${instance}`)
-        const f = instance.exports[exportFunctionName]
+        const f = instance.exports[wordString(exportFunctionName)]
         if (typeof f !== 'function') throw new Error(`expected function, found ${f}`)
         const fObj = { wasmFunc: true, f }
-        funcEnv.set(importName, fObj)
+        funcEnv.set(wordString(importName), fObj)
         return unit
       }
     }
-    const funcOrMacro = funcEnv.get(firstWord)
-    assert(funcOrMacro, `function ${firstWord} not found ${print(form)}`)
+    const funcOrMacro = funcEnv.get(firstWordString)
+    assert(funcOrMacro, `function ${firstWordString} not found ${print(form)}`)
     if (typeof funcOrMacro === 'function') {
       const parameterCount = funcOrMacro.length
-      assert(args.length === parameterCount, `${firstWord} expected ${parameterCount} arguments, got ${args.length}`)
+      assert(
+        args.length === parameterCount,
+        `${firstWordString} expected ${parameterCount} arguments, got ${args.length}`,
+      )
       const res = funcOrMacro(...args.map((arg) => wunsEval(arg, env)))
-      if (typeof res === 'number') return String(res)
+      if (typeof res === 'number') return numberWord(res)
       if (res === undefined) return unit
       return res
     }
@@ -126,12 +168,12 @@ const makeEvaluator = (funcEnv) => {
     if (wasmFunc) {
       const res = funcOrMacro.f(...args.map((arg) => wunsEval(arg, env)))
       if (typeof res === 'undefined') return unit
-      if (typeof res === 'number') return String(res)
+      if (typeof res === 'number') return numberWord(res)
       assert(Array.isArray(res), `expected array or undefined, found ${res}`)
       return makeList(
         ...res.map((r) => {
           assert(typeof r === 'number', `expected number, found ${r}`)
-          return String(r)
+          return numberWord(r)
         }),
       )
     }
@@ -142,39 +184,40 @@ const makeEvaluator = (funcEnv) => {
     )
   }
   const gogomacro = (form) => {
-    if (typeof form === 'string') return form
-    assert(Array.isArray(form), `cannot expand ${form} expected string or array`)
+    if (isWord(form)) return form
+    assert(Array.isArray(form), `cannot expand ${form} expected word or list`)
     if (form.length === 0) return unit
-    const [firstWord, ...args] = form
-    switch (firstWord) {
+    const [firstForm, ...args] = form
+    const firstWordString = wordString(firstForm)
+    switch (firstWordString) {
       case 'quote':
         return form
       case 'if':
-        return makeList(firstWord, ...tryMap(args, gogomacro))
+        return makeList(firstForm, ...tryMap(args, gogomacro))
       case 'let':
       case 'loop': {
         const [bindings, ...bodies] = args
         return makeList(
-          firstWord,
+          firstForm,
           tryMap(bindings, (borf, i) => (i % 2 === 0 ? borf : gogomacro(borf))),
           ...bodies.map(gogomacro),
         )
       }
       case 'cont':
-        return makeList(firstWord, ...args.map(gogomacro))
+        return makeList(firstForm, ...args.map(gogomacro))
       case 'func':
       case 'macro': {
         const [fname, origParams, ...bodies] = args
-        return makeList(firstWord, fname, origParams, ...bodies.map(gogomacro))
+        return makeList(firstForm, fname, origParams, ...bodies.map(gogomacro))
       }
       case 'constant': {
         const [varName, value] = args
-        return makeList(firstWord, varName, gogomacro(value))
+        return makeList(firstForm, varName, gogomacro(value))
       }
     }
-    const funcOrMacro = funcEnv.get(firstWord)
+    const funcOrMacro = funcEnv.get(firstWordString)
     if (funcOrMacro && funcOrMacro.isMacro) return gogomacro(apply(funcOrMacro, args.map(gogomacro)))
-    return makeList(firstWord, ...args.map(gogomacro))
+    return makeList(firstForm, ...args.map(gogomacro))
   }
   return {
     gogoeval: (form) => wunsEval(gogomacro(form), globalEnv),
@@ -182,13 +225,9 @@ const makeEvaluator = (funcEnv) => {
   }
 }
 
-const print = (x) => {
-  if (typeof x === 'string') return x
-  if (!Array.isArray(x)) throw new Error(`cannot print ${x}`)
-  return `[${x.map(print).join(' ')}]`
-}
-
-const number = (s) => {
+const number = (f) => {
+  if (!isWord(f)) throw new Error('expected word: ' + f)
+  const s = wordString(f)
   const n = Number(s)
   if (isNaN(n)) throw new Error('expected number, found: ' + s)
   const normalised = n | 0
@@ -206,32 +245,34 @@ const mkFuncEnv = ({ log }, instructions) => {
     const parameterCount = func.length
     switch (parameterCount) {
       case 1:
-        funcEnv.set(name, (a) => String(func(number(a)) | 0))
+        funcEnv.set(name, (a) => numberWord(func(number(a)) | 0))
         break
       case 2:
-        funcEnv.set(name, (a, b) => String(func(number(a), number(b)) | 0))
+        funcEnv.set(name, (a, b) => numberWord(func(number(a), number(b)) | 0))
         break
       default:
         throw new Error('unsupported parameter count: ' + parameterCount)
     }
   }
-  const boolToWord = (b) => (b ? '1' : '0')
+  const zero = numberWord(0)
+  const one = numberWord(1)
+  const boolToWord = (b) => (b ? one : zero)
   // would be cool to do in a host-func special form
-  funcEnv.set('is-word', (f) => boolToWord(typeof f === 'string'))
+  funcEnv.set('is-word', (f) => boolToWord(isWord(f)))
   funcEnv.set('is-list', (f) => boolToWord(Array.isArray(f)))
 
-  funcEnv.set('size', (a) => String(Number(a.length)))
+  funcEnv.set('size', (a) => numberWord(a.length))
   funcEnv.set('at', (v, i) => {
     const ni = number(i)
     assert(ni >= -v.length && ni < v.length, 'index out of bounds: ' + i)
-    if (typeof v === 'string') return String(v.at(ni).charCodeAt(0))
+    if (isWord(v)) return numberWord(wordString(v).at(ni).charCodeAt(0))
     const elem = v.at(ni)
-    if (typeof elem === 'number') return String(elem)
+    if (typeof elem === 'number') return numberWord(elem)
     return elem
   })
   funcEnv.set('slice', (v, i, j) => {
     let s = v.slice(number(i), number(j))
-    if (s instanceof Uint8Array) return Object.freeze(Array.from(s, (n) => String(n)))
+    if (s instanceof Uint8Array) return Object.freeze(Array.from(s, (n) => numberWord(n)))
     return Object.freeze(s)
   })
 
@@ -242,16 +283,21 @@ const mkFuncEnv = ({ log }, instructions) => {
     ar.push(e)
     return unit
   })
-  funcEnv.set('set-array', (ar, index, e) => {
-    if (!Array.isArray(ar)) throw new Error('push expects array')
-    if (Object.isFrozen(ar)) throw new Error('push expects mutable array')
-    ar[number(index)] = e
-    return unit
+  // funcEnv.set('set-array', (ar, index, e) => {
+  //   if (!Array.isArray(ar)) throw new Error('push expects array')
+  //   if (Object.isFrozen(ar)) throw new Error('push expects mutable array')
+  //   ar[number(index)] = e
+  //   return unit
+  // })
+  funcEnv.set('freeze', (ar) => {
+    if (!Array.isArray(ar)) throw new Error('freeze expects array')
+    makeList(...ar)
   })
-  funcEnv.set('freeze', (ar) => makeList(...ar))
 
+  // genword??? or should we just implement it in wuns?
   let gensym = 0
-  funcEnv.set('gensym', () => 'v' + String(gensym++))
+  funcEnv.set('gensym', () => word('v' + String(gensym++)))
+
   funcEnv.set('log', (a) => {
     log(print(a))
     return unit
@@ -263,7 +309,7 @@ const mkFuncEnv = ({ log }, instructions) => {
 
   funcEnv.set('word-from-codepoints', (cs) => {
     assert(Array.isArray(cs), 'word-from-codepoints expects array')
-    return cs.map((c) => String.fromCharCode(number(c))).join('')
+    return word(cs.map((c) => String.fromCharCode(number(c))).join(''))
   })
 
   funcEnv.set('wasm-module', (s) => new WebAssembly.Module(new Uint8Array(s.map(number))))
@@ -277,9 +323,9 @@ const treeToOurForm = (node) => {
   const { type, text, namedChildren } = node
   switch (type) {
     case 'word':
-      return text
+      return word(text)
     case 'list':
-      return namedChildren.map(treeToOurForm)
+      return makeList(...namedChildren.map(treeToOurForm))
     default:
       throw new Error('unexpected node type: ' + type)
   }
