@@ -241,7 +241,6 @@ const makeInterpretCurrentFile = async (instructionsWasmUri) => {
         outputChannel.appendLine('done interpreting')
       } catch (e) {
         outputChannel.appendLine(e.message)
-        console.error(e)
       }
     }
   }

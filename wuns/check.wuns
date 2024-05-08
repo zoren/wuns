@@ -199,13 +199,12 @@
           [list t]]
         [let
           [- [assert [eq [size cur-ctx] 2] we need a local ctx and a outer ctx if not at root]
-          vars [first cur-ctx]
-          outer [second cur-ctx]
-          index [index-assoc-list vars form]]
+           vars [first cur-ctx]
+           outer [second cur-ctx]
+           index [index-assoc-list vars form]]
           [if [is-negative index]
             [cont outer]
-            []
-          ]]]]
+            [list [at vars [inc index]]]]]]]
 
     [= form []]
     []
@@ -219,8 +218,8 @@
           [res-types [mutable-list]]
           [loop [i [quote 0]]
             [when [lt i [size args]]
-              [comment do we actually want to concat them [i32 i32] [i32] we be surprising]
-              [push-all res-types [compile-form-mutable global-ctx local-ctx code [at args i]]]
+              [comment do we actually want to concat them]
+              [push-all res-types [check global-ctx local-ctx [at args i]]]
               [cont [inc i]]]]
           [freeze res-types]]
 
@@ -228,25 +227,17 @@
         [let
           [- [assert [eq [size args] 1] only support decimal integers]
            dw [dec-word-to-i32 [first args]]]
-          [push code i32.const]
-          [push-all code [s32-word-to-leb-128 dw]]
           [list i32]]
 
         [eq-word first-form [quote if]]
         [let
           [- [assert [eq [size args] 3] if needs a condition and two branches]
            ct [compile-form-mutable global-ctx local-ctx code [first args]]
-           - [push code if]
-           type-index [size code]
-           dummy-type empty-type
-           - [push code dummy-type]
-           - [assert [and [eq [size ct] 1] [eq [at ct 0] i32]] condition not i32]
+           - [assert [= ct [list i32]] condition not i32]
            tt [compile-form-mutable global-ctx local-ctx code [second args]]
            - [push code else]
            ft [compile-form-mutable global-ctx local-ctx code [third args]]
-           - [assert [= tt ft] if branch types differ]
-           enc-branch-type [type-list-to-code ft]]
-          [push code end]
+           - [assert [= tt ft] if branch types differ]]
           [when-not [eq dummy-type enc-branch-type]
             [set-array code type-index enc-branch-type]]
           tt]
@@ -303,6 +294,7 @@
             ]]]]]]]
 
 [test [quote [i32]] [check-form [] [list [quote x i32]] [quote x]]]
+[test [quote [i64]] [check-form [] [list [quote x i64] [list [quote x i32]]] [quote x]]]
 
 [func check-top-level-form [ctx form]
   [if [eq-word [quote func] [first form]]

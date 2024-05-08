@@ -3,7 +3,7 @@
 [func list [.. l] l]
 
 [macro global-id [name]
-  [list [quote global] name [list [quote quote] name]]]
+  [list [quote constant] name [list [quote quote] name]]]
 
 [global-id 0]
 [global-id 1]
@@ -29,6 +29,26 @@
 [func third [l] [at l 2]]
 
 [func rest [l] [slice l 1 [size l]]]
+
+[func push-all [mut-list list]
+  [let [s-l [size list]]
+    [loop [i 0]
+      [if [lt i s-l]
+        [let []
+          [push mut-list [at list i]]
+          [cont [inc i]]]
+        []]]]]
+
+[func concat-lists [lists]
+  [let [res [mutable-list] s [size lists]]
+    [loop [i 0]
+      [if [lt i s]
+        [let []
+          [push-all res [at lists i]]
+          [cont [inc i]]]
+        [freeze res]]]]]
+
+[func concat [.. lists] [concat-lists lists]]
 
 [macro do [.. forms]
   [concat [quote [let []]] forms]]
@@ -234,12 +254,12 @@
 [func push-token-as-sem-tok [token token-type]
   [push-token [token-line token] [token-start token] [sub [token-end token] [token-start token]] token-type 0]]
 
-[global token-type-variable [quote 0]]
-[global token-type-keyword [quote 1]]
-[global token-type-function [quote 2]]
-[global token-type-macro [quote 3]]
-[global token-type-parameter [quote 4]]
-[global token-type-string [quote 5]]
+[constant token-type-variable [quote 0]]
+[constant token-type-keyword [quote 1]]
+[constant token-type-function [quote 2]]
+[constant token-type-macro [quote 3]]
+[constant token-type-parameter [quote 4]]
+[constant token-type-string [quote 5]]
 
 [func push-form-as-quoted [form]
   [if [eq [first form] [quote w]]
@@ -340,4 +360,3 @@
       [when [lt i [size trees]]
         [provide-form-sem-toks [at trees i]]
         [cont [inc i]]]]]]
-

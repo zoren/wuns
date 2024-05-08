@@ -56,6 +56,11 @@
 
 [func concat [.. lists] [concat-lists lists]]
 
+[log [lt [quote 2] [quote 3]]]
+[log [lt [quote 2] [quote 1]]]
+[log [concat [quote 1 2] [quote 4 9]]]
+[log [concat-lists [quote [1 2] [4 9]]]]
+
 [macro do [.. forms]
   [concat [quote [let []]] forms]]
 
@@ -153,20 +158,18 @@
         [cont [dec i]]]]
     [freeze res]]]
 
-[constant ascii-x [quote 120]]
-
 [func dec-word-to-hex-word [dw]
   [assert [not [is-negative dw]] expected non-negative decimal word]
   [if [is-zero dw]
     [quote 0x0]
-    [let [hex-digits [quote 0123456789abcdef]
+    [let [hex-digits [quote 0 1 2 3 4 5 6 7 8 9 a b c d e f]
           res [mutable-list]]
       [loop [n dw]
         [if [is-zero n]
           [do
-            [push res ascii-x]
-            [push res [quote 48]]
-            [word-from-codepoints [reverse res]]]
+            [push res [quote x]]
+            [push res [quote 0]]
+            [concat-words [reverse res]]]
           [let [remainder [bit-and n [quote 15]]
                 quotient [bit-shift-right-signed n [quote 4]]]
             [push res [at hex-digits remainder]]
@@ -215,7 +218,7 @@
 [test [quote [0xc0 0xbb 0x78]] [dec-words-to-hex [s32-word-to-leb-128 [quote -123456]]]]
 
 [constant i32.const [quote 0x41]]
-[constant local.get [quote 32]]
+[constant local.get [quote 0x20]]
 
 [func lookup-assoc-list [ctx sym]
   [let [s [size ctx]]
@@ -283,15 +286,6 @@
 [constant call [quote 0x10]]
 [constant end [quote 0x0b]]
 
-[func push-type [ctx type]
-  [let [types [lookup-assoc-list ctx [quote types]]
-        index [index-of-word types type]]
-    [if [is-negative index]
-      [let [new-index [size types]]
-        [push types type]
-        new-index]
-      index]]]
-
 [func index-of-word [words word]
   [let [s-words [size words]]
     [loop [i 0]
@@ -300,6 +294,15 @@
           i
           [cont [inc i]]]
         -1]]]]
+
+[func push-type [ctx type]
+  [let [types [lookup-assoc-list ctx [quote types]]
+        index [index-of-word types type]]
+    [if [is-negative index]
+      [let [new-index [size types]]
+        [push types type]
+        new-index]
+      index]]]
 
 [constant kind-function 0]
 
@@ -399,6 +402,30 @@
           [when-not [eq dummy-type enc-branch-type]
             [set-array code type-index enc-branch-type]]
           tt]
+
+        [eq-word first-form [quote let]]
+        [let
+          [bindings [first args]
+           var-values [mutable-list]
+           let-ctx [list var-values local-ctx]
+           n-of-bindings [size bindings]]
+          [assert [is-list bindings] let expects a list of bindings]
+          [assert [is-even n-of-bindings] let expects an even number of bindings]
+          [loop [i [quote 0]]
+            [when [lt i n-of-bindings]
+              [let
+                [var [at bindings i]
+                 value [at bindings [inc i]]
+                 var-type [compile-form-mutable global-ctx local-ctx code value]
+                 - [assert [eq [size var-type] 1] let expects a single type]]
+                [push var-values var]
+                [push var-values [first var-type]]
+                [cont [add i 2]]]]]
+          [loop [i 1]
+            [when [lt i [dec [size form]]]
+              [compile-form-mutable global-ctx let-ctx code [at form i]]
+              [cont [inc i]]]]
+          [compile-form-mutable global-ctx let-ctx code [last form]]]
 
         [let [instruction [get-instruction first-form]]
           [if instruction
@@ -540,6 +567,7 @@
   ]
   ]]
   mod [ctx-to-module ctx]
+  - [log mod]
   wm [wasm-module mod]
   wi [wasm-instance wm]
   ]
@@ -554,7 +582,7 @@
   [wasm-import-func wi id-pair my-id-pair]
   [wasm-import-func wi pair my-pair]
   ]
-
+[comment
 [test 3 [my-fst 3 2]]
 [test 2 [my-snd 1 2]]
 [test 3 [my-add 1 2]]
@@ -601,4 +629,6 @@
 
 [test [quote 5] [my-let-test]]
 [test [] [my-let1-test]]
+
 [test [list [quote 5] [quote 6]] [my-let2-test]]
+]

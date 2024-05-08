@@ -3,8 +3,9 @@ lex-document-one-token
       y [f 2 3]]
   [add 2 [d d d]    d d 3]
  ]
- 
+
 [func is-done [document-line-count line-no column]
   [token-class [lex-document-one-token document-line-count line-no column]]]
 [quote [007 1337
 [] 23 ]]
+[log [freeze [quote abc]]]

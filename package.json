@@ -8,10 +8,6 @@
   "contributes": {
     "commands": [
       {
-        "command": "wunslang.semanticTokens",
-        "title": "Semantic tokens with wuns"
-      },
-      {
         "command": "wunslang.interpret",
         "title": "Interpret current file"
       }

@@ -261,18 +261,26 @@ const mkFuncEnv = ({ log }, instructions) => {
   funcEnv.set('is-word', (f) => boolToWord(isWord(f)))
   funcEnv.set('is-list', (f) => boolToWord(Array.isArray(f)))
 
-  funcEnv.set('size', (a) => numberWord(a.length))
+  const getLength = (a) => {
+    if (isWord(a)) return wordString(a).length
+    if (Array.isArray(a)) return a.length
+    throw new Error('getLength expects word or list')
+  }
+  // todo maybe only allow for lists
+  funcEnv.set('size', a => numberWord(getLength(a)))
   funcEnv.set('at', (v, i) => {
     const ni = number(i)
-    assert(ni >= -v.length && ni < v.length, 'index out of bounds: ' + i)
+    const len = getLength(v)
+    assert(ni >= -len && ni < len, 'index out of bounds: ' + i)
     if (isWord(v)) return numberWord(wordString(v).at(ni).charCodeAt(0))
     const elem = v.at(ni)
     if (typeof elem === 'number') return numberWord(elem)
     return elem
   })
   funcEnv.set('slice', (v, i, j) => {
+    assert(Array.isArray(v), 'slice expects array')
     let s = v.slice(number(i), number(j))
-    if (s instanceof Uint8Array) return Object.freeze(Array.from(s, (n) => numberWord(n)))
+    if (s instanceof Uint8Array) return makeList(...Array.from(s, (n) => numberWord(n)))
     return Object.freeze(s)
   })
 
@@ -283,15 +291,16 @@ const mkFuncEnv = ({ log }, instructions) => {
     ar.push(e)
     return unit
   })
-  // funcEnv.set('set-array', (ar, index, e) => {
-  //   if (!Array.isArray(ar)) throw new Error('push expects array')
-  //   if (Object.isFrozen(ar)) throw new Error('push expects mutable array')
-  //   ar[number(index)] = e
-  //   return unit
-  // })
+  funcEnv.set('set-array', (ar, index, e) => {
+    if (!Array.isArray(ar)) throw new Error('set-array expects array')
+    if (Object.isFrozen(ar)) throw new Error('set-array expects mutable array')
+    ar[number(index)] = e
+    return unit
+  })
   funcEnv.set('freeze', (ar) => {
     if (!Array.isArray(ar)) throw new Error('freeze expects array')
-    makeList(...ar)
+    if (Object.isFrozen(ar)) throw new Error('freeze expects mutable array')
+    return makeList(...ar)
   })
 
   // genword??? or should we just implement it in wuns?
@@ -307,9 +316,19 @@ const mkFuncEnv = ({ log }, instructions) => {
     throw new Error("wuns 'abort'")
   })
 
-  funcEnv.set('word-from-codepoints', (cs) => {
+  funcEnv.set('word-from-codepoint', (cs) => {
     assert(Array.isArray(cs), 'word-from-codepoints expects array')
-    return word(cs.map((c) => String.fromCharCode(number(c))).join(''))
+    return word(String.fromCharCode(number(c)))
+  })
+
+  // funcEnv.set('word-from-codepoints', (cs) => {
+  //   assert(Array.isArray(cs), 'word-from-codepoints expects array')
+  //   return word(cs.map((c) => String.fromCharCode(number(c))).join(''))
+  // })
+
+  funcEnv.set('concat-words', (cs) => {
+    assert(Array.isArray(cs), 'concat-words expects array')
+    return word(cs.join(''))
   })
 
   funcEnv.set('wasm-module', (s) => new WebAssembly.Module(new Uint8Array(s.map(number))))
@@ -334,7 +353,15 @@ const treeToOurForm = (node) => {
 const evalTree = (tree, { importObject, instructions }) => {
   const funcEnv = mkFuncEnv(importObject, instructions)
   const { gogoeval } = makeEvaluator(funcEnv)
-  for (const node of tree.rootNode.children) gogoeval(treeToOurForm(node))
+  for (const node of tree.rootNode.children) {
+    const form = treeToOurForm(node)
+    try {
+      gogoeval(form)
+    } catch (e) {
+      console.error('error evaluating', print(form), e)
+      throw e
+    }
+  }
 }
 
 module.exports = { evalTree }
