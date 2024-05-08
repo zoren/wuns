@@ -151,7 +151,7 @@
 
 [func lookup-assoc-list [ctx sym]
   [let [index [index-assoc-list ctx sym]]
-    [assert [not [is-negative index]] [quote symbol not found]]
+    [assert [not [is-negative index]] lookup-assoc-list key not found]
     [at ctx [inc index]]]]
 
 [func make-operation-obj [name opcode parameters results]
@@ -292,10 +292,11 @@
               [second func-sig]
 
             ]]]]]]]
-
+[comment
+[test [quote [i32]] [check-form [] [list []] [quote x]]]
 [test [quote [i32]] [check-form [] [list [quote x i32]] [quote x]]]
 [test [quote [i64]] [check-form [] [list [quote x i64] [list [quote x i32]]] [quote x]]]
-
+]
 [func check-top-level-form [ctx form]
   [if [eq-word [quote func] [first form]]
     [let [name [second form]
@@ -339,7 +340,9 @@
     [do
       [log [list form ]]
       [assert 0 not a top-level form]]]]
-
+[comment
+[test [] [check-top-level-form [] [quote [func fst [x y] x]]]]
+]
 [func make-mty-ctx []
   [list
     [quote function-signatures] [mutable-list]]]
@@ -353,8 +356,8 @@
     ctx]]
 
 [func test-diagnostics [form]
-  [log form]
-  [log [meta form]]]
+  [check-form [] [list []] form]
+  ]
 
 [comment
 [let

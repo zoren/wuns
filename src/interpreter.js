@@ -51,7 +51,7 @@ const wordString = (w) => {
 
 const print = (x) => {
   if (isWord(x)) return wordString(x)
-  if (!Array.isArray(x)) throw new Error(`cannot print ${x}`)
+  if (!Array.isArray(x)) throw new Error(`cannot print ${x} expected word or list ${typeof x} ${x.constructor}`)
   return `[${x.map(print).join(' ')}]`
 }
 
@@ -256,8 +256,10 @@ const number = (f) => {
   return n
 }
 
-const mkFuncEnv = ({ log }, instructions) => {
+const mkFuncEnv = ({ log, ...imports }, instructions) => {
   const funcEnv = new Map()
+  for (const [name, func] of Object.entries(imports)) funcEnv.set(name, func)
+
   const assert = (cond, msg) => {
     if (!cond) throw new Error('built in failed: ' + msg)
   }
@@ -361,8 +363,10 @@ const mkFuncEnv = ({ log }, instructions) => {
 
 const treeToOurForm = (node) => {
   const { type, text, namedChildren, startPosition, endPosition } = node
-  const range = makeList(...[startPosition.row, startPosition.column, endPosition.row, endPosition.column].map(numberWord))
-  const metaData = makeList(word('range'), range)
+  const range = makeList(
+    ...[startPosition.row, startPosition.column, endPosition.row, endPosition.column].map(numberWord),
+  )
+  const metaData = makeList(word('range'), range, word('node-id'), numberWord(node.id))
   switch (type) {
     case 'word':
       return wordWithMeta(text, metaData)
@@ -388,4 +392,4 @@ const evalTree = (tree, { importObject, instructions }) => {
   return funcEnv
 }
 
-module.exports = { treeToOurForm, evalTree, makeEvaluator, mkFuncEnv }
+module.exports = { treeToOurForm, evalTree, makeEvaluator, mkFuncEnv, meta, print }

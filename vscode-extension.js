@@ -1,5 +1,6 @@
 const vscode = require('vscode')
-const { SemanticTokensLegend, SemanticTokensBuilder, SelectionRange, Range, Position } = vscode
+const { SemanticTokensLegend, SemanticTokensBuilder, SelectionRange, Range, Position, Diagnostic, DiagnosticSeverity } =
+  vscode
 
 const TSParser = require('tree-sitter')
 const parser = new TSParser()
@@ -216,7 +217,11 @@ const pointToPosition = ({ row, column }) => new Position(row, column)
 const rangeFromNode = ({ startPosition, endPosition }) =>
   new Range(pointToPosition(startPosition), pointToPosition(endPosition))
 
-const { evalTree, treeToOurForm, makeEvaluator, mkFuncEnv } = require('./src/interpreter')
+const { evalTree, treeToOurForm, makeEvaluator, mkFuncEnv, meta, print } = require('./src/interpreter')
+
+const reportError = (msg, form) => {
+  console.log('report-error', print(msg), print(meta(form)))
+}
 
 const makeInterpretCurrentFile = async (instructions) => {
   const outputChannel = window.createOutputChannel('wuns output', wunsLanguageId)
@@ -226,6 +231,7 @@ const makeInterpretCurrentFile = async (instructions) => {
       outputChannel.show(true)
       outputChannel.appendLine(s)
     },
+    'report-error': reportError,
   }
   return () => {
     const document = getActiveTextEditorDocument()
@@ -245,17 +251,29 @@ const makeInterpretCurrentFile = async (instructions) => {
 
 const makeCheckCurrentFileCommand = async (instructions, context) => {
   const checkUri = vscode.Uri.file(context.extensionPath + '/wuns/check.wuns')
-  const uint8 = await workspace.fs.readFile(checkUri)
-  const checkSource = new TextDecoder().decode(uint8)
   const outputChannel = window.createOutputChannel('wuns output', wunsLanguageId)
   outputChannel.show(true)
-  const importObject = {
-    log: (s) => {
-      outputChannel.show(true)
-      outputChannel.appendLine('check: ' + s)
-    },
-  }
-  return () => {
+  const diag = languages.createDiagnosticCollection('wuns')
+
+  return async () => {
+    const uint8 = await workspace.fs.readFile(checkUri)
+    const checkSource = new TextDecoder().decode(uint8)
+    const diagnostics = []
+    const importObject = {
+      log: (s) => {
+        outputChannel.show(true)
+        outputChannel.appendLine('check: ' + s)
+      },
+      'report-error': (msg, form) => {
+        const [_, range] = meta(form)
+        const diagnostic = new Diagnostic(
+          new Range(...range.map((w) => Number(w.value))),
+          msg.map(print).join(' '),
+          DiagnosticSeverity.Error,
+        )
+        diagnostics.push(diagnostic)
+      },
+    }
     const funcEnv = mkFuncEnv(importObject, instructions)
     const { gogoeval, apply } = makeEvaluator(funcEnv)
 
@@ -283,6 +301,7 @@ const makeCheckCurrentFileCommand = async (instructions, context) => {
     } catch (e) {
       outputChannel.appendLine(e.message)
     }
+    diag.set(document.uri, diagnostics)
   }
 }
 
