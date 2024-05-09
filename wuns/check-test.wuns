@@ -11,6 +11,7 @@
 [if [quote 0]]
 [if [quote 0] []]
 [if [quote 0] [quote 1] [quote 2]]
+[if [quote 0] [tuple] []]
 [if [quote 0] [tuple [quote 1] [quote 2]] [tuple [quote 3] [quote 4]]]
 
 [let ]
@@ -52,6 +53,10 @@
 [func d p]
 
 [func d []]
-[func f [] []]
-[func f [x] [add x [quote 1]]]
-[func f [x] [add x x]]
+[func f [p] [add [quote 3] [quote 4]]]
+[func f1 [p] [add p [quote 4]]]
+[func f2 [p q] [add p q]]
+[func g [] [f [quote 3]]]
+
+[func g1 [] [f [quote 3] [quote 4]]]
+[func g1 [] [f]]
