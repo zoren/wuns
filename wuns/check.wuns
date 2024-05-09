@@ -32,6 +32,7 @@
 [func first [l] [at l 0]]
 [func second [l] [at l 1]]
 [func third [l] [at l 2]]
+[func fourth [l] [at l 3]]
 [func last [l] [at l -1]]
 
 [func rest [l] [slice l 1 [size l]]]
@@ -214,23 +215,22 @@
 
     [let [first-form [first form]
           s-form [size form]
-          n-of-args [dec s-form]
-          args [rest form]]
+          n-of-args [dec s-form]]
       [assert [is-word first-form] expected a word first]
       [ifs
-        [eq-word first-form [quote tuple]]
+        [= first-form [quote tuple]]
         [let
-          [res-types [mutable-list]]
-          [loop [i [quote 0]]
-            [when [lt i [size args]]
+          [res-types [mutable-list] limit [inc n-of-args]]
+          [loop [i [quote 1]]
+            [when [lt i limit]
               [comment do we actually want to concat them]
-              [push-all res-types [check-form global-ctx local-ctx 0 [at args i]]]
+              [push-all res-types [check-form global-ctx local-ctx 0 [at form i]]]
               [cont [inc i]]]]
           [freeze res-types]]
 
         [= first-form [quote quote]]
         [do
-          [assert [eq [size args] 1] only support decimal integers]
+          [assert [eq n-of-args 1] only support decimal integers]
           [comment todo check if integer or word or list]
           i32]
 
@@ -247,7 +247,7 @@
               [cont [inc i]]]]
           [if [gt n-of-args 1]
             [let [tt [check-form global-ctx local-ctx tail-pos [third form]]
-                  ft [if [eq n-of-args 2] [] [check-form global-ctx local-ctx tail-pos [third args]]]]
+                  ft [if [eq n-of-args 2] [] [check-form global-ctx local-ctx tail-pos [fourth form]]]]
               [if [= tt any-type]
                 [if [= ft any-type]
                   [report form if branches both any type maybe this is infinite loop]
@@ -310,9 +310,7 @@
         [let [func-sigs [lookup-assoc-list global-ctx [quote function-signatures]]
               index [index-assoc-list func-sigs first-form]]
           [if [is-negative index]
-            [do
-              [log func-sigs]
-              [report first-form function not found]]
+            [report first-form function not found]
             [let [sig [at func-sigs [inc index]]
                   parameters [lookup-assoc-list sig [quote parameters]]
                   n-of-parameters [size parameters]]
