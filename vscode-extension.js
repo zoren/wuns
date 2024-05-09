@@ -265,7 +265,16 @@ const makeCheckCurrentFileCommand = async (instructions, context) => {
         outputChannel.appendLine('check: ' + s)
       },
       'report-error': (msg, form) => {
-        const [_, range] = meta(form)
+        if (!Array.isArray(msg)) throw new Error('msg is not an array')
+        const metaData = meta(form)
+        if (!metaData) throw new Error('meta is ' + metaData)
+        const [_, range] = metaData
+        if (!Array.isArray(range)) {
+          console.log('metaData', metaData)
+          console.log('form', form)
+          console.log('range', range)
+          throw new Error('range is not an array')
+        }
         const diagnostic = new Diagnostic(
           new Range(...range.map((w) => Number(w.value))),
           msg.map(print).join(' '),

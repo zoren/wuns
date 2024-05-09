@@ -13,7 +13,7 @@
           [cont [add i [quote 1]]]]
         f]]]]
 
-[constant-ids 0 1 2 3 -1]
+[constant-ids 0 1 2 3 4 -1]
 
 [func inc [x] [add x 1]]
 
@@ -75,6 +75,10 @@
   [list [quote when-not] cond
     [list [quote log] [list [quote quote] [concat [list [quote assert-fail]] lmsg]]]
     [quote [abort]]]]
+
+[macro report-when-not [cond form .. lmsg]
+  [list [quote when-not] cond
+    [list [quote report-error] [list [quote quote] lmsg] form]]]
 
 [macro ifs [.. clauses]
   [let [s [size clauses]]
@@ -183,6 +187,16 @@
           [cont [inc i]]]]
       0]]]
 
+[func dec-word-to-i32 [dw]
+  [let [s [sub 0 [size dw]]]
+    [loop [i -1 res 0 multi 1]
+      [if [le s i]
+        [let [c [at dw i]]
+          [when-not [and [le [quote 48] c] [le c [quote 57]]] [report-error dw [quote not a decimal character]]]
+          [assert [lt res [quote 214748364]] out of bounds]
+          [cont [dec i] [add res [mul [sub c [quote 48]] multi]] [mul multi [quote 10]]]]
+        res]]]]
+
 [func check-form [global-ctx local-ctx form]
   [ifs
     [is-word form]
@@ -210,6 +224,8 @@
     []
 
     [let [first-form [first form]
+          s-form [size form]
+          n-of-args [dec [size form]]
           args [rest form]]
       [assert [is-word first-form] expected a word first]
       [ifs
@@ -219,7 +235,7 @@
           [loop [i [quote 0]]
             [when [lt i [size args]]
               [comment do we actually want to concat them]
-              [push-all res-types [check global-ctx local-ctx [at args i]]]
+              [push-all res-types [check-form global-ctx local-ctx [at args i]]]
               [cont [inc i]]]]
           [freeze res-types]]
 
@@ -230,17 +246,22 @@
           [list i32]]
 
         [eq-word first-form [quote if]]
-        [let
-          [- [assert [eq [size args] 3] if needs a condition and two branches]
-           ct [compile-form-mutable global-ctx local-ctx code [first args]]
-           - [assert [= ct [list i32]] condition not i32]
-           tt [compile-form-mutable global-ctx local-ctx code [second args]]
-           - [push code else]
-           ft [compile-form-mutable global-ctx local-ctx code [third args]]
-           - [assert [= tt ft] if branch types differ]]
-          [when-not [eq dummy-type enc-branch-type]
-            [set-array code type-index enc-branch-type]]
-          tt]
+        [do
+          [when [gt n-of-args 0]
+            [let [c [at form 1]
+                  ct [check-form global-ctx local-ctx c]]
+              [report-when-not [= ct [list i32]] c condition not i32]]]
+          [loop [i 4]
+            [when [lt i s-form]
+              [check-form global-ctx local-ctx [at form i]]
+              [report-when-not 0 [at form i] if extra forms ignored]
+              [cont [inc i]]]]
+          [if [gt n-of-args 1]
+            [let [tt [check-form global-ctx local-ctx [second args]]
+                  ft [if [eq n-of-args 2] [] [check-form global-ctx local-ctx [third args]]]]
+              [report-when-not [= tt ft] form branches not same type]
+              tt]
+            []]]
 
         [eq-word first-form [quote let]]
         [let
