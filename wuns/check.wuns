@@ -158,6 +158,8 @@
 
 [func lookup-assoc-list [ctx sym]
   [let [index [index-assoc-list ctx sym]]
+    [when [is-negative index]
+      [log [list [quote symbol] sym [quote not found]]]]
     [assert [not [is-negative index]] lookup-assoc-list key not found]
     [at ctx [inc index]]]]
 
@@ -256,14 +258,14 @@
         [do
           [assert [eq [size args] 1] only support decimal integers]
           [comment todo check if integer or word or list]
-          [list i32]]
+          i32]
 
         [= first-form [quote if]]
         [do
           [when [gt n-of-args 0]
             [let [c [at form 1]
                   ct [check-form global-ctx local-ctx 0 c]]
-              [report-when-not [= ct [list i32]] c condition not i32]]]
+              [report-when-not [= ct i32] c condition not i32]]]
           [loop [i 4]
             [when [lt i s-form]
               [check-form global-ctx local-ctx 1 [at form i]]
@@ -298,7 +300,7 @@
                     [var [at bindings i]
                      value [at bindings [inc i]]
                      var-type [check-form global-ctx let-loop-ctx 0 value]
-                     - [report-when-not [eq [size var-type] 1] value let expects a single type]]
+                     - [report-when-not [= var-type i32] value let expects a single type]]
                     [push var-values var]
                     [push var-values [first var-type]]
                     [cont [add i 2]]]]]]]
@@ -323,7 +325,39 @@
                 [cont [second cur-ctx]]]]]
           any-type]
 
-        []]]]]
+        [let [instruction [get-instruction first-form]]
+          [if instruction
+            [let [parameters [lookup-assoc-list instruction [quote parameters]]
+                  n-of-parameters [size parameters]]
+              [report-when-not [ge n-of-args n-of-parameters] form
+                instruction missing arguments]
+              [loop [i 1]
+                [when [lt i n-of-args]
+                  [let [arg [at form i]
+                        arg-t [check-form global-ctx local-ctx 0 arg]
+                        p-index [dec i]]
+                    [when [lt p-index n-of-parameters]
+                      [report-when-not [= arg-t [at parameters p-index]] arg instruction parameter type mismatch]]
+                    [cont [inc i]]]]]
+              [loop [i [inc n-of-parameters]]
+                [when [lt i s-form]
+                  [report [at form i] instruction extra arguments ignored]
+                  [cont [inc i]]]]
+              [lookup-assoc-list instruction [quote results]]]
+            [comment
+              [let [- [log [list [quote instruction] first-form [quote not found]]]
+              func-sigs [lookup-assoc-list global-ctx [quote function-signatures]]
+                  func-sig [lookup-assoc-list func-sigs first-form]
+                  parameter-types [first func-sig]]
+              [assert [eq [size parameter-types] [size args]] parameter arity mismatch]
+              [loop [i 0]
+                [when [lt i n-of-args]
+                  [comment todo also check types]
+                  [check-form global-ctx local-ctx 0 [at form i]]
+                  [cont [inc i]]]]
+              [second func-sig]
+
+            ]]]]]]]]
 [comment
 [test [quote [i32]] [check-form [] [list []] [quote x]]]
 [test [quote [i32]] [check-form [] [list [quote x i32]] [quote x]]]

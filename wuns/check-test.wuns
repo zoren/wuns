@@ -40,3 +40,9 @@
 [loop [] [quote 3]]
 [loop [] [cont]]
 
+
+[i32.add [quote 4]]
+[i32.add [quote 4]]
+[i32.add [quote 3] [quote 4] [quote 5]]
+[i32.add [] []]
+[i32.add [quote 3] [quote 4]]
