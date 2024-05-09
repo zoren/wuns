@@ -246,13 +246,15 @@
               [report [at form i] if extra forms ignored]
               [cont [inc i]]]]
           [if [gt n-of-args 1]
-            [let [tt [check-form global-ctx local-ctx tail-pos [second args]]
+            [let [tt [check-form global-ctx local-ctx tail-pos [third form]]
                   ft [if [eq n-of-args 2] [] [check-form global-ctx local-ctx tail-pos [third args]]]]
               [if [= tt any-type]
                 [if [= ft any-type]
                   [report form if branches both any type maybe this is infinite loop]
                   ft]
-                tt]]]]
+                [do
+                  [report-when-not [= tt ft] form if branches must have same type]
+                  tt]]]]]
 
         [or
           [= first-form [quote let]]
