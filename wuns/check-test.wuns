@@ -17,6 +17,7 @@
 [let let]
 [let [x [quote 4] y] []]
 [let [y x x [quote 4]] []]
+[let [] [if []]]
 
 [let [quote [quote 3]] [quote 4]]
 [let [x [quote 3]]]
@@ -24,11 +25,18 @@
 
 [cont]
 [let [] [cont]]
+[loop [] [cont] []]
+[loop [] [if [cont] [] []]]
+[loop [] [if [quote 0] [cont] [cont]]]
+[loop [] [let [] [cont] []]]
 
 [loop [] [cont [quote 3]]]
 [loop [x [quote 0]] [cont]]
 [loop [x [quote 0]] [cont [quote 3] [quote 3]]]
 
+[loop [] [if [quote 0] [] []]]
+[loop [] [let [] [] [cont]]]
 [loop [x [quote 0]] [cont [quote 3]]]
 [loop [] [quote 3]]
 [loop [] [cont]]
+

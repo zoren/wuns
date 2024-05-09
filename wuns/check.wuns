@@ -161,25 +161,24 @@
     [assert [not [is-negative index]] lookup-assoc-list key not found]
     [at ctx [inc index]]]]
 
-[func make-operation-obj [name opcode parameters results]
+[func make-operation-obj [name parameters results]
   [concat
     [quote [name]] [list name]
-    [quote [opcode]] [list opcode]
     [quote [parameters]] [list parameters]
     [quote [results]] [list results]]]
 
 [constant i32 [quote i32]]
 [constant any-type [quote any-type]]
 
-[macro make-binary-i32 [name opcode]
-  [list [quote quote] [make-operation-obj name opcode [list i32 i32] [list i32]]]]
+[macro make-binary-i32 [name]
+  [list [quote quote] [make-operation-obj name [list i32 i32] [list i32]]]]
 
 [constant instructions
   [list
-    [make-binary-i32 i32.eq  0x46]
-    [make-binary-i32 i32.add 0x6a]
-    [make-binary-i32 i32.sub 0x6b]
-    [make-binary-i32 i32.mul 0x6c]
+    [make-binary-i32 i32.eq]
+    [make-binary-i32 i32.add]
+    [make-binary-i32 i32.sub]
+    [make-binary-i32 i32.mul]
     ]]
 
 [func get-instruction [name]
@@ -212,7 +211,7 @@
             [cont [inc ii]]
             [report dw not a decimal character]]]]]]]
 
-[func check-form [global-ctx local-ctx form]
+[func check-form [global-ctx local-ctx tail-pos form]
   [ifs
     [is-word form]
     [loop [cur-ctx local-ctx]
@@ -239,7 +238,7 @@
 
     [let [first-form [first form]
           s-form [size form]
-          n-of-args [dec [size form]]
+          n-of-args [dec s-form]
           args [rest form]]
       [assert [is-word first-form] expected a word first]
       [ifs
@@ -249,74 +248,78 @@
           [loop [i [quote 0]]
             [when [lt i [size args]]
               [comment do we actually want to concat them]
-              [push-all res-types [check-form global-ctx local-ctx [at args i]]]
+              [push-all res-types [check-form global-ctx local-ctx 0 [at args i]]]
               [cont [inc i]]]]
           [freeze res-types]]
 
-        [eq-word first-form [quote quote]]
+        [= first-form [quote quote]]
         [do
           [assert [eq [size args] 1] only support decimal integers]
           [comment todo check if integer or word or list]
           [list i32]]
 
-        [eq-word first-form [quote if]]
+        [= first-form [quote if]]
         [do
           [when [gt n-of-args 0]
             [let [c [at form 1]
-                  ct [check-form global-ctx local-ctx c]]
+                  ct [check-form global-ctx local-ctx 0 c]]
               [report-when-not [= ct [list i32]] c condition not i32]]]
           [loop [i 4]
             [when [lt i s-form]
-              [check-form global-ctx local-ctx [at form i]]
-              [report-when-not 0 [at form i] if extra forms ignored]
+              [check-form global-ctx local-ctx 1 [at form i]]
+              [report [at form i] if extra forms ignored]
               [cont [inc i]]]]
           [if [gt n-of-args 1]
-            [let [tt [check-form global-ctx local-ctx [second args]]
-                  ft [if [eq n-of-args 2] [] [check-form global-ctx local-ctx [third args]]]]
-              [report-when-not [= tt ft] form branches not same type]
-              tt]
-            []]]
+            [let [tt [check-form global-ctx local-ctx tail-pos [second args]]
+                  ft [if [eq n-of-args 2] [] [check-form global-ctx local-ctx tail-pos [third args]]]]
+              [if [= tt any-type]
+                [if [= ft any-type]
+                  [report form if branches both any type maybe this is infinite loop]
+                  ft]
+                tt]]]]
 
         [or
-          [eq-word first-form [quote let]]
-          [eq-word first-form [quote loop]]]
+          [= first-form [quote let]]
+          [= first-form [quote loop]]]
         [let
           [var-values [mutable-list]
-           let-ctx [list var-values local-ctx first-form]
+           let-loop-ctx [list var-values local-ctx first-form]
            bindings [if [gt s-form 1] [at form 1] [do [report form let expects bindings] []]]
            n-of-bindings [size bindings]]
-          [when [gt s-form 1]
+          [when [lt 1 s-form]
             [let
               [sec [second form]
                bindings [if [is-list sec] sec [do [report sec let expects a list of bindings] []]]
                n-of-bindings [size bindings]]
               [report-when-not [is-even n-of-bindings] [last bindings] let expects an even number of bindings]
-              [loop [i [quote 0]]
+              [loop [i 0]
                 [when [lt i [dec n-of-bindings]]
                   [let
                     [var [at bindings i]
                      value [at bindings [inc i]]
-                     var-type [check-form global-ctx let-ctx value]
+                     var-type [check-form global-ctx let-loop-ctx 0 value]
                      - [report-when-not [eq [size var-type] 1] value let expects a single type]]
                     [push var-values var]
                     [push var-values [first var-type]]
                     [cont [add i 2]]]]]]]
           [loop [i 1]
             [when [lt i [dec s-form]]
-              [check-form global-ctx let-ctx [at form i]]
+              [check-form global-ctx let-loop-ctx 0 [at form i]]
               [cont [inc i]]]]
-          [check-form global-ctx let-ctx [last form]]]
+          [check-form global-ctx let-loop-ctx [if [= first-form [quote loop]] 1 tail-pos] [last form]]]
 
-        [eq-word first-form [quote cont]]
+        [= first-form [quote cont]]
         [do
           [loop [cur-ctx local-ctx]
             [if [eq [size cur-ctx] 1]
               [report form cont not inside loop]
               [if [= [quote loop] [third cur-ctx]]
                 [let [loop-vars [first cur-ctx]]
-                  [report-when-not [eq n-of-args [bit-shift-right-signed [size loop-vars] [quote 1]]] form
+                  [report-when-not
+                    [eq [mul n-of-args 2] [size loop-vars]]
+                    form
                     cont needs same number of arguments as loop]
-                  ]
+                  [report-when-not tail-pos form cont not at tail position of loop]]
                 [cont [second cur-ctx]]]]]
           any-type]
 
@@ -343,7 +346,6 @@
           func-ctx [list param-ctx]
           parameter-type-list [freeze parameter-type-list]
           locals [mutable-list]
-          code [mutable-list]
           func-sigs [lookup-assoc-list ctx [quote function-signatures]]
           -
           [loop [i 3]
@@ -385,7 +387,7 @@
     ctx]]
 
 [func test-diagnostics [form]
-  [check-form [] [list []] form]
+  [check-form [] [list []] 0 form]
   ]
 
 [comment
