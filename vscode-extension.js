@@ -175,8 +175,8 @@ const tokenBuilderForParseTree = () => {
       case 'macro': {
         pushToken(head, keywordTokenType)
         const [fmName, parameters, ...body] = tail
-        pushToken(fmName, headText === 'func' ? functionTokenType : macroTokenType, declarationModifier)
-        if (parameters.type === 'list') {
+        if (fmName) pushToken(fmName, headText === 'func' ? functionTokenType : macroTokenType, declarationModifier)
+        if (parameters && parameters.type === 'list') {
           let pi = 0
           const dotdotIndex = parameters.namedChildCount - 2
           for (const parameter of parameters.namedChildren) {
