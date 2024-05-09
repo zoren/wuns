@@ -1,0 +1,34 @@
+
+
+[if [] [] []]
+[if [quote 0] [quote 1]]
+[if [quote 0] [quote 1] []]
+[if [quote 2] [tuple [quote 2] [quote 2]] [tuple [quote 3]]]
+[if [quote 2] [tuple [quote 2] [quote 2]]]
+[if [quote 0] [quote 0] [quote 0] [quote 0]]
+
+[if]
+[if [quote 0]]
+[if [quote 0] []]
+[if [quote 0] [quote 1] [quote 2]]
+[if [quote 0] [tuple [quote 1] [quote 2]] [tuple [quote 3] [quote 4]]]
+
+[let ]
+[let let]
+[let [x [quote 4] y] []]
+[let [y x x [quote 4]] []]
+
+[let [quote [quote 3]] [quote 4]]
+[let [x [quote 3]]]
+[let [x [quote 4] y x] []]
+
+[cont]
+[let [] [cont]]
+
+[loop [] [cont [quote 3]]]
+[loop [x [quote 0]] [cont]]
+[loop [x [quote 0]] [cont [quote 3] [quote 3]]]
+
+[loop [x [quote 0]] [cont [quote 3]]]
+[loop [] [quote 3]]
+[loop [] [cont]]

@@ -169,6 +169,7 @@
     [quote [results]] [list results]]]
 
 [constant i32 [quote i32]]
+[constant any-type [quote any-type]]
 
 [macro make-binary-i32 [name opcode]
   [list [quote quote] [make-operation-obj name opcode [list i32 i32] [list i32]]]]
@@ -226,8 +227,7 @@
                 [at param-ctx [inc index]]]]
           [list t]]
         [let
-          [- [assert [eq [size cur-ctx] 2] we need a local ctx and a outer ctx if not at root]
-           vars [first cur-ctx]
+          [vars [first cur-ctx]
            outer [second cur-ctx]
            index [index-assoc-list vars form]]
           [if [is-negative index]
@@ -277,10 +277,12 @@
               tt]
             []]]
 
-        [eq-word first-form [quote let]]
+        [or
+          [eq-word first-form [quote let]]
+          [eq-word first-form [quote loop]]]
         [let
           [var-values [mutable-list]
-           let-ctx [list var-values local-ctx]
+           let-ctx [list var-values local-ctx first-form]
            bindings [if [gt s-form 1] [at form 1] [do [report form let expects bindings] []]]
            n-of-bindings [size bindings]]
           [when [gt s-form 1]
@@ -304,6 +306,19 @@
               [check-form global-ctx let-ctx [at form i]]
               [cont [inc i]]]]
           [check-form global-ctx let-ctx [last form]]]
+
+        [eq-word first-form [quote cont]]
+        [do
+          [loop [cur-ctx local-ctx]
+            [if [eq [size cur-ctx] 1]
+              [report form cont not inside loop]
+              [if [= [quote loop] [third cur-ctx]]
+                [let [loop-vars [first cur-ctx]]
+                  [report-when-not [eq n-of-args [bit-shift-right-signed [size loop-vars] [quote 1]]] form
+                    cont needs same number of arguments as loop]
+                  ]
+                [cont [second cur-ctx]]]]]
+          any-type]
 
         []]]]]
 [comment
