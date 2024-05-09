@@ -303,9 +303,50 @@
 
         [or [= first-form [quote func]]
             [= first-form [quote macro]]]
-        [let []
-          [report form func not supported yet]
-        ]
+        [let [name
+              [if [gt s-form 1]
+                [let [s [second form]]
+                  [report-when-not [is-word s] s expected name here]]
+                [do
+                  [report form function expects a name]
+                  [quote dummy-name]]]
+              params
+              [if [gt s-form 2]
+                [let [l [third form]]
+                  [report-when-not [is-list l] l expected list here]]
+                [do
+                  [report form function expects a list of parameters]
+                  []]]
+              param-ctx [mutable-list]
+              parameter-type-list [mutable-list]
+              -
+              [loop [i 0]
+                [when [lt i [size params]]
+                  [let [p [at params i]
+                        pt i32]
+                    [report-when-not [is-negative [index-assoc-list param-ctx p]] p duplicate parameter]
+                    [push param-ctx p]
+                    [push param-ctx pt]
+                    [push parameter-type-list pt]
+                    [cont [inc i]]]]]
+              func-ctx [list param-ctx [] first-form]
+              parameter-type-list [freeze parameter-type-list]
+              locals [mutable-list]
+              func-sigs [lookup-assoc-list global-ctx [quote function-signatures]]
+              -
+              [loop [i 3]
+                [when [lt i [dec [size form]]]
+                  [comment remember to check type is empty maybe even drop unused and warn instead]
+                  [check-form global-ctx func-ctx 0 [at form i]]
+                  [cont [inc i]]]]
+              result-type
+              [if [gt [size form] 3]
+                [check-form global-ctx func-ctx 0 [last form]]
+                i32]
+              ]
+            [push func-sigs name]
+            [push func-sigs [list [quote parameters] parameter-type-list [quote parameters] result-type]]
+            result-type]
 
         [let [func-sigs [lookup-assoc-list global-ctx [quote function-signatures]]
               index [index-assoc-list func-sigs first-form]]

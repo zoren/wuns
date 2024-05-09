@@ -45,3 +45,13 @@
 [add [quote 3] [quote 4] [quote 5]]
 [add [] []]
 [add [quote 3] [quote 4]]
+
+[func]
+[func f]
+[func [] d]
+[func d p]
+
+[func d []]
+[func f [] []]
+[func f [x] [add x [quote 1]]]
+[func f [x] [add x x]]
