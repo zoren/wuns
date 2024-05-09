@@ -80,6 +80,9 @@
   [list [quote when-not] cond
     [list [quote report-error] [list [quote quote] lmsg] form]]]
 
+[macro report [form .. lmsg]
+  [list [quote report-error] [list [quote quote] lmsg] form]]
+
 [macro ifs [.. clauses]
   [let [s [size clauses]]
     [assert [not [is-zero s]] ifs requires an odd number of arguments]
@@ -207,7 +210,7 @@
               t
               [if [is-negative index]
                 [do
-                  [report-error [quote symbol not found] form]
+                  [report form symbol not found]
                   i32]
                 [at param-ctx [inc index]]]]
           [list t]]
@@ -265,27 +268,31 @@
 
         [eq-word first-form [quote let]]
         [let
-          [bindings [first args]
-           var-values [mutable-list]
+          [var-values [mutable-list]
            let-ctx [list var-values local-ctx]
+           bindings [if [gt s-form 1] [at form 1] [do [report form let expects bindings] []]]
            n-of-bindings [size bindings]]
-          [assert [is-list bindings] let expects a list of bindings]
-          [assert [is-even n-of-bindings] let expects an even number of bindings]
-          [loop [i [quote 0]]
-            [when [lt i n-of-bindings]
-              [let
-                [var [at bindings i]
-                 value [at bindings [inc i]]
-                 var-type [compile-form-mutable global-ctx local-ctx code value]
-                 - [assert [eq [size var-type] 1] let expects a single type]]
-                [push var-values var]
-                [push var-values [first var-type]]
-                [cont [add i 2]]]]]
+          [when [gt s-form 1]
+            [let
+              [sec [second form]
+               bindings [if [is-list sec] sec [do [report sec let expects a list of bindings] []]]
+               n-of-bindings [size bindings]]
+              [report-when-not [is-even n-of-bindings] form let expects an even number of bindings]
+              [loop [i [quote 0]]
+                [when [lt i n-of-bindings]
+                  [let
+                    [var [at bindings i]
+                    value [at bindings [inc i]]
+                    var-type [check-form global-ctx local-ctx value]
+                    - [report-when-not [eq [size var-type] 1] value let expects a single type]]
+                    [push var-values var]
+                    [push var-values [first var-type]]
+                    [cont [add i 2]]]]]]]
           [loop [i 1]
-            [when [lt i [dec [size form]]]
-              [compile-form-mutable global-ctx let-ctx code [at form i]]
+            [when [lt i [dec s-form]]
+              [check-form global-ctx let-ctx [at form i]]
               [cont [inc i]]]]
-          [compile-form-mutable global-ctx let-ctx code [last form]]]
+          [check-form global-ctx let-ctx [last form]]]
 
         [let [instruction [get-instruction first-form]]
           [if instruction
