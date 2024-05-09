@@ -303,9 +303,9 @@ const makeCheckCurrentFileCommand = async (instructions, context) => {
     }
     try {
       // const outfunEnv = evalTree(checkTree, { importObject, instructions })
-      const outfun = funcEnv.get('test-diagnostics')
-      for (const node of tree.rootNode.children) apply(outfun, [treeToOurForm(node)])
-
+      const outfun = funcEnv.get('check-forms')
+      // for (const node of tree.rootNode.children) apply(outfun, [treeToOurForm(node)])
+      apply(outfun, [tree.rootNode.children.map(treeToOurForm)])
       outputChannel.appendLine('done checking: ' + tree.rootNode.children.length)
     } catch (e) {
       outputChannel.appendLine(e.message)

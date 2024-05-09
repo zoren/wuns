@@ -163,34 +163,8 @@
     [assert [not [is-negative index]] lookup-assoc-list key not found]
     [at ctx [inc index]]]]
 
-[func make-operation-obj [name parameters results]
-  [concat
-    [quote [name]] [list name]
-    [quote [parameters]] [list parameters]
-    [quote [results]] [list results]]]
-
 [constant i32 [quote i32]]
 [constant any-type [quote any-type]]
-
-[macro make-binary-i32 [name]
-  [list [quote quote] [make-operation-obj name [list i32 i32] [list i32]]]]
-
-[constant instructions
-  [list
-    [make-binary-i32 i32.eq]
-    [make-binary-i32 i32.add]
-    [make-binary-i32 i32.sub]
-    [make-binary-i32 i32.mul]
-    ]]
-
-[func get-instruction [name]
-  [loop [i 0]
-    [if [lt i [size instructions]]
-      [let [o [at instructions i]]
-        [if [eq-word [lookup-assoc-list o [quote name]] name]
-          o
-          [cont [inc i]]]]
-      0]]]
 
 [func dec-word-to-i32 [dw]
   [let [s [sub 0 [size dw]]]
@@ -325,12 +299,23 @@
                 [cont [second cur-ctx]]]]]
           any-type]
 
-        [let [instruction [get-instruction first-form]]
-          [if instruction
-            [let [parameters [lookup-assoc-list instruction [quote parameters]]
+        [or [= first-form [quote func]]
+            [= first-form [quote macro]]]
+        [let []
+          [report form func not supported yet]
+        ]
+
+        [let [func-sigs [lookup-assoc-list global-ctx [quote function-signatures]]
+              index [index-assoc-list func-sigs first-form]]
+          [if [is-negative index]
+            [do
+              [log func-sigs]
+              [report first-form function not found]]
+            [let [sig [at func-sigs [inc index]]
+                  parameters [lookup-assoc-list sig [quote parameters]]
                   n-of-parameters [size parameters]]
               [report-when-not [ge n-of-args n-of-parameters] form
-                instruction missing arguments]
+                missing arguments]
               [loop [i 1]
                 [when [lt i n-of-args]
                   [let [arg [at form i]
@@ -343,26 +328,9 @@
                 [when [lt i s-form]
                   [report [at form i] instruction extra arguments ignored]
                   [cont [inc i]]]]
-              [lookup-assoc-list instruction [quote results]]]
-            [comment
-              [let [- [log [list [quote instruction] first-form [quote not found]]]
-              func-sigs [lookup-assoc-list global-ctx [quote function-signatures]]
-                  func-sig [lookup-assoc-list func-sigs first-form]
-                  parameter-types [first func-sig]]
-              [assert [eq [size parameter-types] [size args]] parameter arity mismatch]
-              [loop [i 0]
-                [when [lt i n-of-args]
-                  [comment todo also check types]
-                  [check-form global-ctx local-ctx 0 [at form i]]
-                  [cont [inc i]]]]
-              [second func-sig]
+              [lookup-assoc-list sig [quote results]]]
+            ]]]]]]
 
-            ]]]]]]]]
-[comment
-[test [quote [i32]] [check-form [] [list []] [quote x]]]
-[test [quote [i32]] [check-form [] [list [quote x i32]] [quote x]]]
-[test [quote [i64]] [check-form [] [list [quote x i64] [list [quote x i32]]] [quote x]]]
-]
 [func check-top-level-form [ctx form]
   [if [eq-word [quote func] [first form]]
     [let [name [second form]
@@ -405,12 +373,18 @@
     [do
       [log [list form ]]
       [assert 0 not a top-level form]]]]
-[comment
-[test [] [check-top-level-form [] [quote [func fst [x y] x]]]]
-]
+
 [func make-mty-ctx []
-  [list
-    [quote function-signatures] [mutable-list]]]
+  [let [bin-insts [quote eq ne lt le gt ge add sub mul]
+        ml [mutable-list]]
+    [loop [i 0]
+      [when [lt i [size bin-insts]]
+        [let [name [at bin-insts i]]
+          [push ml name]
+          [push ml [quote parameters [i32 i32] results [i32]]]
+          [cont [inc i]]]]]
+    [list
+      [quote function-signatures] ml]]]
 
 [func compile-top-level-forms [forms]
   [let [ctx [make-mty-ctx]]
@@ -420,9 +394,12 @@
         [cont [inc i]]]]
     ctx]]
 
-[func test-diagnostics [form]
-  [check-form [] [list []] 0 form]
-  ]
+[func check-forms [forms]
+  [let [gctx [make-mty-ctx]]
+    [loop [i 0]
+      [when [lt i [size forms]]
+        [check-form gctx [list []] 0 [at forms i]]
+        [cont [inc i]]]]]]
 
 [comment
 [let
