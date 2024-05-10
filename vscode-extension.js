@@ -120,7 +120,7 @@ const tokenBuilderForParseTree = () => {
   const tokensBuilder = new SemanticTokensBuilder(legend)
   let prevRow = 0
   let prevColumn = 0
-  const pushToken = ({ startPosition, endPosition }, tokenType, tokenModifiers) => {
+  const pushTokenWithModifier = ({ startPosition, endPosition }, tokenType, tokenModifiers) => {
     const { row, column } = startPosition
     if (row < prevRow || (row === prevRow && column < prevColumn))
       console.error('sem toks out of order', { row, column }, { prevRow, prevCol: prevColumn })
@@ -128,6 +128,9 @@ const tokenBuilderForParseTree = () => {
     prevRow = row
     prevColumn = column
     tokensBuilder.push(row, column, endPosition.column - column, tokenType, tokenModifiers)
+  }
+  const pushToken = (node, tokenType) => {
+    pushTokenWithModifier(node, tokenType, 0)
   }
   const funcEnv = new Map()
   /**
@@ -163,7 +166,7 @@ const tokenBuilderForParseTree = () => {
         const [bindingsNode, ...body] = tail
         const bindings = bindingsNode ? bindingsNode.namedChildren : []
         for (let i = 0; i < bindings.length - 1; i += 2) {
-          pushToken(bindings[i], variableTokenType, declarationModifier)
+          pushTokenWithModifier(bindings[i], variableTokenType, declarationModifier)
           go(bindings[i + 1])
         }
         for (const child of body) go(child)
@@ -179,7 +182,7 @@ const tokenBuilderForParseTree = () => {
         const [fmName, parameters, ...body] = tail
         if (fmName) {
           funcEnv.set(fmName.text, { headText, isMacro: headText === 'macro' })
-          pushToken(fmName, headText === 'func' ? functionTokenType : macroTokenType, declarationModifier)
+          pushTokenWithModifier(fmName, headText === 'func' ? functionTokenType : macroTokenType, declarationModifier)
         }
         if (parameters && parameters.type === 'list') {
           let pi = 0
@@ -187,7 +190,7 @@ const tokenBuilderForParseTree = () => {
           for (const parameter of parameters.namedChildren) {
             if (pi++ === dotdotIndex && parameter.text === '..') {
               pushToken(parameter, keywordTokenType)
-            } else pushToken(parameter, parameterTokenType, declarationModifier)
+            } else pushTokenWithModifier(parameter, parameterTokenType, declarationModifier)
           }
         }
         for (const child of body) go(child)
