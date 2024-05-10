@@ -6,7 +6,8 @@ Basic module
 
 ---|||
 (source_file
-  (list_special_form
+  (list
+    (word)
     (word)
     (list (word))
-    (list (word) (word) (list_special_form (word)))))
+    (list (word) (word) (list (word) (word)))))
