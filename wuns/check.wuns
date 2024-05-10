@@ -175,8 +175,6 @@
 
 [func lookup-assoc-list [ctx sym]
   [let [index [index-assoc-list ctx sym]]
-    [when [is-negative index]
-      [log [list [quote symbol] sym [quote not found]]]]
     [assert [not [is-negative index]] lookup-assoc-list key not found]
     [at ctx [inc index]]]]
 
@@ -194,7 +192,6 @@
       [if [le s i]
         [let [c [at dw i]]
           [when-not [and [le [quote 48] c] [le c [quote 57]]]
-            [log c]
             [report dw not a decimal character]]
           [assert [lt res [quote 214748364]] out of bounds]
           [cont [dec i] [add res [mul [sub c [quote 48]] multi]] [mul multi [quote 10]]]]
@@ -334,11 +331,9 @@
         [let [params
               [if [gt s-form 2]
                 [let [l [third form]]
-                  [log [list [quote params] l form [at form 2]]]
                   [report-when-not [is-list l] l expected list here]
                   l]
                 [do
-                  [log [list [quote too few]]]
                   [report form function expects a list of parameters]
                   []]]
               param-ctx [mutable-list]
@@ -381,12 +376,9 @@
         [let [func-sigs [lookup-assoc-list global-ctx [quote function-signatures]]
               index [index-assoc-list func-sigs first-form]]
           [if [is-negative index]
-            [do
-              [log [list first-form func-sigs]]
-              [report first-form function not found]]
+            [report first-form function not found]
             [let [sig [at func-sigs [inc index]]
                   parameters [lookup-assoc-list sig [quote parameters]]
-                  - [log [list [quote lookup-parameters] first-form sig index [at func-sigs index]]]
                   n-of-parameters [size parameters]]
               [report-when-not [ge n-of-args n-of-parameters] form
                 missing arguments]
@@ -415,7 +407,6 @@
           [push ml name]
           [push ml [quote parameters [i32 i32] results [i32]]]
           [cont [inc i]]]]]
-    [log [list [quote bin-insts] [size bin-insts] ml]]
 
     [list
       [quote function-signatures] ml]]]
@@ -434,82 +425,3 @@
       [when [lt i [size forms]]
         [check-form gctx [list []] 0 [at forms i]]
         [cont [inc i]]]]]]
-
-[comment
-[let
-  [ctx [compile-top-level-forms [quote
-  [
-    [func fst [x y] x]
-    [func snd [x y] y]
-    [func add [x y] [i32.add x y]]
-    [func sub [x y] [i32.sub x y]]
-    [func inc [x] [i32.add x [quote 1]]]
-    [func five [] [quote 5]]
-    [func ifte [c] [if c [quote 1337] [quote 21]]]
-    [func ignore [x] []]
-    [func identity [x] x]
-    [func id-pair [x] [tuple x x]]
-    [func pair [x y] [tuple x y]]
-  ]
-  ]]
-  ]
-  [wasm-import-func wi fst my-fst]
-  [wasm-import-func wi snd my-snd]
-  [wasm-import-func wi add my-add]
-  [wasm-import-func wi sub my-sub]
-  [wasm-import-func wi inc my-inc]
-  [wasm-import-func wi ifte my-ifte]
-  [wasm-import-func wi ignore my-ignore]
-  [wasm-import-func wi identity my-identity]
-  [wasm-import-func wi id-pair my-id-pair]
-  [wasm-import-func wi pair my-pair]
-  ]
-
-[test 3 [my-fst 3 2]]
-[test 2 [my-snd 1 2]]
-[test 3 [my-add 1 2]]
-[test -1 [my-sub 1 2]]
-[test 2 [my-inc 1]]
-[test [quote 1337] [my-ifte 1]]
-[test [quote 21] [my-ifte 0]]
-[test [] [my-ignore 0]]
-[test 0 [my-identity 0]]
-[test 2 [my-identity 2]]
-[test [list 2 2] [my-id-pair 2]]
-[test [list 2 3] [my-pair 2 3]]
-[test [list 2 3] [my-pair 2 3]]
-
-[func compile-instantiate [funcs]
-  [let
-    [ctx [compile-top-level-forms funcs]
-     mod [ctx-to-module ctx]
-     wm [wasm-module mod]]
-    [wasm-instance wm]]]
-
-[wasm-import-func [compile-instantiate [quote [[func f [x] [] [quote 5]]]]] f my-f]
-
-[wasm-import-func [compile-instantiate
-  [quote
-    [func callee [] [quote 5]]
-    [func caller [] [callee]]]] caller my-caller]
-
-[test [quote 5] [my-caller]]
-
-[let [wi
-  [compile-instantiate
-    [quote
-      [func let-test [] [let [] [quote 5]]]
-      [func let1-test [] [let [] []]]
-      [func let2-test [] [let [] [tuple [quote 5] [quote 6]]]]
-
-
-      ]]]
-  [wasm-import-func wi let-test my-let-test]
-  [wasm-import-func wi let1-test my-let1-test]
-  [wasm-import-func wi let2-test my-let2-test]
-  ]
-
-[test [quote 5] [my-let-test]]
-[test [] [my-let1-test]]
-[test [list [quote 5] [quote 6]] [my-let2-test]]
-]
