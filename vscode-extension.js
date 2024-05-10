@@ -128,6 +128,7 @@ const tokenBuilderForParseTree = () => {
       tokenModifiers,
     )
   }
+  const funcEnv = new Map()
   /**
    * @param {TSParser.SyntaxNode} node
    */
@@ -175,7 +176,10 @@ const tokenBuilderForParseTree = () => {
       case 'macro': {
         pushToken(head, keywordTokenType)
         const [fmName, parameters, ...body] = tail
-        if (fmName) pushToken(fmName, headText === 'func' ? functionTokenType : macroTokenType, declarationModifier)
+        if (fmName) {
+          funcEnv.set(fmName.text, { headText, isMacro: headText === 'macro' })
+          pushToken(fmName, headText === 'func' ? functionTokenType : macroTokenType, declarationModifier)
+        }
         if (parameters && parameters.type === 'list') {
           let pi = 0
           const dotdotIndex = parameters.namedChildCount - 2
@@ -193,8 +197,11 @@ const tokenBuilderForParseTree = () => {
         for (const child of tail) go(child)
         break
       default:
-        pushToken(head, functionTokenType)
-        for (const arg of tail) go(arg)
+        {
+          const func = funcEnv.get(headText)
+          pushToken(head, func && func.isMacro ? macroTokenType : functionTokenType)
+          for (const arg of tail) go(arg)
+        }
         break
     }
   }
