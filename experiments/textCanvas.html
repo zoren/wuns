@@ -13,7 +13,6 @@
       canvas.height = Math.ceil(120 * 7.201171875)
       // canvas.height = document.body.clientHeight
       const dpiScale = window.devicePixelRatio
-      console.log({ dpiScale })
 
       const ctx = canvas.getContext('2d', { colorSpace: 'display-p3' })
       const styleDim = {
@@ -40,43 +39,36 @@
       let position = 0
       ctx.fillStyle = `color(display-p3 ${1} ${1} ${1})`
 
-      ctx.fillText("device pixel ratio is: " + devicePixelRatio, 0, position + 15)
+      ctx.fillText('device pixel ratio is: ' + devicePixelRatio, 0, position + 15)
       position += 20
+      const colors = [
+        [1, 0, 0],
+        [0, 1, 0],
+        [0, 0, 1],
+        [1, 1, 0],
+        [1, 0, 1],
+        [0, 1, 1],
+        [1, 1, 1],
+        [0, 0, 0],
+      ]
+      for (const [red, green, blue] of colors) {
+        ctx.fillStyle = `color(display-p3 ${red} ${green} ${blue})`
+        ctx.fillText(line, 0, position + 15)
+        position += 20
+      }
 
-      for (let green of [1, 0]) {
-        for (let blue of [1, 0]) {
-          for (let red of [1, 0]) {
-            ctx.fillStyle = `color(display-p3 ${red} ${green} ${blue})`
-            ctx.fillText(line, 0, position + 15)
-            position += 20
-          }
-        }
-      }
-      // regular rgb colors
-      // for (let green of [255, 0]) {
-      //   for (let blue of [255, 0]) {
-      //     for (let red of [255, 0]) {
-      //       ctx.fillStyle = `rgb(${red}, ${green}, ${blue})`
-      //       ctx.fillText(line, 0, position + 15)
-      //       position += 20
-      //     }
-      //   }
-      // }
       // draw boxes with color
-      for (let green of [255, 0]) {
-        for (let blue of [255, 0]) {
-          for (let red of [255, 0]) {
-            ctx.fillStyle = `rgb(${red}, ${green}, ${blue})`
-            ctx.fillRect(0, position, 40, 40)
-            ctx.fillStyle = `color(display-p3 ${red/255} ${green/255} ${blue/255})`
-            ctx.fillRect(40, position, 40, 40)
-            position += 40
-          }
-        }
+      const boxSize = 20 * dpiScale
+
+      for (const [red, green, blue] of colors) {
+        ctx.fillStyle = `rgb(${red * 255}, ${green * 255}, ${blue * 255})`
+        ctx.fillRect(0, position, 40, 40)
+        ctx.fillStyle = `color(display-p3 ${red} ${green} ${blue})`
+        ctx.fillRect(40, position, 40, 40)
+        position += 40
       }
-      // console.log({colorSpace: ctx.colorSpace})
-      const p3ImageData = ctx.getImageData(0, 0, 1, 1);
-console.log(p3ImageData.colorSpace); // "display-p3"
+      const p3ImageData = ctx.getImageData(0, 0, 1, 1)
+      console.log(p3ImageData.colorSpace) // "display-p3"
     </script>
   </body>
 </html>
