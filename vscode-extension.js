@@ -88,11 +88,11 @@ const onDidChangeTextDocument = (e) => {
   cacheObj.tree = newTree
   cacheObj.version = version
 }
+// https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide
+const tokenTypes = ['variable', 'keyword', 'function', 'macro', 'parameter', 'string', 'number', 'comment', 'type']
 
-const tokenTypes = ['variable', 'keyword', 'function', 'macro', 'parameter', 'string']
-
-const tokenModifiers = ['local', 'declaration', 'definition', 'defaultLibrary', 'static']
-
+const tokenModifiers = ['declaration', 'definition', 'readonly', 'defaultLibrary']
+// https://github.com/microsoft/vscode/blob/70e10d604e1939e9d98f3970f6f19604bfe2852c/src/vs/workbench/api/common/extHostTypes.ts#L3379
 const legend = new SemanticTokensLegend(tokenTypes, tokenModifiers)
 
 const tokenTypesMap = new Map(tokenTypes.map((type, index) => [type, index]))
@@ -115,18 +115,19 @@ const encodeTokenModifiers = (...strTokenModifiers) => {
 }
 
 const declarationModifier = encodeTokenModifiers('declaration')
-const localDeclarationTokenModifier = encodeTokenModifiers('local', 'declaration')
 
 const tokenBuilderForParseTree = () => {
   const tokensBuilder = new SemanticTokensBuilder(legend)
+  let prevRow = 0
+  let prevColumn = 0
   const pushToken = ({ startPosition, endPosition }, tokenType, tokenModifiers) => {
-    tokensBuilder.push(
-      startPosition.row,
-      startPosition.column,
-      endPosition.column - startPosition.column,
-      tokenType,
-      tokenModifiers,
-    )
+    const { row, column } = startPosition
+    if (row < prevRow || (row === prevRow && column < prevColumn))
+      console.error('sem toks out of order', { row, column }, { prevRow, prevCol: prevColumn })
+
+    prevRow = row
+    prevColumn = column
+    tokensBuilder.push(row, column, endPosition.column - column, tokenType, tokenModifiers)
   }
   const funcEnv = new Map()
   /**
@@ -162,7 +163,7 @@ const tokenBuilderForParseTree = () => {
         const [bindingsNode, ...body] = tail
         const bindings = bindingsNode ? bindingsNode.namedChildren : []
         for (let i = 0; i < bindings.length - 1; i += 2) {
-          pushToken(bindings[i], variableTokenType, localDeclarationTokenModifier)
+          pushToken(bindings[i], variableTokenType, declarationModifier)
           go(bindings[i + 1])
         }
         for (const child of body) go(child)
@@ -194,7 +195,10 @@ const tokenBuilderForParseTree = () => {
       }
       case 'constant':
         pushToken(head, keywordTokenType)
-        for (const child of tail) go(child)
+        if (tail.length === 0) break
+        const cname = tail[0]
+        if (cname.type === 'word') pushToken(cname, variableTokenType, declarationModifier)
+        for (let i = 2; i < node.namedChildCount; i++) go(node.namedChildren[i])
         break
       default:
         {
