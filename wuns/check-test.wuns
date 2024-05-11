@@ -50,6 +50,8 @@
 [func f]
 [func [] d]
 [func d p]
+[func f [p p] []]
+[func f [p] q]
 
 [func d []]
 [func f [p] [add [quote 3] [quote 4]]]
