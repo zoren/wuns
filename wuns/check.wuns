@@ -13,7 +13,7 @@
           [cont [add i [quote 1]]]]
         f]]]]
 
-[constant-ids -1 -2 0 1 2 3 4]
+[constant-ids -1 -2 0 1 2 3 4 - ..]
 
 [func inc [x] [add x 1]]
 
@@ -379,15 +379,15 @@
               param-ctx [mutable-list]
               mut-parameter-type-list [mutable-list]
               n-of-param-words [size params]
-              has-rest-param [and [lt 1 n-of-param-words] [= [at params -2] [quote ..]]]
+              has-rest-param [and [lt 1 n-of-param-words] [= [at params -2] ..]]
               n-of-regular-params [if has-rest-param [sub n-of-param-words 2] n-of-param-words]
               -
               [loop [i 0]
                 [when [lt i n-of-regular-params]
                   [let [p [at params i]
-                        pt [if [= p [quote -]] type-any type-i32]]
-                    [report-when [= p [quote ..]] p .. must be at second last position]
-                    [when-not [= p [quote -]]
+                        pt [if [= p -] type-any type-i32]]
+                    [report-when [= p ..] p .. must be at second last position]
+                    [when-not [= p -]
                       [report-when [assoc-list-has param-ctx p] p duplicate parameter]
                       [push param-ctx p]
                       [push param-ctx [list pt]]]
@@ -397,7 +397,7 @@
               [if has-rest-param
                 [let [p [last params]
                       pt type-any]
-                  [when-not [= p [quote -]]
+                  [when-not [= p -]
                     [report-when [assoc-list-has param-ctx p] p duplicate parameter]
                     [push param-ctx p]
                     [push param-ctx [list pt]]]
@@ -456,7 +456,6 @@
                     [report [at form i] extra arguments ignored]
                     [cont [inc i]]]]
                 [let [rest-param-element-type [at sig [inc index-rest]]]
-                  [log [list [quote fcall var param] first-form]]
                   [loop [i [inc n-of-parameters]]
                     [when [lt i s-form]
                       [let [arg [at form i]
