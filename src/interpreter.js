@@ -60,7 +60,8 @@ const tryMap = (arr, f) => {
   if (arr) return arr.map(f)
   return unit
 }
-const makeEvaluator = (funcEnv) => {
+const makeEvaluator = (importObject, instructions) => {
+  const funcEnv = mkFuncEnv(importObject, instructions)
   const globalVarValues = new Map()
   const globalEnv = { varValues: globalVarValues, outer: null }
   const apply = ({ name, params, restParam, bodies }, args) => {
@@ -87,7 +88,7 @@ const makeEvaluator = (funcEnv) => {
     if (isWord(form)) {
       const s = wordString(form)
       while (true) {
-        assert(env, 'undefined word: ' + s)
+        assert(env, 'undefined variable: ' + s)
         const { varValues, outer } = env
         if (varValues.has(s)) return varValues.get(s)
         env = outer
@@ -239,9 +240,14 @@ const makeEvaluator = (funcEnv) => {
     if (funcOrMacro && funcOrMacro.isMacro) return gogomacro(apply(funcOrMacro, args.map(gogomacro)))
     return makeList(firstForm, ...args.map(gogomacro))
   }
+  const gogoeval = (form) => wunsEval(gogomacro(form), globalEnv)
+
+  funcEnv.set('eval', gogoeval)
+
   return {
-    gogoeval: (form) => wunsEval(gogomacro(form), globalEnv),
+    gogoeval,
     apply,
+    getExport: (name) => funcEnv.get(name),
   }
 }
 
@@ -361,7 +367,7 @@ const mkFuncEnv = ({ log, ...imports }, instructions) => {
   return funcEnv
 }
 
-const treeToOurForm = (node) => {
+const nodeToOurForm = (node) => {
   const { type, text, namedChildren, startPosition, endPosition } = node
   const range = makeList(
     ...[startPosition.row, startPosition.column, endPosition.row, endPosition.column].map(numberWord),
@@ -371,17 +377,16 @@ const treeToOurForm = (node) => {
     case 'word':
       return wordWithMeta(text, metaData)
     case 'list':
-      return listWithMeta(namedChildren.map(treeToOurForm), metaData)
+      return listWithMeta(namedChildren.map(nodeToOurForm), metaData)
     default:
       throw new Error('unexpected node type: ' + type)
   }
 }
 
 const evalTree = (tree, { importObject, instructions }) => {
-  const funcEnv = mkFuncEnv(importObject, instructions)
-  const { gogoeval } = makeEvaluator(funcEnv)
+  const { gogoeval } = makeEvaluator(importObject, instructions)
   for (const node of tree.rootNode.children) {
-    const form = treeToOurForm(node)
+    const form = nodeToOurForm(node)
     try {
       gogoeval(form)
     } catch (e) {
@@ -389,7 +394,6 @@ const evalTree = (tree, { importObject, instructions }) => {
       throw e
     }
   }
-  return funcEnv
 }
 
-module.exports = { treeToOurForm, evalTree, makeEvaluator, mkFuncEnv, meta, print }
+module.exports = { treeToOurForm: nodeToOurForm, evalTree, meta, print }
