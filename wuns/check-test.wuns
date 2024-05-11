@@ -52,7 +52,10 @@
 [func d p]
 [func f [p p] []]
 [func f [p] q]
+[func f [-] -]
 
+[func f [.. l] l]
+[func f [.. l] l]
 [func d []]
 [func f [p] [add [quote 3] [quote 4]]]
 [func f1 [p] [add p [quote 4]]]
@@ -61,3 +64,6 @@
 
 [func g1 [] [f [quote 3] [quote 4]]]
 [func g1 [] [f]]
+
+[macro comment [.. -] []]
+[comment]
