@@ -53,9 +53,12 @@
 [func f [p p] []]
 [func f [p] q]
 [func f [-] -]
+[func f [..] ..]
+[func f [.. -] -]
 
-[func f [.. l] l]
-[func f [.. l] l]
+[func list [.. l] l]
+[func dont-care [- -] []]
+[func dont-care-at-all [.. -] []]
 [func d []]
 [func f [p] [add [quote 3] [quote 4]]]
 [func f1 [p] [add p [quote 4]]]
@@ -64,6 +67,8 @@
 
 [func g1 [] [f [quote 3] [quote 4]]]
 [func g1 [] [f]]
+[func test [] [dont-care [] []]]
+[dont-care-at-all]
 
 [macro comment [.. -] []]
 [comment]

@@ -13,7 +13,7 @@
           [cont [add i [quote 1]]]]
         f]]]]
 
-[constant-ids 0 1 2 3 4 -1]
+[constant-ids -1 -2 0 1 2 3 4]
 
 [func inc [x] [add x 1]]
 
@@ -76,6 +76,10 @@
   [list [quote when-not] cond
     [list [quote log] [list [quote quote] [concat [list [quote assert-fail]] lmsg]]]
     [quote [abort]]]]
+
+[macro report-when [cond form .. lmsg]
+  [list [quote when] cond
+    [list [quote report-error] [list [quote quote] lmsg] form]]]
 
 [macro report-when-not [cond form .. lmsg]
   [list [quote when-not] cond
@@ -157,6 +161,9 @@
           i
           [cont [add i 2]]]]]]]
 
+[func assoc-list-has [ctx sym]
+  [not [is-negative [index-assoc-list ctx sym]]]]
+
 [func assoc-list-keys [ctx]
   [let [s [size ctx] ml [mutable-list]]
     [loop [j 0]
@@ -211,6 +218,13 @@
 [constant any-type [quote any-type]]
 [constant empty-type [quote []]]
 [constant error-type [quote error-type]]
+
+[func check-param-arg-conform [param-type arg-t]
+  [or
+    [= param-type any-type]
+    [= param-type arg-t]
+    [and [= [size arg-t] 1] [= [first arg-t] param-type]]
+    ]]
 
 [func check-form [global-ctx local-ctx tail-pos form]
   [ifs
@@ -331,25 +345,39 @@
         [let [params
               [if [gt s-form 2]
                 [let [l [third form]]
-                  [report-when-not [is-list l] l expected list here]
-                  l]
+                  [if [is-list l]
+                    l
+                    [report l expected a list of parameters]]]
                 [do
                   [report form function expects a list of parameters]
                   []]]
               param-ctx [mutable-list]
               mut-parameter-type-list [mutable-list]
               n-of-param-words [size params]
+              has-rest-param [and [lt 1 n-of-param-words] [= [at params -2] [quote ..]]]
+              n-of-regular-params [if has-rest-param [sub n-of-param-words 2] n-of-param-words]
               -
               [loop [i 0]
-                [when [lt i n-of-param-words]
+                [when [lt i n-of-regular-params]
                   [let [p [at params i]
-                        pt i32]
-                    [report-when-not [is-negative [index-assoc-list param-ctx p]] p duplicate parameter]
+                        pt [if [= p [quote -]] [quote any] i32]]
+                    [report-when [= p [quote ..]] p .. must be at second last position]
                     [when-not [= p [quote -]]
+                      [report-when [assoc-list-has param-ctx p] p duplicate parameter]
                       [push param-ctx p]
-                      [push param-ctx [list pt]]
-                      [push mut-parameter-type-list pt]]
+                      [push param-ctx [list pt]]]
+                    [push mut-parameter-type-list pt]
                     [cont [inc i]]]]]
+              rest-param-element-type
+              [if has-rest-param
+                [let [p [at params -1]
+                      pt any-type]
+                  [when-not [= p [quote -]]
+                    [report-when [assoc-list-has param-ctx p] p duplicate parameter]
+                    [push param-ctx p]
+                    [push param-ctx [list pt]]]
+                  pt]
+                0]
               func-ctx [list param-ctx [list []] first-form]
               parameter-type-list [freeze mut-parameter-type-list]
               locals [mutable-list]
@@ -367,7 +395,11 @@
             [if [gt s-form 1]
               [let [name [second form]]
                 [if [is-word name]
-                  [do
+                  [if rest-param-element-type
+                    [assoc-list-set func-sigs name
+                      [list [quote parameters] parameter-type-list
+                            [quote rest-param-element-type] rest-param-element-type
+                            [quote results] result-type]]
                     [assoc-list-set func-sigs name
                       [list [quote parameters] parameter-type-list
                             [quote results] result-type]]]
@@ -390,7 +422,7 @@
                         arg-t [check-form global-ctx local-ctx 0 arg]
                         p-index [dec i]]
                     [when [lt p-index n-of-parameters]
-                      [report-when-not [and [= [size arg-t] 1] [= [first arg-t] [at parameters p-index]]] arg parameter type mismatch]]
+                      [report-when-not [check-param-arg-conform [at parameters p-index] arg-t] arg parameter type mismatch]]
                     [cont [inc i]]]]]
               [loop [i [inc n-of-parameters]]
                 [when [lt i s-form]
