@@ -9,8 +9,8 @@
     <script>
       // Get the canvas element
       const canvas = document.getElementById('myCanvas')
-      canvas.width = Math.ceil(120 * 7.201171875)
-      canvas.height = Math.ceil(120 * 7.201171875)
+      canvas.width = Math.ceil(120 * 7.225)
+      canvas.height = Math.ceil(120 * 7.225)
       // canvas.height = document.body.clientHeight
       const dpiScale = window.devicePixelRatio
 
@@ -25,7 +25,6 @@
       canvas.style.height = `${styleDim.height}px`
 
       ctx.scale(dpiScale, dpiScale)
-      ctx.font = '12px Monaco'
 
       // make background gray
       ctx.fillStyle = `color(display-p3 ${0.3} ${0.3} ${0.3})`
@@ -38,6 +37,7 @@
       // console.log({ line, length: line.length, measure: ctx.measureText(line) })
       let position = 0
       ctx.fillStyle = `color(display-p3 ${1} ${1} ${1})`
+      ctx.font = '12px Monaco'
 
       ctx.fillText('device pixel ratio is: ' + devicePixelRatio, 0, position + 15)
       position += 20
@@ -52,9 +52,21 @@
         [0, 0, 0],
       ]
       for (const [red, green, blue] of colors) {
-        ctx.fillStyle = `color(display-p3 ${red} ${green} ${blue})`
-        ctx.fillText(line, 0, position + 15)
-        position += 20
+        ctx.font = '12px Monaco'
+        console.log(ctx.font, ctx.measureText("M"), ctx.measureText("MM"))
+        {
+          ctx.fillStyle = `color(display-p3 ${red} ${green} ${blue})`
+          ctx.fillText(line, 0, position + 15)
+          position += 20
+        }
+        ctx.font = '12px Menlo'
+        console.log(ctx.font, ctx.measureText("M"), ctx.measureText("MM"))
+
+        {
+          ctx.fillStyle = `color(display-p3 ${red} ${green} ${blue})`
+          ctx.fillText(line, 0, position + 15)
+          position += 20
+        }
       }
 
       // draw boxes with color
