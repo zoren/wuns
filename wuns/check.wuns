@@ -213,18 +213,32 @@
             [cont [inc ii]]
             [report dw not a decimal character]]]]]]]
 
-[constant i32 [quote i32]]
-[constant singleton-i32 [quote [i32]]]
-[constant any-type [quote any-type]]
-[constant empty-type [quote []]]
-[constant error-type [quote error-type]]
+[func is-decimal [dw]
+  [let [s [size dw]]
+    [loop [i 0]
+      [if [lt i s]
+        [let [c [at dw i]]
+          [if [and [le [quote 48] c] [le c [quote 57]]]
+            [cont [inc i]]
+            0]]
+        1]]]]
+
+[constant type-form [quote form]]
+[constant type-list [quote list]]
+[constant type-word [quote word]]
+[func type-tuple [.. types] [concat [quote [tuple]] types]]
+[constant type-i32 [quote i32]]
+[constant type-singleton-i32 [type-tuple type-i32]]
+[constant type-any [quote type-any]]
+[constant type-empty [type-tuple]]
+[constant type-error [quote type-error]]
+[func is-tuple-type [t] [and [is-list t] [eq [first t] [quote tuple]]]]
 
 [func check-param-arg-conform [param-type arg-t]
   [or
-    [= param-type any-type]
+    [= param-type type-any]
     [= param-type arg-t]
-    [and [= [size arg-t] 1] [= [first arg-t] param-type]]
-    ]]
+    [and [= [size arg-t] 1] [= [first arg-t] param-type]]]]
 
 [func check-form [global-ctx local-ctx tail-pos form]
   [ifs
@@ -236,7 +250,7 @@
           [if [is-negative index]
             [do
               [report form symbol not found]
-              error-type]
+              type-error]
             [at param-ctx [inc index]]]]
         [let
           [vars [first cur-ctx]
@@ -247,7 +261,7 @@
             [at vars [inc index]]]]]]
 
     [= form []]
-    empty-type
+    type-empty
 
     [let [first-form [first form]
           s-form [size form]
@@ -264,20 +278,29 @@
                 [push-all res-types ts]
                 [report-when-not [= [size ts] 1] arg tuple element not allow to be a tuple]
                 [cont [inc i]]]]]
-          [freeze res-types]]
+          [type-tuple res-types]]
 
         [= first-form [quote quote]]
         [do
-          [assert [eq n-of-args 1] only support decimal integers]
           [comment todo check if integer or word or list]
-          singleton-i32]
+          [if [eq n-of-args 1]
+            [let [f [second form]]
+              [ifs
+                [is-list f]
+                type-list
+
+                [is-decimal f]
+                type-i32
+
+                type-word]]
+            type-form]]
 
         [= first-form [quote if]]
         [do
           [when [gt n-of-args 0]
-            [let [c [at form 1]
+            [let [c [second form]
                   ct [check-form global-ctx local-ctx 0 c]]
-              [report-when-not [= ct singleton-i32] c condition not i32]]]
+              [report-when-not [= ct type-singleton-i32] c condition not i32]]]
           [loop [i 4]
             [when [lt i s-form]
               [check-form global-ctx local-ctx 1 [at form i]]
@@ -285,9 +308,9 @@
               [cont [inc i]]]]
           [if [gt n-of-args 1]
             [let [tt [check-form global-ctx local-ctx tail-pos [third form]]
-                  ft [if [eq n-of-args 2] empty-type [check-form global-ctx local-ctx tail-pos [fourth form]]]]
-              [if [= tt any-type]
-                [if [= ft any-type]
+                  ft [if [eq n-of-args 2] type-empty [check-form global-ctx local-ctx tail-pos [fourth form]]]]
+              [if [= tt type-any]
+                [if [= ft type-any]
                   [report form if branches both any type maybe this is infinite loop]
                   ft]
                 [do
@@ -313,13 +336,13 @@
                   [let
                     [var [at bindings i]
                      value [at bindings [inc i]]
-                     var-type [check-form global-ctx let-loop-ctx 0 value]
-                     - [report-when-not [= [size var-type] 1] value let expects a single type]]
+                     val-type [check-form global-ctx let-loop-ctx 0 value]
+                     - [report-when-not [is-tuple-type val-type] value let expects a single type]]
                     [push var-values var]
-                    [push var-values var-type]
+                    [push var-values val-type]
                     [cont [add i 2]]]]]]]
           [loop [i 2]
-            [when [lt i [sub s-form 1]]
+            [when [lt i [dec s-form]]
               [check-form global-ctx let-loop-ctx 0 [at form i]]
               [cont [inc i]]]]
           [when [lt 2 s-form]
@@ -338,7 +361,7 @@
                     cont needs same number of arguments as loop]
                   [report-when-not tail-pos form cont not at tail position of loop]]
                 [cont [second cur-ctx]]]]]
-          any-type]
+          type-any]
 
         [or [= first-form [quote func]]
             [= first-form [quote macro]]]
@@ -347,7 +370,9 @@
                 [let [l [third form]]
                   [if [is-list l]
                     l
-                    [report l expected a list of parameters]]]
+                    [do
+                      [report l expected a list of parameters]
+                      []]]]
                 [do
                   [report form function expects a list of parameters]
                   []]]
@@ -360,7 +385,7 @@
               [loop [i 0]
                 [when [lt i n-of-regular-params]
                   [let [p [at params i]
-                        pt [if [= p [quote -]] [quote any] i32]]
+                        pt [if [= p [quote -]] [quote any] type-i32]]
                     [report-when [= p [quote ..]] p .. must be at second last position]
                     [when-not [= p [quote -]]
                       [report-when [assoc-list-has param-ctx p] p duplicate parameter]
@@ -370,8 +395,8 @@
                     [cont [inc i]]]]]
               rest-param-element-type
               [if has-rest-param
-                [let [p [at params -1]
-                      pt any-type]
+                [let [p [last params]
+                      pt type-any]
                   [when-not [= p [quote -]]
                     [report-when [assoc-list-has param-ctx p] p duplicate parameter]
                     [push param-ctx p]
@@ -391,7 +416,7 @@
               result-type
               [if [gt [size form] 3]
                 [check-form global-ctx func-ctx 0 [last form]]
-                error-type]]
+                type-error]]
             [if [gt s-form 1]
               [let [name [second form]]
                 [if [is-word name]
