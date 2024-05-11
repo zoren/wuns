@@ -60,7 +60,12 @@
 
 [func list [.. l] l]
 [func dont-care [- -] []]
+[dont-care [] []]
+[func dont-care-2 [- - .. -] []]
 [func dont-care-at-all [.. -] []]
+[dont-care-at-all]
+[dont-care-at-all []]
+[dont-care-at-all [] [] []]
 [func d []]
 [func f [p] [add [quote 3] [quote 4]]]
 [func f1 [p] [add p [quote 4]]]
@@ -69,8 +74,12 @@
 
 [func g1 [] [f [quote 3] [quote 4]]]
 [func g1 [] [f]]
-[func test [] [dont-care [] []]]
-[dont-care-at-all]
+[dont-care]
+[dont-care []]
+[dont-care-2]
+[dont-care-2 []]
+
+[dont-care-2 [] [] []]
 
 [macro comment [.. -] []]
 [comment]
