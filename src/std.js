@@ -70,7 +70,7 @@ const wunsWordToJSId = (w) => {
   if (!isWord(w)) throw new Error('expected word')
   const s = wordString(w)
   if (!/^[a-z0-9.=-]+$/.test(s)) throw new Error('invalid identifier: ' + s)
-  return s.replace(/-/g, '_').replace(/=/g, 'EQ').replace(/\./g, 'DOT');
+  return s.replace(/-/g, '_').replace(/=/g, 'EQ').replace(/\./g, 'DOT')
 }
 const jsDOMToJS = (l) => {
   if (isWord(l)) return wordString(l)
@@ -98,8 +98,11 @@ const jsDOMToJS = (l) => {
       if (args.length !== 2) throw new Error('expected 2 arguments')
       return `((${jsDOMToJS(args[0])}) ${instr} (${jsDOMToJS(args[1])})) | 0`
     }
-    case 'call':
-      return `(${jsDOMToJS(rest[0])})(${rest.slice(1).map(jsDOMToJS).join(', ')})`
+    case 'call': {
+      const [f, ...args] = rest
+      if (!isWord(f)) return `(${jsDOMToJS(f)})(${args.map(jsDOMToJS).join(', ')})`
+      return `${wunsWordToJSId(f)}(${args.map(jsDOMToJS).join(', ')})`
+    }
     case 'array':
       return `[${rest.map(jsDOMToJS).join(', ')}]`
     case 'ternary':
@@ -157,6 +160,12 @@ const push = (ar, e) => {
   ar.push(e)
   return unit
 }
+const mutable_list = () => []
+const freeze = (ar) => {
+  if (!Array.isArray(ar)) throw new Error('freeze expects array')
+  if (Object.isFrozen(ar)) throw new Error('freeze expects mutable array')
+  return makeList(...ar)
+}
 const mkFuncEnv = ({ log, ...imports }, instructions) => {
   const funcEnv = new Map()
   funcEnv.set('form-to-js', (form) => new Function(jsDOMToJS(form))())
@@ -204,7 +213,7 @@ const mkFuncEnv = ({ log, ...imports }, instructions) => {
     return Object.freeze(s)
   })
 
-  funcEnv.set('mutable-list', () => [])
+  funcEnv.set('mutable-list', mutable_list)
   funcEnv.set('push', push)
   funcEnv.set('set-array', (ar, index, e) => {
     if (!Array.isArray(ar)) throw new Error('set-array expects array')
@@ -212,11 +221,7 @@ const mkFuncEnv = ({ log, ...imports }, instructions) => {
     ar[number(index)] = e
     return unit
   })
-  funcEnv.set('freeze', (ar) => {
-    if (!Array.isArray(ar)) throw new Error('freeze expects array')
-    if (Object.isFrozen(ar)) throw new Error('freeze expects mutable array')
-    return makeList(...ar)
-  })
+  funcEnv.set('freeze', freeze)
 
   // genword??? or should we just implement it in wuns?
   let gensym = 0
@@ -275,4 +280,6 @@ module.exports = {
   at,
   slice,
   push,
+  mutable_list,
+  freeze
 }

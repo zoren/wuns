@@ -1,0 +1,47 @@
+[func inc [x] [add x 1]]
+
+[func dec [x] [sub x 1]]
+
+[func list [.. l] l]
+
+[func not [c] [eq c [quote 0]]]
+
+[func is-zero [x] [eq x [quote 0]]]
+
+[func is-odd [x] [bit-and x 1]]
+
+[func is-even [x] [not [is-odd x]]]
+
+[func is-negative [x] [lt x 0]]
+
+[import std.js at size slice push mutable-list freeze]
+
+[func first [l] [at l 0]]
+[func second [l] [at l 1]]
+[func third [l] [at l 2]]
+[func fourth [l] [at l 3]]
+[func last [l] [at l [quote -1]]]
+
+[func rest [l] [slice l 1 [size l]]]
+
+[func push-all [mut-list list]
+  [let [s-l [size list]]
+    [loop [i 0]
+      [if [lt i s-l]
+        [let []
+          [push mut-list [at list i]]
+          [cont i [inc i]]]
+        []]]]]
+
+[func concat-lists [lists]
+  [let [res [mutable-list] s [size lists]]
+    [loop [i 0]
+      [if [lt i s]
+        [let []
+          [push-all res [at lists i]]
+          [cont i [inc i]]]
+        [freeze res]]]]]
+
+[func concat [.. lists] [concat-lists lists]]
+
+[export push-all concat]
