@@ -175,6 +175,7 @@
     [make-binary-i32 le]
     [make-binary-i32 gt]
     [make-binary-i32 ge]
+    [make-binary-i32 bitwise-and]
     ]]
 
 [func get-instruction [name]
@@ -221,6 +222,62 @@
 [func iife [.. forms]
   [list [quote call] [list [quote arrow-func] [] [concat-lists forms]] []]]
 
+[func q-to-ar [form]
+  [if [is-word form]
+    [list [quote string] form]
+    [let [ml [mutable-list] sf [size form]]
+      [push ml [quote array]]
+      [loop [i 0]
+        [when [lt i sf]
+          [push ml [q-to-ar [at form i]]]
+          [cont [inc i]]]]
+      [freeze ml]]]]
+
+[constant js-keywords [quote
+  break
+  case
+  catch
+  class
+  const
+  continue
+  debugger
+  default
+  delete
+  do
+  else
+  export
+  extends
+  false
+  finally
+  for
+  function
+  if
+  import
+  in
+  instanceof
+  new
+  null
+  return
+  super
+  switch
+  this
+  throw
+  true
+  try
+  typeof
+  var
+  void
+  while
+  with]]
+
+[func is-js-keyword [word]
+  [not [is-negative [index-of-word js-keywords word]]]]
+
+[func js-escape [word]
+  [if [is-js-keyword word]
+    [concat-words [list [quote kw-] word]]
+    word]]
+
 [func compile-form [is-tail-pos aform]
   [let [form [macroexpand aform]]
     [ifs
@@ -231,14 +288,16 @@
       [return-if-tail is-tail-pos [quote [array]]]
 
       [let [first-form [first form]
-            n-of-args [dec [size form]]]
+            s-form [size form]
+            n-of-args [dec s-form]]
         [assert [is-word first-form] expected a word first]
         [ifs
           [eq-word first-form [quote quote]]
           [return-if-tail is-tail-pos
-            [if [eq [size form] 2]
-              [second form]
-              [list [quote array] [rest form]]]]
+            [q-to-ar
+              [if [eq [size form] 2]
+                [second form]
+                [rest form]]]]
 
           [eq-word first-form [quote if]]
           [let [c [compile-form 0 [second form]]
@@ -294,10 +353,17 @@
             [push var-updates [list [quote continue]]]
             [freeze var-updates]]
 
-          [or
-            [eq-word first-form [quote import]]
-            [eq-word first-form [quote export]]]
+          [eq-word first-form [quote import]]
           form
+
+          [eq-word first-form [quote export]]
+          [let [ml [mutable-list]]
+            [push ml [quote export]]
+            [loop [i 1]
+              [when [lt i s-form]
+                [push ml [js-escape [at form i]]]
+                [cont [inc i]]]]
+            [freeze ml]]
 
           [or
             [eq-word first-form [quote func]]
@@ -310,7 +376,7 @@
                   [push bodies [compile-form 0 [at form i]]]
                   [cont [inc i]]]]
               [push bodies [compile-form 1 [last form]]]
-              [list [quote const] name
+              [list [quote const] [js-escape name]
                 [if [and [lt 1 [size orig-params]] [= [at orig-params -2] ..]]
                   [list [quote arrow-func-rest] [slice orig-params 0 -2] [at orig-params -1] [freeze bodies]]
                   [list [quote arrow-func] orig-params [freeze bodies]]]]]
@@ -327,13 +393,13 @@
 
 [func compile-form-top [aform]
   [let [cf [compile-form 0 aform]]
-    [log [list [quote compile-form-top] cf]]
+[comment    [log [list [quote compile-form-top] cf]]]
     cf
   ]
 
 
   ]
-
+[comment
 [log [compile-form-top [quote x]]]
 [log [compile-form-top []]]
 [log [compile-form-top [quote [quote 1]]]]
@@ -351,6 +417,4 @@
             [cont i [inc i]]
             i]]]]
 [log [compile-form-top [quote [inc [quote 0]]]]]
-[log [form-to-js [compile-form 1 [quote 1337]]]]
-[log [form-to-js [compile-form 1 [quote [add [quote 2147483646] [quote 1]]]]]]
-[log [form-to-js [compile-form 1 [quote [add [quote 2147483647] [quote 1]]]]]]
+]

@@ -1,4 +1,5 @@
-const { makeList, word, wordString, isWord, isList, numberWord, isUnit, unit, mkFuncEnv, wordWithMeta, listWithMeta, print } = require('./std.js')
+const { makeList, word, wordString, isWord, isList, numberWord, isUnit, unit, print, wordWithMeta, listWithMeta } = require('./core.js')
+const { mkFuncEnv } = require('./std.js')
 
 const symbolContinue = Symbol.for('wuns-continue')
 const tryMap = (arr, f) => {

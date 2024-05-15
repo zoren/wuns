@@ -1,71 +1,30 @@
-const unit = Object.freeze([])
-const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
-const isUnit = (x) => x === unit || (Array.isArray(x) && Object.isFrozen(x) && x.length === 0)
+const {
+  wordString,
+  numberWord,
+  number,
+  meta,
+  wordWithMeta,
+  listWithMeta,
+  print,
+  word,
+  isWord,
+  isList,
+  unit,
+  makeList,
+} = require('./core')
 
-class Word {
-  constructor(value) {
-    this.value = value
-  }
-
-  toString() {
-    return this.value
-  }
+const instructions = {
+  '===': '===',
+  add: '+',
+  sub: '-',
+  mul: '*',
+  lt: '<',
+  le: '<=',
+  gt: '>',
+  ge: '>=',
+  eq: '===',
+  'bitwise-and': '&',
 }
-const isWord = (f) => f instanceof Word
-
-const word = (s) => {
-  if (typeof s !== 'string') throw new Error('word expects string arguments only')
-  return Object.freeze(new Word(s))
-}
-
-const symbolMeta = Symbol.for('wuns-meta')
-
-const wordWithMeta = (s, meta) => {
-  if (typeof s !== 'string') throw new Error('word-with-mwta expects string arguments only')
-  const w = new Word(s)
-  w[symbolMeta] = meta
-  return Object.freeze(w)
-}
-
-const listWithMeta = (l, meta) => {
-  const ll = [...l]
-  ll[symbolMeta] = meta
-  return Object.freeze(ll)
-}
-
-const meta = (form) => {
-  if (form[symbolMeta]) return form[symbolMeta]
-  return unit
-}
-
-const numberWord = (n) => {
-  if (typeof n !== 'number') throw new Error('numberWord expects number')
-  return word(String(n))
-}
-
-const wordString = (w) => {
-  if (!isWord(w)) throw new Error('not a word: ' + w + ' ' + typeof w)
-  return w.value
-}
-
-const print = (x) => {
-  if (isWord(x)) return wordString(x)
-  if (!Array.isArray(x)) throw new Error(`cannot print ${x} expected word or list ${typeof x} ${x.constructor}`)
-  return `[${x.map(print).join(' ')}]`
-}
-
-const number = (f) => {
-  if (!isWord(f)) throw new Error('expected word: ' + f)
-  const s = wordString(f)
-  const n = Number(s)
-  if (isNaN(n)) throw new Error('expected number, found: ' + s)
-  const normalised = n | 0
-  if (n !== normalised) throw new Error('expected 32-bit signed integer, found: ' + s)
-  // if (String(normalised) !== s) throw new Error('expected normalized integer, found: ' + s)
-  return n
-}
-
-const instructions = { '===': '===', add: '+', sub: '-', mul: '*', lt: '<', le: '<=', gt: '>', ge: '>=', eq: '===' }
 const wunsWordToJSId = (w) => {
   if (!isWord(w)) throw new Error('expected word')
   const s = wordString(w)
@@ -103,6 +62,8 @@ const jsDOMToJS = (l) => {
       if (!isWord(f)) return `(${jsDOMToJS(f)})(${args.map(jsDOMToJS).join(', ')})`
       return `${wunsWordToJSId(f)}(${args.map(jsDOMToJS).join(', ')})`
     }
+    case 'string':
+      return `'${wordString(rest[0])}'`
     case 'array':
       return `[${rest.map(jsDOMToJS).join(', ')}]`
     case 'ternary':
@@ -168,7 +129,6 @@ const freeze = (ar) => {
 }
 const mkFuncEnv = ({ log, ...imports }, instructions) => {
   const funcEnv = new Map()
-  funcEnv.set('form-to-js', (form) => new Function(jsDOMToJS(form))())
   for (const [name, func] of Object.entries(imports)) funcEnv.set(name, func)
 
   for (const [name, func] of Object.entries(instructions)) {
@@ -263,23 +223,19 @@ module.exports = {
   mkFuncEnv,
   word,
   numberWord,
-  print,
   isWord,
-  isUnit,
-  unit,
-  isWord,
-  isUnit,
+  is_word: (f) => isWord(f) | 0,
+  is_list: (f) => isList(f) | 0,
   makeList,
   wordString,
   number,
   listWithMeta,
   wordWithMeta,
   meta,
-  jsDOMToJS,
   size,
   at,
   slice,
   push,
   mutable_list,
-  freeze
+  freeze,
 }
