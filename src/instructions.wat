@@ -8,7 +8,7 @@
 
   (func (export "ne") (param i32) (param i32) (result i32)
     (i32.ne (local.get 0) (local.get 1)))
-  
+
   (func (export "lt") (param i32) (param i32) (result i32)
     (i32.lt_s (local.get 0) (local.get 1)))
 
@@ -20,7 +20,7 @@
 
   (func (export "gt-unsigned") (param i32) (param i32) (result i32)
     (i32.gt_u (local.get 0) (local.get 1)))
-  
+
   (func (export "le") (param i32) (param i32) (result i32)
     (i32.le_s (local.get 0) (local.get 1)))
 
@@ -34,9 +34,12 @@
     (i32.ge_u (local.get 0) (local.get 1)))
 
   ;; bit operations
+  ;; maybe call them bitwise-* as in Prescheme?
   (func (export "bit-and") (param i32) (param i32) (result i32)
     (i32.and (local.get 0) (local.get 1)))
 
+  ;; maybe call it bitwise-ior?
+  ;; as in https://thintz.com/resources/prescheme-documentation#Pre_002dScheme-bitwise-manipulation
   (func (export "bit-or") (param i32) (param i32) (result i32)
     (i32.or (local.get 0) (local.get 1)))
 

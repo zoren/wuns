@@ -71,13 +71,14 @@ const onDidChangeTextDocument = (e) => {
   const oldTree = cacheObj.tree
   for (const { range, rangeLength, rangeOffset, text } of contentChanges) {
     // from https://github.com/microsoft/vscode-anycode/blob/main/anycode/server/src/common/trees.ts#L109
+    const newEndIndex = rangeOffset + text.length
     const tsEdit = {
       startIndex: rangeOffset,
       oldEndIndex: rangeOffset + rangeLength,
-      newEndIndex: rangeOffset + text.length,
+      newEndIndex,
       startPosition: positionToPoint(range.start),
       oldEndPosition: positionToPoint(range.end),
-      newEndPosition: positionToPoint(document.positionAt(rangeOffset + text.length)),
+      newEndPosition: positionToPoint(document.positionAt(newEndIndex)),
     }
     oldTree.edit(tsEdit)
   }
@@ -214,6 +215,35 @@ const tokenBuilderForParseTree = () => {
   }
   return { tokensBuilder, build: go }
 }
+/**
+ * @param {TSParser.Tree} tree
+ */
+const semanticTokensCursor = (tree) => {
+  const cursor = tree.walk()
+  if(cursor.gotoFirstChild()) {
+    while (cursor.gotoNextSibling()) {
+      console.log('sem cursor node', cursor.nodeType, cursor.nodeTypeId)
+    }
+    cursor.gotoParent()
+  }
+}
+
+/**
+ * @param {vscode.TextDocument} document
+ */
+const provideDocumentSemanticTokens = (document) => {
+  // const stopWatch = makeStopWatch()
+  const { tree } = cacheFetchOrParse(document)
+  // semanticTokensCursor(tree)
+  const { tokensBuilder, build } = tokenBuilderForParseTree()
+  tree.rootNode.children.forEach(build)
+  const semtoks = tokensBuilder.build()
+  // console.log('semantic tokens time taken', stopWatch(), 'ms', document.version)
+  // const semtokHash = crypto.createHash('sha256').update(semtoks.data).digest('hex')
+  // console.log({ semtoksCount: semtoks.data.length, semtokHash, file: document.fileName, version: document.version })
+
+  return semtoks
+}
 
 const { commands, window, languages, workspace } = vscode
 
@@ -231,7 +261,8 @@ const pointToPosition = ({ row, column }) => new Position(row, column)
 const rangeFromNode = ({ startPosition, endPosition }) =>
   new Range(pointToPosition(startPosition), pointToPosition(endPosition))
 
-const { evalTree, treeToOurForm, makeEvaluator, mkFuncEnv, meta, print } = require('./src/interpreter')
+const { meta, print, mkFuncEnv } = require('./src/std')
+const { evalTree, treeToOurForm, makeEvaluator } = require('./src/interpreter')
 
 const reportError = (msg, form) => {
   console.log('report-error', print(msg), print(meta(form)))
@@ -254,7 +285,8 @@ const makeInterpretCurrentFile = async (instructions) => {
     outputChannel.appendLine('interpreting: ' + document.fileName)
     {
       try {
-        evalTree(tree, { importObject, instructions })
+        const funcEnv = mkFuncEnv(importObject, instructions)
+        evalTree(tree, funcEnv)
         outputChannel.appendLine('done interpreting')
       } catch (e) {
         outputChannel.appendLine(e.message)
@@ -265,7 +297,7 @@ const makeInterpretCurrentFile = async (instructions) => {
 
 const makeCheckCurrentFileCommand = async (instructions, context) => {
   const checkUri = vscode.Uri.file(context.extensionPath + '/wuns/check.wuns')
-  const outputChannel = window.createOutputChannel('wuns output', wunsLanguageId)
+  const outputChannel = window.createOutputChannel('wuns check', wunsLanguageId)
   outputChannel.show(true)
   const diag = languages.createDiagnosticCollection('wuns')
 
@@ -287,7 +319,7 @@ const makeCheckCurrentFileCommand = async (instructions, context) => {
           console.log('metaData', metaData)
           console.log('form', form)
           console.log('range', range)
-          throw new Error('range is not an array')
+          throw new Error('range is not an array ' + print(form) + ' ' + print(metaData))
         }
         const diagnostic = new Diagnostic(
           new Range(...range.map((w) => Number(w.value))),
@@ -297,8 +329,7 @@ const makeCheckCurrentFileCommand = async (instructions, context) => {
         diagnostics.push(diagnostic)
       },
     }
-    const funcEnv = mkFuncEnv(importObject, instructions)
-    const { gogoeval, apply } = makeEvaluator(funcEnv)
+    const { gogoeval, apply, getExport } = makeEvaluator(importObject, instructions)
 
     const document = getActiveTextEditorDocument()
     if (!document) return
@@ -317,12 +348,13 @@ const makeCheckCurrentFileCommand = async (instructions, context) => {
     }
     try {
       // const outfunEnv = evalTree(checkTree, { importObject, instructions })
-      const outfun = funcEnv.get('check-forms')
+      const outfun = getExport('check-forms')
       // for (const node of tree.rootNode.children) apply(outfun, [treeToOurForm(node)])
       apply(outfun, [tree.rootNode.children.map(treeToOurForm)])
       outputChannel.appendLine('done checking: ' + tree.rootNode.children.length)
     } catch (e) {
       outputChannel.appendLine(e.message)
+      console.error('error evaluating checker', e)
     }
     diag.set(document.uri, diagnostics)
   }
@@ -363,22 +395,6 @@ const provideSelectionRanges = (document, positions) => {
     if (found) selRanges.push(found)
   }
   return selRanges
-}
-
-/**
- * @param {vscode.TextDocument} document
- */
-const provideDocumentSemanticTokens = (document) => {
-  // const stopWatch = makeStopWatch()
-  const { tree } = cacheFetchOrParse(document)
-  const { tokensBuilder, build } = tokenBuilderForParseTree()
-  tree.rootNode.children.forEach(build)
-  const semtoks = tokensBuilder.build()
-  // console.log('semantic tokens time taken', stopWatch(), 'ms', document.version)
-  // const semtokHash = crypto.createHash('sha256').update(semtoks.data).digest('hex')
-  // console.log({ semtoksCount: semtoks.data.length, semtokHash, file: document.fileName, version: document.version })
-
-  return semtoks
 }
 
 /**

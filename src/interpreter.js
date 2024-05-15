@@ -1,67 +1,11 @@
-const unit = Object.freeze([])
-const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
-const isUnit = (x) => x === unit || (Array.isArray(x) && Object.isFrozen(x) && x.length === 0)
-
-class Word {
-  constructor(value) {
-    this.value = value
-  }
-
-  toString() {
-    return this.value
-  }
-}
-
-const isWord = (f) => f instanceof Word
-
-const word = (s) => {
-  if (typeof s !== 'string') throw new Error('word expects string arguments only')
-  return Object.freeze(new Word(s))
-}
-
-const symbolMeta = Symbol.for('wuns-meta')
-
-const wordWithMeta = (s, meta) => {
-  if (typeof s !== 'string') throw new Error('word expects string arguments only')
-  const w = new Word(s)
-  w[symbolMeta] = meta
-  return Object.freeze(w)
-}
-
-const listWithMeta = (l, meta) => {
-  const ll = [...l]
-  ll[symbolMeta] = meta
-  return Object.freeze(ll)
-}
-
-const meta = (form) => {
-  if (form[symbolMeta]) return form[symbolMeta]
-  return unit
-}
-
-const numberWord = (n) => {
-  if (typeof n !== 'number') throw new Error('numberWord expects number')
-  return word(String(n))
-}
-
-const wordString = (w) => {
-  if (!isWord(w)) throw new Error('not a word: ' + w + ' ' + typeof w)
-  return w.value
-}
-
-const print = (x) => {
-  if (isWord(x)) return wordString(x)
-  if (!Array.isArray(x)) throw new Error(`cannot print ${x} expected word or list ${typeof x} ${x.constructor}`)
-  return `[${x.map(print).join(' ')}]`
-}
+const { makeList, word, wordString, isWord, isList, numberWord, isUnit, unit, mkFuncEnv, wordWithMeta, listWithMeta, print } = require('./std.js')
 
 const symbolContinue = Symbol.for('wuns-continue')
 const tryMap = (arr, f) => {
   if (arr) return arr.map(f)
   return unit
 }
-const makeEvaluator = (importObject, instructions) => {
-  const funcEnv = mkFuncEnv(importObject, instructions)
+const makeEvaluator = (funcEnv) => {
   const globalVarValues = new Map()
   const globalEnv = { varValues: globalVarValues, outer: null }
   const apply = ({ name, params, restParam, bodies }, args) => {
@@ -170,39 +114,64 @@ const makeEvaluator = (importObject, instructions) => {
         funcEnv.set(wordString(importName), fObj)
         return unit
       }
+      case 'tuple':
+        return makeList(...args.map((a) => wunsEval(a, env)))
+      case 'extern': {
+        if (args.length !== 3) throw new Error('extern expects 2 arguments')
+        const [name, params, results] = args
+        // funcEnv.set(wordString(name), func)
+        const funcObj = funcEnv.get(wordString(name))
+        assert(funcObj, `extern function ${name} not found`)
+        if (!(typeof funcObj === 'function')) throw new Error(`expected function, found ${funcObj}`)
+        const parameterCount = funcObj.length
+        assert(isList(params), `extern expected list of parameters, found ${params}`)
+        assert(
+          params.length === parameterCount,
+          `extern function ${name} expected ${parameterCount} arguments, got ${params.length}`,
+        )
+        for (const param of params) {
+          if (!isWord(param)) throw new Error('extern expected word arguments')
+        }
+        return unit
+      }
     }
-    const funcOrMacro = funcEnv.get(firstWordString)
-    assert(funcOrMacro, `function ${firstWordString} not found ${print(form)}`)
-    if (typeof funcOrMacro === 'function') {
-      const parameterCount = funcOrMacro.length
-      assert(
-        args.length === parameterCount,
-        `${firstWordString} expected ${parameterCount} arguments, got ${args.length}`,
+    try {
+      const funcOrMacro = funcEnv.get(firstWordString)
+      assert(funcOrMacro, `function ${firstWordString} not found ${print(form)}`)
+      if (typeof funcOrMacro === 'function') {
+        const parameterCount = funcOrMacro.length
+        assert(
+          args.length === parameterCount,
+          `${firstWordString} expected ${parameterCount} arguments, got ${args.length}`,
+        )
+        const res = funcOrMacro(...args.map((arg) => wunsEval(arg, env)))
+        if (typeof res === 'number') return numberWord(res)
+        if (res === undefined) return unit
+        return res
+      }
+      assert(typeof funcOrMacro === 'object', `expected function or object ${funcOrMacro}`)
+      const { isMacro, wasmFunc } = funcOrMacro
+      if (wasmFunc) {
+        const res = funcOrMacro.f(...args.map((arg) => wunsEval(arg, env)))
+        if (typeof res === 'undefined') return unit
+        if (typeof res === 'number') return numberWord(res)
+        assert(Array.isArray(res), `expected array or undefined, found ${res}`)
+        return makeList(
+          ...res.map((r) => {
+            assert(typeof r === 'number', `expected number, found ${r}`)
+            return numberWord(r)
+          }),
+        )
+      }
+      if (isMacro) return wunsEval(apply(funcOrMacro, args), env)
+      return apply(
+        funcOrMacro,
+        args.map((arg) => wunsEval(arg, env)),
       )
-      const res = funcOrMacro(...args.map((arg) => wunsEval(arg, env)))
-      if (typeof res === 'number') return numberWord(res)
-      if (res === undefined) return unit
-      return res
+    } catch (e) {
+      console.error('error evaluating', firstWordString)
+      throw e
     }
-    assert(typeof funcOrMacro === 'object', `expected function or object ${funcOrMacro}`)
-    const { isMacro, wasmFunc } = funcOrMacro
-    if (wasmFunc) {
-      const res = funcOrMacro.f(...args.map((arg) => wunsEval(arg, env)))
-      if (typeof res === 'undefined') return unit
-      if (typeof res === 'number') return numberWord(res)
-      assert(Array.isArray(res), `expected array or undefined, found ${res}`)
-      return makeList(
-        ...res.map((r) => {
-          assert(typeof r === 'number', `expected number, found ${r}`)
-          return numberWord(r)
-        }),
-      )
-    }
-    if (isMacro) return wunsEval(apply(funcOrMacro, args), env)
-    return apply(
-      funcOrMacro,
-      args.map((arg) => wunsEval(arg, env)),
-    )
   }
   const gogomacro = (form) => {
     if (isWord(form)) return form
@@ -242,6 +211,7 @@ const makeEvaluator = (importObject, instructions) => {
   }
   const gogoeval = (form) => wunsEval(gogomacro(form), globalEnv)
 
+  funcEnv.set('macroexpand', gogomacro)
   funcEnv.set('eval', gogoeval)
 
   return {
@@ -249,122 +219,6 @@ const makeEvaluator = (importObject, instructions) => {
     apply,
     getExport: (name) => funcEnv.get(name),
   }
-}
-
-const number = (f) => {
-  if (!isWord(f)) throw new Error('expected word: ' + f)
-  const s = wordString(f)
-  const n = Number(s)
-  if (isNaN(n)) throw new Error('expected number, found: ' + s)
-  const normalised = n | 0
-  if (n !== normalised) throw new Error('expected 32-bit signed integer, found: ' + s)
-  // if (String(normalised) !== s) throw new Error('expected normalized integer, found: ' + s)
-  return n
-}
-
-const mkFuncEnv = ({ log, ...imports }, instructions) => {
-  const funcEnv = new Map()
-  for (const [name, func] of Object.entries(imports)) funcEnv.set(name, func)
-
-  const assert = (cond, msg) => {
-    if (!cond) throw new Error('built in failed: ' + msg)
-  }
-  for (const [name, func] of Object.entries(instructions)) {
-    const parameterCount = func.length
-    switch (parameterCount) {
-      case 1:
-        funcEnv.set(name, (a) => numberWord(func(number(a)) | 0))
-        break
-      case 2:
-        funcEnv.set(name, (a, b) => numberWord(func(number(a), number(b)) | 0))
-        break
-      default:
-        throw new Error('unsupported parameter count: ' + parameterCount)
-    }
-  }
-  const zero = numberWord(0)
-  const one = numberWord(1)
-  const boolToWord = (b) => (b ? one : zero)
-  // would be cool to do in a host-func special form
-  funcEnv.set('is-word', (f) => boolToWord(isWord(f)))
-  funcEnv.set('is-list', (f) => boolToWord(Array.isArray(f)))
-  funcEnv.set('meta', (f) => meta(f))
-
-  const getLength = (a) => {
-    if (isWord(a)) return wordString(a).length
-    if (Array.isArray(a)) return a.length
-    throw new Error('getLength expects word or list')
-  }
-  // todo maybe only allow for lists
-  funcEnv.set('size', (a) => numberWord(getLength(a)))
-  funcEnv.set('at', (v, i) => {
-    const ni = number(i)
-    const len = getLength(v)
-    assert(ni >= -len && ni < len, 'index out of bounds: ' + i)
-    if (isWord(v)) return numberWord(wordString(v).at(ni).charCodeAt(0))
-    const elem = v.at(ni)
-    if (typeof elem === 'number') return numberWord(elem)
-    return elem
-  })
-  funcEnv.set('slice', (v, i, j) => {
-    assert(Array.isArray(v), 'slice expects array')
-    let s = v.slice(number(i), number(j))
-    if (s instanceof Uint8Array) return makeList(...Array.from(s, (n) => numberWord(n)))
-    return Object.freeze(s)
-  })
-
-  funcEnv.set('mutable-list', () => [])
-  funcEnv.set('push', (ar, e) => {
-    if (!Array.isArray(ar)) throw new Error('push expects array')
-    if (Object.isFrozen(ar)) throw new Error('push expects mutable array')
-    ar.push(e)
-    return unit
-  })
-  funcEnv.set('set-array', (ar, index, e) => {
-    if (!Array.isArray(ar)) throw new Error('set-array expects array')
-    if (Object.isFrozen(ar)) throw new Error('set-array expects mutable array')
-    ar[number(index)] = e
-    return unit
-  })
-  funcEnv.set('freeze', (ar) => {
-    if (!Array.isArray(ar)) throw new Error('freeze expects array')
-    if (Object.isFrozen(ar)) throw new Error('freeze expects mutable array')
-    return makeList(...ar)
-  })
-
-  // genword??? or should we just implement it in wuns?
-  let gensym = 0
-  funcEnv.set('gensym', () => word('v' + String(gensym++)))
-
-  funcEnv.set('log', (a) => {
-    log(print(a))
-    return unit
-  })
-
-  funcEnv.set('abort', () => {
-    throw new Error("wuns 'abort'")
-  })
-
-  funcEnv.set('word-from-codepoint', (cs) => {
-    assert(Array.isArray(cs), 'word-from-codepoints expects array')
-    return word(String.fromCharCode(number(c)))
-  })
-
-  // funcEnv.set('word-from-codepoints', (cs) => {
-  //   assert(Array.isArray(cs), 'word-from-codepoints expects array')
-  //   return word(cs.map((c) => String.fromCharCode(number(c))).join(''))
-  // })
-
-  funcEnv.set('concat-words', (cs) => {
-    assert(Array.isArray(cs), 'concat-words expects array')
-    return word(cs.join(''))
-  })
-
-  funcEnv.set('wasm-module', (s) => new WebAssembly.Module(new Uint8Array(s.map(number))))
-
-  funcEnv.set('wasm-instance', (module) => new WebAssembly.Instance(module))
-
-  return funcEnv
 }
 
 const nodeToOurForm = (node) => {
@@ -384,7 +238,9 @@ const nodeToOurForm = (node) => {
 }
 
 const evalTree = (tree, { importObject, instructions }) => {
-  const { gogoeval } = makeEvaluator(importObject, instructions)
+  const funcEnv = mkFuncEnv(importObject, instructions)
+  const evaluator = makeEvaluator(funcEnv)
+  const { gogoeval } = evaluator
   for (const node of tree.rootNode.children) {
     const form = nodeToOurForm(node)
     try {
@@ -394,6 +250,7 @@ const evalTree = (tree, { importObject, instructions }) => {
       throw e
     }
   }
+  return evaluator
 }
 
-module.exports = { treeToOurForm: nodeToOurForm, evalTree, meta, print }
+module.exports = { treeToOurForm: nodeToOurForm, evalTree, makeEvaluator }

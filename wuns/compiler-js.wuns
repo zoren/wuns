@@ -1,0 +1,356 @@
+[macro comment [.. -] []]
+
+[func list [.. l] l]
+
+[macro constant-ids [.. id-constants]
+  [let [f [mutable-list]]
+    [push f [quote let]]
+    [push f []]
+    [loop [i [quote 0]]
+      [if [lt i [size id-constants]]
+        [let [name [at id-constants i]]
+          [push f [list [quote constant] name [list [quote quote] name]]]
+          [cont [add i [quote 1]]]]
+        f]]]]
+
+[constant-ids -1 -2 0 1 2 3 4 - ..]
+
+[func inc [x] [add x 1]]
+
+[func dec [x] [sub x 1]]
+
+[func not [c] [eqz c]]
+
+[func is-zero [x] [eqz x]]
+
+[func is-odd [x] [bitwise-and x 1]]
+
+[func is-even [x] [not [is-odd x]]]
+
+[func is-negative [x] [lt x 0]]
+
+[func first [l] [at l 0]]
+[func second [l] [at l 1]]
+[func third [l] [at l 2]]
+[func fourth [l] [at l 3]]
+[func last [l] [at l -1]]
+
+[func rest [l] [slice l 1 [size l]]]
+
+[func push-all [mut-list list]
+  [let [s-l [size list]]
+    [loop [i 0]
+      [if [lt i s-l]
+        [let []
+          [push mut-list [at list i]]
+          [cont [inc i]]]
+        []]]]]
+
+[func concat-lists [lists]
+  [let [res [mutable-list] s [size lists]]
+    [loop [i 0]
+      [if [lt i s]
+        [let []
+          [push-all res [at lists i]]
+          [cont [inc i]]]
+        [freeze res]]]]]
+
+[func concat [.. lists] [concat-lists lists]]
+
+[macro do [.. forms]
+  [concat [quote [let []]] forms]]
+
+[macro when [cond .. forms]
+  [list
+    [quote if] cond
+    [concat [quote [do]] forms]
+    []]]
+
+[macro when-not [cond .. forms]
+  [list
+    [quote if] cond
+    []
+    [concat [quote [do]] forms]]]
+
+[macro assert [cond .. lmsg]
+  [list [quote when-not] cond
+    [list [quote log] [list [quote quote] [concat [list [quote assert-fail]] lmsg]]]
+    [quote [abort]]]]
+
+[macro ifs [.. clauses]
+  [let [s [size clauses]]
+    [assert [not [is-zero s]] ifs requires an odd number of arguments]
+    [if [eq s 1]
+      [first clauses]
+      [list [quote if] [first clauses]
+        [second clauses]
+        [concat [quote [ifs]] [slice clauses 2 [size clauses]]]]]]]
+
+[macro and [.. clauses]
+  [let [s [size clauses]]
+    [ifs
+      [is-zero s]
+      1
+
+      [eq s 1]
+      [first clauses]
+
+      [let [gs [gensym]]
+        [list [quote let] [list gs [first clauses]]
+          [list [quote if] gs
+            [concat [quote [and]] [rest clauses]]
+            gs]]]]]]
+
+[macro or [.. clauses]
+  [let [s [size clauses]]
+    [ifs
+      [is-zero s]
+      0
+
+      [eq s 1]
+      [first clauses]
+
+      [let [gs [gensym]]
+        [list [quote let] [list gs [first clauses]]
+          [list [quote if] gs
+            gs
+            [concat [quote [or]] [rest clauses]]]]]]]]
+
+[func reverse [l]
+  [let [res [mutable-list]]
+    [loop [i [dec [size l]]]
+      [when-not [is-negative i]
+        [push res [at l i]]
+        [cont [dec i]]]]
+    [freeze res]]]
+
+[func eq-word [a b]
+  [and [eq [size a] [size b]]
+    [loop [i 0]
+      [if [lt i [size a]]
+        [if [eq [at a i] [at b i]]
+          [cont [inc i]]
+          0]
+        1]]]]
+
+[func = [a b]
+  [if
+    [and [is-word a] [is-word b]]
+    [eq-word a b]
+
+    [and [is-list a] [is-list b]
+      [let [s [size a]]
+        [and [eq s [size b]]
+          [loop [i 0]
+            [or [ge i s]
+              [and [= [at a i] [at b i]] [cont [inc i]]]]]]]]]]
+
+[func lookup-assoc-list [ctx sym]
+  [let [s [size ctx]]
+    [loop [i 0]
+      [if [ge i s]
+        [abort]
+        [let [k [at ctx i]
+              v [at ctx [inc i]]]
+          [if [eq-word k sym]
+            v
+            [cont [add i 2]]]]]]]]
+
+[func make-operation-obj [name parameters results]
+  [concat
+    [quote [name]] [list name]
+    [quote [parameters]] [list parameters]
+    [quote [results]] [list results]]]
+
+[macro make-binary-i32 [name]
+  [list [quote quote] [make-operation-obj name [quote i32 i32] [quote [i32]]]]]
+
+[constant instructions
+  [list
+    [make-binary-i32 eq]
+    [make-binary-i32 add]
+    [make-binary-i32 sub]
+    [make-binary-i32 mul]
+    [make-binary-i32 lt]
+    [make-binary-i32 le]
+    [make-binary-i32 gt]
+    [make-binary-i32 ge]
+    ]]
+
+[func get-instruction [name]
+  [loop [i 0]
+    [if [lt i [size instructions]]
+      [let [o [at instructions i]]
+        [if [eq-word [lookup-assoc-list o [quote name]] name]
+          o
+          [cont [inc i]]]]
+      0]]]
+
+[func index-of-word [words word]
+  [let [s-words [size words]]
+    [loop [i 0]
+      [if [lt i s-words]
+        [if [eq-word word [at words i]]
+          i
+          [cont [inc i]]]
+        -1]]]]
+
+[func word-to-codepoints [w]
+  [let [ml [mutable-list]]
+    [loop [i 0]
+      [when [lt i [size w]]
+        [push ml [at w i]]
+        [cont [inc i]]]]
+    [freeze ml]]]
+
+[func dec-word-to-i32 [dw]
+  [let [s [sub 0 [size dw]]]
+    [loop [i -1 res 0 multi 1]
+      [if [le s i]
+        [let [c [at dw i]]
+          [assert [and [le [quote 48] c] [le c [quote 57]]] not a decimal character]
+          [assert [lt res [quote 214748364]] out of bounds]
+          [cont [dec i] [add res [mul [sub c [quote 48]] multi]] [mul multi [quote 10]]]]
+        res]]]]
+
+[func return-if-tail [is-tail-pos exp]
+  [if is-tail-pos
+    [list [quote return] exp]
+    exp]]
+
+[func iife [.. forms]
+  [list [quote call] [list [quote arrow-func] [] [concat-lists forms]] []]]
+
+[func compile-form [is-tail-pos aform]
+  [let [form [macroexpand aform]]
+    [ifs
+      [is-word form]
+      [return-if-tail is-tail-pos [list [quote var] form]]
+
+      [= form []]
+      [return-if-tail is-tail-pos [quote [array]]]
+
+      [let [first-form [first form]
+            n-of-args [dec [size form]]]
+        [assert [is-word first-form] expected a word first]
+        [ifs
+          [eq-word first-form [quote quote]]
+          [return-if-tail is-tail-pos
+            [if [eq [size form] 2]
+              [second form]
+              [list [quote array] [rest form]]]]
+
+          [eq-word first-form [quote if]]
+          [let [c [compile-form 0 [second form]]
+                js-c [list [quote op] [quote eq] [compile-form 0 [second form]] [list [quote value] 0]]
+                t [compile-form is-tail-pos [third form]]
+                f [compile-form is-tail-pos [fourth form]]]
+            [assert [eq [size form] 4] if needs a condition and two branches]
+            [if is-tail-pos
+              [list [quote if] js-c [list [quote block] f] t]
+              [list [quote ternary] js-c f t]]]
+
+          [or [eq-word first-form [quote let]] [eq-word first-form [quote loop]]]
+          [let
+            [bindings [second form]
+             n-of-bindings [size bindings]
+             var-values [mutable-list]
+             exps [mutable-list]
+             is-let [eq-word first-form [quote let]]
+             decl-kind [if is-let [quote const] [quote let]]]
+            [loop [i 0]
+              [when [lt i n-of-bindings]
+                [push var-values [list decl-kind [at bindings i] [compile-form 0 [at bindings [inc i]]]]]
+                [cont [add i 2]]]]
+            [loop [i 2]
+              [when [lt i n-of-args]
+                [push exps [compile-form 0 [at form i]]]
+                [cont [inc i]]]]
+            [if is-tail-pos
+              [if is-let
+                [concat [quote [block]]
+                  var-values exps [list [compile-form 1 [last form]]]]
+                [concat [quote [block]]
+                  var-values
+                  [list
+                    [concat [quote [loop]]
+                      [concat exps [list [compile-form 1 [last form]]]]]]]]
+              [if is-let
+                [iife
+                  var-values exps [list [compile-form 1 [last form]]]]
+                [iife var-values
+                  [list
+                    [concat [quote [loop]]
+                      [concat exps [list [compile-form 1 [last form]]]]]]]]]]
+
+          [eq-word first-form [quote cont]]
+          [let [var-updates [mutable-list]]
+            [assert is-tail-pos cont must be in tail position]
+            [push var-updates [quote block]]
+            [loop [i 1]
+              [when [lt i n-of-args]
+                [push var-updates [list [quote assign] [at form i] [compile-form 0 [at form [inc i]]]]]
+                [cont [add i 2]]]]
+            [push var-updates [list [quote continue]]]
+            [freeze var-updates]]
+
+          [or
+            [eq-word first-form [quote import]]
+            [eq-word first-form [quote export]]]
+          form
+
+          [or
+            [eq-word first-form [quote func]]
+            [eq-word first-form [quote macro]]]
+          [let [name [second form]
+                orig-params [third form]
+                bodies [mutable-list]]
+              [loop [i 3]
+                [when [lt i [dec [size form]]]
+                  [push bodies [compile-form 0 [at form i]]]
+                  [cont [inc i]]]]
+              [push bodies [compile-form 1 [last form]]]
+              [list [quote const] name
+                [if [and [lt 1 [size orig-params]] [= [at orig-params -2] ..]]
+                  [list [quote arrow-func-rest] [slice orig-params 0 -2] [at orig-params -1] [freeze bodies]]
+                  [list [quote arrow-func] orig-params [freeze bodies]]]]]
+
+          [let [cargs [mutable-list]
+                instruction [get-instruction first-form]]
+              [push cargs [if instruction [quote op] [quote call]]]
+              [push cargs first-form]
+              [loop [i 1]
+                [when [le i n-of-args]
+                  [push cargs [compile-form 0 [at form i]]]
+                  [cont [inc i]]]]
+              [return-if-tail is-tail-pos [freeze cargs]]]]]]]]
+
+[func compile-form-top [aform]
+  [let [cf [compile-form 0 aform]]
+    [log [list [quote compile-form-top] cf]]
+    cf
+  ]
+
+
+  ]
+
+[log [compile-form-top [quote x]]]
+[log [compile-form-top []]]
+[log [compile-form-top [quote [quote 1]]]]
+[log [compile-form-top [quote [quote 1 3]]]]
+[log [compile-form-top [quote [if c t f]]]]
+[log [compile-form-top [quote [let [] x]]]]
+[log [compile-form-top [quote [let [x [quote 4] y x] y]]]]
+[log [compile-form-top [quote [let [x [quote 4] y x] [if x y x]]]]]
+[log [compile-form-top [quote [let [x [quote 4] y x z [if x y x]] z]]]]
+[log [compile-form-top [quote [func inc [x] [add x 1]]]]]
+[log [compile-form-top [quote [func list [.. l] l]]]]
+[log [compile-form-top
+  [quote loop [i [quote 2]]
+          [if [lt i [quote 10]]
+            [cont i [inc i]]
+            i]]]]
+[log [compile-form-top [quote [inc [quote 0]]]]]
+[log [form-to-js [compile-form 1 [quote 1337]]]]
+[log [form-to-js [compile-form 1 [quote [add [quote 2147483646] [quote 1]]]]]]
+[log [form-to-js [compile-form 1 [quote [add [quote 2147483647] [quote 1]]]]]]
