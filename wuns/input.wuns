@@ -1,3 +1,5 @@
+[macro comment [.. -] []]
+
 [func inc [x] [add x 1]]
 
 [func dec [x] [sub x 1]]
@@ -102,27 +104,7 @@
               gs
               [concat [quote [or]] [rest clauses]]]]]]]]]
 
-[func eq-word [a b]
-  [and [eq [size a] [size b]]
-    [loop [i 0]
-      [if [lt i [size a]]
-        [if [eq [at a i] [at b i]]
-          [continue i [inc i] j]
-          0]
-        1]]]]
-
-[import std.js is-word is-list]
-
-[func = [a b]
-  [if
-    [and [is-word a] [is-word b]]
-    [eq-word a b]
-
-    [and [is-list a] [is-list b]
-      [let [s [size a]]
-        [and [eq s [size b]]
-          [loop [i [quote 0]]
-            [or [ge i s]
-              [and [= [at a i] [at b i]] [continue i [inc i]]]]]]]]]]
-
-[export concat do eq-word =]
+[func f [p]
+  [when p
+    [log p]
+  ]]

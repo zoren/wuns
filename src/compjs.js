@@ -1,5 +1,19 @@
-const { evalTree, treeToOurForm } = require('./interpreter.js')
 const { wordString, isWord, print } = require('./core')
+const { mkFuncEnv } = require('./std.js')
+const { evalTreeEvaluator, treeToOurForm, makeEvaluator } = require('./interpreter.js')
+
+const parseParams = (paramOr) => {
+  const params = paramOr[0]
+  let restParam = null
+  if (paramOr.length === 2) {
+    restParam = paramOr[1]
+  }
+  const paramStrings = params.map(wunsWordToJSId)
+  if (restParam) {
+    paramStrings.push('... ' + wunsWordToJSId(restParam))
+  }
+  return paramStrings
+}
 
 const jsInstructions = {
   '===': '===',
@@ -19,11 +33,11 @@ const wunsWordToJSId = (w) => {
   if (!/^[a-z0-9.=-]+$/.test(s)) throw new Error('invalid identifier: ' + s)
   return s.replace(/-/g, '_').replace(/=/g, 'EQ').replace(/\./g, 'DOT')
 }
-const jsDOMToJS = (l) => {
-  if (isWord(l)) return wordString(l)
-  if (!Array.isArray(l)) throw new Error('expected word or list')
-  if (l.length === 0) return []
-  const [first, ...rest] = l
+const jsDOMToJS = (f) => {
+  if (isWord(f)) return wordString(f)
+  if (!Array.isArray(f)) throw new Error('expected word or list')
+  if (f.length === 0) return `[]`
+  const [first, ...rest] = f
   if (!isWord(first)) {
     console.error({ first })
     throw new Error('expected word')
@@ -71,13 +85,9 @@ const jsDOMToJS = (l) => {
     case 'loop':
       return `while(1) { ${rest.map(jsDOMToJS).join(';')} }`
     case 'arrow-func': {
-      const [params, body] = rest
-      return `(${params.map(wunsWordToJSId).join(', ')}) => { ${body.map(jsDOMToJS).join(';')} }`
-    }
-    case 'arrow-func-rest': {
-      const [params, restParam, body] = rest
-      const outParams = [...params.map(wunsWordToJSId), `... ${wunsWordToJSId(restParam)}`]
-      return `(${outParams.join(', ')}) => { ${body.map(jsDOMToJS).join(';')} }`
+      const [paramOr, body] = rest
+      const params = parseParams(paramOr)
+      return `(${params.join(', ')}) => { ${body.map(jsDOMToJS).join(';')} }`
     }
     case 'import': {
       const [file, ...imports] = rest
@@ -110,7 +120,31 @@ const importObject = {
     console.log(s)
   },
 }
-const { getExport, apply } = evalTree(compilerTree, { importObject, instructions })
+const funcEnv = mkFuncEnv(importObject, instructions)
+funcEnv.set('form-to-func', (paramOr, bodies) => {
+  // const paramStrings = params.map(wunsWordToJSId)
+  const paramStrings = parseParams(paramOr)
+
+  const js = bodies.map(jsDOMToJS).join(';')
+
+  try {
+    return new Function(...paramStrings, js)
+  } catch (e) {
+    console.log(js)
+    throw e
+  }
+})
+funcEnv.set('js-apply', (f, args) => {
+  if (typeof f !== 'function') {
+    console.log({ f })
+    throw new Error('expected function for f ' + typeof f)
+  }
+  if (!Array.isArray(args)) throw new Error('expected array')
+  return f(...args)
+})
+const evaluator = makeEvaluator(funcEnv)
+evalTreeEvaluator(compilerTree, evaluator)
+const { getExport, apply } = evaluator
 const compileFormTop = getExport('compile-form-top')
 
 const root = parser.parse(fs.readFileSync(args[0], 'utf8')).rootNode

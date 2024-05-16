@@ -172,7 +172,7 @@ const makeEvaluator = (funcEnv) => {
         )
         const res = funcOrMacro(...args.map((arg) => wunsEval(arg, env)))
         if (res === undefined) return unit
-        if (!isValidRuntimeValue(res)) throw new Error(`expected valid runtime value, found ${res}`)
+        // if (!isValidRuntimeValue(res)) throw new Error(`expected valid runtime value, found ${res}`)
         return res
       }
       assert(typeof funcOrMacro === 'object', `expected function or object ${funcOrMacro}`)
@@ -257,10 +257,7 @@ const nodeToOurForm = (node) => {
   }
 }
 
-const evalTree = (tree, { importObject, instructions }) => {
-  const funcEnv = mkFuncEnv(importObject, instructions)
-  const evaluator = makeEvaluator(funcEnv)
-  const { gogoeval } = evaluator
+const evalTreeEvaluator = (tree, { gogoeval }) => {
   for (const node of tree.rootNode.children) {
     const form = nodeToOurForm(node)
     try {
@@ -270,7 +267,13 @@ const evalTree = (tree, { importObject, instructions }) => {
       throw e
     }
   }
+}
+
+const evalTree = (tree, { importObject, instructions }) => {
+  const funcEnv = mkFuncEnv(importObject, instructions)
+  const evaluator = makeEvaluator(funcEnv)
+  evalTreeEvaluator(tree, evaluator)
   return evaluator
 }
 
-module.exports = { treeToOurForm: nodeToOurForm, evalTree, makeEvaluator }
+module.exports = { treeToOurForm: nodeToOurForm, evalTree, evalTreeEvaluator, makeEvaluator }
