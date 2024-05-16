@@ -58,7 +58,7 @@ const makeEvaluator = (funcEnv) => {
     const firstWordString = wordString(firstForm)
     switch (firstWordString) {
       case 'quote':
-        return args.length === 1 ? args[0] : args
+        return args.length === 1 ? args[0] : Object.freeze(args)
       case 'if': {
         const ifArgs = [...args, unit, unit, unit].slice(0, 3)
         const evaledCond = wunsEval(ifArgs[0], env)

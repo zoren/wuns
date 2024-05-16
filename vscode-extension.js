@@ -173,9 +173,12 @@ const tokenBuilderForParseTree = () => {
         for (const child of body) go(child)
         break
       }
-      case 'cont':
+      case 'continue':
         pushToken(head, keywordTokenType)
-        for (const child of tail) go(child)
+        for (let i = 1; i < namedChildCount; i += 2) {
+          pushTokenWithModifier(node.namedChild(i), variableTokenType)
+          go(node.namedChild(i + 1))
+        }
         break
       case 'func':
       case 'macro': {
@@ -220,7 +223,7 @@ const tokenBuilderForParseTree = () => {
  */
 const semanticTokensCursor = (tree) => {
   const cursor = tree.walk()
-  if(cursor.gotoFirstChild()) {
+  if (cursor.gotoFirstChild()) {
     while (cursor.gotoNextSibling()) {
       console.log('sem cursor node', cursor.nodeType, cursor.nodeTypeId)
     }

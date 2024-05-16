@@ -1,5 +1,5 @@
 const { evalTree, treeToOurForm } = require('./interpreter.js')
-const { wordString, isWord } = require('./core')
+const { wordString, isWord, print } = require('./core')
 
 const jsInstructions = {
   '===': '===',
@@ -90,7 +90,6 @@ const jsDOMToJS = (l) => {
   throw new Error('unexpected: ' + s)
 }
 
-
 const args = process.argv.slice(2)
 const fs = require('fs')
 const path = require('path')
@@ -117,7 +116,9 @@ const compileFormTop = getExport('compile-form-top')
 const root = parser.parse(fs.readFileSync(args[0], 'utf8')).rootNode
 let output = []
 for (const child of root.children) {
-  const jsDom = apply(compileFormTop, [treeToOurForm(child)])
+  const form = treeToOurForm(child)
+  console.log(print(form))
+  const jsDom = apply(compileFormTop, [form])
   output.push(jsDOMToJS(jsDom))
 }
 console.log(output.join('\n'))

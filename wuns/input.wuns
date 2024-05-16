@@ -44,7 +44,7 @@
 
 [func concat [.. lists] [concat-lists lists]]
 
-[func do [.. forms]
+[macro do [.. forms]
   [concat [quote let []] forms]]
 
 [macro when [cond .. forms]
@@ -66,7 +66,9 @@
 
 [macro ifs [.. clauses]
   [let [s [size clauses]]
-    [assert [not [is-zero s]] ifs requires an odd number of arguments]
+    [if [is-zero s]
+      [let [] [log [quote ifs requires an odd number of arguments]] [abort]]
+      []]
     [if [eq s 1]
         [first clauses]
         [list [quote if] [first clauses]
@@ -75,33 +77,30 @@
 
 [macro and [.. clauses]
   [let [s [size clauses]]
-    [ifs
-      [is-zero s]
+    [if [is-zero s]
       1
-
-      [eq s 1]
-      [first clauses]
-
-      [let [gs [gensym]]
-        [list [quote let] [list gs [first clauses]]
-          [list [quote if] gs
-            [concat [quote [and]] [rest clauses]]
-            gs]]]]]]
+      [if [eq s 1]
+        [first clauses]
+        [let [gs [gensym]]
+          [list [quote let] [list gs [first clauses]]
+            [list [quote if] gs
+              [concat [quote [and]] [rest clauses]]
+              gs]]]]]]]
 
 [macro or [.. clauses]
   [let [s [size clauses]]
-    [ifs
+    [if
       [is-zero s]
       0
 
-      [eq s 1]
-      [first clauses]
+      [if [eq s 1]
+        [first clauses]
 
-      [let [gs [gensym]]
-        [list [quote let] [list gs [first clauses]]
-          [list [quote if] gs
-            gs
-            [concat [quote [or]] [rest clauses]]]]]]]]
+        [let [gs [gensym]]
+          [list [quote let] [list gs [first clauses]]
+            [list [quote if] gs
+              gs
+              [concat [quote [or]] [rest clauses]]]]]]]]]
 
 [func eq-word [a b]
   [and [eq [size a] [size b]]

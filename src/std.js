@@ -1,6 +1,5 @@
 const {
   wordString,
-  numberWord,
   number,
   meta,
   wordWithMeta,
@@ -102,7 +101,7 @@ const jsDOMToJS = (l) => {
   throw new Error('unexpected: ' + s)
 }
 
-const boolToWord = (b) => (b | 0)
+const boolToWord = (b) => b | 0
 const size = (a) => {
   if (isWord(a)) return wordString(a).length
   if (Array.isArray(a)) return a.length
@@ -133,10 +132,10 @@ const mkFuncEnv = ({ log, ...imports }, instructions) => {
     const parameterCount = func.length
     switch (parameterCount) {
       case 1:
-        funcEnv.set(name, (a) => (func(number(a)) | 0))
+        funcEnv.set(name, (a) => func(number(a)) | 0)
         break
       case 2:
-        funcEnv.set(name, (a, b) => (func(number(a), number(b)) | 0))
+        funcEnv.set(name, (a, b) => func(number(a), number(b)) | 0)
         break
       default:
         throw new Error('unsupported parameter count: ' + parameterCount)
@@ -154,20 +153,20 @@ const mkFuncEnv = ({ log, ...imports }, instructions) => {
   })
 
   // todo maybe only allow for lists
-  funcEnv.set('size', (a) => numberWord(size(a)))
+  funcEnv.set('size', size)
   funcEnv.set('at', (v, i) => {
     const ni = number(i)
     const len = size(v)
     assert(ni >= -len && ni < len, 'index out of bounds: ' + i + ' ' + len)
-    if (isWord(v)) return numberWord(wordString(v).at(ni).charCodeAt(0))
+    if (isWord(v)) return wordString(v).at(ni).charCodeAt(0)
     const elem = v.at(ni)
-    if (typeof elem === 'number') return numberWord(elem)
+    if (typeof elem === 'number') return elem
     return elem
   })
   funcEnv.set('slice', (v, i, j) => {
     assert(Array.isArray(v), 'slice expects array')
     let s = v.slice(number(i), number(j))
-    if (s instanceof Uint8Array) return makeList(...Array.from(s, (n) => numberWord(n)))
+    if (s instanceof Uint8Array) return makeList(...Array.from(s, (n) => n))
     return Object.freeze(s)
   })
 
@@ -220,7 +219,6 @@ const mkFuncEnv = ({ log, ...imports }, instructions) => {
 module.exports = {
   mkFuncEnv,
   word,
-  numberWord,
   isWord,
   is_word: (f) => isWord(f) | 0,
   is_list: (f) => isList(f) | 0,
