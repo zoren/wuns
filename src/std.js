@@ -102,9 +102,7 @@ const jsDOMToJS = (l) => {
   throw new Error('unexpected: ' + s)
 }
 
-const zero = numberWord(0)
-const one = numberWord(1)
-const boolToWord = (b) => (b ? one : zero)
+const boolToWord = (b) => (b | 0)
 const size = (a) => {
   if (isWord(a)) return wordString(a).length
   if (Array.isArray(a)) return a.length
@@ -135,10 +133,10 @@ const mkFuncEnv = ({ log, ...imports }, instructions) => {
     const parameterCount = func.length
     switch (parameterCount) {
       case 1:
-        funcEnv.set(name, (a) => numberWord(func(number(a)) | 0))
+        funcEnv.set(name, (a) => (func(number(a)) | 0))
         break
       case 2:
-        funcEnv.set(name, (a, b) => numberWord(func(number(a), number(b)) | 0))
+        funcEnv.set(name, (a, b) => (func(number(a), number(b)) | 0))
         break
       default:
         throw new Error('unsupported parameter count: ' + parameterCount)

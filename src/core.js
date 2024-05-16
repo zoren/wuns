@@ -1,9 +1,12 @@
 const unit = Object.freeze([])
 const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
 const isUnit = (x) => x === unit || (Array.isArray(x) && Object.isFrozen(x) && x.length === 0)
-
+// /[a-z0-9.=-]+/
+const wordRegex = /^[a-z0-9.=-]+$/
+const isWordString = (s) => typeof s === 'string' && s.length > 0 && wordRegex.test(s)
 class Word {
   constructor(value) {
+    if (!isWordString(value)) throw new Error('invalid word: ' + value)
     this.value = value
   }
 
@@ -11,8 +14,9 @@ class Word {
     return this.value
   }
 }
-
-const isWord = (f) => f instanceof Word
+const isSigned32BitInteger = (n) => (n | 0) === n
+// todo what about words representing large integers?
+const isWord = (f) => isSigned32BitInteger(f) || (typeof f === 'string' && isWordString(s)) || f instanceof Word
 const isList = (f) => Array.isArray(f)
 const word = (s) => {
   if (typeof s !== 'string') throw new Error('word expects string arguments only')
@@ -34,13 +38,11 @@ const meta = (form) => {
   if (form[symbolMeta]) return form[symbolMeta]
   return unit
 }
-const numberWord = (n) => {
-  if (typeof n !== 'number') throw new Error('numberWord expects number')
-  return word(String(n))
-}
 const wordString = (w) => {
-  if (!isWord(w)) throw new Error('not a word: ' + w + ' ' + typeof w)
-  return w.value
+  if (w instanceof Word) return w.value
+  if (typeof w === 'string') return w
+  if (isSigned32BitInteger(w)) return String(w)
+  throw new Error('not a word: ' + w + ' ' + typeof w)
 }
 const print = (x) => {
   if (isWord(x)) return wordString(x)
@@ -52,8 +54,7 @@ const number = (f) => {
   const s = wordString(f)
   const n = Number(s)
   if (isNaN(n)) throw new Error('expected number, found: ' + s)
-  const normalised = n | 0
-  if (n !== normalised) throw new Error('expected 32-bit signed integer, found: ' + s)
+  if (!isSigned32BitInteger(n)) throw new Error('expected 32-bit signed integer, found: ' + s)
   // if (String(normalised) !== s) throw new Error('expected normalized integer, found: ' + s)
   return n
 }
@@ -69,7 +70,6 @@ module.exports = {
   wordWithMeta,
   listWithMeta,
   meta,
-  numberWord,
   wordString,
   print,
   number,

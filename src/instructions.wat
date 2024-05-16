@@ -34,41 +34,39 @@
     (i32.ge_u (local.get 0) (local.get 1)))
 
   ;; bit operations
-  ;; maybe call them bitwise-* as in Prescheme?
-  (func (export "bit-and") (param i32) (param i32) (result i32)
+  ;; as in https://thintz.com/resources/prescheme-documentation#Pre_002dScheme-bitwise-manipulation
+  (func (export "bitwise-and") (param i32) (param i32) (result i32)
     (i32.and (local.get 0) (local.get 1)))
 
-  ;; maybe call it bitwise-ior?
-  ;; as in https://thintz.com/resources/prescheme-documentation#Pre_002dScheme-bitwise-manipulation
-  (func (export "bit-or") (param i32) (param i32) (result i32)
+  (func (export "bitwise-ior") (param i32) (param i32) (result i32)
     (i32.or (local.get 0) (local.get 1)))
 
-  (func (export "bit-xor") (param i32) (param i32) (result i32)
+  (func (export "bitwise-xor") (param i32) (param i32) (result i32)
     (i32.xor (local.get 0) (local.get 1)))
 
-  (func (export "bit-shift-left") (param i32) (param i32) (result i32)
+  (func (export "bitwise-shift-left") (param i32) (param i32) (result i32)
     (i32.shl (local.get 0) (local.get 1)))
 
-  (func (export "bit-shift-right-signed") (param i32) (param i32) (result i32)
+  (func (export "bitwise-shift-right-signed") (param i32) (param i32) (result i32)
     (i32.shr_s (local.get 0) (local.get 1)))
 
-  (func (export "bit-shift-right-unsigned") (param i32) (param i32) (result i32)
+  (func (export "bitwise-shift-right-unsigned") (param i32) (param i32) (result i32)
     (i32.shr_u (local.get 0) (local.get 1)))
 
-  (func (export "bit-rotate-left") (param i32) (param i32) (result i32)
+  (func (export "bitwise-rotate-left") (param i32) (param i32) (result i32)
     (i32.rotl (local.get 0) (local.get 1)))
 
-  (func (export "bit-rotate-right") (param i32) (param i32) (result i32)
+  (func (export "bitwise-rotate-right") (param i32) (param i32) (result i32)
     (i32.rotr (local.get 0) (local.get 1)))
 
   ;; arithmetic operations
-  (func (export "bit-count-leading-zero-bits") (param i32) (result i32)
+  (func (export "bitwise-count-leading-zero-bits") (param i32) (result i32)
     (i32.clz (local.get 0)))
 
-  (func (export "bit-count-trailing-zero-bits") (param i32) (result i32)
+  (func (export "bitwise-count-trailing-zero-bits") (param i32) (result i32)
     (i32.ctz (local.get 0)))
 
-  (func (export "bit-population-count") (param i32) (result i32)
+  (func (export "bitwise-population-count") (param i32) (result i32)
     (i32.popcnt (local.get 0)))
 
   (func (export "add") (param i32) (param i32) (result i32)

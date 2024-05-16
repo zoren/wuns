@@ -1,7 +1,19 @@
-const { makeList, word, wordString, isWord, isList, numberWord, isUnit, unit, print, wordWithMeta, listWithMeta } = require('./core.js')
+const {
+  makeList,
+  word,
+  wordString,
+  isWord,
+  isList,
+  isUnit,
+  unit,
+  print,
+  wordWithMeta,
+  listWithMeta,
+} = require('./core.js')
 const { mkFuncEnv } = require('./std.js')
 
-const symbolContinue = Symbol.for('wuns-continue')
+const isValidRuntimeValue = (v) => isWord(v) || (isList(v) && v.every(isValidRuntimeValue))
+
 const tryMap = (arr, f) => {
   if (arr) return arr.map(f)
   return unit
@@ -40,8 +52,8 @@ const makeEvaluator = (funcEnv) => {
       }
     }
 
-    assert(Array.isArray(form), `cannot eval ${form} expected word or list`)
-    if (form.length === 0) return unit
+    assert(isList(form), `cannot eval ${form} expected word or list`)
+    if (form.length === 0) return form
     const [firstForm, ...args] = form
     const firstWordString = wordString(firstForm)
     switch (firstWordString) {
@@ -50,14 +62,14 @@ const makeEvaluator = (funcEnv) => {
       case 'if': {
         const ifArgs = [...args, unit, unit, unit].slice(0, 3)
         const evaledCond = wunsEval(ifArgs[0], env)
-        const isZeroWord = isWord(evaledCond) && wordString(evaledCond) === '0'
+        const isZeroWord = evaledCond === 0 || (isWord(evaledCond) && wordString(evaledCond) === '0')
         return wunsEval(ifArgs[isZeroWord ? 2 : 1], env)
       }
       case 'let':
       case 'loop': {
         const [bindings, ...bodies] = args
         const varValues = new Map()
-        const inner = { varValues, outer: env }
+        const inner = { varValues, outer: env, loop: firstWordString === 'loop' }
         for (let i = 0; i < bindings.length - 1; i += 2) {
           const varName = wordString(bindings[i])
           const value = wunsEval(bindings[i + 1], inner)
@@ -73,17 +85,30 @@ const makeEvaluator = (funcEnv) => {
           for (const body of bodies) result = wunsEval(body, inner)
           return result
         }
-        while (true) {
+        inner.continue = true
+        while (inner.continue) {
+          inner.continue = false
+          let result = unit
           for (const body of bodies) result = wunsEval(body, inner)
-          if (!result[symbolContinue]) return result
-          for (let i = 0; i < Math.min(result.length, varValues.size); i++)
-            varValues.set(wordString(bindings[i * 2]), result[i])
+          if (!inner.continue) return result
         }
       }
-      case 'cont': {
-        const contArgs = args.map((a) => wunsEval(a, env))
-        contArgs[symbolContinue] = true
-        return Object.freeze(contArgs)
+      case 'continue': {
+        let enclosingLoopEnv = env
+        while (true) {
+          assert(enclosingLoopEnv, 'continue outside of loop')
+          if (enclosingLoopEnv.loop) break
+          enclosingLoopEnv = enclosingLoopEnv.outer
+        }
+        const loopVars = enclosingLoopEnv.varValues
+        for (let i = 0; i < args.length; i += 2) {
+          const arg = args[i]
+          const v = wordString(arg)
+          assert(loopVars.has(v), 'continue with undeclared variable')
+          loopVars.set(v, wunsEval(args[i + 1], env))
+        }
+        enclosingLoopEnv.continue = true
+        return unit
       }
       case 'func':
       case 'macro': {
@@ -146,8 +171,8 @@ const makeEvaluator = (funcEnv) => {
           `${firstWordString} expected ${parameterCount} arguments, got ${args.length}`,
         )
         const res = funcOrMacro(...args.map((arg) => wunsEval(arg, env)))
-        if (typeof res === 'number') return numberWord(res)
         if (res === undefined) return unit
+        if (!isValidRuntimeValue(res)) throw new Error(`expected valid runtime value, found ${res}`)
         return res
       }
       assert(typeof funcOrMacro === 'object', `expected function or object ${funcOrMacro}`)
@@ -155,14 +180,7 @@ const makeEvaluator = (funcEnv) => {
       if (wasmFunc) {
         const res = funcOrMacro.f(...args.map((arg) => wunsEval(arg, env)))
         if (typeof res === 'undefined') return unit
-        if (typeof res === 'number') return numberWord(res)
-        assert(Array.isArray(res), `expected array or undefined, found ${res}`)
-        return makeList(
-          ...res.map((r) => {
-            assert(typeof r === 'number', `expected number, found ${r}`)
-            return numberWord(r)
-          }),
-        )
+        if (!isValidRuntimeValue(res)) throw new Error(`expected valid runtime value, found ${res}`)
       }
       if (isMacro) return wunsEval(apply(funcOrMacro, args), env)
       return apply(
@@ -176,8 +194,8 @@ const makeEvaluator = (funcEnv) => {
   }
   const gogomacro = (form) => {
     if (isWord(form)) return form
-    assert(Array.isArray(form), `cannot expand ${form} expected word or list`)
-    if (form.length === 0) return unit
+    assert(isList(form), `cannot expand ${form} expected word or list`)
+    if (form.length === 0) return form
     const [firstForm, ...args] = form
     const firstWordString = wordString(firstForm)
     switch (firstWordString) {
@@ -194,8 +212,11 @@ const makeEvaluator = (funcEnv) => {
           ...bodies.map(gogomacro),
         )
       }
-      case 'cont':
-        return makeList(firstForm, ...args.map(gogomacro))
+      case 'continue':
+        return makeList(
+          firstForm,
+          ...tryMap(args, (borf, i) => (i % 2 === 0 ? borf : gogomacro(borf))),
+        )
       case 'func':
       case 'macro': {
         const [fname, origParams, ...bodies] = args
@@ -212,8 +233,8 @@ const makeEvaluator = (funcEnv) => {
   }
   const gogoeval = (form) => wunsEval(gogomacro(form), globalEnv)
 
-  funcEnv.set('macroexpand', gogomacro)
-  funcEnv.set('eval', gogoeval)
+  // funcEnv.set('macroexpand', gogomacro)
+  // funcEnv.set('eval', gogoeval)
 
   return {
     gogoeval,
@@ -224,10 +245,8 @@ const makeEvaluator = (funcEnv) => {
 
 const nodeToOurForm = (node) => {
   const { type, text, namedChildren, startPosition, endPosition } = node
-  const range = makeList(
-    ...[startPosition.row, startPosition.column, endPosition.row, endPosition.column].map(numberWord),
-  )
-  const metaData = makeList(word('range'), range, word('node-id'), numberWord(node.id))
+  const range = makeList(...[startPosition.row, startPosition.column, endPosition.row, endPosition.column])
+  const metaData = makeList(word('range'), range, word('node-id'), node.id)
   switch (type) {
     case 'word':
       return wordWithMeta(text, metaData)
