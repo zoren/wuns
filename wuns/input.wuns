@@ -30,7 +30,7 @@
       [if [lt i s-l]
         [let []
           [push mut-list [at list i]]
-          [cont i [inc i]]]
+          [continue i [inc i]]]
         []]]]]
 
 [func concat-lists [lists]
@@ -39,7 +39,7 @@
       [if [lt i s]
         [let []
           [push-all res [at lists i]]
-          [cont i [inc i]]]
+          [continue i [inc i]]]
         [freeze res]]]]]
 
 [func concat [.. lists] [concat-lists lists]]
@@ -107,7 +107,7 @@
     [loop [i 0]
       [if [lt i [size a]]
         [if [eq [at a i] [at b i]]
-          [cont i [inc i]]
+          [continue i [inc i] j]
           0]
         1]]]]
 
@@ -123,6 +123,6 @@
         [and [eq s [size b]]
           [loop [i [quote 0]]
             [or [ge i s]
-              [and [= [at a i] [at b i]] [cont i [inc i]]]]]]]]]]
+              [and [= [at a i] [at b i]] [continue i [inc i]]]]]]]]]]
 
 [export concat do eq-word =]
