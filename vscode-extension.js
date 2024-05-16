@@ -92,7 +92,7 @@ const onDidChangeTextDocument = (e) => {
 // https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide
 const tokenTypes = ['variable', 'keyword', 'function', 'macro', 'parameter', 'string', 'number', 'comment', 'type']
 
-const tokenModifiers = ['declaration', 'definition', 'readonly', 'defaultLibrary']
+const tokenModifiers = ['declaration', 'definition', 'readonly', 'defaultLibrary', 'modification']
 // https://github.com/microsoft/vscode/blob/70e10d604e1939e9d98f3970f6f19604bfe2852c/src/vs/workbench/api/common/extHostTypes.ts#L3379
 const legend = new SemanticTokensLegend(tokenTypes, tokenModifiers)
 
@@ -116,6 +116,7 @@ const encodeTokenModifiers = (...strTokenModifiers) => {
 }
 
 const declarationModifier = encodeTokenModifiers('declaration')
+const modificationModifier = encodeTokenModifiers('modification')
 
 const tokenBuilderForParseTree = () => {
   const tokensBuilder = new SemanticTokensBuilder(legend)
@@ -175,8 +176,8 @@ const tokenBuilderForParseTree = () => {
       }
       case 'continue':
         pushToken(head, keywordTokenType)
-        for (let i = 1; i < namedChildCount; i += 2) {
-          pushTokenWithModifier(node.namedChild(i), variableTokenType)
+        for (let i = 1; i < namedChildCount - 1; i += 2) {
+          pushTokenWithModifier(node.namedChild(i), variableTokenType, modificationModifier)
           go(node.namedChild(i + 1))
         }
         break
