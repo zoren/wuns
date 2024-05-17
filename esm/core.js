@@ -21,14 +21,16 @@ class Word {
 }
 export const word = (s) => Object.freeze(new Word(s))
 // todo what about words representing large integers?
-export const is_word = (f) => isSigned32BitInteger(f) || (typeof f === 'string' && isWordString(f)) || f instanceof Word
+export const isWord = (f) => isSigned32BitInteger(f) || (typeof f === 'string' && isWordString(f)) || f instanceof Word
+export const is_word = (f) => isWord(f) | 0
 export const wordValue = (w) => {
   if (w instanceof Word) return w.value
   if (typeof w === 'string') return w
   if (isSigned32BitInteger(w)) return w
   throw new Error('not a word: ' + w + ' ' + typeof w)
 }
-export const is_list = (f) => Array.isArray(f)
+export const isList = (f) => Array.isArray(f)
+export const is_list = (f) => isList(f) | 0
 const symbolMeta = Symbol.for('wuns-meta')
 export const wordWithMeta = (s, meta) => {
   const w = new Word(s)
@@ -46,12 +48,12 @@ export const meta = (form) => {
 }
 
 export const print = (x) => {
-  if (is_word(x)) return wordValue(x)
+  if (isWord(x)) return wordValue(x)
   if (!Array.isArray(x)) throw new Error(`cannot print ${x} expected word or list ${typeof x} ${x.constructor}`)
   return `[${x.map(print).join(' ')}]`
 }
 const number = (f) => {
-  if (!is_word(f)) throw new Error('expected word: ' + f)
+  if (!isWord(f)) throw new Error('expected word: ' + f)
   const s = wordValue(f)
   const n = Number(s)
   if (isNaN(n)) throw new Error('expected number, found: ' + s)
@@ -67,7 +69,7 @@ export const push = (ar, e) => {
   return unit
 }
 export const size = (a) => {
-  if (is_word(a)) return String(a).length
+  if (isWord(a)) return String(a).length
   if (Array.isArray(a)) return a.length
   throw new Error('getLength expects word or list')
 }
@@ -79,7 +81,7 @@ export const at = (v, i) => {
   const len = size(v)
   const ni = number(i)
   assert(ni >= -len && ni < len, 'index out of bounds: ' + i + ' ' + len)
-  if (is_word(v)) return String(v).at(ni).charCodeAt(0)
+  if (isWord(v)) return String(v).at(ni).charCodeAt(0)
   const elem = v.at(ni)
   return elem
 }
