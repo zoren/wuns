@@ -22,8 +22,6 @@
 
 [func dec [x] [sub x 1]]
 
-[func list [.. l] l]
-
 [func not [c] [eq c 0]]
 
 [func is-zero [x] [eq x 0]]

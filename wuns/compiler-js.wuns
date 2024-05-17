@@ -308,7 +308,6 @@
       [set-array ctx [inc index] value]]]]
 
 [constant top-level-ctx [mutable-list]]
-[constant macro-env [mutable-list]]
 
 [func local-context-has [lctx sym]
   [loop [ctx lctx]
@@ -319,6 +318,16 @@
           [continue ctx outer]
           1]]
       0]]]
+
+[func make-op-call [op-call js-name lctx form]
+  [let [cargs [mutable-list]]
+    [push cargs op-call]
+    [push cargs js-name]
+    [loop [i 1]
+      [when [lt i [size form]]
+        [push cargs [compile-form lctx 0 [at form i]]]
+        [continue i [inc i]]]]
+    [freeze cargs]]]
 
 [func compile-form [lctx is-tail-pos form]
   [ifs
@@ -415,8 +424,7 @@
           [loop [i 2]
             [when [lt i s-form]
               [assoc-list-set top-level-ctx [at form i] [list first-form module-name]]
-              [continue i [inc i]]]]
-          []]
+              [continue i [inc i]]]]]
 
         [eq-word first-form [quote export]]
         [let [ml [mutable-list]]
@@ -457,9 +465,7 @@
                 [push bodies [compile-form fctx 0 [at form i]]]
                 [continue i [inc i]]]]
             [push bodies [compile-form fctx 1 [last form]]]
-            [assoc-list-set top-level-ctx name [list first-form]]
-            [when [eq-word first-form [quote macro]]
-              [assoc-list-set macro-env name [form-to-func params bodies]]]
+            [assoc-list-set top-level-ctx name [list first-form [form-to-func params bodies]]]
             [list [quote assign]
               [list [quote field]
                 [list [quote field] [quote var global] [quote wuns]]
@@ -474,30 +480,32 @@
             [list [quote assign] [list [quote field] [list [quote field] [quote var global] [quote wuns]] [js-escape name]] value]
           ]]
 
-        [let [macro-index [assoc-list-index macro-env first-form]]
-          [if [is-negative macro-index]
-            [let [cargs [mutable-list]
-                  top-level-index [assoc-list-index top-level-ctx first-form]]
-              [if [is-negative top-level-index]
-                [do
-                  [when-not [get-instruction first-form]
-                    [log [list [quote unknown-op] first-form]]
-                    [abort]]
+        [let [top-level-index [assoc-list-index top-level-ctx first-form]]
+          [if [is-negative top-level-index]
+            [do
+              [when-not [get-instruction first-form]
+                [log [list [quote unknown-op] first-form]]
+                [abort]]
+              [return-if-tail is-tail-pos [make-op-call [quote op] first-form lctx form]]]
+            [let
+                [ns-obj [at top-level-ctx [inc top-level-index]]
+                 kind [first ns-obj]
+                 obj-word [if [= [first ns-obj] [quote import]] [second ns-obj] [quote wuns]]]
+              [ifs
+                [= kind [quote macro]]
+                [compile-form lctx is-tail-pos [js-apply [second ns-obj] [rest form]]]
 
-                  [push cargs [quote op]]
-                  [push cargs first-form]]
-                [let [ns-obj [at top-level-ctx [inc top-level-index]]
-                      obj-word [if [= [first ns-obj] [quote import]] [second ns-obj] [quote wuns]]]
-                  [push cargs [quote call]]
-                  [push cargs [list [quote field] [list [quote var] obj-word] first-form]]]]
-              [loop [i 1]
-                [when [le i n-of-args]
-                  [push cargs [compile-form lctx 0 [at form i]]]
-                  [continue i [inc i]]]]
-              [return-if-tail is-tail-pos [freeze cargs]]]
-            [let [macro-arrow-func [at macro-env [inc macro-index]]]
-              [compile-form lctx is-tail-pos [js-apply macro-arrow-func [rest form]]]]]]
-            ]]]]
+                [= kind [quote func]]
+                [return-if-tail is-tail-pos
+                  [make-op-call [quote call] [list [quote field] [quote var wuns] first-form] lctx form]]
+
+                [= kind [quote import]]
+                [return-if-tail is-tail-pos
+                  [make-op-call [quote call] [list [quote field] [list [quote var] [second ns-obj]]  first-form] lctx form]]
+
+                [do
+                  [log [list [quote unknown kind] kind]]
+                  [abort]]]]]]]]]]
 
 [func compile-form-top [aform]
   [let [cf [compile-form [] 0 aform]]
