@@ -1,22 +1,38 @@
 [macro comment [.. -] []]
 
+[import std
+  at size slice push mutable-list freeze log abort gensym]
+
+[func list [.. l] l]
+
+[macro constant-ids [.. id-constants]
+  [let [f [mutable-list]]
+    [push f [quote let]]
+    [push f []]
+    [loop [i [quote 0]]
+      [if [lt i [size id-constants]]
+        [let [name [at id-constants i]]
+          [push f [list [quote constant] name [list [quote quote] name]]]
+          [continue i [add i [quote 1]]]]
+        f]]]]
+
+[constant-ids -2 -1 0 1 2 3 4]
+
 [func inc [x] [add x 1]]
 
 [func dec [x] [sub x 1]]
 
 [func list [.. l] l]
 
-[func not [c] [eq c [quote 0]]]
+[func not [c] [eq c 0]]
 
-[func is-zero [x] [eq x [quote 0]]]
+[func is-zero [x] [eq x 0]]
 
 [func is-odd [x] [bitwise-and x 1]]
 
 [func is-even [x] [not [is-odd x]]]
 
 [func is-negative [x] [lt x 0]]
-
-[import std.js at size slice push mutable-list freeze]
 
 [func first [l] [at l 0]]
 [func second [l] [at l 1]]

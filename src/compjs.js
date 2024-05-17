@@ -1,4 +1,4 @@
-const { wordString, isWord, print } = require('./core')
+const { wordString, isWord } = require('./core')
 const { mkFuncEnv } = require('./std.js')
 const { evalTreeEvaluator, treeToOurForm, makeEvaluator } = require('./interpreter.js')
 
@@ -46,10 +46,24 @@ const jsDOMToJS = (f) => {
   switch (s) {
     case 'value':
       return `${wordString(rest[0])} | 0`
+    case 'number':
+      return wordString(rest[0])
+    case 'string':
+      return `'${wordString(rest[0])}'`
+    case 'array':
+      return `[${rest.map(jsDOMToJS).join(', ')}]`
     case 'var':
       return wunsWordToJSId(rest[0])
     case 'continue':
       return 'continue'
+    case 'field': {
+      const [obj, field] = rest
+      return `${jsDOMToJS(obj)}.${wunsWordToJSId(field)}`
+    }
+    case 'index': {
+      const [arr, index] = rest
+      return `${jsDOMToJS(arr)}[${jsDOMToJS(index)}]`
+    }
     case 'op': {
       const [name, ...args] = rest
       if (!isWord(name)) throw new Error('expected word')
@@ -64,10 +78,6 @@ const jsDOMToJS = (f) => {
       if (!isWord(f)) return `(${jsDOMToJS(f)})(${args.map(jsDOMToJS).join(', ')})`
       return `${wunsWordToJSId(f)}(${args.map(jsDOMToJS).join(', ')})`
     }
-    case 'string':
-      return `'${wordString(rest[0])}'`
-    case 'array':
-      return `[${rest.map(jsDOMToJS).join(', ')}]`
     case 'ternary':
       return `(${jsDOMToJS(rest[0])}) ? (${jsDOMToJS(rest[1])}) : (${jsDOMToJS(rest[2])})`
     case 'if':
@@ -79,7 +89,7 @@ const jsDOMToJS = (f) => {
     case 'let':
       return `let ${wunsWordToJSId(rest[0])} = ${jsDOMToJS(rest[1])}`
     case 'assign':
-      return `${wunsWordToJSId(rest[0])} = ${jsDOMToJS(rest[1])}`
+      return `${jsDOMToJS(rest[0])} = ${jsDOMToJS(rest[1])}`
     case 'return':
       return `return ${jsDOMToJS(rest[0])}`
     case 'loop':
@@ -88,10 +98,6 @@ const jsDOMToJS = (f) => {
       const [paramOr, body] = rest
       const params = parseParams(paramOr)
       return `(${params.join(', ')}) => { ${body.map(jsDOMToJS).join(';')} }`
-    }
-    case 'import': {
-      const [file, ...imports] = rest
-      return `const { ${imports.map(wunsWordToJSId).join(', ')} } = require('./${wordString(file)}')`
     }
     case 'export': {
       return `module.exports = { ${rest.map(wunsWordToJSId).join(', ')} }`
@@ -122,11 +128,8 @@ const importObject = {
 }
 const funcEnv = mkFuncEnv(importObject, instructions)
 funcEnv.set('form-to-func', (paramOr, bodies) => {
-  // const paramStrings = params.map(wunsWordToJSId)
   const paramStrings = parseParams(paramOr)
-
   const js = bodies.map(jsDOMToJS).join(';')
-
   try {
     return new Function(...paramStrings, js)
   } catch (e) {
@@ -149,11 +152,24 @@ const compileFormTop = getExport('compile-form-top')
 
 const root = parser.parse(fs.readFileSync(args[0], 'utf8')).rootNode
 let output = []
+const wunsObject = {}
+global.wuns = wunsObject
+global.std = require('./std.js')
+
 for (const child of root.children) {
   const form = treeToOurForm(child)
-  console.log(print(form))
-  const jsDom = apply(compileFormTop, [form])
-  output.push(jsDOMToJS(jsDom))
+  // console.log(print(form))
+  try {
+    const jsDom = apply(compileFormTop, [form])
+    const js = jsDOMToJS(jsDom)
+    console.log({js})
+    const f = new Function(js)
+    f()
+    output.push(js)
+  } catch (e) {
+    console.log({ wunsKeys: Object.keys(wunsObject),  })
+    throw e
+  }
 }
 console.log(output.join('\n'))
 fs.writeFileSync('src/out.js', output.join('\n'))

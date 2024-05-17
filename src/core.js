@@ -14,14 +14,17 @@ class Word {
     return this.value
   }
 }
+const word = (s) => Object.freeze(new Word(s))
 const isSigned32BitInteger = (n) => (n | 0) === n
 // todo what about words representing large integers?
-const isWord = (f) => isSigned32BitInteger(f) || (typeof f === 'string' && isWordString(s)) || f instanceof Word
-const isList = (f) => Array.isArray(f)
-const word = (s) => {
-  if (typeof s !== 'string') throw new Error('word expects string arguments only')
-  return Object.freeze(new Word(s))
+const isWord = (f) => isSigned32BitInteger(f) || (typeof f === 'string' && isWordString(f)) || f instanceof Word
+const wordString = (w) => {
+  if (w instanceof Word) return w.value
+  if (typeof w === 'string') return w
+  if (isSigned32BitInteger(w)) return String(w)
+  throw new Error('not a word: ' + w + ' ' + typeof w)
 }
+const isList = (f) => Array.isArray(f)
 const symbolMeta = Symbol.for('wuns-meta')
 const wordWithMeta = (s, meta) => {
   if (typeof s !== 'string') throw new Error('word-with-mwta expects string arguments only')
@@ -38,12 +41,7 @@ const meta = (form) => {
   if (form[symbolMeta]) return form[symbolMeta]
   return unit
 }
-const wordString = (w) => {
-  if (w instanceof Word) return w.value
-  if (typeof w === 'string') return w
-  if (isSigned32BitInteger(w)) return String(w)
-  throw new Error('not a word: ' + w + ' ' + typeof w)
-}
+
 const print = (x) => {
   if (isWord(x)) return wordString(x)
   if (!Array.isArray(x)) throw new Error(`cannot print ${x} expected word or list ${typeof x} ${x.constructor}`)
@@ -63,7 +61,6 @@ module.exports = {
   unit,
   makeList,
   isUnit,
-  Word,
   isWord,
   isList,
   word,
