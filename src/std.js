@@ -160,7 +160,6 @@ const mkFuncEnv = ({ log, ...imports }, instructions) => {
     assert(ni >= -len && ni < len, 'index out of bounds: ' + i + ' ' + len)
     if (isWord(v)) return wordString(v).at(ni).charCodeAt(0)
     const elem = v.at(ni)
-    if (typeof elem === 'number') return elem
     return elem
   })
   funcEnv.set('slice', (v, i, j) => {
