@@ -106,6 +106,7 @@ const functionTokenType = tokenTypesMap.get('function')
 const macroTokenType = tokenTypesMap.get('macro')
 const parameterTokenType = tokenTypesMap.get('parameter')
 const stringTokenType = tokenTypesMap.get('string')
+const typeTokenType = tokenTypesMap.get('type')
 
 // from https://github.com/microsoft/vscode-extension-samples/blob/main/semantic-tokens-sample/src/extension.ts#L54
 const encodeTokenModifiers = (...strTokenModifiers) => {
@@ -201,13 +202,30 @@ const tokenBuilderForParseTree = () => {
         for (const child of body) go(child)
         break
       }
-      case 'constant':
+      case 'constant': {
         pushToken(head, keywordTokenType)
         if (tail.length === 0) break
         const cname = tail[0]
         if (cname.type === 'word') pushToken(cname, variableTokenType, declarationModifier)
         for (let i = 2; i < node.namedChildCount; i++) go(node.namedChildren[i])
         break
+      }
+      case 'external-func': {
+        pushToken(head, keywordTokenType)
+        if (tail.length === 0) break
+        const cname = tail[0]
+        if (cname.type === 'word') pushToken(cname, functionTokenType, declarationModifier)
+        if (tail.length === 1) break
+        const params = tail[1]
+        if (params.type === 'list')
+          for (const param of params.namedChildren) pushToken(param, typeTokenType, declarationModifier)
+        if (tail.length === 2) break
+        const results = tail[2]
+        if (results.type === 'list')
+          for (const result of results.namedChildren) pushToken(result, typeTokenType, declarationModifier)
+        // for (let i = 2; i < node.namedChildCount; i++) go(node.namedChildren[i])
+        break
+      }
       default:
         {
           const func = funcEnv.get(headText)
