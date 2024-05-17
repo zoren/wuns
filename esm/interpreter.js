@@ -1,17 +1,14 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { makeList, word, wordString, isWord, isList, isUnit, unit, print, wordWithMeta, listWithMeta } from './core.js'
-const __dirname = import.meta.dirname;
+import { makeList, word, wordValue, is_word, is_list, isUnit, unit, print, wordWithMeta, listWithMeta } from './core.js'
+const __dirname = import.meta.dirname
 const wasmModule = new WebAssembly.Module(fs.readFileSync(path.resolve(__dirname, '..', 'src', 'instructions.wasm')))
 const wasmInstance = new WebAssembly.Instance(wasmModule)
 const instructions = wasmInstance.exports
 
-const isValidRuntimeValue = (v) => isWord(v) || (isList(v) && v.every(isValidRuntimeValue))
+const isValidRuntimeValue = (v) => is_word(v) || (is_list(v) && v.every(isValidRuntimeValue))
 
-const tryMap = (arr, f) => {
-  if (arr) return arr.map(f)
-  return unit
-}
+const jsFunctions = await import('./core.js')
 
 const moduleMap = new Map()
 const globalVarValues = new Map()
@@ -26,8 +23,8 @@ const apply = ({ name, params, restParam, bodies }, args) => {
       throw new Error(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
   }
   const varValues = new Map()
-  for (let i = 0; i < arity; i++) varValues.set(wordString(params[i]), args[i])
-  if (restParam) varValues.set(wordString(restParam), makeList(...args.slice(arity)))
+  for (let i = 0; i < arity; i++) varValues.set(wordValue(params[i]), args[i])
+  if (restParam) varValues.set(wordValue(restParam), makeList(...args.slice(arity)))
   const inner = { varValues, outer: globalEnv }
   let result = unit
   for (const body of bodies) result = wunsEval(body, inner)
@@ -37,39 +34,39 @@ const assert = (cond, msg) => {
   if (!cond) throw new Error('eval assert failed: ' + msg)
 }
 const wunsEval = (form, env) => {
-  if (isWord(form)) {
-    const s = wordString(form)
+  if (is_word(form)) {
+    const v = wordValue(form)
     while (true) {
       if (!env) {
-        if (globalVarValues.has(s)) return globalVarValues.get(s)
-        throw new Error(`undefined variable ${s}`)
+        if (globalVarValues.has(v)) return globalVarValues.get(v)
+        throw new Error(`undefined variable ${v}`)
       }
       const { varValues, outer } = env
-      if (varValues.has(s)) return varValues.get(s)
+      if (varValues.has(v)) return varValues.get(v)
       env = outer
     }
   }
 
-  assert(isList(form), `cannot eval ${form} expected word or list`)
+  assert(is_list(form), `cannot eval ${form} expected word or list`)
   if (form.length === 0) return form
   const [firstForm, ...args] = form
-  const firstWordString = wordString(firstForm)
-  switch (firstWordString) {
+  const firstWordValue = wordValue(firstForm)
+  switch (firstWordValue) {
     case 'quote':
       return args.length === 1 ? args[0] : Object.freeze(args)
     case 'if': {
       const ifArgs = [...args, unit, unit, unit].slice(0, 3)
       const evaledCond = wunsEval(ifArgs[0], env)
-      const isZeroWord = evaledCond === 0 || (isWord(evaledCond) && wordString(evaledCond) === '0')
+      const isZeroWord = is_word(evaledCond) && wordValue(evaledCond) === 0
       return wunsEval(ifArgs[isZeroWord ? 2 : 1], env)
     }
     case 'let':
     case 'loop': {
       const [bindings, ...bodies] = args
       const varValues = new Map()
-      const inner = { varValues, outer: env, loop: firstWordString === 'loop' }
+      const inner = { varValues, outer: env, loop: firstWordValue === 'loop' }
       for (let i = 0; i < bindings.length - 1; i += 2) {
-        const varName = wordString(bindings[i])
+        const varName = wordValue(bindings[i])
         const value = wunsEval(bindings[i + 1], inner)
         if (varName === '-') {
           if (!isUnit(value))
@@ -79,7 +76,7 @@ const wunsEval = (form, env) => {
         varValues.set(varName, value)
       }
       let result = unit
-      if (firstWordString === 'let') {
+      if (firstWordValue === 'let') {
         for (const body of bodies) result = wunsEval(body, inner)
         return result
       }
@@ -101,7 +98,7 @@ const wunsEval = (form, env) => {
       const loopVars = enclosingLoopEnv.varValues
       for (let i = 0; i < args.length; i += 2) {
         const arg = args[i]
-        const v = wordString(arg)
+        const v = wordValue(arg)
         assert(loopVars.has(v), 'continue with undeclared variable')
         loopVars.set(v, wunsEval(args[i + 1], env))
       }
@@ -114,17 +111,17 @@ const wunsEval = (form, env) => {
       const origParams = origParams0 || unit
       let params = origParams
       let restParam = null
-      if (origParams.length > 1 && wordString(origParams.at(-2)) === '..') {
+      if (origParams.length > 1 && wordValue(origParams.at(-2)) === '..') {
         params = origParams.slice(0, -2)
         restParam = origParams.at(-1)
       }
-      const fObj = { name: fmname, isMacro: firstWordString === 'macro', params, restParam, bodies }
-      funcEnv.set(wordString(fmname), fObj)
+      const fObj = { name: fmname, isMacro: firstWordValue === 'macro', params, restParam, bodies }
+      globalVarValues.set(wordValue(fmname), fObj)
       return unit
     }
     case 'constant': {
       const [varName, value] = args
-      globalVarValues.set(wordString(varName), wunsEval(value, env))
+      globalVarValues.set(wordValue(varName), wunsEval(value, env))
       return unit
     }
     case 'wasm-import-func': {
@@ -132,10 +129,10 @@ const wunsEval = (form, env) => {
       const [instanceArg, exportFunctionName, importName] = args
       const instance = wunsEval(instanceArg, env)
       assert(instance instanceof WebAssembly.Instance, `expected wasm instance, found ${instance}`)
-      const f = instance.exports[wordString(exportFunctionName)]
+      const f = instance.exports[wordValue(exportFunctionName)]
       if (typeof f !== 'function') throw new Error(`expected function, found ${f}`)
       const fObj = { wasmFunc: true, f }
-      globalVarValues.set(wordString(importName), fObj)
+      globalVarValues.set(wordValue(importName), fObj)
       return unit
     }
     case 'tuple':
@@ -143,20 +140,20 @@ const wunsEval = (form, env) => {
     case 'external-func': {
       if (args.length !== 3) throw new Error('external-func expects 3 arguments')
       const [name, params, results] = args
-      // funcEnv.set(wordString(name), func)
-      const funcObj = funcEnv.get(wordString(name))
+      // funcEnv.set(wordValue(name), func)
+      const funcObj = jsFunctions[wordValue(name).replace(/-/g, '_')]
       assert(funcObj, `extern function ${name} not found`)
       if (!(typeof funcObj === 'function')) throw new Error(`expected function, found ${funcObj}`)
       const parameterCount = funcObj.length
-      assert(isList(params), `extern expected list of parameters, found ${params}`)
+      assert(is_list(params), `extern expected list of parameters, found ${params}`)
       assert(
         params.length === parameterCount,
         `extern function ${name} expected ${parameterCount} arguments, got ${params.length}`,
       )
       for (const param of params) {
-        if (!isWord(param)) throw new Error('extern expected word arguments')
+        if (!is_word(param)) throw new Error('extern expected word arguments')
       }
-      globalVarValues.set(wordString(name), funcObj)
+      globalVarValues.set(wordValue(name), funcObj)
       return unit
     }
     case 'import': {
@@ -164,20 +161,20 @@ const wunsEval = (form, env) => {
     }
   }
   try {
-    const funcOrMacro = globalVarValues.get(firstWordString)
+    const funcOrMacro = globalVarValues.get(firstWordValue)
     if (!funcOrMacro) {
-      const instr = instructions[firstWordString]
-      if (!instr) throw new Error(`function ${firstWordString} not found ${print(form)}`)
+      const instr = instructions[firstWordValue]
+      if (!instr) throw new Error(`function ${firstWordValue} not found ${print(form)}`)
       const res = instr(...args.map((arg) => wunsEval(arg, env)))
       if (res === undefined) return unit
       return res
     }
-    assert(funcOrMacro, `function ${firstWordString} not found ${print(form)}`)
+    assert(funcOrMacro, `function ${firstWordValue} not found ${print(form)}`)
     if (typeof funcOrMacro === 'function') {
       const parameterCount = funcOrMacro.length
       assert(
         args.length === parameterCount,
-        `${firstWordString} expected ${parameterCount} arguments, got ${args.length}`,
+        `${firstWordValue} expected ${parameterCount} arguments, got ${args.length}`,
       )
       const res = funcOrMacro(...args.map((arg) => wunsEval(arg, env)))
       if (res === undefined) return unit
@@ -197,47 +194,12 @@ const wunsEval = (form, env) => {
       args.map((arg) => wunsEval(arg, env)),
     )
   } catch (e) {
-    console.error('error evaluating', firstWordString)
+    console.error('error evaluating', firstWordValue)
     throw e
   }
 }
-const gogomacro = (form) => {
-  if (isWord(form)) return form
-  assert(isList(form), `cannot expand ${form} expected word or list`)
-  if (form.length === 0) return form
-  const [firstForm, ...args] = form
-  const firstWordString = wordString(firstForm)
-  switch (firstWordString) {
-    case 'quote':
-      return form
-    case 'if':
-      return makeList(firstForm, ...tryMap(args, gogomacro))
-    case 'let':
-    case 'loop': {
-      const [bindings, ...bodies] = args
-      return makeList(
-        firstForm,
-        tryMap(bindings, (borf, i) => (i % 2 === 0 ? borf : gogomacro(borf))),
-        ...bodies.map(gogomacro),
-      )
-    }
-    case 'continue':
-      return makeList(firstForm, ...tryMap(args, (borf, i) => (i % 2 === 0 ? borf : gogomacro(borf))))
-    case 'func':
-    case 'macro': {
-      const [fname, origParams, ...bodies] = args
-      return makeList(firstForm, fname, origParams, ...bodies.map(gogomacro))
-    }
-    case 'constant': {
-      const [varName, value] = args
-      return makeList(firstForm, varName, gogomacro(value))
-    }
-  }
-  const funcOrMacro = globalVarValues.get(firstWordString)
-  if (funcOrMacro && funcOrMacro.isMacro) return gogomacro(apply(funcOrMacro, args.map(gogomacro)))
-  return makeList(firstForm, ...args.map(gogomacro))
-}
-const gogoeval = (form) => wunsEval(gogomacro(form), globalEnv)
+
+const gogoeval = (form) => wunsEval(form, globalEnv)
 
 const nodeToOurForm = (node) => {
   const { type, text, namedChildren, startPosition, endPosition } = node

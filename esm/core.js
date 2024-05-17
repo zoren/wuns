@@ -1,55 +1,58 @@
-const unit = Object.freeze([])
-const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
-const isUnit = (x) => x === unit || (Array.isArray(x) && Object.isFrozen(x) && x.length === 0)
-// /[a-z0-9.=-]+/
+export const unit = Object.freeze([])
+export const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
+export const isUnit = (x) => x === unit || (Array.isArray(x) && Object.isFrozen(x) && x.length === 0)
+
+const isSigned32BitInteger = (n) => (n | 0) === n
 const wordRegex = /^[a-z0-9.=-]+$/
-const isWordString = (s) => typeof s === 'string' && s.length > 0 && wordRegex.test(s)
+export const isWordString = (s) => typeof s === 'string' && s.length > 0 && wordRegex.test(s)
 class Word {
   constructor(value) {
-    if (!isWordString(value)) throw new Error('invalid word: ' + value)
-    this.value = value
+    const n = Number(value)
+    if (isSigned32BitInteger(n)) {
+      this.value = n
+    } else if (isWordString(value)) {
+      this.value = value
+    } else throw new Error('invalid word: "' + value + '" ' + typeof value)
   }
 
   toString() {
-    return this.value
+    return String(this.value)
   }
 }
-const word = (s) => Object.freeze(new Word(s))
-const isSigned32BitInteger = (n) => (n | 0) === n
+export const word = (s) => Object.freeze(new Word(s))
 // todo what about words representing large integers?
-const isWord = (f) => isSigned32BitInteger(f) || (typeof f === 'string' && isWordString(f)) || f instanceof Word
-const wordString = (w) => {
+export const is_word = (f) => isSigned32BitInteger(f) || (typeof f === 'string' && isWordString(f)) || f instanceof Word
+export const wordValue = (w) => {
   if (w instanceof Word) return w.value
   if (typeof w === 'string') return w
-  if (isSigned32BitInteger(w)) return String(w)
+  if (isSigned32BitInteger(w)) return w
   throw new Error('not a word: ' + w + ' ' + typeof w)
 }
-const isList = (f) => Array.isArray(f)
+export const is_list = (f) => Array.isArray(f)
 const symbolMeta = Symbol.for('wuns-meta')
-const wordWithMeta = (s, meta) => {
-  if (typeof s !== 'string') throw new Error('word-with-mwta expects string arguments only')
+export const wordWithMeta = (s, meta) => {
   const w = new Word(s)
   w[symbolMeta] = meta
   return Object.freeze(w)
 }
-const listWithMeta = (l, meta) => {
+export const listWithMeta = (l, meta) => {
   const ll = [...l]
   ll[symbolMeta] = meta
   return Object.freeze(ll)
 }
-const meta = (form) => {
-  if (form[symbolMeta]) return form[symbolMeta]
+export const meta = (form) => {
+  if (symbolMeta in form) return form[symbolMeta]
   return unit
 }
 
-const print = (x) => {
-  if (isWord(x)) return wordString(x)
+export const print = (x) => {
+  if (is_word(x)) return wordValue(x)
   if (!Array.isArray(x)) throw new Error(`cannot print ${x} expected word or list ${typeof x} ${x.constructor}`)
   return `[${x.map(print).join(' ')}]`
 }
 const number = (f) => {
-  if (!isWord(f)) throw new Error('expected word: ' + f)
-  const s = wordString(f)
+  if (!is_word(f)) throw new Error('expected word: ' + f)
+  const s = wordValue(f)
   const n = Number(s)
   if (isNaN(n)) throw new Error('expected number, found: ' + s)
   if (!isSigned32BitInteger(n)) throw new Error('expected 32-bit signed integer, found: ' + s)
@@ -57,17 +60,47 @@ const number = (f) => {
   return n
 }
 
-export {
-  unit,
-  makeList,
-  isUnit,
-  isWord,
-  isList,
-  word,
-  wordWithMeta,
-  listWithMeta,
-  meta,
-  wordString,
-  print,
-  number,
+export const push = (ar, e) => {
+  if (!Array.isArray(ar)) throw new Error('push expects array')
+  if (Object.isFrozen(ar)) throw new Error('push expects mutable array')
+  ar.push(e)
+  return unit
+}
+export const size = (a) => {
+  if (is_word(a)) return String(a).length
+  if (Array.isArray(a)) return a.length
+  throw new Error('getLength expects word or list')
+}
+export const mutable_list = () => []
+const assert = (b, s) => {
+  if (!b) throw new Error(s)
+}
+export const at = (v, i) => {
+  const len = size(v)
+  const ni = number(i)
+  assert(ni >= -len && ni < len, 'index out of bounds: ' + i + ' ' + len)
+  if (is_word(v)) return String(v).at(ni).charCodeAt(0)
+  const elem = v.at(ni)
+  return elem
+}
+export const freeze = (ar) => {
+  if (!Array.isArray(ar)) throw new Error('freeze expects array')
+  if (Object.isFrozen(ar)) throw new Error('freeze expects mutable array')
+  return makeList(...ar)
+}
+export const slice = (v, i, j) => {
+  if (!Array.isArray(v)) throw new Error('slice expects list')
+  let s = v.slice(number(i), number(j))
+  if (s instanceof Uint8Array) return makeList(...Array.from(s, (n) => n))
+  return Object.freeze(s)
+}
+let gensymCounter = 0
+export const gensym = () => word('v' + String(gensymCounter++))
+export const set_array = (ar, index, e) => {
+  if (!Array.isArray(ar)) throw new Error('set-array expects array')
+  if (Object.isFrozen(ar)) throw new Error('set-array expects mutable array')
+  const i = number(index)
+  if (i < 0 || i >= ar.length) throw new Error('set-array index out of bounds: ' + i + ' ' + ar.length)
+  ar[i] = e
+  return unit
 }
