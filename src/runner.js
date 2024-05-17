@@ -1,3 +1,4 @@
+global.wuns = {}
 const {concat, kw_do, EQ} = require('./out.js')
 {
 const res = concat([1, 2, 3], [], [4, 5])

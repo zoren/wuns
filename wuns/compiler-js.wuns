@@ -334,7 +334,7 @@
               [when-not [eq-word [first v] [quote constant]]
                 [log [concat [list form] [quote not a constant] v]]
                 [abort]]
-              [value-to-js [second v]]]]]]]
+              [second v]]]]]]
 
     [= form []]
     [return-if-tail is-tail-pos [quote [array]]]
@@ -469,7 +469,7 @@
         [eq-word first-form [quote constant]]
         [let [name [second form]
               value [compile-form [] 0 [third form]]]
-          [assoc-list-set top-level-ctx name [list [quote constant] [third form]]]
+          [assoc-list-set top-level-ctx name [list [quote constant] value]]
           [comment
             [list [quote assign] [list [quote field] [list [quote field] [quote var global] [quote wuns]] [js-escape name]] value]
           ]]
