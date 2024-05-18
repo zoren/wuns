@@ -1,160 +1,4 @@
-[macro comment [.. -] []]
-
-[func list [.. l] l]
-
-[macro constant-ids [.. id-constants]
-  [let [f [mutable-list]]
-    [push f [quote let]]
-    [push f []]
-    [loop [i [quote 0]]
-      [if [lt i [size id-constants]]
-        [let [name [at id-constants i]]
-          [push f [list [quote constant] name [list [quote quote] name]]]
-          [continue i [add i [quote 1]]]]
-        f]]]]
-
-[constant-ids -1 -2 0 1 2 3 4 - ..]
-
-[func inc [x] [add x 1]]
-
-[func dec [x] [sub x 1]]
-
-[func not [c] [eqz c]]
-
-[func is-zero [x] [eqz x]]
-
-[func is-odd [x] [bitwise-and x 1]]
-
-[func is-even [x] [not [is-odd x]]]
-
-[func is-negative [x] [lt x 0]]
-
-[func first [l] [at l 0]]
-[func second [l] [at l 1]]
-[func third [l] [at l 2]]
-[func fourth [l] [at l 3]]
-[func last [l] [at l -1]]
-
-[func rest [l] [slice l 1 [size l]]]
-
-[func push-all [mut-list list]
-  [let [s-l [size list]]
-    [loop [i 0]
-      [if [lt i s-l]
-        [let []
-          [push mut-list [at list i]]
-          [continue i [inc i]]]
-        []]]]]
-
-[func concat-lists [lists]
-  [let [res [mutable-list] s [size lists]]
-    [loop [i 0]
-      [if [lt i s]
-        [let []
-          [push-all res [at lists i]]
-          [continue i [inc i]]]
-        [freeze res]]]]]
-
-[func concat [.. lists] [concat-lists lists]]
-
-[macro do [.. forms]
-  [concat [quote [let []]] forms]]
-
-[macro when [cond .. forms]
-  [list
-    [quote if] cond
-    [concat [quote [do]] forms]
-    []]]
-
-[macro when-not [cond .. forms]
-  [list
-    [quote if] cond
-    []
-    [concat [quote [do]] forms]]]
-
-[macro assert [cond .. lmsg]
-  [list [quote when-not] cond
-    [list [quote log] [list [quote quote] [concat [list [quote assert-fail]] lmsg]]]
-    [quote [abort]]]]
-
-[macro ifs [.. clauses]
-  [let [s [size clauses]]
-    [assert [not [is-zero s]] ifs requires an odd number of arguments]
-    [if [eq s 1]
-      [first clauses]
-      [list [quote if] [first clauses]
-        [second clauses]
-        [concat [quote [ifs]] [slice clauses 2 [size clauses]]]]]]]
-
-[macro and [.. clauses]
-  [let [s [size clauses]]
-    [ifs
-      [is-zero s]
-      1
-
-      [eq s 1]
-      [first clauses]
-
-      [let [gs [gensym]]
-        [list [quote let] [list gs [first clauses]]
-          [list [quote if] gs
-            [concat [quote [and]] [rest clauses]]
-            gs]]]]]]
-
-[macro or [.. clauses]
-  [let [s [size clauses]]
-    [ifs
-      [is-zero s]
-      0
-
-      [eq s 1]
-      [first clauses]
-
-      [let [gs [gensym]]
-        [list [quote let] [list gs [first clauses]]
-          [list [quote if] gs
-            gs
-            [concat [quote [or]] [rest clauses]]]]]]]]
-
-[func reverse [l]
-  [let [res [mutable-list]]
-    [loop [i [dec [size l]]]
-      [when-not [is-negative i]
-        [push res [at l i]]
-        [continue i [dec i]]]]
-    [freeze res]]]
-
-[func eq-word [a b]
-  [and [eq [size a] [size b]]
-    [loop [i 0]
-      [if [lt i [size a]]
-        [if [eq [at a i] [at b i]]
-          [continue i [inc i]]
-          0]
-        1]]]]
-
-[func = [a b]
-  [if
-    [and [is-word a] [is-word b]]
-    [eq-word a b]
-
-    [and [is-list a] [is-list b]
-      [let [s [size a]]
-        [and [eq s [size b]]
-          [loop [i 0]
-            [or [ge i s]
-              [and [= [at a i] [at b i]] [continue i [inc i]]]]]]]]]]
-
-[func lookup-assoc-list [ctx sym]
-  [let [s [size ctx]]
-    [loop [i 0]
-      [if [ge i s]
-        [abort]
-        [let [k [at ctx i]
-              v [at ctx [inc i]]]
-          [if [eq-word k sym]
-            v
-            [continue i [add i 2]]]]]]]]
+[import ../wuns/standard-library.wuns]
 
 [func make-operation-obj [name parameters results]
   [concat
@@ -177,6 +21,15 @@
     [make-binary-i32 ge]
     [make-binary-i32 bitwise-and]
     ]]
+
+[func get-instruction [name]
+  [loop [i 0]
+    [if [lt i [size instructions]]
+      [let [o [at instructions i]]
+        [if [eq-word [assoc-list-get o [quote name]] name]
+          o
+          [continue i [inc i]]]]
+      0]]]
 
 [constant js-keywords [quote
   break
@@ -217,15 +70,6 @@
 
 [func is-js-keyword [word]
   [not [is-negative [index-of-word js-keywords word]]]]
-
-[func get-instruction [name]
-  [loop [i 0]
-    [if [lt i [size instructions]]
-      [let [o [at instructions i]]
-        [if [eq-word [lookup-assoc-list o [quote name]] name]
-          o
-          [continue i [inc i]]]]
-      0]]]
 
 [func index-of-word [words word]
   [let [s-words [size words]]
@@ -289,23 +133,6 @@
   [if [is-js-keyword word]
     [concat-words [list [quote kw-] word]]
     word]]
-
-[func assoc-list-index [ctx sym]
-  [let [s [size ctx]]
-    [loop [i 0]
-      [if [ge i s]
-        -1
-        [if [eq-word [at ctx i] sym]
-          i
-          [continue i [add i 2]]]]]]]
-
-[func assoc-list-set [ctx sym value]
-  [let [index [assoc-list-index ctx sym]]
-    [if [is-negative index]
-      [do
-        [push ctx sym]
-        [push ctx value]]
-      [set-array ctx [inc index] value]]]]
 
 [constant top-level-ctx [mutable-list]]
 
@@ -459,13 +286,12 @@
                       [continue i [inc i]]]]
                   [list orig-params]]]
               fctx [list param-ctx []]]
-
+            [assoc-list-set top-level-ctx name [list first-form [form-to-func params bodies]]]
             [loop [i 3]
               [when [lt i [dec [size form]]]
                 [push bodies [compile-form fctx 0 [at form i]]]
                 [continue i [inc i]]]]
             [push bodies [compile-form fctx 1 [last form]]]
-            [assoc-list-set top-level-ctx name [list first-form [form-to-func params bodies]]]
             [list [quote assign]
               [list [quote field]
                 [list [quote field] [quote var global] [quote wuns]]

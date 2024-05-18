@@ -158,6 +158,14 @@ const wunsEval = (form, env) => {
     }
     case 'import': {
       const [module, ...imports] = args
+      const evaledFile = evalFile(wordValue(module))
+      // for (const imp of imports) {
+      //   const name = wordValue(imp)
+      //   const value = evaledFile[name]
+      //   if (!value) throw new Error(`import ${name} not found in ${module}`)
+      //   globalVarValues.set(name, value)
+      // }
+      return unit
     }
   }
   try {
@@ -226,10 +234,11 @@ export const evalString = (content) => {
   for (const node of tree.rootNode.children) {
     const form = nodeToOurForm(node)
     try {
-      console.log(print(gogoeval(form)))
+      const v = gogoeval(form);
+      if (!isUnit(v)) console.log(print(v))
     } catch (e) {
       console.error('error evaluating', print(form), e)
-      throw e
+      // throw e
     }
   }
 }

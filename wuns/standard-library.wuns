@@ -151,6 +151,33 @@
             [or [ge i s]
               [and [= [at a i] [at b i]] [cont [inc i]]]]]]]]]]
 
+
+[func assoc-list-index [ctx sym]
+  [let [s [size ctx]]
+    [loop [i 0]
+      [if [ge i s]
+        -1
+        [if [eq-word [at ctx i] sym]
+          i
+          [continue i [add i 2]]]]]]]
+
+[func assoc-list-get [ctx sym]
+  [let [index [assoc-list-index ctx sym]]
+    [if [is-negative index]
+      [do
+        [log [quote not found]]
+        [abort]]
+      [at ctx [inc index]]]]]
+
+[func assoc-list-set [ctx sym value]
+  [let [index [assoc-list-index ctx sym]]
+    [if [is-negative index]
+      [do
+        [push ctx sym]
+        [push ctx value]]
+      [set-array ctx [inc index] value]]]]
+
+
 [comment
 [= [quote a] [quote a]]
 [= [quote a] [quote b]]

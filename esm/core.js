@@ -3,7 +3,7 @@ export const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(a
 export const isUnit = (x) => x === unit || (Array.isArray(x) && Object.isFrozen(x) && x.length === 0)
 
 const isSigned32BitInteger = (n) => (n | 0) === n
-const wordRegex = /^[a-z0-9.=-]+$/
+const wordRegex = /^[a-z0-9.=/-]+$/
 export const isWordString = (s) => typeof s === 'string' && s.length > 0 && wordRegex.test(s)
 class Word {
   constructor(value) {

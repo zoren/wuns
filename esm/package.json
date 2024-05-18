@@ -11,6 +11,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "tree-sitter-wuns": "file:../tree-sitter-wuns/tree-sitter-wuns-1.0.2.tgz"
+    "tree-sitter-wuns": "file:../tree-sitter-wuns/tree-sitter-wuns-1.0.3.tgz"
   }
 }
