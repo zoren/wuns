@@ -1,81 +1,7 @@
-[macro comment [.. -] []]
+[import ../wuns/standard-library.wuns]
+[constant-ids - ..]
 
-[func list [.. l] l]
-
-[macro constant-ids [.. id-constants]
-  [let [f [mutable-list]]
-    [push f [quote let]]
-    [push f []]
-    [loop [i [quote 0]]
-      [if [lt i [size id-constants]]
-        [let [name [at id-constants i]]
-          [push f [list [quote constant] name [list [quote quote] name]]]
-          [cont [add i [quote 1]]]]
-        f]]]]
-
-[constant-ids -1 -2 0 1 2 3 4 - ..]
-
-[func inc [x] [add x 1]]
-
-[func dec [x] [sub x 1]]
-
-[func not [c] [eqz c]]
-
-[func is-zero [x] [eqz x]]
-
-[func is-odd [x] [bit-and x 1]]
-
-[func is-even [x] [not [is-odd x]]]
-
-[func is-negative [x] [lt x 0]]
-
-[func first [l] [at l 0]]
-[func second [l] [at l 1]]
-[func third [l] [at l 2]]
-[func fourth [l] [at l 3]]
-[func last [l] [at l -1]]
-
-[func rest [l] [slice l 1 [size l]]]
-
-[func push-all [mut-list list]
-  [let [s-l [size list]]
-    [loop [i 0]
-      [if [lt i s-l]
-        [let []
-          [push mut-list [at list i]]
-          [cont [inc i]]]
-        []]]]]
-
-[func concat-lists [lists]
-  [let [res [mutable-list] s [size lists]]
-    [loop [i 0]
-      [if [lt i s]
-        [let []
-          [push-all res [at lists i]]
-          [cont [inc i]]]
-        [freeze res]]]]]
-
-[func concat [.. lists] [concat-lists lists]]
-
-[macro do [.. forms]
-  [concat [quote [let []]] forms]]
-
-[macro when [cond .. forms]
-  [list
-    [quote if] cond
-    [concat [quote [do]] forms]
-    []]]
-
-[macro when-not [cond .. forms]
-  [list
-    [quote if] cond
-    []
-    [concat [quote [do]] forms]]]
-
-[macro assert [cond .. lmsg]
-  [list [quote when-not] cond
-    [list [quote log] [list [quote quote] [concat [list [quote assert-fail]] lmsg]]]
-    [quote [abort]]]]
+[external-func report-error [list form] []]
 
 [macro report-when [cond form .. lmsg]
   [list [quote when] cond
@@ -88,138 +14,11 @@
 [macro report [form .. lmsg]
   [list [quote report-error] [list [quote quote] lmsg] form]]
 
-[macro ifs [.. clauses]
-  [let [s [size clauses]]
-    [assert [not [is-zero s]] ifs requires an odd number of arguments]
-    [if [eq s 1]
-        [first clauses]
-        [list [quote if] [first clauses]
-          [second clauses]
-          [concat [quote [ifs]] [slice clauses 2 [size clauses]]]]]]]
-
-[macro and [.. clauses]
-  [let [s [size clauses]]
-    [ifs
-      [is-zero s]
-      1
-
-      [eq s 1]
-      [first clauses]
-
-      [let [gs [gensym]]
-        [list [quote let] [list gs [first clauses]]
-          [list [quote if] gs
-            [concat [quote [and]] [rest clauses]]
-            gs]]]]]]
-
-[macro or [.. clauses]
-  [let [s [size clauses]]
-    [ifs
-      [is-zero s]
-      0
-
-      [eq s 1]
-      [first clauses]
-
-      [let [gs [gensym]]
-        [list [quote let] [list gs [first clauses]]
-          [list [quote if] gs
-            gs
-            [concat [quote [or]] [rest clauses]]]]]]]]
-
-[func eq-word [a b]
-  [and [eq [size a] [size b]]
-    [loop [i 0]
-      [if [lt i [size a]]
-        [if [eq [at a i] [at b i]]
-          [cont [inc i]]
-          0]
-        1]]]]
-
-[func = [a b]
-  [if
-    [and [is-word a] [is-word b]]
-    [eq-word a b]
-
-    [and [is-list a] [is-list b]
-      [let [s [size a]]
-        [and [eq s [size b]]
-          [loop [i 0]
-            [or [ge i s]
-              [and [= [at a i] [at b i]] [cont [inc i]]]]]]]]]]
-
 [func test [expected actual]
   [when-not [= expected actual]
     [log [list [quote expected] expected [quote [but got]] actual]]]]
 
-[func index-assoc-list [ctx sym]
-  [let [s [size ctx]]
-    [loop [i 0]
-      [if [ge i s]
-        -1
-        [if [eq-word [at ctx i] sym]
-          i
-          [cont [add i 2]]]]]]]
-
-[func assoc-list-has [ctx sym]
-  [not [is-negative [index-assoc-list ctx sym]]]]
-
-[func assoc-list-keys [ctx]
-  [let [s [size ctx] ml [mutable-list]]
-    [loop [j 0]
-      [when [lt j s]
-        [push ml [at ctx j]]
-        [cont [add j 2]]]]
-    [freeze ml]]]
-
-[func assoc-list-entries [ctx]
-  [let [s [size ctx] ml [mutable-list]]
-    [loop [j 0]
-      [when [lt j s]
-        [push ml [list [at ctx j] [at ctx [inc j]]]]
-        [cont [add j 2]]]]
-    [freeze ml]]]
-
-[func lookup-assoc-list [ctx sym]
-  [let [index [index-assoc-list ctx sym]]
-    [assert [not [is-negative index]] lookup-assoc-list key not found]
-    [at ctx [inc index]]]]
-
-[func assoc-list-set [ctx sym value]
-  [let [index [index-assoc-list ctx sym]]
-    [if [is-negative index]
-      [do
-        [push ctx sym]
-        [push ctx value]]
-      [set-array ctx [inc index] value]]]]
-
-[func assoc-meta [f k v]
-  [let [ml [mutable-list]]
-    [push-all ml [meta f]]
-    [assoc-list-set ml k v]
-    [with-meta f [freeze ml]]]]
-
 [macro with-type [f t] [list [quote assoc-meta] f [quote quote type] [list [quote quote] t]]]
-
-[func dec-word-to-i32 [dw]
-  [let [s [sub 0 [size dw]]]
-    [loop [i -1 res 0 multi 1]
-      [if [le s i]
-        [let [c [at dw i]]
-          [when-not [and [le [quote 48] c] [le c [quote 57]]]
-            [report dw not a decimal character]]
-          [assert [lt res [quote 214748364]] out of bounds]
-          [cont [dec i] [add res [mul [sub c [quote 48]] multi]] [mul multi [quote 10]]]]
-        res]]]]
-
-[func check-decimal [dw]
-  [let [s [size dw]]
-    [loop [ii 0]
-      [when [lt ii s]
-        [let [c [at dw ii]]
-          [if [and [le [quote 48] c] [le c [quote 57]]]
-            [cont [inc ii]]
-            [report dw not a decimal character]]]]]]]
 
 [func is-decimal [dw]
   [let [s [size dw]]
@@ -227,7 +26,7 @@
       [if [lt i s]
         [let [c [at dw i]]
           [if [and [le [quote 48] c] [le c [quote 57]]]
-            [cont [inc i]]
+            [continue i [inc i]]
             0]]
         1]]]]
 
@@ -239,7 +38,7 @@
 [constant type-any [quote type-any]]
 [constant type-empty [type-tuple]]
 [constant type-error [quote type-error]]
-[constant mutable-list [quote mutable-list]]
+[constant type-mutable-list [quote mutable-list]]
 [func is-tuple-type [t] [and [is-list t] [gt [size t] 0] [= [first t] [quote tuple]]]]
 
 [func is-atomic-type [t]
@@ -251,17 +50,16 @@
     [= t type-any]
     [= t type-empty]
     [= t type-error]
-    [= t mutable-list]]]
+    [= t type-mutable-list]]]
 
 [func is-type [t]
-  [or [is-atomic-type t]
-    [let []]]]
+  [or [is-atomic-type t]]]
 
 [func is-type-list [ts]
   [loop [i 0]
     [if [lt i [size ts]]
       [if [is-atomic-type [at ts i]]
-        [cont [inc i]]
+        [continue i [inc i]]
         0]
       1]]]
 
@@ -277,7 +75,7 @@
     [loop [cur-ctx local-ctx]
       [if [eq [size cur-ctx] 1]
         [let [param-ctx [first cur-ctx]
-              index [index-assoc-list param-ctx form]]
+              index [assoc-list-index param-ctx form]]
           [if [is-negative index]
             [do
               [report form symbol not found]
@@ -286,9 +84,9 @@
         [let
           [vars [first cur-ctx]
            outer [second cur-ctx]
-           index [index-assoc-list vars form]]
+           index [assoc-list-index vars form]]
           [if [is-negative index]
-            [cont outer]
+            [continue cur-ctx outer]
             [at vars [inc index]]]]]]
 
     [= form []]
@@ -308,7 +106,7 @@
                     ts [check-form global-ctx local-ctx 0 arg]]
                 [push-all res-types ts]
                 [report-when-not [= [size ts] 1] arg tuple element not allow to be a tuple]
-                [cont [inc i]]]]]
+                [continue i [inc i]]]]]
           [type-tuple res-types]]
 
         [= first-form [quote quote]]
@@ -336,7 +134,7 @@
             [when [lt i s-form]
               [check-form global-ctx local-ctx 1 [at form i]]
               [report [at form i] if extra forms ignored]
-              [cont [inc i]]]]
+              [continue i [inc i]]]]
           [if [gt n-of-args 1]
             [let [tt [check-form global-ctx local-ctx tail-pos [third form]]
                   ft [if [eq n-of-args 2] type-empty [check-form global-ctx local-ctx tail-pos [fourth form]]]]
@@ -371,15 +169,15 @@
                      ]
                     [push var-values var]
                     [push var-values val-type]
-                    [cont [add i 2]]]]]]]
+                    [continue i [add i 2]]]]]]]
           [loop [i 2]
             [when [lt i [dec s-form]]
               [check-form global-ctx let-loop-ctx 0 [at form i]]
-              [cont [inc i]]]]
+              [continue i [inc i]]]]
           [when [lt 2 s-form]
             [check-form global-ctx let-loop-ctx [if [= first-form [quote loop]] 1 tail-pos] [last form]]]]
 
-        [= first-form [quote cont]]
+        [= first-form [quote continue]]
         [do
           [loop [cur-ctx local-ctx]
             [if [eq [size cur-ctx] 1]
@@ -387,16 +185,26 @@
               [if [= [quote loop] [third cur-ctx]]
                 [let [loop-vars [first cur-ctx]]
                   [report-when-not
-                    [eq [mul n-of-args 2] [size loop-vars]]
+                    [is-even n-of-args]
                     form
-                    cont needs same number of arguments as loop]
-                  [report-when-not tail-pos form cont not at tail position of loop]]
-                [cont [second cur-ctx]]]]]
+                    continue takes a list of pairs of bindings]
+                  [loop [i 1]
+                    [when [lt i n-of-args]
+                      [let [var [at form i]
+                            value [at form [inc i]]
+                            val-type [check-form global-ctx cur-ctx 0 value]
+                            index [assoc-list-index loop-vars var]]
+                        [if [is-negative index]
+                          [report var loop var not found]
+                          [let [type [at loop-vars [inc index]]]
+                            [report-when-not [= type val-type] value type mismatch]]]
+                      [continue i [add i 2]]]]]]
+                [report-when-not tail-pos form continue not at tail position of loop]
+                [continue cur-ctx [second cur-ctx]]]]]
           type-any]
 
-        [= first-form [quote extern]]
-        [let
-          [func-sigs [lookup-assoc-list global-ctx [quote function-signatures]]]
+        [= first-form [quote external-func]]
+        [let [func-sigs [assoc-list-get global-ctx [quote function-signatures]]]
         [if [gt [size form] 1]
           [let [name [second form]]
             [if [is-word name]
@@ -447,7 +255,7 @@
                       [push param-ctx p]
                       [push param-ctx [list pt]]]
                     [push mut-parameter-type-list pt]
-                    [cont [inc i]]]]]
+                    [continue i [inc i]]]]]
               rest-param-element-type
               [if has-rest-param
                 [let [lp [last params]
@@ -469,13 +277,13 @@
               func-ctx [list param-ctx [list []] first-form]
               parameter-type-list [freeze mut-parameter-type-list]
               locals [mutable-list]
-              func-sigs [lookup-assoc-list global-ctx [quote function-signatures]]
+              func-sigs [assoc-list-get global-ctx [quote function-signatures]]
               -
               [loop [i 3]
                 [when [lt i [dec [size form]]]
                   [comment remember to check type is empty maybe even drop unused and warn instead]
                   [check-form global-ctx func-ctx 0 [at form i]]
-                  [cont [inc i]]]]
+                  [continue i [inc i]]]]
               result-type
               [if [gt [size form] 3]
                 [check-form global-ctx func-ctx 0 [last form]]
@@ -494,13 +302,13 @@
                   [report name expected a word here]]]
               []]]
 
-        [let [func-sigs [lookup-assoc-list global-ctx [quote function-signatures]]
-              index [index-assoc-list func-sigs first-form]]
+        [let [func-sigs [assoc-list-get global-ctx [quote function-signatures]]
+              index [assoc-list-index func-sigs first-form]]
           [if [is-negative index]
             [report first-form function not found]
             [let [sig [at func-sigs [inc index]]
-                  parameters [lookup-assoc-list sig [quote parameters]]
-                  index-rest [index-assoc-list sig [quote rest-param-element-type]]
+                  parameters [assoc-list-get sig [quote parameters]]
+                  index-rest [assoc-list-index sig [quote rest-param-element-type]]
                   n-of-parameters [size parameters]]
               [report-when-not [ge n-of-args n-of-parameters] form
                 missing arguments]
@@ -516,12 +324,12 @@
                         [report-error [list [quote blav] pt arg-t] arg]]
                       [report-when-not [check-param-arg-conform pt arg-t] arg parameter type mismatch]]
                       ]
-                    [cont [inc i]]]]]
+                    [continue i [inc i]]]]]
               [if [is-negative index-rest]
                 [loop [i [inc n-of-parameters]]
                   [when [lt i s-form]
                     [report [at form i] extra arguments ignored]
-                    [cont [inc i]]]]
+                    [continue i [inc i]]]]
                 [let [rest-param-element-type [at sig [inc index-rest]]]
                   [loop [i [inc n-of-parameters]]
                     [when [lt i s-form]
@@ -530,8 +338,8 @@
                         [report-when-not [check-param-arg-conform rest-param-element-type arg-t] arg
                           rest parameter type mismatch]
                           ]
-                      [cont [inc i]]]]]]
-              [lookup-assoc-list sig [quote results]]]
+                      [continue i [inc i]]]]]]
+              [assoc-list-get sig [quote results]]]
 
             ]]]]]]
 
@@ -542,7 +350,7 @@
       [when [lt i [size bin-insts]]
         [let [name [at bin-insts i]]
           [assoc-list-set ml name [quote parameters [i32 i32] results i32]]
-          [cont [inc i]]]]]
+          [continue i [inc i]]]]]
 
     [list
       [quote function-signatures] ml]]]
@@ -552,7 +360,7 @@
     [loop [i 0]
       [when [lt i [size forms]]
         [compile-top-level-form ctx [at forms i]]
-        [cont [inc i]]]]
+        [continue i [inc i]]]]
     ctx]]
 
 [func check-forms [forms]
@@ -560,4 +368,12 @@
     [loop [i 0]
       [when [lt i [size forms]]
         [check-form gctx [list []] 0 [at forms i]]
-        [cont [inc i]]]]]]
+        [continue i [inc i]]]]]]
+
+[comment
+  [check-forms
+    [quote
+      [func f [x y] [add x y]]
+      [func g [x y] [sub x y]]]]
+  [check-forms [quote [func f [x y] [add x y]] [func g [x y] [sub x y]]]]
+]

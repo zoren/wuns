@@ -1,24 +1,22 @@
 [macro comment [.. -] []]
 
 [import std
-  at size slice push mutable-list freeze log abort gensym]
+  at size slice push mutable-list freeze log abort gensym
+  is-word is-list
+  ]
 
 [func list [.. l] l]
 
-[macro constant-ids [.. id-constants]
-  [let [f [mutable-list]]
-    [push f [quote let]]
-    [push f []]
-    [loop [i [quote 0]]
-      [if [lt i [size id-constants]]
-        [let [name [at id-constants i]]
-          [push f [list [quote constant] name [list [quote quote] name]]]
-          [continue i [add i [quote 1]]]]
-        f]]]]
-
-[constant-ids -2 -1 0 1 2 3 4]
+[constant -2 [quote -2]]
+[constant -1 [quote -1]]
+[constant 0 [quote 0]]
+[constant 1 [quote 1]]
+[constant 2 [quote 2]]
+[constant 3 [quote 3]]
 
 [func inc [x] [add x 1]]
+
+[log [inc [quote 1336]]]
 
 [func dec [x] [sub x 1]]
 
@@ -59,6 +57,12 @@
         [freeze res]]]]]
 
 [func concat [.. lists] [concat-lists lists]]
+
+[if [eq [size [concat [quote one two] [quote [three]] [quote four five]]] [quote 5]]
+  []
+  [let []
+    [log [quote not equal]]
+    [abort]]]
 
 [macro do [.. forms]
   [concat [quote let []] forms]]
@@ -118,7 +122,28 @@
               gs
               [concat [quote [or]] [rest clauses]]]]]]]]]
 
-[func f [p]
-  [when p
-    [log p]
-  ]]
+[func eq-word [a b]
+  [and [eq [size a] [size b]]
+    [loop [i 0]
+      [if [lt i [size a]]
+        [if [eq [at a i] [at b i]]
+          [continue i [inc i]]
+          0]
+        1]]]]
+
+[func = [a b]
+  [if [and [is-word a] [is-word b]]
+    [eq-word a b]
+
+    [and [is-list a] [is-list b]
+      [let [s [size a]]
+        [and [eq s [size b]]
+          [loop [i 0]
+            [or [ge i s]
+              [and [= [at a i] [at b i]] [continue i [inc i]]]]]]]]]]
+
+[log [list [quote is equal]
+            [= [quote 1] [quote 1]]]]
+
+[log [list [quote is not equal]
+            [= [quote 2] [quote 1]]]]

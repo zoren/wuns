@@ -18,7 +18,7 @@
           [continue i [add i [quote 1]]]]
         f]]]]
 
-[constant-ids 0 1 2 3 4 -1]
+[constant-ids -2 -1 0 1 2 3 4]
 
 [func inc [x] [add x 1]]
 
@@ -147,10 +147,9 @@
     [and [is-list a] [is-list b]
       [let [s [size a]]
         [and [eq s [size b]]
-          [loop [i [quote 0]]
+          [loop [i 0]
             [or [ge i s]
-              [and [= [at a i] [at b i]] [cont [inc i]]]]]]]]]]
-
+              [and [= [at a i] [at b i]] [continue i [inc i]]]]]]]]]]
 
 [func assoc-list-index [ctx sym]
   [let [s [size ctx]]
@@ -161,11 +160,14 @@
           i
           [continue i [add i 2]]]]]]]
 
+[func assoc-list-has [ctx sym]
+  [not [is-negative [assoc-list-index ctx sym]]]]
+
 [func assoc-list-get [ctx sym]
   [let [index [assoc-list-index ctx sym]]
     [if [is-negative index]
       [do
-        [log [quote not found]]
+        [log [quote assoc-list-get key not found]]
         [abort]]
       [at ctx [inc index]]]]]
 
@@ -177,6 +179,11 @@
         [push ctx value]]
       [set-array ctx [inc index] value]]]]
 
+[func assoc-meta [f k v]
+  [let [ml [mutable-list]]
+    [push-all ml [meta f]]
+    [assoc-list-set ml k v]
+    [with-meta f [freeze ml]]]]
 
 [comment
 [= [quote a] [quote a]]

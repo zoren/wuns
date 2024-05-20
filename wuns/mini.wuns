@@ -4,7 +4,7 @@ lex-document-one-token
 [list [quote [0 7 1337]]]
 [if [quote 0] x [add y z]]
 [let [d []] 3]
-[loop [i []] [cont [quote 0] x y]]
+[loop [i []] [continue [quote 0] x y]]
 [func f [x1 y2 z3 .. rest] [add x 1]]
 [macro when [cond .. forms]
   [list
@@ -13,4 +13,3 @@ lex-document-one-token
     []]]
 [func is-done [document-line-count line-no column]
   [token-class [lex-document-one-token document-line-count line-no column]]]
- 

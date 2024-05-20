@@ -237,18 +237,6 @@ const tokenBuilderForParseTree = () => {
   }
   return { tokensBuilder, build: go }
 }
-/**
- * @param {TSParser.Tree} tree
- */
-const semanticTokensCursor = (tree) => {
-  const cursor = tree.walk()
-  if (cursor.gotoFirstChild()) {
-    while (cursor.gotoNextSibling()) {
-      console.log('sem cursor node', cursor.nodeType, cursor.nodeTypeId)
-    }
-    cursor.gotoParent()
-  }
-}
 
 /**
  * @param {vscode.TextDocument} document
@@ -283,8 +271,7 @@ const pointToPosition = ({ row, column }) => new Position(row, column)
 const rangeFromNode = ({ startPosition, endPosition }) =>
   new Range(pointToPosition(startPosition), pointToPosition(endPosition))
 
-const { meta, print, mkFuncEnv } = require('./src/std')
-const { evalTree, treeToOurForm, makeEvaluator } = require('./src/interpreter')
+const { meta, print } = require('./src/std')
 
 const reportError = (msg, form) => {
   console.log('report-error', print(msg), print(meta(form)))
@@ -293,13 +280,14 @@ const reportError = (msg, form) => {
 const makeInterpretCurrentFile = async (instructions) => {
   const outputChannel = window.createOutputChannel('wuns output', wunsLanguageId)
   outputChannel.show(true)
-  const importObject = {
-    log: (s) => {
-      outputChannel.show(true)
-      outputChannel.appendLine(s)
-    },
-    'report-error': reportError,
-  }
+  const { makeEvaluator, evalTree,defineImportFunction } = await import('./esm/interpreter.js')
+  // const {defineImportFunction} = evaluator
+  defineImportFunction('log', (s) => {
+    outputChannel.show(true)
+    outputChannel.appendLine(s)
+  })
+  defineImportFunction('report-error', reportError)
+  const evaluator = makeEvaluator(instructions)
   return () => {
     const document = getActiveTextEditorDocument()
     const { tree } = cacheFetchOrParse(document)
@@ -307,8 +295,7 @@ const makeInterpretCurrentFile = async (instructions) => {
     outputChannel.appendLine('interpreting: ' + document.fileName)
     {
       try {
-        const funcEnv = mkFuncEnv(importObject, instructions)
-        evalTree(tree, funcEnv)
+        evalTree(evaluator, tree)
         outputChannel.appendLine('done interpreting')
       } catch (e) {
         outputChannel.appendLine(e.message)
@@ -322,57 +309,58 @@ const makeCheckCurrentFileCommand = async (instructions, context) => {
   const outputChannel = window.createOutputChannel('wuns check', wunsLanguageId)
   outputChannel.show(true)
   const diag = languages.createDiagnosticCollection('wuns')
+  const { defineImportFunction, makeEvaluator, parseEvalString, nodeToOurForm } = await import('./esm/interpreter.js')
+  const evaluator = makeEvaluator(instructions)
 
   return async () => {
     const uint8 = await workspace.fs.readFile(checkUri)
     const checkSource = new TextDecoder().decode(uint8)
     const diagnostics = []
-    const importObject = {
-      log: (s) => {
-        outputChannel.show(true)
-        outputChannel.appendLine('check: ' + s)
-      },
-      'report-error': (msg, form) => {
-        if (!Array.isArray(msg)) throw new Error('msg is not an array')
-        const metaData = meta(form)
-        if (!metaData) throw new Error('meta is ' + metaData)
-        const [_, range] = metaData
-        if (!Array.isArray(range)) {
-          console.log('metaData', metaData)
-          console.log('form', form)
-          console.log('range', range)
-          throw new Error('range is not an array ' + print(form) + ' ' + print(metaData))
-        }
-        const diagnostic = new Diagnostic(
-          new Range(...range.map((w) => Number(w.value))),
-          msg.map(print).join(' '),
-          DiagnosticSeverity.Error,
-        )
-        diagnostics.push(diagnostic)
-      },
-    }
-    const { gogoeval, apply, getExport } = makeEvaluator(importObject, instructions)
+    defineImportFunction('log', (s) => {
+      outputChannel.show(true)
+      outputChannel.appendLine('check: ' + s)
+    })
+    defineImportFunction('report-error', (msg, form) => {
+      if (!Array.isArray(msg)) throw new Error('msg is not an array')
+      const metaData = meta(form)
+      if (!metaData) throw new Error('meta is ' + metaData)
+      const [_, range] = metaData
+      if (!Array.isArray(range)) {
+        console.log('metaData', metaData)
+        console.log('form', form)
+        console.log('range', range)
+        throw new Error('range is not an array ' + print(form) + ' ' + print(metaData))
+      }
+      const diagnostic = new Diagnostic(
+        new Range(...range.map((w) => Number(w.value))),
+        msg.map(print).join(' '),
+        DiagnosticSeverity.Error,
+      )
+      diagnostics.push(diagnostic)
+    })
+    const { apply, getExport } = evaluator
 
     const document = getActiveTextEditorDocument()
     if (!document) return
     const { tree } = cacheFetchOrParse(document)
     outputChannel.clear()
     outputChannel.appendLine('checking: ' + document.fileName)
-    const checkTree = parser.parse(checkSource)
-    for (const node of checkTree.rootNode.children) {
-      const form = treeToOurForm(node)
-      try {
-        gogoeval(form)
-      } catch (e) {
-        console.error('error evaluating', print(form), e)
-        throw e
-      }
-    }
+    parseEvalString(evaluator, checkSource)
+    // const checkTree = parser.parse(checkSource)
+    // for (const node of checkTree.rootNode.children) {
+    //   const form = treeToOurForm(node)
+    //   try {
+    //     gogoeval(form)
+    //   } catch (e) {
+    //     console.error('error evaluating', print(form), e)
+    //     throw e
+    //   }
+    // }
     try {
       // const outfunEnv = evalTree(checkTree, { importObject, instructions })
       const outfun = getExport('check-forms')
       // for (const node of tree.rootNode.children) apply(outfun, [treeToOurForm(node)])
-      apply(outfun, [tree.rootNode.children.map(treeToOurForm)])
+      apply(outfun, [tree.rootNode.children.map(nodeToOurForm)])
       outputChannel.appendLine('done checking: ' + tree.rootNode.children.length)
     } catch (e) {
       outputChannel.appendLine(e.message)
@@ -393,6 +381,7 @@ const makeCheckCurrentFileCommand = async (instructions, context) => {
 const provideSelectionRanges = (document, positions) => {
   const { tree } = cacheFetchOrParse(document)
   const topLevelNodes = tree.rootNode.children
+  // todo make selection aware of special forms such as let, where one wan't to select bindings before entire binding form
   const tryFindRange = (pos) => {
     const go = (node, parentSelectionRange) => {
       const range = rangeFromNode(node)
