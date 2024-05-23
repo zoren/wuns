@@ -28,7 +28,7 @@
 
 [func is-zero [x] [eqz x]]
 
-[func is-odd [x] [bit-and x 1]]
+[func is-odd [x] [bitwise-and x 1]]
 
 [func is-even [x] [not [is-odd x]]]
 
@@ -78,6 +78,9 @@
     [quote if] cond
     []
     [concat [quote [do]] forms]]]
+
+[external-func log [form] []]
+[external-func abort [] []]
 
 [macro assert [cond .. lmsg]
   [list [quote when-not] cond
@@ -171,6 +174,8 @@
         [abort]]
       [at ctx [inc index]]]]]
 
+[external-func set-array [mutable-list i32 form] []]
+
 [func assoc-list-set [ctx sym value]
   [let [index [assoc-list-index ctx sym]]
     [if [is-negative index]
@@ -178,6 +183,8 @@
         [push ctx sym]
         [push ctx value]]
       [set-array ctx [inc index] value]]]]
+
+[external-func meta [form] [form]]
 
 [func assoc-meta [f k v]
   [let [ml [mutable-list]]
@@ -193,12 +200,6 @@
 [= [quote [a]] [list [quote a]]]
 [= [quote [a]] [list [quote b]]]
 
-[external-func meta [form] [form]]
-
-[external-func set-array [mutable-list i32 form] []]
-
-[external-func log [form] []]
-[external-func abort [] []]
 
 [external-func concat-words [list] [word]]
 [external-func eval [form] [form]]

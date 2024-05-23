@@ -1,5 +1,5 @@
 import fs from 'fs'
-import { makeList, word, wordValue, is_word, is_list, isUnit, unit, print, wordWithMeta, listWithMeta, meta } from './core.js'
+import { makeList, word, wordValue, is_word, is_list, isUnit, unit, print, wordWithMeta, listWithMeta } from './core.js'
 
 import TSParser from 'tree-sitter'
 const parser = new TSParser()
@@ -10,7 +10,10 @@ parser.setLanguage(Wuns)
 const isValidRuntimeValue = (v) => is_word(v) || (is_list(v) && v.every(isValidRuntimeValue))
 
 const coreJsFunctions = await import('./core.js')
-const importFunctions = { ...coreJsFunctions }
+const importFunctions = {}
+for (const [name, f] of Object.entries(coreJsFunctions)) {
+  importFunctions[name.replace(/_/g, '-')] = f
+}
 export const defineImportFunction = (name, f) => {
   // if (name in importFunctions) throw new Error(`function ${name} already defined`)
   importFunctions[name] = f
@@ -23,7 +26,11 @@ const assert = (cond, msg) => {
 
 const parseStringToForms = (content) => parser.parse(content).rootNode.children.map(nodeToOurForm)
 
-const evalLogForms = (evalWuns, forms) => {
+let currentFilename = null
+
+const evalLogForms = (evalWuns, forms, filename) => {
+  const prevFilename = currentFilename
+  currentFilename = filename
   for (const form of forms) {
     try {
       const v = evalWuns(form)
@@ -32,6 +39,13 @@ const evalLogForms = (evalWuns, forms) => {
       console.error('error evaluating', print(form), e)
     }
   }
+  currentFilename = prevFilename
+}
+
+export const parseEvalFile = (evaluator, filename) => {
+  const { evalWuns } = evaluator
+  const content = fs.readFileSync(filename, 'utf8')
+  evalLogForms(evalWuns, parseStringToForms(content), filename)
 }
 
 import path from 'node:path'
@@ -170,7 +184,7 @@ export const makeEvaluator = (instructions) => {
         if (args.length !== 3) throw new Error('external-func expects 3 arguments')
         const [name, params, results] = args
         // funcEnv.set(wordValue(name), func)
-        const funcObj = importFunctions[wordValue(name).replace(/-/g, '_')]
+        const funcObj = importFunctions[wordValue(name)]
         if (!funcObj) {
           console.error('extern functions', importFunctions)
         }
@@ -189,9 +203,12 @@ export const makeEvaluator = (instructions) => {
         return unit
       }
       case 'import': {
-        const [module, ...imports] = args
-        const fileContent = fs.readFileSync(wordValue(module), 'utf8')
-        evalLogForms(evalWuns, parseStringToForms(fileContent))
+        const [module] = args
+        const importPath = path.resolve(currentFilename, '..', wordValue(module))
+        console.log('importing', importPath)
+        parseEvalFile({ evalWuns }, importPath)
+        // const fileContent = fs.readFileSync(wordValue(module), 'utf8')
+        // evalLogForms(evalWuns, parseStringToForms(fileContent))
         return unit
       }
     }
@@ -248,6 +265,7 @@ export const nodeToOurForm = (node) => {
   const { type, text, namedChildren, startPosition, endPosition } = node
   const range = makeList(...[startPosition.row, startPosition.column, endPosition.row, endPosition.column])
   const metaData = makeList(word('range'), range, word('node-id'), node.id)
+  // todo handle error nodes
   switch (type) {
     case 'word':
       return wordWithMeta(text, metaData)
@@ -259,12 +277,7 @@ export const nodeToOurForm = (node) => {
   }
 }
 
-export const parseEvalString = (evaluator, content) => {
-  const { evalWuns } = evaluator
-  evalLogForms(evalWuns, parseStringToForms(content))
-}
-
-export const evalTree = ({ evalWuns }, tree) => {
+export const evalTree = ({ evalWuns }, tree, filename) => {
   const forms = tree.rootNode.children.map(nodeToOurForm)
-  evalLogForms(evalWuns, forms)
+  evalLogForms(evalWuns, forms, filename)
 }

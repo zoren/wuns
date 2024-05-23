@@ -1,5 +1,3 @@
-
-
 [if [] [] []]
 [if [quote 0] [quote 1]]
 [if [quote 0] [quote 1] []]

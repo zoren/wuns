@@ -1,4 +1,4 @@
-[import ../wuns/standard-library.wuns]
+[import standard-library.wuns]
 [constant-ids - ..]
 
 [external-func report-error [list form] []]
@@ -258,14 +258,8 @@
                     [continue i [inc i]]]]]
               rest-param-element-type
               [if has-rest-param
-                [let [lp [last params]
-                      - [log [list [quote lp] lp]]
-                      pt type-any
-                      p [if [is-word lp]
-                          lp
-                          [let [ep [eval lp]]
-                            [log [list [quote ep] ep]]
-                            ep]]]
+                [let [p [last params]
+                      pt type-any]
                   [log [list [quote p] p]]
                   [report-when-not [is-word p] p not a word]
                   [when-not [= p -]

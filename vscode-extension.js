@@ -271,54 +271,46 @@ const pointToPosition = ({ row, column }) => new Position(row, column)
 const rangeFromNode = ({ startPosition, endPosition }) =>
   new Range(pointToPosition(startPosition), pointToPosition(endPosition))
 
-const { meta, print } = require('./src/std')
-
-const reportError = (msg, form) => {
-  console.log('report-error', print(msg), print(meta(form)))
-}
-
 const makeInterpretCurrentFile = async (instructions) => {
   const outputChannel = window.createOutputChannel('wuns output', wunsLanguageId)
   outputChannel.show(true)
-  const { makeEvaluator, evalTree,defineImportFunction } = await import('./esm/interpreter.js')
-  // const {defineImportFunction} = evaluator
+  const { meta, print } = await import('./esm/core.js')
+  const { makeEvaluator, evalTree, defineImportFunction } = await import('./esm/interpreter.js')
   defineImportFunction('log', (s) => {
     outputChannel.show(true)
     outputChannel.appendLine(s)
   })
-  defineImportFunction('report-error', reportError)
+  defineImportFunction('report-error', (msg, form) => {
+    console.log('report-error', print(msg), print(meta(form)))
+  })
   const evaluator = makeEvaluator(instructions)
   return () => {
     const document = getActiveTextEditorDocument()
     const { tree } = cacheFetchOrParse(document)
     outputChannel.clear()
     outputChannel.appendLine('interpreting: ' + document.fileName)
-    {
-      try {
-        evalTree(evaluator, tree)
-        outputChannel.appendLine('done interpreting')
-      } catch (e) {
-        outputChannel.appendLine(e.message)
-      }
+    try {
+      evalTree(evaluator, tree, document.fileName)
+      outputChannel.appendLine('done interpreting')
+    } catch (e) {
+      outputChannel.appendLine(e.message)
     }
   }
 }
 
 const makeCheckCurrentFileCommand = async (instructions, context) => {
-  const checkUri = vscode.Uri.file(context.extensionPath + '/wuns/check.wuns')
   const outputChannel = window.createOutputChannel('wuns check', wunsLanguageId)
   outputChannel.show(true)
   const diag = languages.createDiagnosticCollection('wuns')
-  const { defineImportFunction, makeEvaluator, parseEvalString, nodeToOurForm } = await import('./esm/interpreter.js')
+  const { meta, print } = await import('./esm/core.js')
+  const { defineImportFunction, makeEvaluator, parseEvalFile, nodeToOurForm } = await import('./esm/interpreter.js')
   const evaluator = makeEvaluator(instructions)
 
   return async () => {
-    const uint8 = await workspace.fs.readFile(checkUri)
-    const checkSource = new TextDecoder().decode(uint8)
     const diagnostics = []
-    defineImportFunction('log', (s) => {
+    defineImportFunction('log', (form) => {
       outputChannel.show(true)
-      outputChannel.appendLine('check: ' + s)
+      outputChannel.appendLine('check: ' + print(form))
     })
     defineImportFunction('report-error', (msg, form) => {
       if (!Array.isArray(msg)) throw new Error('msg is not an array')
@@ -340,26 +332,15 @@ const makeCheckCurrentFileCommand = async (instructions, context) => {
     })
     const { apply, getExport } = evaluator
 
+    parseEvalFile(evaluator, context.extensionPath + '/wuns/check.wuns')
+
     const document = getActiveTextEditorDocument()
     if (!document) return
     const { tree } = cacheFetchOrParse(document)
     outputChannel.clear()
     outputChannel.appendLine('checking: ' + document.fileName)
-    parseEvalString(evaluator, checkSource)
-    // const checkTree = parser.parse(checkSource)
-    // for (const node of checkTree.rootNode.children) {
-    //   const form = treeToOurForm(node)
-    //   try {
-    //     gogoeval(form)
-    //   } catch (e) {
-    //     console.error('error evaluating', print(form), e)
-    //     throw e
-    //   }
-    // }
     try {
-      // const outfunEnv = evalTree(checkTree, { importObject, instructions })
       const outfun = getExport('check-forms')
-      // for (const node of tree.rootNode.children) apply(outfun, [treeToOurForm(node)])
       apply(outfun, [tree.rootNode.children.map(nodeToOurForm)])
       outputChannel.appendLine('done checking: ' + tree.rootNode.children.length)
     } catch (e) {
