@@ -324,7 +324,7 @@ const makeCheckCurrentFileCommand = async (instructions, context) => {
         throw new Error('range is not an array ' + print(form) + ' ' + print(metaData))
       }
       const diagnostic = new Diagnostic(
-        new Range(...range.map((w) => Number(w.value))),
+        new Range(...range),
         msg.map(print).join(' '),
         DiagnosticSeverity.Error,
       )
