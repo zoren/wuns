@@ -58,7 +58,7 @@ export const print = (x) => {
   if (!Array.isArray(x)) throw new Error(`cannot print ${x} expected word or list ${typeof x} ${x.constructor}`)
   return `[${x.map(print).join(' ')}]`
 }
-const number = (f) => {
+export const number = (f) => {
   if (!isWord(f)) throw new Error('expected word: ' + f)
   const s = wordValue(f)
   const n = Number(s)
@@ -114,48 +114,4 @@ export const set_array = (ar, index, e) => {
 }
 export const abort = () => {
   throw new Error('abort')
-}
-export const add = (a, b) => {
-  const na = number(a)
-  const nb = number(b)
-  return na + nb | 0
-}
-export const sub = (a, b) => {
-  const na = number(a)
-  const nb = number(b)
-  return na - nb | 0
-}
-export const bitwise_and = (a, b) => {
-  const na = number(a)
-  const nb = number(b)
-  return na & nb | 0
-}
-export const eqz = (a) => {
-  const na = number(a)
-  return na === 0 ? 1 : 0
-}
-export const eq = (a, b) => {
-  const na = number(a)
-  const nb = number(b)
-  return na === nb ? 1 : 0
-}
-export const lt = (a, b) => {
-  const na = number(a)
-  const nb = number(b)
-  return na < nb | 0
-}
-export const le = (a, b) => {
-  const na = number(a)
-  const nb = number(b)
-  return na <= nb | 0
-}
-export const gt = (a, b) => {
-  const na = number(a)
-  const nb = number(b)
-  return na > nb | 0
-}
-export const ge = (a, b) => {
-  const na = number(a)
-  const nb = number(b)
-  return na >= nb | 0
 }

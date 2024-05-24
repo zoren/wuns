@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { makeList, wordValue, isWord, isList, isUnit, unit, print } from './core.js'
 import { parseStringToForms } from './parse.js'
+import { i32 } from './instructions.js'
 
 const isValidRuntimeValue = (v) => isWord(v) || (isList(v) && v.every(isValidRuntimeValue))
 
@@ -16,6 +17,7 @@ const globalVarSet = (name, value) => {
   if (globalVarValues.has(name)) throw new Error('global variable already defined: ' + name)
   globalVarValues.set(name, value)
 }
+for (const [name, f] of Object.entries(i32)) globalVarSet(name, f)
 
 const globalEnv = { varValues: globalVarValues, outer: null }
 const assert = (cond, msg) => {
