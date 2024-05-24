@@ -26,21 +26,24 @@ const assert = (cond, msg) => {
 
 let currentFilename = null
 
-export const apply = ({ name, params, restParam, cbodies }, args) => {
+const checkApplyArity = ({ name, params, restParam }, numberOfGivenArgs) => {
   const arity = params.length
-  const numberOfGivenArgs = args.length
   if (restParam === null) {
     if (arity !== numberOfGivenArgs) throw new Error(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
   } else {
     if (arity > numberOfGivenArgs)
       throw new Error(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
   }
+}
+
+const internalApply = ({ name, params, restParam, cbodies }, args) => {
+  const arity = params.length
   const varValues = new Map()
   for (let i = 0; i < arity; i++) varValues.set(wordValue(params[i]), args[i])
   if (restParam) varValues.set(wordValue(restParam), makeList(...args.slice(arity)))
   const inner = { varValues, outer: globalEnv }
   let result = unit
-  if (!cbodies) throw new Error('no cbodies')
+  if (!cbodies) throw new Error('no cbodies ' + name)
   for (const cbody of cbodies) result = cbody(inner)
   return result
 }
@@ -204,8 +207,9 @@ const wunsComp = (form) => {
     assert(typeof funcOrMacro === 'object', `expected function or object ${funcOrMacro}`)
     const { isMacro, wasmFunc } = funcOrMacro
     if (wasmFunc) throw new Error('wasm functions not supported in wunsComp')
+    checkApplyArity(funcOrMacro, args.length)
     if (isMacro) {
-      const res = apply(
+      const res = internalApply(
         funcOrMacro,
         args.map((a) => {
           if (isWord(a)) return wordValue(a)
@@ -216,7 +220,7 @@ const wunsComp = (form) => {
     }
     const cargs = args.map(wunsComp)
     return (env) =>
-      apply(
+      internalApply(
         funcOrMacro,
         cargs.map((carg) => carg(env)),
       )
@@ -226,14 +230,18 @@ const wunsComp = (form) => {
   }
 }
 
+export const apply = (funmacObj, args) => {
+  checkApplyArity(funmacObj, args.length)
+  internalApply(funmacObj, args)
+}
+
 export const defineImportFunction = (name, f) => {
   // if (name in importFunctions) throw new Error(`function ${name} already defined`)
   importFunctions[name] = f
 }
 export const getGlobal = (name) => {
-  const v = globalVarValues.get(name)
-  if (!v) throw new Error(`export ${name} not found`)
-  return v
+  if (globalVarValues.has(name)) return globalVarValues.get(name)
+  throw new Error(`global ${name} not found`)
 }
 
 export const evalLogForms = (forms, filename) => {
