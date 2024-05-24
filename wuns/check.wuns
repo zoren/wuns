@@ -89,7 +89,7 @@
             [continue cur-ctx outer]
             [at vars [inc index]]]]]]
 
-    [= form []]
+    [= [size form] 0]
     type-empty
 
     [let [first-form [first form]
