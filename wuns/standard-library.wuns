@@ -40,6 +40,8 @@
 [func fourth [l] [at l 3]]
 [func last [l] [at l -1]]
 
+[external-func slice [list i32 i32] [list]]
+
 [func rest [l] [slice l 1 [size l]]]
 
 [func push-all [mut-list list]
@@ -86,8 +88,6 @@
   [list [quote when-not] cond
     [list [quote log] [list [quote quote] [concat [list [quote assert-fail]] lmsg]]]
     [quote [abort]]]]
-
-[external-func slice [list i32 i32] [list]]
 
 [macro ifs [.. clauses]
   [let [s [size clauses]]
@@ -185,6 +185,7 @@
       [set-array ctx [inc index] value]]]]
 
 [external-func meta [form] [form]]
+[external-func with-meta [form form] [form]]
 
 [func assoc-meta [f k v]
   [let [ml [mutable-list]]
