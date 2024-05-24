@@ -409,23 +409,8 @@ export const makeEvaluator = (instructions) => {
       case 'import': {
         const [module] = args
         const importPath = path.resolve(currentFilename, '..', wordValue(module))
-        const content = fs.readFileSync(importPath, 'utf8')
-        const forms = parseStringToForms(content)
-        return (env) => {
-          const prevFilename = currentFilename
-          currentFilename = importPath
-          for (const form of forms) {
-            const cform = wunsComp(form)
-            try {
-              const v = cform(env)
-              if (!isUnit(v)) console.log(print(v))
-            } catch (e) {
-              console.error('error evaluating compiled form', e)
-            }
-          }
-          currentFilename = prevFilename
-          return unit
-        }
+        parseEvalFile({ evalWuns }, importPath)
+        return () => unit
       }
     }
     try {
