@@ -314,7 +314,7 @@
                       [let [
                         pt [at parameters p-index]]
                         [when-not [check-param-arg-conform pt arg-t]
-                        [report-error [list [quote blav] pt arg-t] arg]]
+                          [report-error [concat [quote parameter does not match] [list pt arg-t]] arg]]
                       [report-when-not [check-param-arg-conform pt arg-t] arg parameter type mismatch]]
                       ]
                     [continue i [inc i]]]]]
