@@ -150,25 +150,21 @@ const wunsComp = (form) => {
 
       globalVarSet(n, fObj)
       const cbodies = Object.freeze(bodies.map(wunsComp))
-      return () => {
-        fObj.cbodies = cbodies
-        return unit
-      }
+      fObj.cbodies = cbodies
+      return () => unit
     }
     case 'constant': {
       const [varName, value] = args
-      const compValue = wunsComp(value)
       const vn = wordValue(varName)
-      return (env) => {
-        globalVarSet(vn, compValue(env))
-        return unit
-      }
+      const compValue = wunsComp(value)
+      globalVarSet(vn, compValue(globalEnv))
+      return () => unit
     }
     case 'external-func': {
       if (args.length !== 3) throw new Error('external-func expects 3 arguments')
       const [name, params, results] = args
-      // funcEnv.set(wordValue(name), func)
-      const funcObj = importFunctions[wordValue(name)]
+      const n = wordValue(name)
+      const funcObj = importFunctions[n]
       assert(funcObj, `extern function ${name} not found`)
       if (!(typeof funcObj === 'function')) throw new Error(`expected function, found ${funcObj}`)
       const parameterCount = funcObj.length
@@ -178,10 +174,8 @@ const wunsComp = (form) => {
         `extern function ${name} expected ${parameterCount} arguments, got ${params.length}`,
       )
       for (const param of params) if (!isWord(param)) throw new Error('extern expected word arguments')
-      return () => {
-        globalVarSet(wordValue(name), funcObj)
-        return unit
-      }
+      globalVarSet(n, funcObj)
+      return () => unit
     }
     case 'import': {
       const [module] = args
