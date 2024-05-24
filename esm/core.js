@@ -54,6 +54,7 @@ export const meta = (form) => {
 
 export const print = (x) => {
   if (isWord(x)) return wordValue(x)
+  if (typeof x === 'number') return String(x)
   if (!Array.isArray(x)) throw new Error(`cannot print ${x} expected word or list ${typeof x} ${x.constructor}`)
   return `[${x.map(print).join(' ')}]`
 }
