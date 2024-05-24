@@ -271,7 +271,7 @@ const pointToPosition = ({ row, column }) => new Position(row, column)
 const rangeFromNode = ({ startPosition, endPosition }) =>
   new Range(pointToPosition(startPosition), pointToPosition(endPosition))
 
-const makeInterpretCurrentFile = async (instructions) => {
+const makeInterpretCurrentFile = async () => {
   const outputChannel = window.createOutputChannel('wuns output', wunsLanguageId)
   outputChannel.show(true)
   const { meta, print } = await import('./esm/core.js')
@@ -283,7 +283,7 @@ const makeInterpretCurrentFile = async (instructions) => {
   defineImportFunction('report-error', (msg, form) => {
     console.log('report-error', print(msg), print(meta(form)))
   })
-  const evaluator = makeEvaluator(instructions)
+  const evaluator = makeEvaluator()
   return () => {
     const document = getActiveTextEditorDocument()
     const { tree } = cacheFetchOrParse(document)
@@ -298,13 +298,13 @@ const makeInterpretCurrentFile = async (instructions) => {
   }
 }
 
-const makeCheckCurrentFileCommand = async (instructions, context) => {
+const makeCheckCurrentFileCommand = async (context) => {
   const outputChannel = window.createOutputChannel('wuns check', wunsLanguageId)
   outputChannel.show(true)
   const diag = languages.createDiagnosticCollection('wuns')
   const { meta, print } = await import('./esm/core.js')
   const { defineImportFunction, makeEvaluator, parseEvalFile, nodeToOurForm } = await import('./esm/interpreter.js')
-  const evaluator = makeEvaluator(instructions)
+  const evaluator = makeEvaluator()
 
   return async () => {
     const diagnostics = []
@@ -394,14 +394,10 @@ const provideSelectionRanges = (document, positions) => {
  */
 async function activate(context) {
   console.log('starting wuns lang extension: ' + context.extensionPath)
-  const instructionsWasmUri = vscode.Uri.file(context.extensionPath + '/src/instructions.wasm')
-  const uint8arInstructions = await workspace.fs.readFile(instructionsWasmUri)
-  const wasm = await WebAssembly.instantiate(uint8arInstructions)
-  const instructions = wasm.instance.exports
-  const interpretCurrentFile = await makeInterpretCurrentFile(instructions)
+  const interpretCurrentFile = await makeInterpretCurrentFile()
   context.subscriptions.push(commands.registerCommand('wunslang.interpret', interpretCurrentFile))
   context.subscriptions.push(
-    commands.registerCommand('wunslang.check', await makeCheckCurrentFileCommand(instructions, context)),
+    commands.registerCommand('wunslang.check', await makeCheckCurrentFileCommand(context)),
   )
 
   const selector = { language: 'wuns', scheme: 'file' }

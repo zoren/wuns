@@ -62,16 +62,8 @@ export const parseEvalFile = (evaluator, filename) => {
 }
 
 import path from 'node:path'
-const getInstructions = () => {
-  const dirname = import.meta.dirname
-  const wasmModule = new WebAssembly.Module(fs.readFileSync(path.resolve(dirname, '..', 'src', 'instructions.wasm')))
-  const wasmInstance = new WebAssembly.Instance(wasmModule)
-  const instructions = wasmInstance.exports
-  return instructions
-}
 
-export const makeEvaluator = (instructions) => {
-  if (!instructions) instructions = getInstructions()
+export const makeEvaluator = () => {
   const apply = ({ name, params, restParam, cbodies }, args) => {
     const arity = params.length
     const numberOfGivenArgs = args.length
@@ -236,29 +228,6 @@ export const makeEvaluator = (instructions) => {
     }
     try {
       const funcOrMacro = globalVarValues.get(firstWordValue)
-      if (!funcOrMacro) {
-        const instr = instructions[firstWordValue]
-        if (!instr) {
-          console.log('first not found', firstForm)
-          throw new Error(`function ${firstWordValue} not found ${print(form)}`)
-        }
-        const cargs = args.map(wunsComp)
-        return (env) => {
-          const eargs = cargs.map((carg) => carg(env))
-          for (let i = 0; i < eargs.length; i++) {
-            const v = eargs[i]
-            if (!isSigned32BitInteger(v)) {
-              if (!isWord(v)) throw new Error(`expected i32 value, found ${v} t ${typeof v}`)
-              const wv = wordValue(v)
-              if (!isSigned32BitInteger(wv)) throw new Error(`expected i32 value, found ${wv} t ${typeof wv}`)
-              eargs[i] = wv
-            }
-          }
-          const res = instr(...eargs)
-          if (res === undefined) return unit
-          return res
-        }
-      }
       assert(funcOrMacro, `function ${firstWordValue} not found ${print(form)}`)
       if (typeof funcOrMacro === 'function') {
         const parameterCount = funcOrMacro.length

@@ -7,6 +7,18 @@
 [external-func size [form] [i32]]
 [external-func at [form i32] [form]]
 
+[external-func eq [i32 i32] [i32]]
+[external-func lt [i32 i32] [i32]]
+[external-func le [i32 i32] [i32]]
+[external-func gt [i32 i32] [i32]]
+[external-func ge [i32 i32] [i32]]
+
+[external-func add [i32 i32] [i32]]
+[external-func sub [i32 i32] [i32]]
+[external-func eqz [i32] [i32]]
+[external-func bitwise-and [i32 i32] [i32]]
+[external-func le [i32 i32] [i32]]
+
 [macro constant-ids [.. id-constants]
   [let [f [mutable-list]]
     [push f [quote let]]
