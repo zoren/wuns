@@ -44,7 +44,11 @@ export const apply = ({ name, params, restParam, cbodies }, args) => {
   for (const cbody of cbodies) result = cbody(inner)
   return result
 }
-
+const unword = (v) => {
+  if (isWord(v)) return wordValue(v)
+  if (isList(v)) return v.map(unword)
+  throw new Error('quote expects word or list')
+}
 const wunsComp = (form) => {
   if (isWord(form)) {
     const v = wordValue(form)
@@ -63,8 +67,9 @@ const wunsComp = (form) => {
   const firstWordValue = wordValue(firstForm)
   switch (firstWordValue) {
     case 'quote': {
-      const res = args.length === 1 ? args[0] : Object.freeze(args)
-      return () => res
+      const res = args.length === 1 ? args[0] : args
+      const unworded = unword(res)
+      return () => unworded
     }
     case 'if': {
       const ifArgs = [...args, unit, unit, unit].slice(0, 3)
