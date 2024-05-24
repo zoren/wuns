@@ -2,7 +2,7 @@ export const unit = Object.freeze([])
 export const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
 export const isUnit = (x) => x === unit || (Array.isArray(x) && Object.isFrozen(x) && x.length === 0)
 
-const isSigned32BitInteger = (n) => (n | 0) === n
+export const isSigned32BitInteger = (n) => (n | 0) === n
 const wordRegex = /^[a-z0-9.=/-]+$/
 export const isWordString = (s) => typeof s === 'string' && s.length > 0 && wordRegex.test(s)
 class Word {
@@ -42,6 +42,11 @@ export const listWithMeta = (l, meta) => {
   ll[symbolMeta] = meta
   return Object.freeze(ll)
 }
+export const with_meta = (f, meta) => {
+  if (isWord(f)) return wordWithMeta(wordValue(f), meta)
+  if (isList(f)) return listWithMeta(f, meta)
+  throw new Error('with-meta expects word or list')
+}
 export const meta = (form) => {
   if (symbolMeta in form) return form[symbolMeta]
   return unit
@@ -71,7 +76,7 @@ export const push = (ar, e) => {
 export const size = (a) => {
   if (isWord(a)) return String(a).length
   if (Array.isArray(a)) return a.length
-  throw new Error('getLength expects word or list')
+  throw new Error('size expects word or list')
 }
 export const mutable_list = () => []
 const assert = (b, s) => {
@@ -105,4 +110,7 @@ export const set_array = (ar, index, e) => {
   if (i < 0 || i >= ar.length) throw new Error('set-array index out of bounds: ' + i + ' ' + ar.length)
   ar[i] = e
   return unit
+}
+export const abort = () => {
+  throw new Error('abort')
 }
