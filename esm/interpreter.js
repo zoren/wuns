@@ -46,7 +46,7 @@ export const apply = ({ name, params, restParam, cbodies }, args) => {
 }
 const unword = (v) => {
   if (isWord(v)) return wordValue(v)
-  if (isList(v)) return v.map(unword)
+  if (isList(v)) return makeList(...v.map(unword))
   throw new Error('quote expects word or list')
 }
 const wunsComp = (form) => {
