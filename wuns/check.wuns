@@ -260,7 +260,6 @@
               [if has-rest-param
                 [let [p [last params]
                       pt type-any]
-                  [log [list [quote p] p]]
                   [report-when-not [is-word p] p not a word]
                   [when-not [= p -]
                     [report-when [assoc-list-has param-ctx p] p duplicate parameter]
@@ -348,14 +347,6 @@
 
     [list
       [quote function-signatures] ml]]]
-
-[func compile-top-level-forms [forms]
-  [let [ctx [make-mty-ctx]]
-    [loop [i 0]
-      [when [lt i [size forms]]
-        [compile-top-level-form ctx [at forms i]]
-        [continue i [inc i]]]]
-    ctx]]
 
 [func check-forms [forms]
   [let [gctx [make-mty-ctx]]
