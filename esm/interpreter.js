@@ -36,6 +36,11 @@ const globalVarSet = (name, value) => {
   if (globalVarValues.has(name)) throw new Error('global variable already defined: ' + name)
   globalVarValues.set(name, value)
 }
+export const getGlobal = (name) => {
+  const v = globalVarValues.get(name)
+  if (!v) throw new Error(`export ${name} not found`)
+  return v
+}
 const globalEnv = { varValues: globalVarValues, outer: null }
 const assert = (cond, msg) => {
   if (!cond) throw new Error('eval assert failed: ' + msg)
@@ -91,10 +96,7 @@ export const makeEvaluator = () => {
       const v = wordValue(form)
       return (env) => {
         while (true) {
-          if (!env) {
-            if (globalVarValues.has(v)) return globalVarValues.get(v)
-            throw new Error(`undefined variable ${v}`)
-          }
+          if (!env) throw new Error(`undefined variable ${v}`)
           const { varValues, outer } = env
           if (varValues.has(v)) return varValues.get(v)
           env = outer
@@ -277,7 +279,6 @@ export const makeEvaluator = () => {
   return {
     evalWuns,
     apply,
-    getExport: (name) => globalVarValues.get(name),
   }
 }
 

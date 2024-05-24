@@ -303,7 +303,7 @@ const makeCheckCurrentFileCommand = async (context) => {
   outputChannel.show(true)
   const diag = languages.createDiagnosticCollection('wuns')
   const { meta, print } = await import('./esm/core.js')
-  const { defineImportFunction, makeEvaluator, parseEvalFile, nodeToOurForm } = await import('./esm/interpreter.js')
+  const { defineImportFunction, makeEvaluator, parseEvalFile, nodeToOurForm, getGlobal } = await import('./esm/interpreter.js')
   const evaluator = makeEvaluator()
 
   return async () => {
@@ -330,7 +330,7 @@ const makeCheckCurrentFileCommand = async (context) => {
       )
       diagnostics.push(diagnostic)
     })
-    const { apply, getExport } = evaluator
+    const { apply } = evaluator
 
     parseEvalFile(evaluator, context.extensionPath + '/wuns/check.wuns')
 
@@ -340,7 +340,7 @@ const makeCheckCurrentFileCommand = async (context) => {
     outputChannel.clear()
     outputChannel.appendLine('checking: ' + document.fileName)
     try {
-      const outfun = getExport('check-forms')
+      const outfun = getGlobal('check-forms')
       apply(outfun, [tree.rootNode.children.map(nodeToOurForm)])
       outputChannel.appendLine('done checking: ' + tree.rootNode.children.length)
     } catch (e) {
