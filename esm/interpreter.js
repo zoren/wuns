@@ -32,6 +32,10 @@ export const defineImportFunction = (name, f) => {
   importFunctions[name] = f
 }
 const globalVarValues = new Map()
+const globalVarSet = (name, value) => {
+  if (globalVarValues.has(name)) throw new Error('global variable already defined: ' + name)
+  globalVarValues.set(name, value)
+}
 const globalEnv = { varValues: globalVarValues, outer: null }
 const assert = (cond, msg) => {
   if (!cond) throw new Error('eval assert failed: ' + msg)
@@ -183,7 +187,7 @@ export const makeEvaluator = () => {
         const fObj = { name: fmname, isMacro: firstWordValue === 'macro', params, restParam }
         const n = wordValue(fmname)
 
-        globalVarValues.set(n, fObj)
+        globalVarSet(n, fObj)
         const cbodies = Object.freeze(bodies.map(wunsComp))
         return () => {
           fObj.cbodies = cbodies
@@ -195,8 +199,7 @@ export const makeEvaluator = () => {
         const compValue = wunsComp(value)
         const vn = wordValue(varName)
         return (env) => {
-          // console.log('setting global', vn)
-          globalVarValues.set(vn, compValue(env))
+          globalVarSet(vn, compValue(env))
           return unit
         }
       }
@@ -215,7 +218,7 @@ export const makeEvaluator = () => {
         )
         for (const param of params) if (!is_word(param)) throw new Error('extern expected word arguments')
         return () => {
-          globalVarValues.set(wordValue(name), funcObj)
+          globalVarSet(wordValue(name), funcObj)
           return unit
         }
       }
