@@ -261,12 +261,15 @@ const rangeFromNode = ({ startPosition, endPosition }) =>
 const makeInterpretCurrentFile = async () => {
   const outputChannel = window.createOutputChannel('wuns output', wunsLanguageId)
   // outputChannel.show(true)
+  const appendShow = (s) => {
+    outputChannel.appendLine(s)
+    outputChannel.show(true)
+  }
   const { treeToForms } = await import('./esm/parse.js')
   const { meta, print } = await import('./esm/core.js')
   const { evalLogForms, defineImportFunction } = await import('./esm/interpreter.js')
   defineImportFunction('log', (s) => {
-    outputChannel.show(true)
-    outputChannel.appendLine(s)
+    appendShow('interp log: ' + print(s))
   })
   defineImportFunction('report-error', (msg, form) => {
     console.log('report-error', print(msg), print(meta(form)))
@@ -276,12 +279,12 @@ const makeInterpretCurrentFile = async () => {
     const { tree } = cacheFetchOrParse(document)
     const forms = treeToForms(tree)
     outputChannel.clear()
-    outputChannel.appendLine('interpreting: ' + document.fileName)
+    appendShow('interpreting: ' + document.fileName)
     try {
       evalLogForms(forms, document.fileName)
-      outputChannel.appendLine('done interpreting')
+      appendShow('done interpreting')
     } catch (e) {
-      outputChannel.appendLine(e.message)
+      appendShow(e.message)
     }
   }
 }
