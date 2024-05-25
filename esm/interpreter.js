@@ -6,11 +6,8 @@ import { i32 } from './instructions.js'
 
 const isValidRuntimeValue = (v) => isWord(v) || (isList(v) && v.every(isValidRuntimeValue))
 
-const coreJsFunctions = await import('./core.js')
 const importFunctions = {}
-for (const [name, f] of Object.entries(coreJsFunctions)) {
-  importFunctions[name.replace(/_/g, '-')] = f
-}
+for (const [name, f] of Object.entries(await import('./host.js'))) importFunctions[name.replace(/_/g, '-')] = f
 
 const globalVarValues = new Map()
 const globalVarSet = (name, value) => {
