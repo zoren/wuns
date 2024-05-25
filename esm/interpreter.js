@@ -40,8 +40,8 @@ const internalApply = ({ name, params, restParam, cbodies }, args) => {
   if (!cbodies) throw new Error('no cbodies in:' + name)
   const arity = params.length
   const varValues = new Map()
-  for (let i = 0; i < arity; i++) varValues.set(wordValue(params[i]), args[i])
-  if (restParam) varValues.set(wordValue(restParam), makeList(...args.slice(arity)))
+  for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+  if (restParam) varValues.set(restParam, makeList(...args.slice(arity)))
   const inner = { varValues, outer: globalEnv }
   let result = unit
   for (const cbody of cbodies) result = cbody(inner)
@@ -60,7 +60,7 @@ const wunsComp = (form) => {
       if (cbody === null) continue
       cbodies.push(cbody)
     }
-    return Object.freeze(cbodies)
+    return makeList(...cbodies)
   }
   if (isWord(form)) {
     const v = wordValue(form)
@@ -74,7 +74,7 @@ const wunsComp = (form) => {
     }
   }
   assert(isList(form), `cannot eval ${form} expected word or list`)
-  if (form.length === 0) return () => unit
+  if (form.length === 0) return null
   const [firstForm, ...args] = form
   const firstWordValue = wordValue(firstForm)
   switch (firstWordValue) {
@@ -85,12 +85,17 @@ const wunsComp = (form) => {
     }
     case 'if': {
       const ifArgs = [...args, unit, unit, unit].slice(0, 3)
-      const [cc, ct, cf] = ifArgs.map(wunsComp)
-      return (env) => {
-        const evaledCond = cc(env)
-        const isZeroWord = evaledCond === 0 || (isWord(evaledCond) && wordValue(evaledCond) === 0)
-        return isZeroWord ? cf(env) : ct(env)
-      }
+      let [cc, ct, cf] = ifArgs.map(wunsComp)
+      if (cc === null && ct === null && cf === null) return null
+      if (cc === null) cc = () => unit
+      if (ct === null && cf === null)
+        return (env) => {
+          cc(env)
+          return unit
+        }
+      if (ct === null) return (env) => (cc(env) === 0 ? cf(env) : unit)
+      if (cf === null) return (env) => (cc(env) === 0 ? unit : ct(env))
+      return (env) => (cc(env) === 0 ? cf(env) : ct(env))
     }
     case 'let':
     case 'loop': {
@@ -156,13 +161,13 @@ const wunsComp = (form) => {
       let restParam = null
       if (origParams.length > 1 && wordValue(origParams.at(-2)) === '..') {
         params = origParams.slice(0, -2)
-        restParam = origParams.at(-1)
+        restParam = wordValue(origParams.at(-1))
       }
-      const fObj = { name: fmname, isMacro: firstWordValue === 'macro', params, restParam }
+      const fObj = { name: fmname, isMacro: firstWordValue === 'macro', params: params.map(wordValue), restParam }
       const n = wordValue(fmname)
 
       globalVarSet(n, fObj)
-      fObj.cbodies = makeList(...bodies.map(wunsComp))
+      fObj.cbodies = compBodies(bodies)
       return null
     }
     case 'constant': {
@@ -207,7 +212,7 @@ const wunsComp = (form) => {
       )
       const cargs = args.map(wunsComp)
       return (env) => {
-        const res = funcOrMacro(...cargs.map((carg) => carg(env)))
+        const res = funcOrMacro(...cargs.map((carg) => (carg === null ? unit : carg(env))))
         if (res === undefined) return unit
         // if (!isValidRuntimeValue(res)) throw new Error(`expected valid runtime value, found ${res}`)
         return res
@@ -232,7 +237,7 @@ const wunsComp = (form) => {
     return (env) =>
       internalApply(
         funcOrMacro,
-        cargs.map((carg) => carg(env)),
+        cargs.map((carg) => (carg === null ? unit : carg(env))),
       )
   } catch (e) {
     console.error('error evaluating', firstWordValue)
