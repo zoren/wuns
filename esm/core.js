@@ -127,3 +127,6 @@ export const concat_words = (l) => {
       .join(''),
   )
 }
+export const log = (form) => {
+  console.log('log: ' + print(form))
+}

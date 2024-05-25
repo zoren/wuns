@@ -53,6 +53,15 @@ const unword = (v) => {
   throw new Error('quote expects word or list')
 }
 const wunsComp = (form) => {
+  const compBodies = (bodies) => {
+    const cbodies = []
+    for (const body of bodies) {
+      const cbody = wunsComp(body)
+      if (cbody === null) continue
+      cbodies.push(cbody)
+    }
+    return Object.freeze(cbodies)
+  }
   if (isWord(form)) {
     const v = wordValue(form)
     return (env) => {
@@ -92,7 +101,7 @@ const wunsComp = (form) => {
         const compVal = wunsComp(bindings[i + 1])
         compBindings.push([varName, compVal])
       }
-      const cbodies = bodies.map(wunsComp)
+      const cbodies = compBodies(bodies)
       if (firstWordValue === 'let')
         return (env) => {
           const varValues = new Map()
@@ -138,6 +147,7 @@ const wunsComp = (form) => {
         return unit
       }
     }
+    // side effect forms
     case 'func':
     case 'macro': {
       const [fmname, origParams0, ...bodies] = args
@@ -152,39 +162,38 @@ const wunsComp = (form) => {
       const n = wordValue(fmname)
 
       globalVarSet(n, fObj)
-      const cbodies = Object.freeze(bodies.map(wunsComp))
-      fObj.cbodies = cbodies
-      return () => unit
+      fObj.cbodies = makeList(...bodies.map(wunsComp))
+      return null
     }
     case 'constant': {
       const [varName, value] = args
       const vn = wordValue(varName)
       const compValue = wunsComp(value)
       globalVarSet(vn, compValue(globalEnv))
-      return () => unit
+      return null
     }
     case 'external-func': {
       if (args.length !== 3) throw new Error('external-func expects 3 arguments')
       const [name, params, results] = args
       const n = wordValue(name)
       const funcObj = importFunctions[n]
-      assert(funcObj, `extern function ${name} not found`)
-      if (!(typeof funcObj === 'function')) throw new Error(`expected function, found ${funcObj}`)
+      assert(funcObj, `external-func function ${name} not found`)
+      if (!(typeof funcObj === 'function')) throw new Error(`external-func expected function, found ${funcObj}`)
       const parameterCount = funcObj.length
-      assert(isList(params), `extern expected list of parameters, found ${params}`)
+      assert(isList(params), `external-func expected list of parameters, found ${params}`)
       assert(
         params.length === parameterCount,
         `extern function ${name} expected ${parameterCount} arguments, got ${params.length}`,
       )
-      for (const param of params) if (!isWord(param)) throw new Error('extern expected word arguments')
+      for (const param of params) if (!isWord(param)) throw new Error('external-func expected word arguments')
       globalVarSet(n, funcObj)
-      return () => unit
+      return null
     }
     case 'import': {
       const [module] = args
       const importPath = path.resolve(currentFilename, '..', wordValue(module))
       parseEvalFile(importPath)
-      return () => unit
+      return null
     }
   }
   try {
@@ -212,6 +221,7 @@ const wunsComp = (form) => {
       const res = internalApply(
         funcOrMacro,
         args.map((a) => {
+          // should we unword here?
           if (isWord(a)) return wordValue(a)
           return a
         }),
@@ -249,7 +259,8 @@ export const evalLogForms = (forms, filename) => {
   currentFilename = filename
   for (const form of forms) {
     try {
-      const v = evalWuns(form)
+      const cform = wunsComp(form)
+      const v = cform === null ? unit : cform(globalEnv)
       if (!isUnit(v)) console.log(print(v))
     } catch (e) {
       console.error('error evaluating', print(form), e)
@@ -258,9 +269,11 @@ export const evalLogForms = (forms, filename) => {
   currentFilename = prevFilename
 }
 
-export const parseEvalFile = (filename) => {
-  const content = fs.readFileSync(filename, 'utf8')
+export const parseEvalString = (content, filename) => {
   evalLogForms(parseStringToForms(content), filename)
 }
 
-export const evalWuns = (form) => wunsComp(form)(globalEnv)
+export const parseEvalFile = (filename) => {
+  const content = fs.readFileSync(filename, 'utf8')
+  parseEvalString(content, filename)
+}
