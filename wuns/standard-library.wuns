@@ -193,14 +193,4 @@
     [assoc-list-set ml k v]
     [with-meta f [freeze ml]]]]
 
-[comment
-[= [quote a] [quote a]]
-[= [quote a] [quote b]]
-[= [] [list]]
-[= [quote []] [list []]]
-[= [quote [a]] [list [quote a]]]
-[= [quote [a]] [list [quote b]]]
-
 [external-func concat-words [list] [word]]
-[external-func eval [form] [form]]
-]

@@ -17,20 +17,17 @@ defineImportFunction('report-error', (msg, form) => {
   console.log('report-error', `${startRow}:${startCol}-${endRow}:${endCol}`, msg.map(print).join(' '))
 })
 const __dirname = path.dirname(new URL(import.meta.url).pathname)
-parseEvalFile(path.resolve(__dirname, '..', 'wuns', 'check.wuns'))
-const commandLineArgs = process.argv.slice(2)
-if (commandLineArgs.length === 0) {
-  console.error('missing input file')
-  process.exit(1)
-}
-const inputFile = commandLineArgs[0]
+const wunsDir = path.resolve(__dirname, '..', 'wuns')
+parseEvalFile(path.resolve(wunsDir, 'compiler-js.wuns'))
+
+const inputFile = path.resolve(wunsDir, 'input.wuns')
 const content = fs.readFileSync(inputFile, 'utf8')
 const forms = parseStringToForms(content)
 
 try {
-  const outfun = getGlobal('check-forms')
+  const outfun = getGlobal('compile-forms')
   apply(outfun, [forms])
-  console.log('done checking: ' + forms.length)
+  console.log('done compilikng: ' + forms.length)
 } catch (e) {
-  console.error('error evaluating checker', e)
+  console.error('error evaluating compiler', e)
 }

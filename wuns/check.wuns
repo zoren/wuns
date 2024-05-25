@@ -337,14 +337,14 @@
             ]]]]]]
 
 [func make-mty-ctx []
-  [let [bin-insts [quote eq lt le add sub mul]
+  [let [bin-insts [quote eq lt le gt ge add sub mul bitwise-and]
         ml [mutable-list]]
     [loop [i 0]
       [when [lt i [size bin-insts]]
         [let [name [at bin-insts i]]
           [assoc-list-set ml name [quote parameters [i32 i32] results i32]]
           [continue i [inc i]]]]]
-
+    [assoc-list-set ml [quote eqz] [quote parameters [i32] results i32]]
     [list
       [quote function-signatures] ml]]]
 

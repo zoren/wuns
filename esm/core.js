@@ -115,3 +115,15 @@ export const set_array = (ar, index, e) => {
 export const abort = () => {
   throw new Error('abort')
 }
+export const concat_words = (l) => {
+  return word(
+    l
+      .map((w) => {
+        const v = wordValue(w)
+        if (typeof v === 'string') return v
+        if (typeof v === 'number') return String(v)
+        throw new Error('concat-words expects list of words')
+      })
+      .join(''),
+  )
+}

@@ -37,13 +37,13 @@ const checkApplyArity = ({ name, params, restParam }, numberOfGivenArgs) => {
 }
 
 const internalApply = ({ name, params, restParam, cbodies }, args) => {
+  if (!cbodies) throw new Error('no cbodies in:' + name)
   const arity = params.length
   const varValues = new Map()
   for (let i = 0; i < arity; i++) varValues.set(wordValue(params[i]), args[i])
   if (restParam) varValues.set(wordValue(restParam), makeList(...args.slice(arity)))
   const inner = { varValues, outer: globalEnv }
   let result = unit
-  if (!cbodies) throw new Error('no cbodies ' + name)
   for (const cbody of cbodies) result = cbody(inner)
   return result
 }

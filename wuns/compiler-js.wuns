@@ -68,9 +68,6 @@
   while
   with]]
 
-[func is-js-keyword [word]
-  [not [is-negative [index-of-word js-keywords word]]]]
-
 [func index-of-word [words word]
   [let [s-words [size words]]
     [loop [i 0]
@@ -79,6 +76,9 @@
           i
           [continue i [inc i]]]
         -1]]]]
+
+[func is-js-keyword [word]
+  [not [is-negative [index-of-word js-keywords word]]]]
 
 [func word-to-codepoints [w]
   [let [ml [mutable-list]]
@@ -145,16 +145,6 @@
           [continue ctx outer]
           1]]
       0]]]
-
-[func make-op-call [op-call js-name lctx form]
-  [let [cargs [mutable-list]]
-    [push cargs op-call]
-    [push cargs js-name]
-    [loop [i 1]
-      [when [lt i [size form]]
-        [push cargs [compile-form lctx 0 [at form i]]]
-        [continue i [inc i]]]]
-    [freeze cargs]]]
 
 [func compile-form [lctx is-tail-pos form]
   [ifs
@@ -308,11 +298,17 @@
 
         [let [top-level-index [assoc-list-index top-level-ctx first-form]]
           [if [is-negative top-level-index]
-            [do
+            [let [cargs [mutable-list]]
               [when-not [get-instruction first-form]
                 [log [list [quote unknown-op] first-form]]
                 [abort]]
-              [return-if-tail is-tail-pos [make-op-call [quote op] first-form lctx form]]]
+              [push cargs [quote op]]
+              [push cargs first-form]
+              [loop [i 1]
+                [when [lt i [size form]]
+                  [push cargs [compile-form lctx 0 [at form i]]]
+                  [continue i [inc i]]]]
+              [return-if-tail is-tail-pos [freeze cargs]]]
             [let
                 [ns-obj [at top-level-ctx [inc top-level-index]]
                  kind [first ns-obj]
@@ -323,11 +319,25 @@
 
                 [= kind [quote func]]
                 [return-if-tail is-tail-pos
-                  [make-op-call [quote call] [list [quote field] [quote var wuns] first-form] lctx form]]
+                  [let [cargs [mutable-list]]
+                    [push cargs [quote call]]
+                    [push cargs [list [quote field] [quote var wuns] first-form]]
+                    [loop [i 1]
+                      [when [lt i [size form]]
+                        [push cargs [compile-form lctx 0 [at form i]]]
+                        [continue i [inc i]]]]
+                    [freeze cargs]]]
 
                 [= kind [quote import]]
                 [return-if-tail is-tail-pos
-                  [make-op-call [quote call] [list [quote field] [list [quote var] [second ns-obj]]  first-form] lctx form]]
+                  [let [cargs [mutable-list]]
+                    [push cargs [quote call]]
+                    [list [quote field] [list [quote var] [second ns-obj]]  first-form]
+                    [loop [i 1]
+                      [when [lt i [size form]]
+                        [push cargs [compile-form lctx 0 [at form i]]]
+                        [continue i [inc i]]]]
+                    [freeze cargs]]]
 
                 [do
                   [log [list [quote unknown kind] kind]]
@@ -338,3 +348,11 @@
     [log [list [quote compile-form-top] cf]]
     cf
   ]]
+
+[func compile-forms [forms]
+  [let [res [mutable-list]]
+    [loop [i 0]
+      [when [lt i [size forms]]
+        [push res [compile-form [] 0 [at forms i]]]
+        [continue i [inc i]]]]
+    [freeze res]]]
