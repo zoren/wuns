@@ -100,7 +100,7 @@ export const slice = (v, i, j) => {
   if (!Array.isArray(v)) throw new Error('slice expects list')
   let s = v.slice(number(i), number(j))
   if (s instanceof Uint8Array) return makeList(...Array.from(s, (n) => n))
-  return Object.freeze(s)
+  return makeList(...s)
 }
 let gensymCounter = 0
 export const gensym = () => word('v' + String(gensymCounter++))

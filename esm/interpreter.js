@@ -65,7 +65,7 @@ const wunsComp = (form) => {
     }
   }
   assert(isList(form), `cannot eval ${form} expected word or list`)
-  if (form.length === 0) return () => form
+  if (form.length === 0) return () => unit
   const [firstForm, ...args] = form
   const firstWordValue = wordValue(firstForm)
   switch (firstWordValue) {
