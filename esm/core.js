@@ -102,8 +102,6 @@ export const slice = (v, i, j) => {
   if (s instanceof Uint8Array) return makeList(...Array.from(s, (n) => n))
   return makeList(...s)
 }
-let gensymCounter = 0
-export const gensym = () => word('v' + String(gensymCounter++))
 export const set_array = (ar, index, e) => {
   if (!Array.isArray(ar)) throw new Error('set-array expects array')
   if (Object.isFrozen(ar)) throw new Error('set-array expects mutable array')

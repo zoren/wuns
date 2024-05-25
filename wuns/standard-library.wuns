@@ -98,7 +98,18 @@
           [second clauses]
           [concat [quote [ifs]] [slice clauses 2 [size clauses]]]]]]]
 
-[external-func gensym [] [word]]
+[constant gensym-counter [mutable-list]]
+
+[push gensym-counter 0]
+
+[external-func set-array [mutable-list i32 form] []]
+
+[external-func concat-words [list] [word]]
+
+[func gensym []
+  [let [v [first gensym-counter]]
+    [set-array gensym-counter 0 [inc v]]
+    [concat-words [list [quote g] v]]]]
 
 [macro and [.. clauses]
   [let [s [size clauses]]
@@ -174,8 +185,6 @@
         [abort]]
       [at ctx [inc index]]]]]
 
-[external-func set-array [mutable-list i32 form] []]
-
 [func assoc-list-set [ctx sym value]
   [let [index [assoc-list-index ctx sym]]
     [if [is-negative index]
@@ -192,5 +201,3 @@
     [push-all ml [meta f]]
     [assoc-list-set ml k v]
     [with-meta f [freeze ml]]]]
-
-[external-func concat-words [list] [word]]
