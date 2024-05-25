@@ -74,7 +74,7 @@ const wunsComp = (form) => {
     }
   }
   assert(isList(form), `cannot eval ${form} expected word or list`)
-  if (form.length === 0) return null
+  if (form.length === 0) return () => unit
   const [firstForm, ...args] = form
   const firstWordValue = wordValue(firstForm)
   switch (firstWordValue) {
@@ -86,15 +86,6 @@ const wunsComp = (form) => {
     case 'if': {
       const ifArgs = [...args, unit, unit, unit].slice(0, 3)
       let [cc, ct, cf] = ifArgs.map(wunsComp)
-      if (cc === null && ct === null && cf === null) return null
-      if (cc === null) cc = () => unit
-      if (ct === null && cf === null)
-        return (env) => {
-          cc(env)
-          return unit
-        }
-      if (ct === null) return (env) => (cc(env) === 0 ? cf(env) : unit)
-      if (cf === null) return (env) => (cc(env) === 0 ? unit : ct(env))
       return (env) => (cc(env) === 0 ? cf(env) : ct(env))
     }
     case 'let':
@@ -183,14 +174,14 @@ const wunsComp = (form) => {
       const n = wordValue(name)
       const funcObj = importFunctions[n]
       assert(funcObj, `external-func function ${name} not found`)
-      if (!(typeof funcObj === 'function')) throw new Error(`external-func expected function, found ${funcObj}`)
-      const parameterCount = funcObj.length
+      assert(typeof funcObj === 'function', `external-func expected function, found ${funcObj}`)
       assert(isList(params), `external-func expected list of parameters, found ${params}`)
+      for (const param of params) assert(isWord(param), `external-func expected word, found ${param}`)
+      const actualParameterCount = funcObj.length
       assert(
-        params.length === parameterCount,
-        `extern function ${name} expected ${parameterCount} arguments, got ${params.length}`,
+        params.length === actualParameterCount,
+        `extern function ${name} expected ${actualParameterCount} arguments, got ${params.length}`,
       )
-      for (const param of params) if (!isWord(param)) throw new Error('external-func expected word arguments')
       globalVarSet(n, funcObj)
       return null
     }
@@ -212,7 +203,7 @@ const wunsComp = (form) => {
       )
       const cargs = args.map(wunsComp)
       return (env) => {
-        const res = funcOrMacro(...cargs.map((carg) => (carg === null ? unit : carg(env))))
+        const res = funcOrMacro(...cargs.map((carg) => carg(env)))
         if (res === undefined) return unit
         // if (!isValidRuntimeValue(res)) throw new Error(`expected valid runtime value, found ${res}`)
         return res
@@ -237,7 +228,7 @@ const wunsComp = (form) => {
     return (env) =>
       internalApply(
         funcOrMacro,
-        cargs.map((carg) => (carg === null ? unit : carg(env))),
+        cargs.map((carg) => carg(env)),
       )
   } catch (e) {
     console.error('error evaluating', firstWordValue)
@@ -262,14 +253,14 @@ export const getGlobal = (name) => {
 export const evalLogForms = (forms, filename) => {
   const prevFilename = currentFilename
   currentFilename = filename
-  for (const form of forms) {
-    try {
+  try {
+    for (const form of forms) {
       const cform = wunsComp(form)
       const v = cform === null ? unit : cform(globalEnv)
       if (!isUnit(v)) console.log(print(v))
-    } catch (e) {
-      console.error('error evaluating', print(form), e)
     }
+  } catch (e) {
+    console.error('error evaluating', e)
   }
   currentFilename = prevFilename
 }
