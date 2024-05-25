@@ -80,13 +80,10 @@ export const size = (a) => {
   throw new Error('size expects word or list')
 }
 export const mutable_list = () => []
-const assert = (b, s) => {
-  if (!b) throw new Error(s)
-}
 export const at = (v, i) => {
   const len = size(v)
   const ni = number(i)
-  assert(ni >= -len && ni < len, 'index out of bounds: ' + i + ' ' + len)
+  if (ni < -len || ni >= len) throw new Error('index out of bounds: ' + i + ' ' + len)
   if (isWord(v)) return String(v).at(ni).charCodeAt(0)
   const elem = v.at(ni)
   return elem
