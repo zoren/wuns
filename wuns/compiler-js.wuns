@@ -1,4 +1,6 @@
-[import ../wuns/standard-library.wuns]
+[import ./standard-library.wuns]
+
+[constant-ids - ..]
 
 [func make-operation-obj [name parameters results]
   [concat
@@ -146,6 +148,12 @@
           1]]
       0]]]
 
+[external-func form-to-func [list list] []]
+
+[external-func js-apply [any list] []]
+
+[external-func emit-js [list] []]
+
 [func compile-form [lctx is-tail-pos form]
   [ifs
     [is-word form]
@@ -158,11 +166,14 @@
                 [abort]]
             [let [v [at top-level-ctx [inc index]]]
               [when-not [eq-word [first v] [quote constant]]
-                [log [concat [list form] [quote not a constant] v]]
+                [log [concat [list form] [quote not a constant] [first v]]]
                 [abort]]
-              [second v]]]]]]
+              [let [c-exp [second v]]
+                [if [= [first c-exp] [quote number]]
+                  c-exp
+                  [list [quote var] form]]]]]]]]
 
-    [= form []]
+    [eq [size form] 0]
     [return-if-tail is-tail-pos [quote [array]]]
 
     [let [first-form [first form]
@@ -179,13 +190,12 @@
 
         [eq-word first-form [quote if]]
         [let [c [compile-form lctx 0 [second form]]
-              js-c [list [quote op] [quote eq] c [list [quote value] 0]]
               t [compile-form lctx is-tail-pos [third form]]
               f [compile-form lctx is-tail-pos [fourth form]]]
           [assert [eq [size form] 4] if needs a condition and two branches]
           [if is-tail-pos
-            [list [quote if] js-c [list [quote block] f] t]
-            [list [quote ternary] js-c f t]]]
+            [list [quote if] c [list [quote block] t] f]
+            [list [quote ternary] c t f]]]
 
         [or [eq-word first-form [quote let]] [eq-word first-form [quote loop]]]
         [let
@@ -208,26 +218,26 @@
               [continue i [inc i]]]]
           [if is-tail-pos
             [if is-let
-              [concat [quote [block]]
+              [concat [quote [stmts]]
                 var-values exps [list [compile-form new-lctx 1 [last form]]]]
               [concat [quote [block]]
                 var-values
                 [list
-                  [concat [quote [loop]]
-                    [concat exps [list [compile-form new-lctx 1 [last form]]]]]]]]
+                  [list [quote while] [quote number 1]
+                    [concat [quote [block]] exps [list [compile-form new-lctx 1 [last form]]]]]]]]
             [if is-let
-              [iife
-                var-values exps [list [compile-form new-lctx 1 [last form]]]]
               [iife var-values
-                [list
-                  [concat [quote [loop]]
+                exps [list [compile-form new-lctx 1 [last form]]]]
+              [iife var-values
+                [list [quote while] [quote number 1]
+                  [list [quote block]
                     [concat exps [list [compile-form new-lctx 1 [last form]]]]]]]]]]
 
         [eq-word first-form [quote continue]]
         [let [var-updates [mutable-list]]
           [assert is-tail-pos continue must be in tail position]
           [assert [is-even n-of-args] continue needs an even number of arguments]
-          [push var-updates [quote block]]
+          [push var-updates [quote stmts]]
           [loop [i 1]
             [when [lt i n-of-args]
               [push var-updates [list [quote assign] [list [quote var] [at form i]] [compile-form lctx 0 [at form [inc i]]]]]
@@ -257,7 +267,7 @@
           [eq-word first-form [quote macro]]]
         [let [name [second form]
               orig-params [third form]
-              bodies [mutable-list]
+              body-block [mutable-list]
               param-ctx [mutable-list]
               params
               [if [and [lt 1 [size orig-params]] [= [at orig-params -2] ..]]
@@ -268,41 +278,54 @@
                       [assoc-list-set param-ctx [at regular-params i] [list [quote parameter]]]
                       [continue i [inc i]]]]
                   [assoc-list-set param-ctx rest-param [list [quote parameter]]]
-                  [list regular-params rest-param]]
+                  [concat regular-params [list [concat-words [list [quote ...] rest-param]]]]]
                 [do
                   [loop [i 0]
                     [when [lt i [size orig-params]]
                       [assoc-list-set param-ctx [at orig-params i] [list [quote parameter]]]
                       [continue i [inc i]]]]
-                  [list orig-params]]]
+                  orig-params]]
               fctx [list param-ctx []]]
-            [assoc-list-set top-level-ctx name [list first-form [form-to-func params bodies]]]
+            [push body-block [quote block]]
             [loop [i 3]
               [when [lt i [dec [size form]]]
-                [push bodies [compile-form fctx 0 [at form i]]]
+                [push body-block [compile-form fctx 0 [at form i]]]
                 [continue i [inc i]]]]
-            [push bodies [compile-form fctx 1 [last form]]]
+            [push body-block [compile-form fctx 1 [last form]]]
+            [assoc-list-set top-level-ctx name [list first-form [form-to-func params body-block]]]
+            [emit-js [list [quote const] [js-escape name] [list [quote arrow-func] params body-block]]]
             [list [quote assign]
               [list [quote field]
                 [list [quote field] [quote var global] [quote wuns]]
                 [js-escape name]]
-              [list [quote arrow-func] params bodies]]]
+              [list [quote arrow-func] params body-block]]]
 
         [eq-word first-form [quote constant]]
         [let [name [second form]
               value [compile-form [] 0 [third form]]]
           [assoc-list-set top-level-ctx name [list [quote constant] value]]
+          [when-not [is-decimal name]
+            [emit-js [list [quote const] [js-escape name] value]]]
           [comment
             [list [quote assign] [list [quote field] [list [quote field] [quote var global] [quote wuns]] [js-escape name]] value]
           ]]
+
+        [eq-word first-form [quote external-func]]
+        [let [name [second form]
+              params [third form]
+              results [fourth form]]
+          [emit-js [concat [quote import ./host.js] [list [js-escape name]]]]
+          [assoc-list-set top-level-ctx name [list [quote func] params results]]
+          [list [quote import] [quote core.js] name]
+          ]
 
         [let [top-level-index [assoc-list-index top-level-ctx first-form]]
           [if [is-negative top-level-index]
             [let [cargs [mutable-list]]
               [when-not [get-instruction first-form]
-                [log [list [quote unknown-op] first-form]]
+                [log [concat [quote unknown func or op] [list first-form]]]
                 [abort]]
-              [push cargs [quote op]]
+              [push cargs [quote binop]]
               [push cargs first-form]
               [loop [i 1]
                 [when [lt i [size form]]
@@ -321,7 +344,7 @@
                 [return-if-tail is-tail-pos
                   [let [cargs [mutable-list]]
                     [push cargs [quote call]]
-                    [push cargs [list [quote field] [quote var wuns] first-form]]
+                    [push cargs [list [quote var] first-form]]
                     [loop [i 1]
                       [when [lt i [size form]]
                         [push cargs [compile-form lctx 0 [at form i]]]
@@ -333,6 +356,17 @@
                   [let [cargs [mutable-list]]
                     [push cargs [quote call]]
                     [list [quote field] [list [quote var] [second ns-obj]]  first-form]
+                    [loop [i 1]
+                      [when [lt i [size form]]
+                        [push cargs [compile-form lctx 0 [at form i]]]
+                        [continue i [inc i]]]]
+                    [freeze cargs]]]
+
+                [= kind [quote external-func]]
+                [return-if-tail is-tail-pos
+                  [let [cargs [mutable-list]]
+                    [push cargs [quote call]]
+                    [list [quote field] [quote var host] first-form]
                     [loop [i 1]
                       [when [lt i [size form]]
                         [push cargs [compile-form lctx 0 [at form i]]]

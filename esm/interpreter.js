@@ -6,8 +6,8 @@ import { i32 } from './instructions.js'
 
 const isValidRuntimeValue = (v) => isWord(v) || (isList(v) && v.every(isValidRuntimeValue))
 
-const importFunctions = {}
-for (const [name, f] of Object.entries(await import('./host.js'))) importFunctions[name.replace(/_/g, '-')] = f
+const externalFunctions = {}
+for (const [name, f] of Object.entries(await import('./host.js'))) externalFunctions[name.replace(/_/g, '-')] = f
 
 const globalVarValues = new Map()
 const globalVarSet = (name, value) => {
@@ -169,7 +169,7 @@ const wunsComp = (form) => {
       if (args.length !== 3) throw new Error('external-func expects 3 arguments')
       const [name, params, results] = args
       const n = wordValue(name)
-      const funcObj = importFunctions[n]
+      const funcObj = externalFunctions[n]
       assert(funcObj, `external-func function ${name} not found`)
       assert(typeof funcObj === 'function', `external-func expected function, found ${funcObj}`)
       assert(isList(params), `external-func expected list of parameters, found ${params}`)
@@ -240,7 +240,7 @@ export const apply = (funmacObj, args) => {
 
 export const defineImportFunction = (name, f) => {
   // if (name in importFunctions) throw new Error(`function ${name} already defined`)
-  importFunctions[name] = f
+  externalFunctions[name] = f
 }
 export const getGlobal = (name) => {
   if (globalVarValues.has(name)) return globalVarValues.get(name)

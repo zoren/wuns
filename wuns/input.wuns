@@ -1,13 +1,3 @@
-[macro comment [.. -] []]
-
-[import std
-  at size slice push mutable-list freeze log abort gensym
-  is-word is-list
-  ]
-
-[func list [.. l] l]
-
-[constant -2 [quote -2]]
 [constant -1 [quote -1]]
 [constant 0 [quote 0]]
 [constant 1 [quote 1]]
@@ -15,9 +5,6 @@
 [constant 3 [quote 3]]
 
 [func inc [x] [add x 1]]
-
-[log [inc [quote 1336]]]
-
 [func dec [x] [sub x 1]]
 
 [func not [c] [eq c 0]]
@@ -30,13 +17,32 @@
 
 [func is-negative [x] [lt x 0]]
 
+[func abs [x] [if [is-negative x] [sub 0 x] x]]
+[func min [a b] [if [lt a b] a b]]
+[func max [a b] [if [gt a b] a b]]
+[func delta [a b]
+  [let [min [if [lt a b] a b]
+        max [if [gt a b] a b]]
+    [sub max min]]]
+
+[external-func at [form i32] [form]]
+
 [func first [l] [at l 0]]
 [func second [l] [at l 1]]
 [func third [l] [at l 2]]
 [func fourth [l] [at l 3]]
-[func last [l] [at l [quote -1]]]
+[func last [l] [at l -1]]
+
+[external-func slice [list i32 i32] [list]]
+[external-func size [form] [i32]]
 
 [func rest [l] [slice l 1 [size l]]]
+
+[func list [.. l] l]
+
+[constant unit [list]]
+
+[external-func push [mutable-list form] []]
 
 [func push-all [mut-list list]
   [let [s-l [size list]]
@@ -45,7 +51,10 @@
         [let []
           [push mut-list [at list i]]
           [continue i [inc i]]]
-        []]]]]
+        unit]]]]
+
+[external-func mutable-list [] [mutable-list]]
+[external-func freeze [mutable-list] [list]]
 
 [func concat-lists [lists]
   [let [res [mutable-list] s [size lists]]
@@ -57,93 +66,3 @@
         [freeze res]]]]]
 
 [func concat [.. lists] [concat-lists lists]]
-
-[if [eq [size [concat [quote one two] [quote [three]] [quote four five]]] [quote 5]]
-  []
-  [let []
-    [log [quote not equal]]
-    [abort]]]
-
-[macro do [.. forms]
-  [concat [quote let []] forms]]
-
-[macro when [cond .. forms]
-  [list
-    [quote if] cond
-    [concat [quote [do]] forms]
-    []]]
-
-[macro when-not [cond .. forms]
-  [list
-    [quote if] cond
-    []
-    [concat [quote [do]] forms]]]
-
-[macro assert [cond .. lmsg]
-  [list [quote when-not] cond
-    [list [quote log] [list [quote quote] [concat [list [quote assert-fail]] lmsg]]]
-    [quote [abort]]]]
-
-[macro ifs [.. clauses]
-  [let [s [size clauses]]
-    [if [is-zero s]
-      [let [] [log [quote ifs requires an odd number of arguments]] [abort]]
-      []]
-    [if [eq s 1]
-        [first clauses]
-        [list [quote if] [first clauses]
-          [second clauses]
-          [concat [quote [ifs]] [slice clauses 2 [size clauses]]]]]]]
-
-[macro and [.. clauses]
-  [let [s [size clauses]]
-    [if [is-zero s]
-      1
-      [if [eq s 1]
-        [first clauses]
-        [let [gs [gensym]]
-          [list [quote let] [list gs [first clauses]]
-            [list [quote if] gs
-              [concat [quote [and]] [rest clauses]]
-              gs]]]]]]]
-
-[macro or [.. clauses]
-  [let [s [size clauses]]
-    [if
-      [is-zero s]
-      0
-
-      [if [eq s 1]
-        [first clauses]
-
-        [let [gs [gensym]]
-          [list [quote let] [list gs [first clauses]]
-            [list [quote if] gs
-              gs
-              [concat [quote [or]] [rest clauses]]]]]]]]]
-
-[func eq-word [a b]
-  [and [eq [size a] [size b]]
-    [loop [i 0]
-      [if [lt i [size a]]
-        [if [eq [at a i] [at b i]]
-          [continue i [inc i]]
-          0]
-        1]]]]
-
-[func = [a b]
-  [if [and [is-word a] [is-word b]]
-    [eq-word a b]
-
-    [and [is-list a] [is-list b]
-      [let [s [size a]]
-        [and [eq s [size b]]
-          [loop [i 0]
-            [or [ge i s]
-              [and [= [at a i] [at b i]] [continue i [inc i]]]]]]]]]]
-
-[log [list [quote is equal]
-            [= [quote 1] [quote 1]]]]
-
-[log [list [quote is not equal]
-            [= [quote 2] [quote 1]]]]

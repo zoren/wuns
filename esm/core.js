@@ -23,9 +23,9 @@ export const word = (s) => Object.freeze(new Word(s))
 // todo what about words representing large integers?
 export const isWord = (f) => isSigned32BitInteger(f) || (typeof f === 'string' && isWordString(f)) || f instanceof Word
 export const wordValue = (w) => {
-  if (w instanceof Word) return w.value
-  if (typeof w === 'string') return w
   if (isSigned32BitInteger(w)) return w
+  if (typeof w === 'string') return w
+  if (w instanceof Word) return w.value
   throw new Error('not a word: ' + w + ' ' + typeof w)
 }
 export const isList = (f) => Array.isArray(f)
