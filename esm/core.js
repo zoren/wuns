@@ -53,3 +53,8 @@ export const print = (x) => {
   if (!Array.isArray(x)) throw new Error(`cannot print ${x} expected word or list ${typeof x} ${x.constructor}`)
   return `[${x.map(print).join(' ')}]`
 }
+export const unword = (v) => {
+  if (isWord(v)) return wordValue(v)
+  if (isList(v)) return makeList(...v.map(unword))
+  throw new Error('quote expects word or list')
+}

@@ -1,6 +1,6 @@
 import path from 'node:path'
 import fs from 'node:fs'
-import { print, wordValue } from './core.js'
+import { print, wordValue, unword } from './core.js'
 import { parseStringToForms } from './parse.js'
 import { defineImportFunction, parseEvalFile, getGlobal, apply } from './interpreter.js'
 
@@ -68,15 +68,17 @@ const jsDomToString = (dom) => {
         return `${go(args[0])} ? ${go(args[1])} : ${go(args[2])}`
       case 'binop':
         return `((${go(args[1])} ${i32binops[args[0]]} ${go(args[2])}) | 0)`
-      case 'call':
+      case 'call': {
         if (args.length === 0) throw new Error('call expects at least one arg')
-        return `${go(args[0])}(${args.slice(1).map(go).join(',')})`
+        const [f, ...fargs] = args
+        return `${go(f)}(${fargs.map(go).join(',')})`
+      }
       case 'field':
         return `${go(args[0])}.${wunsWordToJSIdentifier(args[1])}`
       case 'if':
         return `if (${go(args[0])}) ${go(args[1])} else ${go(args[2])}`
       case 'arrow-func':
-        return `(${commasepWords(args[0])}) => ${go(args[1])}`
+        return `((${commasepWords(args[0])}) => ${go(args[1])})`
       case 'import':
         return `import { ${commasepWords(args.slice(1))} } from '${args[0]}'`
       case 'dynamic-import':
@@ -86,12 +88,12 @@ const jsDomToString = (dom) => {
       case 'continue':
         return 'continue'
     }
-    throw new Error('unexpected dom tag: ' + print(tag))
+    throw new Error('unexpected dom tag: ' + tag)
   }
   try {
     return go(dom)
   } catch (e) {
-    console.dir(dom, { depth: null })
+    console.dir(unword(dom), { depth: null })
     console.error('jsDomToString error', e)
     throw e
   }
@@ -146,8 +148,7 @@ const esmJSToIIFE = (contents, globalName, footerJS) => {
     const src = output.text
     return src
   } catch (e) {
-    console.error('esmJSToIIFE error', {contents, globalName, footerJS},e)
-
+    console.error('esmJSToIIFE error', { contents, globalName, footerJS }, e)
   }
 }
 const makeContextIIFE = (m) => {

@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { makeList, wordValue, isWord, isList, isUnit, unit, print } from './core.js'
+import { makeList, wordValue, isWord, isList, isUnit, unit, print, unword } from './core.js'
 import { parseStringToForms } from './parse.js'
 import { i32 } from './instructions.js'
 
@@ -43,11 +43,6 @@ const internalApply = ({ name, params, restParam, cbodies }, args) => {
   let result = unit
   for (const cbody of cbodies) result = cbody(inner)
   return result
-}
-const unword = (v) => {
-  if (isWord(v)) return wordValue(v)
-  if (isList(v)) return makeList(...v.map(unword))
-  throw new Error('quote expects word or list')
 }
 const wunsComp = (form) => {
   const compBodies = (bodies) => {

@@ -118,7 +118,7 @@
     exp]]
 
 [func iife [.. forms]
-  [list [quote call] [list [quote arrow-func] [quote [[]]] [concat-lists forms]] []]]
+  [list [quote call] [list [quote arrow-func] [quote []] [concat-lists forms]]]]
 
 [func value-to-js [form]
   [if [is-word form]
@@ -229,7 +229,7 @@
                   [list [quote while] [quote number 1]
                     [concat [quote [block]] exps [list [compile-form new-lctx 1 [last form]]]]]]]]
             [if is-let
-              [iife var-values
+              [iife [quote [block]] var-values
                 exps [list [compile-form new-lctx 1 [last form]]]]
               [iife var-values
                 [list [quote while] [quote number 1]
