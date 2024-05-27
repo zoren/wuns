@@ -1,6 +1,6 @@
 import path from 'node:path'
 import fs from 'node:fs'
-import { print } from './core.js'
+import { print, wordValue } from './core.js'
 import { parseStringToForms } from './parse.js'
 import { defineImportFunction, parseEvalFile, getGlobal, apply } from './interpreter.js'
 
@@ -11,69 +11,90 @@ const wunsWordToJSIdentifier = (word) => {
   return s.replace(/-/g, '_')
 }
 
+const i32binops = {
+  add: '+',
+  sub: '-',
+  mul: '*',
+  'div-signed': '/',
+  'rem-signed': '%',
+
+  eq: '===',
+  ne: '!==',
+
+  lt: '<',
+  le: '<=',
+  gt: '>',
+  ge: '>=',
+
+  'bitwise-and': '&',
+  'bitwise-ior': '|',
+  'bitwise-xor': '^',
+  'bitwise-shift-left': '<<',
+  'bitwise-shift-right-signed': '>>',
+  'bitwise-shift-right-unsigned': '>>>',
+}
+
+const commasepWords = (words) => words.map(wunsWordToJSIdentifier).join(', ')
+
 const jsDomToString = (dom) => {
-  const [tag, ...children] = dom
-  switch (tag) {
-    case 'var':
-      return wunsWordToJSIdentifier(children[0])
-    case 'number':
-      return children[0]
-    case 'return':
-      return `return ${jsDomToString(children[0])}`
-    case 'stmts':
-      return children.map(jsDomToString).join(';')
-    case 'block':
-      return `{ ${children.map(jsDomToString).join(';')} }`
-    case 'const':
-      return `const ${wunsWordToJSIdentifier(children[0])} = ${jsDomToString(children[1])}`
-    case 'let':
-      return `let ${wunsWordToJSIdentifier(children[0])} = ${jsDomToString(children[1])}`
-    case 'assign':
-      return `${jsDomToString(children[0])} = ${jsDomToString(children[1])}`
-    case 'ternary':
-      return `${jsDomToString(children[0])} ? ${jsDomToString(children[1])} : ${jsDomToString(children[2])}`
-    case 'binop': {
-      const i32binops = {
-        add: '+',
-        sub: '-',
-        mul: '*',
-        'div-signed': '/',
-        'rem-signed': '%',
-
-        eq: '===',
-        ne: '!==',
-
-        lt: '<',
-        le: '<=',
-        gt: '>',
-        ge: '>=',
-
-        'bitwise-and': '&',
-        'bitwise-ior': '|',
-        'bitwise-xor': '^',
-        'bitwise-shift-left': '<<',
-        'bitwise-shift-right-signed': '>>',
-        'bitwise-shift-right-unsigned': '>>>',
-      }
-      return `((${jsDomToString(children[1])} ${i32binops[children[0]]} ${jsDomToString(children[2])}) | 0)`
+  const go = (dom) => {
+    if (!Array.isArray(dom)) {
+      console.dir({ dom }, { depth: null })
+      throw new Error('expected dom to be an array')
     }
-    case 'call':
-      return `${jsDomToString(children[0])}(${children.slice(1).map(jsDomToString).join(',')})`
-    case 'field':
-      return `${jsDomToString(children[0])}.${wunsWordToJSIdentifier(children[1])}`
-    case 'if':
-      return `if (${jsDomToString(children[0])}) ${jsDomToString(children[1])} else ${jsDomToString(children[2])}`
-    case 'arrow-func':
-      return `(${children[0].map(wunsWordToJSIdentifier).join(', ')}) => ${jsDomToString(children[1])}`
-    case 'import':
-      return `import { ${children.slice(1).map(wunsWordToJSIdentifier).join(', ')} } from '${children[0]}'`
-    case 'while':
-      return `while (${jsDomToString(children[0])}) ${jsDomToString(children[1])}`
-    case 'continue':
-      return 'continue'
+    const [tag, ...args] = dom
+    switch (tag) {
+      case 'var':
+        return wunsWordToJSIdentifier(args[0])
+      case 'number':
+        return args[0]
+      case 'string':
+        return `'${args[0]}'`
+      case 'return':
+        return `return ${go(args[0])}`
+      case 'stmts':
+        return args.map(go).join(';')
+      case 'array':
+        return `[${args.map(go).join(',')}]`
+      case 'block':
+        return `{ ${args.map(go).join(';')} }`
+      case 'const':
+        return `const ${wunsWordToJSIdentifier(args[0])} = ${go(args[1])}`
+      case 'let':
+        return `let ${wunsWordToJSIdentifier(args[0])} = ${go(args[1])}`
+      case 'assign':
+        return `${go(args[0])} = ${go(args[1])}`
+      case 'ternary':
+        return `${go(args[0])} ? ${go(args[1])} : ${go(args[2])}`
+      case 'binop':
+        return `((${go(args[1])} ${i32binops[args[0]]} ${go(args[2])}) | 0)`
+      case 'call':
+        if (args.length === 0) throw new Error('call expects at least one arg')
+        return `${go(args[0])}(${args.slice(1).map(go).join(',')})`
+      case 'field':
+        return `${go(args[0])}.${wunsWordToJSIdentifier(args[1])}`
+      case 'if':
+        return `if (${go(args[0])}) ${go(args[1])} else ${go(args[2])}`
+      case 'arrow-func':
+        return `(${commasepWords(args[0])}) => ${go(args[1])}`
+      case 'import':
+        return `import { ${commasepWords(args.slice(1))} } from '${args[0]}'`
+      case 'dynamic-import':
+        return `const { ${commasepWords(args.slice(1))} } = await import('${args[0]}')`
+      case 'while':
+        return `while (${go(args[0])}) ${go(args[1])}`
+      case 'continue':
+        return 'continue'
+    }
+    throw new Error('unexpected dom tag: ' + print(tag))
   }
-  console.dir({ dom }, { depth: null })
-  throw new Error('unexpected dom tag: ' + tag)
+  try {
+    return go(dom)
+  } catch (e) {
+    console.dir(dom, { depth: null })
+    console.error('jsDomToString error', e)
+    throw e
+  }
 }
 
 defineImportFunction('form-to-func', (params, body) => {
@@ -86,15 +107,65 @@ defineImportFunction('form-to-func', (params, body) => {
   }
 })
 
+defineImportFunction('form-to-async-func', (params, body) => {
+  const src = jsDomToString(body)
+  try {
+    return new AsyncFunction(...params.map(wunsWordToJSIdentifier), src)
+  } catch (e) {
+    console.error('form-to-async-func error', e, src)
+    console.dir({ params: print(params), body }, { depth: null })
+  }
+})
+
 defineImportFunction('js-apply', (func, args) => func(...args))
-let jsSrc = ''
+let emittedJS = ''
 
 defineImportFunction('emit-js', (l) => {
   const src = jsDomToString(l)
   console.log('emitting: ' + src)
-  jsSrc += src + '\n'
+  emittedJS += src + '\n'
 })
 
+import * as esbuild from 'esbuild'
+
+const esmJSToIIFE = (contents, globalName, footerJS) => {
+  try {
+    const result = esbuild.buildSync({
+      stdin: {
+        contents,
+        resolveDir: './',
+      },
+      bundle: true,
+      write: false,
+      format: 'iife',
+      globalName,
+      footer: { js: footerJS },
+    })
+    const { outputFiles } = result
+    const [output] = outputFiles
+    const src = output.text
+    return src
+  } catch (e) {
+    console.error('esmJSToIIFE error', {contents, globalName, footerJS},e)
+
+  }
+}
+const makeContextIIFE = (m) => {
+  const wm = wunsWordToJSIdentifier(m)
+  const src = emittedJS + '\n' + `export { ${wm} }`
+  const globalName = '_wunsContext'
+  const footerJS = `return _wunsContext.${wm}`
+  const iifeSrc = esmJSToIIFE(src, globalName, footerJS)
+  console.log('iifeSrc', iifeSrc)
+  const f = Function(iifeSrc)()
+  console.log('makeContextIIFE f', f)
+  return f
+  // return iifeSrc
+}
+
+defineImportFunction('make-macro-iife', (m) => {
+  return makeContextIIFE(wordValue(m))
+})
 const __dirname = path.dirname(new URL(import.meta.url).pathname)
 const wunsDir = path.resolve(__dirname, '..', 'wuns')
 parseEvalFile(path.resolve(wunsDir, 'compiler-js.wuns'))
@@ -103,21 +174,24 @@ const inputFile = path.resolve(wunsDir, 'input.wuns')
 const content = fs.readFileSync(inputFile, 'utf8')
 const forms = parseStringToForms(content)
 
-try {
-  const outfun = getGlobal('compile-forms')
-  apply(outfun, [forms])
-  console.log('done compiling: ' + forms.length)
-} catch (e) {
-  console.error('error evaluating compiler', e)
-}
+const compileForm = getGlobal('compile-top-form')
+for (const form of forms) apply(compileForm, [form])
 
-fs.writeFileSync('output.js', jsSrc)
+// try {
+//   const outfun = getGlobal('compile-forms')
+//   apply(outfun, [forms])
+//   console.log('done compiling: ' + forms.length)
+// } catch (e) {
+//   console.error('error evaluating compiler', e)
+// }
+
+fs.writeFileSync('output.js', emittedJS)
 
 import * as prettier from 'prettier'
 
 fs.writeFileSync(
   'output.prettier.js',
-  await prettier.format(jsSrc, {
+  await prettier.format(emittedJS, {
     parser: 'babel',
     singleQuote: true,
     trailingComma: 'all',

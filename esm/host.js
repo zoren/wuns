@@ -32,9 +32,10 @@ export const push = (ar, e) => {
 export const size = (a) => {
   if (isWord(a)) return String(a).length
   if (Array.isArray(a)) return a.length
-  throw new Error('size expects word or list')
+  throw new Error('size expects word or list found: ' + a + ' ' + typeof a)
 }
 export const mutable_list = () => []
+export const is_mutable = (f) => (Array.isArray(f) && !Object.isFrozen(f)) | 0
 
 const number = (f) => {
   if (!isWord(f)) throw new Error('expected word: ' + f)
@@ -54,6 +55,7 @@ export const at = (v, i) => {
   const elem = v.at(ni)
   return elem
 }
+// come up with a better name, the list is not frozen, a frozen copy is made
 export const freeze = (ar) => {
   if (!Array.isArray(ar)) throw new Error('freeze expects array')
   if (Object.isFrozen(ar)) throw new Error('freeze expects mutable array')

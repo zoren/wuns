@@ -98,18 +98,9 @@
           [second clauses]
           [concat [quote [ifs]] [slice clauses 2 [size clauses]]]]]]]
 
-[constant gensym-counter [mutable-list]]
-
-[push gensym-counter 0]
-
 [external-func set-array [mutable-list i32 form] []]
 
 [external-func concat-words [list] [word]]
-
-[func gensym []
-  [let [v [first gensym-counter]]
-    [set-array gensym-counter 0 [inc v]]
-    [concat-words [list [quote g] v]]]]
 
 [macro and [.. clauses]
   [let [s [size clauses]]
@@ -120,11 +111,9 @@
       [eq s 1]
       [first clauses]
 
-      [let [gs [gensym]]
-        [list [quote let] [list gs [first clauses]]
-          [list [quote if] gs
-            [concat [quote [and]] [rest clauses]]
-            gs]]]]]]
+      [list [quote if] [first clauses]
+        [concat [quote [and]] [rest clauses]]
+        0]]]]
 
 [macro or [.. clauses]
   [let [s [size clauses]]
@@ -135,11 +124,9 @@
       [eq s 1]
       [first clauses]
 
-      [let [gs [gensym]]
-        [list [quote let] [list gs [first clauses]]
-          [list [quote if] gs
-            gs
-            [concat [quote [or]] [rest clauses]]]]]]]]
+      [list [quote if] [first clauses]
+            1
+            [concat [quote [or]] [rest clauses]]]]]]
 
 [func eq-word [a b]
   [and [eq [size a] [size b]]

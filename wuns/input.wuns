@@ -1,23 +1,17 @@
-[constant -1 [quote -1]]
-[constant 0 [quote 0]]
-[constant 1 [quote 1]]
-[constant 2 [quote 2]]
-[constant 3 [quote 3]]
+[func inc [x] [add x [quote 1]]]
+[func dec [x] [sub x [quote 1]]]
 
-[func inc [x] [add x 1]]
-[func dec [x] [sub x 1]]
+[func not [c] [eq c [quote 0]]]
 
-[func not [c] [eq c 0]]
+[func is-zero [x] [eq x [quote 0]]]
 
-[func is-zero [x] [eq x 0]]
-
-[func is-odd [x] [bitwise-and x 1]]
+[func is-odd [x] [bitwise-and x [quote 1]]]
 
 [func is-even [x] [not [is-odd x]]]
 
-[func is-negative [x] [lt x 0]]
+[func is-negative [x] [lt x [quote 0]]]
 
-[func abs [x] [if [is-negative x] [sub 0 x] x]]
+[func abs [x] [if [is-negative x] [sub [quote 0] x] x]]
 [func min [a b] [if [lt a b] a b]]
 [func max [a b] [if [gt a b] a b]]
 [func delta [a b]
@@ -27,29 +21,37 @@
 
 [external-func at [form i32] [form]]
 
-[func first [l] [at l 0]]
-[func second [l] [at l 1]]
-[func third [l] [at l 2]]
-[func fourth [l] [at l 3]]
-[func last [l] [at l -1]]
+[func first [l] [at l [quote 0]]]
+[func second [l] [at l [quote 1]]]
+[func third [l] [at l [quote 2]]]
+[func fourth [l] [at l [quote 3]]]
+[func last [l] [at l [quote -1]]]
 
 [external-func slice [list i32 i32] [list]]
 [external-func size [form] [i32]]
 
-[func rest [l] [slice l 1 [size l]]]
+[func rest [l] [slice l [quote 1] [size l]]]
 
-[func list [.. l] l]
+[func first-second-rest [f s .. r] [list f s r]]
+
+[func tester []
+  [first-second-rest [quote 1] [quote 2] [quote 3] [quote 4]]]
+
+[external-func is-mutable [form] [i32]]
+
+[func is-rest-mutable [.. rest]
+  [is-mutable rest]]
 
 [constant unit [list]]
 
 [external-func push [mutable-list form] []]
 
-[func push-all [mut-list list]
-  [let [s-l [size list]]
-    [loop [i 0]
+[func push-all [mut-list elements]
+  [let [s-l [size elements]]
+    [loop [i [quote 0]]
       [if [lt i s-l]
         [let []
-          [push mut-list [at list i]]
+          [push mut-list [at elements i]]
           [continue i [inc i]]]
         unit]]]]
 
@@ -57,8 +59,9 @@
 [external-func freeze [mutable-list] [list]]
 
 [func concat-lists [lists]
-  [let [res [mutable-list] s [size lists]]
-    [loop [i 0]
+  [let [res [mutable-list]
+        s [size lists]]
+    [loop [i [quote 0]]
       [if [lt i s]
         [let []
           [push-all res [at lists i]]
@@ -66,3 +69,133 @@
         [freeze res]]]]]
 
 [func concat [.. lists] [concat-lists lists]]
+
+[external-func set-array [mutable-list i32 form] []]
+
+[external-func concat-words [list] [word]]
+
+[macro do [.. forms]
+  [concat [quote [let []]] forms]]
+
+[external-func log [list] []]
+
+[func macro-work []
+  [do
+    [log [quote 1]]
+    [log [quote 2]]
+    [log [quote 3]]
+    [log [quote do do do do]]
+    ]]
+
+[macro when [cond .. forms]
+  [list
+    [quote if] cond
+    [concat [quote [do]] forms]
+    []]]
+
+[macro when-not [cond .. forms]
+  [list
+    [quote if] cond
+    []
+    [concat [quote [do]] forms]]]
+
+[external-func abort [] []]
+
+[macro assert [cond .. lmsg]
+  [list [quote when-not] cond
+    [list [quote log] [list [quote quote] [concat [list [quote assert-fail]] lmsg]]]
+    [quote [abort]]]]
+
+[macro ifs [.. clauses]
+  [let [s [size clauses]]
+    [if [eq s [quote 1]]
+        [first clauses]
+        [list [quote if] [first clauses]
+          [second clauses]
+          [concat [list [quote ifs]] [slice clauses [quote 2] [size clauses]]]]]]]
+
+[macro and [.. clauses]
+  [let [s [size clauses]]
+    [ifs
+      [is-zero s]
+      [quote 1]
+
+      [eq s [quote 1]]
+      [first clauses]
+
+      [list [quote if] [first clauses]
+        [concat [list [quote and]] [rest clauses]]
+        [list [quote quote] [quote 0]]]]]]
+
+[macro or [.. clauses]
+  [let [s [size clauses]]
+    [ifs
+      [is-zero s]
+      [quote 0]
+
+      [eq s [quote 1]]
+      [first clauses]
+
+      [list [quote if] [first clauses]
+        [list [quote quote] [quote 1]]
+        [concat [quote [or]] [rest clauses]]]]]]
+
+[func between [a b c]
+  [and [lt a b] [lt b c]]]
+
+[func between-silly [a b c]
+  [and [lt a b] [lt b c] [lt a c]]]
+
+[func eq-word [a b]
+  [and [eq [size a] [size b]]
+    [loop [i [quote 0]]
+      [if [lt i [size a]]
+        [if [eq [at a i] [at b i]]
+          [continue i [inc i]]
+          [quote 0]]
+        [quote 1]]]]]
+
+[external-func is-word [form] [i32]]
+[external-func is-list [form] [i32]]
+
+[func eq-form [a b]
+  [if
+    [and [is-word a] [is-word b]]
+    [eq-word a b]
+
+    [and [is-list a] [is-list b]
+      [let [s [size a]]
+        [and [eq s [size b]]
+          [loop [i [quote 0]]
+            [or [ge i s]
+              [and [eq-form [at a i] [at b i]] [continue i [inc i]]]]]]]]]]
+
+[func assoc-list-index [ctx sym]
+  [let [s [size ctx]]
+    [loop [i [quote 0]]
+      [if [ge i s]
+        [quote -1]
+        [if [eq-word [at ctx i] sym]
+          i
+          [continue i [add i [quote 2]]]]]]]]
+
+[func assoc-list-has [ctx sym]
+  [not [is-negative [assoc-list-index ctx sym]]]]
+
+[func assoc-list-get [ctx sym]
+  [let [index [assoc-list-index ctx sym]]
+    [if [is-negative index]
+      [do
+        [log [quote assoc-list-get key not found]]
+        [abort]]
+      [at ctx [inc index]]]]]
+
+[func assoc-list-set [ctx sym value]
+  [let [index [assoc-list-index ctx sym]]
+    [if [is-negative index]
+      [do
+        [push ctx sym]
+        [push ctx value]]
+      [set-array ctx [inc index] value]]
+    ]
+  ]

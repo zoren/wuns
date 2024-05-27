@@ -1,7 +1,3 @@
-export const unit = Object.freeze([])
-export const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
-export const isUnit = (x) => x === unit || (Array.isArray(x) && Object.isFrozen(x) && x.length === 0)
-
 export const isSigned32BitInteger = (n) => (n | 0) === n
 const wordRegex = /^[a-z0-9.=/-]+$/
 export const isWordString = (s) => typeof s === 'string' && s.length > 0 && wordRegex.test(s)
@@ -28,7 +24,12 @@ export const wordValue = (w) => {
   if (w instanceof Word) return w.value
   throw new Error('not a word: ' + w + ' ' + typeof w)
 }
+
+export const unit = Object.freeze([])
+export const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
+export const isUnit = (x) => x === unit || (Array.isArray(x) && Object.isFrozen(x) && x.length === 0)
 export const isList = (f) => Array.isArray(f)
+
 const symbolMeta = Symbol.for('wuns-meta')
 export const wordWithMeta = (s, meta) => {
   const w = new Word(s)
@@ -47,7 +48,7 @@ export const meta = (form) => {
 }
 
 export const print = (x) => {
-  if (isWord(x)) return wordValue(x)
+  if (isWord(x)) return String(x)
   if (typeof x === 'number') return String(x)
   if (!Array.isArray(x)) throw new Error(`cannot print ${x} expected word or list ${typeof x} ${x.constructor}`)
   return `[${x.map(print).join(' ')}]`
