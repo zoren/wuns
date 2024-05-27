@@ -135,6 +135,10 @@ const wunsComp = (form) => {
         return unit
       }
     }
+    case 'list': {
+      const cargs = args.map(wunsComp)
+      return (env) => makeList(...cargs.map((carg) => carg(env)))
+    }
     // side effect forms
     case 'func':
     case 'macro': {

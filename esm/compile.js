@@ -87,6 +87,8 @@ const jsDomToString = (dom) => {
         return `while (${go(args[0])}) ${go(args[1])}`
       case 'continue':
         return 'continue'
+      case 'export':
+        return `export { ${commasepWords(args)} }`
     }
     throw new Error('unexpected dom tag: ' + tag)
   }

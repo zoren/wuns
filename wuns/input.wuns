@@ -108,6 +108,7 @@
 
 [macro ifs [.. clauses]
   [let [s [size clauses]]
+    [assert [not [is-zero s]] ifs requires an odd number of arguments]
     [if [eq s [quote 1]]
         [first clauses]
         [list [quote if] [first clauses]
@@ -196,9 +197,16 @@
       [do
         [push ctx sym]
         [push ctx value]]
-      [set-array ctx [inc index] value]]
-    ]
-  ]
+      [set-array ctx [inc index] value]]]]
+
+[external-func meta [form] [form]]
+[external-func with-meta [form form] [form]]
+
+[func assoc-meta [f k v]
+  [let [ml [mutable-list]]
+    [push-all ml [meta f]]
+    [assoc-list-set ml k v]
+    [with-meta f [freeze ml]]]]
 
 [func do-two-things []
   [log [quote third thing]]
@@ -209,5 +217,11 @@
 [func do-two-things-2 []
   [let []
     [log [quote 1]]]
-  [log [quote 2]]
-  ]
+  [log [quote 2]]]
+
+[func do-two-things-3 []
+  [add
+    [let [] [quote 1]]
+    [let [] [quote 3]]]]
+
+[export do-two-things do-two-things-2 do-two-things-3]

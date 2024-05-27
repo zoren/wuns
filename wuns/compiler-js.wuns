@@ -263,6 +263,7 @@
             [when [lt i s-form]
               [push ml [js-escape [at form i]]]
               [continue i [inc i]]]]
+          [emit-js ml]
           [freeze ml]]
 
         [eq-word first-form [quote list]]
