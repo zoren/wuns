@@ -2,6 +2,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { print, wordValue, unword } from './core.js'
 import { parseStringToForms } from './parse.js'
+import { i32binops } from './instructions.js'
 import { defineImportFunction, parseEvalFile, getGlobal, apply } from './interpreter.js'
 
 const wunsWordToJSIdentifier = (word) => {
@@ -9,29 +10,6 @@ const wunsWordToJSIdentifier = (word) => {
   const n = Number(s)
   if (!isNaN(n)) return '_' + s
   return s.replace(/-/g, '_')
-}
-
-const i32binops = {
-  add: '+',
-  sub: '-',
-  mul: '*',
-  'div-signed': '/',
-  'rem-signed': '%',
-
-  eq: '===',
-  ne: '!==',
-
-  lt: '<',
-  le: '<=',
-  gt: '>',
-  ge: '>=',
-
-  'bitwise-and': '&',
-  'bitwise-ior': '|',
-  'bitwise-xor': '^',
-  'bitwise-shift-left': '<<',
-  'bitwise-shift-right-signed': '>>',
-  'bitwise-shift-right-unsigned': '>>>',
 }
 
 const commasepWords = (words) => words.map(wunsWordToJSIdentifier).join(', ')
@@ -76,6 +54,7 @@ const jsDomToString = (dom) => {
       case 'field':
         return `${go(args[0])}.${wunsWordToJSIdentifier(args[1])}`
       case 'if':
+        if (args.length === 2) return `if (${go(args[0])}) ${go(args[1])}`
         return `if (${go(args[0])}) ${go(args[1])} else ${go(args[2])}`
       case 'arrow-func':
         return `((${commasepWords(args[0])}) => ${go(args[1])})`
@@ -173,7 +152,12 @@ const __dirname = path.dirname(new URL(import.meta.url).pathname)
 const wunsDir = path.resolve(__dirname, '..', 'wuns')
 parseEvalFile(path.resolve(wunsDir, 'compiler-js.wuns'))
 
-const inputFile = path.resolve(wunsDir, 'input.wuns')
+const commandLineArgs = process.argv.slice(2)
+
+if (commandLineArgs.length !== 1) throw new Error('missing input file')
+
+const inputFilePath = commandLineArgs[0]
+const inputFile = path.resolve(wunsDir, inputFilePath)
 const content = fs.readFileSync(inputFile, 'utf8')
 const forms = parseStringToForms(content)
 
@@ -188,12 +172,14 @@ for (const form of forms) apply(compileForm, [form])
 //   console.error('error evaluating compiler', e)
 // }
 
-fs.writeFileSync('output.js', emittedJS)
+// fs.writeFileSync('output.js', emittedJS)
 
 import * as prettier from 'prettier'
+const inputFileName = path.basename(inputFilePath)
+const outputFilePath = inputFileName.replace(/\.wuns$/, '.js')
 
 fs.writeFileSync(
-  'output.prettier.js',
+  outputFilePath,
   await prettier.format(emittedJS, {
     parser: 'babel',
     singleQuote: true,

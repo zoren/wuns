@@ -187,6 +187,9 @@ const wunsComp = (form) => {
       parseEvalFile(importPath)
       return null
     }
+    case 'export': {
+      return null
+    }
   }
   try {
     const funcOrMacro = globalVarValues.get(firstWordValue)
