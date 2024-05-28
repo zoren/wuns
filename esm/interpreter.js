@@ -2,7 +2,19 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { makeList, wordValue, isWord, isList, isUnit, unit, print, unword } from './core.js'
 import { parseStringToForms } from './parse.js'
-import { i32 } from './instructions.js'
+import { i32binops } from './instructions.js'
+
+export const instructions = {}
+for (const [name, op] of Object.entries(i32binops)) {
+  instructions[name] = Function(
+    'a',
+    'b',
+    `
+if ((a | 0) !== a) throw new Error('op ${op} expected 32-bit signed integer, found: ' + a)
+if ((b | 0) !== b) throw new Error('op ${op} expected 32-bit signed integer, found: ' + b)
+return (a ${op} b) | 0`,
+  )
+}
 
 const isValidRuntimeValue = (v) => isWord(v) || (isList(v) && v.every(isValidRuntimeValue))
 
@@ -14,7 +26,6 @@ const globalVarSet = (name, value) => {
   if (globalVarValues.has(name)) throw new Error('global variable already defined: ' + name)
   globalVarValues.set(name, value)
 }
-for (const [name, f] of Object.entries(i32)) globalVarSet(name, f)
 
 const globalEnv = { varValues: globalVarValues, outer: null }
 const assert = (cond, msg) => {
@@ -184,6 +195,7 @@ const wunsComp = (form) => {
     case 'import': {
       const [module] = args
       const importPath = path.resolve(currentFilename, '..', wordValue(module))
+      // todo, this imports everything, we should only import the given names
       parseEvalFile(importPath)
       return null
     }
@@ -193,7 +205,14 @@ const wunsComp = (form) => {
   }
   try {
     const funcOrMacro = globalVarValues.get(firstWordValue)
-    assert(funcOrMacro, `function ${firstWordValue} not found ${print(form)}`)
+    if (funcOrMacro === undefined) {
+      const inst = instructions[firstWordValue]
+      if (inst) {
+        const cargs = args.map(wunsComp)
+        return (env) => inst(...cargs.map((carg) => carg(env)))
+      }
+      throw new Error(`function ${firstWordValue} not found ${print(form)}`)
+    }
     if (typeof funcOrMacro === 'function') {
       const parameterCount = funcOrMacro.length
       assert(
@@ -237,7 +256,7 @@ const wunsComp = (form) => {
 
 export const apply = (funmacObj, args) => {
   checkApplyArity(funmacObj, args.length)
-  internalApply(funmacObj, args)
+  return internalApply(funmacObj, args)
 }
 
 export const defineImportFunction = (name, f) => {

@@ -126,7 +126,7 @@
 
       [list [quote if] [first clauses]
         [concat [list [quote and]] [rest clauses]]
-        [list [quote quote] [quote 0]]]]]]
+        [quote quote 0]]]]]
 
 [macro or [.. clauses]
   [let [s [size clauses]]
@@ -138,7 +138,7 @@
       [first clauses]
 
       [list [quote if] [first clauses]
-        [list [quote quote] [quote 1]]
+        [quote quote 1]
         [concat [quote [or]] [rest clauses]]]]]]
 
 [func between [a b c]

@@ -1,7 +1,7 @@
 (module
   ;; comparison operations
-  (func (export "eqz") (param i32) (result i32)
-    (i32.eqz (local.get 0)))
+  ;; (func (export "eqz") (param i32) (result i32)
+  ;;   (i32.eqz (local.get 0)))
 
   (func (export "eq") (param i32) (param i32) (result i32)
     (i32.eq (local.get 0) (local.get 1)))

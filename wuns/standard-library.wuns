@@ -1,7 +1,5 @@
 [macro comment [.. -] []]
 
-[func list [.. l] l]
-
 [external-func mutable-list [] [mutable-list]]
 [external-func push [mutable-list form] []]
 [external-func size [form] [i32]]
@@ -24,9 +22,9 @@
 
 [func dec [x] [sub x 1]]
 
-[func not [c] [eqz c]]
+[func not [c] [eq c 0]]
 
-[func is-zero [x] [eqz x]]
+[func is-zero [x] [eq x 0]]
 
 [func is-odd [x] [bitwise-and x 1]]
 
