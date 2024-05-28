@@ -17,6 +17,7 @@
     [make-binary-i32 add]
     [make-binary-i32 sub]
     [make-binary-i32 mul]
+    [make-binary-i32 div]
     [make-binary-i32 lt]
     [make-binary-i32 le]
     [make-binary-i32 gt]

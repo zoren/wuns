@@ -2,7 +2,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { parseStringToForms } from './parse.js'
 import { meta, print } from './core.js'
-import { defineImportFunction, parseEvalFile, getGlobal, apply } from './interpreter.js'
+import { defineImportFunction, parseEvalFile, globalVarGet, apply } from './interpreter.js'
 defineImportFunction('log', (form) => {
   console.log('check: ' + print(form))
 })
@@ -28,7 +28,7 @@ const content = fs.readFileSync(inputFile, 'utf8')
 const forms = parseStringToForms(content)
 
 try {
-  const outfun = getGlobal('check-forms')
+  const outfun = globalVarGet('check-forms')
   apply(outfun, [forms])
   console.log('done checking: ' + forms.length)
 } catch (e) {

@@ -4,7 +4,11 @@ import { makeList, wordValue, isWord, isList, isUnit, unit, print, unword } from
 import { parseStringToForms } from './parse.js'
 import { i32binops } from './instructions.js'
 
-export const instructions = {}
+const isValidRuntimeValue = (v) => isWord(v) || (isList(v) && v.every(isValidRuntimeValue))
+const assert = (cond, msg) => {
+  if (!cond) throw new Error('eval assert failed: ' + msg)
+}
+const instructions = {}
 for (const [name, op] of Object.entries(i32binops)) {
   instructions[name] = Function(
     'a',
@@ -16,23 +20,42 @@ return (a ${op} b) | 0`,
   )
 }
 
-const isValidRuntimeValue = (v) => isWord(v) || (isList(v) && v.every(isValidRuntimeValue))
+const hostExports = Object.entries(await import('./host.js'))
 
 const externalFunctions = {}
-for (const [name, f] of Object.entries(await import('./host.js'))) externalFunctions[name.replace(/_/g, '-')] = f
+for (const [name, f] of hostExports) externalFunctions[name.replace(/_/g, '-')] = f
 
-const globalVarValues = new Map()
-const globalVarSet = (name, value) => {
-  if (globalVarValues.has(name)) throw new Error('global variable already defined: ' + name)
-  globalVarValues.set(name, value)
+export const defineImportFunction = (name, f) => {
+  // if (name in importFunctions) throw new Error(`function ${name} already defined`)
+  externalFunctions[name] = f
 }
 
-const globalEnv = { varValues: globalVarValues, outer: null }
-const assert = (cond, msg) => {
-  if (!cond) throw new Error('eval assert failed: ' + msg)
+export let currentFilename = null
+
+const modules = new Map()
+const currentModuleEnv = () => {
+  let modEnv = modules.get(currentFilename)
+  if (modEnv) return modEnv
+  modEnv = { varValues: new Map() }
+  modules.set(currentFilename, modEnv)
+  return modEnv
+}
+const currentModuleVars = () => {
+  return currentModuleEnv().varValues
 }
 
-let currentFilename = null
+export const moduleVarGet = (name) => {
+  const moduleVars = currentModuleVars()
+  if (moduleVars.has(name)) return moduleVars.get(name)
+  throw new Error(`global ${name} not found`)
+}
+
+const moduleVarSet = (name, value) => {
+  const moduleVars = currentModuleVars()
+  if (moduleVars.has(name)) throw new Error('global variable already defined: ' + name)
+  moduleVars.set(name, value)
+}
+
 
 const checkApplyArity = ({ name, params, restParam }, numberOfGivenArgs) => {
   const arity = params.length
@@ -50,7 +73,7 @@ const internalApply = ({ name, params, restParam, cbodies }, args) => {
   const varValues = new Map()
   for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
   if (restParam) varValues.set(restParam, makeList(...args.slice(arity)))
-  const inner = { varValues, outer: globalEnv }
+  const inner = { varValues, outer: currentModuleEnv() }
   let result = unit
   for (const cbody of cbodies) result = cbody(inner)
   return result
@@ -164,7 +187,7 @@ const wunsComp = (form) => {
       const fObj = { name: fmname, isMacro: firstWordValue === 'macro', params: params.map(wordValue), restParam }
       const n = wordValue(fmname)
 
-      globalVarSet(n, fObj)
+      moduleVarSet(n, fObj)
       fObj.cbodies = compBodies(bodies)
       return null
     }
@@ -172,7 +195,7 @@ const wunsComp = (form) => {
       const [varName, value] = args
       const vn = wordValue(varName)
       const compValue = wunsComp(value)
-      globalVarSet(vn, compValue(globalEnv))
+      moduleVarSet(vn, compValue(currentModuleEnv()))
       return null
     }
     case 'external-func': {
@@ -189,14 +212,34 @@ const wunsComp = (form) => {
         params.length === actualParameterCount,
         `extern function ${name} expected ${actualParameterCount} arguments, got ${params.length}`,
       )
-      globalVarSet(n, funcObj)
+      moduleVarSet(n, funcObj)
       return null
     }
     case 'import': {
-      const [module] = args
+      const [module, ...names] = args
       const importPath = path.resolve(currentFilename, '..', wordValue(module))
-      // todo, this imports everything, we should only import the given names
-      parseEvalFile(importPath)
+      const content = fs.readFileSync(importPath, 'utf8')
+      const forms = parseStringToForms(content)
+      const prevFilename = currentFilename
+      currentFilename = importPath
+      const importEnv = currentModuleEnv()
+      try {
+        for (const form of forms) {
+          const cform = wunsComp(form)
+          const v = cform === null ? unit : cform(importEnv)
+          if (!isUnit(v)) console.log(print(v))
+        }
+      } catch (e) {
+        console.error('error evaluating', e)
+      }
+      currentFilename = prevFilename
+      const importVars = importEnv.varValues
+      for (const name of names) {
+        const n = wordValue(name)
+        const v = importVars.get(n)
+        if (v === undefined) throw new Error(`import failed: ${n}`)
+        moduleVarSet(n, v)
+      }
       return null
     }
     case 'export': {
@@ -204,13 +247,14 @@ const wunsComp = (form) => {
     }
   }
   try {
-    const funcOrMacro = globalVarValues.get(firstWordValue)
+    const inst = instructions[firstWordValue]
+    if (inst) {
+      const cargs = args.map(wunsComp)
+      assert(cargs.length === 2, `expected 2 arguments, got ${cargs.length}`)
+      return (env) => inst(...cargs.map((carg) => carg(env)))
+    }
+    const funcOrMacro = currentModuleVars().get(firstWordValue)
     if (funcOrMacro === undefined) {
-      const inst = instructions[firstWordValue]
-      if (inst) {
-        const cargs = args.map(wunsComp)
-        return (env) => inst(...cargs.map((carg) => carg(env)))
-      }
       throw new Error(`function ${firstWordValue} not found ${print(form)}`)
     }
     if (typeof funcOrMacro === 'function') {
@@ -259,35 +303,25 @@ export const apply = (funmacObj, args) => {
   return internalApply(funmacObj, args)
 }
 
-export const defineImportFunction = (name, f) => {
-  // if (name in importFunctions) throw new Error(`function ${name} already defined`)
-  externalFunctions[name] = f
-}
-export const getGlobal = (name) => {
-  if (globalVarValues.has(name)) return globalVarValues.get(name)
-  throw new Error(`global ${name} not found`)
-}
-
-export const evalLogForms = (forms, filename) => {
-  const prevFilename = currentFilename
-  currentFilename = filename
+export const evalLogForms = (forms) => {
   try {
+    const moduleEnv = currentModuleEnv()
     for (const form of forms) {
       const cform = wunsComp(form)
-      const v = cform === null ? unit : cform(globalEnv)
+      const v = cform === null ? unit : cform(moduleEnv)
       if (!isUnit(v)) console.log(print(v))
     }
   } catch (e) {
     console.error('error evaluating', e)
   }
-  currentFilename = prevFilename
 }
 
-export const parseEvalString = (content, filename) => {
-  evalLogForms(parseStringToForms(content), filename)
+export const parseEvalString = (content) => {
+  evalLogForms(parseStringToForms(content))
 }
 
 export const parseEvalFile = (filename) => {
+  currentFilename = path.resolve(filename)
   const content = fs.readFileSync(filename, 'utf8')
-  parseEvalString(content, filename)
+  parseEvalString(content)
 }

@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import * as readline from 'node:readline'
 import { stdin, nextTick, stdout } from 'node:process'
 
-import { parseEvalString } from './interpreter.js'
+import { currentFilename, parseEvalString } from './interpreter.js'
 
 const historyFilePath = 'history.json'
 
@@ -31,7 +31,7 @@ export const runRepl = () => {
   })
 
   const prompt = () => {
-    rl.question(`user> `, (line) => {
+    rl.question(`${currentFilename}> `, (line) => {
       if (line === '') {
         console.log(`Bye!`)
         rl.close()

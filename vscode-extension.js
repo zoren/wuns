@@ -294,7 +294,7 @@ const makeCheckCurrentFileCommand = async (context) => {
   const diag = languages.createDiagnosticCollection('wuns')
   const { treeToForms } = await import('./esm/parse.js')
   const { meta, print } = await import('./esm/core.js')
-  const { defineImportFunction, parseEvalFile, getGlobal, apply } = await import('./esm/interpreter.js')
+  const { defineImportFunction, parseEvalFile, moduleVarGet: getGlobal, apply } = await import('./esm/interpreter.js')
   const appendShow = (s) => {
     outputChannel.appendLine(s)
     outputChannel.show(true)
