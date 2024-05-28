@@ -1,0 +1,84 @@
+[import ./standard-library.wuns
+  inc dec ifs or is-odd mutable-list push when size at comment]
+
+[func gauss [n]
+  [loop [i [quote 0]
+         r [quote 0]]
+    [if [lt r [quote 0]]
+      [quote -1]
+      [if [eq i n]
+        r
+        [continue
+          i [inc i]
+          r [add r i]]]]]]
+
+[func gauss2 [n]
+  [loop [i [quote 0]
+         r [quote 0]]
+    [if [eq i n]
+      r
+      [let [new-i [inc i]
+            new-r [add r new-i]]
+        [if [lt new-r [quote 0]]
+          [quote -1]
+          [continue
+            i new-i
+            r new-r]]]]]]
+
+[func gauss3 [n]
+  [loop [r [quote 0]
+         i n]
+    [if i
+      [if [lt r [quote 0]]
+        [quote -1]
+        [continue
+          r [add r i]
+          i [dec i]]]
+      r]]]
+
+[func smart-gauss [n]
+  [ifs
+    [or [lt n [quote 0]] [gt n [quote 65535]]]
+    [quote -1]
+
+    [is-odd n]
+    [mul [div [inc n] [quote 2]] n]
+
+    [mul [div n [quote 2]] [inc n]]]]
+[export gauss gauss2 gauss3 smart-gauss]
+
+[func qq [f] [list [quote quote] f]]
+
+[macro test-suite [f]
+  [let [tests
+    [quote
+           0      0
+          55     10
+        5050    100
+      500500   1000
+    50005000  10000
+  2147450880  65535
+          -1  65536
+          -1     -1
+          -1 100000]
+        r [mutable-list]]
+    [push r [quote list]]
+    [push r [qq f]]
+    [loop [i [quote 0]]
+      [when [lt i [size tests]]
+        [let [expected-result [at tests i]
+              argument [at tests [inc i]]]
+          [push r
+            [list [quote if] [list [quote eq] [qq expected-result] [list f [qq argument]]]
+              [quote quote ok]
+              [quote quote not-good]]]
+          [continue i [add i [quote 2]]]]]]
+    r]]
+
+[func test []
+  [list
+    [test-suite gauss]
+    [test-suite gauss2]
+    [test-suite gauss3]
+    [test-suite smart-gauss]]]
+
