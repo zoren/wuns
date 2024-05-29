@@ -47,7 +47,7 @@ const modules = new Map()
 const currentModuleEnv = () => {
   let modEnv = modules.get(currentFilename)
   if (modEnv) return modEnv
-  modEnv = { varValues: new Map() }
+  modEnv = { varValues: new Map(), exports: new Set() }
   modules.set(currentFilename, modEnv)
   return modEnv
 }
@@ -55,10 +55,18 @@ const currentModuleVars = () => {
   return currentModuleEnv().varValues
 }
 
-export const moduleVarGet = (name) => {
+const moduleVarGet = (name) => {
   const moduleVars = currentModuleVars()
   if (moduleVars.has(name)) return moduleVars.get(name)
   throw new Error(`global ${name} not found in ${currentFilename}`)
+}
+
+export const getExported = (moduleName, exportedName) => {
+  const modEnv = modules.get(moduleName)
+  if (!modEnv) throw new Error(`module ${moduleName} not found`)
+  const { exports, varValues } = modEnv
+  if (!exports.has(exportedName)) throw new Error(`export ${exportedName} not found in ${moduleName}`)
+  return varValues.get(exportedName)
 }
 
 const moduleVarSet = (name, value) => {
@@ -267,8 +275,13 @@ const wunsComp = (form) => {
       return null
     }
     case 'export': {
-      const names = args
-
+      const { varValues, exports } = currentModuleEnv()
+      for (const name of args) {
+        if (!isWord(name)) throw new Error(`export expects word, found ${name}`)
+        const s = wordValue(name)
+        if (!varValues.has(s)) throw new Error(`export failed: ${s}`)
+        exports.add(s)
+      }
       return null
     }
   }

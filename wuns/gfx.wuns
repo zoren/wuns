@@ -1,0 +1,9 @@
+[import ../wuns/standard-library.wuns
+  log]
+
+[log [quote hello wuns]]
+
+[func calc-color [w h x y]
+  [bitwise-xor x y]]
+
+[export calc-color]

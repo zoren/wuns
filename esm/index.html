@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+  <head>
+    <title>canvas gfx</title>
+  </head>
+  <body>
+    <canvas id="myCanvas" width="400" height="400"></canvas>
+
+    <script type="module">
+      import { setFile, parseEvalFile, getExported, apply } from './interpreter.js'
+      const wunsModules = import.meta.glob('../wuns/*.wuns', {
+        query: '?raw',
+        import: 'default',
+      })
+      for (const [path, module] of Object.entries(wunsModules)) setFile(path, await module())
+
+      // Get the canvas element
+      const canvas = document.getElementById('myCanvas')
+      const dim = 256 
+      const width = dim
+      const height = dim
+      canvas.width = width
+      canvas.height = height
+
+      const ctx = canvas.getContext('2d', { colorSpace: 'display-p3' })
+
+      canvas.style.width = `${width}px`
+      canvas.style.height = `${height}px`
+
+      const dpiScale = window.devicePixelRatio
+      canvas.width = width * dpiScale
+      canvas.height = height * dpiScale
+
+      ctx.scale(dpiScale, dpiScale)
+      parseEvalFile('../wuns/gfx.wuns')
+      const calc = getExported('../wuns/gfx.wuns', 'calc-color')
+      console.log(apply(calc, [dim, dim, 0, 0]))
+      const now = performance.now()
+      for (let y = 0; y < canvas.width; y++) {
+        for (let x = 0; x < canvas.height; x++) {
+          // const red = x / 255
+          // const green = y / 255
+          // const blue = 0.5
+          // ctx.fillStyle = `color(display-p3 ${red} ${green} ${blue})`
+          // https://hachyderm.io/@bitartbot@botsin.space/112497498733917788
+          // const val = (~(y - x + (y + 12)) ^ ~(-y & (9 & y))) % 10 //((((-x) - (y | 2)) & ((23 - y) - (-x))) ^ (((~x) * (x - x)) + (-(~x))))
+          // const val =  (((y + 23) * (x % y)) % (~(-y))) / (((~y) ^ (-y)) | ((20 | x) / (y ^ 19)))
+          // const gray = (val & 0xff) / 255
+          const color = apply(calc, [canvas.width, canvas.height, x, y])
+          const hexColor = color.toString(16).padStart(6, '0')
+          ctx.fillStyle = '#' + hexColor
+          ctx.fillRect(x, y, 1, 1)
+        }
+      }
+      const elapsed = performance.now() - now
+      console.log(`rendered ${canvas.width * canvas.height} pixels in ${elapsed}ms`)
+      export {}
+    </script>
+  </body>
+</html>
