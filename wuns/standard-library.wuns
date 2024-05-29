@@ -79,7 +79,9 @@
     []
     [concat [quote [do]] forms]]]
 
+[comment has side effect]
 [external-func log [form] []]
+[comment never returns should maybe be unreachable on wasm]
 [external-func abort [] []]
 
 [macro assert [cond .. lmsg]
@@ -123,8 +125,8 @@
       [first clauses]
 
       [list [quote if] [first clauses]
-            1
-            [concat [quote [or]] [rest clauses]]]]]]
+        1
+        [concat [quote [or]] [rest clauses]]]]]]
 
 [func eq-word [a b]
   [and [eq [size a] [size b]]
@@ -138,7 +140,7 @@
 [external-func is-word [form] [i32]]
 [external-func is-list [form] [i32]]
 
-[func = [a b]
+[func eq-form [a b]
   [if
     [and [is-word a] [is-word b]]
     [eq-word a b]
@@ -148,7 +150,7 @@
         [and [eq s [size b]]
           [loop [i 0]
             [or [ge i s]
-              [and [= [at a i] [at b i]] [continue i [inc i]]]]]]]]]]
+              [and [eq-form [at a i] [at b i]] [continue i [inc i]]]]]]]]]]
 
 [func assoc-list-index [ctx sym]
   [let [s [size ctx]]
@@ -186,3 +188,5 @@
     [push-all ml [meta f]]
     [assoc-list-set ml k v]
     [with-meta f [freeze ml]]]]
+
+[export comment mutable-list]

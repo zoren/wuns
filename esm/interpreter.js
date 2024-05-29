@@ -1,8 +1,19 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import { makeList, wordValue, isWord, isList, isUnit, unit, print, unword } from './core.js'
-import { parseStringToForms } from './parse.js'
+import { parseStringToForms } from './parseByHand.js'
 import { i32binops } from './instructions.js'
+
+const files = new Map()
+export const getFile = (filename) => {
+  if (files.has(filename)) return files.get(filename)
+  console.log(files)
+  console.log([...files.keys()])
+  throw new Error('file not found: ' + filename)
+}
+export const setFile = (filename, fileContent) => {
+  if (typeof filename !== 'string') throw new Error('expected string')
+  if (typeof fileContent !== 'string') throw new Error('expected string')
+  files.set(filename, fileContent)
+}
 
 const isValidRuntimeValue = (v) => isWord(v) || (isList(v) && v.every(isValidRuntimeValue))
 const assert = (cond, msg) => {
@@ -47,7 +58,7 @@ const currentModuleVars = () => {
 export const moduleVarGet = (name) => {
   const moduleVars = currentModuleVars()
   if (moduleVars.has(name)) return moduleVars.get(name)
-  throw new Error(`global ${name} not found`)
+  throw new Error(`global ${name} not found in ${currentFilename}`)
 }
 
 const moduleVarSet = (name, value) => {
@@ -55,7 +66,6 @@ const moduleVarSet = (name, value) => {
   if (moduleVars.has(name)) throw new Error('global variable already defined: ' + name)
   moduleVars.set(name, value)
 }
-
 
 const checkApplyArity = ({ name, params, restParam }, numberOfGivenArgs) => {
   const arity = params.length
@@ -67,13 +77,17 @@ const checkApplyArity = ({ name, params, restParam }, numberOfGivenArgs) => {
   }
 }
 
-const internalApply = ({ name, params, restParam, cbodies }, args) => {
-  if (!cbodies) throw new Error('no cbodies in:' + name)
+const internalApply = (fobj, args) => {
+  const { name, params, restParam, cbodies, moduleEnv } = fobj
+  if (!cbodies) {
+    console.log(fobj)
+    throw new Error('no cbodies in:' + name)
+  }
   const arity = params.length
   const varValues = new Map()
   for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
   if (restParam) varValues.set(restParam, makeList(...args.slice(arity)))
-  const inner = { varValues, outer: currentModuleEnv() }
+  const inner = { varValues, outer: moduleEnv }
   let result = unit
   for (const cbody of cbodies) result = cbody(inner)
   return result
@@ -147,11 +161,13 @@ const wunsComp = (form) => {
       }
     }
     case 'continue': {
-      const compBindings = []
+      const updateNames = []
+      const compExps = []
       for (let i = 0; i < args.length; i += 2) {
         const varName = wordValue(args[i])
+        updateNames.push(varName)
         const compVal = wunsComp(args[i + 1])
-        compBindings.push([varName, compVal])
+        compExps.push(compVal)
       }
       return (env) => {
         let enclosingLoopEnv = env
@@ -160,10 +176,12 @@ const wunsComp = (form) => {
           if (enclosingLoopEnv.loop) break
           enclosingLoopEnv = enclosingLoopEnv.outer
         }
+        const newValues = compExps.map((compVal) => compVal(env))
         const { varValues } = enclosingLoopEnv
-        for (const [varName, compVal] of compBindings) {
-          if (!varValues.has(varName)) throw new Error('continue with undeclared variable')
-          varValues.set(varName, compVal(env))
+        for (let i = 0; i < updateNames.length; i++) {
+          const varName = updateNames[i]
+          if (!varValues.has(varName)) throw new Error(`undefined loop variable ${varName}`)
+          varValues.set(varName, newValues[i])
         }
         enclosingLoopEnv.continue = true
         return unit
@@ -184,11 +202,17 @@ const wunsComp = (form) => {
         params = origParams.slice(0, -2)
         restParam = wordValue(origParams.at(-1))
       }
-      const fObj = { name: fmname, isMacro: firstWordValue === 'macro', params: params.map(wordValue), restParam }
+      const fObj = {
+        name: fmname,
+        isMacro: firstWordValue === 'macro',
+        params: params.map(wordValue),
+        restParam,
+        moduleEnv: currentModuleEnv(),
+      }
       const n = wordValue(fmname)
-
       moduleVarSet(n, fObj)
-      fObj.cbodies = compBodies(bodies)
+      const cbodies = compBodies(bodies)
+      fObj.cbodies = cbodies
       return null
     }
     case 'constant': {
@@ -217,8 +241,8 @@ const wunsComp = (form) => {
     }
     case 'import': {
       const [module, ...names] = args
-      const importPath = path.resolve(currentFilename, '..', wordValue(module))
-      const content = fs.readFileSync(importPath, 'utf8')
+      const importPath = wordValue(module)
+      const content = getFile(importPath)
       const forms = parseStringToForms(content)
       const prevFilename = currentFilename
       currentFilename = importPath
@@ -243,6 +267,8 @@ const wunsComp = (form) => {
       return null
     }
     case 'export': {
+      const names = args
+
       return null
     }
   }
@@ -321,7 +347,7 @@ export const parseEvalString = (content) => {
 }
 
 export const parseEvalFile = (filename) => {
-  currentFilename = path.resolve(filename)
-  const content = fs.readFileSync(filename, 'utf8')
+  currentFilename = filename
+  const content = getFile(filename)
   parseEvalString(content)
 }

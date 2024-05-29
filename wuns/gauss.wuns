@@ -1,5 +1,10 @@
 [import ./standard-library.wuns
-  inc dec ifs or is-odd mutable-list push when size at comment]
+  inc dec ifs or is-odd mutable-list push when size at comment 0 1 2 do]
+
+[func mut-0 []
+  [let [ml [mutable-list]]
+    [push ml [quote 0]]
+    ml]]
 
 [func gauss [n]
   [loop [i [quote 0]
@@ -10,7 +15,18 @@
         r
         [continue
           i [inc i]
-          r [add r i]]]]]]
+          r [add r [inc i]]]]]]]
+
+[func gauss-swapped [n]
+  [loop [r [quote 0]
+         i [quote 0]]
+    [if [lt r [quote 0]]
+      [quote -1]
+      [if [eq i n]
+        r
+        [continue
+          r [add r [inc i]]
+          i [inc i]]]]]]
 
 [func gauss2 [n]
   [loop [i [quote 0]
@@ -78,7 +94,7 @@
 [func test []
   [list
     [test-suite gauss]
+    [test-suite gauss-swapped]
     [test-suite gauss2]
     [test-suite gauss3]
     [test-suite smart-gauss]]]
-

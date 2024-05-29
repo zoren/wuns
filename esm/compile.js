@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import { print, wordValue, unword } from './core.js'
 import { parseStringToForms } from './parse.js'
 import { i32binops } from './instructions.js'
-import { defineImportFunction, parseEvalFile, getGlobal, apply } from './interpreter.js'
+import { defineImportFunction, parseEvalFile, moduleVarGet, apply } from './interpreter.js'
 
 const wunsWordToJSIdentifier = (word) => {
   const s = String(word)
@@ -161,9 +161,13 @@ const inputFile = path.resolve(wunsDir, inputFilePath)
 const content = fs.readFileSync(inputFile, 'utf8')
 const forms = parseStringToForms(content)
 
-const compileForm = getGlobal('compile-top-form')
-for (const form of forms) apply(compileForm, [form])
-
+// const compileForm = getGlobal('compile-top-form')
+const compileForms = moduleVarGet('compile-top-forms')
+// for (const form of forms) apply(compileForm, [form])
+const [, exportInterface] = apply(compileForms, [forms])
+console.dir(unword(exportInterface), { depth: null })
+const eiString = print(exportInterface)
+console.log(eiString)
 // try {
 //   const outfun = getGlobal('compile-forms')
 //   apply(outfun, [forms])
@@ -177,6 +181,8 @@ for (const form of forms) apply(compileForm, [form])
 import * as prettier from 'prettier'
 const inputFileName = path.basename(inputFilePath)
 const outputFilePath = inputFileName.replace(/\.wuns$/, '.js')
+fs.writeFileSync(path.resolve(wunsDir, inputFileName.replace(/\.wuns$/, '.interface.wuns')), eiString)
+fs.writeFileSync(path.resolve(wunsDir, inputFileName.replace(/\.wuns$/, '.interface.json')), JSON.stringify(unword(exportInterface), null, 2))
 
 fs.writeFileSync(
   outputFilePath,
