@@ -265,7 +265,7 @@ const makeInterpretCurrentFile = async () => {
     outputChannel.appendLine(s)
     outputChannel.show(true)
   }
-  const { treeToForms } = await import('./esm/parse.js')
+  const { treeToForms } = await import('./esm/parseTreeSitter.js')
   const { meta, print } = await import('./esm/core.js')
   const { evalLogForms, defineImportFunction } = await import('./esm/interpreter.js')
   defineImportFunction('log', (s) => {
@@ -292,7 +292,7 @@ const makeInterpretCurrentFile = async () => {
 const makeCheckCurrentFileCommand = async (context) => {
   const outputChannel = window.createOutputChannel('wuns check', wunsLanguageId)
   const diag = languages.createDiagnosticCollection('wuns')
-  const { treeToForms } = await import('./esm/parse.js')
+  const { treeToForms } = await import('./esm/parseTreeSitter.js')
   const { meta, print } = await import('./esm/core.js')
   const { defineImportFunction, parseEvalFile, moduleVarGet: getGlobal, apply } = await import('./esm/interpreter.js')
   const appendShow = (s) => {
@@ -385,7 +385,7 @@ const provideSelectionRanges = (document, positions) => {
  * @param {vscode.ExtensionContext} context
  */
 async function activate(context) {
-  const { parse } = await import('./esm/parse.js')
+  const { parse } = await import('./esm/parseTreeSitter.js')
   parseDocument = (document, oldTree) => parse(document.getText(), oldTree)
   console.log('starting wuns lang extension: ' + context.extensionPath)
   const interpretCurrentFile = await makeInterpretCurrentFile()
