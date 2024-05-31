@@ -17,7 +17,7 @@ const cache = new Map()
 /**
  * @param {vscode.TextDocument} document
  * @param {TSParser.Tree} oldTree
- * @returns {TSParser.Tree} tree
+ * @returns {{tree: TSParser.Tree, forms: []}} tree
  */
 let parseDocument = null
 
@@ -31,9 +31,9 @@ const cacheFetchOrParse = (document) => {
   const cacheObj = cache.get(document)
   if (!cacheObj) {
     const watch = makeStopWatch()
-    const tree = parseDocument(document)
+    const { tree, forms } = parseDocument(document)
     console.log('parse initial took', watch(), 'ms')
-    const obj = { version, tree }
+    const obj = { version, tree, forms }
     cache.set(document, obj)
     return obj
   }
@@ -43,8 +43,9 @@ const cacheFetchOrParse = (document) => {
   }
   // we don't expect to come here, onDidChangeTextDocument should have been called updating the tree
   const oldTree = cacheObj.tree
-  const newTree = parseDocument(document, oldTree)
-  cacheObj.tree = newTree
+  const { tree, forms } = parseDocument(document, oldTree)
+  cacheObj.tree = tree
+  cacheObj.forms = forms
   cacheObj.version = version
   return cacheObj
 }
@@ -76,9 +77,10 @@ const onDidChangeTextDocument = (e) => {
   }
   // console.log('tree edited', { version: document.version, nOfChanges: contentChanges.length })
   // const watch = makeStopWatch()
-  const newTree = parseDocument(document, oldTree)
+  const { tree, forms } = parseDocument(document, oldTree)
   // console.log('parse incremental took', watch(), 'ms')
-  cacheObj.tree = newTree
+  cacheObj.tree = tree
+  cacheObj.forms = forms
   cacheObj.version = version
 }
 // https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide
@@ -265,7 +267,6 @@ const makeInterpretCurrentFile = async () => {
     outputChannel.appendLine(s)
     outputChannel.show(true)
   }
-  const { treeToForms } = await import('./esm/parseTreeSitter.js')
   const { meta, print } = await import('./esm/core.js')
   const { evalLogForms, defineImportFunction } = await import('./esm/interpreter.js')
   defineImportFunction('log', (s) => {
@@ -276,8 +277,7 @@ const makeInterpretCurrentFile = async () => {
   })
   return () => {
     const document = getActiveTextEditorDocument()
-    const { tree } = cacheFetchOrParse(document)
-    const forms = treeToForms(tree)
+    const { forms } = cacheFetchOrParse(document)
     outputChannel.clear()
     appendShow('interpreting: ' + document.fileName)
     try {
@@ -292,7 +292,6 @@ const makeInterpretCurrentFile = async () => {
 const makeCheckCurrentFileCommand = async (context) => {
   const outputChannel = window.createOutputChannel('wuns check', wunsLanguageId)
   const diag = languages.createDiagnosticCollection('wuns')
-  const { treeToForms } = await import('./esm/parseTreeSitter.js')
   const { meta, print } = await import('./esm/core.js')
   const { defineImportFunction, parseEvalFile, moduleVarGet: getGlobal, apply } = await import('./esm/interpreter.js')
   const appendShow = (s) => {
@@ -315,11 +314,7 @@ const makeCheckCurrentFileCommand = async (context) => {
         console.log('range', range)
         throw new Error('range is not an array ' + print(form) + ' ' + print(metaData))
       }
-      const diagnostic = new Diagnostic(
-        new Range(...range),
-        msg.map(print).join(' '),
-        DiagnosticSeverity.Error,
-      )
+      const diagnostic = new Diagnostic(new Range(...range), msg.map(print).join(' '), DiagnosticSeverity.Error)
       diagnostics.push(diagnostic)
     })
 
@@ -327,10 +322,10 @@ const makeCheckCurrentFileCommand = async (context) => {
 
     const document = getActiveTextEditorDocument()
     if (!document) return
-    const { tree } = cacheFetchOrParse(document)
+    const { forms } = cacheFetchOrParse(document)
     outputChannel.clear()
     appendShow('checking: ' + document.fileName)
-    const forms = treeToForms(tree)
+
     try {
       const outfun = getGlobal('check-forms')
       apply(outfun, [forms])
@@ -342,8 +337,6 @@ const makeCheckCurrentFileCommand = async (context) => {
     diag.set(document.uri, diagnostics)
   }
 }
-
-// const crypto = require('crypto')
 
 /**
  *
@@ -385,14 +378,15 @@ const provideSelectionRanges = (document, positions) => {
  * @param {vscode.ExtensionContext} context
  */
 async function activate(context) {
-  const { parse } = await import('./esm/parseTreeSitter.js')
-  parseDocument = (document, oldTree) => parse(document.getText(), oldTree)
+  const { parse, treeToForms } = await import('./esm/parseTreeSitter.js')
+  parseDocument = (document, oldTree) => {
+    const tree = parse(document.getText(), oldTree)
+    return { tree, forms: treeToForms(tree) }
+  }
   console.log('starting wuns lang extension: ' + context.extensionPath)
   const interpretCurrentFile = await makeInterpretCurrentFile()
   context.subscriptions.push(commands.registerCommand('wunslang.interpret', interpretCurrentFile))
-  context.subscriptions.push(
-    commands.registerCommand('wunslang.check', await makeCheckCurrentFileCommand(context)),
-  )
+  context.subscriptions.push(commands.registerCommand('wunslang.check', await makeCheckCurrentFileCommand(context)))
 
   const selector = { language: 'wuns', scheme: 'file' }
 
