@@ -1,6 +1,6 @@
-[import ./standard-library.wuns
+[import standard-library.wuns
   constant-ids
-  inc dec ifs or is-odd mutable-list push when size at comment -1 0 1 2 3 do
+  inc dec ifs or is-odd mutable-list push when size at comment -2 -1 0 1 2 3 4 do
   concat concat-lists
   is-word concat-words
 
@@ -38,6 +38,7 @@
     [make-binary-i32 gt]
     [make-binary-i32 ge]
     [make-binary-i32 bitwise-and]
+    [make-binary-i32 bitwise-ior]
     ]]
 
 [func get-instruction [name]
@@ -202,7 +203,7 @@
       [when-not [is-word first-form] [log first-form]]
       [assert [is-word first-form] expected a word first]
       [ifs
-        [eq-word first-form [quote quote]]
+        [or [eq-word first-form [quote quote]] [eq-word first-form [quote i32]]]
         [return-if-tail is-tail-pos
           [value-to-js
             [if [eq [size form] 2]

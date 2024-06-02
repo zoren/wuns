@@ -1,4 +1,4 @@
-import { makeList, wordValue, isWord, isList, isUnit, unit, print, unword } from './core.js'
+import { makeList, wordValue, isWord, isList, isUnit, unit, print, unword, isSigned32BitInteger } from './core.js'
 import { parseStringToForms } from './parseByHand.js'
 import { i32binops } from './instructions.js'
 
@@ -199,6 +199,11 @@ const wunsComp = (form) => {
       const cargs = args.map(wunsComp)
       return (env) => makeList(...cargs.map((carg) => carg(env)))
     }
+    case 'i32': {
+      const n = wordValue(args[0])
+      if (!isSigned32BitInteger(n)) throw new Error(`expected 32-bit signed integer, found ${n}`)
+      return () => n
+    }
     // side effect forms
     case 'func':
     case 'macro': {
@@ -293,9 +298,8 @@ const wunsComp = (form) => {
       return (env) => inst(...cargs.map((carg) => carg(env)))
     }
     const funcOrMacro = currentModuleVars().get(firstWordValue)
-    if (funcOrMacro === undefined) {
-      throw new Error(`function ${firstWordValue} not found ${print(form)}`)
-    }
+    if (funcOrMacro === undefined)
+      throw new Error(`function ${firstWordValue} not found ${print(form)} in ${currentFilename}`)
     if (typeof funcOrMacro === 'function') {
       const parameterCount = funcOrMacro.length
       assert(
@@ -304,27 +308,22 @@ const wunsComp = (form) => {
       )
       const cargs = args.map(wunsComp)
       return (env) => {
-        const res = funcOrMacro(...cargs.map((carg) => carg(env)))
-        if (res === undefined) return unit
-        // if (!isValidRuntimeValue(res)) throw new Error(`expected valid runtime value, found ${res}`)
-        return res
+        try {
+          const res = funcOrMacro(...cargs.map((carg) => carg(env)))
+          if (res === undefined) return unit
+          // if (!isValidRuntimeValue(res)) throw new Error(`expected valid runtime value, found ${res}`)
+          return res
+        } catch (e) {
+          console.error('error evaluating', firstWordValue)
+          throw e
+        }
       }
     }
     assert(typeof funcOrMacro === 'object', `expected function or object ${funcOrMacro}`)
     const { isMacro, wasmFunc } = funcOrMacro
     if (wasmFunc) throw new Error('wasm functions not supported in wunsComp')
     checkApplyArity(funcOrMacro, args.length)
-    if (isMacro) {
-      const res = internalApply(
-        funcOrMacro,
-        args.map((a) => {
-          // should we unword here?
-          if (isWord(a)) return wordValue(a)
-          return a
-        }),
-      )
-      return wunsComp(res)
-    }
+    if (isMacro) return wunsComp(internalApply(funcOrMacro, args))
     const cargs = args.map(wunsComp)
     return (env) =>
       internalApply(

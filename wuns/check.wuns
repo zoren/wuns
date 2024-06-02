@@ -1,4 +1,8 @@
-[import standard-library.wuns]
+[import standard-library.wuns
+  comment constant-ids mutable-list push size at slice freeze concat-lists concat do when when-not assert ifs set-array concat-words and or eq-word is-word is-list eq-form assoc-list-index assoc-list-has assoc-list-get assoc-list-set meta with-meta assoc-meta log
+  inc dec not is-zero is-odd is-even is-negative first second third fourth last rest push-all abort
+  -2 -1 0 1 2 3 4]
+
 [constant-ids - ..]
 
 [external-func report-error [list form] []]
@@ -15,7 +19,7 @@
   [list [quote report-error] [list [quote quote] lmsg] form]]
 
 [func test [expected actual]
-  [when-not [= expected actual]
+  [when-not [eq-form expected actual]
     [log [list [quote expected] expected [quote [but got]] actual]]]]
 
 [macro with-type [f t] [list [quote assoc-meta] f [quote quote type] [list [quote quote] t]]]
@@ -39,18 +43,18 @@
 [constant type-empty [type-tuple]]
 [constant type-error [quote type-error]]
 [constant type-mutable-list [quote mutable-list]]
-[func is-tuple-type [t] [and [is-list t] [gt [size t] 0] [= [first t] [quote tuple]]]]
+[func is-tuple-type [t] [and [is-list t] [gt [size t] 0] [eq-form [first t] [quote tuple]]]]
 
 [func is-atomic-type [t]
   [or
-    [= t type-form]
-    [= t type-list]
-    [= t type-word]
-    [= t type-i32]
-    [= t type-any]
-    [= t type-empty]
-    [= t type-error]
-    [= t type-mutable-list]]]
+    [eq-form t type-form]
+    [eq-form t type-list]
+    [eq-form t type-word]
+    [eq-form t type-i32]
+    [eq-form t type-any]
+    [eq-form t type-empty]
+    [eq-form t type-error]
+    [eq-form t type-mutable-list]]]
 
 [func is-type [t]
   [or [is-atomic-type t]]]
@@ -65,9 +69,9 @@
 
 [func check-param-arg-conform [param-type arg-t]
   [or
-    [= param-type type-any]
-    [= param-type arg-t]
-    [and [= [size arg-t] 1] [= [first arg-t] param-type]]]]
+    [eq-form param-type type-any]
+    [eq-form param-type arg-t]
+    [and [eq-form [size arg-t] 1] [eq-form [first arg-t] param-type]]]]
 
 [func check-form [global-ctx local-ctx tail-pos form]
   [ifs
@@ -89,7 +93,7 @@
             [continue cur-ctx outer]
             [at vars [inc index]]]]]]
 
-    [= [size form] 0]
+    [eq-form [size form] 0]
     type-empty
 
     [let [first-form [first form]
@@ -97,7 +101,7 @@
           n-of-args [dec s-form]]
       [assert [is-word first-form] expected a word first]
       [ifs
-        [= first-form [quote tuple]]
+        [eq-form first-form [quote tuple]]
         [let
           [res-types [mutable-list] limit [inc n-of-args]]
           [loop [i [quote 1]]
@@ -105,11 +109,11 @@
               [let [arg [at form i]
                     ts [check-form global-ctx local-ctx 0 arg]]
                 [push-all res-types ts]
-                [report-when-not [= [size ts] 1] arg tuple element not allow to be a tuple]
+                [report-when-not [eq-form [size ts] 1] arg tuple element not allow to be a tuple]
                 [continue i [inc i]]]]]
           [type-tuple res-types]]
 
-        [= first-form [quote quote]]
+        [eq-form first-form [quote quote]]
         [do
           [comment todo check if integer or word or list]
           [if [eq n-of-args 1]
@@ -124,12 +128,12 @@
                 type-word]]
             type-form]]
 
-        [= first-form [quote if]]
+        [eq-form first-form [quote if]]
         [do
           [when [gt n-of-args 0]
             [let [c [second form]
                   ct [check-form global-ctx local-ctx 0 c]]
-              [report-when-not [= ct type-i32] c condition not i32]]]
+              [report-when-not [eq-form ct type-i32] c condition not i32]]]
           [loop [i 4]
             [when [lt i s-form]
               [check-form global-ctx local-ctx 1 [at form i]]
@@ -138,17 +142,17 @@
           [if [gt n-of-args 1]
             [let [tt [check-form global-ctx local-ctx tail-pos [third form]]
                   ft [if [eq n-of-args 2] type-empty [check-form global-ctx local-ctx tail-pos [fourth form]]]]
-              [if [= tt type-any]
-                [if [= ft type-any]
+              [if [eq-form tt type-any]
+                [if [eq-form ft type-any]
                   [report form if branches both any type maybe this is infinite loop]
                   ft]
                 [do
-                  [report-when-not [= tt ft] form if branches must have same type]
+                  [report-when-not [eq-form tt ft] form if branches must have same type]
                   tt]]]]]
 
         [or
-          [= first-form [quote let]]
-          [= first-form [quote loop]]]
+          [eq-form first-form [quote let]]
+          [eq-form first-form [quote loop]]]
         [let
           [var-values [mutable-list]
            let-loop-ctx [list var-values local-ctx first-form]
@@ -175,14 +179,14 @@
               [check-form global-ctx let-loop-ctx 0 [at form i]]
               [continue i [inc i]]]]
           [when [lt 2 s-form]
-            [check-form global-ctx let-loop-ctx [if [= first-form [quote loop]] 1 tail-pos] [last form]]]]
+            [check-form global-ctx let-loop-ctx [if [eq-form first-form [quote loop]] 1 tail-pos] [last form]]]]
 
-        [= first-form [quote continue]]
+        [eq-form first-form [quote continue]]
         [do
           [loop [cur-ctx local-ctx]
             [if [eq [size cur-ctx] 1]
               [report form cont not inside loop]
-              [if [= [quote loop] [third cur-ctx]]
+              [if [eq-form [quote loop] [third cur-ctx]]
                 [let [loop-vars [first cur-ctx]]
                   [report-when-not
                     [is-even n-of-args]
@@ -197,13 +201,13 @@
                         [if [is-negative index]
                           [report var loop var not found]
                           [let [type [at loop-vars [inc index]]]
-                            [report-when-not [= type val-type] value type mismatch]]]
+                            [report-when-not [eq-form type val-type] value type mismatch]]]
                       [continue i [add i 2]]]]]]
                 [report-when-not tail-pos form continue not at tail position of loop]
                 [continue cur-ctx [second cur-ctx]]]]]
           type-any]
 
-        [= first-form [quote external-func]]
+        [eq-form first-form [quote external-func]]
         [let [func-sigs [assoc-list-get global-ctx [quote function-signatures]]]
         [if [gt [size form] 1]
           [let [name [second form]]
@@ -226,8 +230,8 @@
               [report name extern expects a name]]]
           [report form extern expects a name]]]
 
-        [or [= first-form [quote func]]
-            [= first-form [quote macro]]]
+        [or [eq-form first-form [quote func]]
+            [eq-form first-form [quote macro]]]
         [let [params
               [if [gt s-form 2]
                 [let [l [third form]]
@@ -242,15 +246,15 @@
               param-ctx [mutable-list]
               mut-parameter-type-list [mutable-list]
               n-of-param-words [size params]
-              has-rest-param [and [lt 1 n-of-param-words] [= [at params -2] ..]]
+              has-rest-param [and [lt 1 n-of-param-words] [eq-form [at params -2] ..]]
               n-of-regular-params [if has-rest-param [sub n-of-param-words 2] n-of-param-words]
               -
               [loop [i 0]
                 [when [lt i n-of-regular-params]
                   [let [p [at params i]
-                        pt [if [= p -] type-any type-form]]
-                    [report-when [= p ..] p .. must be at second last position]
-                    [when-not [= p -]
+                        pt [if [eq-form p -] type-any type-form]]
+                    [report-when [eq-form p ..] p .. must be at second last position]
+                    [when-not [eq-form p -]
                       [report-when [assoc-list-has param-ctx p] p duplicate parameter]
                       [push param-ctx p]
                       [push param-ctx [list pt]]]
@@ -261,7 +265,7 @@
                 [let [p [last params]
                       pt type-any]
                   [report-when-not [is-word p] p not a word]
-                  [when-not [= p -]
+                  [when-not [eq-form p -]
                     [report-when [assoc-list-has param-ctx p] p duplicate parameter]
                     [push param-ctx p]
                     [push param-ctx [list pt]]]
@@ -362,3 +366,5 @@
       [func g [x y] [sub x y]]]]
   [check-forms [quote [func f [x y] [add x y]] [func g [x y] [sub x y]]]]
 ]
+
+[export check-forms]

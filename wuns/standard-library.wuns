@@ -189,4 +189,6 @@
     [assoc-list-set ml k v]
     [with-meta f [freeze ml]]]]
 
-[export comment mutable-list]
+[export comment constant-ids mutable-list push size at slice freeze concat-lists concat do when when-not assert ifs set-array concat-words and or eq-word is-word is-list eq-form assoc-list-index assoc-list-has assoc-list-get assoc-list-set meta with-meta assoc-meta log
+  inc dec not is-zero is-odd is-even is-negative first second third fourth last rest push-all abort]
+

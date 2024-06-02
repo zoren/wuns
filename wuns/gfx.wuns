@@ -1,9 +1,14 @@
-[import ../wuns/standard-library.wuns
-  log]
+[external-func store [i32 i32] []]
 
-[log [quote hello wuns]]
+[func fill [p w h color]
+  [let
+    [end [add p [mul [i32 4] [mul w h]]]
+     acolor [bitwise-ior color [i32 -16777216]]]
+    [loop [q p]
+      [if [lt q end]
+        [let []
+          [store q acolor]
+          [continue q [add q [i32 4]]]]
+        []]]]]
 
-[func calc-color [w h x y]
-  [bitwise-xor x y]]
-
-[export calc-color]
+[export fill]

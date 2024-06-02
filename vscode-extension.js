@@ -289,15 +289,28 @@ const makeInterpretCurrentFile = async () => {
   }
 }
 
+const fs = require('node:fs')
+
 const makeCheckCurrentFileCommand = async (context) => {
   const outputChannel = window.createOutputChannel('wuns check', wunsLanguageId)
   const diag = languages.createDiagnosticCollection('wuns')
   const { meta, print } = await import('./esm/core.js')
-  const { defineImportFunction, parseEvalFile, moduleVarGet: getGlobal, apply } = await import('./esm/interpreter.js')
+  const { defineImportFunction, parseEvalFile, getExported, apply, setFile } = await import('./esm/interpreter.js')
   const appendShow = (s) => {
     outputChannel.appendLine(s)
     outputChannel.show(true)
   }
+  const wunsDir = context.extensionPath + '/wuns/'
+  const wunsFiles = fs.readdirSync(wunsDir)
+
+  for (const file of wunsFiles) {
+    if (!file.endsWith('.wuns')) continue
+    const bla = wunsDir + file
+    const content = fs.readFileSync(bla, 'utf8')
+    console.log({file})
+    setFile(file, content)
+  }
+
   return async () => {
     const diagnostics = []
     defineImportFunction('log', (form) => {
@@ -318,7 +331,8 @@ const makeCheckCurrentFileCommand = async (context) => {
       diagnostics.push(diagnostic)
     })
 
-    parseEvalFile(context.extensionPath + '/wuns/check.wuns')
+    const checkPath = 'check.wuns'
+    parseEvalFile(checkPath)
 
     const document = getActiveTextEditorDocument()
     if (!document) return
@@ -327,7 +341,7 @@ const makeCheckCurrentFileCommand = async (context) => {
     appendShow('checking: ' + document.fileName)
 
     try {
-      const outfun = getGlobal('check-forms')
+      const outfun = getExported(checkPath, 'check-forms')
       apply(outfun, [forms])
       appendShow('done checking: ' + forms.length)
     } catch (e) {

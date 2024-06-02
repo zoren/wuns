@@ -1,9 +1,9 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import { print, wordValue, unword } from './core.js'
-import { parseStringToForms } from './parse.js'
+import { parseStringToForms } from './parseByHand.js'
 import { i32binops } from './instructions.js'
-import { defineImportFunction, parseEvalFile, moduleVarGet, apply } from './interpreter.js'
+import { defineImportFunction, parseEvalFile, getExported, apply, setFile } from './interpreter.js'
 
 const wunsWordToJSIdentifier = (word) => {
   const s = String(word)
@@ -44,8 +44,11 @@ const jsDomToString = (dom) => {
         return `${go(args[0])} = ${go(args[1])}`
       case 'ternary':
         return `${go(args[0])} ? ${go(args[1])} : ${go(args[2])}`
-      case 'binop':
-        return `((${go(args[1])} ${i32binops[args[0]]} ${go(args[2])}) | 0)`
+      case 'binop': {
+        const inst = i32binops[args[0]]
+        if (!inst) throw new Error('unknown binop: ' + args[0])
+        return `((${go(args[1])} ${inst} ${go(args[2])}) | 0)`
+      }
       case 'call': {
         if (args.length === 0) throw new Error('call expects at least one arg')
         const [f, ...fargs] = args
@@ -150,7 +153,17 @@ defineImportFunction('make-macro-iife', (m) => {
 })
 const __dirname = path.dirname(new URL(import.meta.url).pathname)
 const wunsDir = path.resolve(__dirname, '..', 'wuns')
-parseEvalFile(path.resolve(wunsDir, 'compiler-js.wuns'))
+// const wunsDir = context.extensionPath + '/wuns/'
+const wunsFiles = fs.readdirSync(wunsDir)
+
+for (const file of wunsFiles) {
+  if (!file.endsWith('.wuns')) continue
+  const bla = path.resolve(wunsDir, file)
+  const content = fs.readFileSync(bla, 'utf8')
+  console.log({ file })
+  setFile(file, content)
+}
+parseEvalFile('compiler-js.wuns')
 
 const commandLineArgs = process.argv.slice(2)
 
@@ -162,7 +175,7 @@ const content = fs.readFileSync(inputFile, 'utf8')
 const forms = parseStringToForms(content)
 
 // const compileForm = getGlobal('compile-top-form')
-const compileForms = moduleVarGet('compile-top-forms')
+const compileForms = getExported('compiler-js.wuns', 'compile-top-forms')
 // for (const form of forms) apply(compileForm, [form])
 const [, exportInterface] = apply(compileForms, [forms])
 console.dir(unword(exportInterface), { depth: null })
@@ -176,14 +189,14 @@ console.log(eiString)
 //   console.error('error evaluating compiler', e)
 // }
 
-// fs.writeFileSync('output.js', emittedJS)
+fs.writeFileSync('output.js', emittedJS)
 
 import * as prettier from 'prettier'
 const inputFileName = path.basename(inputFilePath)
 const outputFilePath = inputFileName.replace(/\.wuns$/, '.js')
-fs.writeFileSync(path.resolve(wunsDir, inputFileName.replace(/\.wuns$/, '.interface.wuns')), eiString)
-fs.writeFileSync(path.resolve(wunsDir, inputFileName.replace(/\.wuns$/, '.interface.json')), JSON.stringify(unword(exportInterface), null, 2))
-
+// fs.writeFileSync(path.resolve(wunsDir, inputFileName.replace(/\.wuns$/, '.interface.wuns')), eiString)
+// fs.writeFileSync(path.resolve(wunsDir, inputFileName.replace(/\.wuns$/, '.interface.json')), JSON.stringify(unword(exportInterface), null, 2))
+console.log('outputFilePath', outputFilePath)
 fs.writeFileSync(
   outputFilePath,
   await prettier.format(emittedJS, {
