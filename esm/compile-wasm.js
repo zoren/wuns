@@ -29,7 +29,7 @@ const wunsFiles = fs.readdirSync(wunsDir)
 for (const file of wunsFiles) {
   if (!file.endsWith('.wuns')) continue
   const bla = path.resolve(wunsDir, file)
-  const content = fs.readFileSync(bla, 'utf8')
+  const content = fs.readFileSync(bla, 'ascii')
   setFile(file, content)
 }
 parseEvalFile('compiler-wasm.wuns')
@@ -42,7 +42,7 @@ if (commandLineArgs.length !== 1) throw new Error('missing input file')
 
 const inputFilePath = commandLineArgs[0]
 const inputFile = path.resolve(wunsDir, inputFilePath)
-const content = fs.readFileSync(inputFile, 'utf8')
+const content = fs.readFileSync(inputFile, 'ascii')
 const forms = parseStringToForms(content)
 
 // const compileForm = getGlobal('compile-top-form')
@@ -66,5 +66,5 @@ for (const n of moduleNumbers) {
 const moduleBytes = new Uint8Array(moduleNumbers)
 fs.writeFileSync('output.wasm', moduleBytes)
 const wasmModule = new WebAssembly.Module(moduleBytes)
-const wasmInstance = new WebAssembly.Instance(wasmModule, {})
+const wasmInstance = new WebAssembly.Instance(wasmModule)
 // console.dir(wasmInstance.exports, { depth: null })
