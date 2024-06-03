@@ -30,11 +30,11 @@ for (const file of wunsFiles) {
   if (!file.endsWith('.wuns')) continue
   const bla = path.resolve(wunsDir, file)
   const content = fs.readFileSync(bla, 'utf8')
-  console.log({ file })
   setFile(file, content)
 }
 parseEvalFile('compiler-wasm.wuns')
-const compileForms = getExported('compiler-wasm.wuns', 'compile-top-forms')
+const compileFormsContext = getExported('compiler-wasm.wuns', 'compile-top-forms-to-context')
+const contextToModule = getExported('compiler-wasm.wuns', 'ctx-to-module')
 
 const commandLineArgs = process.argv.slice(2)
 
@@ -47,21 +47,24 @@ const forms = parseStringToForms(content)
 
 // const compileForm = getGlobal('compile-top-form')
 // for (const form of forms) apply(compileForm, [form])
-const moduleNumbers = apply(compileForms, [forms])
-console.dir(moduleNumbers, { depth: null })
-const moduleBytes = new Uint8Array(moduleNumbers)
-const module = new WebAssembly.Module(moduleBytes)
-const instance = new WebAssembly.Instance(module, {})
-console.dir(instance.exports, { depth: null })
-// console.dir(unword(exportInterface), { depth: null })
-// const eiString = print(exportInterface)
-// console.log(eiString)
-// try {
-//   const outfun = getGlobal('compile-forms')
-//   apply(outfun, [forms])
-//   console.log('done compiling: ' + forms.length)
-// } catch (e) {
-//   console.error('error evaluating compiler', e)
+const context = apply(compileFormsContext, [forms])
+// console.dir(unword(context), { depth: null })
+const moduleNumbers = apply(contextToModule, [context])
+for (const n of moduleNumbers) {
+  if ((n !== n) | 0) throw new Error('module number is not an integer: ' + n)
+  if (n < 0 || n > 255) throw new Error('module number is out of range: ' + n)
+}
+// console.dir(moduleNumbers, { depth: null })
+// for (let i = 0; i < moduleNumbers.length; i += 16) {
+//   console.log(
+//     moduleNumbers
+//       .slice(i, i + 16)
+//       .map((n) => n.toString(16).padStart(2, '0'))
+//       .join(' '),
+//   )
 // }
-
+const moduleBytes = new Uint8Array(moduleNumbers)
 fs.writeFileSync('output.wasm', moduleBytes)
+const wasmModule = new WebAssembly.Module(moduleBytes)
+const wasmInstance = new WebAssembly.Instance(wasmModule, {})
+// console.dir(wasmInstance.exports, { depth: null })

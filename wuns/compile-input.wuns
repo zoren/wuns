@@ -14,3 +14,21 @@
 [func is-negative [x] [lt x [i32 0]]]
 [func ifte-unit [c] [if c [tuple] [tuple]]]
 [func ifte-tuple [c] [if c [tuple [i32 1337] c] [tuple [i32 21] c]]]
+[func abs [x] [if [lt x [i32 0]] [sub [i32 0] x] x]]
+[func let-test [p]
+  [let [z [inc p]]
+    z]]
+
+[func fill [p w h]
+  [if [is-negative p]
+    [i32 -1]
+    [let
+      [end [add p [mul [i32 4] [mul w h]]]]
+      end]]]
+
+[func gauss [n] [div [mul n [add n [i32 1]]] [i32 2]]]
+
+[func let-test2 [p]
+  [let [x [inc p]
+        y [inc x]]
+    [tuple x y]]]

@@ -67,7 +67,7 @@
         [if [is-zero n]
           [do
             [push res [quote x]]
-            [push res [quote 0]]
+            [push res 0]
             [concat-words [reverse res]]]
           [let [remainder [bitwise-and n [quote 15]]
                 quotient [bitwise-shift-right n [quote 4]]]
@@ -97,17 +97,7 @@
 
 [constant i32.const [quote 0x41]]
 [constant local.get [quote 0x20]]
-
-[func lookup-assoc-list [ctx sym]
-  [let [s [size ctx]]
-    [loop [i [quote 0]]
-      [if [ge i s]
-        [abort]
-        [let [k [at ctx i]
-              v [at ctx [inc i]]]
-          [if [eq-word k sym]
-            v
-            [continue i [add i 2]]]]]]]]
+[constant local.set [quote 0x21]]
 
 [constant empty-type [quote 0x40]]
 [constant i32 [quote 0x7f]]
@@ -134,6 +124,7 @@
     [make-binary-i32 add 0x6a]
     [make-binary-i32 sub 0x6b]
     [make-binary-i32 mul 0x6c]
+    [make-binary-i32 div 0x6d]
 
     [make-binary-i32 bitwise-and 0x71]
     [make-binary-i32 bitwise-ior 0x72]
@@ -199,7 +190,6 @@
     [u32-word-to-leb-128 index]]]
 
 [func decimal-word-to-i32 [dw]
-  [log [concat [list dw] [list [first dw]]]]
   [if [eq-word [first dw] [quote 45]]
     [let [s [sub 0 [size dw]]]
       [loop [i [dec [size dw]] res 0 multi -1]
@@ -232,31 +222,54 @@
     [eq-form type-list [list i32]]
     i32
 
-    [push-type ctx
-      [type-function [] type-list]]]]
+    [let
+      [i [push-type ctx [type-function [] type-list]]]
+      [assert [lt i [quote 32]] not sure how to handle higher indexes]
+      i]]]
 
-[func compile-form-mutable [global-ctx local-ctx code form]
+[func make-mty-ctx []
+  [list
+    [quote types] [mutable-list]
+    [quote functions] [mutable-list]
+    [quote exports] [mutable-list]
+    [quote codes] [mutable-list]
+    [quote function-signatures] [mutable-list]]]
+
+[constant global-ctx [make-mty-ctx]]
+
+[func push-code-byte [code-locals byte] [push [first code-locals] byte]]
+
+[func push-code-u32 [code-locals value] [push-all [first code-locals] [u32-word-to-leb-128 value]]]
+[func push-code-s32 [code-locals value] [push-all [first code-locals] [s32-word-to-leb-128 value]]]
+
+[func push-local [code-locals type]
+  [let [locals [second code-locals]
+        arity [third code-locals]
+        index [add arity [div [size locals] 2]]]
+    [push locals 1]
+    [push locals type]
+    index]]
+
+[func compile-form-mutable [local-ctx code form]
   [ifs
     [is-word form]
-    [loop [cur-ctx local-ctx]
-      [if [eq [size cur-ctx] 1]
-        [let [param-ctx [first cur-ctx]
-              index [assoc-list-index param-ctx form]
-              - [assert [not [is-negative index]] not found in local ctx]
-              local-type [at param-ctx [inc index]]]
-          [push code local.get]
-          [push-all code [u32-word-to-leb-128 [div index 2]]]
-          [list local-type]]
-        [let
-          [- [assert [eq [size cur-ctx] 2] we need a local ctx and a outer ctx if not at root]
-           vars [first cur-ctx]
-           index [assoc-list-index vars form]]
-          [if [is-negative index]
-            [continue cur-ctx [second cur-ctx]]
-            [let [local-type [at vars [inc index]]]
-              [push code local.get]
-              [push-all code [u32-word-to-leb-128 [div index 2]]]
-              [list local-type]]]]]]
+    [let [vars-index
+      [loop [cur-ctx local-ctx]
+        [if [eq [size cur-ctx] 1]
+          [let [param-ctx [first cur-ctx]
+                index [assoc-list-index param-ctx form]]
+            [assert [not [is-negative index]] not found in local ctx]
+            [list [at param-ctx [inc index]] [div index 2]]]
+          [let
+            [- [assert [eq [size cur-ctx] 2] we need a local ctx and a outer ctx if not at root]
+             vars [first cur-ctx]
+             index [assoc-list-index vars form]]
+            [if [is-negative index]
+              [continue cur-ctx [second cur-ctx]]
+              [at vars [inc index]]]]]]]
+      [push-code-byte code local.get]
+      [push-code-u32 code [second vars-index]]
+      [list [first vars-index]]]
 
     [eq-form form []]
     []
@@ -268,10 +281,10 @@
         [eq-word first-form [quote tuple]]
         [let
           [res-types [mutable-list]]
-          [loop [i [quote 0]]
+          [loop [i 0]
             [when [lt i [size args]]
               [comment do we actually want to concat them [i32 i32] [i32] we be surprising]
-              [push-all res-types [compile-form-mutable global-ctx local-ctx code [at args i]]]
+              [push-all res-types [compile-form-mutable local-ctx code [at args i]]]
               [continue i [inc i]]]]
           [freeze res-types]]
 
@@ -279,27 +292,27 @@
         [let
           [- [assert [eq [size args] 1] only support decimal integers]
            dw [decimal-word-to-i32 [first args]]]
-          [push code i32.const]
-          [push-all code [s32-word-to-leb-128 dw]]
+          [push-code-byte code i32.const]
+          [push-code-s32 code dw]
           [list i32]]
 
         [eq-word first-form [quote if]]
         [let
           [- [assert [eq [size args] 3] if needs a condition and two branches]
-           ct [compile-form-mutable global-ctx local-ctx code [first args]]
-           - [push code if]
-           type-index [size code]
+           ct [compile-form-mutable local-ctx code [first args]]
+           - [push-code-byte code if]
+           type-index [size [first code]]
            dummy-type empty-type
-           - [push code dummy-type]
+           - [push-code-byte code dummy-type]
            - [assert [and [eq [size ct] 1] [eq [at ct 0] i32]] condition not i32]
-           tt [compile-form-mutable global-ctx local-ctx code [second args]]
-           - [push code else]
-           ft [compile-form-mutable global-ctx local-ctx code [third args]]
+           tt [compile-form-mutable local-ctx code [second args]]
+           - [push-code-byte code else]
+           ft [compile-form-mutable local-ctx code [third args]]
            - [assert [eq-form tt ft] if branch types differ]
            enc-branch-type [type-list-to-code global-ctx ft]]
-          [push code end]
+          [push-code-byte code end]
           [when-not [eq dummy-type enc-branch-type]
-            [set-array code type-index enc-branch-type]]
+            [set-array [first code] type-index enc-branch-type]]
           tt]
 
         [eq-word first-form [quote let]]
@@ -308,31 +321,32 @@
            var-values [mutable-list]
            let-ctx [list var-values local-ctx]
            n-of-bindings [size bindings]]
-          [log [list [quote let] bindings n-of-bindings]]
           [assert [is-list bindings] let expects a list of bindings]
           [assert [is-even n-of-bindings] let expects an even number of bindings]
-          [loop [i [quote 0]]
+          [loop [i 0]
             [when [lt i n-of-bindings]
               [let
                 [var [at bindings i]
                  value [at bindings [inc i]]
-                 var-type [compile-form-mutable global-ctx local-ctx code value]
-                 - [assert [eq [size var-type] 1] let expects a single type]]
+                 var-type [compile-form-mutable let-ctx code value]
+                 - [assert [eq [size var-type] 1] let expects a single type]
+                 t [first var-type]
+                 local-index [push-local code t]]
+                [push-code-byte code local.set]
+                [push-code-u32 code local-index]
                 [push var-values var]
-                [push var-values [first var-type]]
+                [push var-values [list t local-index]]
                 [continue i [add i 2]]]]]
-          [log [list [quote let] var-values let-ctx]]
-          [loop [i 1]
+          [loop [i 2]
             [when [lt i [dec [size form]]]
-              [compile-form-mutable global-ctx let-ctx code [at form i]]
+              [compile-form-mutable let-ctx code [at form i]]
               [continue i [inc i]]]]
-          [compile-form-mutable global-ctx let-ctx code [last form]]]
+          [compile-form-mutable let-ctx code [last form]]]
 
         [eq-word first-form [quote loop]]
         [let []
           [log [quote loop not yet implemented]]
           [abort]]
-
 
         [let [instruction [get-instruction first-form]]
           [if instruction
@@ -342,9 +356,9 @@
               [loop [i 0]
                 [when [lt i [size args]]
                   [comment todo also check types]
-                  [compile-form-mutable global-ctx local-ctx code [at args i]]
+                  [compile-form-mutable local-ctx code [at args i]]
                   [continue i [inc i]]]]
-              [push code [assoc-list-get instruction [quote opcode]]]
+              [push-code-byte code [assoc-list-get instruction [quote opcode]]]
               [assoc-list-get instruction [quote results]]]
             [let [func-sigs [assoc-list-get global-ctx [quote function-signatures]]
                   func-sig [assoc-list-get func-sigs first-form]
@@ -353,17 +367,18 @@
               [loop [i 0]
                 [when [lt i [size args]]
                   [comment todo also check types]
-                  [compile-form-mutable global-ctx local-ctx code [at args i]]
+                  [compile-form-mutable local-ctx code [at args i]]
                   [continue i [inc i]]]]
-              [push code call]
-              [push code [u32-word-to-leb-128 [third func-sig]]]
+              [push-code-byte code call]
+              [push-code-byte code [u32-word-to-leb-128 [third func-sig]]]
               [second func-sig]
 
             ]]]]]]]
 
 [func locals-to-bytes [locals]
-  [let [bytes [mutable-list] number-of-locals [size locals]]
-    [push-all bytes [u32-word-to-leb-128 [size locals]]]
+  [let [bytes [mutable-list]
+        number-of-locals [size locals]]
+    [push-all bytes [u32-word-to-leb-128 [div number-of-locals 2]]]
     [loop [i 0]
       [when [lt i number-of-locals]
         [push-all bytes [u32-word-to-leb-128 [at locals i]]]
@@ -379,7 +394,7 @@
         instructions]]
     [concat [u32-word-to-leb-128 [size bytes]] bytes]]]
 
-[func compile-top-level-form [ctx form]
+[func compile-top-level-form [form]
   [if [eq-word [quote func] [first form]]
     [let [name [second form]
           params [third form]
@@ -388,7 +403,7 @@
           -
           [loop [i 0]
             [when [lt i [size params]]
-              [comment check for duplicate parameters]
+              [comment check for duplicate parameters make type configurable]
               [push param-ctx [at params i]]
               [push param-ctx i32]
               [push parameter-type-list i32]
@@ -397,39 +412,32 @@
           parameter-type-list [freeze parameter-type-list]
           locals [mutable-list]
           code [mutable-list]
-          func-sigs [assoc-list-get ctx [quote function-signatures]]
+          code-locals [list code locals [size params]]
+          func-sigs [assoc-list-get global-ctx [quote function-signatures]]
           -
           [loop [i 3]
             [when [lt i [dec [size form]]]
               [comment remember to check type is empty maybe even drop unused and warn instead]
-              [compile-form-mutable ctx func-ctx code [at form i]]]]
-          result-type [compile-form-mutable ctx func-ctx code [last form]]
+              [compile-form-mutable func-ctx code-locals [at form i]]]]
+          result-type [compile-form-mutable func-ctx code-locals [last form]]
           type-index
-          [push-type ctx
+          [push-type global-ctx
             [type-function parameter-type-list result-type]]
-          functions [assoc-list-get ctx [quote functions]]
+          functions [assoc-list-get global-ctx [quote functions]]
           func-index [size functions]]
       [push func-sigs name]
       [push func-sigs [list parameter-type-list result-type func-index]]
 
       [push functions type-index]
-      [push [assoc-list-get ctx [quote exports]]
+      [push [assoc-list-get global-ctx [quote exports]]
         [wasm-export name kind-function func-index]]
       [push code end]
-      [push [assoc-list-get ctx [quote codes]] [code-to-bytes locals code]]
+      [push [assoc-list-get global-ctx [quote codes]] [code-to-bytes locals code]]
       ]
 
     [do
       [log [list form ]]
       [assert 0 not a top-level form]]]]
-
-[func make-mty-ctx []
-  [list
-    [quote types] [mutable-list]
-    [quote functions] [mutable-list]
-    [quote exports] [mutable-list]
-    [quote codes] [mutable-list]
-    [quote function-signatures] [mutable-list]]]
 
 [func vector-section [section-id content]
   [concat [list section-id] [u32-word-to-leb-128 [size content]] content]]
@@ -449,15 +457,15 @@
     [vector-section-concat [quote 7] [assoc-list-get ctx [quote exports]]]
     [vector-section-concat [quote 10] [assoc-list-get ctx [quote codes]]]]]
 
-[func compile-top-forms [forms]
-  [let [ctx [make-mty-ctx]]
+[func compile-top-forms-to-context [forms]
+  [do
     [loop [i 0]
       [when [lt i [size forms]]
-        [compile-top-level-form ctx [at forms i]]
+        [compile-top-level-form [at forms i]]
         [continue i [inc i]]]]
-    [ctx-to-module ctx]]]
+    global-ctx]]
 
-[export compile-top-forms]
+[export ctx-to-module compile-top-forms-to-context]
 
 [comment
 [external-func wasm-module [list] [module]]
