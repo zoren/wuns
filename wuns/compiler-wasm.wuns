@@ -234,7 +234,7 @@
               multi [mul multi [quote 10]]]]
           res]]]]]
 
-[func type-list-to-code [type-list]
+[func type-list-to-code [ctx type-list]
   [ifs
     [eq-form type-list []]
     empty-type
@@ -242,9 +242,8 @@
     [eq-form type-list [list i32]]
     i32
 
-    [do
-      [log [quote type-list-to-code unknown types]]
-      [abort]]]]
+    [push-type ctx
+      [type-function [] type-list]]]]
 
 [func compile-form-mutable [global-ctx local-ctx code form]
   [ifs
@@ -301,7 +300,7 @@
            - [push code else]
            ft [compile-form-mutable global-ctx local-ctx code [third args]]
            - [assert [eq-form tt ft] if branch types differ]
-           enc-branch-type [type-list-to-code ft]]
+           enc-branch-type [type-list-to-code global-ctx ft]]
           [push code end]
           [when-not [eq dummy-type enc-branch-type]
             [set-array code type-index enc-branch-type]]

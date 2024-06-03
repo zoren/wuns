@@ -9,3 +9,8 @@
 [func identity [x] x]
 [func id-pair [x] [tuple x x]]
 [func pair [x y] [tuple x y]]
+[func is-odd [x] [bitwise-and x [i32 1]]]
+[func is-even [x] [eq [is-odd x] [i32 0]]]
+[func is-negative [x] [lt x [i32 0]]]
+[func ifte-unit [c] [if c [tuple] [tuple]]]
+[func ifte-tuple [c] [if c [tuple [i32 1337] c] [tuple [i32 21] c]]]

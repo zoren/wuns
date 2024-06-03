@@ -9,12 +9,8 @@ const wasmModule = new WebAssembly.Module(fs.readFileSync(path.resolve(__dirname
 const wasmInstance = new WebAssembly.Instance(wasmModule)
 const { exports } = wasmInstance
 for (const [key, f] of Object.entries(exports)) {
-  {
-    const args = Array.from(new Array(f.length), (_, i) => i)
-    console.log(`${key}(${args.map(String).join(', ')}) = ${f(...args)}`)
-  }
-  {
-    const args = Array.from(new Array(f.length), (_, i) => i + 1)
+  for (let offset = -1; offset < 3; offset++) {
+    const args = Array.from(new Array(f.length), (_, i) => i + offset)
     console.log(`${key}(${args.map(String).join(', ')}) = ${f(...args)}`)
   }
   console.log()
