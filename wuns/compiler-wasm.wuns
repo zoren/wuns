@@ -1,32 +1,52 @@
+[import standard-library.wuns
+  constant-ids
+  inc dec ifs or is-odd mutable-list push when size at comment -2 -1 0 1 2 3 4 do
+  concat concat-lists
+  is-word concat-words
+
+   eq-word assoc-list-get assoc-list-index assoc-list-set slice push-all not is-negative freeze assert
+  when-not and log abort
+  first
+  second
+  third
+  fourth
+  rest
+  last
+  is-even
+  is-zero
+  is-list
+  eq-form
+  set-array
+]
 
 [func u32-word-to-leb-128 [w]
   [assert [not [is-negative w]] expected 32 bit ints]
   [let [res [mutable-list]]
     [loop [n w]
       [let
-        [byte [bit-and n [quote 127]]
-        nn [bit-shift-right-signed n [quote 7]]]
+        [byte [bitwise-and n [quote 127]]
+         nn [bitwise-shift-right n [quote 7]]]
         [if [is-zero nn]
           [push res byte]
           [do
-            [push res [bit-or byte [quote 128]]]
-            [cont nn]]]]]
+            [push res [bitwise-ior byte [quote 128]]]
+            [continue n nn]]]]]
     [freeze res]]]
 
 [func s32-word-to-leb-128 [value]
   [let [res [mutable-list]]
     [loop [value1 value]
       [let
-        [byte [bit-and value1 [quote 127]]
-         value2 [bit-shift-right-signed value1 [quote 7]]
-         sign-bit [bit-and byte [quote 64]]]
+        [byte [bitwise-and value1 [quote 127]]
+         value2 [bitwise-shift-right value1 [quote 7]]
+         sign-bit [bitwise-and byte [quote 64]]]
         [comment todo it seems we should swap the order here as we already have the sign bit]
         [if [or [and [is-zero value2] [not sign-bit]]
                 [and [eq value2 -1]   sign-bit]]
           [push res byte]
           [do
-            [push res [bit-or byte [quote 128]]]
-            [cont value2]]]]]
+            [push res [bitwise-ior byte [quote 128]]]
+            [continue value1 value2]]]]]
     [freeze res]]]
 
 [func reverse [l]
@@ -34,7 +54,7 @@
     [loop [i [dec [size l]]]
       [when-not [is-negative i]
         [push res [at l i]]
-        [cont [dec i]]]]
+        [continue i [dec i]]]]
     [freeze res]]]
 
 [func dec-word-to-hex-word [dw]
@@ -49,10 +69,10 @@
             [push res [quote x]]
             [push res [quote 0]]
             [concat-words [reverse res]]]
-          [let [remainder [bit-and n [quote 15]]
-                quotient [bit-shift-right-signed n [quote 4]]]
+          [let [remainder [bitwise-and n [quote 15]]
+                quotient [bitwise-shift-right n [quote 4]]]
             [push res [at hex-digits remainder]]
-            [cont quotient]]]]]]]
+            [continue n quotient]]]]]]]
 
 [func dec-words-to-hex [decs]
   [let [res [mutable-list] s [size decs]]
@@ -60,32 +80,11 @@
       [if [lt i s]
         [do
           [push res [dec-word-to-hex-word [at decs i]]]
-          [cont [inc i]]]
+          [continue i [inc i]]]
         [freeze res]]]]]
 
-[func eq-word [a b]
-  [and [eq [size a] [size b]]
-    [loop [i 0]
-      [if [lt i [size a]]
-        [if [eq [at a i] [at b i]]
-          [cont [inc i]]
-          0]
-        1]]]]
-
-[func = [a b]
-  [if
-    [and [is-word a] [is-word b]]
-    [eq-word a b]
-
-    [and [is-list a] [is-list b]
-      [let [s [size a]]
-        [and [eq s [size b]]
-          [loop [i [quote 0]]
-            [or [ge i s]
-              [and [= [at a i] [at b i]] [cont [inc i]]]]]]]]]]
-
 [func test [expected actual]
-  [when-not [= expected actual]
+  [when-not [eq-form expected actual]
     [log [list [quote expected] expected [quote [but got]] actual]]]]
 
 [comment wikipedia says 0xe5 0x8e 0x26]
@@ -108,7 +107,7 @@
               v [at ctx [inc i]]]
           [if [eq-word k sym]
             v
-            [cont [add i 2]]]]]]]]
+            [continue i [add i 2]]]]]]]]
 
 [func get-local-index [ctx sym]
   [let [s [size ctx]]
@@ -117,10 +116,8 @@
         [abort]
         [let [k [at ctx i]]
           [if [eq-word k sym]
-            [bit-shift-right-signed i 1]
-            [cont [sub i 2]]]]]]]]
-
-[constant local.get [quote 32]]
+            [bitwise-shift-right i 1]
+            [continue i [sub i 2]]]]]]]]
 
 [constant empty-type [quote 0x40]]
 [constant i32 [quote 0x7f]]
@@ -137,19 +134,30 @@
 
 [constant instructions
   [list
-    [make-binary-i32 i32.eq  0x46]
-    [make-binary-i32 i32.add 0x6a]
-    [make-binary-i32 i32.sub 0x6b]
-    [make-binary-i32 i32.mul 0x6c]
+    [make-binary-i32 eq  0x46]
+    [make-binary-i32 ne  0x47]
+    [make-binary-i32 lt  0x48]
+    [make-binary-i32 gt  0x4a]
+    [make-binary-i32 le  0x4c]
+    [make-binary-i32 ge  0x4e]
+
+    [make-binary-i32 add 0x6a]
+    [make-binary-i32 sub 0x6b]
+    [make-binary-i32 mul 0x6c]
+
+    [make-binary-i32 bitwise-and 0x71]
+    [make-binary-i32 bitwise-ior 0x72]
+    [make-binary-i32 bitwise-xor 0x73]
+
     ]]
 
 [func get-instruction [name]
   [loop [i 0]
     [if [lt i [size instructions]]
       [let [o [at instructions i]]
-        [if [eq-word [lookup-assoc-list o [quote name]] name]
+        [if [eq-word [assoc-list-get o [quote name]] name]
           o
-          [cont [inc i]]]]
+          [continue i [inc i]]]]
       0]]]
 
 [func type-function [params results]
@@ -171,11 +179,11 @@
       [if [lt i s-words]
         [if [eq-word word [at words i]]
           i
-          [cont [inc i]]]
+          [continue i [inc i]]]
         -1]]]]
 
 [func push-type [ctx type]
-  [let [types [lookup-assoc-list ctx [quote types]]
+  [let [types [assoc-list-get ctx [quote types]]
         index [index-of-word types type]]
     [if [is-negative index]
       [let [new-index [size types]]
@@ -190,32 +198,48 @@
     [loop [i 0]
       [when [lt i [size w]]
         [push ml [at w i]]
-        [cont [inc i]]]]
+        [continue i [inc i]]]]
     [freeze ml]]]
 
-[func export [name kind index]
+[func wasm-export [name kind index]
   [concat
     [u32-word-to-leb-128 [size name]]
     [word-to-codepoints name]
     [list kind]
     [u32-word-to-leb-128 index]]]
 
-[func dec-word-to-i32 [dw]
-  [let [s [sub 0 [size dw]]]
-    [loop [i -1 res 0 multi 1]
-      [if [le s i]
-        [let [c [at dw i]]
-          [assert [and [le [quote 48] c] [le c [quote 57]]] not a decimal character]
-          [assert [lt res [quote 214748364]] out of bounds]
-          [cont [dec i] [add res [mul [sub c [quote 48]] multi]] [mul multi [quote 10]]]]
-        res]]]]
+[func decimal-word-to-i32 [dw]
+  [log [concat [list dw] [list [first dw]]]]
+  [if [eq-word [first dw] [quote 45]]
+    [let [s [sub 0 [size dw]]]
+      [loop [i [dec [size dw]] res 0 multi -1]
+        [if [gt i 0]
+          [let [c [at dw i]]
+            [assert [and [le [quote 48] c] [le c [quote 57]]] not a decimal character neg]
+            [assert [gt res [quote -214748364]] out of bounds]
+            [continue
+              i [dec i]
+              res [add res [mul [sub c [quote 48]] multi]]
+              multi [mul multi [quote 10]]]]
+          res]]]
+    [let [s [sub 0 [size dw]]]
+      [loop [i -1 res 0 multi 1]
+        [if [le s i]
+          [let [c [at dw i]]
+            [assert [and [le [quote 48] c] [le c [quote 57]]] not a decimal character pos]
+            [assert [lt res [quote 214748364]] out of bounds]
+            [continue
+              i [dec i]
+              res [add res [mul [sub c [quote 48]] multi]]
+              multi [mul multi [quote 10]]]]
+          res]]]]]
 
 [func type-list-to-code [type-list]
   [ifs
-    [= type-list []]
+    [eq-form type-list []]
     empty-type
 
-    [= type-list [list i32]]
+    [eq-form type-list [list i32]]
     i32
 
     [do
@@ -228,7 +252,7 @@
     [if [eq [size local-ctx] 1]
       [let [param-ctx [first local-ctx]
             index [get-local-index param-ctx form]
-            local-type [at param-ctx [inc [bit-shift-left index 1]]]]
+            local-type [at param-ctx [inc [bitwise-shift-left index 1]]]]
         [push code local.get]
         [push-all code [u32-word-to-leb-128 index]]
         [list local-type]]
@@ -236,9 +260,10 @@
         [- [assert [eq [size local-ctx] 2] we need a local ctx and a outer ctx if not at root]
          vars [first local-ctx]
          outer [second local-ctx]]
-        []]]
+        [log [quote should loop here]]
+        [abort]]]
 
-    [= form []]
+    [eq-form form []]
     []
 
     [let [first-form [first form]
@@ -252,13 +277,13 @@
             [when [lt i [size args]]
               [comment do we actually want to concat them [i32 i32] [i32] we be surprising]
               [push-all res-types [compile-form-mutable global-ctx local-ctx code [at args i]]]
-              [cont [inc i]]]]
+              [continue i [inc i]]]]
           [freeze res-types]]
 
-        [eq-word first-form [quote quote]]
+        [eq-word first-form [quote i32]]
         [let
           [- [assert [eq [size args] 1] only support decimal integers]
-           dw [dec-word-to-i32 [first args]]]
+           dw [decimal-word-to-i32 [first args]]]
           [push code i32.const]
           [push-all code [s32-word-to-leb-128 dw]]
           [list i32]]
@@ -275,7 +300,7 @@
            tt [compile-form-mutable global-ctx local-ctx code [second args]]
            - [push code else]
            ft [compile-form-mutable global-ctx local-ctx code [third args]]
-           - [assert [= tt ft] if branch types differ]
+           - [assert [eq-form tt ft] if branch types differ]
            enc-branch-type [type-list-to-code ft]]
           [push code end]
           [when-not [eq dummy-type enc-branch-type]
@@ -288,6 +313,7 @@
            var-values [mutable-list]
            let-ctx [list var-values local-ctx]
            n-of-bindings [size bindings]]
+          [log [list [quote let] bindings n-of-bindings]]
           [assert [is-list bindings] let expects a list of bindings]
           [assert [is-even n-of-bindings] let expects an even number of bindings]
           [loop [i [quote 0]]
@@ -299,34 +325,41 @@
                  - [assert [eq [size var-type] 1] let expects a single type]]
                 [push var-values var]
                 [push var-values [first var-type]]
-                [cont [add i 2]]]]]
+                [continue i [add i 2]]]]]
+          [log [list [quote let] var-values let-ctx]]
           [loop [i 1]
             [when [lt i [dec [size form]]]
               [compile-form-mutable global-ctx let-ctx code [at form i]]
-              [cont [inc i]]]]
+              [continue i [inc i]]]]
           [compile-form-mutable global-ctx let-ctx code [last form]]]
+
+        [eq-word first-form [quote loop]]
+        [let []
+          [log [quote loop not yet implemented]]
+          [abort]]
+
 
         [let [instruction [get-instruction first-form]]
           [if instruction
             [do
-              [assert [eq [size [lookup-assoc-list instruction [quote parameters]]] [size args]]
+              [assert [eq [size [assoc-list-get instruction [quote parameters]]] [size args]]
                 instruction arity mismatch]
               [loop [i 0]
                 [when [lt i [size args]]
                   [comment todo also check types]
                   [compile-form-mutable global-ctx local-ctx code [at args i]]
-                  [cont [inc i]]]]
-              [push code [lookup-assoc-list instruction [quote opcode]]]
-              [lookup-assoc-list instruction [quote results]]]
-            [let [func-sigs [lookup-assoc-list global-ctx [quote function-signatures]]
-                  func-sig [lookup-assoc-list func-sigs first-form]
+                  [continue i [inc i]]]]
+              [push code [assoc-list-get instruction [quote opcode]]]
+              [assoc-list-get instruction [quote results]]]
+            [let [func-sigs [assoc-list-get global-ctx [quote function-signatures]]
+                  func-sig [assoc-list-get func-sigs first-form]
                   parameter-types [first func-sig]]
               [assert [eq [size parameter-types] [size args]] parameter arity mismatch]
               [loop [i 0]
                 [when [lt i [size args]]
                   [comment todo also check types]
                   [compile-form-mutable global-ctx local-ctx code [at args i]]
-                  [cont [inc i]]]]
+                  [continue i [inc i]]]]
               [push code call]
               [push code [u32-word-to-leb-128 [third func-sig]]]
               [second func-sig]
@@ -339,8 +372,8 @@
     [loop [i 0]
       [when [lt i number-of-locals]
         [push-all bytes [u32-word-to-leb-128 [at locals i]]]
-        [push [at locals [inc i]]]
-        [cont [add i 2]]]]
+        [push bytes [at locals [inc i]]]
+        [continue i [add i 2]]]]
     bytes]]
 
 [func code-to-bytes [locals instructions]
@@ -364,12 +397,12 @@
               [push param-ctx [at params i]]
               [push param-ctx i32]
               [push parameter-type-list i32]
-              [cont [inc i]]]]
+              [continue i [inc i]]]]
           func-ctx [list param-ctx]
           parameter-type-list [freeze parameter-type-list]
           locals [mutable-list]
           code [mutable-list]
-          func-sigs [lookup-assoc-list ctx [quote function-signatures]]
+          func-sigs [assoc-list-get ctx [quote function-signatures]]
           -
           [loop [i 3]
             [when [lt i [dec [size form]]]
@@ -379,16 +412,16 @@
           type-index
           [push-type ctx
             [type-function parameter-type-list result-type]]
-          functions [lookup-assoc-list ctx [quote functions]]
+          functions [assoc-list-get ctx [quote functions]]
           func-index [size functions]]
       [push func-sigs name]
       [push func-sigs [list parameter-type-list result-type func-index]]
 
       [push functions type-index]
-      [push [lookup-assoc-list ctx [quote exports]]
-        [export name kind-function func-index]]
+      [push [assoc-list-get ctx [quote exports]]
+        [wasm-export name kind-function func-index]]
       [push code end]
-      [push [lookup-assoc-list ctx [quote codes]] [code-to-bytes locals code]]
+      [push [assoc-list-get ctx [quote codes]] [code-to-bytes locals code]]
       ]
 
     [do
@@ -403,14 +436,6 @@
     [quote codes] [mutable-list]
     [quote function-signatures] [mutable-list]]]
 
-[func compile-top-level-forms [forms]
-  [let [ctx [make-mty-ctx]]
-    [loop [i 0]
-      [when [lt i [size forms]]
-        [compile-top-level-form ctx [at forms i]]
-        [cont [inc i]]]]
-    ctx]]
-
 [func vector-section [section-id content]
   [concat [list section-id] [u32-word-to-leb-128 [size content]] content]]
 
@@ -424,13 +449,28 @@
   [concat
     [quote [0 97 115 109
             1 0 0 0]]
-    [vector-section-concat [quote 1] [lookup-assoc-list ctx [quote types]]]
-    [func-section [lookup-assoc-list ctx [quote functions]]]
-    [vector-section-concat [quote 7] [lookup-assoc-list ctx [quote exports]]]
-    [vector-section-concat [quote 10] [lookup-assoc-list ctx [quote codes]]]]]
+    [vector-section-concat [quote 1] [assoc-list-get ctx [quote types]]]
+    [func-section [assoc-list-get ctx [quote functions]]]
+    [vector-section-concat [quote 7] [assoc-list-get ctx [quote exports]]]
+    [vector-section-concat [quote 10] [assoc-list-get ctx [quote codes]]]]]
+
+[func compile-top-forms [forms]
+  [let [ctx [make-mty-ctx]]
+    [loop [i 0]
+      [when [lt i [size forms]]
+        [compile-top-level-form ctx [at forms i]]
+        [continue i [inc i]]]]
+    [ctx-to-module ctx]]]
+
+[export compile-top-forms]
+
+[comment
+[external-func wasm-module [list] [module]]
+[external-func wasm-instance [module] [instance]]
+[external-func wasm-import-func [instance word] []]
 
 [let
-  [ctx [compile-top-level-forms [quote
+  [ctx [compile-top-forms [quote
     [func fst [x y] x]
     [func snd [x y] y]
     [func add [x y] [i32.add x y]]
@@ -459,7 +499,7 @@
   [wasm-import-func wi id-pair my-id-pair]
   [wasm-import-func wi pair my-pair]
   ]
-[comment
+
 [test 3 [my-fst 3 2]]
 [test 2 [my-snd 1 2]]
 [test 3 [my-add 1 2]]

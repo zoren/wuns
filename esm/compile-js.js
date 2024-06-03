@@ -164,6 +164,7 @@ for (const file of wunsFiles) {
   setFile(file, content)
 }
 parseEvalFile('compiler-js.wuns')
+const compileForms = getExported('compiler-js.wuns', 'compile-top-forms')
 
 const commandLineArgs = process.argv.slice(2)
 
@@ -175,7 +176,6 @@ const content = fs.readFileSync(inputFile, 'utf8')
 const forms = parseStringToForms(content)
 
 // const compileForm = getGlobal('compile-top-form')
-const compileForms = getExported('compiler-js.wuns', 'compile-top-forms')
 // for (const form of forms) apply(compileForm, [form])
 const [, exportInterface] = apply(compileForms, [forms])
 console.dir(unword(exportInterface), { depth: null })

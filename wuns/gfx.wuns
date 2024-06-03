@@ -1,5 +1,3 @@
-[external-func store [i32 i32] []]
-
 [func fill [p w h color]
   [let
     [end [add p [mul [i32 4] [mul w h]]]

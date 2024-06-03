@@ -168,7 +168,7 @@
   [let [index [assoc-list-index ctx sym]]
     [if [is-negative index]
       [do
-        [log [quote assoc-list-get key not found]]
+        [log [concat [quote assoc-list-get key not found] [list sym ctx]]]
         [abort]]
       [at ctx [inc index]]]]]
 

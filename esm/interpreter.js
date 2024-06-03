@@ -284,7 +284,7 @@ const wunsComp = (form) => {
       for (const name of args) {
         if (!isWord(name)) throw new Error(`export expects word, found ${name}`)
         const s = wordValue(name)
-        if (!varValues.has(s)) throw new Error(`export failed: ${s}`)
+        if (!varValues.has(s)) throw new Error(`export failed: ${s} not found in ${currentFilename}`)
         exports.add(s)
       }
       return null
