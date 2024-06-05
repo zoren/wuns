@@ -1,0 +1,29 @@
+[func load32 [addr] [load 2 0 addr]]
+
+[func store32 [addr val] [store 2 0 addr val]]
+
+[func t []
+  [load32 [i32 69]]]
+
+[func init-mem []
+  [if [load32 [i32 0]]
+    [store32 [i32 0] [i32 16]]
+    [unreachable]]]
+
+[func i32.bitwise-not [x] [bitwise-xor [i32 -1] x]]
+
+[comp-time
+  [func ct-i32.bitwise-not [x] [list [quote i32] [bitwise-xor [i32 -1] x]]]
+  [import standard-library.wuns log]
+  [log [quote hello at comp time]]
+]
+
+[func is-align4 [x] [eq [bitwise-and x [i32 3]] [i32 0]]]
+
+[func align4 [x] [bitwise-and [add x [i32 3]] [ct-i32.bitwise-not [i32 3]]]]
+
+[func bump-alloc [size]
+  [if [le size [i32 0]]
+    [unreachable]
+    [nop]]
+  ]

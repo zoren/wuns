@@ -83,11 +83,21 @@
 [external-func log [form] []]
 [comment never returns should maybe be unreachable on wasm]
 [external-func abort [] []]
+[external-func is-word [form] [i32]]
+[external-func is-list [form] [i32]]
 
 [macro assert [cond .. lmsg]
-  [list [quote when-not] cond
-    [list [quote log] [list [quote quote] [concat [list [quote assert-fail]] lmsg]]]
-    [quote [abort]]]]
+  [let [msg [mutable-list]]
+    [push msg [quote list]]
+    [loop [i 0]
+      [when [lt i [size lmsg]]
+        [let [e [at lmsg i]]
+          [push msg [if [is-word e] [list [quote quote] e] e]]
+          [continue i [inc i]]]]
+        ]
+    [list [quote when-not] cond
+      [list [quote log] msg]
+      [quote [abort]]]]]
 
 [macro ifs [.. clauses]
   [let [s [size clauses]]
@@ -136,9 +146,6 @@
           [continue i [inc i]]
           0]
         1]]]]
-
-[external-func is-word [form] [i32]]
-[external-func is-list [form] [i32]]
 
 [func eq-form [a b]
   [if

@@ -1,37 +1,38 @@
 import path from 'node:path'
 import fs from 'node:fs'
-import { print, wordValue, unword } from './core.js'
+
+import { unword } from './core.js'
 import { parseStringToForms } from './parseByHand.js'
-import { defineImportFunction, parseEvalFile, getExported, apply, setFile } from './interpreter.js'
+import { makeContext } from './interpreter.js'
 
-defineImportFunction('js-apply', (func, args) => func(...args))
-
-defineImportFunction('make-macro-iife', (m) => {
-  return makeContextIIFE(wordValue(m))
-})
-
-// defineImportFunction('wasm-module', (ar) => {
-//   return new WebAssembly.Module(ar)
-// })
-
-// defineImportFunction('wasm-instance', (module) => {
-//   return new WebAssembly.Instance(module, {})
-// })
-
-// defineImportFunction('wasm-import-func', (module) => {
-//   return new WebAssembly.Instance(module, {})
-// })
+const compilerContext = makeContext()
+const { defineImportFunction, parseEvalFile, getExported, apply } = compilerContext
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname)
 const wunsDir = path.resolve(__dirname, '..', 'wuns')
-const wunsFiles = fs.readdirSync(wunsDir)
 
-for (const file of wunsFiles) {
+const wunsFileContent = []
+
+for (const file of fs.readdirSync(wunsDir)) {
   if (!file.endsWith('.wuns')) continue
-  const bla = path.resolve(wunsDir, file)
-  const content = fs.readFileSync(bla, 'ascii')
-  setFile(file, content)
+  wunsFileContent.push([file, fs.readFileSync(path.resolve(wunsDir, file), 'ascii')])
 }
+
+const setFiles = ({ setFile }) => {
+  for (const [file, content] of wunsFileContent) setFile(file, content)
+}
+
+defineImportFunction('make-interpreter-context', () => {
+  const ctx = makeContext()
+  setFiles(ctx)
+  return ctx
+})
+
+defineImportFunction('context-eval', (context, form) => {
+  const { evalFormCurrentModule } = context
+  return evalFormCurrentModule(form)
+})
+setFiles(compilerContext)
 parseEvalFile('compiler-wasm.wuns')
 const compileFormsContext = getExported('compiler-wasm.wuns', 'compile-top-forms-to-context')
 const contextToModule = getExported('compiler-wasm.wuns', 'ctx-to-module')
@@ -44,27 +45,34 @@ const inputFilePath = commandLineArgs[0]
 const inputFile = path.resolve(wunsDir, inputFilePath)
 const content = fs.readFileSync(inputFile, 'ascii')
 const forms = parseStringToForms(content)
-
-// const compileForm = getGlobal('compile-top-form')
-// for (const form of forms) apply(compileForm, [form])
 const context = apply(compileFormsContext, [forms])
 // console.dir(unword(context), { depth: null })
 const moduleNumbers = apply(contextToModule, [context])
+// console.dir(moduleNumbers, { depth: null })
 for (const n of moduleNumbers) {
-  if ((n !== n) | 0) throw new Error('module number is not an integer: ' + n)
+  if (n !== (n | 0)) throw new Error('module number is not an integer: ' + n)
   if (n < 0 || n > 255) throw new Error('module number is out of range: ' + n)
 }
-// console.dir(moduleNumbers, { depth: null })
-// for (let i = 0; i < moduleNumbers.length; i += 16) {
-//   console.log(
-//     moduleNumbers
-//       .slice(i, i + 16)
-//       .map((n) => n.toString(16).padStart(2, '0'))
-//       .join(' '),
-//   )
-// }
+// console.log('---')
+const hexDump = (moduleBytes) => {
+  for (let i = 0; i < moduleBytes.length; i += 16) {
+    console.log(
+      [...moduleBytes
+        .slice(i, i + 16)]
+        .map((n) => n.toString(16).padStart(2, '0'))
+        .join(' '),
+    )
+  }
+}
+// hexDump(moduleNumbers)
 const moduleBytes = new Uint8Array(moduleNumbers)
-fs.writeFileSync('output.wasm', moduleBytes)
+// console.log('---')
+// hexDump(moduleBytes)
+
+const inputFileName = path.basename(inputFilePath)
+const outputFilePath = inputFileName.replace(/\.wuns$/, '.wasm')
+fs.writeFileSync(outputFilePath, moduleBytes)
 const wasmModule = new WebAssembly.Module(moduleBytes)
-const wasmInstance = new WebAssembly.Instance(wasmModule)
+const importObject = { env: { memory: new WebAssembly.Memory({ initial: 16, maximum: 32 }) } }
+const wasmInstance = new WebAssembly.Instance(wasmModule, importObject)
 // console.dir(wasmInstance.exports, { depth: null })

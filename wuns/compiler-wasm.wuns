@@ -118,6 +118,9 @@
 
 [constant instructions
   [list
+    [make-operation-obj [quote unreachable] [quote 0x00] [] []]
+    [make-operation-obj [quote nop] [quote 0x01] [] []]
+
     [make-binary-i32 eq  0x46]
     [make-binary-i32 ne  0x47]
     [make-binary-i32 lt  0x48]
@@ -282,6 +285,14 @@
     [push locals type]
     index]]
 
+[func identity [x] x]
+
+[external-func make-interpreter-context [] [context]]
+
+[external-func context-eval [context form] [any]]
+
+[constant comp-time-context [make-interpreter-context]]
+
 [func compile-form-mutable [local-ctx code form]
   [ifs
     [is-word form]
@@ -290,7 +301,7 @@
         [if [eq [size cur-ctx] 1]
           [let [param-ctx [first cur-ctx]
                 index [assoc-list-index param-ctx form]]
-            [assert [not [is-negative index]] not found in local ctx]
+            [assert [not [is-negative index]] not found in local ctx [identity form]]
             [list [at param-ctx [inc index]] [div index 2]]]
           [let
             [- [assert [eq [size cur-ctx] 3] we need a local ctx and a outer ctx if not at root]
@@ -418,19 +429,28 @@
           [push-code-u32 code 1]
           []]
 
-        [let [instruction [get-instruction first-form]]
+        [eq-word first-form [quote comp-time]]
+        [do
+          [loop [i 1]
+            [when [lt i [dec [size form]]]
+              [context-eval comp-time-context [at form i]]
+              [continue i [inc i]]]]
+          [context-eval comp-time-context [last form]]]
+
+        [let [instruction [get-instruction first-form]
+              func-sigs [assoc-list-get global-ctx [quote function-signatures]]]
           [if instruction
             [let [params [assoc-list-get instruction [quote parameters]]]
               [if [is-negative [assoc-list-index instruction [quote memory]]]
                 [do
-                  [assert [eq [size params] [size args]] instruction arity mismatch]
+                  [assert [eq [size params] [size args]] instruction arity mismatch [identity first-form]]
                   [loop [i 0]
                     [when [lt i [size args]]
                       [comment todo also check types]
                       [compile-form-mutable local-ctx code [at args i]]
                       [continue i [inc i]]]]
                   [push-code-byte code [assoc-list-get instruction [quote opcode]]]]
-                [let [- [assert [eq [add [size params] 2] [size args]] instruction arity mismatch]
+                [let [- [assert [eq [add [size params] 2] [size args]] memory instruction arity mismatch [identity first-form]]
                       align [second form]
                       offset [third form]]
                   [loop [i 3]
@@ -442,20 +462,21 @@
                   [push-code-u32 code align]
                   [push-code-u32 code offset]]]
               [assoc-list-get instruction [quote results]]]
-            [let [func-sigs [assoc-list-get global-ctx [quote function-signatures]]
-                  func-sig [assoc-list-get func-sigs first-form]
-                  parameter-types [first func-sig]]
-              [assert [eq [size parameter-types] [size args]] parameter arity mismatch]
-              [loop [i 0]
-                [when [lt i [size args]]
-                  [comment todo also check types]
-                  [compile-form-mutable local-ctx code [at args i]]
-                  [continue i [inc i]]]]
-              [push-code-byte code call]
-              [push-code-byte code [u32-word-to-leb-128 [third func-sig]]]
-              [second func-sig]
-
-            ]]]]]]]
+            [if [is-negative [assoc-list-index func-sigs first-form]]
+              [let [macro-code [context-eval comp-time-context form]]
+                [compile-form-mutable local-ctx code macro-code]]
+              [let [func-sig [assoc-list-get func-sigs first-form]
+                    parameter-types [first func-sig]]
+                [assert [eq [size parameter-types] [size args]] parameter arity mismatch]
+                [loop [i 0]
+                  [when [lt i [size args]]
+                    [comment todo also check types]
+                    [compile-form-mutable local-ctx code [at args i]]
+                    [continue i [inc i]]]]
+                [push-code-byte code call]
+                [push-code-u32 code [third func-sig]]
+                [second func-sig]]]
+            ]]]]]]
 
 [func locals-to-bytes [locals]
   [let [bytes [mutable-list]
@@ -477,7 +498,8 @@
     [concat [u32-word-to-leb-128 [size bytes]] bytes]]]
 
 [func compile-top-level-form [form]
-  [if [eq-word [quote func] [first form]]
+  [ifs
+    [eq-word [quote func] [first form]]
     [let [name [second form]
           params [third form]
           param-ctx [mutable-list]
@@ -517,6 +539,13 @@
       [push [assoc-list-get global-ctx [quote codes]] [code-to-bytes locals code]]
       ]
 
+    [eq-word [quote comp-time] [first form]]
+    [let []
+      [loop [i 1]
+        [when [lt i [size form]]
+          [context-eval comp-time-context [at form i]]
+          [continue i [inc i]]]]]
+
     [do
       [log [list form ]]
       [assert 0 not a top-level form]]]]
@@ -543,97 +572,10 @@
 [func compile-top-forms-to-context [forms]
   [push [assoc-list-get global-ctx [quote imports]]
     [wasm-import [quote env] [quote memory] [import-desc-mem-min [quote 0]]]]
-  [do
-    [loop [i 0]
-      [when [lt i [size forms]]
-        [compile-top-level-form [at forms i]]
-        [continue i [inc i]]]]
-    global-ctx]]
+  [loop [i 0]
+    [when [lt i [size forms]]
+      [compile-top-level-form [at forms i]]
+      [continue i [inc i]]]]
+  global-ctx]
 
 [export ctx-to-module compile-top-forms-to-context]
-
-[comment
-[external-func wasm-module [list] [module]]
-[external-func wasm-instance [module] [instance]]
-[external-func wasm-import-func [instance word] []]
-
-[let
-  [ctx [compile-top-forms [quote
-    [func fst [x y] x]
-    [func snd [x y] y]
-    [func add [x y] [i32.add x y]]
-    [func sub [x y] [i32.sub x y]]
-    [func inc [x] [i32.add x [quote 1]]]
-    [func five [] [quote 5]]
-    [func ifte [c] [if c [quote 1337] [quote 21]]]
-    [func ignore [x] []]
-    [func identity [x] x]
-    [func id-pair [x] [tuple x x]]
-    [func pair [x y] [tuple x y]]
-  ]]
-  mod [ctx-to-module ctx]
-  - [log mod]
-  wm [wasm-module mod]
-  wi [wasm-instance wm]
-  ]
-  [wasm-import-func wi fst my-fst]
-  [wasm-import-func wi snd my-snd]
-  [wasm-import-func wi add my-add]
-  [wasm-import-func wi sub my-sub]
-  [wasm-import-func wi inc my-inc]
-  [wasm-import-func wi ifte my-ifte]
-  [wasm-import-func wi ignore my-ignore]
-  [wasm-import-func wi identity my-identity]
-  [wasm-import-func wi id-pair my-id-pair]
-  [wasm-import-func wi pair my-pair]
-  ]
-
-[test 3 [my-fst 3 2]]
-[test 2 [my-snd 1 2]]
-[test 3 [my-add 1 2]]
-[test -1 [my-sub 1 2]]
-[test 2 [my-inc 1]]
-[test [quote 1337] [my-ifte 1]]
-[test [quote 21] [my-ifte 0]]
-[test [] [my-ignore 0]]
-[test 0 [my-identity 0]]
-[test 2 [my-identity 2]]
-[test [list 2 2] [my-id-pair 2]]
-[test [list 2 3] [my-pair 2 3]]
-[test [list 2 3] [my-pair 2 3]]
-
-[func compile-instantiate [funcs]
-  [let
-    [ctx [compile-top-level-forms funcs]
-     mod [ctx-to-module ctx]
-     wm [wasm-module mod]]
-    [wasm-instance wm]]]
-
-[wasm-import-func [compile-instantiate [quote [[func f [x] [] [quote 5]]]]] f my-f]
-
-[wasm-import-func [compile-instantiate
-  [quote
-    [func callee [] [quote 5]]
-    [func caller [] [callee]]]] caller my-caller]
-
-[test [quote 5] [my-caller]]
-
-[let [wi
-  [compile-instantiate
-    [quote
-      [func let-test [] [let [] [quote 5]]]
-      [func let1-test [] [let [] []]]
-      [func let2-test [] [let [] [tuple [quote 5] [quote 6]]]]
-
-
-      ]]]
-  [wasm-import-func wi let-test my-let-test]
-  [wasm-import-func wi let1-test my-let1-test]
-  [wasm-import-func wi let2-test my-let2-test]
-  ]
-
-[test [quote 5] [my-let-test]]
-[test [] [my-let1-test]]
-
-[test [list [quote 5] [quote 6]] [my-let2-test]]
-]

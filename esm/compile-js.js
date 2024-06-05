@@ -160,7 +160,6 @@ for (const file of wunsFiles) {
   if (!file.endsWith('.wuns')) continue
   const bla = path.resolve(wunsDir, file)
   const content = fs.readFileSync(bla, 'utf8')
-  console.log({ file })
   setFile(file, content)
 }
 parseEvalFile('compiler-js.wuns')

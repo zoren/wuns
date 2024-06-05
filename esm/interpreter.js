@@ -151,10 +151,8 @@ export const makeContext = () => {
         const updateNames = []
         const compExps = []
         for (let i = 0; i < args.length; i += 2) {
-          const varName = wordValue(args[i])
-          updateNames.push(varName)
-          const compVal = wunsComp(args[i + 1])
-          compExps.push(compVal)
+          updateNames.push(wordValue(args[i]))
+          compExps.push(wunsComp(args[i + 1]))
         }
         return (env) => {
           let enclosingLoopEnv = env
