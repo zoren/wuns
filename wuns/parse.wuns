@@ -2,9 +2,6 @@
 
 [func store32 [addr val] [store 2 0 addr val]]
 
-[func t []
-  [load32 [i32 69]]]
-
 [func init-mem []
   [if [load32 [i32 0]]
     [store32 [i32 0] [i32 16]]
@@ -13,17 +10,47 @@
 [func i32.bitwise-not [x] [bitwise-xor [i32 -1] x]]
 
 [comp-time
-  [func ct-i32.bitwise-not [x] [list [quote i32] [bitwise-xor [i32 -1] x]]]
-  [import standard-library.wuns log]
-  [log [quote hello at comp time]]
+  [func i32.bitwise-not [x] [bitwise-xor [i32 -1] x]]
+  [func mk-i32 [x] [list [quote i32] x]]
+  [func is-power-of-2 [x] [eq [i32 0] [bitwise-and x [sub x [i32 1]]]]]
+  [import standard-library.wuns assert when-not do abort log dec concat]
+
+  [func not-is-align [n x]
+    [assert n must not be zero]
+    [assert [is-power-of-2 n] must be power of 2]
+    [list [quote bitwise-and] [mk-i32 [dec n]] [list [quote quote] x]]]
+  [func is-align [n x]
+    [list [quote eq] [quote i32 0] [not-is-align n x]]]
+  [func align [n x]
+    [assert n must not be zero]
+    [assert [is-power-of-2 n] must be power of 2]
+    [let [dn [dec n]]
+      [list [quote bitwise-and]
+        [list [quote add] [mk-i32 dn] [list [quote quote] x]]
+        [mk-i32 [i32.bitwise-not dn]]]]]
 ]
 
-[func is-align4 [x] [eq [bitwise-and x [i32 3]] [i32 0]]]
+[func is-align4 [x] [is-align [i32 4] [quote x]]]
 
-[func align4 [x] [bitwise-and [add x [i32 3]] [ct-i32.bitwise-not [i32 3]]]]
+[func is-align8 [x] [is-align [i32 8] [quote x]]]
+
+[func not-is-address-aligned [p] [not-is-align [i32 4] [quote p]]]
+
+[func align4 [x] [align [i32 4] [quote x]]]
+
+[func align8 [x] [align [i32 8] [quote x]]]
 
 [func bump-alloc [size]
-  [if [le size [i32 0]]
-    [unreachable]
-    [nop]]
-  ]
+  [if [le size [i32 0]] [unreachable]]
+  [if [gt size [mul [i32 64] [i32 1024]]] [unreachable]]
+  [if [not-is-address-aligned size] [unreachable]]
+  [let
+    [current-top [load32 [i32 0]]
+     - [if [eq current-top [i32 0]] [unreachable]]
+     - [if [not-is-align [i32 4] [quote current-top]] [unreachable]]
+     mem-size-bytes [mul [mul [i32 64] [i32 1024]] [memory.size 0]]
+     - [if [gt current-top mem-size-bytes] [unreachable]]
+     new-top [add current-top size]]
+    [tuple]
+  ]]
+
