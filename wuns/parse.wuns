@@ -2,11 +2,6 @@
 
 [func store32 [addr val] [store 2 0 addr val]]
 
-[func init-mem []
-  [if [load32 [i32 0]]
-    [store32 [i32 0] [i32 16]]
-    [unreachable]]]
-
 [func i32.bitwise-not [x] [bitwise-xor [i32 -1] x]]
 
 [comp-time
@@ -40,6 +35,11 @@
 
 [func align8 [x] [align [i32 8] [quote x]]]
 
+[func bump-alloc-init []
+  [if [eq [load32 [i32 0]] [i32 0]]
+    [store32 [i32 0] [i32 16]]
+    [unreachable]]]
+
 [func bump-alloc [size]
   [if [le size [i32 0]] [unreachable]]
   [if [gt size [mul [i32 64] [i32 1024]]] [unreachable]]
@@ -51,6 +51,6 @@
      mem-size-bytes [mul [mul [i32 64] [i32 1024]] [memory.size 0]]
      - [if [gt current-top mem-size-bytes] [unreachable]]
      new-top [add current-top size]]
-    [tuple]
-  ]]
-
+    [if [gt new-top mem-size-bytes] [unreachable]]
+    [store32 [i32 0] new-top]
+    current-top]]
