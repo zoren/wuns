@@ -21,16 +21,6 @@ Object.freeze(instructions)
 
 const hostExports = Object.entries(await import('./host.js'))
 
-const checkApplyArity = ({ name, params, restParam }, numberOfGivenArgs) => {
-  const arity = params.length
-  if (restParam === null) {
-    if (arity !== numberOfGivenArgs) throw new Error(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
-  } else {
-    if (arity > numberOfGivenArgs)
-      throw new Error(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
-  }
-}
-
 export const makeContext = () => {
   const externalFunctions = {}
   for (const [name, f] of hostExports) externalFunctions[name.replace(/_/g, '-')] = f
@@ -61,21 +51,33 @@ export const makeContext = () => {
     if (moduleVars.has(name)) throw new Error('global variable already defined: ' + name)
     moduleVars.set(name, value)
   }
-
-  const internalApply = (fobj, args) => {
-    const { name, params, restParam, cbodies, moduleEnv } = fobj
-    if (!cbodies) {
-      console.log(fobj)
-      throw new Error('no cbodies in:' + name)
-    }
+  const seqApply = (funcOrMacro, numberOfGivenArgs) => {
+    const { name, params, restParam, moduleEnv } = funcOrMacro
     const arity = params.length
-    const varValues = new Map()
-    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-    if (restParam) varValues.set(restParam, makeList(...args.slice(arity)))
-    const inner = { varValues, outer: moduleEnv }
-    let result = unit
-    for (const cbody of cbodies) result = cbody(inner)
-    return result
+    let setArguments
+    if (restParam === null) {
+      if (arity !== numberOfGivenArgs) throw new Error(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
+      setArguments = (varValues, args) => {
+        for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+      }
+    } else {
+      if (arity > numberOfGivenArgs)
+        throw new Error(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
+      setArguments = (varValues, args) => {
+        for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+        varValues.set(restParam, makeList(...args.slice(arity)))
+      }
+    }
+    return (args) => {
+      const { cbodies } = funcOrMacro
+      assert(cbodies, `no cbodies in: ${name}`)
+      const varValues = new Map()
+      setArguments(varValues, args)
+      const inner = { varValues, outer: moduleEnv }
+      let result = unit
+      for (const cbody of cbodies) result = cbody(inner)
+      return result
+    }
   }
   const wunsComp = (form) => {
     const compBodies = (bodies) => {
@@ -297,16 +299,11 @@ export const makeContext = () => {
         }
       }
       assert(typeof funcOrMacro === 'object', `expected function or object ${funcOrMacro}`)
-      const { isMacro, wasmFunc } = funcOrMacro
-      if (wasmFunc) throw new Error('wasm functions not supported in wunsComp')
-      checkApplyArity(funcOrMacro, args.length)
-      if (isMacro) return wunsComp(internalApply(funcOrMacro, args))
+      const { isMacro } = funcOrMacro
+      const internalApply = seqApply(funcOrMacro, args.length)
+      if (isMacro) return wunsComp(internalApply(args))
       const cargs = args.map(wunsComp)
-      return (env) =>
-        internalApply(
-          funcOrMacro,
-          cargs.map((carg) => carg(env)),
-        )
+      return (env) => internalApply(cargs.map((carg) => carg(env)))
     } catch (e) {
       console.error('error evaluating', firstWordValue)
       throw e
@@ -321,9 +318,11 @@ export const makeContext = () => {
     return varValues.get(exportedName)
   }
 
-  const apply = (funmacObj, args) => {
-    checkApplyArity(funmacObj, args.length)
-    return internalApply(funmacObj, args)
+  const apply = (funcOrMacro, args) => {
+    const { isMacro } = funcOrMacro
+    const internalApply = seqApply(funcOrMacro, args.length)
+    if (isMacro) return wunsComp(internalApply(args))
+    return internalApply(args)
   }
 
   const evalLogForms = (forms) => {
