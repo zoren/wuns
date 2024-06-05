@@ -2,11 +2,9 @@ import fs from 'node:fs'
 import * as readline from 'node:readline'
 import { stdin, nextTick, stdout } from 'node:process'
 
-import { currentFilename, parseEvalString } from './interpreter.js'
-
 const historyFilePath = 'history.json'
 
-export const runRepl = () => {
+export const runRepl = ({ getCurrentFilename, parseEvalString }) => {
   let history = []
   try {
     const histO = JSON.parse(fs.readFileSync(historyFilePath, 'utf8'))
@@ -31,7 +29,7 @@ export const runRepl = () => {
   })
 
   const prompt = () => {
-    rl.question(`${currentFilename}> `, (line) => {
+    rl.question(`${getCurrentFilename()}> `, (line) => {
       if (line === '') {
         console.log(`Bye!`)
         rl.close()

@@ -1,7 +1,10 @@
 import fs from 'fs'
 import path from 'path'
 import { runRepl } from './repl.js'
-import { setFile, parseEvalFile } from './interpreter.js'
+import { makeContext } from './interpreter.js'
+
+const context = makeContext()
+const { setFile } = context
 
 const wunsDir = '../wuns/'
 const wunsFiles = fs.readdirSync(wunsDir)
@@ -17,4 +20,4 @@ const commandLineArgs = process.argv.slice(2)
 
 if (commandLineArgs.length === 1) parseEvalFile(path.basename(commandLineArgs[0]))
 
-runRepl()
+runRepl(context)
