@@ -595,8 +595,6 @@
 [func compile-top-forms-to-module [forms]
   [push global-ctx-imports
     [wasm-import [quote env] [quote memory] [import-desc-mem-min [quote 0]]]]
-  [push global-ctx-datas
-    [passive-data-word [quote abcd]]]
   [for i 0 [size forms]
     [compile-top-level-form [at forms i]]]
   [ctx-to-module]
