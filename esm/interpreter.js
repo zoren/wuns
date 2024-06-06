@@ -323,12 +323,16 @@ export const makeContext = () => {
     return internalApply(args)
   }
 
+  const compEval = (form, moduleEnv) => {
+    const cform = wunsComp(form)
+    return cform === null ? unit : cform(moduleEnv)
+  }
+
   const evalLogForms = (forms) => {
     try {
       const moduleEnv = currentModuleEnv()
       for (const form of forms) {
-        const cform = wunsComp(form)
-        const v = cform === null ? unit : cform(moduleEnv)
+        const v = compEval(form, moduleEnv)
         if (!isUnit(v)) console.log(print(v))
       }
     } catch (e) {
@@ -336,12 +340,7 @@ export const makeContext = () => {
     }
   }
 
-  const evalFormCurrentModule = (form) => {
-    const moduleEnv = currentModuleEnv()
-    const cform = wunsComp(form)
-    const v = cform === null ? unit : cform(moduleEnv)
-    return v
-  }
+  const evalFormCurrentModule = form => compEval(form, currentModuleEnv())
 
   const parseEvalString = (content) => {
     evalLogForms(parseStringToForms(content))
