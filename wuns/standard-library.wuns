@@ -138,6 +138,25 @@
         1
         [concat [quote [or]] [rest clauses]]]]]]
 
+[constant word-counter [mutable-list]]
+[push word-counter 0]
+
+[func genword []
+  [let [c [first word-counter]]
+    [set-array word-counter 0 [inc c]]
+    [concat-words [list [quote genword] c]]]]
+
+[macro for [iw start end .. forms]
+  [let [ew [genword]]
+    [list
+      [quote let] [list ew end]
+      [list
+        [quote loop] [list iw start]
+        [list [quote if]
+          [list [quote lt] iw ew]
+          [concat [quote let []] forms [list [list [quote continue] iw [list [quote add] iw [quote 1]]]]]
+          []]]]]]
+
 [func eq-word [a b]
   [and [eq [size a] [size b]]
     [loop [i 0]

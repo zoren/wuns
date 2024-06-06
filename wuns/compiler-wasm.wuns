@@ -16,7 +16,7 @@
   is-zero
   is-list
   eq-form
-  set-array
+  set-array for
 ]
 
 [func u32-word-to-leb-128 [w]
@@ -75,13 +75,10 @@
             [continue n quotient]]]]]]]
 
 [func dec-words-to-hex [decs]
-  [let [res [mutable-list] s [size decs]]
-    [loop [i 0]
-      [if [lt i s]
-        [do
-          [push res [dec-word-to-hex-word [at decs i]]]
-          [continue i [inc i]]]
-        [freeze res]]]]]
+  [let [res [mutable-list]]
+    [for i 0 [size decs]
+      [push res [dec-word-to-hex-word [at decs i]]]]
+    [freeze res]]]
 
 [func test [expected actual]
   [when-not [eq-form expected actual]
