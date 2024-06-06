@@ -146,7 +146,7 @@
     [set-array word-counter 0 [inc c]]
     [concat-words [list [quote genword] c]]]]
 
-[macro for [iw start end .. forms]
+[func for-func [iw start increment end forms]
   [let [ew [genword]]
     [list
       [quote let] [list ew end]
@@ -154,8 +154,14 @@
         [quote loop] [list iw start]
         [list [quote if]
           [list [quote lt] iw ew]
-          [concat [quote let []] forms [list [list [quote continue] iw [list [quote add] iw [quote 1]]]]]
+          [concat [quote let []] forms [list [list [quote continue] iw [list [quote add] iw increment]]]]
           []]]]]]
+
+[macro for [iw start end .. forms]
+  [for-func iw start 1 end forms]]
+
+[macro for-inc [iw start increment end .. forms]
+  [for-func iw start increment end forms]]
 
 [func eq-word [a b]
   [and [eq [size a] [size b]]
