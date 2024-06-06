@@ -41,8 +41,7 @@ defineImportFunction('log', (form) => {
 })
 setFiles(compilerContext)
 parseEvalFile('compiler-wasm.wuns')
-const compileFormsContext = getExported('compiler-wasm.wuns', 'compile-top-forms-to-context')
-const contextToModule = getExported('compiler-wasm.wuns', 'ctx-to-module')
+const compileFormsModule = getExported('compiler-wasm.wuns', 'compile-top-forms-to-module')
 
 const commandLineArgs = process.argv.slice(2)
 
@@ -52,11 +51,7 @@ const inputFilePath = commandLineArgs[0]
 const inputFile = path.resolve(wunsDir, inputFilePath)
 const content = fs.readFileSync(inputFile, 'ascii')
 const forms = parseStringToForms(content)
-const context = apply(compileFormsContext, [forms])
-// import { unword } from './core.js'
-// console.dir(unword(context), { depth: null })
-const moduleNumbers = apply(contextToModule, [context])
-// console.dir(moduleNumbers, { depth: null })
+const moduleNumbers = apply(compileFormsModule, [forms])
 for (const n of moduleNumbers) {
   if (n !== (n | 0)) throw new Error('module number is not an integer: ' + n)
   if (n < 0 || n > 255) throw new Error('module number is out of range: ' + n)

@@ -252,17 +252,13 @@
               multi [mul multi [quote 10]]]]
           res]]]]]
 
-[func make-mty-ctx []
-  [list
-    [quote imports] [mutable-list]
-    [quote functions] [mutable-list]
-    [quote exports] [mutable-list]
-    [quote codes] [mutable-list]
-    [quote function-signatures] [mutable-list]
-    [quote datas] [mutable-list]]]
-
-[constant global-ctx [make-mty-ctx]]
 [constant global-ctx-types [mutable-list]]
+[constant global-ctx-imports [mutable-list]]
+[constant global-ctx-functions [mutable-list]]
+[constant global-ctx-exports [mutable-list]]
+[constant global-ctx-codes [mutable-list]]
+[constant global-ctx-func-sigs [mutable-list]]
+[constant global-ctx-datas [mutable-list]]
 
 [func push-type [type]
   [let [index [index-of-word global-ctx-types type]]
@@ -450,8 +446,7 @@
             [context-eval comp-time-context [at form i]]]
           [context-eval comp-time-context [last form]]]
 
-        [let [instruction [get-instruction first-form]
-              func-sigs [assoc-list-get global-ctx [quote function-signatures]]]
+        [let [instruction [get-instruction first-form]]
           [if instruction
             [let [arity [assoc-list-get instruction [quote arity]]
                   immediate-parameters [assoc-list-get instruction [quote immediate-parameters]]
@@ -465,12 +460,12 @@
                   [assert [eq-word [at immediate-parameters i] immediate-u32] immediate parameter type mismatch]
                   [push-code-u32 code [at form [inc i]]]]
               [assoc-list-get instruction [quote results]]]
-            [let [sig-index [assoc-list-index func-sigs first-form]]
+            [let [sig-index [assoc-list-index global-ctx-func-sigs first-form]]
               [if [is-negative sig-index]
                 [let [q-form [quote-args form]
                       macro-code [context-eval comp-time-context q-form]]
                   [compile-form-mutable local-ctx code macro-code]]
-                [let [func-sig [at func-sigs [inc sig-index]]
+                [let [func-sig [at global-ctx-func-sigs [inc sig-index]]
                       parameter-types [first func-sig]]
                   [assert [eq [size parameter-types] [size args]] parameter arity mismatch]
                   [for i 0 [size args]
@@ -532,7 +527,6 @@
           locals [mutable-list]
           code [mutable-list]
           code-locals [list code locals [size params]]
-          func-sigs [assoc-list-get global-ctx [quote function-signatures]]
           -
           [for i 3 [dec [size form]]
             [comment remember to check type is empty maybe even drop unused and warn instead]
@@ -541,17 +535,17 @@
           type-index
           [push-type
             [type-function parameter-type-list result-type]]
-          import-count [size [assoc-list-get global-ctx [quote imports]]]
-          functions [assoc-list-get global-ctx [quote functions]]
-          func-index [div [size func-sigs] 2]]
-      [push func-sigs name]
-      [push func-sigs [list parameter-type-list result-type]]
+          import-count [size global-ctx-imports]
+          functions global-ctx-functions
+          func-index [div [size global-ctx-func-sigs] 2]]
+      [push global-ctx-func-sigs name]
+      [push global-ctx-func-sigs [list parameter-type-list result-type]]
 
       [push functions type-index]
-      [push [assoc-list-get global-ctx [quote exports]]
+      [push global-ctx-exports
         [wasm-export name kind-function func-index]]
       [push code end]
-      [push [assoc-list-get global-ctx [quote codes]] [code-to-bytes locals code]]
+      [push global-ctx-codes [code-to-bytes locals code]]
       ]
 
     [eq-word [quote comp-time] [first form]]
@@ -564,11 +558,10 @@
           tf [type-function parameter-type-list result-type]
           - [log [list [quote tf] tf]]
           type-index [push-type tf]
-          func-sigs [assoc-list-get global-ctx [quote function-signatures]]
           name [at form 2]]
-      [push func-sigs name]
-      [push func-sigs [list parameter-type-list result-type type-index]]
-      [push [assoc-list-get global-ctx [quote imports]]
+      [push global-ctx-func-sigs name]
+      [push global-ctx-func-sigs [list parameter-type-list result-type type-index]]
+      [push global-ctx-imports
         [wasm-import [at form 1] name [import-desc-func type-index]]]]
 
     [do
@@ -584,27 +577,27 @@
 [func func-section [func-indexes]
   [vector-section 3 [concat [u32-word-to-leb-128 [size func-indexes]] func-indexes]]]
 
-[func ctx-to-module [ctx]
-  [let [datas [assoc-list-get ctx [quote datas]]
-        s-datas [size datas]]
+[func ctx-to-module []
+  [let [s-datas [size global-ctx-datas]]
     [concat
       [quote [0 97 115 109
               1 0 0 0]]
       [vector-section-concat [quote 1] global-ctx-types]
-      [vector-section-concat [quote 2] [assoc-list-get ctx [quote imports]]]
-      [func-section [assoc-list-get ctx [quote functions]]]
-      [vector-section-concat [quote 7] [assoc-list-get ctx [quote exports]]]
+      [vector-section-concat [quote 2] global-ctx-imports]
+      [func-section global-ctx-functions]
+      [vector-section-concat [quote 7] global-ctx-exports]
       [if s-datas [vector-section [quote 12] [u32-word-to-leb-128 s-datas]] [list]]
-      [vector-section-concat [quote 10] [assoc-list-get ctx [quote codes]]]
-      [if s-datas [vector-section-concat [quote 11] datas] [list]]]]]
+      [vector-section-concat [quote 10] global-ctx-codes]
+      [if s-datas [vector-section-concat [quote 11] global-ctx-datas] [list]]]]]
 
-[func compile-top-forms-to-context [forms]
-  [push [assoc-list-get global-ctx [quote imports]]
+[func compile-top-forms-to-module [forms]
+  [push global-ctx-imports
     [wasm-import [quote env] [quote memory] [import-desc-mem-min [quote 0]]]]
-  [push [assoc-list-get global-ctx [quote datas]]
+  [push global-ctx-datas
     [passive-data-word [quote abcd]]]
   [for i 0 [size forms]
     [compile-top-level-form [at forms i]]]
-  global-ctx]
+  [ctx-to-module]
+  ]
 
-[export ctx-to-module compile-top-forms-to-context]
+[export compile-top-forms-to-module]
