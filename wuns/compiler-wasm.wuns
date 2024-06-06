@@ -291,11 +291,11 @@
 
 [func identity [x] x]
 
-[external-func make-interpreter-context [] [context]]
+[external-func make-interpreter-context [word] [context]]
 
 [external-func context-eval [context form] [any]]
 
-[constant comp-time-context [make-interpreter-context]]
+[constant comp-time-context [make-interpreter-context [quote comp-time]]]
 
 [func quote-args [list]
   [let [ml [mutable-list]]

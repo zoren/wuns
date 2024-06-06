@@ -1,7 +1,7 @@
 import path from 'node:path'
 import fs from 'node:fs'
 
-import { unword } from './core.js'
+import { print } from './core.js'
 import { parseStringToForms } from './parseByHand.js'
 import { makeContext } from './interpreter.js'
 
@@ -22,8 +22,12 @@ const setFiles = ({ setFile }) => {
   for (const [file, content] of wunsFileContent) setFile(file, content)
 }
 
-defineImportFunction('make-interpreter-context', () => {
+defineImportFunction('make-interpreter-context', (name) => {
   const ctx = makeContext()
+  const prefix = name + ':'
+  ctx.defineImportFunction('log', (form) => {
+    console.log(prefix, print(form))
+  })
   setFiles(ctx)
   return ctx
 })
@@ -31,6 +35,9 @@ defineImportFunction('make-interpreter-context', () => {
 defineImportFunction('context-eval', (context, form) => {
   const { evalFormCurrentModule } = context
   return evalFormCurrentModule(form)
+})
+defineImportFunction('log', (form) => {
+  console.log('complog:', print(form))
 })
 setFiles(compilerContext)
 parseEvalFile('compiler-wasm.wuns')
@@ -56,18 +63,13 @@ for (const n of moduleNumbers) {
 // console.log('---')
 const hexDump = (moduleBytes) => {
   for (let i = 0; i < moduleBytes.length; i += 16) {
-    console.log(
-      [...moduleBytes
-        .slice(i, i + 16)]
-        .map((n) => n.toString(16).padStart(2, '0'))
-        .join(' '),
-    )
+    console.log([...moduleBytes.slice(i, i + 16)].map((n) => n.toString(16).padStart(2, '0')).join(' '))
   }
 }
 // hexDump(moduleNumbers)
 const moduleBytes = new Uint8Array(moduleNumbers)
 // console.log('---')
-// hexDump(moduleBytes)
+hexDump(moduleBytes)
 
 const inputFileName = path.basename(inputFilePath)
 const outputFilePath = inputFileName.replace(/\.wuns$/, '.wasm')
