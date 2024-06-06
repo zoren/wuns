@@ -136,6 +136,8 @@
     [make-binary-i32 bitwise-ior 0x72]
     [make-binary-i32 bitwise-xor 0x73]
 
+    [make-binary-i32 bitwise-shift-left 0x74]
+
     [make-operation-obj [quote load] [quote 0x28]
       [list immediate-u32 immediate-u32] [list i32] [list i32]]
     [make-operation-obj [quote store] [quote 0x36]
@@ -537,7 +539,8 @@
           [loop [i 3]
             [when [lt i [dec [size form]]]
               [comment remember to check type is empty maybe even drop unused and warn instead]
-              [compile-form-mutable func-ctx code-locals [at form i]]]]
+              [compile-form-mutable func-ctx code-locals [at form i]]
+              [continue i [inc i]]]]
           result-type [compile-form-mutable func-ctx code-locals [last form]]
           type-index
           [push-type global-ctx

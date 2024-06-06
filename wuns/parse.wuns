@@ -1,5 +1,5 @@
 [comp-time
-  [import standard-library.wuns 0 1 2 assert when-not do abort log dec concat]
+  [import standard-library.wuns 0 1 2 3 4 assert when-not do abort log dec concat]
 
   [func load32 [addr] [list [quote load] 2 0 addr]]
 
@@ -7,20 +7,21 @@
 
   [func i32.bitwise-not [x] [bitwise-xor [i32 -1] x]]
   [func mk-i32 [x] [list [quote i32] x]]
-  [func is-power-of-2 [x] [eq [i32 0] [bitwise-and x [sub x [i32 1]]]]]
+  [func is-power-of-2 [x] [eq [i32 0] [bitwise-and x [dec x]]]]
 
   [func not-is-align [n x]
     [assert n must not be zero]
     [assert [is-power-of-2 n] must be power of 2]
     [list [quote bitwise-and] [mk-i32 [dec n]] x]]
+  [func not-is-address-aligned [x] [not-is-align 4 x]]
   [func is-align [n x]
-    [list [quote eq] [quote i32 0] [not-is-align n x]]]
+    [list [quote eq] [mk-i32 0] [not-is-align n x]]]
   [func align [n x]
     [assert n must not be zero]
     [assert [is-power-of-2 n] must be power of 2]
     [let [dn [dec n]]
       [list [quote bitwise-and]
-        [list [quote add] [mk-i32 dn] [list [quote quote] x]]
+        [list [quote add] [mk-i32 dn] x]
         [mk-i32 [i32.bitwise-not dn]]]]]
 ]
 
@@ -31,13 +32,13 @@
 
 [func bump-alloc [size]
   [if [le size [i32 0]] [unreachable]]
-  [if [gt size [mul [i32 64] [i32 1024]]] [unreachable]]
+  [if [gt size [i32 65536]] [unreachable]]
   [if [not-is-address-aligned size] [unreachable]]
   [let
     [current-top [load32 [i32 0]]
      - [if [eq current-top [i32 0]] [unreachable]]
-     - [if [not-is-align 4 current-top] [unreachable]]
-     mem-size-bytes [mul [mul [i32 64] [i32 1024]] [memory.size 0]]
+     - [if [not-is-address-aligned current-top] [unreachable]]
+     mem-size-bytes [bitwise-shift-left [memory.size 0] [i32 16]]
      - [if [gt current-top mem-size-bytes] [unreachable]]
      new-top [add current-top size]]
     [if [gt new-top mem-size-bytes] [unreachable]]
