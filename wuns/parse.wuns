@@ -14,8 +14,6 @@
     [assert [is-power-of-2 n] must be power of 2]
     [list [quote bitwise-and] [mk-i32 [dec n]] x]]
   [func not-is-address-aligned [x] [not-is-align 4 x]]
-  [func is-align [n x]
-    [list [quote eq] [mk-i32 0] [not-is-align n x]]]
   [func align [n x]
     [assert n must not be zero]
     [assert [is-power-of-2 n] must be power of 2]
@@ -25,7 +23,10 @@
         [mk-i32 [i32.bitwise-not dn]]]]]
 ]
 
+[external-func env log-size-pointer [i32 i32] []]
+
 [func bump-alloc-init []
+  [log-size-pointer [i32 0] [i32 16]]
   [if [eq [load32 [i32 0]] [i32 0]]
     [store32 [i32 0] [i32 16]]
     [unreachable]]]

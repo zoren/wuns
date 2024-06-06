@@ -103,7 +103,7 @@
 [func make-operation-obj [name opcode immediate-parameters parameters results]
   [concat
     [quote [name]] [list name]
-    [quote [opcode]] [list opcode]
+    [quote [opcode]] [if [is-list opcode] opcode [list opcode]]
     [quote [immediate-parameters]] [list immediate-parameters]
     [quote [parameters]] [list parameters]
     [quote [arity]] [list [add [size immediate-parameters] [size parameters]]]
@@ -143,6 +143,8 @@
       [list immediate-u32] [] [list i32]]
     [make-operation-obj [quote memory.grow] [quote 0x40]
       [list immediate-u32] [list i32] [list i32]]
+    [make-operation-obj [quote memory.init] [quote 0xfc 0x08]
+      [list immediate-u32] [list i32 i32 i32] [list i32]]
     ]]
 
 [func get-instruction [name]
@@ -225,6 +227,15 @@
     [u32-word-to-leb-128 min]
     [u32-word-to-leb-128 max]]]
 
+[func import-desc-func [index]
+  [concat [list 0] [u32-word-to-leb-128 index]]]
+
+[func active-data-word [offset w]
+  [concat [list 0 i32.const] [s32-word-to-leb-128 offset] [list end] [word-to-length-bytes w]]]
+
+[func passive-data-word [w]
+  [concat [list 1] [word-to-length-bytes w]]]
+
 [func decimal-word-to-i32 [dw]
   [if [eq-word [first dw] [quote 45]]
     [let [s [sub 0 [size dw]]]
@@ -270,7 +281,8 @@
     [quote functions] [mutable-list]
     [quote exports] [mutable-list]
     [quote codes] [mutable-list]
-    [quote function-signatures] [mutable-list]]]
+    [quote function-signatures] [mutable-list]
+    [quote datas] [mutable-list]]]
 
 [constant global-ctx [make-mty-ctx]]
 
@@ -454,19 +466,20 @@
                   [assert [eq-word [at immediate-parameters i] immediate-u32] immediate parameter type mismatch]
                   [push-code-u32 code [at form [inc i]]]]
               [assoc-list-get instruction [quote results]]]
-            [if [is-negative [assoc-list-index func-sigs first-form]]
-              [let [q-form [quote-args form]
-                    macro-code [context-eval comp-time-context q-form]]
-                [compile-form-mutable local-ctx code macro-code]]
-              [let [func-sig [assoc-list-get func-sigs first-form]
-                    parameter-types [first func-sig]]
-                [assert [eq [size parameter-types] [size args]] parameter arity mismatch]
-                [for i 0 [size args]
-                  [comment todo also check types]
-                  [compile-form-mutable local-ctx code [at args i]]]
-                [push-code-byte code call]
-                [push-code-u32 code [third func-sig]]
-                [second func-sig]]]
+            [let [sig-index [assoc-list-index func-sigs first-form]]
+              [if [is-negative sig-index]
+                [let [q-form [quote-args form]
+                      macro-code [context-eval comp-time-context q-form]]
+                  [compile-form-mutable local-ctx code macro-code]]
+                [let [func-sig [at func-sigs [inc sig-index]]
+                      parameter-types [first func-sig]]
+                  [assert [eq [size parameter-types] [size args]] parameter arity mismatch]
+                  [for i 0 [size args]
+                    [comment todo also check types]
+                    [compile-form-mutable local-ctx code [at args i]]]
+                  [push-code-byte code call]
+                  [push-code-u32 code [div sig-index 2]]
+                  [second func-sig]]]]
             ]]]]]]
 
 [func locals-to-bytes [locals]
@@ -485,6 +498,22 @@
         [locals-to-bytes locals]
         instructions]]
     [concat [u32-word-to-leb-128 [size bytes]] bytes]]]
+
+[func parse-type-list [types]
+  [let [ml [mutable-list]]
+    [for i 0 [size types]
+      [let
+        [type-word [at types i]
+         type-code
+         [ifs
+          [eq-word [quote i32] type-word]
+          i32
+
+          [do
+            [log unknown]
+            [abort]]]]
+        [push ml type-code]]]
+    ml]]
 
 [func compile-top-level-form [form]
   [ifs
@@ -513,10 +542,11 @@
           type-index
           [push-type global-ctx
             [type-function parameter-type-list result-type]]
+          import-count [size [assoc-list-get global-ctx [quote imports]]]
           functions [assoc-list-get global-ctx [quote functions]]
-          func-index [size functions]]
+          func-index [div [size func-sigs] 2]]
       [push func-sigs name]
-      [push func-sigs [list parameter-type-list result-type func-index]]
+      [push func-sigs [list parameter-type-list result-type]]
 
       [push functions type-index]
       [push [assoc-list-get global-ctx [quote exports]]
@@ -528,6 +558,19 @@
     [eq-word [quote comp-time] [first form]]
     [for i 1 [size form]
       [context-eval comp-time-context [at form i]]]
+
+    [eq-word [quote external-func] [first form]]
+    [let [parameter-type-list [parse-type-list [at form 3]]
+          result-type [parse-type-list [at form 4]]
+          tf [type-function parameter-type-list result-type]
+          - [log [list [quote tf] tf]]
+          type-index [push-type global-ctx tf]
+          func-sigs [assoc-list-get global-ctx [quote function-signatures]]
+          name [at form 2]]
+      [push func-sigs name]
+      [push func-sigs [list parameter-type-list result-type type-index]]
+      [push [assoc-list-get global-ctx [quote imports]]
+        [wasm-import [at form 1] name [import-desc-func type-index]]]]
 
     [do
       [log [list form ]]
@@ -543,18 +586,24 @@
   [vector-section 3 [concat [u32-word-to-leb-128 [size func-indexes]] func-indexes]]]
 
 [func ctx-to-module [ctx]
-  [concat
-    [quote [0 97 115 109
-            1 0 0 0]]
-    [vector-section-concat [quote 1] [assoc-list-get ctx [quote types]]]
-    [vector-section-concat [quote 2] [assoc-list-get ctx [quote imports]]]
-    [func-section [assoc-list-get ctx [quote functions]]]
-    [vector-section-concat [quote 7] [assoc-list-get ctx [quote exports]]]
-    [vector-section-concat [quote 10] [assoc-list-get ctx [quote codes]]]]]
+  [let [datas [assoc-list-get ctx [quote datas]]
+        s-datas [size datas]]
+    [concat
+      [quote [0 97 115 109
+              1 0 0 0]]
+      [vector-section-concat [quote 1] [assoc-list-get ctx [quote types]]]
+      [vector-section-concat [quote 2] [assoc-list-get ctx [quote imports]]]
+      [func-section [assoc-list-get ctx [quote functions]]]
+      [vector-section-concat [quote 7] [assoc-list-get ctx [quote exports]]]
+      [if s-datas [vector-section [quote 12] [u32-word-to-leb-128 s-datas]] [list]]
+      [vector-section-concat [quote 10] [assoc-list-get ctx [quote codes]]]
+      [if s-datas [vector-section-concat [quote 11] datas] [list]]]]]
 
 [func compile-top-forms-to-context [forms]
   [push [assoc-list-get global-ctx [quote imports]]
     [wasm-import [quote env] [quote memory] [import-desc-mem-min [quote 0]]]]
+  [push [assoc-list-get global-ctx [quote datas]]
+    [passive-data-word [quote abcd]]]
   [for i 0 [size forms]
     [compile-top-level-form [at forms i]]]
   global-ctx]
