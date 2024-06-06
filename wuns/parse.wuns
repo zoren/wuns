@@ -26,7 +26,6 @@
 [external-func env log-size-pointer [i32 i32] []]
 
 [func bump-alloc-init []
-  [log-size-pointer [i32 0] [i32 16]]
   [if [eq [load32 [i32 0]] [i32 0]]
     [store32 [i32 0] [i32 16]]
     [unreachable]]]
@@ -45,3 +44,14 @@
     [if [gt new-top mem-size-bytes] [unreachable]]
     [store32 [i32 0] new-top]
     current-top]]
+
+[func test-log []
+  [let [s [i32 16]
+        p [bump-alloc s]]
+    [loop [i [i32 0]]
+      [if [lt i s]
+        [let []
+          [store8 0 0 [add p i] [add [i32 97] i]]
+          [continue i [add i [i32 1]]]]
+        []]]
+    [log-size-pointer s p]]]

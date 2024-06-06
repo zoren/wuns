@@ -139,6 +139,8 @@
       [list immediate-u32 immediate-u32] [list i32] [list i32]]
     [make-operation-obj [quote store] [quote 0x36]
       [list immediate-u32 immediate-u32] [list i32 i32] []]
+    [make-operation-obj [quote store8] [quote 0x3a]
+      [list immediate-u32 immediate-u32] [list i32 i32] []]
     [make-operation-obj [quote memory.size] [quote 0x3f]
       [list immediate-u32] [] [list i32]]
     [make-operation-obj [quote memory.grow] [quote 0x40]
@@ -429,10 +431,10 @@
                 [if [eq-word [third cur-ctx] [quote loop]]
                   [first cur-ctx]
                   [continue cur-ctx [second cur-ctx]]]]]]]
-          [for-inc i 2 s-form
+          [for-inc i 1 2 s-form
             [let
               [local [assoc-list-get loop-ctx [at form i]]
-                arg-type [compile-form-mutable local-ctx code [at form [inc i]]]]
+               arg-type [compile-form-mutable local-ctx code [at form [inc i]]]]
               [comment todo check types]
               [push-code-byte code local.set]
               [push-code-u32 code [second local]]]]
@@ -582,8 +584,8 @@
     [concat
       [quote [0 97 115 109
               1 0 0 0]]
-      [vector-section-concat [quote 1] global-ctx-types]
-      [vector-section-concat [quote 2] global-ctx-imports]
+      [vector-section-concat 1 global-ctx-types]
+      [vector-section-concat 2 global-ctx-imports]
       [func-section global-ctx-functions]
       [vector-section-concat [quote 7] global-ctx-exports]
       [if s-datas [vector-section [quote 12] [u32-word-to-leb-128 s-datas]] [list]]
