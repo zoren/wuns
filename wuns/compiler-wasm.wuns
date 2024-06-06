@@ -180,15 +180,6 @@
           [continue i [inc i]]]
         -1]]]]
 
-[func push-type [ctx type]
-  [let [types [assoc-list-get ctx [quote types]]
-        index [index-of-word types type]]
-    [if [is-negative index]
-      [let [new-index [size types]]
-        [push types type]
-        new-index]
-      index]]]
-
 [constant kind-function 0]
 
 [func word-to-codepoints [w]
@@ -261,22 +252,8 @@
               multi [mul multi [quote 10]]]]
           res]]]]]
 
-[func type-list-to-code [ctx type-list]
-  [ifs
-    [eq-form type-list []]
-    empty-type
-
-    [eq-form type-list [list i32]]
-    i32
-
-    [let
-      [i [push-type ctx [type-function [] type-list]]]
-      [assert [lt i [quote 32]] not sure how to handle higher indexes]
-      i]]]
-
 [func make-mty-ctx []
   [list
-    [quote types] [mutable-list]
     [quote imports] [mutable-list]
     [quote functions] [mutable-list]
     [quote exports] [mutable-list]
@@ -285,6 +262,28 @@
     [quote datas] [mutable-list]]]
 
 [constant global-ctx [make-mty-ctx]]
+[constant global-ctx-types [mutable-list]]
+
+[func push-type [type]
+  [let [index [index-of-word global-ctx-types type]]
+    [if [is-negative index]
+      [let [new-index [size global-ctx-types]]
+        [push global-ctx-types type]
+        new-index]
+      index]]]
+
+[func type-list-to-code [type-list]
+  [ifs
+    [eq-form type-list []]
+    empty-type
+
+    [eq-form type-list [list i32]]
+    i32
+
+    [let
+      [i [push-type [type-function [] type-list]]]
+      [assert [lt i [quote 32]] not sure how to handle higher indexes]
+      i]]]
 
 [func push-code-byte [code-locals byte] [push [first code-locals] byte]]
 
@@ -369,7 +368,7 @@
            - [push-code-byte code dummy-type]
            - [assert [and [eq [size ct] 1] [eq [at ct 0] i32]] condition not i32]
            tt [compile-form-mutable local-ctx code [second args]]
-           enc-branch-type [type-list-to-code global-ctx tt]]
+           enc-branch-type [type-list-to-code tt]]
           [if [eq s-args 3]
             [do
               [push-code-byte code else]
@@ -414,7 +413,7 @@
                 [for i 2 [dec [size form]]
                   [compile-form-mutable let-loop-ctx code [at form i]]]
                 [let [last-body-type [compile-form-mutable let-loop-ctx code [last args]]]
-                  [set-array [first code] type-index [type-list-to-code global-ctx last-body-type]]
+                  [set-array [first code] type-index [type-list-to-code last-body-type]]
                   [push-code-byte code end]
                   last-body-type]]]
             [do
@@ -540,7 +539,7 @@
             [compile-form-mutable func-ctx code-locals [at form i]]]
           result-type [compile-form-mutable func-ctx code-locals [last form]]
           type-index
-          [push-type global-ctx
+          [push-type
             [type-function parameter-type-list result-type]]
           import-count [size [assoc-list-get global-ctx [quote imports]]]
           functions [assoc-list-get global-ctx [quote functions]]
@@ -564,7 +563,7 @@
           result-type [parse-type-list [at form 4]]
           tf [type-function parameter-type-list result-type]
           - [log [list [quote tf] tf]]
-          type-index [push-type global-ctx tf]
+          type-index [push-type tf]
           func-sigs [assoc-list-get global-ctx [quote function-signatures]]
           name [at form 2]]
       [push func-sigs name]
@@ -591,7 +590,7 @@
     [concat
       [quote [0 97 115 109
               1 0 0 0]]
-      [vector-section-concat [quote 1] [assoc-list-get ctx [quote types]]]
+      [vector-section-concat [quote 1] global-ctx-types]
       [vector-section-concat [quote 2] [assoc-list-get ctx [quote imports]]]
       [func-section [assoc-list-get ctx [quote functions]]]
       [vector-section-concat [quote 7] [assoc-list-get ctx [quote exports]]]
