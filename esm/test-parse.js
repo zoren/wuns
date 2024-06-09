@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-const module = new WebAssembly.Module(fs.readFileSync('parse.wasm'))
+const module = new WebAssembly.Module(fs.readFileSync('parse3.wasm'))
 const instantiate = () => {
   const memory = new WebAssembly.Memory({ initial: 1 })
   const ui8 = new Uint8Array(memory.buffer)
@@ -11,11 +11,12 @@ const instantiate = () => {
   const env = { memory, 'log-size-pointer': logSizePointer }
   const importObject = { env }
   const instance = new WebAssembly.Instance(module, importObject)
-  return instance
+  return { instance, memory }
 }
 
 {
-  const { exports } = instantiate()
+  const { instance } = instantiate()
+  const { exports } = instance
   const bumpAllocInit = exports['bump-alloc-init']
   const bumpAlloc = exports['bump-alloc']
   const expectRuntimeErrorUnreachable = (f) => {
@@ -52,9 +53,20 @@ const instantiate = () => {
   // hexDump(ui8)
 }
 {
-  const { exports } = instantiate()
+  const { instance, memory } = instantiate()
+  const { exports } = instance
+  const ui32 = new Uint32Array(memory.buffer)
   const bumpAllocInit = exports['bump-alloc-init']
   const testLog = exports['test-log']
-  bumpAllocInit()
-  testLog()
+  const testPassive = exports['test-passive']
+  try {
+    bumpAllocInit()
+    testLog()
+    testLog()
+    testPassive()
+  } catch (e) {
+    console.log(e)
+  } finally {
+    console.log('first memory dump', ui32.slice(0, 4))
+  }
 }
