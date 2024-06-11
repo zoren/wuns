@@ -107,7 +107,7 @@ export const makeContext = (options) => {
         const startEnv = env
         while (true) {
           if (!env) {
-            console.dir({ v, t: typeof v,startEnv }, { depth: null })
+            console.dir({ form, v, t: typeof v, startEnv }, { depth: null })
             throw new Error(`undefined variable ${v}`)
           }
           const { varValues, outer } = env
@@ -184,10 +184,6 @@ export const makeContext = (options) => {
           enclosingLoopEnv.continue = true
           return unit
         }
-      }
-      case 'list': {
-        const cargs = args.map(wunsComp)
-        return (env) => makeList(...cargs.map((carg) => carg(env)))
       }
       case 'i32': {
         const n = wordValue(args[0])
@@ -359,7 +355,8 @@ export const makeContext = (options) => {
         for (let i = 1; i < form.length; i += 2) expandedBindings.push(form[i], macroExpand(form[i + 1]))
         return makeList(first, ...expandedBindings)
       }
-      case 'func': {
+      case 'func':
+      case 'macro': {
         let [name, params, ...bodies] = args
         return makeList(first, name, params, ...bodies.map(macroExpand))
       }
@@ -367,8 +364,10 @@ export const makeContext = (options) => {
       case 'i32':
         return form
 
-      case 'list':
-      case 'constant':
+      case 'constant': {
+        const [varName, value] = args
+        return makeList(first, varName, macroExpand(value))
+      }
       case 'external-func':
       case 'import':
       case 'export':
@@ -386,13 +385,6 @@ export const makeContext = (options) => {
     const r = internalApply(args)
     return macroExpand(r)
   }
-  externalFunctions['macro-expand'] = (form) => {
-    const newLocal = macroExpand(form)
-    // console.log('macro-expand', form)
-    // console.log('macro-expand', newLocal)
-    return newLocal
-  }
-
   const getExported = (moduleName, exportedName) => {
     const modEnv = modules.get(moduleName)
     if (!modEnv) throw new Error(`module ${moduleName} not found`)
@@ -445,6 +437,7 @@ export const makeContext = (options) => {
     apply,
     evalLogForms,
     evalFormCurrentModule,
+    macroExpandCurrentModule: macroExpand,
     parseEvalString,
     parseEvalFile,
     defineImportFunction,

@@ -105,3 +105,7 @@ export const context_eval = (context, form) => {
   const { evalFormCurrentModule } = context
   return evalFormCurrentModule(form)
 }
+export const context_macro_expand = (context, form) => {
+  const { macroExpandCurrentModule } = context
+  return macroExpandCurrentModule(form)
+}

@@ -1,5 +1,5 @@
 [import standard-library.wuns
-  concat size inc assoc-list-get eq-word at for 0]
+  concat size inc assoc-list-get eq-word at for 0 list]
 
 [func make-operation-obj [name opcode immediate-parameters parameters results]
   [concat
