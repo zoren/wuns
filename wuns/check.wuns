@@ -27,7 +27,7 @@
 
 [func is-decimal [dw]
   [let [s [size dw]]
-    [loop [i 0]
+    [loop [i [if [eq [at-word dw 0] [quote 45]] 1 0]]
       [if [lt i s]
         [let [c [at-word dw i]]
           [if [and [le [quote 48] c] [le c [quote 57]]]
