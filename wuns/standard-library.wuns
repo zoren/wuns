@@ -1,11 +1,16 @@
 [macro comment [.. -] []]
 
-[external-func mutable-list [] [mutable-list]]
-[external-func push [mutable-list form] []]
+[external-func mutable-list [] [[mutable-list any]]]
+[external-func push [[mutable-list any] any] []]
 [external-func size [form] [i32]]
 [external-func at [form i32] [form]]
 
+[macro type [params results]
+  [comment [type [[list form] [list form]] [[]]]]
+  []]
+
 [macro constant-ids [.. id-constants]
+  [type [.. word] [[]]]
   [let [f [mutable-list]]
     [push f [quote let]]
     [push f []]
@@ -38,11 +43,14 @@
 [func fourth [l] [at l 3]]
 [func last [l] [at l -1]]
 
-[external-func slice [list i32 i32] [list]]
+[external-func slice [[list any] i32 i32] [[list any]]]
 
-[func rest [l] [slice l 1 [size l]]]
+[func rest [l]
+  [type [list any] [list any]]
+  [slice l 1 [size l]]]
 
 [func push-all [mut-list list]
+
   [let [s-l [size list]]
     [loop [i 0]
       [if [lt i s-l]
@@ -51,7 +59,7 @@
           [continue i [inc i]]]
         []]]]]
 
-[external-func freeze [mutable-list] [list]]
+[external-func freeze [[mutable-list any]] [[list any]]]
 
 [func concat-lists [lists]
   [let [res [mutable-list] s [size lists]]
@@ -103,10 +111,10 @@
   [let [s [size clauses]]
     [assert [not [is-zero s]] ifs requires an odd number of arguments]
     [if [eq s 1]
-        [first clauses]
-        [list [quote if] [first clauses]
-          [second clauses]
-          [concat [quote [ifs]] [slice clauses 2 [size clauses]]]]]]]
+      [first clauses]
+      [list [quote if] [first clauses]
+        [second clauses]
+        [concat [quote [ifs]] [slice clauses 2 [size clauses]]]]]]]
 
 [external-func set-array [mutable-list i32 form] []]
 
@@ -163,11 +171,13 @@
 [macro for-inc [iw start increment end .. forms]
   [for-func iw start increment end forms]]
 
+[external-func at-word [word i32] [i32]]
+
 [func eq-word [a b]
   [and [eq [size a] [size b]]
     [loop [i 0]
       [if [lt i [size a]]
-        [if [eq [at a i] [at b i]]
+        [if [eq [at-word a i] [at-word b i]]
           [continue i [inc i]]
           0]
         1]]]]

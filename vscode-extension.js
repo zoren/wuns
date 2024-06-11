@@ -260,7 +260,7 @@ const pointToPosition = ({ row, column }) => new Position(row, column)
 const rangeFromNode = ({ startPosition, endPosition }) =>
   new Range(pointToPosition(startPosition), pointToPosition(endPosition))
 
-const makeInterpretCurrentFile = async () => {
+const makeInterpretCurrentFile = async (context) => {
   const outputChannel = window.createOutputChannel('wuns output', wunsLanguageId)
   // outputChannel.show(true)
   const appendShow = (s) => {
@@ -268,14 +268,15 @@ const makeInterpretCurrentFile = async () => {
     outputChannel.show(true)
   }
   const { meta, print } = await import('./esm/core.js')
-  const { evalLogForms, defineImportFunction } = await import('./esm/interpreter.js')
-  defineImportFunction('log', (s) => {
-    appendShow('interp log: ' + print(s))
-  })
-  defineImportFunction('report-error', (msg, form) => {
-    console.log('report-error', print(msg), print(meta(form)))
-  })
+  const { makeContext } = await import('./esm/interpreter.js')
+  const wunsDir = context.extensionPath + '/wuns/'
   return () => {
+    const ctx = makeContext({ wunsDir, contextName: 'interpret'})
+    const { evalLogForms, defineImportFunction } = ctx
+    defineImportFunction('report-error', (msg, form) => {
+      console.log('report-error', print(msg), print(meta(form)))
+    })
+
     const document = getActiveTextEditorDocument()
     const { forms } = cacheFetchOrParse(document)
     outputChannel.clear()
@@ -289,33 +290,20 @@ const makeInterpretCurrentFile = async () => {
   }
 }
 
-const fs = require('node:fs')
-
 const makeCheckCurrentFileCommand = async (context) => {
   const outputChannel = window.createOutputChannel('wuns check', wunsLanguageId)
   const diag = languages.createDiagnosticCollection('wuns')
   const { meta, print } = await import('./esm/core.js')
-  const { defineImportFunction, parseEvalFile, getExported, apply, setFile } = await import('./esm/interpreter.js')
+  const { makeContext } = await import('./esm/interpreter.js')
   const appendShow = (s) => {
     outputChannel.appendLine(s)
     outputChannel.show(true)
   }
   const wunsDir = context.extensionPath + '/wuns/'
-  const wunsFiles = fs.readdirSync(wunsDir)
-
-  for (const file of wunsFiles) {
-    if (!file.endsWith('.wuns')) continue
-    const bla = wunsDir + file
-    const content = fs.readFileSync(bla, 'utf8')
-    console.log({file})
-    setFile(file, content)
-  }
-
   return async () => {
+    const ctx = makeContext({ wunsDir, contextName: 'check' })
+    const { defineImportFunction, parseEvalFile, getExported, apply } = ctx
     const diagnostics = []
-    defineImportFunction('log', (form) => {
-      appendShow('check log: ' + print(form))
-    })
     defineImportFunction('report-error', (msg, form) => {
       if (!Array.isArray(msg)) throw new Error('msg is not an array')
       const metaData = meta(form)
@@ -325,7 +313,8 @@ const makeCheckCurrentFileCommand = async (context) => {
         console.log('metaData', metaData)
         console.log('form', form)
         console.log('range', range)
-        throw new Error('range is not an array ' + print(form) + ' ' + print(metaData))
+        console.error('range is not an array ' + print(form) + ' ' + print(metaData))
+        return
       }
       const diagnostic = new Diagnostic(new Range(...range), msg.map(print).join(' '), DiagnosticSeverity.Error)
       diagnostics.push(diagnostic)
@@ -398,7 +387,7 @@ async function activate(context) {
     return { tree, forms: treeToForms(tree) }
   }
   console.log('starting wuns lang extension: ' + context.extensionPath)
-  const interpretCurrentFile = await makeInterpretCurrentFile()
+  const interpretCurrentFile = await makeInterpretCurrentFile(context)
   context.subscriptions.push(commands.registerCommand('wunslang.interpret', interpretCurrentFile))
   context.subscriptions.push(commands.registerCommand('wunslang.check', await makeCheckCurrentFileCommand(context)))
 

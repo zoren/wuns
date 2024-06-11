@@ -1,7 +1,7 @@
 import path from 'node:path'
 import fs from 'node:fs'
 import { print, wordValue, unword } from './core.js'
-import { parseStringToForms } from './parseByHand.js'
+import { parseStringToForms } from './parseTreeSitter.js'
 import { i32binops } from './instructions.js'
 import { defineImportFunction, parseEvalFile, getExported, apply, setFile } from './interpreter.js'
 

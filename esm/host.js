@@ -48,12 +48,18 @@ const number = (f) => {
 }
 
 export const at = (v, i) => {
+  if (!isList(v)) throw new Error('at expects list, got' + typeof v + ' ' + v)
   const len = size(v)
   const ni = number(i)
   if (ni < -len || ni >= len) throw new Error('index out of bounds: ' + i + ' ' + len)
-  if (isWord(v)) return String(v).at(ni).charCodeAt(0)
-  const elem = v.at(ni)
-  return elem
+  return v.at(ni)
+}
+export const at_word = (v, i) => {
+  if (!isWord(v)) throw new Error('at-word expects word')
+  const len = size(v)
+  const ni = number(i)
+  if (ni < -len || ni >= len) throw new Error('index out of bounds: ' + i + ' ' + len)
+  return String(v).at(ni).charCodeAt(0)
 }
 // come up with a better name, the list is not frozen, a frozen copy is made
 export const freeze = (ar) => {
@@ -94,17 +100,8 @@ export const log = (form) => {
   console.log(print(form))
   return unit
 }
-import { memArrayBuffer, i32mem, u32mem } from './core.js'
-export const store = (addr, value) => {
-  if ((addr | 0) !== addr) throw new Error('store expected 32-bit signed integer, found: ' + addr)
-  if ((value | 0) !== value) throw new Error('store expected 32-bit signed integer, found: ' + value)
-  if (!memArrayBuffer) throw new Error('memory not defined')
-  if (addr < 0 || addr > memArrayBuffer.byteLength)
-    throw new Error('store out of bounds: ' + addr + ' ' + memArrayBuffer.byteLength)
-  if (value < 0) {
-    i32mem[addr >> 2] = value
-  } else {
-    u32mem[addr >> 2] = value
-  }
-  return unit
+
+export const context_eval = (context, form) => {
+  const { evalFormCurrentModule } = context
+  return evalFormCurrentModule(form)
 }

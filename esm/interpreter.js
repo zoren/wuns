@@ -1,5 +1,7 @@
+import fs from 'fs'
+
 import { makeList, wordValue, isWord, isList, isUnit, unit, print, unword, isSigned32BitInteger } from './core.js'
-import { parseStringToForms } from './parseByHand.js'
+import { parseStringToForms } from './parseTreeSitter.js'
 import { i32binops } from './instructions.js'
 
 const isValidRuntimeValue = (v) => isWord(v) || (isList(v) && v.every(isValidRuntimeValue))
@@ -12,28 +14,34 @@ for (const [name, op] of Object.entries(i32binops)) {
     'a',
     'b',
     `
-if ((a | 0) !== a) throw new Error('op ${op} expected 32-bit signed integer, found: ' + a + ' of type ' + typeof a)
-if ((b | 0) !== b) throw new Error('op ${op} expected 32-bit signed integer, found: ' + b)
+if ((a | 0) !== a) throw new Error('op ${op} expected 32-bit signed integer, found: ' + a + ' ${op} ' + b)
+if ((b | 0) !== b) throw new Error('op ${op} expected 32-bit signed integer, found: ' + a + ' ${op} ' + b)
 return (a ${op} b) | 0`,
   )
 }
-Object.freeze(instructions)
+instructions['unreachable'] = () => {
+  throw new Error('unreachable')
+}
 
-const hostExports = Object.entries(await import('./host.js'))
+const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 
-export const makeContext = () => {
-  const externalFunctions = {}
-  for (const [name, f] of hostExports) externalFunctions[name.replace(/_/g, '-')] = f
+export const makeContext = (options) => {
+  const { wunsDir, contextName } = options
+  const files = new Map()
+  for (const file of fs.readdirSync(wunsDir)) {
+    if (!file.endsWith('.wuns')) continue
+    files.set(file, fs.readFileSync(wunsDir + file, 'ascii'))
+  }
+  const prefix = contextName + ':'
+  const externalFunctions = {
+    'make-interpreter-context': (contextName) => makeContext({ ...options, contextName }),
+    log: (form) => {
+      console.log(prefix, print(form))
+    },
+  }
+  for (const [name, f] of hostExports) externalFunctions[name] = f
 
   let currentFilename = null
-  const files = new Map()
-  const getFile = (filename) => {
-    if (files.has(filename)) return files.get(filename)
-    console.log(files)
-    console.log([...files.keys()])
-    throw new Error('file not found: ' + filename)
-  }
-
   const modules = new Map()
   const currentModuleEnv = () => {
     let modEnv = modules.get(currentFilename)
@@ -45,11 +53,13 @@ export const makeContext = () => {
   const currentModuleVars = () => {
     return currentModuleEnv().varValues
   }
-
   const moduleVarSet = (name, value) => {
     const moduleVars = currentModuleVars()
-    if (moduleVars.has(name)) throw new Error('global variable already defined: ' + name)
     moduleVars.set(name, value)
+  }
+  const getFile = (filename) => {
+    if (files.has(filename)) return files.get(filename)
+    throw new Error('file not found: ' + filename)
   }
   const seqApply = (funcOrMacro, numberOfGivenArgs) => {
     const { name, params, restParam, moduleEnv } = funcOrMacro
@@ -57,23 +67,25 @@ export const makeContext = () => {
     let setArguments
     if (restParam === null) {
       if (arity !== numberOfGivenArgs) throw new Error(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
-      setArguments = (varValues, args) => {
+      setArguments = (args) => {
+        const varValues = new Map()
         for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+        return varValues
       }
     } else {
       if (arity > numberOfGivenArgs)
         throw new Error(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
-      setArguments = (varValues, args) => {
+      setArguments = (args) => {
+        const varValues = new Map()
         for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
         varValues.set(restParam, makeList(...args.slice(arity)))
+        return varValues
       }
     }
     return (args) => {
       const { cbodies } = funcOrMacro
       assert(cbodies, `no cbodies in: ${name}`)
-      const varValues = new Map()
-      setArguments(varValues, args)
-      const inner = { varValues, outer: moduleEnv }
+      const inner = { varValues: setArguments(args), outer: moduleEnv }
       let result = unit
       for (const cbody of cbodies) result = cbody(inner)
       return result
@@ -92,8 +104,12 @@ export const makeContext = () => {
     if (isWord(form)) {
       const v = wordValue(form)
       return (env) => {
+        const startEnv = env
         while (true) {
-          if (!env) throw new Error(`undefined variable ${v}`)
+          if (!env) {
+            console.dir({ v, t: typeof v,startEnv }, { depth: null })
+            throw new Error(`undefined variable ${v}`)
+          }
           const { varValues, outer } = env
           if (varValues.has(v)) return varValues.get(v)
           env = outer
@@ -119,11 +135,8 @@ export const makeContext = () => {
       case 'loop': {
         const [bindings, ...bodies] = args
         const compBindings = []
-        for (let i = 0; i < bindings.length - 1; i += 2) {
-          const varName = wordValue(bindings[i])
-          const compVal = wunsComp(bindings[i + 1])
-          compBindings.push([varName, compVal])
-        }
+        for (let i = 0; i < bindings.length - 1; i += 2)
+          compBindings.push([wordValue(bindings[i]), wunsComp(bindings[i + 1])])
         const cbodies = compBodies(bodies)
         if (firstWordValue === 'let')
           return (env) => {
@@ -220,7 +233,7 @@ export const makeContext = () => {
         assert(funcObj, `external-func function ${name} not found`)
         assert(typeof funcObj === 'function', `external-func expected function, found ${funcObj}`)
         assert(isList(params), `external-func expected list of parameters, found ${params}`)
-        for (const param of params) assert(isWord(param), `external-func expected word, found ${param}`)
+        // for (const param of params) assert(isWord(param), `external-func expected word, found ${param}`)
         const actualParameterCount = funcObj.length
         assert(
           params.length === actualParameterCount,
@@ -270,9 +283,24 @@ export const makeContext = () => {
     try {
       const inst = instructions[firstWordValue]
       if (inst) {
-        const cargs = args.map(wunsComp)
-        assert(cargs.length === 2, `expected 2 arguments, got ${cargs.length}`)
-        return (env) => inst(...cargs.map((carg) => carg(env)))
+        if (typeof inst === 'function') {
+          const parameterCount = inst.length
+          assert(args.length === parameterCount, `expected ${parameterCount} arguments, got ${args.length}`)
+          const cargs = args.map(wunsComp)
+          return (env) => inst(...cargs.map((carg) => carg(env)))
+        } else if (typeof inst === 'object') {
+          const { immediateParams, regularParams, func } = inst
+          const arity = immediateParams + regularParams
+          assert(args.length === arity, `${firstWordValue} expected ${arity} arguments, got ${args.length}`)
+          const immediateArgs = args.slice(0, immediateParams)
+          for (const arg of immediateArgs) assert(isSigned32BitInteger(arg), `expected word, found ${arg}`)
+          const cargs = args.slice(immediateParams).map(wunsComp)
+          const immediateValues = immediateArgs.map((arg) => wordValue(arg))
+          return (env) => {
+            const regularValues = cargs.map((carg) => carg(env))
+            return func(...immediateValues, ...regularValues)
+          }
+        }
       }
       const funcOrMacro = currentModuleVars().get(firstWordValue)
       if (funcOrMacro === undefined)
@@ -307,6 +335,63 @@ export const makeContext = () => {
       throw e
     }
   }
+  const macroExpand = (form) => {
+    if (isWord(form)) return form
+    if (!isList(form)) return form
+    if (form.length === 0) return form
+    const [first, ...args] = form
+    if (!isWord(first)) return form
+    const firstWordValue = wordValue(first)
+    switch (firstWordValue) {
+      case 'if':
+        return makeList(first, ...args.map(macroExpand))
+      case 'let':
+      case 'loop': {
+        let [bindings, ...bodies] = args
+        let expandedBindings = []
+        for (let i = 0; i < bindings.length - 1; i += 2)
+          expandedBindings.push(bindings[i], macroExpand(bindings[i + 1]))
+        let expandedBodies = bodies.map(macroExpand)
+        return makeList(first, makeList(...expandedBindings), ...expandedBodies)
+      }
+      case 'continue': {
+        let expandedBindings = []
+        for (let i = 1; i < form.length; i += 2) expandedBindings.push(form[i], macroExpand(form[i + 1]))
+        return makeList(first, ...expandedBindings)
+      }
+      case 'func': {
+        let [name, params, ...bodies] = args
+        return makeList(first, name, params, ...bodies.map(macroExpand))
+      }
+      case 'quote':
+      case 'i32':
+        return form
+
+      case 'list':
+      case 'constant':
+      case 'external-func':
+      case 'import':
+      case 'export':
+        throw new Error(`cannot macro-expand ${firstWordValue}`)
+    }
+    const inst = instructions[firstWordValue]
+    if (inst) return makeList(first, ...args.map(macroExpand))
+    const funcOrMacro = currentModuleVars().get(firstWordValue)
+    if (funcOrMacro === undefined) return makeList(first, ...args.map(macroExpand))
+    if (typeof funcOrMacro === 'function') return makeList(first, ...args.map(macroExpand))
+    if (typeof funcOrMacro !== 'object') throw new Error(`expected function or object ${funcOrMacro}`)
+    const { isMacro } = funcOrMacro
+    if (!isMacro) return makeList(first, ...args.map(macroExpand))
+    const internalApply = seqApply(funcOrMacro, args.length)
+    const r = internalApply(args)
+    return macroExpand(r)
+  }
+  externalFunctions['macro-expand'] = (form) => {
+    const newLocal = macroExpand(form)
+    // console.log('macro-expand', form)
+    // console.log('macro-expand', newLocal)
+    return newLocal
+  }
 
   const getExported = (moduleName, exportedName) => {
     const modEnv = modules.get(moduleName)
@@ -327,6 +412,7 @@ export const makeContext = () => {
     const cform = wunsComp(form)
     return cform === null ? unit : cform(moduleEnv)
   }
+  externalFunctions['eval'] = (form) => compEval(form, currentModuleEnv())
 
   const evalLogForms = (forms) => {
     try {
@@ -340,7 +426,7 @@ export const makeContext = () => {
     }
   }
 
-  const evalFormCurrentModule = form => compEval(form, currentModuleEnv())
+  const evalFormCurrentModule = (form) => compEval(form, currentModuleEnv())
 
   const parseEvalString = (content) => {
     evalLogForms(parseStringToForms(content))
@@ -350,11 +436,6 @@ export const makeContext = () => {
     currentFilename = filename
     const content = getFile(filename)
     parseEvalString(content)
-  }
-  const setFile = (filename, fileContent) => {
-    if (typeof filename !== 'string') throw new Error('expected string')
-    if (typeof fileContent !== 'string') throw new Error('expected string')
-    files.set(filename, fileContent)
   }
   const defineImportFunction = (name, f) => {
     externalFunctions[name] = f
@@ -366,7 +447,6 @@ export const makeContext = () => {
     evalFormCurrentModule,
     parseEvalString,
     parseEvalFile,
-    setFile,
     defineImportFunction,
     getCurrentFilename: () => currentFilename,
   }

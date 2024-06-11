@@ -43,7 +43,7 @@ export const listWithMeta = (l, meta) => {
 }
 
 export const meta = (form) => {
-  if (symbolMeta in form) return form[symbolMeta]
+  if (typeof form === 'object' && symbolMeta in form) return form[symbolMeta]
   return unit
 }
 

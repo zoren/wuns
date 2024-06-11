@@ -99,64 +99,9 @@
 [constant empty-type [quote 0x40]]
 [constant i32 [quote 0x7f]]
 [constant immediate-u32 [quote immediate-u32]]
+[constant continue-type [quote continue-type]]
 
-[func make-operation-obj [name opcode immediate-parameters parameters results]
-  [concat
-    [quote [name]] [list name]
-    [quote [opcode]] [list opcode]
-    [quote [immediate-parameters]] [list immediate-parameters]
-    [quote [parameters]] [list parameters]
-    [quote [arity]] [list [add [size immediate-parameters] [size parameters]]]
-    [quote [results]] [list results]]]
-
-[macro make-binary-i32 [name opcode]
-  [list [quote quote] [make-operation-obj name opcode [] [list i32 i32] [list i32]]]]
-
-[constant instructions
-  [list
-    [make-operation-obj [quote unreachable] [quote 0x00] [] [] []]
-    [make-operation-obj [quote nop] [quote 0x01] [] [] []]
-
-    [make-binary-i32 eq  0x46]
-    [make-binary-i32 ne  0x47]
-    [make-binary-i32 lt  0x48]
-    [make-binary-i32 gt  0x4a]
-    [make-binary-i32 le  0x4c]
-    [make-binary-i32 ge  0x4e]
-
-    [make-binary-i32 add 0x6a]
-    [make-binary-i32 sub 0x6b]
-    [make-binary-i32 mul 0x6c]
-    [make-binary-i32 div 0x6d]
-
-    [make-binary-i32 bitwise-and 0x71]
-    [make-binary-i32 bitwise-ior 0x72]
-    [make-binary-i32 bitwise-xor 0x73]
-
-    [make-binary-i32 bitwise-shift-left 0x74]
-
-    [make-operation-obj [quote load] [quote 0x28]
-      [list immediate-u32 immediate-u32] [list i32] [list i32]]
-    [make-operation-obj [quote store] [quote 0x36]
-      [list immediate-u32 immediate-u32] [list i32 i32] []]
-    [make-operation-obj [quote store8] [quote 0x3a]
-      [list immediate-u32 immediate-u32] [list i32 i32] []]
-    [make-operation-obj [quote memory.size] [quote 0x3f]
-      [list immediate-u32] [] [list i32]]
-    [make-operation-obj [quote memory.grow] [quote 0x40]
-      [list immediate-u32] [list i32] [list i32]]
-    [make-operation-obj [quote memory.init] [quote 0xfc 0x08]
-      [list immediate-u32 immediate-u32] [list i32 i32 i32] [list ]]
-    ]]
-
-[func get-instruction [name]
-  [loop [i 0]
-    [if [lt i [size instructions]]
-      [let [o [at instructions i]]
-        [if [eq-word [assoc-list-get o [quote name]] name]
-          o
-          [continue i [inc i]]]]
-      0]]]
+[import wasm-instructions.wuns get-instruction]
 
 [func type-function [params results]
   [concat
@@ -363,6 +308,7 @@
         [eq-word first-form [quote if]]
         [let
           [s-args [dec s-form]
+           - [assert [or [eq s-args 2] [eq s-args 3]] if expects 2 or 3 arguments]
            ct [compile-form-mutable local-ctx code [first args]]
            - [push-code-byte code if]
            type-index [size [first code]]
@@ -371,15 +317,20 @@
            - [assert [and [eq [size ct] 1] [eq [at ct 0] i32]] condition not i32]
            tt [compile-form-mutable local-ctx code [second args]]
            enc-branch-type [type-list-to-code tt]]
-          [if [eq s-args 3]
-            [do
-              [push-code-byte code else]
-              [assert [eq-form tt [compile-form-mutable local-ctx code [third args]]] if branch types differ]]
-            [assert [eq s-args 2] if expects 2 or 3 arguments]]
-          [push-code-byte code end]
-          [when-not [eq dummy-type enc-branch-type]
-            [set-array [first code] type-index enc-branch-type]]
-          tt]
+          [if [eq-form tt [list continue-type]]
+            [let []
+
+            ]
+            [let
+              [if [eq s-args 3]
+                [let [- [push-code-byte code else]
+                      ft [compile-form-mutable local-ctx code [third args]]]
+                  [assert [eq-form tt ft] if branch types differ [identity tt] [identity ft]]]
+                [assert [eq s-args 2] if expects 2 or 3 arguments]]
+              [push-code-byte code end]
+              [when-not [eq dummy-type enc-branch-type]
+                [set-array [first code] type-index enc-branch-type]]
+              tt]]]
 
         [or
           [eq-word first-form [quote let]]
@@ -459,7 +410,7 @@
               [push-code-u32 code [second local]]]]
           [push-code-byte code br]
           [push-code-u32 code 1]
-          []]
+          [list continue-type]]
 
         [eq-word [quote data-passive-word] [first form]]
         [let [index [size global-ctx-datas]

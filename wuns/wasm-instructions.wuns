@@ -1,0 +1,70 @@
+[import standard-library.wuns
+  concat size inc assoc-list-get eq-word at for 0]
+
+[func make-operation-obj [name opcode immediate-parameters parameters results]
+  [concat
+    [quote [name]] [list name]
+    [quote [opcode]] [list opcode]
+    [quote [immediate-parameters]] [list immediate-parameters]
+    [quote [parameters]] [list parameters]
+    [quote [arity]] [list [add [size immediate-parameters] [size parameters]]]
+    [quote [results]] [list results]]]
+
+[constant i32 [quote i32]]
+[constant immediate-u32 [quote immediate-u32]]
+
+[macro make-binary-i32 [name opcode]
+  [list [quote quote] [make-operation-obj name opcode [] [list i32 i32] [list i32]]]]
+
+[constant instructions
+  [list
+    [make-operation-obj [quote unreachable] [quote 0x00] [] [] []]
+    [make-operation-obj [quote nop] [quote 0x01] [] [] []]
+
+    [make-binary-i32 eq  0x46]
+    [make-binary-i32 ne  0x47]
+    [make-binary-i32 lt  0x48]
+    [make-binary-i32 gt  0x4a]
+    [make-binary-i32 le  0x4c]
+    [make-binary-i32 ge  0x4e]
+
+    [make-binary-i32 add 0x6a]
+    [make-binary-i32 sub 0x6b]
+    [make-binary-i32 mul 0x6c]
+    [make-binary-i32 div 0x6d]
+
+    [make-binary-i32 bitwise-and 0x71]
+    [make-binary-i32 bitwise-ior 0x72]
+    [make-binary-i32 bitwise-xor 0x73]
+
+    [make-binary-i32 bitwise-shift-left 0x74]
+
+    [make-operation-obj [quote load] [quote 0x28]
+      [list immediate-u32 immediate-u32] [list i32] [list i32]]
+    [make-operation-obj [quote load8-signed] [quote 0x2c]
+      [list immediate-u32 immediate-u32] [list i32] [list i32]]
+    [make-operation-obj [quote load8-unsigned] [quote 0x2d]
+      [list immediate-u32 immediate-u32] [list i32] [list i32]]
+
+    [make-operation-obj [quote store] [quote 0x36]
+      [list immediate-u32 immediate-u32] [list i32 i32] []]
+    [make-operation-obj [quote store8] [quote 0x3a]
+      [list immediate-u32 immediate-u32] [list i32 i32] []]
+    [make-operation-obj [quote memory.size] [quote 0x3f]
+      [list immediate-u32] [] [list i32]]
+    [make-operation-obj [quote memory.grow] [quote 0x40]
+      [list immediate-u32] [list i32] [list i32]]
+    [make-operation-obj [quote memory.init] [quote 0xfc 0x08]
+      [list immediate-u32 immediate-u32] [list i32 i32 i32] [list]]
+    ]]
+
+[func get-instruction [name]
+  [loop [i 0]
+    [if [lt i [size instructions]]
+      [let [o [at instructions i]]
+        [if [eq-word [assoc-list-get o [quote name]] name]
+          o
+          [continue i [inc i]]]]
+      [list]]]]
+
+[export get-instruction]

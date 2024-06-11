@@ -2,8 +2,8 @@ import path from 'node:path'
 import fs from 'node:fs'
 
 import { print } from './core.js'
-import { parseStringToForms } from './parseByHand.js'
-import { makeContext } from './interpreter.js'
+import { parseStringToForms } from './parseTreeSitter.js'
+import { makeContext, setFiles } from './interpreter.js'
 
 const compilerContext = makeContext()
 const { defineImportFunction, parseEvalFile, getExported, apply } = compilerContext
@@ -11,35 +11,11 @@ const { defineImportFunction, parseEvalFile, getExported, apply } = compilerCont
 const __dirname = path.dirname(new URL(import.meta.url).pathname)
 const wunsDir = path.resolve(__dirname, '..', 'wuns')
 
-const wunsFileContent = []
-
-for (const file of fs.readdirSync(wunsDir)) {
-  if (!file.endsWith('.wuns')) continue
-  wunsFileContent.push([file, fs.readFileSync(path.resolve(wunsDir, file), 'ascii')])
-}
-
-const setFiles = ({ setFile }) => {
-  for (const [file, content] of wunsFileContent) setFile(file, content)
-}
-
-defineImportFunction('make-interpreter-context', (name) => {
-  const ctx = makeContext()
-  const prefix = name + ':'
-  ctx.defineImportFunction('log', (form) => {
-    console.log(prefix, print(form))
-  })
-  setFiles(ctx)
-  return ctx
-})
-
-defineImportFunction('context-eval', (context, form) => {
-  const { evalFormCurrentModule } = context
-  return evalFormCurrentModule(form)
-})
 defineImportFunction('log', (form) => {
   console.log('complog:', print(form))
+  return unit
 })
-setFiles(compilerContext)
+setFiles(wunsDir, compilerContext)
 parseEvalFile('compiler-wasm.wuns')
 const compileFormsModule = getExported('compiler-wasm.wuns', 'compile-top-forms-to-module')
 
