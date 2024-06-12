@@ -185,6 +185,10 @@ export const makeContext = (options) => {
           return unit
         }
       }
+      case 'tuple': {
+        const cargs = args.map(wunsComp)
+        return (env) => makeList(...cargs.map((carg) => carg(env)))
+      }
       case 'i32': {
         const n = wordValue(args[0])
         if (!isSigned32BitInteger(n)) throw new Error(`expected 32-bit signed integer, found ${n}`)

@@ -1,28 +1,26 @@
-[macro comment [.. -] []]
-
-[external-func mutable-list [] [[mutable-list any]]]
-[external-func push [[mutable-list any] any] []]
-[external-func size [form] [i32]]
-[external-func at [[list any] i32] [[list any]]]
-
-[macro type [params results]
-  [comment [type [[list form] [list form]] []]]
-  []]
-
 [func list [.. forms]
-  [type [.. any] [[list any]]]
   forms]
 
+[macro comment [.. -] [list]]
+
+[external-func mutable-list [] [mutable-list any]]
+[external-func push [[mutable-list any] any] [tuple]]
+[external-func size [form] i32]
+[external-func at [[list any] i32] any]
+
+[macro type [params results]
+  [comment [type [[list form] [list form]] [tuple]]]
+  [tuple]]
+
 [comment has side effect]
-[external-func log [form] []]
+[external-func log [form] [tuple]]
 [comment never returns should maybe be unreachable on wasm]
-[external-func abort [] []]
+[external-func abort [] any]
 
 [macro constant-ids [.. id-constants]
-  [type [.. word] []]
   [let [f [mutable-list]]
     [push f [quote let]]
-    [push f []]
+    [push f [list]]
     [loop [ij [quote 0]]
       [if [lt ij [size id-constants]]
         [let [name [at id-constants ij]]
@@ -33,75 +31,76 @@
 [constant-ids -2 -1 0 1 2 3 4]
 
 [func inc [x]
-  [type [i32] [i32]]
+  [type [i32] i32]
   [add x 1]]
 
 [func dec [x]
-  [type [i32] [i32]]
+  [type [i32] i32]
   [sub x 1]]
 
 [func not [c]
-  [type [i32] [i32]]
+  [type [i32] i32]
   [eq c 0]]
 
 [func is-zero [x]
-  [type [i32] [i32]]
+  [type [i32] i32]
   [eq x 0]]
 
 [func is-odd [x]
-  [type [i32] [i32]]
+  [type [i32] i32]
   [bitwise-and x 1]]
 
 [func is-odd2 [x]
-  [type [i32] [i32]]
+  [type [i32] i32]
   [is-odd x]]
 
 [func is-even [x]
-  [type [i32] [i32]]
+  [type [i32] i32]
   [not [is-odd x]]]
 
 [func is-negative [x]
-  [type [i32] [i32]]
+  [type [i32] i32]
   [lt x 0]]
 
 [func first [l]
-  [type [[list any]] [any]]
+  [type [[list any]] any]
   [at l 0]]
 [func second [l]
-  [type [[list any]] [any]]
+  [type [[list any]] any]
   [at l 1]]
 [func third [l]
-  [type [[list any]] [any]]
+  [type [[list any]] any]
   [at l 2]]
 [func fourth [l]
-  [type [[list any]] [any]]
+  [type [[list any]] any]
   [at l 3]]
 [func last [l]
-  [type [[list any]] [any]]
+  [type [[list any]] any]
   [at l -1]]
 
-[external-func slice [[list any] i32 i32] [[list any]]]
+[external-func slice [[list any] i32 i32] [list any]]
 
 [func rest [l]
-  [type [[list any]] [[list any]]]
+  [type [[list any]] [list any]]
   [slice l 1 [size l]]]
 
-[external-func is-word [form] [i32]]
-[external-func is-list [form] [i32]]
+[external-func is-word [any] i32]
+[external-func is-list [any] i32]
 
 [func push-all [mut-list list]
-
+  [type [[mutable-list any] [list any]] [tuple]]
   [let [s-l [size list]]
     [loop [i 0]
       [if [lt i s-l]
         [let []
           [push mut-list [at list i]]
           [continue i [inc i]]]
-        []]]]]
+        [tuple]]]]]
 
-[external-func freeze [[mutable-list any]] [[list any]]]
+[external-func freeze [[mutable-list any]] [list any]]
 
 [func concat-lists [lists]
+  [type [[list [list any]]] [list any]]
   [let [res [mutable-list] s [size lists]]
     [loop [i 0]
       [if [lt i s]
@@ -110,7 +109,9 @@
           [continue i [inc i]]]
         [freeze res]]]]]
 
-[func concat [.. lists] [concat-lists lists]]
+[func concat [.. lists]
+  [type [.. [list any]] [list any]]
+  [concat-lists lists]]
 
 [macro do [.. forms]
   [concat [quote [let []]] forms]]
@@ -119,12 +120,12 @@
   [list
     [quote if] cond
     [concat [quote [do]] forms]
-    []]]
+    [list]]]
 
 [macro when-not [cond .. forms]
   [list
     [quote if] cond
-    []
+    [list]
     [concat [quote [do]] forms]]]
 
 [macro assert [cond .. lmsg]
@@ -149,9 +150,9 @@
         [second clauses]
         [concat [quote [ifs]] [slice clauses 2 [size clauses]]]]]]]
 
-[external-func set-array [mutable-list i32 form] []]
+[external-func set-array [[mutable-list any] i32 any] [tuple]]
 
-[external-func concat-words [list] [word]]
+[external-func concat-words [[list word]] word]
 
 [macro and [.. clauses]
   [let [s [size clauses]]
@@ -166,6 +167,14 @@
         [concat [quote [and]] [rest clauses]]
         0]]]]
 
+[func between [x a b]
+  [type [i32 i32 i32] i32]
+  [if [ge x a] [lt x b] 0]]
+
+[func between-mac [x a b]
+  [type [i32 i32 i32] i32]
+  [and [ge x a] [lt x b]]]
+
 [macro or [.. clauses]
   [let [s [size clauses]]
     [ifs
@@ -179,10 +188,69 @@
         1
         [concat [quote [or]] [rest clauses]]]]]]
 
+[external-func at-word [word i32] i32]
+
+[func eq-word [a b]
+  [type [word word] i32]
+  [and [eq [size a] [size b]]
+    [loop [i 0]
+      [if [lt i [size a]]
+        [if [eq [at-word a i] [at-word b i]]
+          [continue i [inc i]]
+          0]
+        1]]]]
+
+[func eq-form [a b]
+  [type [form form] i32]
+  [if [and [is-word a] [is-word b]]
+    [eq-word a b]
+    [and [is-list a] [is-list b]
+      [let [s [size a]]
+        [and [eq s [size b]]
+          [loop [i 0]
+            [or [ge i s]
+              [and [eq-form [at a i] [at b i]] [continue i [inc i]]]]]]]]]]
+
+[func assoc-list-index [ctx sym]
+  [type [[list any] form] i32]
+  [let [s [size ctx]]
+    [loop [i 0]
+      [if [ge i s]
+        -1
+        [if [eq-form [at ctx i] sym]
+          i
+          [continue i [add i 2]]]]]]]
+
+[func assoc-list-has [ctx sym]
+  [type [[list any] word] i32]
+  [not [is-negative [assoc-list-index ctx sym]]]]
+
+[func assoc-list-get [ctx sym]
+  [type [[list any] word] any]
+  [let [index [assoc-list-index ctx sym]]
+    [if [is-negative index]
+      [let []
+        [log [concat [quote assoc-list-get key not found] [list sym ctx]]]
+        [abort]]
+      [at ctx [inc index]]]]]
+
+[func assoc-list-set [ctx sym value]
+  [type [[mutable-list any] word any] [tuple]]
+  [let [index [assoc-list-index ctx sym]]
+    [if [is-negative index]
+      [do
+        [push ctx sym]
+        [push ctx value]]
+      [set-array ctx [inc index] value]]]]
+
+[external-func meta [form] form]
+[external-func with-meta [form form] form]
+
 [constant word-counter [mutable-list]]
 [push word-counter 0]
 
 [func genword []
+  [type [] word]
   [let [c [first word-counter]]
     [set-array word-counter 0 [inc c]]
     [concat-words [list [quote genword] c]]]]
@@ -196,7 +264,7 @@
         [list [quote if]
           [list [quote lt] iw ew]
           [concat [quote let []] forms [list [list [quote continue] iw [list [quote add] iw increment]]]]
-          []]]]]]
+          [list]]]]]]
 
 [macro for [iw start end .. forms]
   [for-func iw start 1 end forms]]
@@ -204,66 +272,6 @@
 [macro for-inc [iw start increment end .. forms]
   [for-func iw start increment end forms]]
 
-[external-func at-word [word i32] [i32]]
-
-[func eq-word [a b]
-  [and [eq [size a] [size b]]
-    [loop [i 0]
-      [if [lt i [size a]]
-        [if [eq [at-word a i] [at-word b i]]
-          [continue i [inc i]]
-          0]
-        1]]]]
-
-[func eq-form [a b]
-  [if
-    [and [is-word a] [is-word b]]
-    [eq-word a b]
-
-    [and [is-list a] [is-list b]
-      [let [s [size a]]
-        [and [eq s [size b]]
-          [loop [i 0]
-            [or [ge i s]
-              [and [eq-form [at a i] [at b i]] [continue i [inc i]]]]]]]]]]
-
-[func assoc-list-index [ctx sym]
-  [let [s [size ctx]]
-    [loop [i 0]
-      [if [ge i s]
-        -1
-        [if [eq-word [at ctx i] sym]
-          i
-          [continue i [add i 2]]]]]]]
-
-[func assoc-list-has [ctx sym]
-  [not [is-negative [assoc-list-index ctx sym]]]]
-
-[func assoc-list-get [ctx sym]
-  [let [index [assoc-list-index ctx sym]]
-    [if [is-negative index]
-      [do
-        [log [concat [quote assoc-list-get key not found] [list sym ctx]]]
-        [abort]]
-      [at ctx [inc index]]]]]
-
-[func assoc-list-set [ctx sym value]
-  [let [index [assoc-list-index ctx sym]]
-    [if [is-negative index]
-      [do
-        [push ctx sym]
-        [push ctx value]]
-      [set-array ctx [inc index] value]]]]
-
-[external-func meta [form] [form]]
-[external-func with-meta [form form] [form]]
-
-[func assoc-meta [f k v]
-  [let [ml [mutable-list]]
-    [push-all ml [meta f]]
-    [assoc-list-set ml k v]
-    [with-meta f [freeze ml]]]]
-
-[export comment constant-ids mutable-list push size at at-word slice freeze concat-lists concat do when when-not assert ifs set-array concat-words and or eq-word is-word is-list eq-form assoc-list-index assoc-list-has assoc-list-get assoc-list-set meta with-meta assoc-meta log
-  inc dec not is-zero is-odd is-even is-negative first second third fourth last rest push-all abort]
+[export comment constant-ids mutable-list push size at at-word slice freeze concat-lists concat do when when-not assert ifs set-array concat-words and or eq-word is-word is-list eq-form assoc-list-index assoc-list-has assoc-list-get assoc-list-set meta with-meta log
+  inc dec not is-zero is-odd is-even is-negative first second third fourth last rest push-all abort list]
 
