@@ -258,7 +258,6 @@
     [freeze ml]]]
 
 [external-func macro-expand [form] [form]]
-[external-func eval [form] [form]]
 
 [func compile-form-mutable [local-ctx code form]
   [ifs
@@ -502,8 +501,6 @@
       [push global-ctx-datas [passive-data-bytes [rest form]]]
       [list index [dec [size form]]]]
     [abort]]]
-
-[external-func eval [form] [form]]
 
 [func dec-word-to-i32 [dw]
   [let [s [sub 0 [size dw]]]

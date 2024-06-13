@@ -6,7 +6,11 @@
 
 [constant-ids - ..]
 
-[external-func report-error [[list any] form] []]
+[external check report-error [func [[list any] form] []]]
+
+[external host make-interpreter-context [func [word] [context]]]
+[external host context-eval [func [context form] [form]]]
+[external host context-macro-expand [func [context form] [form]]]
 
 [macro report-when [cond form .. lmsg]
   [list [quote when] cond
@@ -132,10 +136,6 @@
       [at global-ctx [inc index]]]]]
 
 [import wasm-instructions.wuns get-instruction]
-
-[external-func make-interpreter-context [word] [context]]
-[external-func context-eval [context form] [form]]
-[external-func context-macro-expand [context form] [form]]
 
 [constant interpreter-context [make-interpreter-context [quote check]]]
 

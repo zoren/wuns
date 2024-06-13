@@ -101,7 +101,6 @@
 [external-func abort [] []]
 
 [external-func concat-words [list] [word]]
-[external-func eval [form] [form]]
 
 [func list [.. l] l]
 

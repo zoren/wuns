@@ -204,8 +204,9 @@ const tokenBuilderForParseTree = () => {
         for (let i = 2; i < node.namedChildCount; i++) go(node.namedChildren[i])
         break
       }
-      case 'external-func': {
+      case 'external': {
         pushToken(head, keywordTokenType)
+        // todo update this
         if (tail.length === 0) break
         const cname = tail[0]
         if (cname.type === 'word') pushToken(cname, functionTokenType, declarationModifier)
@@ -271,11 +272,15 @@ const makeInterpretCurrentFile = async (context) => {
   const { makeContext } = await import('./esm/interpreter.js')
   const wunsDir = context.extensionPath + '/wuns/'
   return () => {
-    const ctx = makeContext({ wunsDir, contextName: 'interpret'})
-    const { evalLogForms, defineImportFunction } = ctx
-    defineImportFunction('report-error', (msg, form) => {
-      console.log('report-error', print(msg), print(meta(form)))
-    })
+    const importObject = {
+      check: {
+        'report-error': (msg, form) => {
+          console.log('report-error', print(msg), print(meta(form)))
+        },
+      },
+    }
+    const ctx = makeContext({ wunsDir, contextName: 'interpret', importObject })
+    const { evalLogForms } = ctx
 
     const document = getActiveTextEditorDocument()
     const { forms } = cacheFetchOrParse(document)
@@ -301,10 +306,8 @@ const makeCheckCurrentFileCommand = async (context) => {
   }
   const wunsDir = context.extensionPath + '/wuns/'
   return async () => {
-    const ctx = makeContext({ wunsDir, contextName: 'check' })
-    const { defineImportFunction, parseEvalFile, getExported, apply } = ctx
     const diagnostics = []
-    defineImportFunction('report-error', (msg, form) => {
+    const reportError = (msg, form) => {
       if (!Array.isArray(msg)) throw new Error('msg is not an array')
       const metaData = meta(form)
       if (!metaData) throw new Error('meta is ' + metaData)
@@ -316,9 +319,17 @@ const makeCheckCurrentFileCommand = async (context) => {
         console.error('range is not an array ' + print(form) + ' ' + print(metaData))
         return
       }
-      const diagnostic = new Diagnostic(new Range(...range), msg.map(print).join(' '), DiagnosticSeverity.Error)
+      const [startLine, startCol, endLine, endCol] = range
+      const diagnostic = new Diagnostic(
+        new Range(startLine, startCol, endLine, endCol),
+        msg.map(print).join(' '),
+        DiagnosticSeverity.Error,
+      )
       diagnostics.push(diagnostic)
-    })
+    }
+    const importObject = { check: { 'report-error': reportError } }
+    const ctx = makeContext({ wunsDir, contextName: 'check', importObject })
+    const { parseEvalFile, getExported, apply } = ctx
 
     const checkPath = 'check.wuns'
     parseEvalFile(checkPath)

@@ -1,20 +1,15 @@
 import path from 'node:path'
 import fs from 'node:fs'
 
-import { print } from './core.js'
 import { parseStringToForms } from './parseTreeSitter.js'
 import { makeContext, setFiles } from './interpreter.js'
 
-const compilerContext = makeContext()
-const { defineImportFunction, parseEvalFile, getExported, apply } = compilerContext
+const compilerContext = makeContext({ contextName: 'compiler-wasm' })
+const { parseEvalFile, getExported, apply } = compilerContext
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname)
 const wunsDir = path.resolve(__dirname, '..', 'wuns')
 
-defineImportFunction('log', (form) => {
-  console.log('complog:', print(form))
-  return unit
-})
 setFiles(wunsDir, compilerContext)
 parseEvalFile('compiler-wasm.wuns')
 const compileFormsModule = getExported('compiler-wasm.wuns', 'compile-top-forms-to-module')

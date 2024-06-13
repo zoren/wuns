@@ -26,20 +26,24 @@ instructions['unreachable'] = () => {
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 
 export const makeContext = (options) => {
-  const { wunsDir, contextName } = options
+  let { wunsDir, contextName, importObject } = options
+  importObject = importObject || {}
+  if ('host' in importObject) throw new Error('importObject cannot contain host')
   const files = new Map()
   for (const file of fs.readdirSync(wunsDir)) {
     if (!file.endsWith('.wuns')) continue
     files.set(file, fs.readFileSync(wunsDir + file, 'ascii'))
   }
   const prefix = contextName + ':'
-  const externalFunctions = {
+  const hostFuncs = {
+    // todo define in host.js
     'make-interpreter-context': (contextName) => makeContext({ ...options, contextName }),
     log: (form) => {
       console.log(prefix, print(form))
     },
   }
-  for (const [name, f] of hostExports) externalFunctions[name] = f
+  for (const [name, f] of hostExports) hostFuncs[name] = f
+  const externals = { host: hostFuncs, ...importObject }
 
   let currentFilename = null
   const modules = new Map()
@@ -225,21 +229,29 @@ export const makeContext = (options) => {
         moduleVarSet(vn, compValue(currentModuleEnv()))
         return null
       }
-      case 'external-func': {
-        if (args.length !== 3) throw new Error('external-func expects 3 arguments')
-        const [name, params, results] = args
+      case 'external': {
+        assert(args.length === 3, `external-func expects 3 arguments, found ${args.length}`)
+        const [moduleName, name, type] = args
+        const module = externals[wordValue(moduleName)]
+        assert(module, `external module ${moduleName} not found`)
         const n = wordValue(name)
-        const funcObj = externalFunctions[n]
-        assert(funcObj, `external-func function ${name} not found`)
-        assert(typeof funcObj === 'function', `external-func expected function, found ${funcObj}`)
-        assert(isList(params), `external-func expected list of parameters, found ${params}`)
-        // for (const param of params) assert(isWord(param), `external-func expected word, found ${param}`)
-        const actualParameterCount = funcObj.length
-        assert(
-          params.length === actualParameterCount,
-          `extern function ${name} expected ${actualParameterCount} arguments, got ${params.length}`,
-        )
-        moduleVarSet(n, funcObj)
+        const externalObj = module[n]
+        assert(externalObj, `external ${name} not found`)
+        assert(isList(type), `expected external spec, found ${type}`)
+        assert(type.length > 0, `external expected non-empty list of parameters, found ${type}`)
+        if (wordValue(type[0]) === 'func') {
+          assert(typeof externalObj === 'function', `external expected function, found ${externalObj}`)
+          assert(type.length === 3, `external expected 3 arguments, found ${type}`)
+          const params = type[1]
+          assert(isList(params), `external expected list of parameters, found ${params}`)
+          // for (const param of params) assert(isWord(param), `external expected word, found ${param}`)
+          const actualParameterCount = externalObj.length
+          assert(
+            params.length === actualParameterCount,
+            `external function ${name} expected ${actualParameterCount} parameters, got ${params.length}`,
+          )
+          moduleVarSet(n, externalObj)
+        }
         return null
       }
       case 'import': {
@@ -408,7 +420,6 @@ export const makeContext = (options) => {
     const cform = wunsComp(form)
     return cform === null ? unit : cform(moduleEnv)
   }
-  externalFunctions['eval'] = (form) => compEval(form, currentModuleEnv())
 
   const evalLogForms = (forms) => {
     try {
@@ -433,9 +444,6 @@ export const makeContext = (options) => {
     const content = getFile(filename)
     parseEvalString(content)
   }
-  const defineImportFunction = (name, f) => {
-    externalFunctions[name] = f
-  }
   return {
     getExported,
     apply,
@@ -444,7 +452,6 @@ export const makeContext = (options) => {
     macroExpandCurrentModule: macroExpand,
     parseEvalString,
     parseEvalFile,
-    defineImportFunction,
     getCurrentFilename: () => currentFilename,
   }
 }

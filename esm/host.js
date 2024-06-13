@@ -14,6 +14,8 @@ import {
 
 export const is_word = (f) => isWord(f) | 0
 
+export const is_i32 = (f) => isWord(f) && isSigned32BitInteger(wordValue(f)) | 0
+
 export const is_list = (f) => isList(f) | 0
 
 export const with_meta = (f, meta) => {
@@ -109,3 +111,4 @@ export const context_macro_expand = (context, form) => {
   const { macroExpandCurrentModule } = context
   return macroExpandCurrentModule(form)
 }
+// import {makeContext} from './interpreter.js'

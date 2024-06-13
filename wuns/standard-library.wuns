@@ -3,6 +3,11 @@
 
 [macro comment [.. -] [list]]
 
+[macro external-func [name params results]
+  [list
+    [quote external] [quote host] name
+    [list [quote func] params results]]]
+
 [external-func mutable-list [] [mutable-list any]]
 [external-func push [[mutable-list any] any] [tuple]]
 [external-func size [form] i32]
@@ -16,8 +21,10 @@
 [external-func log [form] [tuple]]
 [comment never returns should maybe be unreachable on wasm]
 [external-func abort [] any]
+[external-func freeze [[mutable-list any]] [list any]]
 
 [macro constant-ids [.. id-constants]
+  [type [.. word] [list any]]
   [let [f [mutable-list]]
     [push f [quote let]]
     [push f [list]]
@@ -26,7 +33,7 @@
         [let [name [at id-constants ij]]
           [push f [list [quote constant] name [list [quote quote] name]]]
           [continue ij [add ij [quote 1]]]]
-        f]]]]
+        [freeze f]]]]]
 
 [constant-ids -2 -1 0 1 2 3 4]
 
@@ -97,8 +104,6 @@
           [push mut-list [at list i]]
           [continue i [inc i]]]
         [tuple]]]]]
-
-[external-func freeze [[mutable-list any]] [list any]]
 
 [func concat-lists [lists]
   [type [[list [list any]]] [list any]]
