@@ -1,7 +1,7 @@
 [import standard-library.wuns
   comment constant-ids mutable-list push size at at-word slice freeze concat-lists concat do when when-not assert ifs set-array concat-words and or eq-word is-word is-list eq-form assoc-list-index assoc-list-has assoc-list-get assoc-list-set log
   inc dec not is-zero is-odd is-even is-negative first second third fourth last rest push-all abort
-  for list
+  for list meta
   -2 -1 0 1 2 3 4]
 
 [constant-ids - ..]
@@ -39,6 +39,7 @@
 
 [constant type-word [quote word]]
 [constant type-i32 [quote i32]]
+[constant type-f64 [quote f64]]
 [constant type-form [quote form]]
 [constant type-any [quote any]]
 [constant type-error [quote type-error]]
@@ -54,6 +55,7 @@
     [eq-form t type-form]
     [eq-form t type-word]
     [eq-form t type-i32]
+    [eq-form t type-f64]
     [eq-form t type-any]
     [eq-form t type-error]]]
 
@@ -159,6 +161,20 @@
         local-ctx]]
     local-ctx]]
 
+[constant node-types [mutable-list]]
+
+[func push-node-type [node type]
+  [push node-types [assoc-list-get [meta node] [quote node-id]]]
+  [push node-types type]
+  type]
+
+[func try-get-node-type [node]
+  [let [node-id [assoc-list-get [meta node] [quote node-id]]
+        index [assoc-list-index node-types node-id]]
+    [if [is-negative index]
+      type-error
+      [at node-types [inc index]]]]]
+
 [func check-form [local-ctx tail-pos form]
   [ifs
     [is-word form]
@@ -186,7 +202,7 @@
            index [assoc-list-index vars form]]
           [if [is-negative index]
             [continue cur-ctx outer]
-            [at vars [inc index]]]]]]
+            [push-node-type form [at vars [inc index]]]]]]]
 
     [eq-form [size form] 0]
     [do
@@ -246,14 +262,14 @@
             [let [t-ctx [try-bind-type-predicate local-ctx [second form]]
                   tt [check-form t-ctx tail-pos [third form]]
                   ft [if [eq n-of-args 2] type-empty [check-form local-ctx tail-pos [fourth form]]]]
-              [if [eq-form tt type-any]
-                ft
-                [if [eq-form ft type-any]
-                  tt
-                  [do
-                    [log [list [quote if] form tt ft]]
-                    [report-when-not [eq-form tt ft] form if branches must have same type]
-                    tt]]]]]]
+              [push-node-type form
+                [if [eq-form tt type-any]
+                  ft
+                  [if [eq-form ft type-any]
+                    tt
+                    [do
+                      [report-when-not [eq-form tt ft] form if branches must have same type]
+                      tt]]]]]]]
 
         [or
           [eq-form first-form [quote let]]
@@ -282,9 +298,10 @@
             [when [lt i [dec s-form]]
               [check-form let-loop-ctx 0 [at form i]]
               [continue i [inc i]]]]
-          [if [lt 2 s-form]
-            [check-form let-loop-ctx [if [eq-form first-form [quote loop]] 1 tail-pos] [last form]]
-            type-empty]]
+          [push-node-type form
+            [if [lt 2 s-form]
+              [check-form let-loop-ctx [if [eq-form first-form [quote loop]] 1 tail-pos] [last form]]
+              type-empty]]]
 
         [eq-form first-form [quote continue]]
         [do
@@ -390,6 +407,7 @@
                     [report-when [eq-form p ..] p .. must be at second last position]
                     [when-not [eq-form p -]
                       [report-when [assoc-list-has param-ctx p] p duplicate parameter]
+                      [push-node-type p pt]
                       [push param-ctx p]
                       [push param-ctx pt]]
                     [push mut-parameter-type-list pt]
@@ -502,12 +520,17 @@
 
             ]]]]]]
 
+[func check-top-form [form]
+  [check-form [list []] 0 form]
+  [context-eval interpreter-context form]]
+
 [func check-forms [forms]
   [for i 0 [size forms]
     [let [f [at forms i]]
-      [check-form [list []] 0 f]
-      [context-eval interpreter-context f]
-      ]]]
+      [check-top-form f]
+      ]]
+  [log [list [quote node-types] node-types]]
+      ]
 
 [comment
   [check-forms
@@ -521,4 +544,4 @@
       [func f [x y] [add x y]]
       [func g [x y] [sub x y]]]]
 ]
-[export check-forms]
+[export check-top-form check-forms try-get-node-type node-types]

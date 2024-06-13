@@ -8,7 +8,7 @@ import { word, makeList, wordWithMeta, listWithMeta } from './core.js'
 export const nodeToOurForm = (node) => {
   const { type, text, namedChildren, startPosition, endPosition } = node
   const range = makeList(...[startPosition.row, startPosition.column, endPosition.row, endPosition.column])
-  const metaData = makeList(word('range'), range, word('node-id'), node.id)
+  const metaData = makeList(word('range'), range, word('node-id'), String(node.id))
   // todo handle error nodes
   switch (type) {
     case 'word':

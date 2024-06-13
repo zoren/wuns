@@ -4,7 +4,8 @@
   concat concat-lists
   is-word concat-words
 
-  eq-word assoc-list-get assoc-list-index assoc-list-set slice push-all not is-negative freeze assert
+  eq-word assoc-list-get assoc-list-index assoc-list-set assoc-list-has
+  slice push-all not is-negative freeze assert
   when-not and log abort
   first
   second
@@ -16,8 +17,10 @@
   is-zero
   is-list
   eq-form
-  set-array for for-inc list
+  for for-inc list
 ]
+
+[import check.wuns check-top-form try-get-node-type node-types is-tuple-type]
 
 [func u32-word-to-leb-128 [w]
   [assert [not [is-negative w]] expected 32 bit ints]
@@ -55,10 +58,20 @@
 
 [constant empty-type [quote 0x40]]
 [constant i32 [quote 0x7f]]
+[constant f64 [quote 0x7c]]
 [constant immediate-u32 [quote immediate-u32]]
 [constant continue-type [quote continue-type]]
 
 [import wasm-instructions.wuns get-instruction]
+
+[constant words-to-type
+  [quote
+    i32 0x7f
+    i64 0x7e
+    f32 0x7d
+    f64 0x7c]]
+
+[func word-type-to-type-code [wt] [assoc-list-get words-to-type wt]]
 
 [func type-function [params results]
   [concat
@@ -187,10 +200,26 @@
     [eq-form type-list [list i32]]
     i32
 
+    [eq-form type-list [list f64]]
+    f64
+
     [let
       [i [push-type [type-function [] type-list]]]
       [assert [lt i [quote 32]] not sure how to handle higher indexes]
       i]]]
+
+[func word-type-list-to-type-code [wtl]
+  [if [assoc-list-has words-to-type wtl]
+    [word-type-to-type-code wtl]
+    [do
+      [assert [is-tuple-type wtl] expected a tuple type]
+      [let [ml [mutable-list]]
+        [for i 1 [size wtl]
+          [push ml [word-type-to-type-code [at wtl i]]]]
+        [let
+          [i [push-type [type-function [] ml]]]
+          [assert [lt i [quote 32]] not sure how to handle higher indexes]
+          i]]]]]
 
 [func push-code-byte [code-locals byte] [push [first code-locals] byte]]
 
@@ -206,13 +235,6 @@
     index]]
 
 [func identity [x] x]
-
-[func quote-args [list]
-  [let [ml [mutable-list]]
-    [push ml [first list]]
-    [for i 1 [size list]
-      [push ml [list [quote quote] [at list i]]]]
-    [freeze ml]]]
 
 [external host context-macro-expand [func [context form] [form]]]
 [external host context-eval [func [context form] [form]]]
@@ -236,6 +258,7 @@
             [if [is-negative index]
               [continue cur-ctx [second cur-ctx]]
               [at vars [inc index]]]]]]]
+      [log [concat [quote type from checker] [list [try-get-node-type form]]]]
       [push-code-byte code local.get]
       [push-code-u32 code [second vars-index]]
       [list [first vars-index]]]
@@ -270,15 +293,12 @@
            - [assert [or [eq s-args 2] [eq s-args 3]] if expects 2 or 3 arguments]
            ct [compile-form-mutable local-ctx code [first args]]
            - [push-code-byte code if]
-           type-index [size [first code]]
-           dummy-type empty-type
-           - [push-code-byte code dummy-type]
+           wtl-code [word-type-list-to-type-code [try-get-node-type form]]
+           - [push-code-byte code wtl-code]
            - [assert [and [eq [size ct] 1] [eq [at ct 0] i32]] condition not i32]
-           tt [compile-form-mutable local-ctx code [second args]]
-           enc-branch-type [type-list-to-code tt]]
+           tt [compile-form-mutable local-ctx code [second args]]]
           [if [eq-form tt [list continue-type]]
             [let []
-
             ]
             [let []
               [if [eq s-args 3]
@@ -287,8 +307,6 @@
                   [assert [eq-form tt ft] if branch types differ [identity tt] [identity ft]]]
                 [assert [eq s-args 2] if expects 2 or 3 arguments]]
               [push-code-byte code end]
-              [when-not [eq dummy-type enc-branch-type]
-                [set-array [first code] type-index enc-branch-type]]
               tt]]]
 
         [or
@@ -306,16 +324,16 @@
             [let
               [var [at bindings i]
                value [at bindings [inc i]]
-               var-type [compile-form-mutable let-loop-ctx code value]]
+               val-type [compile-form-mutable let-loop-ctx code value]]
               [ifs
                 [eq-word [quote -] var]
-                [assert [eq [size var-type] 0] let - expects unit type]
+                [assert [eq [size val-type] 0] binding - expects unit type]
 
                 [is-word var]
                 [let
-                  [- [assert [eq [size var-type] 1] let expects a single type]
-                    t [first var-type]
-                    local-index [push-local code t]]
+                  [- [assert [not [is-tuple-type val-type]] binding expects a single type]
+                   t [word-type-to-type-code val-type]
+                   local-index [push-local code t]]
                   [push-code-byte code local.set]
                   [push-code-u32 code local-index]
                   [push var-values var]
@@ -323,10 +341,11 @@
 
                 [let [s [size var]]
                   [assert [is-list var] expects a word or list]
-                  [assert [eq [size var] [size var-type]] let expects matching type arity]
-                  [for i 0 [size var]
+                  [assert [is-tuple-type val-type] binding expects a tuple type]
+                  [assert [eq s [dec [size val-type]]] binding expects matching type arity]
+                  [for i 0 s
                     [let
-                      [t [at var-type i]
+                      [t [at val-type [inc i]]
                        local-index [push-local code t]]
                       [push-code-byte code local.set]
                       [push-code-u32 code local-index]
@@ -335,12 +354,11 @@
           [if is-loop
             [do
               [push-code-byte code loop]
-              [let [type-index [size [first code]]]
-                [push-code-byte code empty-type]
+              [do
+                [push-code-byte code [word-type-list-to-type-code [try-get-node-type form]]]
                 [for i 2 [dec [size form]]
                   [compile-form-mutable let-loop-ctx code [at form i]]]
                 [let [last-body-type [compile-form-mutable let-loop-ctx code [last args]]]
-                  [set-array [first code] type-index [type-list-to-code last-body-type]]
                   [push-code-byte code end]
                   last-body-type]]]
             [do
@@ -453,8 +471,7 @@
     ml]]
 
 [func comp-const-expr [form]
-  [ifs
-    [eq-word [quote data-passive-bytes] [first form]]
+  [if [eq-word [quote data-passive-bytes] [first form]]
     [let [index [size global-ctx-datas]]
       [push global-ctx-datas [passive-data-bytes [rest form]]]
       [list index [dec [size form]]]]
@@ -481,10 +498,13 @@
           parameter-type-list [mutable-list]
           -
           [for i 0 [size params]
-            [comment check for duplicate parameters make type configurable]
-            [push param-ctx [at params i]]
-            [push param-ctx i32]
-            [push parameter-type-list i32]]
+            [let [p [at params i]
+                  t [try-get-node-type p]
+                  type-code [word-type-to-type-code t]]
+              [log [concat [quote type from checker param] [list p [try-get-node-type p]]]]
+              [push param-ctx p]
+              [push param-ctx type-code]
+              [push parameter-type-list type-code]]]
           func-ctx [list param-ctx]
           parameter-type-list [freeze parameter-type-list]
           locals [mutable-list]
@@ -610,8 +630,10 @@
 
 [func compile-top-forms-to-module [forms]
   [for i 0 [size forms]
-    [compile-top-level-form [at forms i]]]
-  [ctx-to-module]
-  ]
+    [let [f [at forms i]]
+      [check-top-form f]
+      [compile-top-level-form f]]]
+  [log [list [quote node-types] node-types]]
+  [ctx-to-module]]
 
 [export compile-top-forms-to-module]

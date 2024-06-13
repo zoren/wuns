@@ -1,14 +1,18 @@
 [macro type [params results]
   [tuple]]
 
-[func i32.id [p]
+[func i32.id [i]
   [type [i32] i32]
-  p]
+  i]
 
-[func if-test0 [p]
+[func f64.id [f]
+  [type [f64] f64]
+  f]
+
+[func if-test0 [i]
   [type [i32] i32]
-  [if p
-    p
+  [if i
+    i
     [i32 1337]]]
 
 [func tuple-test [p]
@@ -20,3 +24,31 @@
   [if p
     [tuple [i32 1] p]
     [tuple [i32 0] p]]]
+
+[func if-test3 [p]
+  [type [i32] [tuple i32 i32]]
+  [if p
+    [tuple p p]
+    [tuple [i32 0] p]]]
+
+[func let-test [p]
+  [type [i32] i32]
+  [let [z [add [i32 1] p]]
+    z]]
+
+[func let-test2 [p]
+  [type [i32] [tuple i32 i32]]
+  [let [x [add [i32 1] p]
+        y [add [i32 1] x]]
+    [tuple x y]]]
+
+[func loop-test [p]
+  [type [i32] i32]
+  [loop [z [add [i32 1] p]]
+    z]]
+
+[func loop-test2 [p]
+  [type [i32] [tuple i32 i32]]
+  [loop [x [add [i32 1] p]
+         y [add [i32 1] x]]
+    [tuple x y]]]

@@ -3,11 +3,26 @@ import fs from 'node:fs'
 
 import { parseStringToForms } from './parseTreeSitter.js'
 import { makeContext } from './interpreter.js'
+import { meta, print } from './core.js'
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname)
 const wunsDir = path.resolve(__dirname, '..', 'wuns') + '/'
-
-const compilerContext = makeContext({ wunsDir, contextName: 'compiler-wasm' })
+const importObject = { check: {'report-error': (msg, form)=> {
+  if (!Array.isArray(msg)) throw new Error('msg is not an array')
+    const metaData = meta(form)
+    if (!metaData) throw new Error('meta is ' + metaData)
+    const [_, range] = metaData
+    if (!Array.isArray(range)) {
+      console.log('metaData', metaData)
+      console.log('form', form)
+      console.log('range', range)
+      console.error('range is not an array ' + print(form) + ' ' + print(metaData))
+      return
+    }
+    const [startLine, startCol, endLine, endCol] = range
+    console.error('error', `${startLine}:${startCol}-${endLine}:${endCol}`, msg)
+}}}
+const compilerContext = makeContext({ wunsDir, contextName: 'compiler-wasm', importObject })
 const { parseEvalFile, getExported, apply } = compilerContext
 
 parseEvalFile('compiler-wasm.wuns')
