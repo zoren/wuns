@@ -139,6 +139,26 @@
 
 [constant interpreter-context [make-interpreter-context [quote check]]]
 
+[constant predicate-to-type
+  [quote
+    is-word word
+    is-i32 i32
+    is-list [list any]]]
+
+[func is-external-func [name]
+  [let [sig [try-get-global-sig name]]
+    [and [gt [size sig] 0] [eq-word [assoc-list-get sig [quote def]] [quote external-func]]]]]
+
+[func try-bind-type-predicate [local-ctx t-form]
+  [if [and [is-list t-form] [eq [size t-form] 2]]
+    [let [f [first t-form] a [second t-form]]
+      [if [and [is-word f] [is-word a] [is-external-func f] [assoc-list-has predicate-to-type f]]
+        [do
+          [log [list [quote try-bind-type-predicate] t-form f a]]
+          [list [list a [assoc-list-get predicate-to-type f]] local-ctx [quote type-pred]]]
+        local-ctx]]
+    local-ctx]]
+
 [func check-form [local-ctx tail-pos form]
   [ifs
     [is-word form]
@@ -216,7 +236,8 @@
               [report [at form i] if extra forms ignored]
               [continue i [inc i]]]]
           [if [gt n-of-args 1]
-            [let [tt [check-form local-ctx tail-pos [third form]]
+            [let [t-ctx [try-bind-type-predicate local-ctx [second form]]
+                  tt [check-form t-ctx tail-pos [third form]]
                   ft [if [eq n-of-args 2] type-empty [check-form local-ctx tail-pos [fourth form]]]]
               [if [eq-form tt type-any]
                 ft
@@ -294,8 +315,8 @@
         [let [name [second form]
               value [third form]
               value-type [check-form local-ctx 0 value]]
-          [log [list [quote c] name value value-type]]
-          [add-sig name [list [quote constant] value-type]]]
+          [add-sig name [list [quote constant] value-type
+                              [quote def] first-form]]]
 
         [eq-form first-form [quote external-func]]
         [if [gt [size form] 1]
@@ -311,7 +332,8 @@
                       type-error]]
                 [add-sig name
                   [list [quote parameters] param-types
-                        [quote results] [fourth form]]]]
+                        [quote results] [fourth form]
+                        [quote def] first-form]]]
               [report name external-func expects a name]]]
           [report form external-func expects a name]]
 
@@ -398,17 +420,17 @@
                   [let [ml [mutable-list]]
                     [push-all ml
                       [list [quote parameters] parameter-type-list
-                            [quote results] result-type]]
+                            [quote results] result-type
+                            [quote def] first-form]]
                     [when rest-param-element-type
                       [push-all ml
                         [list [quote rest-param-element-type] rest-param-element-type]]]
-                    [when [eq-word first-form [quote macro]]
-                      [push-all ml [list [quote macro] [quote macro]]]]
                     [add-sig name ml]]
                   [report name expected a word here]]]
               []]]
 
-        [let [sig [try-get-global-sig first-form]]
+        [let [sig [try-get-global-sig first-form]
+              sig-def [if [assoc-list-has sig [quote def]] [assoc-list-get sig [quote def]] 0]]
           [if [eq 0 [size sig]]
             [let [instruction [get-instruction first-form]]
               [if [ne 0 [size instruction]]
@@ -434,7 +456,7 @@
                   n-of-parameters [size parameters]]
               [report-when-not [ge n-of-args n-of-parameters] form
                 missing arguments]
-              [if [assoc-list-has sig [quote macro]]
+              [if [eq-word sig-def [quote macro]]
                 [let [expanded [context-macro-expand interpreter-context form]
                       ex-type [check-form local-ctx tail-pos expanded]]
                   [log [list [quote macro-form] form]]

@@ -85,6 +85,7 @@
   [slice l 1 [size l]]]
 
 [external-func is-word [any] i32]
+[external-func is-i32 [any] i32]
 [external-func is-list [any] i32]
 
 [func push-all [mut-list list]
@@ -202,8 +203,8 @@
 
 [func eq-form [a b]
   [type [form form] i32]
-  [if [and [is-word a] [is-word b]]
-    [eq-word a b]
+  [or
+    [and [is-word a] [is-word b] [eq-word a b]]
     [and [is-list a] [is-list b]
       [let [s [size a]]
         [and [eq s [size b]]
@@ -252,7 +253,10 @@
 [func genword []
   [type [] word]
   [let [c [first word-counter]]
-    [set-array word-counter 0 [inc c]]
+    [if [is-i32 c]
+      [set-array word-counter 0 [inc c]]
+      [do [log [quote not int]]
+        [abort]]]
     [concat-words [list [quote genword] c]]]]
 
 [func for-func [iw start increment end forms]
