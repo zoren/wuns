@@ -4,7 +4,7 @@ export const isWordString = (s) => typeof s === 'string' && s.length > 0 && word
 class Word {
   constructor(value) {
     const n = Number(value)
-    if (isSigned32BitInteger(n) && String(n) === value){
+    if (isSigned32BitInteger(n)) {
       this.value = n
     } else if (isWordString(value)) {
       this.value = value

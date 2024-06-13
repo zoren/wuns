@@ -1,0 +1,22 @@
+[macro type [params results]
+  [tuple]]
+
+[func i32.id [p]
+  [type [i32] i32]
+  p]
+
+[func if-test0 [p]
+  [type [i32] i32]
+  [if p
+    p
+    [i32 1337]]]
+
+[func tuple-test [p]
+  [type [i32] [tuple i32 i32]]
+  [tuple p p]]
+
+[func if-test [p]
+  [type [i32] [tuple i32 i32]]
+  [if p
+    [tuple [i32 1] p]
+    [tuple [i32 0] p]]]

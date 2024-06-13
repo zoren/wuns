@@ -1,6 +1,6 @@
 [import standard-library.wuns
   constant-ids
-  inc dec ifs or is-odd mutable-list push when size at comment -2 -1 0 1 2 3 4 do
+  inc dec ifs or is-odd mutable-list push when size at at-word comment -2 -1 0 1 2 3 4 do
   concat concat-lists
   is-word concat-words
 
@@ -16,7 +16,7 @@
   is-zero
   is-list
   eq-form
-  set-array for for-inc
+  set-array for for-inc list
 ]
 
 [func u32-word-to-leb-128 [w]
@@ -49,49 +49,6 @@
             [continue value1 value2]]]]]
     [freeze res]]]
 
-[func reverse [l]
-  [let [res [mutable-list]]
-    [loop [i [dec [size l]]]
-      [when-not [is-negative i]
-        [push res [at l i]]
-        [continue i [dec i]]]]
-    [freeze res]]]
-
-[func dec-word-to-hex-word [dw]
-  [assert [not [is-negative dw]] expected non-negative decimal word]
-  [if [is-zero dw]
-    [quote 0x0]
-    [let [hex-digits [quote 0 1 2 3 4 5 6 7 8 9 a b c d e f]
-          res [mutable-list]]
-      [loop [n dw]
-        [if [is-zero n]
-          [do
-            [push res [quote x]]
-            [push res 0]
-            [concat-words [reverse res]]]
-          [let [remainder [bitwise-and n [quote 15]]
-                quotient [bitwise-shift-right n [quote 4]]]
-            [push res [at hex-digits remainder]]
-            [continue n quotient]]]]]]]
-
-[func dec-words-to-hex [decs]
-  [let [res [mutable-list]]
-    [for i 0 [size decs]
-      [push res [dec-word-to-hex-word [at decs i]]]]
-    [freeze res]]]
-
-[func test [expected actual]
-  [when-not [eq-form expected actual]
-    [log [list [quote expected] expected [quote [but got]] actual]]]]
-
-[comment wikipedia says 0xe5 0x8e 0x26]
-
-[test [quote [0xe5 0x8e 0x26]] [dec-words-to-hex [u32-word-to-leb-128 [quote 624485]]]]
-
-[comment wikipedia says 0xc0 0xbb 0x78]
-
-[test [quote [0xc0 0xbb 0x78]] [dec-words-to-hex [s32-word-to-leb-128 [quote -123456]]]]
-
 [constant i32.const [quote 0x41]]
 [constant local.get [quote 0x20]]
 [constant local.set [quote 0x21]]
@@ -118,11 +75,11 @@
 [constant end [quote 0x0b]]
 [constant br [quote 0x0c]]
 
-[func index-of-word [words word]
-  [let [s-words [size words]]
+[func index-of-form [forms form]
+  [let [s-forms [size forms]]
     [loop [i 0]
-      [if [lt i s-words]
-        [if [eq-word word [at words i]]
+      [if [lt i s-forms]
+        [if [eq-form form [at forms i]]
           i
           [continue i [inc i]]]
         -1]]]]
@@ -132,7 +89,7 @@
 [func word-to-codepoints [w]
   [let [ml [mutable-list]]
     [for i 0 [size w]
-      [push ml [at w i]]]
+      [push ml [at-word w i]]]
     [freeze ml]]]
 
 [func word-to-length-bytes [name]
@@ -152,7 +109,7 @@
     [word-to-length-bytes name]
     import-desc]]
 
-[constant kind-memory 0x02]
+[constant kind-memory [quote 0x02]]
 
 [func import-desc-mem-min [min]
   [concat
@@ -182,11 +139,11 @@
   [concat [list 1] [u32-word-to-leb-128 [size bytes]] bytes]]
 
 [func decimal-word-to-i32 [dw]
-  [if [eq-word [first dw] [quote 45]]
+  [if [eq-word [at-word dw 0] [quote 45]]
     [let [s [sub 0 [size dw]]]
       [loop [i [dec [size dw]] res 0 multi -1]
         [if [gt i 0]
-          [let [c [at dw i]]
+          [let [c [at-word dw i]]
             [assert [and [le [quote 48] c] [le c [quote 57]]] not a decimal character neg]
             [assert [gt res [quote -214748364]] out of bounds]
             [continue
@@ -197,7 +154,7 @@
     [let [s [sub 0 [size dw]]]
       [loop [i -1 res 0 multi 1]
         [if [le s i]
-          [let [c [at dw i]]
+          [let [c [at-word dw i]]
             [assert [and [le [quote 48] c] [le c [quote 57]]] not a decimal character pos]
             [assert [lt res [quote 214748364]] out of bounds]
             [continue
@@ -215,7 +172,7 @@
 [constant global-ctx-datas [mutable-list]]
 
 [func push-type [type]
-  [let [index [index-of-word global-ctx-types type]]
+  [let [index [index-of-form global-ctx-types type]]
     [if [is-negative index]
       [let [new-index [size global-ctx-types]]
         [push global-ctx-types type]
@@ -257,7 +214,10 @@
       [push ml [list [quote quote] [at list i]]]]
     [freeze ml]]]
 
-[external-func macro-expand [form] [form]]
+[external host context-macro-expand [func [context form] [form]]]
+[external host context-eval [func [context form] [form]]]
+[external host make-interpreter-context [func [word] [context]]]
+[constant interpreter-context [make-interpreter-context [quote comp-wasm]]]
 
 [func compile-form-mutable [local-ctx code form]
   [ifs
@@ -320,7 +280,7 @@
             [let []
 
             ]
-            [let
+            [let []
               [if [eq s-args 3]
                 [let [- [push-code-byte code else]
                       ft [compile-form-mutable local-ctx code [third args]]]
@@ -426,7 +386,7 @@
           [list]]
 
         [let [instruction [get-instruction first-form]]
-          [if instruction
+          [if [ne [size instruction] 0]
             [let [arity [assoc-list-get instruction [quote arity]]
                   immediate-parameters [assoc-list-get instruction [quote immediate-parameters]]
                   parameters [assoc-list-get instruction [quote parameters]]
@@ -441,22 +401,20 @@
                 [push-code-byte code opcode]]
               [for i 0 [size immediate-parameters]
                   [assert [eq-word [at immediate-parameters i] immediate-u32] immediate parameter type mismatch]
-                  [push-code-u32 code [eval [at form [inc i]]]]]
+                  [push-code-u32 code [context-eval interpreter-context [at form [inc i]]]]]
               [assoc-list-get instruction [quote results]]]
             [let [sig-index [assoc-list-index global-ctx-func-sigs first-form]]
               [if [is-negative sig-index]
-                [let [exp-form [macro-expand form]]
-                  [log [list [quote exp-form] exp-form]]
-                  [compile-form-mutable local-ctx code exp-form]]
-              [let [func-sig [at global-ctx-func-sigs [inc sig-index]]
-                    parameter-types [first func-sig]]
-                [assert [eq [size parameter-types] [size args]] parameter arity mismatch [list first-form [size parameter-types] [size args]]]
-                [for i 0 [size args]
-                  [comment todo also check types]
-                  [compile-form-mutable local-ctx code [at args i]]]
-                [push-code-byte code call]
-                [push-code-u32 code [div sig-index 2]]
-                [second func-sig]]]]
+                [do [log [concat [quote unknown instruction] [list first-form]]] [abort]]
+                [let [func-sig [at global-ctx-func-sigs [inc sig-index]]
+                      parameter-types [first func-sig]]
+                  [assert [eq [size parameter-types] [size args]] parameter arity mismatch [list first-form [size parameter-types] [size args]]]
+                  [for i 0 [size args]
+                    [comment todo also check types]
+                    [compile-form-mutable local-ctx code [at args i]]]
+                  [push-code-byte code call]
+                  [push-code-u32 code [div sig-index 2]]
+                  [second func-sig]]]]
             ]]]]]]
 
 [func data-passive-bytes [byte-list]
@@ -516,10 +474,9 @@
 
 [func compile-top-level-form [form]
   [ifs
-    [eq-word [quote wasm-func] [first form]]
+    [eq-word [quote func] [first form]]
     [let [name [second form]
           params [third form]
-          results [fourth form]
           param-ctx [mutable-list]
           parameter-type-list [mutable-list]
           -
@@ -603,7 +560,7 @@
           value [third form]]
       []]
 
-    [eval form]]]
+    [context-eval interpreter-context form]]]
 
 [func vector-section [section-id content]
   [let [n-of-bytes [size content]]

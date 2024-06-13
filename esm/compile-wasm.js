@@ -2,15 +2,14 @@ import path from 'node:path'
 import fs from 'node:fs'
 
 import { parseStringToForms } from './parseTreeSitter.js'
-import { makeContext, setFiles } from './interpreter.js'
-
-const compilerContext = makeContext({ contextName: 'compiler-wasm' })
-const { parseEvalFile, getExported, apply } = compilerContext
+import { makeContext } from './interpreter.js'
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname)
-const wunsDir = path.resolve(__dirname, '..', 'wuns')
+const wunsDir = path.resolve(__dirname, '..', 'wuns') + '/'
 
-setFiles(wunsDir, compilerContext)
+const compilerContext = makeContext({ wunsDir, contextName: 'compiler-wasm' })
+const { parseEvalFile, getExported, apply } = compilerContext
+
 parseEvalFile('compiler-wasm.wuns')
 const compileFormsModule = getExported('compiler-wasm.wuns', 'compile-top-forms-to-module')
 

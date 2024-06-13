@@ -1,6 +1,6 @@
 import fs from 'fs'
 
-import { makeList, wordValue, isWord, isList, isUnit, unit, print, unword, isSigned32BitInteger } from './core.js'
+import { makeList, wordValue, isWord, isList, isUnit, unit, print, unword, isSigned32BitInteger, meta } from './core.js'
 import { parseStringToForms } from './parseTreeSitter.js'
 import { i32binops } from './instructions.js'
 
@@ -331,7 +331,7 @@ export const makeContext = (options) => {
             // if (!isValidRuntimeValue(res)) throw new Error(`expected valid runtime value, found ${res}`)
             return res
           } catch (e) {
-            console.error('error evaluating', firstWordValue, print(form))
+            console.error('error evaluating', firstWordValue, print(form), meta(form))
             throw e
           }
         }
@@ -341,7 +341,14 @@ export const makeContext = (options) => {
       const internalApply = seqApply(funcOrMacro, args.length)
       if (isMacro) return wunsComp(internalApply(args))
       const cargs = args.map(wunsComp)
-      return (env) => internalApply(cargs.map((carg) => carg(env)))
+      return (env) => {
+        try {
+          return internalApply(cargs.map((carg) => carg(env)))
+        } catch (e) {
+          console.error('error evaluating', firstWordValue, print(form), meta(form))
+          throw e
+        }
+      }
     } catch (e) {
       console.error('error evaluating', firstWordValue)
       throw e

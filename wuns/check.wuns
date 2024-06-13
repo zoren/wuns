@@ -209,6 +209,13 @@
               [continue i [inc i]]]]
           res-types]
 
+        [eq-form first-form [quote i32]]
+        [do
+          [if [eq n-of-args 1]
+            [report-when-not [is-decimal [second form]] [second form] i32 expects a decimal]
+            [report form i32 expects one argument]]
+          type-i32]
+
         [eq-form first-form [quote quote]]
         [do
           [comment todo check if integer or word or list]
@@ -436,7 +443,7 @@
               [if [ne 0 [size instruction]]
                 [let [parameters [assoc-list-get instruction [quote parameters]]
                       imm-parameters [assoc-list-get instruction [quote immediate-parameters]]
-                      n-of-parameters [add [size parameters] [size imm-parameters]]
+                      n-of-parameters [assoc-list-get instruction [quote arity]]
                       results [assoc-list-get instruction [quote results]]]
                   [report-when-not [eq n-of-args n-of-parameters] form wrong number of arguments]
                   [loop [i 1]

@@ -1,0 +1,43 @@
+
+[func reverse [l]
+  [let [res [mutable-list]]
+    [loop [i [dec [size l]]]
+      [when-not [is-negative i]
+        [push res [at l i]]
+        [continue i [dec i]]]]
+    [freeze res]]]
+
+[func dec-word-to-hex-word [dw]
+  [assert [not [is-negative dw]] expected non-negative decimal word]
+  [if [is-zero dw]
+    [quote 0x00]
+    [let [hex-digits [quote 0 1 2 3 4 5 6 7 8 9 a b c d e f]
+          res [mutable-list]]
+      [loop [n dw]
+        [if [is-zero n]
+          [do
+            [push res [quote x]]
+            [push res 0]
+            [concat-words [reverse res]]]
+          [let [remainder [bitwise-and n [quote 15]]
+                quotient [bitwise-shift-right n [quote 4]]]
+            [push res [at hex-digits remainder]]
+            [continue n quotient]]]]]]]
+
+[func dec-words-to-hex [decs]
+  [let [res [mutable-list]]
+    [for i 0 [size decs]
+      [push res [dec-word-to-hex-word [at decs i]]]]
+    [freeze res]]]
+
+[func test [expected actual]
+  [when-not [eq-form expected actual]
+    [log [list [quote expected] expected [quote [but got]] actual]]]]
+
+[comment wikipedia says 0xe5 0x8e 0x26]
+
+[test [quote [0xe5 0x8e 0x26]] [dec-words-to-hex [u32-word-to-leb-128 [quote 624485]]]]
+
+[comment wikipedia says 0xc0 0xbb 0x78]
+
+[test [quote [0xc0 0xbb 0x78]] [dec-words-to-hex [s32-word-to-leb-128 [quote -123456]]]]
