@@ -99,14 +99,6 @@
 [func is-js-keyword [word]
   [not [is-negative [index-of-word js-keywords word]]]]
 
-[func word-to-codepoints [w]
-  [let [ml [mutable-list]]
-    [loop [i 0]
-      [when [lt i [size w]]
-        [push ml [at w i]]
-        [continue i [inc i]]]]
-    [freeze ml]]]
-
 [func dec-word-to-i32 [dw]
   [let [s [sub 0 [size dw]]]
     [loop [i -1 res 0 multi 1]
