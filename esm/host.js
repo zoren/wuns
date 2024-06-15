@@ -18,7 +18,7 @@ import {
 
 export const is_word = (f) => isWord(f)
 
-export const is_i32 = (f) => (isWord(f) && isSigned32BitInteger(Number(wordValue(f))))
+export const is_i32 = (f) => isWord(f) && isSigned32BitInteger(Number(wordValue(f)))
 
 export const is_list = (f) => isList(f)
 
@@ -113,8 +113,13 @@ export const report_error = (msg, form) => {
   console.error(msg, print(form))
   return unit
 }
-export {
-  atom,
-  is_atom,
-  atom_get,
-  atom_set,}
+export { atom, is_atom, atom_get, atom_set }
+export const concat_lists = (l) => {
+  if (!Array.isArray(l)) throw new Error('concat-lists expects list')
+  const result = []
+  for (const e of l) {
+    if (!Array.isArray(e)) throw new Error('concat-lists expects list of lists')
+    result.push(...e)
+  }
+  return makeList(...result)
+}

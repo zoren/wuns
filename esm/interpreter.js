@@ -62,20 +62,16 @@ const seqApply = (funcOrMacro, numberOfGivenArgs) => {
     return result
   }
 }
-
+const a2n = (arg) => {
+  const wv = wordValue(arg)
+  const n = Number(wv)
+  if (!isSigned32BitInteger(n)) throw new Error(`expected 32-bit signed integer, found: ${wv}`)
+  return n
+}
 const instructions = []
 for (const [name, op] of Object.entries(i32binops)) {
   const opfn = Function('a', 'b', `return (a ${op} b) | 0`)
-  const f = (a, b) => {
-    const numberArgs = [a, b].map((arg) => {
-      const wv = wordValue(arg)
-      const n = Number(wv)
-      if (!isSigned32BitInteger(n)) throw new Error(`expected 32-bit signed integer, found: ${wv}`)
-      return n
-    })
-    return opfn(...numberArgs)
-  }
-  instructions.push([name, f])
+  instructions.push([name, (a, b) => opfn(a2n(a), a2n(b))])
 }
 
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])

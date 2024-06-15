@@ -1,0 +1,226 @@
+[func list [.. forms]
+  forms]
+
+[macro comment [.. -] [list]]
+
+[macro type [params results]
+  [comment [type [[list form] [list form]] [tuple]]]
+  [list]]
+
+[constant -2 [quote -2]]
+[constant -1 [quote -1]]
+[constant 0 [quote 0]]
+[constant 1 [quote 1]]
+[constant 2 [quote 2]]
+[constant 3 [quote 3]]
+[constant 4 [quote 4]]
+
+[func inc [x]
+  [type [i32] i32]
+  [add x 1]]
+
+[func dec [x]
+  [type [i32] i32]
+  [sub x 1]]
+
+[func not [c]
+  [type [i32] i32]
+  [eq c 0]]
+
+[func is-zero [x]
+  [type [i32] i32]
+  [eq x 0]]
+
+[func is-odd [x]
+  [type [i32] i32]
+  [bitwise-and x 1]]
+
+[func is-odd2 [x]
+  [type [i32] i32]
+  [is-odd x]]
+
+[func is-even [x]
+  [type [i32] i32]
+  [not [is-odd x]]]
+
+[func is-negative [x]
+  [type [i32] i32]
+  [lt x 0]]
+
+[func first [l]
+  [type [[list any]] any]
+  [at l 0]]
+[func second [l]
+  [type [[list any]] any]
+  [at l 1]]
+[func third [l]
+  [type [[list any]] any]
+  [at l 2]]
+[func fourth [l]
+  [type [[list any]] any]
+  [at l 3]]
+[func last [l]
+  [type [[list any]] any]
+  [at l -1]]
+
+[func rest [l]
+  [type [[list any]] [list any]]
+  [slice l 1 [size l]]]
+
+[func push-all [mut-list list]
+  [type [[mutable-list any] [list any]] [tuple]]
+  [let [s-l [size list]]
+    [loop [i 0]
+      [if [lt i s-l]
+        [let []
+          [push mut-list [at list i]]
+          [continue i [inc i]]]
+        []]]]]
+
+[func concat [.. lists]
+  [type [.. [list any]] [list any]]
+  [concat-lists lists]]
+
+[macro do [.. forms]
+  [concat [quote [let []]] forms]]
+
+[macro when [cond .. forms]
+  [list
+    [quote if] cond
+    [concat [quote [do]] forms]
+    [list]]]
+
+[macro when-not [cond .. forms]
+  [list
+    [quote if] cond
+    [list]
+    [concat [quote [do]] forms]]]
+
+[macro assert [cond .. lmsg]
+  [let [msg [mutable-list]]
+    [push msg [quote list]]
+    [loop [i 0]
+      [when [lt i [size lmsg]]
+        [let [e [at lmsg i]]
+          [push msg [if [is-word e] [list [quote quote] e] e]]
+          [continue i [inc i]]]]
+        ]
+    [list [quote when-not] cond
+      [list [quote log] msg]
+      [quote [abort]]]]]
+
+[macro ifs [.. clauses]
+  [let [s [size clauses]]
+    [assert [not [is-zero s]] ifs requires an odd number of arguments]
+    [if [eq s 1]
+      [first clauses]
+      [list [quote if] [first clauses]
+        [second clauses]
+        [concat [quote [ifs]] [slice clauses 2 [size clauses]]]]]]]
+
+[macro and [.. clauses]
+  [let [s [size clauses]]
+    [ifs
+      [is-zero s]
+      1
+
+      [eq s 1]
+      [first clauses]
+
+      [list [quote if] [first clauses]
+        [concat [quote [and]] [rest clauses]]
+        0]]]]
+
+[macro or [.. clauses]
+  [let [s [size clauses]]
+    [ifs
+      [is-zero s]
+      0
+
+      [eq s 1]
+      [first clauses]
+
+      [list [quote if] [first clauses]
+        1
+        [concat [quote [or]] [rest clauses]]]]]]
+
+[func eq-word [a b]
+  [type [word word] i32]
+  [and [eq [size a] [size b]]
+    [loop [i 0]
+      [if [lt i [size a]]
+        [if [eq [at-word a i] [at-word b i]]
+          [continue i [inc i]]
+          0]
+        1]]]]
+
+[func eq-form [a b]
+  [type [form form] i32]
+  [or
+    [and [is-word a] [is-word b] [eq-word a b]]
+    [and [is-list a] [is-list b]
+      [let [s [size a]]
+        [and [eq s [size b]]
+          [loop [i 0]
+            [or [ge i s]
+              [and [eq-form [at a i] [at b i]] [continue i [inc i]]]]]]]]]]
+
+[func assoc-list-index [ctx sym]
+  [type [[list any] form] i32]
+  [let [s [size ctx]]
+    [loop [i 0]
+      [if [ge i s]
+        -1
+        [if [eq-form [at ctx i] sym]
+          i
+          [continue i [add i 2]]]]]]]
+
+[func assoc-list-has [ctx sym]
+  [type [[list any] word] i32]
+  [not [is-negative [assoc-list-index ctx sym]]]]
+
+[func assoc-list-get [ctx sym]
+  [type [[list any] word] any]
+  [let [index [assoc-list-index ctx sym]]
+    [if [is-negative index]
+      [let []
+        [log [concat [quote assoc-list-get key not found] [list sym ctx]]]
+        [abort]]
+      [at ctx [inc index]]]]]
+
+[func assoc-list-set [ctx sym value]
+  [type [[mutable-list any] word any] [tuple]]
+  [let [index [assoc-list-index ctx sym]]
+    [if [is-negative index]
+      [do
+        [push ctx sym]
+        [push ctx value]]
+      [set-array ctx [inc index] value]]]]
+
+[constant word-counter [atom 0]]
+
+[func genword []
+  [type [] word]
+  [let [c [atom-get word-counter]]
+    [if [is-i32 c]
+      [atom-set word-counter [inc c]]
+      [do [log [quote not int]]
+        [abort]]]
+    [concat-words [list [quote genword] c]]]]
+
+[func for-func [iw start increment end forms]
+  [let [ew [genword]]
+    [list
+      [quote let] [list ew end]
+      [list
+        [quote loop] [list iw start]
+        [list [quote if]
+          [list [quote lt] iw ew]
+          [concat [quote let []] forms [list [list [quote continue] iw [list [quote add] iw increment]]]]
+          [list]]]]]]
+
+[macro for [iw start end .. forms]
+  [for-func iw start 1 end forms]]
+
+[macro for-inc [iw start increment end .. forms]
+  [for-func iw start increment end forms]]
