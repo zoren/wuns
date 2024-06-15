@@ -15,7 +15,7 @@
 
 [macro type [params results]
   [comment [type [[list form] [list form]] [tuple]]]
-  [tuple]]
+  [list]]
 
 [comment has side effect]
 [external-func log [form] [tuple]]
@@ -172,14 +172,6 @@
       [list [quote if] [first clauses]
         [concat [quote [and]] [rest clauses]]
         0]]]]
-
-[func between [x a b]
-  [type [i32 i32 i32] i32]
-  [if [ge x a] [lt x b] 0]]
-
-[func between-mac [x a b]
-  [type [i32 i32 i32] i32]
-  [and [ge x a] [lt x b]]]
 
 [macro or [.. clauses]
   [let [s [size clauses]]

@@ -3,10 +3,7 @@ const wordRegex = /^[a-z0-9.=/-]+$/
 export const isWordString = (s) => typeof s === 'string' && s.length > 0 && wordRegex.test(s)
 class Word {
   constructor(value) {
-    const n = Number(value)
-    if (isSigned32BitInteger(n)) {
-      this.value = n
-    } else if (isWordString(value)) {
+    if (isWordString(value)) {
       this.value = value
     } else throw new Error('invalid word: "' + value + '" ' + typeof value)
   }
@@ -17,10 +14,9 @@ class Word {
 }
 export const word = (s) => Object.freeze(new Word(s))
 // todo what about words representing large integers?
-export const isWord = (f) => isSigned32BitInteger(f) || (typeof f === 'string' && isWordString(f)) || f instanceof Word
+export const isWord = (f) => f instanceof Word
+export const isForm = (f) => isWord(f) || (isList(f) && f.every(isForm))
 export const wordValue = (w) => {
-  if (isSigned32BitInteger(w)) return w
-  if (typeof w === 'string') return w
   if (w instanceof Word) return w.value
   throw new Error('not a word: ' + w + ' ' + typeof w)
 }

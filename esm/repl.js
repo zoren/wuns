@@ -4,7 +4,7 @@ import { stdin, nextTick, stdout } from 'node:process'
 
 const historyFilePath = 'history.json'
 
-export const runRepl = ({ getCurrentFilename, parseEvalString }) => {
+export const runRepl = ({ parseEvalString }) => {
   let history = []
   try {
     const histO = JSON.parse(fs.readFileSync(historyFilePath, 'utf8'))
@@ -29,7 +29,7 @@ export const runRepl = ({ getCurrentFilename, parseEvalString }) => {
   })
 
   const prompt = () => {
-    rl.question(`${getCurrentFilename()}> `, (line) => {
+    rl.question(`> `, (line) => {
       if (line === '') {
         console.log(`Bye!`)
         rl.close()
