@@ -148,7 +148,7 @@
   [for i 0 [size bytes]
     [let [b [at bytes i]]
       [assert [not [is-negative b]] passive-data-bytes negative byte]
-      [assert [le b [i32 255]] passive-data-bytes byte greater than 255]]]
+      [assert [le b [quote 255]] passive-data-bytes byte greater than 255]]]
   [concat [list 1] [u32-word-to-leb-128 [size bytes]] bytes]]
 
 [func decimal-word-to-i32 [dw]

@@ -54,3 +54,21 @@ export const unword = (v) => {
   if (isList(v)) return makeList(...v.map(unword))
   throw new Error('quote expects word or list')
 }
+class Atom {
+  constructor(value) {
+    this.value = value
+  }
+  toString() {
+    return print(this.value)
+  }
+}
+export const atom = (v) => (new Atom(v))
+export const is_atom = (f) => f instanceof Atom
+export const atom_get = (a) => {
+  if (a instanceof Atom) return a.value
+  throw new Error('not an atom: ' + a)
+}
+export const atom_set = (a, v) => {
+  if (!(a instanceof Atom)) throw new Error('not an atom: ' + a)
+  a.value = v
+}

@@ -29,7 +29,7 @@ export const runRepl = ({ parseEvalString }) => {
   })
 
   const prompt = () => {
-    rl.question(`> `, (line) => {
+    rl.question(`wuns> `, (line) => {
       if (line === '') {
         console.log(`Bye!`)
         rl.close()

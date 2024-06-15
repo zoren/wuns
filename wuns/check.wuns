@@ -1,16 +1,5 @@
-[import standard-library.wuns
-  comment constant-ids mutable-list push size at at-word slice freeze concat-lists concat do when when-not assert ifs set-array concat-words and or eq-word is-word is-list eq-form assoc-list-index assoc-list-has assoc-list-get assoc-list-set log
-  inc dec not is-zero is-odd is-even is-negative first second third fourth last rest push-all abort
-  for list meta
-  -2 -1 0 1 2 3 4]
-
-[constant-ids - ..]
-
-[external check report-error [func [[list any] form] []]]
-
-[external host make-interpreter-context [func [word] [context]]]
-[external host context-eval [func [context form] [form]]]
-[external host context-macro-expand [func [context form] [form]]]
+[constant - [quote -]]
+[constant .. [quote ..]]
 
 [macro report-when [cond form .. lmsg]
   [list [quote when] cond
@@ -136,8 +125,6 @@
     [if [is-negative index]
       []
       [at global-ctx [inc index]]]]]
-
-[import wasm-instructions.wuns get-instruction]
 
 [constant interpreter-context [make-interpreter-context [quote check]]]
 

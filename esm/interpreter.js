@@ -12,6 +12,7 @@ import {
   isSigned32BitInteger,
   meta,
   word,
+  is_atom
 } from './core.js'
 import { parseStringToForms } from './parseTreeSitter.js'
 import { i32binops } from './instructions.js'
@@ -22,9 +23,11 @@ const assert = (cond, msg) => {
 
 const jsToWuns = (js) => {
   if (isForm(js)) return js
+  if (typeof js === 'boolean') return js ? word('1') : word('0')
   if (typeof js === 'string') return word(js)
   if (typeof js === 'number') return word(String(js))
   if (js === undefined) return unit
+  if (is_atom(js)) return js
   throw new Error(`cannot convert ${js} of type ${typeof js} to wuns ${js.constructor.name}`)
 }
 

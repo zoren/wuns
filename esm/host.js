@@ -10,13 +10,17 @@ import {
   print,
   isSigned32BitInteger,
   makeList,
+  atom,
+  is_atom,
+  atom_get,
+  atom_set,
 } from './core.js'
 
-export const is_word = (f) => isWord(f) | 0
+export const is_word = (f) => isWord(f)
 
-export const is_i32 = (f) => (isWord(f) && isSigned32BitInteger(Number(wordValue(f)))) | 0
+export const is_i32 = (f) => (isWord(f) && isSigned32BitInteger(Number(wordValue(f))))
 
-export const is_list = (f) => isList(f) | 0
+export const is_list = (f) => isList(f)
 
 export const with_meta = (f, meta) => {
   if (isWord(f)) return wordWithMeta(wordValue(f), meta)
@@ -104,3 +108,13 @@ export const context_eval = (context, form) => {
   const { evalFormCurrentModule } = context
   return evalFormCurrentModule(form)
 }
+
+export const report_error = (msg, form) => {
+  console.error(msg, print(form))
+  return unit
+}
+export {
+  atom,
+  is_atom,
+  atom_get,
+  atom_set,}

@@ -1,6 +1,3 @@
-[import standard-library.wuns
-  concat size inc assoc-list-get eq-word at for 0 list]
-
 [func make-operation-obj [name opcode immediate-parameters parameters results]
   [concat
     [quote [name]] [list name]
@@ -12,6 +9,7 @@
 
 [constant i32 [quote i32]]
 [constant immediate-u32 [quote immediate-u32]]
+[constant immediate-s32 [quote immediate-s32]]
 [constant empty-tuple [quote [tuple]]]
 
 [macro make-binary-i32 [name opcode]
@@ -21,6 +19,8 @@
   [list
     [make-operation-obj [quote unreachable] [quote 0x00] [] [] empty-tuple]
     [make-operation-obj [quote nop] [quote 0x01] [] [] empty-tuple]
+
+    [make-operation-obj [quote const] [quote 0x41] [list immediate-s32] [] i32]
 
     [make-binary-i32 eq  0x46]
     [make-binary-i32 ne  0x47]
@@ -67,5 +67,3 @@
           o
           [continue i [inc i]]]]
       [list]]]]
-
-[export get-instruction]
