@@ -293,18 +293,15 @@ export const makeContext = (options) => {
       }
     }
     try {
-      const inst = instructions[firstWordValue]
-      if (inst) {
-        if (typeof inst !== 'function')
-          throw new Error(`expected function, found ${typeof inst} ${firstWordValue} ${print(form)}`)
+      const funcOrMacro = currentModuleVars().get(firstWordValue)
+      if (funcOrMacro === undefined) {
+        const inst = instructions[firstWordValue]
+        if (!inst) throw new Error(`function ${firstWordValue} not found ${print(form)} in ${currentFilename}`)
         const parameterCount = inst.length
         assert(args.length === parameterCount, `expected ${parameterCount} arguments, got ${args.length}`)
         const cargs = args.map(wunsComp)
         return (env) => inst(...cargs.map((carg) => carg(env)))
       }
-      const funcOrMacro = currentModuleVars().get(firstWordValue)
-      if (funcOrMacro === undefined)
-        throw new Error(`function ${firstWordValue} not found ${print(form)} in ${currentFilename}`)
       if (typeof funcOrMacro === 'function') {
         const parameterCount = funcOrMacro.length
         assert(
