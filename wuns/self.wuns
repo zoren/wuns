@@ -1,0 +1,47 @@
+[func eval [env form]
+  [ifs
+    [is-word form]
+    [loop [cur-env env]
+      [list]]
+
+    [not [is-list form]]
+    [log-abort list begins with [identity form]]
+
+    [is-empty form]
+    [log-abort empty list]
+
+    [let
+      [first-word [first form]
+       s-form [size form]
+       n-of-args [dec [size form]]]
+      [assert [is-word first-word] first element must be a word]
+      [ifs
+        [eq-word first-word [quote quote]]
+        [if [eq n-of-args 1]
+          [second form]
+          [rest form]]
+
+        [eq-word first-word [quote if]]
+        [do
+          [assert [eq n-of-args 3] must have 3 arguments]
+          [if [eval env [at form 1]]
+            [eval env [at form 2]]
+            [eval env [at form 3]]]]
+
+        [eq-word first-word [quote let]]
+        [let [bindings [second form]
+              bodies [slice form 2 s-form]]
+            [assert [is-list bindings] bindings must be a list]
+            [assert [is-even [size bindings]] bindings must have an even number of elements]
+            [for-inc i 0 2 [size bindings]
+              [let [binding [at bindings i]
+                    value [at bindings [inc i]]]
+                [assert [is-word binding] binding must be a word]
+                ]]]
+
+        [eq-word first-word [quote add]]
+        [do
+          [assert [eq [size args] 2] must have 2 arguments]
+          [add [eval env [first args]] [eval env [second args]]]]
+
+        [log-abort unknown function [identity first-word]]]]]]

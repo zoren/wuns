@@ -15,53 +15,27 @@
 [constant 3 [quote 3]]
 [constant 4 [quote 4]]
 
-[func inc [x]
-  [type [i32] i32]
-  [add x 1]]
+[func inc [x] [add x 1]]
 
-[func dec [x]
-  [type [i32] i32]
-  [sub x 1]]
+[func dec [x] [sub x 1]]
 
-[func not [c]
-  [type [i32] i32]
-  [eq c 0]]
+[func not [c] [eq c 0]]
 
-[func is-zero [x]
-  [type [i32] i32]
-  [eq x 0]]
+[func is-zero [x] [eq x 0]]
 
-[func is-odd [x]
-  [type [i32] i32]
-  [bitwise-and x 1]]
+[func is-odd [x] [bitwise-and x 1]]
 
-[func is-odd2 [x]
-  [type [i32] i32]
-  [is-odd x]]
+[func is-odd2 [x] [is-odd x]]
 
-[func is-even [x]
-  [type [i32] i32]
-  [not [is-odd x]]]
+[func is-even [x] [not [is-odd x]]]
 
-[func is-negative [x]
-  [type [i32] i32]
-  [lt x 0]]
+[func is-negative [x] [lt x 0]]
 
-[func first [l]
-  [type [[list any]] any]
-  [at l 0]]
-[func second [l]
-  [type [[list any]] any]
-  [at l 1]]
-[func third [l]
-  [type [[list any]] any]
-  [at l 2]]
-[func fourth [l]
-  [type [[list any]] any]
-  [at l 3]]
-[func last [l]
-  [type [[list any]] any]
-  [at l -1]]
+[func first [l] [at l 0]]
+[func second [l] [at l 1]]
+[func third [l] [at l 2]]
+[func fourth [l] [at l 3]]
+[func last [l] [at l -1]]
 
 [func rest [l]
   [type [[list any]] [list any]]
@@ -75,7 +49,7 @@
         [let []
           [push mut-list [at list i]]
           [continue i [inc i]]]
-        []]]]]
+        [list]]]]]
 
 [func concat [.. lists]
   [type [.. [list any]] [list any]]
@@ -96,18 +70,28 @@
     [list]
     [concat [quote [do]] forms]]]
 
-[macro assert [cond .. lmsg]
-  [let [msg [mutable-list]]
-    [push msg [quote list]]
+[func quote-list [lmsg]
+  [let [msg [mutable-list [quote list]]]
     [loop [i 0]
       [when [lt i [size lmsg]]
         [let [e [at lmsg i]]
           [push msg [if [is-word e] [list [quote quote] e] e]]
-          [continue i [inc i]]]]
-        ]
-    [list [quote when-not] cond
-      [list [quote log] msg]
-      [quote [abort]]]]]
+          [continue i [inc i]]]]]
+    [freeze msg]]]
+
+[macro log-abort [.. lmsg]
+  [list [quote let] [list]
+    [list [quote log] [quote-list lmsg]]
+    [quote [abort]]]]
+
+[macro assert [cond .. lmsg]
+  [list [quote when-not] cond
+      [list [quote log] [quote-list lmsg]]
+      [quote [abort]]]]
+
+[func identity [x]
+  [type [any] any]
+  x]
 
 [macro ifs [.. clauses]
   [let [s [size clauses]]
@@ -144,26 +128,34 @@
         1
         [concat [quote [or]] [rest clauses]]]]]]
 
-[func eq-word [a b]
-  [type [word word] i32]
-  [and [eq [size a] [size b]]
-    [loop [i 0]
-      [if [lt i [size a]]
-        [if [eq [at-word a i] [at-word b i]]
-          [continue i [inc i]]
-          0]
-        1]]]]
+[constant word-counter [atom 0]]
 
-[func eq-form [a b]
-  [type [form form] i32]
-  [or
-    [and [is-word a] [is-word b] [eq-word a b]]
-    [and [is-list a] [is-list b]
-      [let [s [size a]]
-        [and [eq s [size b]]
-          [loop [i 0]
-            [or [ge i s]
-              [and [eq-form [at a i] [at b i]] [continue i [inc i]]]]]]]]]]
+[func genword []
+  [type [] word]
+  [let [c [atom-get word-counter]]
+    [if [is-i32 c]
+      [atom-set word-counter [inc c]]
+      [do [log [quote not int]]
+        [abort]]]
+    [concat-words [list [quote genword] c]]]]
+
+[func for-func [iw start increment end forms]
+  [assert [gt increment 0] for-func increment must be positive]
+  [let [ew [genword]]
+    [list
+      [quote let] [list ew end]
+      [list
+        [quote loop] [list iw start]
+        [list [quote if]
+          [list [quote lt] iw ew]
+          [concat [quote let []] forms [list [list [quote continue] iw [list [quote add] iw increment]]]]
+          [list]]]]]]
+
+[macro for [iw start end .. forms]
+  [for-func iw start 1 end forms]]
+
+[macro for-inc [iw start increment end .. forms]
+  [for-func iw start increment end forms]]
 
 [func assoc-list-index [ctx sym]
   [type [[list any] form] i32]
@@ -197,30 +189,6 @@
         [push ctx value]]
       [set-array ctx [inc index] value]]]]
 
-[constant word-counter [atom 0]]
-
-[func genword []
-  [type [] word]
-  [let [c [atom-get word-counter]]
-    [if [is-i32 c]
-      [atom-set word-counter [inc c]]
-      [do [log [quote not int]]
-        [abort]]]
-    [concat-words [list [quote genword] c]]]]
-
-[func for-func [iw start increment end forms]
-  [let [ew [genword]]
-    [list
-      [quote let] [list ew end]
-      [list
-        [quote loop] [list iw start]
-        [list [quote if]
-          [list [quote lt] iw ew]
-          [concat [quote let []] forms [list [list [quote continue] iw [list [quote add] iw increment]]]]
-          [list]]]]]]
-
-[macro for [iw start end .. forms]
-  [for-func iw start 1 end forms]]
-
-[macro for-inc [iw start increment end .. forms]
-  [for-func iw start increment end forms]]
+[func is-empty [form]
+  [type [form] i32]
+  [eq 0 [size form]]]

@@ -14,6 +14,7 @@ import {
   is_atom,
   atom_get,
   atom_set,
+  number,
 } from './core.js'
 
 export const is_word = (f) => isWord(f)
@@ -21,6 +22,12 @@ export const is_word = (f) => isWord(f)
 export const is_i32 = (f) => isWord(f) && isSigned32BitInteger(Number(wordValue(f)))
 
 export const is_list = (f) => isList(f)
+
+export const eq_word = (a, b) => isWord(a) && isWord(b) && (a === b || wordValue(a) === wordValue(b))
+
+export const eq_list = (a, b) => isList(a) && isList(b) && (a === b || a.every((e, i) => eq_form(e, b[i])))
+
+export const eq_form = (a, b) => eq_word(a, b) || eq_list(a, b)
 
 export const with_meta = (f, meta) => {
   if (isWord(f)) return wordWithMeta(wordValue(f), meta)
@@ -40,13 +47,22 @@ export const push = (ar, e) => {
   ar.push(e)
   return unit
 }
-export const mutable_list = () => []
+export const mutable_list = (...args) => args
 export const is_mutable = (f) => (Array.isArray(f) && !Object.isFrozen(f)) | 0
 // come up with a better name, the list is not frozen, a frozen copy is made
 export const freeze = (ar) => {
   if (!Array.isArray(ar)) throw new Error('freeze expects array')
   if (Object.isFrozen(ar)) throw new Error('freeze expects mutable array')
   return makeList(...ar)
+}
+export const persistent_array = (o) => {
+  if (!Array.isArray(o)) throw new Error('persistent-array expects array')
+  return makeList(...o)
+}
+export const persistent_object = (o) => {
+  if (!o || typeof o !== 'object') throw new Error('persistent-object expects object')
+  const clone = { ...o }
+  return Object.freeze(clone)
 }
 export const set_array = (ar, index, e) => {
   if (!Array.isArray(ar)) throw new Error('set-array expects array')
@@ -56,15 +72,12 @@ export const set_array = (ar, index, e) => {
   ar[i] = e
   return unit
 }
-const number = (f) => {
-  if (!isWord(f)) throw new Error('expected word: ' + f)
-  const s = wordValue(f)
-  const n = Number(s)
-  if (isNaN(n)) throw new Error('expected number, found: ' + s)
-  if (!isSigned32BitInteger(n)) throw new Error('expected 32-bit signed integer, found: ' + s)
-  return n
+export const set = (ar, k, e) => {
+  if (!ar || typeof ar !== 'object' || Array.isArray(ar)) throw new Error('set expects map')
+  if (Object.isFrozen(ar)) throw new Error('set expects mutable object')
+  ar[wordValue(k)] = e
+  return unit
 }
-
 export const at = (v, i) => {
   if (!isList(v)) throw new Error('at expects list, got' + typeof v + ' ' + v)
   const len = size(v)
@@ -122,4 +135,25 @@ export const concat_lists = (l) => {
     result.push(...e)
   }
   return makeList(...result)
+}
+
+export const kv_map = (...entries) => {
+  if (entries.length % 2 !== 0) throw new Error('kv-map expects even number of arguments')
+  const map = {}
+  for (let i = 0; i < entries.length; i += 2) map[wordValue(entries[i])] = entries[i + 1]
+  return map
+}
+export const assoc = (m, k, v) => {
+  if (typeof m !== 'object' || !Object.isFrozen(m)) throw new Error('assoc expects frozen map')
+  const map = { ...m, [wordValue(k)]: v }
+  return Object.freeze(map)
+}
+export const has = (m, k) => {
+  if (typeof m !== 'object') throw new Error('get expects map')
+  return wordValue(k) in m
+}
+
+export const get = (m, k) => {
+  if (typeof m !== 'object') throw new Error('get expects map')
+  return m[wordValue(k)] || unit
 }

@@ -9,10 +9,9 @@ import {
   isUnit,
   unit,
   print,
-  isSigned32BitInteger,
-  meta,
+  number,
   word,
-  is_atom
+  is_atom,
 } from './core.js'
 import { parseStringToForms } from './parseTreeSitter.js'
 import { i32binops } from './instructions.js'
@@ -28,6 +27,7 @@ const jsToWuns = (js) => {
   if (typeof js === 'number') return word(String(js))
   if (js === undefined) return unit
   if (is_atom(js)) return js
+  if (Object.isFrozen(js)) return js
   throw new Error(`cannot convert ${js} of type ${typeof js} to wuns ${js.constructor.name}`)
 }
 
@@ -70,16 +70,10 @@ export const apply = (funcOrMacro, args) => {
   return internalApply(args)
 }
 
-const a2n = (arg) => {
-  const wv = wordValue(arg)
-  const n = Number(wv)
-  if (!isSigned32BitInteger(n)) throw new Error(`expected 32-bit signed integer, found: ${wv}`)
-  return n
-}
 const instructions = []
 for (const [name, op] of Object.entries(i32binops)) {
   const opfn = Function('a', 'b', `return (a ${op} b) | 0`)
-  instructions.push([name, (a, b) => opfn(a2n(a), a2n(b))])
+  instructions.push([name, (a, b) => opfn(number(a), number(b))])
 }
 
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
@@ -93,17 +87,16 @@ export const makeContext = () => {
   for (const [name, f] of instructions) moduleVarSet(name, f)
   for (const [name, f] of hostExports) moduleVarSet(name, f)
   const topEnv = { varValues: topVarValues, outer: null }
-  const currentModuleEnv = () => topEnv
-  const wunsComp = (form) => {
-    const compBodies = (bodies) => {
-      const cbodies = []
-      for (const body of bodies) {
-        const cbody = wunsComp(body)
-        if (cbody === null) continue
-        cbodies.push(cbody)
-      }
-      return makeList(...cbodies)
+  const compBodies = (bodies) => {
+    const cbodies = []
+    for (const body of bodies) {
+      const cbody = wunsComp(body)
+      if (cbody === null) continue
+      cbodies.push(cbody)
     }
+    return makeList(...cbodies)
+  }
+  const wunsComp = (form) => {
     if (isWord(form)) {
       const v = wordValue(form)
       return (env) => {
@@ -207,7 +200,7 @@ export const makeContext = () => {
           isMacro: firstWordValue === 'macro',
           params: params.map(wordValue),
           restParam,
-          moduleEnv: currentModuleEnv(),
+          moduleEnv: topEnv,
         }
         const n = wordValue(fmname)
         moduleVarSet(n, fObj)
@@ -219,46 +212,21 @@ export const makeContext = () => {
         const [varName, value] = args
         const vn = wordValue(varName)
         const compValue = wunsComp(value)
-        moduleVarSet(vn, compValue(currentModuleEnv()))
+        moduleVarSet(vn, compValue(topEnv))
         return null
       }
     }
-    try {
-      const funcOrMacro = topVarValues.get(firstWordValue)
-      if (funcOrMacro === undefined) throw new Error(`function ${firstWordValue} not found ${print(form)}`)
-      if (typeof funcOrMacro === 'function') {
-        const parameterCount = funcOrMacro.length
-        assert(
-          args.length === parameterCount,
-          `${firstWordValue} expected ${parameterCount} arguments, got ${args.length}`,
-        )
-        const cargs = args.map(wunsComp)
-        return (env) => {
-          try {
-            return jsToWuns(funcOrMacro(...cargs.map((carg) => carg(env))))
-          } catch (e) {
-            console.error('error evaluating', firstWordValue, print(form), meta(form))
-            throw e
-          }
-        }
-      }
-      assert(typeof funcOrMacro === 'object', `expected function or object ${funcOrMacro}`)
-      const { isMacro } = funcOrMacro
+    const funcOrMacro = topVarValues.get(firstWordValue)
+    if (funcOrMacro === undefined) throw new Error(`function ${firstWordValue} not found ${print(form)}`)
+    if (typeof funcOrMacro === 'object') {
       const internalApply = seqApply(funcOrMacro, args.length)
-      if (isMacro) return wunsComp(internalApply(args))
-
+      if (funcOrMacro.isMacro) return wunsComp(internalApply(args))
       const cargs = args.map(wunsComp)
-      return (env) => {
-        try {
-          return internalApply(cargs.map((carg) => carg(env)))
-        } catch (e) {
-          console.error('error evaluating', firstWordValue, print(form), meta(form))
-          throw e
-        }
-      }
-    } catch (e) {
-      console.error('error evaluating', firstWordValue)
-      throw e
+      return (env) => internalApply(cargs.map((carg) => carg(env)))
+    }
+    if (typeof funcOrMacro === 'function') {
+      const cargs = args.map(wunsComp)
+      return (env) => jsToWuns(funcOrMacro(...cargs.map((carg) => carg(env))))
     }
   }
 
@@ -269,7 +237,7 @@ export const makeContext = () => {
 
   const evalLogForms = (forms) => {
     try {
-      const moduleEnv = currentModuleEnv()
+      const moduleEnv = topEnv
       for (const form of forms) {
         const v = compEval(form, moduleEnv)
         if (!isUnit(v)) console.log(print(v))
@@ -279,7 +247,7 @@ export const makeContext = () => {
     }
   }
 
-  const evalFormCurrentModule = (form) => compEval(form, currentModuleEnv())
+  const evalFormCurrentModule = (form) => compEval(form, topEnv)
 
   const parseEvalString = (content) => {
     evalLogForms(parseStringToForms(content))

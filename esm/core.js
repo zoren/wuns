@@ -46,8 +46,9 @@ export const meta = (form) => {
 export const print = (x) => {
   if (isWord(x)) return String(x)
   if (typeof x === 'number') return String(x)
-  if (!Array.isArray(x)) throw new Error(`cannot print ${x} expected word or list ${typeof x} ${x.constructor}`)
-  return `[${x.map(print).join(' ')}]`
+  if (Array.isArray(x)) return `[${x.map(print).join(' ')}]`
+  if (Object.isFrozen(x)) return `[kv-map ${Object.entries(x).map(([k, v]) => `[quote ${k}] ${print(v)}`).join(' ')}]`
+  throw new Error('cannot print: ' + x)
 }
 export const unword = (v) => {
   if (isWord(v)) return wordValue(v)
@@ -62,7 +63,7 @@ class Atom {
     return print(this.value)
   }
 }
-export const atom = (v) => (new Atom(v))
+export const atom = (v) => new Atom(v)
 export const is_atom = (f) => f instanceof Atom
 export const atom_get = (a) => {
   if (a instanceof Atom) return a.value
@@ -71,4 +72,10 @@ export const atom_get = (a) => {
 export const atom_set = (a, v) => {
   if (!(a instanceof Atom)) throw new Error('not an atom: ' + a)
   a.value = v
+}
+export const number = (arg) => {
+  const wv = wordValue(arg)
+  const n = Number(wv)
+  if (!isSigned32BitInteger(n)) throw new Error(`expected 32-bit signed integer, found: ${wv}`)
+  return n
 }
