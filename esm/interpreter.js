@@ -63,13 +63,6 @@ const seqApply = (funcOrMacro, numberOfGivenArgs) => {
   }
 }
 
-export const apply = (funcOrMacro, args) => {
-  const { isMacro } = funcOrMacro
-  const internalApply = seqApply(funcOrMacro, args.length)
-  if (isMacro) return wunsComp(internalApply(args))
-  return internalApply(args)
-}
-
 const instructions = []
 for (const [name, op] of Object.entries(i32binops)) {
   const opfn = Function('a', 'b', `return (a ${op} b) | 0`)
@@ -229,7 +222,12 @@ export const makeContext = () => {
       return (env) => jsToWuns(funcOrMacro(...cargs.map((carg) => carg(env))))
     }
   }
-
+  const apply = (funcOrMacro, args) => {
+    const { isMacro } = funcOrMacro
+    const internalApply = seqApply(funcOrMacro, args.length)
+    if (isMacro) return wunsComp(internalApply(args))
+    return internalApply(args)
+  }
   const compEval = (form, moduleEnv) => {
     const cform = wunsComp(form)
     return cform === null ? unit : cform(moduleEnv)
@@ -257,6 +255,7 @@ export const makeContext = () => {
     parseEvalString(fs.readFileSync(filename, 'ascii'))
   }
   return {
+    apply,
     evalLogForms,
     evalFormCurrentModule,
     parseEvalString,
