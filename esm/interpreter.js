@@ -32,7 +32,7 @@ const jsToWuns = (js) => {
 }
 
 const seqApply = (funcOrMacro, numberOfGivenArgs) => {
-  const { name, params, restParam, moduleEnv } = funcOrMacro
+  const { name, params, restParam } = funcOrMacro
   const arity = params.length
   let setArguments
   if (restParam === null) {
@@ -54,7 +54,7 @@ const seqApply = (funcOrMacro, numberOfGivenArgs) => {
   }
   return (args) => {
     assert(args.length === numberOfGivenArgs, `expected ${numberOfGivenArgs} arguments, got ${args.length}`)
-    const { cbodies } = funcOrMacro
+    const { cbodies, moduleEnv } = funcOrMacro
     assert(cbodies, `no cbodies in: ${name}`)
     const inner = { varValues: setArguments(args), outer: moduleEnv }
     let result = unit
@@ -73,12 +73,12 @@ const hostExports = Object.entries(await import('./host.js')).map(([name, f]) =>
 
 export const makeContext = () => {
   const topVarValues = new Map()
-  const moduleVarSet = (name, value) => {
+  const topVarSet = (name, value) => {
     if (topVarValues.has(name)) throw new Error(`duplicate variable ${name}`)
     topVarValues.set(name, value)
   }
-  for (const [name, f] of instructions) moduleVarSet(name, f)
-  for (const [name, f] of hostExports) moduleVarSet(name, f)
+  for (const [name, f] of instructions) topVarSet(name, f)
+  for (const [name, f] of hostExports) topVarSet(name, f)
   const topEnv = { varValues: topVarValues, outer: null }
   const compBodies = (bodies) => {
     const cbodies = []
@@ -181,6 +181,7 @@ export const makeContext = () => {
       case 'func':
       case 'macro': {
         const [fmname, origParams0, ...bodies] = args
+        const n = wordValue(fmname)
         const origParams = origParams0 || unit
         let params = origParams
         let restParam = null
@@ -195,17 +196,17 @@ export const makeContext = () => {
           restParam,
           moduleEnv: topEnv,
         }
-        const n = wordValue(fmname)
-        moduleVarSet(n, fObj)
+        topVarSet(n, fObj)
         const cbodies = compBodies(bodies)
         fObj.cbodies = cbodies
+        Object.freeze(fObj)
         return null
       }
       case 'constant': {
         const [varName, value] = args
         const vn = wordValue(varName)
         const compValue = wunsComp(value)
-        moduleVarSet(vn, compValue(topEnv))
+        topVarSet(vn, compValue(topEnv))
         return null
       }
     }
@@ -223,9 +224,8 @@ export const makeContext = () => {
     }
   }
   const apply = (funcOrMacro, args) => {
-    const { isMacro } = funcOrMacro
     const internalApply = seqApply(funcOrMacro, args.length)
-    if (isMacro) return wunsComp(internalApply(args))
+    if (funcOrMacro.isMacro) return wunsComp(internalApply(args))
     return internalApply(args)
   }
   const compEval = (form, moduleEnv) => {
