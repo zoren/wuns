@@ -117,11 +117,6 @@ export const log = (form) => {
   return unit
 }
 
-export const context_eval = (context, form) => {
-  const { evalFormCurrentModule } = context
-  return evalFormCurrentModule(form)
-}
-
 export const report_error = (msg, form) => {
   console.error(msg, print(form))
   return unit

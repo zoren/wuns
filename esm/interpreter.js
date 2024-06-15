@@ -1,18 +1,6 @@
 import fs from 'fs'
 
-import {
-  makeList,
-  wordValue,
-  isWord,
-  isList,
-  isForm,
-  isUnit,
-  unit,
-  print,
-  number,
-  word,
-  is_atom,
-} from './core.js'
+import { makeList, wordValue, isWord, isList, isForm, isUnit, unit, print, number, word, is_atom } from './core.js'
 import { parseStringToForms } from './parseTreeSitter.js'
 import { i32binops } from './instructions.js'
 
@@ -63,6 +51,15 @@ const seqApply = (funcOrMacro, numberOfGivenArgs) => {
   }
 }
 
+const getVar = (env, v) => {
+  while (true) {
+    if (!env) throw new Error(`undefined variable ${v}`)
+    const { varValues } = env
+    if (varValues.has(v)) return varValues.get(v)
+    env = env.outer
+  }
+}
+
 const instructions = []
 for (const [name, op] of Object.entries(i32binops)) {
   const opfn = Function('a', 'b', `return (a ${op} b) | 0`)
@@ -92,18 +89,7 @@ export const makeContext = () => {
   const wunsComp = (form) => {
     if (isWord(form)) {
       const v = wordValue(form)
-      return (env) => {
-        const startEnv = env
-        while (true) {
-          if (!env) {
-            console.dir({ form, v, t: typeof v, startEnv }, { depth: null })
-            throw new Error(`undefined variable ${v}`)
-          }
-          const { varValues, outer } = env
-          if (varValues.has(v)) return varValues.get(v)
-          env = outer
-        }
-      }
+      return (env) => getVar(env, v)
     }
     assert(isList(form), `cannot eval ${form} expected word or list`)
     if (form.length === 0) return () => unit
@@ -153,12 +139,8 @@ export const makeContext = () => {
         }
       }
       case 'continue': {
-        const updateNames = []
-        const compExps = []
-        for (let i = 0; i < args.length; i += 2) {
-          updateNames.push(wordValue(args[i]))
-          compExps.push(wunsComp(args[i + 1]))
-        }
+        const updateBindings = []
+        for (let i = 0; i < args.length; i += 2) updateBindings.push([wordValue(args[i]), wunsComp(args[i + 1])])
         return (env) => {
           let enclosingLoopEnv = env
           while (true) {
@@ -166,12 +148,10 @@ export const makeContext = () => {
             if (enclosingLoopEnv.loop) break
             enclosingLoopEnv = enclosingLoopEnv.outer
           }
-          const newValues = compExps.map((compVal) => compVal(env))
           const { varValues } = enclosingLoopEnv
-          for (let i = 0; i < updateNames.length; i++) {
-            const varName = updateNames[i]
+          for (const [varName, compVal] of updateBindings) {
             if (!varValues.has(varName)) throw new Error(`undefined loop variable ${varName}`)
-            varValues.set(varName, newValues[i])
+            varValues.set(varName, compVal(env))
           }
           enclosingLoopEnv.continue = true
           return unit
@@ -180,9 +160,8 @@ export const makeContext = () => {
       // side effect forms
       case 'func':
       case 'macro': {
-        const [fmname, origParams0, ...bodies] = args
+        const [fmname, origParams, ...bodies] = args
         const n = wordValue(fmname)
-        const origParams = origParams0 || unit
         let params = origParams
         let restParam = null
         if (origParams.length > 1 && wordValue(origParams.at(-2)) === '..') {
@@ -194,11 +173,10 @@ export const makeContext = () => {
           isMacro: firstWordValue === 'macro',
           params: params.map(wordValue),
           restParam,
-          moduleEnv: topEnv,
         }
         topVarSet(n, fObj)
-        const cbodies = compBodies(bodies)
-        fObj.cbodies = cbodies
+        fObj.cbodies = compBodies(bodies)
+        fObj.moduleEnv = topEnv
         Object.freeze(fObj)
         return null
       }
@@ -206,8 +184,11 @@ export const makeContext = () => {
         const [varName, value] = args
         const vn = wordValue(varName)
         const compValue = wunsComp(value)
-        topVarSet(vn, compValue(topEnv))
-        return null
+        return (env) => {
+          const { varValues } = env
+          varValues.set(vn, compValue(env))
+          return unit
+        }
       }
     }
     const funcOrMacro = topVarValues.get(firstWordValue)
@@ -222,6 +203,7 @@ export const makeContext = () => {
       const cargs = args.map(wunsComp)
       return (env) => jsToWuns(funcOrMacro(...cargs.map((carg) => carg(env))))
     }
+    throw new Error(`unexpected function type ${typeof funcOrMacro}`)
   }
   const apply = (funcOrMacro, args) => {
     const internalApply = seqApply(funcOrMacro, args.length)
@@ -245,8 +227,6 @@ export const makeContext = () => {
     }
   }
 
-  const evalFormCurrentModule = (form) => compEval(form, topEnv)
-
   const parseEvalString = (content) => {
     evalLogForms(parseStringToForms(content))
   }
@@ -257,7 +237,6 @@ export const makeContext = () => {
   return {
     apply,
     evalLogForms,
-    evalFormCurrentModule,
     parseEvalString,
     parseEvalFile,
   }
