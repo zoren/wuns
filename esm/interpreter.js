@@ -19,8 +19,8 @@ const jsToWuns = (js) => {
   throw new Error(`cannot convert ${js} of type ${typeof js} to wuns ${js.constructor.name}`)
 }
 
-const seqApply = (funcOrMacro, numberOfGivenArgs) => {
-  const { name, params, restParam } = funcOrMacro
+const seqApply = (funcOrMacroDesc, numberOfGivenArgs) => {
+  const { name, params, restParam, cbodies } = funcOrMacroDesc
   const arity = params.length
   let setArguments
   if (restParam === null) {
@@ -40,23 +40,29 @@ const seqApply = (funcOrMacro, numberOfGivenArgs) => {
       return varValues
     }
   }
-  return (args) => {
+  return (closureEnv, args) => {
     assert(args.length === numberOfGivenArgs, `expected ${numberOfGivenArgs} arguments, got ${args.length}`)
-    const { cbodies, moduleEnv } = funcOrMacro
-    assert(cbodies, `no cbodies in: ${name}`)
-    const inner = { varValues: setArguments(args), outer: moduleEnv }
+    const inner = { varValues: setArguments(args), outer: closureEnv }
     let result = unit
     for (const cbody of cbodies) result = cbody(inner)
     return result
   }
 }
 
-const getVar = (env, v) => {
+const getVarValue = (env, v) => {
   while (true) {
     if (!env) throw new Error(`undefined variable ${v}`)
     const { varValues } = env
     if (varValues.has(v)) return varValues.get(v)
     env = env.outer
+  }
+}
+const getCtxVar = (ctx, v) => {
+  while (true) {
+    if (!ctx) throw new Error(`undefined context variable ${v}`)
+    const { varDescs } = ctx
+    if (varDescs.has(v)) return varDescs.get(v)
+    ctx = ctx.outer
   }
 }
 
@@ -70,26 +76,23 @@ const hostExports = Object.entries(await import('./host.js')).map(([name, f]) =>
 
 export const makeContext = () => {
   const topVarValues = new Map()
-  const topVarSet = (name, value) => {
-    if (topVarValues.has(name)) throw new Error(`duplicate variable ${name}`)
-    topVarValues.set(name, value)
-  }
-  for (const [name, f] of instructions) topVarSet(name, f)
-  for (const [name, f] of hostExports) topVarSet(name, f)
+  for (const [name, f] of instructions) topVarValues.set(name, f)
+  for (const [name, f] of hostExports) topVarValues.set(name, f)
+
+  const varDescs = new Map()
+  for (const [name] of topVarValues) varDescs.set(name, { type: 'external-function' })
+  const topCtx = { varDescs, outer: null }
+
   const topEnv = { varValues: topVarValues, outer: null }
-  const compBodies = (bodies) => {
+  const compBodies = (ctx, bodies) => {
     const cbodies = []
-    for (const body of bodies) {
-      const cbody = wunsComp(body)
-      if (cbody === null) continue
-      cbodies.push(cbody)
-    }
-    return makeList(...cbodies)
+    for (const body of bodies) cbodies.push(wunsComp(ctx, body))
+    return cbodies
   }
-  const wunsComp = (form) => {
+  const wunsComp = (ctx, form) => {
     if (isWord(form)) {
       const v = wordValue(form)
-      return (env) => getVar(env, v)
+      return (env) => getVarValue(env, v)
     }
     assert(isList(form), `cannot eval ${form} expected word or list`)
     if (form.length === 0) return () => unit
@@ -97,25 +100,39 @@ export const makeContext = () => {
     const firstWordValue = wordValue(firstForm)
     switch (firstWordValue) {
       case 'quote': {
-        const res = args.length === 1 ? args[0] : args
+        const res = args.length === 1 ? args[0] : Object.freeze(args)
         return () => res
       }
       case 'if': {
         const ifArgs = [...args, unit, unit, unit].slice(0, 3)
-        let [cc, ct, cf] = ifArgs.map(wunsComp)
+        let [cc, ct, cf] = ifArgs.map((arg) => wunsComp(ctx, arg))
         return (env) => {
           const cv = cc(env)
           const wv = wordValue(cv)
           return (wv === '0' ? cf : ct)(env)
         }
       }
+      case 'do': {
+        const cbodies = compBodies(ctx, args)
+        return (env) => {
+          let result = unit
+          for (const cbody of cbodies) result = cbody(env)
+          return result
+        }
+      }
       case 'let':
       case 'loop': {
         const [bindings, ...bodies] = args
         const compBindings = []
-        for (let i = 0; i < bindings.length - 1; i += 2)
-          compBindings.push([wordValue(bindings[i]), wunsComp(bindings[i + 1])])
-        const cbodies = compBodies(bodies)
+        const varDescs = new Map()
+        const newCtx = { varDescs, outer: ctx }
+        const varDesc = { defForm: firstForm }
+        for (let i = 0; i < bindings.length - 1; i += 2) {
+          const v = wordValue(bindings[i])
+          compBindings.push([v, wunsComp(newCtx, bindings[i + 1])])
+          varDescs.set(v, varDesc)
+        }
+        const cbodies = compBodies(newCtx, bodies)
         if (firstWordValue === 'let')
           return (env) => {
             const varValues = new Map()
@@ -140,7 +157,7 @@ export const makeContext = () => {
       }
       case 'continue': {
         const updateBindings = []
-        for (let i = 0; i < args.length; i += 2) updateBindings.push([wordValue(args[i]), wunsComp(args[i + 1])])
+        for (let i = 0; i < args.length; i += 2) updateBindings.push([wordValue(args[i]), wunsComp(ctx, args[i + 1])])
         return (env) => {
           let enclosingLoopEnv = env
           while (true) {
@@ -157,69 +174,93 @@ export const makeContext = () => {
           return unit
         }
       }
-      // side effect forms
+      case 'constant': {
+        const [varName, value] = args
+        const vn = wordValue(varName)
+        const compValue = wunsComp(ctx, value)
+        const varDesc = { defForm: firstForm }
+        return (env) => {
+          const { varValues } = env
+          const val = compValue(env)
+          ctx.varDescs.set(vn, val.funMacDesc ?? varDesc)
+          varValues.set(vn, val)
+          return unit
+        }
+      }
       case 'func':
       case 'macro': {
         const [fmname, origParams, ...bodies] = args
         const n = wordValue(fmname)
         let params = origParams
         let restParam = null
+        const varDescs = new Map()
         if (origParams.length > 1 && wordValue(origParams.at(-2)) === '..') {
           params = origParams.slice(0, -2)
           restParam = wordValue(origParams.at(-1))
+          const desc = { defForm: firstForm }
+          for (const p of params) varDescs.set(wordValue(p), desc)
+          varDescs.set(restParam, desc)
         }
-        const fObj = {
+        const funMacDesc = {
+          type: 'closure',
           name: fmname,
           isMacro: firstWordValue === 'macro',
           params: params.map(wordValue),
           restParam,
         }
-        topVarSet(n, fObj)
-        fObj.cbodies = compBodies(bodies)
-        fObj.moduleEnv = topEnv
-        Object.freeze(fObj)
-        return null
-      }
-      case 'constant': {
-        const [varName, value] = args
-        const vn = wordValue(varName)
-        const compValue = wunsComp(value)
+        ctx.varDescs.set(n, funMacDesc)
+        funMacDesc.cbodies = compBodies({ varDescs, outer: ctx }, bodies)
+        Object.freeze(funMacDesc)
         return (env) => {
           const { varValues } = env
-          varValues.set(vn, compValue(env))
-          return unit
+          const closure = { funMacDesc, closureEnv: env }
+          varValues.set(n, closure)
+          return closure
         }
       }
     }
-    const funcOrMacro = topVarValues.get(firstWordValue)
-    if (funcOrMacro === undefined) throw new Error(`function ${firstWordValue} not found ${print(form)}`)
-    if (typeof funcOrMacro === 'object') {
-      const internalApply = seqApply(funcOrMacro, args.length)
-      if (funcOrMacro.isMacro) return wunsComp(internalApply(args))
-      const cargs = args.map(wunsComp)
-      return (env) => internalApply(cargs.map((carg) => carg(env)))
+    const funcOrMacroDesc = getCtxVar(ctx, firstWordValue)
+    if (funcOrMacroDesc === undefined) throw new Error(`function ${firstWordValue} not found ${print(form)}`)
+    if (funcOrMacroDesc.type === 'closure') {
+      const internalApply = seqApply(funcOrMacroDesc, args.length)
+      if (funcOrMacroDesc.isMacro)
+        return (env) => {
+          const { funMacDesc, closureEnv } = getVarValue(env, firstWordValue)
+          assert(funMacDesc === funcOrMacroDesc, `function ${firstWordValue} not found ${print(form)}`)
+          return wunsComp(ctx, internalApply(closureEnv, args))(env)
+        }
+
+      const cargs = args.map((a) => wunsComp(ctx, a))
+      return (env) => {
+        const { funMacDesc, closureEnv } = getVarValue(env, firstWordValue)
+        assert(funMacDesc === funcOrMacroDesc, `function ${firstWordValue} not found ${print(form)}`)
+        return internalApply(
+          closureEnv,
+          cargs.map((carg) => carg(env)),
+        )
+      }
     }
-    if (typeof funcOrMacro === 'function') {
-      const cargs = args.map(wunsComp)
-      return (env) => jsToWuns(funcOrMacro(...cargs.map((carg) => carg(env))))
+    if (funcOrMacroDesc.type === 'external-function') {
+      const cargs = args.map((a) => wunsComp(ctx, a))
+      return (env) => {
+        const f = getVarValue(env, firstWordValue)
+        if (typeof f !== 'function') {
+          console.dir(f)
+          console.dir(firstWordValue)
+          throw new Error(`expected function, got ${typeof f}`)
+        }
+        return jsToWuns(f(...cargs.map((carg) => carg(env))))
+      }
     }
-    throw new Error(`unexpected function type ${typeof funcOrMacro}`)
-  }
-  const apply = (funcOrMacro, args) => {
-    const internalApply = seqApply(funcOrMacro, args.length)
-    if (funcOrMacro.isMacro) return wunsComp(internalApply(args))
-    return internalApply(args)
-  }
-  const compEval = (form, moduleEnv) => {
-    const cform = wunsComp(form)
-    return cform === null ? unit : cform(moduleEnv)
+    throw new Error(`unexpected function type ${typeof funcOrMacroDesc}`)
   }
 
   const evalLogForms = (forms) => {
     try {
       const moduleEnv = topEnv
       for (const form of forms) {
-        const v = compEval(form, moduleEnv)
+        const cform = wunsComp(topCtx, form)
+        const v = cform(moduleEnv)
         if (!isUnit(v)) console.log(print(v))
       }
     } catch (e) {
@@ -234,8 +275,8 @@ export const makeContext = () => {
   const parseEvalFile = (filename) => {
     parseEvalString(fs.readFileSync(filename, 'ascii'))
   }
+
   return {
-    apply,
     evalLogForms,
     parseEvalString,
     parseEvalFile,

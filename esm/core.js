@@ -48,6 +48,7 @@ export const print = (x) => {
   if (typeof x === 'number') return String(x)
   if (Array.isArray(x)) return `[${x.map(print).join(' ')}]`
   if (Object.isFrozen(x)) return `[kv-map ${Object.entries(x).map(([k, v]) => `[quote ${k}] ${print(v)}`).join(' ')}]`
+  if ('funMacDesc' in x) return `[closure ${x.funMacDesc.name}]`
   throw new Error('cannot print: ' + x)
 }
 export const unword = (v) => {
