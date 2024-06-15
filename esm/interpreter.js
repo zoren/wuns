@@ -295,24 +295,12 @@ export const makeContext = (options) => {
     try {
       const inst = instructions[firstWordValue]
       if (inst) {
-        if (typeof inst === 'function') {
-          const parameterCount = inst.length
-          assert(args.length === parameterCount, `expected ${parameterCount} arguments, got ${args.length}`)
-          const cargs = args.map(wunsComp)
-          return (env) => inst(...cargs.map((carg) => carg(env)))
-        } else if (typeof inst === 'object') {
-          const { immediateParams, regularParams, func } = inst
-          const arity = immediateParams + regularParams
-          assert(args.length === arity, `${firstWordValue} expected ${arity} arguments, got ${args.length}`)
-          const immediateArgs = args.slice(0, immediateParams)
-          for (const arg of immediateArgs) assert(isSigned32BitInteger(arg), `expected word, found ${arg}`)
-          const cargs = args.slice(immediateParams).map(wunsComp)
-          const immediateValues = immediateArgs.map((arg) => wordValue(arg))
-          return (env) => {
-            const regularValues = cargs.map((carg) => carg(env))
-            return func(...immediateValues, ...regularValues)
-          }
-        }
+        if (typeof inst !== 'function')
+          throw new Error(`expected function, found ${typeof inst} ${firstWordValue} ${print(form)}`)
+        const parameterCount = inst.length
+        assert(args.length === parameterCount, `expected ${parameterCount} arguments, got ${args.length}`)
+        const cargs = args.map(wunsComp)
+        return (env) => inst(...cargs.map((carg) => carg(env)))
       }
       const funcOrMacro = currentModuleVars().get(firstWordValue)
       if (funcOrMacro === undefined)

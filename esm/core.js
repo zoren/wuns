@@ -58,16 +58,3 @@ export const unword = (v) => {
   if (isList(v)) return makeList(...v.map(unword))
   throw new Error('quote expects word or list')
 }
-
-export let memArrayBuffer
-let u8mem
-export let i32mem
-export let u32mem
-
-export const defineMemory = (nOfPages) => {
-  memArrayBuffer = new ArrayBuffer(nOfPages * 64 * 1024)
-  u8mem = new Uint8Array(memArrayBuffer)
-  i32mem = new Int32Array(memArrayBuffer)
-  u32mem = new Uint32Array(memArrayBuffer)
-  return memArrayBuffer
-}
