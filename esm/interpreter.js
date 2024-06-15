@@ -62,6 +62,14 @@ const seqApply = (funcOrMacro, numberOfGivenArgs) => {
     return result
   }
 }
+
+export const apply = (funcOrMacro, args) => {
+  const { isMacro } = funcOrMacro
+  const internalApply = seqApply(funcOrMacro, args.length)
+  if (isMacro) return wunsComp(internalApply(args))
+  return internalApply(args)
+}
+
 const a2n = (arg) => {
   const wv = wordValue(arg)
   const n = Number(wv)
@@ -254,13 +262,6 @@ export const makeContext = () => {
     }
   }
 
-  const apply = (funcOrMacro, args) => {
-    const { isMacro } = funcOrMacro
-    const internalApply = seqApply(funcOrMacro, args.length)
-    if (isMacro) return wunsComp(internalApply(args))
-    return internalApply(args)
-  }
-
   const compEval = (form, moduleEnv) => {
     const cform = wunsComp(form)
     return cform === null ? unit : cform(moduleEnv)
@@ -288,7 +289,6 @@ export const makeContext = () => {
     parseEvalString(fs.readFileSync(filename, 'ascii'))
   }
   return {
-    apply,
     evalLogForms,
     evalFormCurrentModule,
     parseEvalString,

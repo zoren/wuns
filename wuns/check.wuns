@@ -12,10 +12,6 @@
 [macro report [form .. lmsg]
   [list [quote report-error] [list [quote quote] lmsg] form]]
 
-[func test [expected actual]
-  [when-not [eq-form expected actual]
-    [log [list [quote expected] expected [quote [but got]] actual]]]]
-
 [func is-decimal [dw]
   [let [s [size dw]]
     [loop [i [if [eq [at-word dw 0] [quote 45]] 1 0]]
@@ -126,8 +122,6 @@
       []
       [at global-ctx [inc index]]]]]
 
-[constant interpreter-context [make-interpreter-context [quote check]]]
-
 [constant predicate-to-type
   [quote
     is-word word
@@ -161,6 +155,8 @@
     [if [is-negative index]
       type-error
       [at node-types [inc index]]]]]
+
+[constant interpreter-context [make-interpreter-context [quote check]]]
 
 [func check-form [local-ctx tail-pos form]
   [ifs
