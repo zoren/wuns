@@ -22,20 +22,18 @@ const jsToWuns = (js) => {
 const seqApply = (funcOrMacroDesc, numberOfGivenArgs) => {
   const { name, params, restParam, cbodies } = funcOrMacroDesc
   const arity = params.length
-  let setArguments
+  let setArguments = (args) => {
+    const varValues = new Map()
+    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+    return varValues
+  }
   if (restParam === null) {
     if (arity !== numberOfGivenArgs) throw new Error(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
-    setArguments = (args) => {
-      const varValues = new Map()
-      for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-      return varValues
-    }
   } else {
     if (arity > numberOfGivenArgs)
       throw new Error(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
     setArguments = (args) => {
-      const varValues = new Map()
-      for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+      const varValues = setArguments(args)
       varValues.set(restParam, makeList(...args.slice(arity)))
       return varValues
     }
