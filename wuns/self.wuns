@@ -1,8 +1,30 @@
+[macro kv-map [.. entries]
+  [let [ml [mutable-list]]
+    [push ml [quote transient-kv-map]]
+    [for-inc i 0 2 [size entries]
+      [push ml [list [quote quote] [at entries i]]]
+      [push ml [at entries [inc i]]]]
+    [concat [quote [persistent-object]] [list ml]]]]
+
+[func make-top-env []
+  [kv-map var-values [transient-kv-map]]]
+
+[func make-env [var-values outer def-form]
+  [kv-map var-values var-values outer outer def-form def-form]]
+
+[func get-var-value [env var]
+  [loop [cur-env env]
+    [let [var-map [get cur-env [quote var-values]]]
+      [if [has var-map var]
+        [get var-map var]
+        [if [has cur-env [quote outer]]
+          [continue cur-env [get cur-env [quote outer]]]
+          [log-abort unknownnn variable [identity var]]]]]]]
+
 [func eval [env form]
   [ifs
     [is-word form]
-    [loop [cur-env env]
-      [list]]
+    [get-var-value env form]
 
     [not [is-list form]]
     [log-abort list begins with [identity form]]
@@ -28,20 +50,38 @@
             [eval env [at form 2]]
             [eval env [at form 3]]]]
 
+        [eq-word first-word [quote do]]
+        [do
+          [for i 1 [dec s-form]
+            [eval env [at form i]]]
+          [eval env [last form]]]
+
         [eq-word first-word [quote let]]
         [let [bindings [second form]
-              bodies [slice form 2 s-form]]
-            [assert [is-list bindings] bindings must be a list]
-            [assert [is-even [size bindings]] bindings must have an even number of elements]
-            [for-inc i 0 2 [size bindings]
-              [let [binding [at bindings i]
-                    value [at bindings [inc i]]]
-                [assert [is-word binding] binding must be a word]
-                ]]]
+              bodies [slice form 2 s-form]
+              var-values [transient-kv-map]
+              new-env [make-env var-values env first-word]]
+          [assert [is-list bindings] bindings must be a list]
+          [assert [is-even [size bindings]] bindings must have an even number of elements]
+          [for-inc i 0 2 [size bindings]
+            [let [binding [at bindings i]
+                  value [at bindings [inc i]]]
+              [assert [is-word binding] binding must be a word]
+              [set var-values binding [eval new-env value]]]]
+          [for i 2 [dec s-form]
+            [eval new-env [at form i]]]
+          [eval new-env [last form]]]
+
+        [eq-word first-word [quote constant]]
+        [let [var [second form]
+              value [eval env [third form]]]
+          [set [get env [quote var-values]] var value]]
 
         [eq-word first-word [quote add]]
         [do
-          [assert [eq [size args] 2] must have 2 arguments]
-          [add [eval env [first args]] [eval env [second args]]]]
+          [assert [eq n-of-args 2] must have 2 arguments]
+          [add [eval env [at form 1]] [eval env [at form 2]]]]
 
-        [log-abort unknown function [identity first-word]]]]]]
+        [log-abort unknownn function [identity first-word]]]]]]
+
+[constant top-env [make-top-env]]
