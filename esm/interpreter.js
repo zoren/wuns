@@ -4,8 +4,26 @@ import { makeList, wordValue, isWord, isList, isForm, isUnit, unit, print, numbe
 import { parseStringToForms } from './parseTreeSitter.js'
 import { i32binops } from './instructions.js'
 
-const assert = (cond, msg) => {
-  if (!cond) throw new Error('eval assert failed: ' + msg)
+class RuntimeError extends Error {
+  constructor(message, form) {
+    super(message)
+    this.form = form
+  }
+}
+
+const rtAssert = (cond, msg) => {
+  if (!cond) throw new RuntimeError('eval assert failed: ' + msg)
+}
+
+class CompileError extends Error {
+  constructor(message, form) {
+    super(message)
+    this.form = form
+  }
+}
+
+const ctAssert = (cond, msg) => {
+  if (!cond) throw new CompileError('compile assert failed: ' + msg)
 }
 
 const jsToWuns = (js) => {
@@ -16,20 +34,21 @@ const jsToWuns = (js) => {
   if (js === undefined) return unit
   if (is_atom(js)) return js
   if (Object.isFrozen(js)) return js
-  throw new Error(`cannot convert ${js} of type ${typeof js} to wuns ${js.constructor.name}`)
+  throw new RuntimeError(`cannot convert ${js} of type ${typeof js} to wuns ${js.constructor.name}`)
 }
 
 const getVarValue = (env, v) => {
   while (true) {
-    if (!env) throw new Error(`undefined runtime variable ${v}`)
+    if (!env) throw new RuntimeError(`undefined runtime variable ${v}`)
     const { varValues } = env
     if (varValues.has(v)) return varValues.get(v)
     env = env.outer
   }
 }
+
 const getCtxVar = (ctx, v) => {
   while (true) {
-    if (!ctx) throw new Error(`undefined context variable ${v}`)
+    if (!ctx) throw new CompileError(`undefined context variable ${v}`)
     const { varDescs } = ctx
     if (varDescs.has(v)) return varDescs.get(v)
     ctx = ctx.outer
@@ -67,10 +86,10 @@ export const makeContext = () => {
     if (isWord(form)) {
       const v = wordValue(form)
       const desc = getCtxVar(ctx, v)
-      if (desc.isMacro) throw new Error(`cannot eval macro ${v} as value`)
+      if (desc.isMacro) throw new CompileError(`cannot eval macro ${v} as value`)
       return (env) => getVarValue(env, v)
     }
-    assert(isList(form), `cannot eval ${form} expected word or list`)
+    ctAssert(isList(form), `cannot eval ${form} expected word or list`)
     if (form.length === 0) return () => unit
     const [firstForm, ...args] = form
     const firstWordValue = wordValue(firstForm)
@@ -82,11 +101,7 @@ export const makeContext = () => {
       case 'if': {
         const ifArgs = [...args, unit, unit, unit].slice(0, 3)
         let [cc, ct, cf] = ifArgs.map((arg) => wunsComp(ctx, arg))
-        return (env) => {
-          const cv = cc(env)
-          const wv = wordValue(cv)
-          return (wv === '0' ? cf : ct)(env)
-        }
+        return (env) => (wordValue(cc(env)) === '0' ? cf : ct)(env)
       }
       case 'do':
         return compBodies(ctx, args)
@@ -130,17 +145,18 @@ export const makeContext = () => {
         }
         let enclosingLoopCtx = ctx
         while (true) {
-          assert(enclosingLoopCtx, 'continue outside of loop')
+          ctAssert(enclosingLoopCtx, 'continue outside of loop')
           if (enclosingLoopCtx.ctxType === 'loop') break
           enclosingLoopCtx = enclosingLoopCtx.outer
         }
         for (const uv of updateVars) {
-          if (!enclosingLoopCtx.varDescs.has(uv)) throw new Error(`loop variable ${uv} not found in loop context`)
+          if (!enclosingLoopCtx.varDescs.has(uv))
+            throw new CompileError(`loop variable ${uv} not found in loop context`)
         }
         return (env) => {
           let enclosingLoopEnv = env
           while (true) {
-            assert(enclosingLoopEnv, 'continue outside of loop')
+            rtAssert(enclosingLoopEnv, 'continue outside of loop')
             if (enclosingLoopEnv.loop) break
             enclosingLoopEnv = enclosingLoopEnv.outer
           }
@@ -199,17 +215,16 @@ export const makeContext = () => {
       }
     }
     const funcOrMacroDesc = getCtxVar(ctx, firstWordValue)
-    if (funcOrMacroDesc === undefined) throw new Error(`function ${firstWordValue} not found ${print(form)}`)
     if (funcOrMacroDesc.type === 'external-function') {
       const cargs = args.map((a) => wunsComp(ctx, a))
       return (env) => {
         const f = getVarValue(env, firstWordValue)
-        if (typeof f !== 'function') throw new Error(`expected function, got ${typeof f}`)
+        rtAssert(typeof f === 'function', `expected function, got ${typeof f}`)
         return jsToWuns(f(...cargs.map((carg) => carg(env))))
       }
     }
     if (funcOrMacroDesc.type !== 'closure')
-      throw new Error(`unexpected function type ${typeof funcOrMacroDesc} ${funcOrMacroDesc}`)
+      throw new CompileError(`unexpected function type ${typeof funcOrMacroDesc} ${funcOrMacroDesc}`)
     const { name, params, restParam, cbodies } = funcOrMacroDesc
     const arity = params.length
     let setArguments = (args) => {
@@ -219,27 +234,31 @@ export const makeContext = () => {
     }
     const numberOfGivenArgs = args.length
     if (restParam === null) {
-      if (arity !== numberOfGivenArgs) throw new Error(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
+      if (arity !== numberOfGivenArgs)
+        throw new CompileError(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
     } else {
       if (arity > numberOfGivenArgs)
-        throw new Error(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
+        throw new CompileError(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
       setArguments = (args) => {
         const varValues = setArguments(args)
         varValues.set(restParam, makeList(...args.slice(arity)))
         return varValues
       }
     }
-    if (funcOrMacroDesc.isMacro)
+    if (funcOrMacroDesc.isMacro) {
+      const { funMacDesc, closureEnv } = getVarValue(topEnv, firstWordValue)
+      ctAssert(funMacDesc === funcOrMacroDesc, `function ${firstWordValue} not found ${print(form)}`)
       return (env) => {
-        const { funMacDesc, closureEnv } = getVarValue(env, firstWordValue)
-        assert(funMacDesc === funcOrMacroDesc, `function ${firstWordValue} not found ${print(form)}`)
         const inner = { varValues: setArguments(args), outer: closureEnv }
-        return wunsComp(ctx, cbodies(inner))(env)
+        const ebodies = cbodies(inner)
+        const compMac = wunsComp(ctx, ebodies)
+        return compMac(env)
       }
+    }
     const cargs = args.map((a) => wunsComp(ctx, a))
     return (env) => {
       const { funMacDesc, closureEnv } = getVarValue(env, firstWordValue)
-      assert(funMacDesc === funcOrMacroDesc, `function ${firstWordValue} not found ${print(form)}`)
+      rtAssert(funMacDesc === funcOrMacroDesc, `function ${firstWordValue} not found ${print(form)}`)
       const inner = { varValues: setArguments(cargs.map((carg) => carg(env))), outer: closureEnv }
       return cbodies(inner)(env)
     }
