@@ -123,7 +123,7 @@ export const makeContext = () => {
         const [bindings, ...bodies] = args
         const compBindings = []
         const varDescs = new Map()
-        const newCtx = { varDescs, outer: ctx }
+        const newCtx = { varDescs, outer: ctx, ctxType: wordValue(firstForm) }
         const varDesc = { defForm: firstForm }
         for (let i = 0; i < bindings.length - 1; i += 2) {
           const v = wordValue(bindings[i])
@@ -154,8 +154,21 @@ export const makeContext = () => {
         }
       }
       case 'continue': {
-        const updateBindings = []
-        for (let i = 0; i < args.length; i += 2) updateBindings.push([wordValue(args[i]), wunsComp(ctx, args[i + 1])])
+        const updateVars = []
+        const updateFuncs = []
+        for (let i = 0; i < args.length; i += 2) {
+          updateVars.push(wordValue(args[i]))
+          updateFuncs.push(wunsComp(ctx, args[i + 1]))
+        }
+        let enclosingLoopCtx = ctx
+        while (true) {
+          assert(enclosingLoopCtx, 'continue outside of loop')
+          if (enclosingLoopCtx.ctxType === 'loop') break
+          enclosingLoopCtx = enclosingLoopCtx.outer
+        }
+        for (const uv of updateVars) {
+          if (!enclosingLoopCtx.varDescs.has(uv)) throw new Error(`loop variable ${uv} not found in loop context`)
+        }
         return (env) => {
           let enclosingLoopEnv = env
           while (true) {
@@ -164,10 +177,9 @@ export const makeContext = () => {
             enclosingLoopEnv = enclosingLoopEnv.outer
           }
           const { varValues } = enclosingLoopEnv
-          for (const [varName, compVal] of updateBindings) {
-            if (!varValues.has(varName)) throw new Error(`undefined loop variable ${varName}`)
-            varValues.set(varName, compVal(env))
-          }
+          // it's important to evaluate all the update functions before updating the variables as they might depend on each other
+          const tmpVals = updateFuncs.map((f) => f(env))
+          for (let i = 0; i < updateVars.length; i++) varValues.set(updateVars[i], tmpVals[i])
           enclosingLoopEnv.continue = true
           return unit
         }
