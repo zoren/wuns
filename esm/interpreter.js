@@ -224,7 +224,7 @@ export const makeContext = () => {
     }
     if (funcOrMacroDesc.type !== 'closure')
       throw new CompileError(`unexpected function type ${typeof funcOrMacroDesc} ${funcOrMacroDesc}`)
-    const { name, params, restParam, cbodies } = funcOrMacroDesc
+    const { name, params, restParam } = funcOrMacroDesc
     const arity = params.length
     let setArguments
     const numberOfGivenArgs = args.length
@@ -250,7 +250,7 @@ export const makeContext = () => {
       const { funMacDesc, closureEnv } = getVarValue(topEnv, firstWordValue)
       ctAssert(funMacDesc === funcOrMacroDesc, `function ${firstWordValue} not found ${print(form)}`)
       const inner = { varValues: setArguments(args), outer: closureEnv }
-      const ebodies = cbodies(inner)
+      const ebodies = funMacDesc.cbodies(inner)
       return wunsComp(ctx, ebodies)
     }
     const cargs = args.map((a) => wunsComp(ctx, a))
@@ -258,6 +258,7 @@ export const makeContext = () => {
       const { funMacDesc, closureEnv } = getVarValue(env, firstWordValue)
       rtAssert(funMacDesc === funcOrMacroDesc, `function ${firstWordValue} not found ${print(form)}`)
       const inner = { varValues: setArguments(cargs.map((carg) => carg(env))), outer: closureEnv }
+      const cbodies = funMacDesc.cbodies
       return cbodies(inner)
     }
   }
