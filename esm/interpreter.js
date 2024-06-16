@@ -208,11 +208,8 @@ export const makeContext = () => {
         return jsToWuns(f(...cargs.map((carg) => carg(env))))
       }
     }
-    if (funcOrMacroDesc.type !== 'closure') {
-      console.dir({ funcOrMacroDesc, firstWordValue }, { depth: 3 })
-      // handle functions passed as parameters or through lets/loops/constants
+    if (funcOrMacroDesc.type !== 'closure')
       throw new Error(`unexpected function type ${typeof funcOrMacroDesc} ${funcOrMacroDesc}`)
-    }
     const { name, params, restParam, cbodies } = funcOrMacroDesc
     const arity = params.length
     let setArguments = (args) => {
@@ -232,25 +229,19 @@ export const makeContext = () => {
         return varValues
       }
     }
-    const internalApply = (closureEnv, eargs) => {
-      const inner = { varValues: setArguments(eargs), outer: closureEnv }
-      return cbodies(inner)
-    }
     if (funcOrMacroDesc.isMacro)
       return (env) => {
         const { funMacDesc, closureEnv } = getVarValue(env, firstWordValue)
         assert(funMacDesc === funcOrMacroDesc, `function ${firstWordValue} not found ${print(form)}`)
-        return wunsComp(ctx, internalApply(closureEnv, args))(env)
+        const inner = { varValues: setArguments(args), outer: closureEnv }
+        return wunsComp(ctx, cbodies(inner))(env)
       }
-
     const cargs = args.map((a) => wunsComp(ctx, a))
     return (env) => {
       const { funMacDesc, closureEnv } = getVarValue(env, firstWordValue)
       assert(funMacDesc === funcOrMacroDesc, `function ${firstWordValue} not found ${print(form)}`)
-      return internalApply(
-        closureEnv,
-        cargs.map((carg) => carg(env)),
-      )
+      const inner = { varValues: setArguments(cargs.map((carg) => carg(env))), outer: closureEnv }
+      return cbodies(inner)(env)
     }
   }
 

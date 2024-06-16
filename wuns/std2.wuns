@@ -41,13 +41,13 @@
   [type [[list any]] [list any]]
   [slice l 1 [size l]]]
 
-[func push-all [mut-list list]
+[func push-all [mut-list l]
   [type [[mutable-list any] [list any]] [tuple]]
-  [let [s-l [size list]]
+  [let [s-l [size l]]
     [loop [i 0]
       [if [lt i s-l]
         [let []
-          [push mut-list [at list i]]
+          [push mut-list [at l i]]
           [continue i [inc i]]]
         [list]]]]]
 
