@@ -132,7 +132,8 @@ export const makeContext = () => {
           for (const [varName, compVal] of compBindings) varValues.set(varName, compVal(inner))
           while (inner.continue) {
             inner.continue = false
-            if (!inner.continue) return cbodies(inner)
+            const result = cbodies(inner)
+            if (!inner.continue) return result
           }
         }
       }
