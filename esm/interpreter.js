@@ -172,8 +172,7 @@ export const makeContext = () => {
         const [varName, value] = args
         const vn = wordValue(varName)
         const compValue = wunsComp(ctx, value)
-        const varDesc = { defForm: firstForm }
-        ctx.varDescs.set(vn, varDesc)
+        ctx.varDescs.set(vn, { defForm: firstForm })
         return (env) => {
           const { varValues } = env
           const val = compValue(env)
@@ -227,20 +226,22 @@ export const makeContext = () => {
       throw new CompileError(`unexpected function type ${typeof funcOrMacroDesc} ${funcOrMacroDesc}`)
     const { name, params, restParam, cbodies } = funcOrMacroDesc
     const arity = params.length
-    let setArguments = (args) => {
-      const varValues = new Map()
-      for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-      return varValues
-    }
+    let setArguments
     const numberOfGivenArgs = args.length
     if (restParam === null) {
       if (arity !== numberOfGivenArgs)
         throw new CompileError(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
+      setArguments = (args) => {
+        const varValues = new Map()
+        for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+        return varValues
+      }
     } else {
       if (arity > numberOfGivenArgs)
         throw new CompileError(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
       setArguments = (args) => {
-        const varValues = setArguments(args)
+        const varValues = new Map()
+        for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
         varValues.set(restParam, makeList(...args.slice(arity)))
         return varValues
       }
@@ -248,19 +249,16 @@ export const makeContext = () => {
     if (funcOrMacroDesc.isMacro) {
       const { funMacDesc, closureEnv } = getVarValue(topEnv, firstWordValue)
       ctAssert(funMacDesc === funcOrMacroDesc, `function ${firstWordValue} not found ${print(form)}`)
-      return (env) => {
-        const inner = { varValues: setArguments(args), outer: closureEnv }
-        const ebodies = cbodies(inner)
-        const compMac = wunsComp(ctx, ebodies)
-        return compMac(env)
-      }
+      const inner = { varValues: setArguments(args), outer: closureEnv }
+      const ebodies = cbodies(inner)
+      return wunsComp(ctx, ebodies)
     }
     const cargs = args.map((a) => wunsComp(ctx, a))
     return (env) => {
       const { funMacDesc, closureEnv } = getVarValue(env, firstWordValue)
       rtAssert(funMacDesc === funcOrMacroDesc, `function ${firstWordValue} not found ${print(form)}`)
       const inner = { varValues: setArguments(cargs.map((carg) => carg(env))), outer: closureEnv }
-      return cbodies(inner)(env)
+      return cbodies(inner)
     }
   }
 
