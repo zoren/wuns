@@ -15,6 +15,9 @@ import {
   atom_get,
   atom_set,
   number,
+  isVar,
+  varWithMeta,
+  setMeta
 } from './core.js'
 
 export const is_word = (f) => isWord(f)
@@ -32,9 +35,11 @@ export const eq_form = (a, b) => eq_word(a, b) || eq_list(a, b)
 export const with_meta = (f, meta) => {
   if (isWord(f)) return wordWithMeta(wordValue(f), meta)
   if (isList(f)) return listWithMeta(f, meta)
+  if (isVar(f)) return varWithMeta(f, meta)
   throw new Error('with-meta expects word or list')
 }
 export { meta }
+export const set_meta = (v, meta) => setMeta(v, meta)
 
 export const size = (a) => {
   if (isWord(a)) return String(a).length
@@ -47,6 +52,8 @@ export const push = (ar, e) => {
   ar.push(e)
   return unit
 }
+export const list = (...args) => makeList(...args)
+
 export const mutable_list = (...args) => args
 export const is_mutable = (f) => (Array.isArray(f) && !Object.isFrozen(f)) | 0
 // come up with a better name, the list is not frozen, a frozen copy is made
@@ -72,10 +79,10 @@ export const set_array = (ar, index, e) => {
   ar[i] = e
   return unit
 }
-export const set = (ar, k, e) => {
-  if (!ar || typeof ar !== 'object' || Array.isArray(ar)) throw new Error('set expects map')
-  if (Object.isFrozen(ar)) throw new Error('set expects mutable object')
-  ar[wordValue(k)] = e
+export const set = (o, k, e) => {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('set expects map')
+  if (Object.isFrozen(o)) throw new Error('set expects mutable object')
+  o[wordValue(k)] = e
   return unit
 }
 export const at = (v, i) => {
@@ -131,8 +138,8 @@ export const concat_lists = (l) => {
   }
   return makeList(...result)
 }
-
-export const kv_map = (...entries) => {
+export const concat = (...lists) => concat_lists(lists)
+export const transient_kv_map = (...entries) => {
   if (entries.length % 2 !== 0) throw new Error('kv-map expects even number of arguments')
   const map = {}
   for (let i = 0; i < entries.length; i += 2) map[wordValue(entries[i])] = entries[i + 1]
@@ -150,5 +157,7 @@ export const has = (m, k) => {
 
 export const get = (m, k) => {
   if (typeof m !== 'object') throw new Error('get expects map')
-  return m[wordValue(k)] || unit
+  const ks = wordValue(k)
+  if (ks in m) return m[ks]
+  throw new Error('key not found: ' + ks + ' ' + Object.keys(m))
 }

@@ -1,7 +1,7 @@
 import { runRepl } from './repl.js'
-import { makeContext } from './interpreter.js'
+import { makeInterpreterContext } from './interpreter.js'
 
-const context = makeContext()
+const context = makeInterpreterContext()
 const { parseEvalFile } = context
 
 const commandLineArgs = process.argv.slice(2)

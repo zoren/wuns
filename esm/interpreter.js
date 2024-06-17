@@ -1,6 +1,21 @@
 import fs from 'fs'
 
-import { makeList, wordValue, isWord, isList, isForm, isUnit, unit, print, number, word, is_atom } from './core.js'
+import {
+  makeList,
+  wordValue,
+  isWord,
+  isList,
+  isForm,
+  isUnit,
+  unit,
+  print,
+  number,
+  word,
+  is_atom,
+  makeVar,
+  isVar,
+  meta,
+} from './core.js'
 import { parseStringToForms } from './parseTreeSitter.js'
 import { i32binops } from './instructions.js'
 
@@ -32,23 +47,21 @@ const jsToWuns = (js) => {
   if (typeof js === 'string') return word(js)
   if (typeof js === 'number') return word(String(js))
   if (js === undefined) return unit
-  if (is_atom(js)) return js
-  if (Object.isFrozen(js)) return js
-  throw new RuntimeError(`cannot convert ${js} of type ${typeof js} to wuns ${js.constructor.name}`)
+  return js
 }
 
 const getVarValue = (env, v) => {
   while (true) {
-    if (!env) throw new RuntimeError(`undefined runtime variable ${v}`)
+    if (!env) return null
     const { varValues } = env
-    if (varValues.has(v)) return varValues.get(v)
+    if (env && varValues.has(v)) return varValues.get(v)
     env = env.outer
   }
 }
 
 const getCtxVar = (ctx, v) => {
   while (true) {
-    if (!ctx) throw new CompileError(`undefined context variable ${v}`)
+    if (!ctx) return null
     const { varDescs } = ctx
     if (varDescs.has(v)) return varDescs.get(v)
     ctx = ctx.outer
@@ -63,16 +76,45 @@ for (const [name, op] of Object.entries(i32binops)) {
 
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 
-export const makeContext = () => {
-  const topVarValues = new Map()
-  for (const [name, f] of instructions) topVarValues.set(name, f)
-  for (const [name, f] of hostExports) topVarValues.set(name, f)
+const makeSetArgs = ({ params, restParam }, numberOfGivenArgs) => {
+  const arity = params.length
+  if (restParam === null) {
+    if (arity !== numberOfGivenArgs)
+      throw new CompileError(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
+    return (args) => {
+      const varValues = new Map()
+      for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+      return varValues
+    }
+  }
+  if (arity > numberOfGivenArgs)
+    throw new CompileError(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
+  return (args) => {
+    const varValues = new Map()
+    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+    varValues.set(restParam, makeList(...args.slice(arity)))
+    return varValues
+  }
+}
 
-  const varDescs = new Map()
-  for (const [name] of topVarValues) varDescs.set(name, { type: 'external-function' })
-  const topCtx = { varDescs, outer: null }
+export const makeInterpreterContext = () => {
+  const varObjects = new Map()
+  const getVarObject = name => varObjects.get(name)
+  const defVar = (name) => {
+    if (varObjects.has(name)) return varObjects.get(name)
+    const varObj = makeVar(name)
+    varObjects.set(name, varObj)
+    return varObj
+  }
+  const defSetVar = (varName, value) => {
+    const v = defVar(varName)
+    v.bind(value)
+    return v
+  }
+  defSetVar('var', (vn) => getVarObject(wordValue(vn)))
+  for (const [name, f] of instructions) defSetVar(name, f)
+  for (const [name, f] of hostExports) defSetVar(name, f)
 
-  const topEnv = { varValues: topVarValues, outer: null }
   const compBodies = (ctx, bodies) => {
     const cbodies = []
     for (const body of bodies) cbodies.push(wunsComp(ctx, body))
@@ -85,9 +127,25 @@ export const makeContext = () => {
   const wunsComp = (ctx, form) => {
     if (isWord(form)) {
       const v = wordValue(form)
-      const desc = getCtxVar(ctx, v)
-      if (desc.isMacro) throw new CompileError(`cannot eval macro ${v} as value`)
-      return (env) => getVarValue(env, v)
+      const lvarctx = getCtxVar(ctx, v)
+      if (lvarctx)
+        return (env) => {
+          while (true) {
+            if (!env) throw new RuntimeError(`variable ${v} not found`)
+            const { varValues } = env
+            if (varValues.has(v)) return varValues.get(v)
+            env = env.outer
+          }
+        }
+      const varObj = getVarObject(v)
+      if (!varObj) throw new CompileError(`variable ${v} not found ${meta(form)}`)
+      return () => {
+        rtAssert(
+          varObj === getVarObject(v),
+          `compile time var not same as runtime varObj !== getVarObject(v) ${varObj} ${getVarObject(v)}`,
+        )
+        return varObj.getValue()
+      }
     }
     ctAssert(isList(form), `cannot eval ${form} expected word or list`)
     if (form.length === 0) return () => unit
@@ -103,8 +161,6 @@ export const makeContext = () => {
         let [cc, ct, cf] = ifArgs.map((arg) => wunsComp(ctx, arg))
         return (env) => (wordValue(cc(env)) === '0' ? cf : ct)(env)
       }
-      case 'do':
-        return compBodies(ctx, args)
       case 'let':
       case 'loop': {
         const [bindings, ...bodies] = args
@@ -169,20 +225,18 @@ export const makeContext = () => {
           return unit
         }
       }
-      case 'constant': {
+      case 'def': {
+        ctAssert(args.length === 2, `def expects 2 arguments, got ${args.length}`)
         const [varName, value] = args
         const vn = wordValue(varName)
         const compValue = wunsComp(ctx, value)
-        ctx.varDescs.set(vn, { defForm: firstForm })
         return (env) => {
-          const { varValues } = env
           const val = compValue(env)
-          varValues.set(vn, val)
+          defSetVar(vn, val)
           return unit
         }
       }
-      case 'func':
-      case 'macro': {
+      case 'func': {
         const [fmname, origParams, ...bodies] = args
         const n = wordValue(fmname)
         let params = origParams
@@ -196,64 +250,53 @@ export const makeContext = () => {
         for (const p of params) varDescs.set(wordValue(p), paramDesc)
         if (restParam) varDescs.set(restParam, paramDesc)
         const funMacDesc = {
-          type: 'closure',
           name: fmname,
           params: params.map(wordValue),
           restParam,
-          isMacro: firstWordValue === 'macro',
         }
-        ctx.varDescs.set(n, funMacDesc)
+        // for recursive calls
+        varDescs.set(n, funMacDesc)
         const newCtx = { varDescs, outer: ctx, ctxType: wordValue(firstForm) }
         funMacDesc.cbodies = compBodies(newCtx, bodies)
         Object.freeze(funMacDesc)
         return (env) => {
-          const { varValues } = env
+          // const { varValues } = env
           const closure = { funMacDesc, closureEnv: env }
-          varValues.set(n, closure)
+          // varValues.set(n, closure)
           return closure
         }
       }
     }
     const funcOrMacroDesc = getCtxVar(ctx, firstWordValue)
-    if (funcOrMacroDesc.type === 'external-function') {
+    if (!funcOrMacroDesc) {
+      const varObj = getVarObject(firstWordValue)
+      if (!varObj) throw new CompileError(`function ${firstWordValue} not found ${print(form)}`)
+      const value = varObj.getValue()
+      if (typeof value === 'function') {
+        const cargs = args.map((a) => wunsComp(ctx, a))
+        return (env) => {
+          const rtValue = varObj.getValue()
+          rtAssert(typeof rtValue === 'function', `expected function, got ${typeof rtValue}`)
+          return jsToWuns(rtValue(...cargs.map((carg) => carg(env))))
+        }
+      }
+      const { funMacDesc, closureEnv } = value
+      const setArguments = makeSetArgs(funMacDesc, args.length)
+      if (meta(varObj)['is-macro']) {
+        const inner = { varValues: setArguments(args), outer: closureEnv }
+        const ebodies = funMacDesc.cbodies(inner)
+        return wunsComp(ctx, ebodies)
+      }
       const cargs = args.map((a) => wunsComp(ctx, a))
       return (env) => {
-        const f = getVarValue(env, firstWordValue)
-        rtAssert(typeof f === 'function', `expected function, got ${typeof f}`)
-        return jsToWuns(f(...cargs.map((carg) => carg(env))))
+        const rtValue = varObj.getValue()
+        rtAssert(value === rtValue, `value !== rtValue ${value} ${rtValue}`)
+        const inner = { varValues: setArguments(cargs.map((carg) => carg(env))), outer: closureEnv }
+        const cbodies = funMacDesc.cbodies
+        return cbodies(inner)
       }
     }
-    if (funcOrMacroDesc.type !== 'closure')
-      throw new CompileError(`unexpected function type ${typeof funcOrMacroDesc} ${funcOrMacroDesc}`)
-    const { name, params, restParam } = funcOrMacroDesc
-    const arity = params.length
-    let setArguments
-    const numberOfGivenArgs = args.length
-    if (restParam === null) {
-      if (arity !== numberOfGivenArgs)
-        throw new CompileError(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
-      setArguments = (args) => {
-        const varValues = new Map()
-        for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-        return varValues
-      }
-    } else {
-      if (arity > numberOfGivenArgs)
-        throw new CompileError(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
-      setArguments = (args) => {
-        const varValues = new Map()
-        for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-        varValues.set(restParam, makeList(...args.slice(arity)))
-        return varValues
-      }
-    }
-    if (funcOrMacroDesc.isMacro) {
-      const { funMacDesc, closureEnv } = getVarValue(topEnv, firstWordValue)
-      ctAssert(funMacDesc === funcOrMacroDesc, `function ${firstWordValue} not found ${print(form)}`)
-      const inner = { varValues: setArguments(args), outer: closureEnv }
-      const ebodies = funMacDesc.cbodies(inner)
-      return wunsComp(ctx, ebodies)
-    }
+
     const cargs = args.map((a) => wunsComp(ctx, a))
     return (env) => {
       const { funMacDesc, closureEnv } = getVarValue(env, firstWordValue)
@@ -267,8 +310,8 @@ export const makeContext = () => {
   const evalLogForms = (forms) => {
     try {
       for (const form of forms) {
-        const cform = wunsComp(topCtx, form)
-        const v = cform(topEnv)
+        const cform = wunsComp(null, form)
+        const v = cform(null)
         if (!isUnit(v)) console.log(print(v))
       }
     } catch (e) {

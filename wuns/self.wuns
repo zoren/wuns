@@ -1,18 +1,128 @@
-[macro kv-map [.. entries]
+[defmacro kv-map [.. entries]
   [let [ml [mutable-list]]
     [push ml [quote transient-kv-map]]
     [for-inc i 0 2 [size entries]
-      [push ml [list [quote quote] [at entries i]]]
+      [push ml
+        [let [k [at entries i]]
+                [if [is-word k]
+                  [list [quote quote] k]
+                  k]]]
       [push ml [at entries [inc i]]]]
     [concat [quote [persistent-object]] [list ml]]]]
 
-[func make-top-env []
+[defmacro getq [m w]
+  [list [quote get] m [list [quote quote] w]]]
+
+[defmacro hasq [m w]
+  [list [quote has] m [list [quote quote] w]]]
+
+[defn make-top-ctx []
+  [kv-map var-descriptors [transient-kv-map]]]
+
+[defn make-ctx [var-descriptors outer def-form]
+  [kv-map var-descriptors var-descriptors outer outer def-form def-form]]
+
+[defn get-var-descriptor [ctx word]
+  [loop [cur-ctx ctx]
+    [let [var-map [getq cur-ctx var-descriptors]]
+      [if [has var-map word]
+        [get var-map word]
+        [if [hasq cur-ctx outer]
+          [continue cur-ctx [getq cur-ctx outer]]
+          [log-abort unknown variable [identity word]]]]]]]
+
+[defmacro report [form .. lmsg]
+  [list [quote report-error] [list [quote quote] lmsg] form]]
+
+[defmacro report-when [cond form .. lmsg]
+  [list [quote when] cond
+    [list [quote report-error] [list [quote quote] lmsg] form]]]
+
+[defmacro report-when-not [cond form .. lmsg]
+  [list [quote when-not] cond
+    [list [quote report-error] [list [quote quote] lmsg] form]]]
+
+[def type-error [quote type-error]]
+
+[defn check [ctx form]
+  [ifs
+    [is-word form]
+    [let [desc [get-var-descriptor ctx form]]
+
+      ]
+
+    [not [is-list form]]
+    [do
+      [report form not a list]
+      type-error]
+
+    [is-empty form]
+    [do
+      [report form empty list]
+      type-error]
+
+    [let
+      [first-word [first form]
+       s-form [size form]
+       n-of-args [dec s-form]]
+      [ifs
+        [eq-word first-word [quote quote]]
+        [if [eq n-of-args 1]
+          [let [v [second form]]
+            [if [is-word v]
+              [if [is-i32 v] [quote i32] [quote word]]
+              [quote list form]]]
+          [quote list form]]
+
+        [eq-word first-word [quote constant]]
+        [let
+          [- [report-when-not [eq n-of-args 3] form must have 3 arguments]
+           var [second form]]
+          [report-when-not [is-word var] var first argument must be a word]
+          [set [getq ctx var-descriptors] var [check ctx [third form]]]]
+
+        [eq-word first-word [quote if]]
+        [let
+          [- [report-when-not [eq n-of-args 3] form must have 3 arguments]
+           ct [check ctx [at form 1]]
+           tt [check ctx [at form 2]]
+           et [check ctx [at form 3]]]
+          [report-when-not [eq-word ct [quote i32]] first argument must be an i32]
+          [report-when-not [eq tt et] second and third arguments must have the same type]
+          ]
+
+        [eq-word first-word [quote do]]
+        [do
+          [for i 1 [dec s-form]
+            [check ctx [at form i]]]
+          [check ctx [last form]]]
+
+        [eq-word first-word [quote scope]]
+        [let [new-ctx [make-ctx [transient-kv-map] ctx first-word]]
+          [for i 1 [dec s-form]
+            [check new-ctx [at form i]]]
+          [check new-ctx [last form]]]
+
+        [eq-word first-word [quote loop]]
+        []
+
+        [eq-word first-word [quote continue]]
+        []
+
+        [or [eq-form first-word [quote func]]
+            [eq-form first-word [quote macro]]]
+        []
+
+        []
+  ]]]]
+
+[defn make-top-env []
   [kv-map var-values [transient-kv-map]]]
 
-[func make-env [var-values outer def-form]
+[defn make-env [var-values outer def-form]
   [kv-map var-values var-values outer outer def-form def-form]]
 
-[func get-var-value [env var]
+[defn get-var-value [env var]
   [loop [cur-env env]
     [let [var-map [get cur-env [quote var-values]]]
       [if [has var-map var]
@@ -21,7 +131,7 @@
           [continue cur-env [get cur-env [quote outer]]]
           [log-abort unknownnn variable [identity var]]]]]]]
 
-[func eval [env form]
+[defn eval [env form]
   [ifs
     [is-word form]
     [get-var-value env form]
@@ -43,6 +153,11 @@
           [second form]
           [rest form]]
 
+        [eq-word first-word [quote constant]]
+        [let [var [second form]
+              value [eval env [third form]]]
+          [set [get env [quote var-values]] var value]]
+
         [eq-word first-word [quote if]]
         [do
           [assert [eq n-of-args 3] must have 3 arguments]
@@ -56,9 +171,14 @@
             [eval env [at form i]]]
           [eval env [last form]]]
 
+        [eq-word first-word [quote scope]]
+        [let [new-env [make-env [transient-kv-map] env first-word]]
+          [for i 1 [dec s-form]
+            [eval new-env [at form i]]]
+          [eval new-env [last form]]]
+
         [eq-word first-word [quote let]]
         [let [bindings [second form]
-              bodies [slice form 2 s-form]
               var-values [transient-kv-map]
               new-env [make-env var-values env first-word]]
           [assert [is-list bindings] bindings must be a list]
@@ -72,10 +192,22 @@
             [eval new-env [at form i]]]
           [eval new-env [last form]]]
 
-        [eq-word first-word [quote constant]]
-        [let [var [second form]
-              value [eval env [third form]]]
-          [set [get env [quote var-values]] var value]]
+        [eq-word first-word [quote loop]]
+        [let [bindings [second form]
+              var-values [transient-kv-map]
+              new-env [make-env var-values env first-word]]
+          [assert [is-list bindings] bindings must be a list]
+          [assert [is-even [size bindings]] bindings must have an even number of elements]
+          [for-inc i 0 2 [size bindings]
+            [let [binding [at bindings i]
+                  value [at bindings [inc i]]]
+              [assert [is-word binding] binding must be a word]
+              [set var-values binding [eval new-env value]]]]
+          [loop []
+            [for i 2 [dec s-form]
+              [eval new-env [at form i]]]
+            [eval new-env [last form]]]
+          ]
 
         [eq-word first-word [quote add]]
         [do
@@ -84,4 +216,4 @@
 
         [log-abort unknownn function [identity first-word]]]]]]
 
-[constant top-env [make-top-env]]
+[def top-env [make-top-env]]

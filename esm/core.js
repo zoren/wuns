@@ -45,11 +45,17 @@ export const meta = (form) => {
 
 export const print = (x) => {
   if (isWord(x)) return String(x)
+  if (isVar(x)) return `[var ${x.name}]`
   if (typeof x === 'number') return String(x)
   if (Array.isArray(x)) return `[${x.map(print).join(' ')}]`
-  if (Object.isFrozen(x)) return `[kv-map ${Object.entries(x).map(([k, v]) => `[quote ${k}] ${print(v)}`).join(' ')}]`
   if ('funMacDesc' in x) return `[closure ${x.funMacDesc.name}]`
-  throw new Error('cannot print: ' + x)
+  if (Object.isFrozen(x))
+    return `[kv-map ${Object.entries(x)
+      .map(([k, v]) => `[quote ${k}] ${print(v)}`)
+      .join(' ')}]`
+  return `[trans-kv-map ${Object.entries(x)
+    .map(([k, v]) => `[quote ${k}] ${print(v)}`)
+    .join(' ')}]`
 }
 export const unword = (v) => {
   if (isWord(v)) return wordValue(v)
@@ -79,4 +85,33 @@ export const number = (arg) => {
   const n = Number(wv)
   if (!isSigned32BitInteger(n)) throw new Error(`expected 32-bit signed integer, found: ${wv}`)
   return n
+}
+class Var {
+  constructor(name, value = null) {
+    this.name = name
+    this.value = value
+  }
+  isBound() {
+    return this.value !== null
+  }
+  bind(value) {
+    this.value = value
+  }
+  getValue() {
+    if (this.value === null) throw new Error('unbound variable: ' + this.name)
+    return this.value
+  }
+  toString() {
+    return this.name
+  }
+}
+export const makeVar = (name) => new Var(name)
+export const varWithMeta = (v, meta) => {
+  v[symbolMeta] = meta
+  return v
+}
+export const isVar = (f) => f instanceof Var
+export const setMeta = (v, meta) => {
+  v[symbolMeta] = meta
+  return v
 }
