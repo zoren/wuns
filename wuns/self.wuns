@@ -89,7 +89,9 @@ comp
     [let [desc [try-get-var-descriptor ctx form]]
       [if desc
         [func lvar [env] [get-var-value env form]]
-        [assert 0 not implemented]]]
+        [let [var-obj [get-var-object form]]
+          [report-when [getq [meta var-obj] is-macro] form can not take value of a macro]
+          [func var [env] [atom-get [getq var-obj value]]]]]]
 
     [not [is-list form]]
     [log-abort expected list but found [identity form]]
@@ -118,6 +120,13 @@ comp
             [if [cond env]
               [then env]
               [else env]]]]
+
+        [eq-word first-form [quote def]]
+        [let [var [second form]
+              value [comp ctx [third form]]]
+          [func def [env]
+            [def-set-var var [value env]]
+            []]]
 
         [eq-word first-form [quote let]]
         [let [bindings [second form]
