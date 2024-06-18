@@ -172,7 +172,10 @@ export const makeInterpreterContext = () => {
       case 'if': {
         const ifArgs = [...args, unit, unit, unit].slice(0, 3)
         let [cc, ct, cf] = ifArgs.map((arg) => wunsComp(ctx, arg))
-        return (env) => (wordValue(cc(env)) === '0' ? cf : ct)(env)
+        return (env) => {
+          const ec = cc(env)
+          return (isWord(ec) && wordValue(ec) === '0' ? cf : ct)(env)
+        }
       }
       case 'let':
       case 'loop': {
