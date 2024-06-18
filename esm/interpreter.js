@@ -74,34 +74,26 @@ for (const [name, op] of Object.entries(i32binops)) {
 
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 
-const makeSetArgs = ({ params, restParam }, numberOfGivenArgs) => {
+const callClosure = (closure, args) => {
+  const {
+    funMacDesc: { name, params, restParam, cbodies },
+    closureEnv,
+  } = closure
+  const numberOfGivenArgs = args.length
   const arity = params.length
+  const varValues = new Map()
+
   if (restParam === null) {
     if (arity !== numberOfGivenArgs)
       throw new CompileError(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
-    return (args) => {
-      if (numberOfGivenArgs !== args.length) throw new Error('wrong number of arguments')
-      const varValues = new Map()
-      for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-      return varValues
-    }
-  }
-  if (arity > numberOfGivenArgs)
-    throw new CompileError(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
-  return (args) => {
-    if (numberOfGivenArgs !== args.length) throw new Error('wrong number of arguments')
-    const varValues = new Map()
+    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+  } else {
+    if (arity > numberOfGivenArgs)
+      throw new CompileError(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
     for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
     varValues.set(restParam, makeList(...args.slice(arity)))
-    return varValues
   }
-}
-
-const callClosure = (closure, args) => {
-  const { funMacDesc, closureEnv } = closure
-  const setArguments = makeSetArgs(funMacDesc, args.length)
-  const inner = { varValues: setArguments(args), outer: closureEnv }
-  return funMacDesc.cbodies(inner)
+  return cbodies({ varValues, outer: closureEnv })
 }
 
 export const makeInterpreterContext = () => {
