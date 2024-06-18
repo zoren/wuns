@@ -5,22 +5,34 @@ import Wuns from 'tree-sitter-wuns'
 parser.setLanguage(Wuns)
 import { word, makeList, wordWithMeta, listWithMeta } from './core.js'
 
-export const nodeToOurForm = (node) => {
-  const { type, text, namedChildren, startPosition, endPosition } = node
+/**
+ * @param {TSParser.SyntaxNode} node
+ */
+const nodeToOurForm = (node) => {
+  const { type, text, namedChildren, startPosition, endPosition, isError } = node
+  if (isError) return null
   const range = makeList(...[startPosition.row, startPosition.column, endPosition.row, endPosition.column])
   const metaData = makeList(word('range'), range, word('node-id'), String(node.id))
-  // todo handle error nodes
   switch (type) {
     case 'word':
       return wordWithMeta(text, metaData)
     case 'list':
-      return listWithMeta(namedChildren.map(nodeToOurForm), metaData)
+      return listWithMeta(childrenToOurForm(namedChildren), metaData)
     default:
-      console.error('unexpected node type', node, { startPosition, endPosition })
-      throw new Error('unexpected node type: ' + type + ' ' + JSON.stringify({ startPosition, endPosition }))
+      throw new Error('unexpected node type: ' + type)
   }
 }
 
+const childrenToOurForm = (children) => {
+  const l = []
+  for (const child of children) {
+    if (child.isError) continue
+    const form = nodeToOurForm(child)
+    if (form !== null) l.push(form)
+  }
+  return l
+}
+
 export const parse = (content, oldTree) => parser.parse(content, oldTree)
-export const treeToForms = (tree) => tree.rootNode.children.map(nodeToOurForm)
+export const treeToForms = (tree) => childrenToOurForm(tree.rootNode.children)
 export const parseStringToForms = (content, oldTree) => treeToForms(parse(content, oldTree))
