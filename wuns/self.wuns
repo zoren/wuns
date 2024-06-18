@@ -22,14 +22,16 @@
 [defn make-ctx [var-descriptors outer def-form]
   [kv-map var-descriptors var-descriptors outer outer def-form def-form]]
 
-[defn get-var-descriptor [ctx word]
+[defn try-get-var-descriptor [ctx word]
   [loop [cur-ctx ctx]
-    [let [var-map [getq cur-ctx var-descriptors]]
-      [if [has var-map word]
-        [get var-map word]
-        [if [hasq cur-ctx outer]
-          [continue cur-ctx [getq cur-ctx outer]]
-          [log-abort unknown variable [identity word]]]]]]]
+    [if cur-ctx
+      [let [var-map [getq cur-ctx var-descriptors]]
+        [if [has var-map word]
+          [get var-map word]
+          [if [hasq cur-ctx outer]
+            [continue cur-ctx [getq cur-ctx outer]]
+            0]]]
+      0]]]
 
 [defmacro report [form .. lmsg]
   [list [quote report-error] [list [quote quote] lmsg] form]]
@@ -41,74 +43,6 @@
 [defmacro report-when-not [cond form .. lmsg]
   [list [quote when-not] cond
     [list [quote report-error] [list [quote quote] lmsg] form]]]
-
-[def type-error [quote type-error]]
-
-[defn check [ctx form]
-  [ifs
-    [is-word form]
-    [let [desc [get-var-descriptor ctx form]]
-
-      ]
-
-    [not [is-list form]]
-    [do
-      [report form not a list]
-      type-error]
-
-    [is-empty form]
-    [do
-      [report form empty list]
-      type-error]
-
-    [let
-      [first-form [first form]
-       s-form [size form]
-       n-of-args [dec s-form]]
-      [ifs
-        [eq-word first-form [quote quote]]
-        [if [eq n-of-args 1]
-          [let [v [second form]]
-            [if [is-word v]
-              [if [is-i32 v] [quote i32] [quote word]]
-              [quote list form]]]
-          [quote list form]]
-
-        [eq-word first-form [quote if]]
-        [let
-          [- [report-when-not [eq n-of-args 3] form must have 3 arguments]
-           ct [check ctx [at form 1]]
-           tt [check ctx [at form 2]]
-           et [check ctx [at form 3]]]
-          [report-when-not [eq-word ct [quote i32]] first argument must be an i32]
-          [report-when-not [eq tt et] second and third arguments must have the same type]
-          ]
-
-        [eq-word first-form [quote let]]
-        [let [new-ctx [make-ctx [transient-kv-map] ctx first-form]]
-          [for i 1 [dec s-form]
-            [check new-ctx [at form i]]]
-          [check new-ctx [last form]]]
-
-        [eq-word first-form [quote loop]]
-        []
-
-        [eq-word first-form [quote continue]]
-        []
-
-        [eq-word first-form [quote def]]
-        [let
-          [- [report-when-not [eq n-of-args 3] form must have 3 arguments]
-           var [second form]]
-          [report-when-not [is-word var] var first argument must be a word]
-          [set [getq ctx var-descriptors] var [check ctx [third form]]]]
-
-
-        [eq-form first-form [quote func]]
-        []
-
-        []
-  ]]]]
 
 [defn make-top-env []
   [kv-map var-values [transient-kv-map]]]
@@ -152,7 +86,10 @@ comp
               result]]]]]
   [ifs
     [is-word form]
-    [get-var-descriptor ctx form]
+    [let [desc [try-get-var-descriptor ctx form]]
+      [if desc
+        [func lvar [env] [get-var-value env form]]
+        [assert 0 not implemented]]]
 
     [not [is-list form]]
     [log-abort expected list but found [identity form]]
@@ -186,21 +123,26 @@ comp
         [let [bindings [second form]
               s-bindings [size bindings]
               var-descs [transient-kv-map]
-              new-ctx [make-ctx var-descs ctx first-form]]
+              new-ctx [make-ctx var-descs ctx first-form]
+              cbinds [mutable-list]]
           [report-when-not [is-list bindings] bindings must be a list]
           [report-when-not [is-even s-bindings] bindings must have an even number of elements]
           [for-inc i 0 2 s-bindings
             [let [binding [at bindings i]
-                  value [at bindings [inc i]]]
+                  value [at bindings [inc i]]
+                  cv [comp new-ctx value]]
               [report-when-not [is-word binding] binding must be a word]
-              [set var-descs binding [comp new-ctx value]]]]
+              [set var-descs binding cv]
+              [push cbinds binding]
+              [push cbinds cv]]]
           [let [ebodies [comp-bodies new-ctx [slice form 2 s-form]]]
             [func let [env]
-              [let [var-values [transient-kv-map] inner [make-env var-values env first-form]]
+              [let [var-values [transient-kv-map]
+                    inner [make-env var-values env first-form]]
                 [for-inc i 0 2 s-bindings
-                  [let [binding [at bindings i]
-                        value [at bindings [inc i]]]
-                    [set var-values binding [comp inner value]]]]
+                  [let [binding [at cbinds i]
+                        cvalue [at cbinds [inc i]]]
+                    [set var-values binding [cvalue inner]]]]
                 [ebodies inner]]]]]
 
           [if [is-list first-form]
@@ -213,10 +155,10 @@ comp
         ]]]
   [kv-map eval [func eval [form] [comp 0 form]]]]]
 
-[def ctx [make-eval-context]]
+[def ectx [make-eval-context]]
 
 [defn ev-cc [form]
-  [[[getq ctx eval] form] 0]]
+  [[[getq ectx eval] form] 0]]
 
 [comment
         [eq-word first-form [quote def]]
