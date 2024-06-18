@@ -11,9 +11,7 @@ import {
   print,
   number,
   word,
-  is_atom,
   makeVar,
-  isVar,
   meta,
 } from './core.js'
 import { parseStringToForms } from './parseTreeSitter.js'
@@ -82,6 +80,7 @@ const makeSetArgs = ({ params, restParam }, numberOfGivenArgs) => {
     if (arity !== numberOfGivenArgs)
       throw new CompileError(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
     return (args) => {
+      if (numberOfGivenArgs !== args.length) throw new Error('wrong number of arguments')
       const varValues = new Map()
       for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
       return varValues
@@ -90,6 +89,7 @@ const makeSetArgs = ({ params, restParam }, numberOfGivenArgs) => {
   if (arity > numberOfGivenArgs)
     throw new CompileError(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
   return (args) => {
+    if (numberOfGivenArgs !== args.length) throw new Error('wrong number of arguments')
     const varValues = new Map()
     for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
     varValues.set(restParam, makeList(...args.slice(arity)))
@@ -99,7 +99,7 @@ const makeSetArgs = ({ params, restParam }, numberOfGivenArgs) => {
 
 export const makeInterpreterContext = () => {
   const varObjects = new Map()
-  const getVarObject = name => varObjects.get(name)
+  const getVarObject = (name) => varObjects.get(name)
   const defVar = (name) => {
     if (varObjects.has(name)) return varObjects.get(name)
     const varObj = makeVar(name)
@@ -139,6 +139,7 @@ export const makeInterpreterContext = () => {
         }
       const varObj = getVarObject(v)
       if (!varObj) throw new CompileError(`variable ${v} not found ${meta(form)}`)
+      if (meta(varObj)['is-macro']) throw new CompileError(`can't take value of macro ${v}`)
       return () => {
         rtAssert(
           varObj === getVarObject(v),
@@ -260,9 +261,10 @@ export const makeInterpreterContext = () => {
         funMacDesc.cbodies = compBodies(newCtx, bodies)
         Object.freeze(funMacDesc)
         return (env) => {
-          // const { varValues } = env
-          const closure = { funMacDesc, closureEnv: env }
-          // varValues.set(n, closure)
+          const varValues = new Map()
+          const closureEnv = { varValues, outer: env }
+          const closure = { funMacDesc, closureEnv }
+          varValues.set(n, closure)
           return closure
         }
       }
@@ -296,11 +298,10 @@ export const makeInterpreterContext = () => {
         return cbodies(inner)
       }
     }
-
     const cargs = args.map((a) => wunsComp(ctx, a))
     return (env) => {
       const { funMacDesc, closureEnv } = getVarValue(env, firstWordValue)
-      rtAssert(funMacDesc === funcOrMacroDesc, `function ${firstWordValue} not found ${print(form)}`)
+      const setArguments = makeSetArgs(funMacDesc, args.length)
       const inner = { varValues: setArguments(cargs.map((carg) => carg(env))), outer: closureEnv }
       const cbodies = funMacDesc.cbodies
       return cbodies(inner)
