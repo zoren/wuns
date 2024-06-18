@@ -99,14 +99,14 @@ const callClosure = (closure, args) => {
 export const makeInterpreterContext = () => {
   const varObjects = new Map()
   const getVarObject = (name) => varObjects.get(name)
-  const defVar = (name) => {
-    if (varObjects.has(name)) return varObjects.get(name)
-    const varObj = makeVar(name)
-    varObjects.set(name, varObj)
-    return varObj
-  }
-  const defSetVar = (varName, value) => {
-    const v = defVar(varName)
+  const defSetVar = (name, value) => {
+    let v
+    if (varObjects.has(name)) {
+      v = varObjects.get(name)
+    } else {
+      v = makeVar(name)
+      varObjects.set(name, v)
+    }
     v.bind(value)
     return v
   }
