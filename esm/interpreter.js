@@ -97,6 +97,13 @@ const makeSetArgs = ({ params, restParam }, numberOfGivenArgs) => {
   }
 }
 
+const callClosure = (closure, args) => {
+  const { funMacDesc, closureEnv } = closure
+  const setArguments = makeSetArgs(funMacDesc, args.length)
+  const inner = { varValues: setArguments(args), outer: closureEnv }
+  return funMacDesc.cbodies(inner)
+}
+
 export const makeInterpreterContext = () => {
   const varObjects = new Map()
   const getVarObject = (name) => varObjects.get(name)
@@ -156,10 +163,7 @@ export const makeInterpreterContext = () => {
       return (f, env) => {
         const eargs = cargs.map((carg) => carg(env))
         if (typeof f === 'function') return jsToWuns(f(...eargs))
-        const { funMacDesc, closureEnv } = f
-        const setArguments = makeSetArgs(funMacDesc, args.length)
-        const inner = { varValues: setArguments(eargs), outer: closureEnv }
-        return funMacDesc.cbodies(inner)
+        return callClosure(f, eargs)
       }
     }
     if (!isWord(firstForm)) {
@@ -293,11 +297,7 @@ export const makeInterpreterContext = () => {
     const varObj = getVarObject(firstWordValue)
     if (!varObj) throw new CompileError(`function ${firstWordValue} not found ${print(form)}`)
     if (meta(varObj)['is-macro']) {
-      const compileTimeValue = varObj.getValue()
-      const { funMacDesc, closureEnv } = compileTimeValue
-      const setArguments = makeSetArgs(funMacDesc, args.length)
-      const inner = { varValues: setArguments(args), outer: closureEnv }
-      const macResult = funMacDesc.cbodies(inner)
+      const macResult = callClosure(varObj.getValue(), args)
       return wunsComp(ctx, macResult)
     }
     const caller = rtCallFunc()
