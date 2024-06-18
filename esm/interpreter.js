@@ -50,7 +50,7 @@ const jsToWuns = (js) => {
 
 const getVarValue = (env, v) => {
   while (true) {
-    if (!env) return null
+    if (!env) throw new RuntimeError(`variable ${v} not found`)
     const { varValues } = env
     if (env && varValues.has(v)) return varValues.get(v)
     env = env.outer
@@ -127,23 +127,12 @@ export const makeInterpreterContext = () => {
     if (isWord(form)) {
       const v = wordValue(form)
       const lvarctx = getCtxVar(ctx, v)
-      if (lvarctx)
-        return (env) => {
-          while (true) {
-            if (!env) throw new RuntimeError(`variable ${v} not found`)
-            const { varValues } = env
-            if (varValues.has(v)) return varValues.get(v)
-            env = env.outer
-          }
-        }
+      if (lvarctx) return (env) => getVarValue(env, v)
       const varObj = getVarObject(v)
       if (!varObj) throw new CompileError(`variable ${v} not found ${meta(form)}`)
       if (meta(varObj)['is-macro']) throw new CompileError(`can't take value of macro ${v}`)
       return () => {
-        rtAssert(
-          varObj === getVarObject(v),
-          `compile time var not same as runtime varObj !== getVarObject(v) ${varObj} ${getVarObject(v)}`,
-        )
+        rtAssert(varObj === getVarObject(v), `compile time var not same as runtime varObj !== getVarObject(v)`)
         return varObj.getValue()
       }
     }
@@ -284,8 +273,7 @@ export const makeInterpreterContext = () => {
         }
       }
     }
-    const funcOrMacroDesc = getCtxVar(ctx, firstWordValue)
-    if (funcOrMacroDesc) {
+    if (getCtxVar(ctx, firstWordValue)) {
       const caller = rtCallFunc()
       return (env) => caller(getVarValue(env, firstWordValue), env)
     }
