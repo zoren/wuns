@@ -154,3 +154,33 @@
   [for-func iw start increment end forms]]
 
 [defn is-empty [l] [eq [size l] 0]]
+
+[defmacro fn [params .. forms]
+  [concat [list [quote func] [genword] params] forms]]
+
+[defn map [mf coll]
+  [let [result [mutable-list]]
+    [for i 0 [size coll]
+      [push result [mf [at coll i]]]]
+    result]]
+
+[defn for-each [mf coll]
+  [for i 0 [size coll]
+    [mf [at coll i]]]]
+
+[defmacro for-each [element-var collection .. forms]
+  [assert [is-word element-var] for-each requires a word as the first argument]
+  [let [iteration-var [genword]
+        col-var [genword]
+        col-size-var [genword]]
+    [list
+      [quote let] [list col-var collection col-size-var [list [quote size] col-var]]
+      [list
+        [quote loop] [list iteration-var [quote 0]]
+        [list [quote if]
+          [list [quote lt] iteration-var col-size-var]
+          [concat [quote [let]]
+            [list [list element-var [list [quote at] col-var iteration-var]]]
+            forms
+            [list [list [quote continue] iteration-var [list [quote add] iteration-var [quote 1]]]]]
+          [list]]]]]]

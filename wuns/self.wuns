@@ -8,13 +8,16 @@
                   [list [quote quote] k]
                   k]]]
       [push ml [at entries [inc i]]]]
-    [concat [quote [persistent-object]] [list ml]]]]
+    [concat [quote [persistent-kv-map]] [list ml]]]]
 
 [defmacro getq [m w]
   [list [quote get] m [list [quote quote] w]]]
 
 [defmacro hasq [m w]
   [list [quote has] m [list [quote quote] w]]]
+
+[defmacro setq [m w v]
+  [list [quote set] m [list [quote quote] w] v]]
 
 [defn make-top-ctx []
   [kv-map var-descriptors [transient-kv-map]]]
@@ -44,9 +47,6 @@
   [list [quote when-not] cond
     [list [quote report-error] [list [quote quote] lmsg] form]]]
 
-[defn make-top-env []
-  [kv-map var-values [transient-kv-map]]]
-
 [defn make-env [var-values outer def-form]
   [kv-map var-values var-values outer outer def-form def-form]]
 
@@ -61,6 +61,20 @@
 
 [defn make-var-obj []
   [kv-map value [atom 0] meta [atom 0]]]
+
+[defn call-closure [closure args]
+  [let
+    [fun-desc [getq closure fun-desc]
+     params [getq fun-desc params]
+     cbodies [getq fun-desc cbodies]
+     env [getq closure env]
+     var-values [transient-kv-map]
+     cloenv [make-env var-values env fun-desc]]
+    [assert [not [hasq fun-desc rest-param]] rest parameter not supported]
+    [assert [eq [size params] [size args]] [size args] arguments expected but [size params] found]
+    [for i 0 [size params]
+      [set var-values [at params i] [at args i]]]
+    [cbodies cloenv]]]
 
 [defn make-eval-context []
 [let [var-objects [transient-kv-map]
@@ -128,7 +142,7 @@ comp
             [def-set-var var [value env]]
             []]]
 
-        [eq-word first-form [quote let]]
+        [or [eq-word first-form [quote let]] [eq-word first-form [quote loop]]]
         [let [bindings [second form]
               s-bindings [size bindings]
               var-descs [transient-kv-map]
@@ -145,23 +159,108 @@ comp
               [push cbinds binding]
               [push cbinds cv]]]
           [let [ebodies [comp-bodies new-ctx [slice form 2 s-form]]]
-            [func let [env]
-              [let [var-values [transient-kv-map]
-                    inner [make-env var-values env first-form]]
-                [for-inc i 0 2 s-bindings
-                  [let [binding [at cbinds i]
-                        cvalue [at cbinds [inc i]]]
-                    [set var-values binding [cvalue inner]]]]
-                [ebodies inner]]]]]
+            [if [eq-word first-form [quote let]]
+              [func let [env]
+                [let [var-values [transient-kv-map]
+                      inner [make-env var-values env first-form]]
+                  [for-inc i 0 2 s-bindings
+                    [let [binding [at cbinds i]
+                          cvalue [at cbinds [inc i]]]
+                      [set var-values binding [cvalue inner]]]]
+                  [ebodies inner]]]
+              [func loop [env]
+                [let [var-values [transient-kv-map]
+                      inner [make-env var-values env first-form]
+                      continue-atom [atom 1]]
+                  [set-meta inner continue-atom]
+                  [for-inc i 0 2 s-bindings
+                    [let [binding [at cbinds i]
+                          cvalue [at cbinds [inc i]]]
+                      [set var-values binding [cvalue inner]]]]
+                  [loop []
+                    [when [atom-get continue-atom]
+                      [atom-set continue-atom 0]
+                      [let [res [ebodies inner]]
+                        [if [atom-get continue-atom]
+                          res
+                          [continue]]]]]]]]]]
+
+        [eq-word first-form [quote continue]]
+        [let
+          [update-vars [mutable-list]
+           update-forms [mutable-list]]
+          [for-inc i 1 2 s-form
+            [push update-vars [at form i]]
+            [push update-forms [comp ctx [at form [inc i]]]]]
+          [loop [cur-ctx ctx]
+            [if cur-ctx
+              [if [eq-word [getq cur-ctx def-form] [quote loop]]
+                [let [var-descs [getq cur-ctx var-descriptors]]
+                  [for i 0 [size update-vars]
+                  [let [var [at update-vars i]]
+                    [report-when-not [has var-descs var] var not found in loop]]]]
+                [continue cur-ctx [getq cur-ctx outer]]]
+              [report form continue must be inside a loop]]]
+          [func continue [env]
+            [let [loop-env
+              [loop [cur-env env]
+                [if [hasq cur-env outer]
+                  [if [eq-word [getq cur-env def-form] [quote loop]]
+                    cur-env
+                    [continue cur-env [getq cur-env outer]]]
+                  [log-abort continue must be inside a loop]]]
+                  continue-atom [meta loop-env]
+                  var-values [getq loop-env var-values]
+                  tmp-values [map [fn [uf] [uf env]] update-forms]]
+              [for i 0 [size update-vars]
+                [set var-values [at update-vars i] [at tmp-values i]]
+                [atom-set continue-atom 1]]]]]
+
+          [eq-word first-form [quote func]]
+          [let [name [second form]
+                params [third form]
+                bodies [slice form 3 s-form]
+                var-descs [transient-kv-map]
+                bind-var-desc [fn [v d]
+                  [report-when [has var-descs v] v already defined]
+                  [set var-descs v d]]
+                fun-desc [transient-kv-map]]
+            [report-when-not [is-word name] name must be a word]
+            [report-when-not [is-list params] params must be a list]
+            [bind-var-desc name []]
+            [if [and [gt [size params] 1] [eq-word [at params -2] [quote ..]]]
+              [let [reg-params [slice params 0 [sub [size params] 2]]
+                    rest-param [last params]]
+                [for-each p reg-params [bind-var-desc p []]]
+                [bind-var-desc rest-param []]
+                [setq fun-desc params reg-params]
+                [setq fun-desc rest-param rest-param]]
+              [do
+                [for-each p params [bind-var-desc p []]]
+                [setq fun-desc params params]]]
+            [let [new-ctx [make-ctx var-descs ctx first-form]]
+              [setq fun-desc cbodies [comp-bodies new-ctx bodies]]
+              [func func [env]
+                [let [var-values [transient-kv-map]
+                      cloenv [make-env var-values env first-form]
+                      closure [kv-map fun-desc fun-desc
+                                      env cloenv]]
+                  [set var-values name closure]
+                  closure]]]]
 
           [if [is-list first-form]
-            []
-            [log-abort unknownn function [identity first-form]]]
+            [let [cfunc [comp ctx first-form]
+                  rt-call-func
+                  [fn []
+                    [let [cargs [map [fn [a] [comp ctx a]] [slice form 1 s-form]]]
+                      [func call [f env]
+                        [let [eargs [map [fn [ca] [ca env]] cargs]]
+                          [call-closure f eargs]]]]]
+                  caller [rt-call-func]]
+              [func call [env]
+                [caller [cfunc env] env]]]
 
-            ]]
-          ]
-
-        ]]]
+            [log-abort unknownn function [identity first-form]]]]]]]]]
   [kv-map eval [func eval [form] [comp 0 form]]]]]
 
 [def ectx [make-eval-context]]

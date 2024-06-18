@@ -43,19 +43,25 @@ export const meta = (form) => {
   return unit
 }
 
-export const print = (x) => {
-  if (isWord(x)) return String(x)
-  if (isVar(x)) return `[var ${x.name}]`
-  if (typeof x === 'number') return String(x)
-  if (Array.isArray(x)) return `[${x.map(print).join(' ')}]`
-  if ('funMacDesc' in x) return `[closure ${x.funMacDesc.name}]`
-  if (Object.isFrozen(x))
-    return `[kv-map ${Object.entries(x)
-      .map(([k, v]) => `[quote ${k}] ${print(v)}`)
+export const print = (ox) => {
+  const visited = new Set()
+  const go = (x) => {
+    if (visited.has(x)) return '[*circular*]'
+    visited.add(x)
+    if (isWord(x)) return String(x)
+    if (isVar(x)) return `[var ${x.name}]`
+    if (typeof x === 'number') return String(x)
+    if (Array.isArray(x)) return `[${x.map(go).join(' ')}]`
+    if ('funMacDesc' in x) return `[closure ${x.funMacDesc.name}]`
+    if (Object.isFrozen(x))
+      return `[kv-map ${Object.entries(x)
+        .map(([k, v]) => `[quote ${k}] ${go(v)}`)
+        .join(' ')}]`
+    return `[trans-kv-map ${Object.entries(x)
+      .map(([k, v]) => `[quote ${k}] ${go(v)}`)
       .join(' ')}]`
-  return `[trans-kv-map ${Object.entries(x)
-    .map(([k, v]) => `[quote ${k}] ${print(v)}`)
-    .join(' ')}]`
+  }
+  return go(ox)
 }
 export const unword = (v) => {
   if (isWord(v)) return wordValue(v)

@@ -66,7 +66,7 @@ export const persistent_array = (o) => {
   if (!Array.isArray(o)) throw new Error('persistent-array expects array')
   return makeList(...o)
 }
-export const persistent_object = (o) => {
+export const persistent_kv_map = (o) => {
   if (!o || typeof o !== 'object') throw new Error('persistent-object expects object')
   const clone = { ...o }
   return Object.freeze(clone)
@@ -159,5 +159,5 @@ export const get = (m, k) => {
   if (typeof m !== 'object') throw new Error('get expects map')
   const ks = wordValue(k)
   if (ks in m) return m[ks]
-  throw new Error('key not found: ' + ks + ' ' + Object.keys(m))
+  throw new Error('key not found: ' + ks + ' in ' + Object.keys(m))
 }

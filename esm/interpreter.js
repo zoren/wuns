@@ -75,10 +75,12 @@ for (const [name, op] of Object.entries(i32binops)) {
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 
 const callClosure = (closure, args) => {
-  const {
-    funMacDesc: { name, params, restParam, cbodies },
-    closureEnv,
-  } = closure
+  const { funMacDesc, closureEnv } = closure
+  if (!funMacDesc) {
+    console.log('closure', closure)
+    throw new RuntimeError('closure has no funMacDesc')
+  }
+  const { name, params, restParam, cbodies } = funMacDesc
   const numberOfGivenArgs = args.length
   const arity = params.length
   const varValues = new Map()
@@ -266,8 +268,7 @@ export const makeInterpreterContext = () => {
         Object.freeze(funMacDesc)
         return (env) => {
           const varValues = new Map()
-          const closureEnv = { varValues, outer: env }
-          const closure = { funMacDesc, closureEnv }
+          const closure = { funMacDesc, closureEnv: { varValues, outer: env } }
           varValues.set(n, closure)
           return closure
         }
