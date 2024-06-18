@@ -151,6 +151,22 @@ export const makeInterpreterContext = () => {
     ctAssert(isList(form), `cannot eval ${form} expected word or list`)
     if (form.length === 0) return () => unit
     const [firstForm, ...args] = form
+    const rtCallFunc = () => {
+      const cargs = args.map((a) => wunsComp(ctx, a))
+      return (f, env) => {
+        const eargs = cargs.map((carg) => carg(env))
+        if (typeof f === 'function') return jsToWuns(f(...eargs))
+        const { funMacDesc, closureEnv } = f
+        const setArguments = makeSetArgs(funMacDesc, args.length)
+        const inner = { varValues: setArguments(eargs), outer: closureEnv }
+        return funMacDesc.cbodies(inner)
+      }
+    }
+    if (!isWord(firstForm)) {
+      const cfunc = wunsComp(ctx, firstForm)
+      const caller = rtCallFunc()
+      return (env) => caller(cfunc(env), env)
+    }
     const firstWordValue = wordValue(firstForm)
     switch (firstWordValue) {
       case 'quote': {
@@ -270,42 +286,22 @@ export const makeInterpreterContext = () => {
       }
     }
     const funcOrMacroDesc = getCtxVar(ctx, firstWordValue)
-    if (!funcOrMacroDesc) {
-      const varObj = getVarObject(firstWordValue)
-      if (!varObj) throw new CompileError(`function ${firstWordValue} not found ${print(form)}`)
-      const value = varObj.getValue()
-      if (typeof value === 'function') {
-        const cargs = args.map((a) => wunsComp(ctx, a))
-        return (env) => {
-          const rtValue = varObj.getValue()
-          rtAssert(typeof rtValue === 'function', `expected function, got ${typeof rtValue}`)
-          return jsToWuns(rtValue(...cargs.map((carg) => carg(env))))
-        }
-      }
-      const { funMacDesc, closureEnv } = value
-      const setArguments = makeSetArgs(funMacDesc, args.length)
-      if (meta(varObj)['is-macro']) {
-        const inner = { varValues: setArguments(args), outer: closureEnv }
-        const ebodies = funMacDesc.cbodies(inner)
-        return wunsComp(ctx, ebodies)
-      }
-      const cargs = args.map((a) => wunsComp(ctx, a))
-      return (env) => {
-        const rtValue = varObj.getValue()
-        rtAssert(value === rtValue, `value !== rtValue ${value} ${rtValue}`)
-        const inner = { varValues: setArguments(cargs.map((carg) => carg(env))), outer: closureEnv }
-        const cbodies = funMacDesc.cbodies
-        return cbodies(inner)
-      }
+    if (funcOrMacroDesc) {
+      const caller = rtCallFunc()
+      return (env) => caller(getVarValue(env, firstWordValue), env)
     }
-    const cargs = args.map((a) => wunsComp(ctx, a))
-    return (env) => {
-      const { funMacDesc, closureEnv } = getVarValue(env, firstWordValue)
+    const varObj = getVarObject(firstWordValue)
+    if (!varObj) throw new CompileError(`function ${firstWordValue} not found ${print(form)}`)
+    if (meta(varObj)['is-macro']) {
+      const compileTimeValue = varObj.getValue()
+      const { funMacDesc, closureEnv } = compileTimeValue
       const setArguments = makeSetArgs(funMacDesc, args.length)
-      const inner = { varValues: setArguments(cargs.map((carg) => carg(env))), outer: closureEnv }
-      const cbodies = funMacDesc.cbodies
-      return cbodies(inner)
+      const inner = { varValues: setArguments(args), outer: closureEnv }
+      const macResult = funMacDesc.cbodies(inner)
+      return wunsComp(ctx, macResult)
     }
+    const caller = rtCallFunc()
+    return (env) => caller(varObj.getValue(), env)
   }
 
   const evalLogForms = (forms) => {
