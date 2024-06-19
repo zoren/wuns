@@ -81,6 +81,8 @@
       [assert [eq arity number-of-args] wrong number of args]]
     [cbodies cloenv]]]
 
+[comment we do not import meta functions from host but implement them here]
+
 [def builtins [quote
   add
   sub
@@ -135,7 +137,6 @@
   size
   slice
   transient-kv-map
-  with-meta
 ]]
 
 [defn get-var-obj-value [var-obj] [atom-get [getq var-obj value]]]
@@ -167,8 +168,8 @@ comp
         [func ev-bodies [env]
           [loop [result [] i 0]
             [if [lt i [size cbodies]]
-              [continue result [[at cbodies i] env] i [inc i]]]
-              result]]]]]
+              [continue result [[at cbodies i] env] i [inc i]]
+              result]]]]]]
   [ifs
     [is-word form]
     [let [desc [try-get-var-descriptor ctx form]]
@@ -346,17 +347,3 @@ comp
       eval [func eval [form] [[comp 0 form] 0]]]
   [def-set-var [quote eval] eval]
   [kv-map eval eval]]]
-
-[def ectx [make-eval-context]]
-
-[defn ev-cc [form]
-  [[getq ectx eval] form]]
-
-[comment
-
-        [eq-word first-form [quote add]]
-        [do
-          [assert [eq n-of-args 2] must have 2 arguments]
-          [add [eval env [at form 1]] [eval env [at form 2]]]]
-
-]

@@ -1,0 +1,13 @@
+[def ectx [make-eval-context]]
+
+[defn ev-cc [form]
+  [[getq ectx eval] form]]
+
+[defn eval-many [forms]
+  [let [res [mutable-list]]
+    [for i 0 [size forms]
+      [ev-cc [at forms i]]]
+    res]]
+
+[eval-many [read-file [quote std3.wuns]]]
+[eval-many [read-file [quote self.wuns]]]
