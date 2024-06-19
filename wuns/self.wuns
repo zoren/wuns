@@ -50,7 +50,7 @@
 [defn make-env [var-values outer def-form]
   [kv-map var-values var-values outer outer def-form def-form]]
 
-[defn get-var-value [env var]
+[defn get-local-var-value [env var]
   [loop [cur-env env]
     [let [var-map [getq cur-env var-values]]
       [if [has var-map var]
@@ -69,11 +69,16 @@
      cbodies [getq fun-desc cbodies]
      env [getq closure env]
      var-values [transient-kv-map]
-     cloenv [make-env var-values env fun-desc]]
-    [assert [not [hasq fun-desc rest-param]] rest parameter not supported]
-    [assert [eq [size params] [size args]] [size args] arguments expected but [size params] found]
+     cloenv [make-env var-values env fun-desc]
+     arity [size params]
+     number-of-args [size args]]
     [for i 0 [size params]
       [set var-values [at params i] [at args i]]]
+    [if [hasq fun-desc rest-param]
+      [do
+        [assert [ge number-of-args arity] wrong number of args]
+        [set var-values [getq fun-desc rest-param] [slice args [size params] number-of-args]]]
+      [assert [eq arity number-of-args] wrong number of args]]
     [cbodies cloenv]]]
 
 [def builtins [quote
@@ -120,7 +125,6 @@
   is-word
   list
   log
-  meta
   mutable-list
   persistent-array
   persistent-kv-map
@@ -128,12 +132,17 @@
   report-error
   set
   set-array
-  set-meta
   size
   slice
   transient-kv-map
   with-meta
 ]]
+
+[defn get-var-obj-value [var-obj] [atom-get [getq var-obj value]]]
+
+[defn meta [var-obj] [atom-get [getq var-obj meta]]]
+
+[defn set-meta [var-obj meta] [atom-set [getq var-obj meta] meta]]
 
 [defn make-eval-context []
 [let [var-objects [transient-kv-map]
@@ -146,7 +155,8 @@
                     new-var]]]
           [atom-set [getq v value] value]]]
       - [def-set-var [quote var] get-var-object]
-      - [for-each b builtins [def-set-var b [eval b]]]
+      - [for-each b builtins [def-set-var b [eval b]]
+      - [def-set-var [quote set-meta] set-meta]]
 comp
 [func comp [ctx form]
   [let [comp-bodies
@@ -163,16 +173,16 @@ comp
     [is-word form]
     [let [desc [try-get-var-descriptor ctx form]]
       [if desc
-        [func lvar [env] [get-var-value env form]]
+        [func lvar [env] [get-local-var-value env form]]
         [let [var-obj [get-var-object form]]
           [report-when [hasq [meta var-obj] is-macro] form can not take value of a macro]
-          [func var [env] [atom-get [getq var-obj value]]]]]]
+          [func var [env] [get-var-obj-value var-obj]]]]]
 
     [not [is-list form]]
     [log-abort expected list but found [identity form]]
 
     [is-empty form]
-    [log-abort empty list]
+    [func empty-list [env] []]
 
     [let
       [first-form [first form]
@@ -190,7 +200,7 @@ comp
               cond [comp ctx [at forms 1]]
               then [comp ctx [at forms 2]]
               else [comp ctx [at forms 3]]]
-          [report-when-not [eq [size forms] 4] form if must have 3 arguments]
+          [report-when-not [eq [size form] 4] form if must have 3 arguments [identity [size form]]]
           [func if [env]
             [if [cond env]
               [then env]
@@ -231,9 +241,11 @@ comp
                   [ebodies inner]]]
               [func loop [env]
                 [let [var-values [transient-kv-map]
-                      inner [make-env var-values env first-form]
-                      continue-atom [atom 1]]
-                  [set-meta inner continue-atom]
+                      continue-atom [atom 1]
+                      inner [kv-map var-values var-values
+                                    outer env
+                                    def-form first-form
+                                    continue-atom continue-atom]]
                   [for-inc i 0 2 s-bindings
                     [let [binding [at cbinds i]
                           cvalue [at cbinds [inc i]]]
@@ -270,7 +282,7 @@ comp
                     cur-env
                     [continue cur-env [getq cur-env outer]]]
                   [log-abort continue must be inside a loop]]]
-                  continue-atom [meta loop-env]
+                  continue-atom [getq loop-env continue-atom]
                   var-values [getq loop-env var-values]
                   tmp-values [map [fn [uf] [uf env]] update-forms]]
               [for i 0 [size update-vars]
@@ -325,18 +337,20 @@ comp
               [let [desc [try-get-var-descriptor ctx first-form]]
                 [if desc
                   [let [caller [rt-call-func]]
-                    [func call-local-var [env] [caller [get-var-value env first-form] env]]]
+                    [func call-local-var [env] [caller [get-local-var-value env first-form] env]]]
                   [let [var-obj [get-var-object first-form]]
                     [if [hasq [meta var-obj] is-macro]
-                      [report form can not call macro yet]
+                      [comp ctx [call-closure [get-var-obj-value var-obj] [slice form 1 s-form]]]
                       [let [caller [rt-call-func]]
-                        [func call-var [env] [caller [atom-get [getq var-obj value]] env]]]]]]]]]]]]]]]
-  [kv-map eval [func eval [form] [comp 0 form]]]]]
+                        [func call-var [env] [caller [get-var-obj-value var-obj] env]]]]]]]]]]]]]]
+      eval [func eval [form] [[comp 0 form] 0]]]
+  [def-set-var [quote eval] eval]
+  [kv-map eval eval]]]
 
 [def ectx [make-eval-context]]
 
 [defn ev-cc [form]
-  [[[getq ectx eval] form] 0]]
+  [[getq ectx eval] form]]
 
 [comment
 

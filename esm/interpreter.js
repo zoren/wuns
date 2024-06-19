@@ -1,7 +1,6 @@
 import fs from 'fs'
 
 import {
-  makeList,
   wordValue,
   isWord,
   isList,
@@ -13,6 +12,7 @@ import {
   word,
   makeVar,
   meta,
+  callClosure,
 } from './core.js'
 import { parseStringToForms } from './parseTreeSitter.js'
 import { i32binops } from './instructions.js'
@@ -74,32 +74,8 @@ for (const [name, op] of Object.entries(i32binops)) {
 
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 
-const callClosure = (closure, args) => {
-  const { funMacDesc, closureEnv } = closure
-  if (!funMacDesc) {
-    console.log('closure', closure)
-    throw new RuntimeError('closure has no funMacDesc')
-  }
-  const { name, params, restParam, cbodies } = funMacDesc
-  const numberOfGivenArgs = args.length
-  const arity = params.length
-  const varValues = new Map()
-
-  if (restParam === null) {
-    if (arity !== numberOfGivenArgs)
-      throw new CompileError(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
-    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-  } else {
-    if (arity > numberOfGivenArgs)
-      throw new CompileError(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
-    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-    varValues.set(restParam, makeList(...args.slice(arity)))
-  }
-  return cbodies({ varValues, outer: closureEnv })
-}
-
 export const makeInterpreterContext = () => {
-  const wunsEval = form => {
+  const wunsEval = (form) => {
     const cform = wunsComp(null, form)
     return cform(null)
   }

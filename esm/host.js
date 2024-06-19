@@ -17,13 +17,16 @@ import {
   number,
   isVar,
   varWithMeta,
-  setMeta
+  setMeta,
+  callClosure
 } from './core.js'
 
 export const apply = (f, ...args) => {
   const butLast = args.slice(0, -1)
   const last = args.at(-1)
-  return f(...butLast, ...last)
+  if (typeof f === 'function') return f(...butLast, ...last)
+  if (isClosure(f)) return callClosure(f, butLast.concat(last))
+  throw new Error('apply expects function or closure')
 }
 
 export const is_word = (f) => isWord(f)
@@ -32,7 +35,9 @@ export const is_i32 = (f) => isWord(f) && isSigned32BitInteger(Number(wordValue(
 
 export const is_list = (f) => isList(f)
 
-export const is_fn = (f) => typeof f === 'function'
+const isClosure = (f) => 'funMacDesc' in f && 'closureEnv' in f
+
+export const is_fn = (f) => (typeof f === 'function') || isClosure(f)
 
 export const eq_word = (a, b) => isWord(a) && isWord(b) && (a === b || wordValue(a) === wordValue(b))
 

@@ -121,3 +121,27 @@ export const setMeta = (v, meta) => {
   v[symbolMeta] = meta
   return v
 }
+
+export const callClosure = (closure, args) => {
+  const { funMacDesc, closureEnv } = closure
+  if (!funMacDesc) {
+    console.log('closure', closure)
+    throw new RuntimeError('closure has no funMacDesc')
+  }
+  const { name, params, restParam, cbodies } = funMacDesc
+  const numberOfGivenArgs = args.length
+  const arity = params.length
+  const varValues = new Map()
+
+  if (restParam === null) {
+    if (arity !== numberOfGivenArgs)
+      throw new Error(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
+    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+  } else {
+    if (arity > numberOfGivenArgs)
+      throw new Error(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
+    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+    varValues.set(restParam, makeList(...args.slice(arity)))
+  }
+  return cbodies({ varValues, outer: closureEnv })
+}
