@@ -86,6 +86,8 @@
                     [set var-objects var-name new-var]
                     new-var]]]
           [atom-set [getq v value] value]]]
+      - [def-set-var [quote var] get-var-object]
+      - [def-set-var [quote add] add]
 comp
 [func comp [ctx form]
   [let [comp-bodies
@@ -104,7 +106,7 @@ comp
       [if desc
         [func lvar [env] [get-var-value env form]]
         [let [var-obj [get-var-object form]]
-          [report-when [getq [meta var-obj] is-macro] form can not take value of a macro]
+          [report-when [hasq [meta var-obj] is-macro] form can not take value of a macro]
           [func var [env] [atom-get [getq var-obj value]]]]]]
 
     [not [is-list form]]
@@ -248,19 +250,28 @@ comp
                   [set var-values name closure]
                   closure]]]]
 
-          [if [is-list first-form]
-            [let [cfunc [comp ctx first-form]
-                  rt-call-func
-                  [fn []
-                    [let [cargs [map [fn [a] [comp ctx a]] [slice form 1 s-form]]]
-                      [func call [f env]
-                        [let [eargs [map [fn [ca] [ca env]] cargs]]
-                          [call-closure f eargs]]]]]
-                  caller [rt-call-func]]
-              [func call [env]
-                [caller [cfunc env] env]]]
-
-            [log-abort unknownn function [identity first-form]]]]]]]]]
+          [let [rt-call-func
+                [fn []
+                [let [cargs [map [fn [a] [comp ctx a]] [slice form 1 s-form]]]
+                  [func call [f env]
+                    [let [eargs [map [fn [ca] [ca env]] cargs]]
+                      [if [is-fn f]
+                        [f [first eargs] [second eargs]]
+                        [call-closure f eargs]]]]]]]
+            [if [is-list first-form]
+              [let [cfunc [comp ctx first-form]
+                    caller [rt-call-func]]
+                [func call-inline [env]
+                  [caller [cfunc env] env]]]
+              [let [desc [try-get-var-descriptor ctx first-form]]
+                [if desc
+                  [let [caller [rt-call-func]]
+                    [func call-local-var [env] [caller [get-var-value env first-form] env]]]
+                  [let [var-obj [get-var-object first-form]]
+                    [if [hasq [meta var-obj] is-macro]
+                      [report form can not call macro yet]
+                      [let [caller [rt-call-func]]
+                        [func call-var [env] [caller [atom-get [getq var-obj value]] env]]]]]]]]]]]]]]]
   [kv-map eval [func eval [form] [comp 0 form]]]]]
 
 [def ectx [make-eval-context]]
@@ -269,42 +280,6 @@ comp
   [[[getq ectx eval] form] 0]]
 
 [comment
-        [eq-word first-form [quote def]]
-        [let [var [second form]
-              value [comp ctx [third form]]]
-          [set [getq env var-values] var value]]
-
-        [eq-word first-form [quote let]]
-        [let [bindings [second form]
-              var-values [transient-kv-map]
-              new-env [make-env var-values env first-form]]
-          [assert [is-list bindings] bindings must be a list]
-          [assert [is-even [size bindings]] bindings must have an even number of elements]
-          [for-inc i 0 2 [size bindings]
-            [let [binding [at bindings i]
-                  value [at bindings [inc i]]]
-              [assert [is-word binding] binding must be a word]
-              [set var-values binding [eval new-env value]]]]
-          [for i 2 [dec s-form]
-            [eval new-env [at form i]]]
-          [eval new-env [last form]]]
-
-        [eq-word first-form [quote loop]]
-        [let [bindings [second form]
-              var-values [transient-kv-map]
-              new-env [make-env var-values env first-form]]
-          [assert [is-list bindings] bindings must be a list]
-          [assert [is-even [size bindings]] bindings must have an even number of elements]
-          [for-inc i 0 2 [size bindings]
-            [let [binding [at bindings i]
-                  value [at bindings [inc i]]]
-              [assert [is-word binding] binding must be a word]
-              [set var-values binding [eval new-env value]]]]
-          [loop []
-            [for i 2 [dec s-form]
-              [eval new-env [at form i]]]
-            [eval new-env [last form]]]
-          ]
 
         [eq-word first-form [quote add]]
         [do

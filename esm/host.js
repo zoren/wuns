@@ -26,6 +26,8 @@ export const is_i32 = (f) => isWord(f) && isSigned32BitInteger(Number(wordValue(
 
 export const is_list = (f) => isList(f)
 
+export const is_fn = (f) => typeof f === 'function'
+
 export const eq_word = (a, b) => isWord(a) && isWord(b) && (a === b || wordValue(a) === wordValue(b))
 
 export const eq_list = (a, b) => isList(a) && isList(b) && (a === b || a.every((e, i) => eq_form(e, b[i])))
