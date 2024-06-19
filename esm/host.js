@@ -20,6 +20,12 @@ import {
   setMeta
 } from './core.js'
 
+export const apply = (f, ...args) => {
+  const butLast = args.slice(0, -1)
+  const last = args.at(-1)
+  return f(...butLast, ...last)
+}
+
 export const is_word = (f) => isWord(f)
 
 export const is_i32 = (f) => isWord(f) && isSigned32BitInteger(Number(wordValue(f)))

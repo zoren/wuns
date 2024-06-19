@@ -99,6 +99,10 @@ const callClosure = (closure, args) => {
 }
 
 export const makeInterpreterContext = () => {
+  const wunsEval = form => {
+    const cform = wunsComp(null, form)
+    return cform(null)
+  }
   const varObjects = new Map()
   const getVarObject = (name) => varObjects.get(name)
   const defSetVar = (name, value) => {
@@ -113,6 +117,7 @@ export const makeInterpreterContext = () => {
     return v
   }
   defSetVar('var', (vn) => getVarObject(wordValue(vn)))
+  defSetVar('eval', wunsEval)
   for (const [name, f] of instructions) defSetVar(name, f)
   for (const [name, f] of hostExports) defSetVar(name, f)
 
@@ -291,8 +296,7 @@ export const makeInterpreterContext = () => {
   const evalLogForms = (forms) => {
     try {
       for (const form of forms) {
-        const cform = wunsComp(null, form)
-        const v = cform(null)
+        const v = wunsEval(form)
         if (!isUnit(v)) console.log(print(v))
       }
     } catch (e) {

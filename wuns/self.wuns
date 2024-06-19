@@ -76,6 +76,65 @@
       [set var-values [at params i] [at args i]]]
     [cbodies cloenv]]]
 
+[def builtins [quote
+  add
+  sub
+  mul
+  div
+  rem
+  eq
+  ne
+  lt
+  le
+  gt
+  ge
+  bitwise-and
+  bitwise-ior
+  bitwise-xor
+  bitwise-shift-left
+  bitwise-shift-right
+  bitwise-shift-right-unsigned
+
+  abort
+  apply
+  assoc
+  at
+  at-word
+  atom
+  atom-get
+  atom-set
+  concat
+  concat-lists
+  concat-words
+  eq-form
+  eq-list
+  eq-word
+  freeze
+  get
+  has
+  is-atom
+  is-fn
+  is-i32
+  is-list
+  is-mutable
+  is-word
+  list
+  log
+  meta
+  mutable-list
+  persistent-array
+  persistent-kv-map
+  push
+  report-error
+  set
+  set-array
+  set-meta
+  size
+  slice
+  transient-kv-map
+  with-meta
+]]
+
 [defn make-eval-context []
 [let [var-objects [transient-kv-map]
       get-var-object [func get-var-object [var] [get var-objects var]]
@@ -87,7 +146,7 @@
                     new-var]]]
           [atom-set [getq v value] value]]]
       - [def-set-var [quote var] get-var-object]
-      - [def-set-var [quote add] add]
+      - [for-each b builtins [def-set-var b [eval b]]]
 comp
 [func comp [ctx form]
   [let [comp-bodies
@@ -256,7 +315,7 @@ comp
                   [func call [f env]
                     [let [eargs [map [fn [ca] [ca env]] cargs]]
                       [if [is-fn f]
-                        [f [first eargs] [second eargs]]
+                        [apply f eargs]
                         [call-closure f eargs]]]]]]]
             [if [is-list first-form]
               [let [cfunc [comp ctx first-form]
