@@ -5,134 +5,265 @@
 #include <stdlib.h>
 #include <limits.h>
 
-bool is_word_char(char c)
+typedef struct word
 {
-  switch (c)
-  {
-  case 'a' ... 'z':
-  case '0' ... '9':
-  case '-':
-  case '.':
-  case '=':
-    return true;
-  default:
-    return false;
-  }
-}
+  ssize_t len;
+  char* chars;
+} word_t;
+
+typedef struct rtlist
+{
+  ssize_t len;
+  struct rtval** elements;
+} rtlist_t;
+
+typedef struct
+{
+  char *name;
+  int arity;
+  char **parameters;
+  char *rest_param;
+  int n_of_bodies;
+  struct rtval* bodies;
+} rt_closure_t;
+
+// typedef struct
+// {
+//   const char *word;
+//   struct rtval form;
+// } Binding;
+
+// typedef struct
+// {
+//   int len;
+//   const Binding *bindings;
+// } Bindings;
+
+// typedef struct
+// {
+//   const char *word;
+//   struct rtval *val;
+// } ContinueBinding;
+
+// typedef struct
+// {
+//   int len;
+//   const ContinueBinding *bindings;
+// } ContinueBindings;
 
 typedef enum
 {
-  form_word = 1,
-  form_list = 2,
-} form_tag;
+  rtval_word = 1,
+  rtval_list = 2,
+  // rtval_continue_special = 4,
+  rtval_builtin = 8,
+  // rtval_closure = 4,
+  // rtval_atom = 5,
+} rtval_tag;
 
-typedef struct
+void assert_valid_tag(rtval_tag tag)
 {
-  ssize_t len;
-  char *word;
-} word_t;
+  assert(tag >= 1 && tag <= 6  && "tag must be word or list");
+}
 
-typedef struct
+typedef struct rtval
 {
-  ssize_t len;
-  struct form *forms;
-} list_t;
-
-typedef struct form
-{
-  form_tag tag;
-  ssize_t len;
+  rtval_tag tag;
   union
   {
-    char *word;
-    struct form *forms;
+    word_t* word;
+    rtlist_t* list;
+    // rt_closure_t closure;
+    // ContinueBindings* continue_update_bindings;
   };
-} form_t;
+  struct rtval *metadata;
+} rtval_t;
 
-void print_form(form_t form)
+void print_form(rtval_t* form)
 {
-  switch (form.tag)
+  switch (form->tag)
   {
-  case form_word:
-    printf("%s", form.word);
+  case rtval_word:
+    printf("%s", form->word->chars);
     break;
-  case form_list:
-    if (form.len == 0)
+  case rtval_list:{
+    const rtlist_t* list = form->list;
+    if (list->len == 0)
     {
       printf("[]");
       return;
     }
     printf("[");
-    print_form(form.forms[0]);
+    print_form(list->elements[0]);
 
-    for (int i = 1; i < form.len; i++)
+    for (int i = 1; i < list->len; i++)
     {
       printf(" ");
-      print_form(form.forms[i]);
+      print_form((list->elements)[i]);
     }
     printf("]");
-    break;
+    break;}
   default:
-    printf("print_form Error: unknown tag %d\n", form.tag);
+    printf("print_form Error: unknown tag %d\n", form->tag);
     exit(1);
   }
 }
 
-const form_t zero = {.tag = form_word, .len = 1, .word = "0"};
-const form_t one = {.tag = form_word, .len = 1, .word = "1"};
-const form_t two = {.tag = form_word, .len = 1, .word = "2"};
-
-const form_t unit = {.tag = form_list, .len = 0, .forms = NULL};
-
-form_t word_from_int(int n)
+rtval_t* alloc_val(rtval_tag tag)
 {
-  switch (n)
+  rtval_t* val = malloc(sizeof(rtval_t));
+  val->tag = tag;
+  return val;
+}
+
+rtlist_t* alloc_list(ssize_t len)
+{
+  rtlist_t* list = malloc(sizeof(rtlist_t));
+  list->len = len;
+  list->elements = malloc(sizeof(rtval_t*) * len);
+  return list;
+}
+
+rtval_t* word_from_string(const char *s)
+{
+  const int len = strlen(s);
+  char *chars = malloc(len + 1);
+  memcpy(chars, s, len);
+  chars[len] = '\0';
+  word_t word = {.len = len, .chars = chars};
+  // rtval_t* val = malloc(sizeof(rtval_t));
+  // val->tag = rtval_word;
+  rtval_t *val = alloc_val(rtval_word);
+  val->word = &word;
+  return val;
+}
+
+rtval_t* zero;
+rtval_t* one;
+rtval_t* two;
+
+rtval_t* unit;
+
+// const rtval_t zero = {.tag = rtval_word, .word = &{.len = 1, .chars = "0"}};
+// const rtval_t one = {.tag = rtval_word, .word = {.len = 1, .chars = "1"}};
+// const rtval_t two = {.tag = rtval_word, .word = {.len = 1, .chars = "2"}};
+// const rtlist_t rt_unit = {.len = 0, .elements = NULL};
+// const rtval_t unit = {.tag = rtval_list, .list = rt_unit};
+
+
+bool streq(const char *a, const char *b)
+{
+  return strcmp(a, b) == 0;
+}
+
+#include <tree_sitter/api.h>
+
+rtval_t* form_from_node(const char *file_content, TSNode node)
+{
+  const char *node_type_str = ts_node_type(node);
+  if (streq(node_type_str, "word"))
   {
-  case 0:
-    return zero;
-  case 1:
-    return one;
-  case 2:
-    return two;
+    const uint32_t word = ts_node_start_byte(node);
+    const uint32_t len = ts_node_end_byte(node) - word;
+    char *new_chars = malloc(len + 1);
+    memcpy(new_chars, file_content + word, len);
+    new_chars[len] = '\0';
+    word_t *new_word = malloc(sizeof(word_t));
+    new_word->len = len;
+    new_word->chars = new_chars;
+    rtval_t *val = alloc_val(rtval_word);
+    val->word = new_word;
+    return val;
+    // return word_from_string(new_word);
   }
-  char *result = malloc(12);
-  sprintf(result, "%d", n);
-  return (form_t){.tag = form_word, .len = strlen(result), .word = result};
+  if (streq(node_type_str, "list"))
+  {
+    const int len = ts_node_named_child_count(node);
+    rtlist_t* list = alloc_list(len);
+    for (int i = 0; i < len; i++)
+      list->elements[i] = form_from_node(file_content, ts_node_named_child(node, i));
+    rtval_t* val = alloc_val(rtval_list);
+    val->list = list;
+    return val;
+  }
+  printf("Error: form_from_node unknown node type %s\n", node_type_str);
+  exit(1);
 }
 
-const form_t continueSpecialWord = {.tag = form_word, .len = 0, .word = "*continue*"};
+const TSLanguage *tree_sitter_wuns(void);
 
-void assert_word_or_list(form_t a)
+rtlist_t parse_all(const char *file_content, uint32_t file_size)
 {
-  assert(a.tag == form_word || a.tag == form_list && "tag must be word or list");
+  TSParser *parser = ts_parser_new();
+
+  ts_parser_set_language(parser, tree_sitter_wuns());
+
+  TSTree *tree = ts_parser_parse_string(
+      parser,
+      NULL,
+      file_content,
+      file_size);
+
+  // Get the root node of the syntax tree.
+  TSNode root_node = ts_tree_root_node(tree);
+  const int n_of_top_level_forms = ts_node_named_child_count(root_node);
+  rtval_t **forms = malloc(sizeof(rtval_t*) * n_of_top_level_forms);
+  for (int i = 0; i < n_of_top_level_forms; i++)
+  {
+    TSNode child = ts_node_named_child(root_node, i);
+    rtval_t* form = form_from_node(file_content, child);
+    forms[i] = form;
+  }
+
+  ts_tree_delete(tree);
+  ts_parser_delete(parser);
+  return (rtlist_t){.len = n_of_top_level_forms, .elements = forms};
 }
 
-bool is_word(form_t a)
+bool is_word(rtval_t* a)
 {
-  assert_word_or_list(a);
-  return a.tag == form_word;
+  assert_valid_tag(a->tag);
+  return a->tag == rtval_word;
 }
 
-bool is_list(form_t a)
+bool is_list(rtval_t* a)
 {
-  assert_word_or_list(a);
-  return a.tag == form_list;
+  assert_valid_tag(a->tag);
+  return a->tag == rtval_list;
 }
 
-int word_to_int(form_t a)
+int word_to_int(word_t* a)
 {
   char *endptr;
-  long int a_val = strtol(a.word, &endptr, 10);
+  long int a_val = strtol(a->chars, &endptr, 10);
   assert(*endptr == '\0' && "word_to_int requires a decimal word");
   assert(a_val <= INT_MAX && a_val >= INT_MIN && "word_to_int overflow");
   return a_val;
 }
 
+int rtval_to_int(rtval_t* a)
+{
+  assert(a->tag == rtval_word && "form_to_int requires a word");
+  return word_to_int(a->word);
+}
+
+rtval_t* rtval_from_int(int n)
+{
+  char *result = malloc(12);
+  sprintf(result, "%d", n);
+  return word_from_string(result);
+}
+
+// rtval_t rtval_from_word(word_t word)
+// {
+//   return (rtval_t){.tag = rtval_word, .word = word};
+// }
+
 #define BUILTIN_TWO_DECIMAL_OP(name, op)            \
-  form_t name(form_t a, form_t b)                   \
+  rtval_t* name(rtval_t* a, rtval_t* b)                   \
   {                                                 \
-    const int r = word_to_int(a) op word_to_int(b); \
-    return word_from_int(r);                        \
+    const int r = rtval_to_int(a) op rtval_to_int(b); \
+    return rtval_from_int(r);                        \
   }
 
 BUILTIN_TWO_DECIMAL_OP(bi_add, +)
@@ -152,9 +283,9 @@ int bit_shift_right_signed(int v, int shift)
   return (result | (~0 << (sizeof(int) * CHAR_BIT - shift)));
 }
 
-form_t bi_bit_shift_right_signed(form_t a, form_t b)
+rtval_t* bi_bit_shift_right_signed(rtval_t* a, rtval_t* b)
 {
-  return word_from_int(bit_shift_right_signed(word_to_int(a), word_to_int(b)));
+  return rtval_from_int(bit_shift_right_signed(rtval_to_int(a), rtval_to_int(b)));
 }
 
 // form_t bi_eq(form_t a, form_t b)
@@ -164,9 +295,9 @@ form_t bi_bit_shift_right_signed(form_t a, form_t b)
 // }
 
 #define BUILTIN_TWO_DECIMAL_CMP(name, op)                 \
-  form_t name(form_t a, form_t b)                         \
+  rtval_t* name(rtval_t* a, rtval_t* b)                         \
   {                                                       \
-    return word_to_int(a) op word_to_int(b) ? one : zero; \
+    return rtval_to_int(a) op rtval_to_int(b) ? one : zero; \
   }
 
 BUILTIN_TWO_DECIMAL_CMP(bi_eq, ==)
@@ -175,38 +306,58 @@ BUILTIN_TWO_DECIMAL_CMP(bi_le, <=)
 BUILTIN_TWO_DECIMAL_CMP(bi_ge, >=)
 BUILTIN_TWO_DECIMAL_CMP(bi_gt, >)
 
-form_t bi_is_word(form_t a)
+rtval_t* bi_is_word(rtval_t* a)
 {
   return is_word(a) ? one : zero;
 }
 
-form_t bi_is_list(form_t a)
+rtval_t* bi_is_list(rtval_t* a)
 {
   return is_list(a) ? one : zero;
 }
 
-form_t bi_size(form_t a)
+rtval_t* bi_size(rtval_t* a)
 {
-  return word_from_int(a.len);
+  if (is_word(a))
+    return rtval_from_int(a->word->len);
+  if (is_list(a))
+    return rtval_from_int(a->list->len);
+  assert(false && "size requires a word or a list");
 }
 
-form_t bi_word_from_codepoints(form_t a)
+bool is_word_char(char c)
+{
+  switch (c)
+  {
+  case 'a' ... 'z':
+  case '0' ... '9':
+  case '-':
+  case '.':
+  case '=':
+    return true;
+  default:
+    return false;
+  }
+}
+
+rtval_t* bi_word_from_codepoints(rtval_t* a)
 {
   assert(is_list(a) && "word_from_codepoints requires a list");
-  const int len = a.len;
+  const rtlist_t* codepoints = a->list;
+  const int len = codepoints->len;
   char *word = malloc(len + 1);
   for (int i = 0; i < len; i++)
   {
-    form_t codepoint = a.forms[i];
-    int cp = word_to_int(codepoint);
+    rtval_t* codepoint = codepoints->elements[i];
+    int cp = rtval_to_int(codepoint);
     assert(is_word_char(cp) && "word_from_codepoints requires a list of decimal words corresponding to ascii codes for word characters");
     word[i] = cp;
   }
   word[len] = '\0';
-  return (form_t){.tag = form_word, .len = len, .word = word};
+  return word_from_string(word);
 }
 
-form_t bi_log(form_t a)
+rtval_t* bi_log(rtval_t* a)
 {
   printf("wuns: ");
   print_form(a);
@@ -214,37 +365,38 @@ form_t bi_log(form_t a)
   return unit;
 }
 
-form_t bi_abort()
+rtval_t* bi_abort()
 {
   puts("wuns abort");
   exit(1);
 }
 
-form_t bi_at(form_t a, form_t b)
+rtval_t* bi_at(rtval_t* a, rtval_t* b)
 {
-  int index = word_to_int(b);
-  assert(index >= -a.len && index < a.len && "at index out of bounds");
+  assert(is_list(a) && "at requires a list");
+  const rtlist_t* list = a->list;
+  int index = rtval_to_int(b);
+  assert(index >= -list->len && index < list->len && "at index out of bounds");
   if (index < 0)
-    index += a.len;
-  if (is_list(a))
-    return a.forms[index];
-  assert(is_word(a) && "at requires a list or a word");
-  return word_from_int(a.word[index]);
+    index += list->len;
+  return list->elements[index];
 }
 
-form_t slice(int len, const form_t *forms, int start, int end)
+rtlist_t* rt_unit;
+
+rtlist_t* slice(ssize_t len, rtval_t* elements, int start, int end)
 {
   // do it like in js https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/slice
   // as ousterhout says as well don't throw errors, just return empty list
   if (start >= len)
-    return unit;
+    return rt_unit;
   if (start < -len)
     start = 0;
   else if (start < 0)
     start = len + start;
 
   if (end == 0 || end < -len)
-    return unit;
+    return rt_unit;
   if (end > len)
     end = len;
   else if (end < 0)
@@ -252,64 +404,67 @@ form_t slice(int len, const form_t *forms, int start, int end)
 
   const int length = end - start;
   if (length <= 0)
-    return unit;
-  form_t *slice_forms = malloc(sizeof(form_t) * length);
+    return rt_unit;
+  rtval_t *slice_forms = malloc(sizeof(rtval_t) * length);
   for (int i = 0; i < length; i++)
-    slice_forms[i] = forms[start + i];
-  return (form_t){.tag = form_list, .len = length, .forms = slice_forms};
+    slice_forms[i] = elements[start + i];
+
+  rtlist_t* l = malloc(sizeof(rtlist_t));
+  l->len = length;
+  l->elements = slice_forms;
+  return l;
 }
 
-form_t bi_slice(form_t v, form_t i, form_t j)
+rtval_t* bi_slice(rtval_t* v, rtval_t* i, rtval_t* j)
 {
   assert(is_list(v) && "slice requires a list");
-  const int start = word_to_int(i);
-  const int end = word_to_int(j);
-  return slice(v.len, v.forms, start, end);
+  const rtlist_t* list = v->list;
+  const int start = rtval_to_int(i);
+  const int end = rtval_to_int(j);
+  // return (rtval_t){.tag = rtval_list, .list = slice(list->len, list->elements, start, end)};
+  rtval_t* result = alloc_val(rtval_list);
+  result->list = slice(list->len, list->elements, start, end);
+  return result;
 }
 
-form_t bi_concat(size_t n, form_t *forms)
+rtval_t* bi_gensym()
 {
-  ssize_t total_length = 0;
-  for (size_t i = 0; i < n; i++)
-  {
-    assert(is_list(forms[i]) && "concat requires lists");
-    total_length += forms[i].len;
-  }
-  if (total_length == 0)
-    return unit;
-  form_t *concat_forms = malloc(sizeof(form_t) * total_length);
-  int k = 0;
-  for (size_t i = 0; i < n; i++)
-    for (int j = 0; j < forms[i].len; j++)
-      concat_forms[k++] = forms[i].forms[j];
-  return (form_t){.tag = form_list, .len = total_length, .forms = concat_forms};
+  static int counter = 0;
+  char *result = malloc(12);
+  sprintf(result, "gensym%d", counter++);
+  return word_from_string(result);
 }
+
+// form_t bi_concat(size_t n, form_t *forms)
+// {
+//   ssize_t total_length = 0;
+//   for (size_t i = 0; i < n; i++)
+//   {
+//     assert(is_list(forms[i]) && "concat requires lists");
+//     total_length += forms[i].len;
+//   }
+//   if (total_length == 0)
+//     return rt_unit;
+//   form_t *concat_forms = malloc(sizeof(form_t) * total_length);
+//   int k = 0;
+//   for (size_t i = 0; i < n; i++)
+//     for (int j = 0; j < forms[i].len; j++)
+//       concat_forms[k++] = forms[i].forms[j];
+//   return (form_t){.tag = form_list, .len = total_length, .forms = concat_forms};
+// }
 
 typedef struct
 {
   const int parameters;
   union
   {
-    form_t (*func0)();
-    form_t (*func1)(form_t);
-    form_t (*func2)(form_t, form_t);
-    form_t (*func3)(form_t, form_t, form_t);
-    form_t (*funcvar)(size_t, form_t *);
+    rtval_t* (*func0)();
+    rtval_t* (*func1)(rtval_t*);
+    rtval_t* (*func2)(rtval_t*, rtval_t*);
+    rtval_t* (*func3)(rtval_t*, rtval_t*, rtval_t*);
+    rtval_t* (*funcvar)(size_t, rtval_t* *);
   };
 } built_in_func_t;
-
-bool streq(const char *a, const char *b)
-{
-  return strcmp(a, b) == 0;
-}
-
-form_t bi_gensym()
-{
-  static int counter = 0;
-  char *result = malloc(12);
-  sprintf(result, "gensym%d", counter++);
-  return (form_t){.tag = form_word, .len = strlen(result), .word = result};
-}
 
 typedef struct
 {
@@ -360,7 +515,7 @@ built_in_func_t get_builtin(const char *name)
 typedef struct
 {
   const char *word;
-  form_t form;
+  const rtval_t *form;
 } Binding;
 
 typedef struct Env
@@ -384,56 +539,37 @@ void print_env(const Env_t *env)
   }
 }
 
-typedef struct
-{
-  const bool is_macro;
-  const int arity;
-  const char **parameters;
-  const char *rest_param;
-  const int n_of_bodies;
-  const form_t *bodies;
-} FuncMacro;
+// typedef struct
+// {
+//   word_t name;
+//   const rt_closure_t func_macro;
+// } ClosureBinding;
 
-typedef struct
-{
-  const char *name;
-  const FuncMacro func_macro;
-} FuncMacroBinding;
+// typedef struct
+// {
+//   int len;
+//   ClosureBinding *bindings;
+// } ClosureEnv;
 
-typedef struct
-{
-  int len;
-  FuncMacroBinding *bindings;
-} FuncMacroEnv;
+// ClosureEnv func_macro_env = {
+//     .len = 0,
+//     .bindings = NULL,
+// };
 
-FuncMacroEnv func_macro_env = {
-    .len = 0,
-    .bindings = NULL,
-};
+// void insert_func_macro_binding(ClosureBinding b)
+// {
+//   // todo handle overwriting properly
+//   ClosureBinding *new_bindings = realloc(func_macro_env.bindings, sizeof(ClosureBinding) * (func_macro_env.len + 1));
+//   memcpy(&new_bindings[func_macro_env.len], &b, sizeof(ClosureBinding));
+//   func_macro_env.len++;
+//   func_macro_env.bindings = new_bindings;
+// }
 
-void insert_func_macro_binding(FuncMacroBinding b)
-{
-  // todo handle overwriting properly
-  FuncMacroBinding *new_bindings = realloc(func_macro_env.bindings, sizeof(FuncMacroBinding) * (func_macro_env.len + 1));
-  memcpy(&new_bindings[func_macro_env.len], &b, sizeof(FuncMacroBinding));
-  func_macro_env.len++;
-  func_macro_env.bindings = new_bindings;
-}
-
-const FuncMacro *get_func_macro(const char *name)
-{
-  // search from the end to the beginning to get the latest definition
-  for (int i = func_macro_env.len - 1; i >= 0; i--)
-    if (streq(name, func_macro_env.bindings[i].name))
-      return &func_macro_env.bindings[i].func_macro;
-  return NULL;
-}
-
-form_t eval(form_t form, const Env_t *env)
+rtval_t* eval(rtval_t* form, const Env_t *env)
 {
   if (is_word(form))
   {
-    const char *word = form.word;
+    const char *word = form->word->chars;
     Env_t *cur_env = (Env_t *)env;
     while (cur_env != NULL)
     {
@@ -447,14 +583,14 @@ form_t eval(form_t form, const Env_t *env)
     exit(1);
   }
   assert(is_list(form) && "eval requires a list at this point");
-
-  const int length = form.len;
+  const rtlist_t* list = form->list;
+  const int length = list->len;
   if (length == 0)
     return unit;
-  const form_t *forms = form.forms;
-  const form_t first = forms[0];
+  const rtval_t **forms = list->elements;
+  const rtval_t* first = forms[0];
   assert(is_word(first) && "first element a list must be a word");
-  const char *first_word = first.word;
+  const char *first_word = first->word->chars;
   if (streq(first_word, "quote"))
   {
     assert(length == 2 && "quote takes exactly one argument");
@@ -463,10 +599,10 @@ form_t eval(form_t form, const Env_t *env)
   if (streq(first_word, "if"))
   {
     assert(length == 4 && "if takes three arguments");
-    const form_t cond = eval(forms[1], env);
+    const rtval_t* cond = eval(forms[1], env);
     bool b = is_word(cond) &&
-             cond.len == 1 &&
-             cond.word[0] == '0';
+             cond->word->len == 1 &&
+             cond->word->chars[0] == '0';
     return eval(forms[b ? 3 : 2], env);
   }
   {
@@ -475,80 +611,81 @@ form_t eval(form_t form, const Env_t *env)
     if (is_let || is_loop)
     {
       assert(length >= 2 && "let/loop must have at least two arguments");
-      form_t binding_form = forms[1];
+      rtval_t* binding_form = forms[1];
       assert(is_list(binding_form) && "let/loop and loop bindings must be a list");
-      const int binding_length = binding_form.len;
+      const rtlist_t* binding_list = binding_form->list;
+      const int binding_length = binding_list->len;
       assert(binding_length % 2 == 0 && "let/loop bindings must be a list of even length");
-      const form_t *binding_forms = binding_form.forms;
+      const rtval_t *binding_forms = binding_list->elements;
       const int number_of_bindings = binding_length / 2;
       Binding *bindings = number_of_bindings == 0 ? NULL : malloc(sizeof(Binding) * number_of_bindings);
       Env_t new_env = {.parent = env, .len = 0, .bindings = bindings};
       for (int i = 0; i < binding_length; i += 2)
       {
-        assert(is_word(binding_forms[i]) && "let/loop bindings must be words");
-        bindings[new_env.len].word = binding_forms[i].word;
-        bindings[new_env.len].form = eval(binding_forms[i + 1], &new_env);
+        const rtval_t var = binding_forms[i];
+        assert(is_word(&var) && "let/loop bindings must be words");
+        bindings[new_env.len].word = var.word->chars;
+        bindings[new_env.len].form = eval(&binding_forms[i + 1], &new_env);
         new_env.len++;
       }
       if (is_let)
       {
-        form_t result = unit;
+        rtval_t* result = unit;
         for (int i = 2; i < length; i++)
           result = eval(forms[i], &new_env);
         free(bindings);
         return result;
       }
-      while (true)
-      {
-        form_t result = unit;
-        for (int i = 2; i < length; i++)
-          result = eval(forms[i], &new_env);
-        if (is_list(result) &&
-            result.len > 0 &&
-            streq(result.forms[0].word, continueSpecialWord.word))
-        {
-          assert(result.len - 1 == number_of_bindings && "loop bindings mismatch");
-          for (int i = 0; i < number_of_bindings; i++)
-          {
-            const form_t v = result.forms[i + 1];
-            bindings[i].form = v;
-          }
-          free(result.forms);
-          continue;
-        }
-        free(bindings);
-        return result;
-      }
+
+      // is loop
+      // while (true)
+      // {
+      //   rtval_t result = unit;
+      //   for (int i = 2; i < length; i++)
+      //     result = eval(forms[i], &new_env);
+      //   if (result.tag == rtval_continue_special)
+      //   {
+      //     const ContinueBindings* cont_bindings = result.continue_update_bindings;
+      //     free(cont_bindings.bindings);
+      //     continue;
+      //   }
+      //   free(bindings);
+      //   return result;
+      // }
     }
   }
-  if (streq(first_word, "cont"))
-  {
-    form_t *cont_args = malloc(sizeof(form_t) * (length));
-    cont_args[0] = continueSpecialWord;
-    for (int i = 1; i < length; i++)
-      cont_args[i] = eval(forms[i], env);
-    return (form_t){.tag = form_list, .len = length, .forms = cont_args};
-  }
-  {
-    const bool is_func = streq(first_word, "func");
-    const bool is_macro = streq(first_word, "macro");
-    if (is_func || is_macro)
+  // if (streq(first_word, "continue"))
+  // {
+  //   int bindings_length = ((length-1)/2);
+  //   ContinueBinding *cont_bindings = malloc(sizeof(ContinueBinding) * bindings_length);
+  //   for (int i = 0; i < length; i++){
+  //     const rtval_t var = forms[i*2+1];
+  //     const rtval_t val = forms[i*2+2];
+  //     assert(is_word(var) && "continue bindings must be words");
+  //     cont_bindings[i] = (Binding){.word = var.word.chars, .form = eval(val, env)};
+  //   }
+  //   return (rtval_t){.tag = rtval_continue_special,
+  //           .continue_update_bindings = (ContinueBindings){.len = bindings_length, .bindings = cont_bindings}};
+  // }
+    if (streq(first_word, "func"))
     {
-      assert(length >= 3 && "func/macro must have at least two arguments");
-      const form_t fname = forms[1];
-      assert(is_word(fname) && "func/macro name must be a word");
-      const form_t params = forms[2];
-      assert(is_list(params) && "func/macro params must be a list");
-      const int param_length = params.len;
+      assert(length >= 3 && "func must have at least two arguments");
+      const rtval_t* fname = forms[1];
+      assert(is_word(fname) && "func name must be a word");
+      const rtval_t* params = forms[2];
+      assert(is_list(params) && "func params must be a list");
+      const rtlist_t* params_list = params->list;
+      const int param_length = params_list->len;
+      const rtval_t *params_forms = params_list->elements;
       for (int i = 0; i < param_length; i++)
       {
-        assert(is_word(params.forms[i]) && "func/macro params must be words");
+        assert(is_word(params_list->elements[i]) && "func params must be words");
       }
       const char *rest_param = NULL;
       int arity;
-      if (param_length >= 2 && streq(params.forms[param_length - 2].word, ".."))
+      if (param_length >= 2 && streq(params_forms[param_length - 2].word->chars, ".."))
       {
-        rest_param = params.forms[param_length - 1].word;
+        rest_param = params_forms[param_length - 1].word->chars;
         arity = param_length - 2;
       }
       else
@@ -557,32 +694,32 @@ form_t eval(form_t form, const Env_t *env)
       }
       const char **parameters = malloc(arity * sizeof(char *));
       for (int i = 0; i < arity; i++)
-        parameters[i] = params.forms[i].word;
-      form_t *bodies = malloc(sizeof(form_t) * (length - 3));
+        parameters[i] = params_forms[i].word->chars;
+      const int n_of_bodies = length - 3;
+      rtval_t **bodies = malloc(sizeof(rtval_t*) * n_of_bodies);
       for (int i = 3; i < length; i++)
         bodies[i - 3] = forms[i];
-      FuncMacro func_macro = {
-          .is_macro = is_macro,
+      rt_closure_t closure = {
           .arity = arity,
           .parameters = parameters,
           .rest_param = rest_param,
-          .n_of_bodies = length - 3,
+          .n_of_bodies = n_of_bodies,
           .bodies = bodies,
       };
-      FuncMacroBinding func_macro_binding = {.name = fname.word, .func_macro = func_macro};
-      insert_func_macro_binding(func_macro_binding);
-      {
-        const FuncMacro *test_func_macro = get_func_macro(fname.word);
-        assert(test_func_macro != NULL && "func/macro not found");
-        assert(test_func_macro->arity == arity && "func/macro arity mismatch");
-      }
+      // ClosureBinding func_macro_binding = {.name = fname.word, .func_macro = func_macro};
+      // insert_func_macro_binding(func_macro_binding);
+      // {
+      //   const rt_closure_t *test_func_macro = get_func_macro(fname.word);
+      //   assert(test_func_macro != NULL && "func/macro not found");
+      //   assert(test_func_macro->arity == arity && "func/macro arity mismatch");
+      // }
       return unit;
     }
-  }
+
 
   const int number_of_given_args = length - 1;
-  const FuncMacro *func_macro = get_func_macro(first_word);
-  if (func_macro == NULL)
+  // const rt_closure_t *func_macro = get_func_macro(first_word);
+  // if (func_macro == NULL)
   {
     const built_in_func_t builtin = get_builtin(first_word);
     if (builtin.parameters == -1)
@@ -607,31 +744,25 @@ form_t eval(form_t form, const Env_t *env)
       exit(1);
     }
   }
-  const bool is_macro = func_macro->is_macro;
-  const int number_of_regular_params = func_macro->arity;
-  const char *rest_param = func_macro->rest_param;
-  const char **parameters = func_macro->parameters;
+  // const bool is_macro = func_macro->is_macro;
+  // const int number_of_regular_params = func_macro->arity;
+  // const char *rest_param = func_macro->rest_param;
+  // const char **parameters = func_macro->parameters;
   int number_of_given_params;
-  if (rest_param == NULL)
-  {
-    assert(number_of_given_args == number_of_regular_params && "func/macro call arity mismatch");
-    number_of_given_params = number_of_regular_params;
-  }
-  else
-  {
-    assert(number_of_given_args >= number_of_regular_params && "func/macro call arity mismatch");
-    number_of_given_params = number_of_regular_params + 1;
-  }
+  // if (rest_param == NULL)
+  // {
+  //   assert(number_of_given_args == number_of_regular_params && "func/macro call arity mismatch");
+  //   number_of_given_params = number_of_regular_params;
+  // }
+  // else
+  // {
+  //   assert(number_of_given_args >= number_of_regular_params && "func/macro call arity mismatch");
+  //   number_of_given_params = number_of_regular_params + 1;
+  // }
 
   // eval args if func
   // we don't really need to make eval
-  form_t *args = malloc(sizeof(form_t) * number_of_given_args);
-  if (is_macro)
-  {
-    for (int i = 1; i < length; i++)
-      args[i - 1] = forms[i];
-  }
-  else
+  rtval_t **args = malloc(sizeof(rtval_t*) * number_of_given_args);
   {
     for (int i = 1; i < length; i++)
       args[i - 1] = eval(forms[i], env);
@@ -639,86 +770,51 @@ form_t eval(form_t form, const Env_t *env)
 
   Binding *bindings = malloc(sizeof(Binding) * number_of_given_params);
   const Env_t new_env = {.parent = env, .len = number_of_given_params, .bindings = bindings};
-  for (int i = 0; i < number_of_regular_params; i++)
-    bindings[i] = (Binding){.word = parameters[i], .form = args[i]};
+  // for (int i = 0; i < number_of_regular_params; i++)
+  //   bindings[i] = (Binding){.word = parameters[i], .form = args[i]};
 
-  if (rest_param != NULL)
-    bindings[number_of_regular_params] =
-        (Binding){
-            .word = rest_param,
-            .form = slice(number_of_given_args, args, number_of_regular_params, number_of_given_args)};
-  free(args);
-  const form_t *bodies = func_macro->bodies;
-  const int n_of_bodies = func_macro->n_of_bodies;
-  form_t result;
-  for (int i = 0; i < n_of_bodies; i++)
-    result = eval(bodies[i], &new_env);
+  // if (rest_param != NULL)
+  //   bindings[number_of_regular_params] =
+  //       (Binding){
+  //           .word = rest_param,
+  //           .form = slice(number_of_given_args, args, number_of_regular_params, number_of_given_args)};
+  // free(args);
+  // const rtval_t *bodies = func_macro->bodies;
+  // const int n_of_bodies = func_macro->n_of_bodies;
+  rtval_t* result = unit;
+  // for (int i = 0; i < n_of_bodies; i++)
+  //   result = eval(bodies[i], &new_env);
   free(bindings);
-  if (is_macro)
-    result = eval(result, env);
+  // if (is_macro)
+  //   result = eval(result, env);
 
   return result;
 }
 
-#include <tree_sitter/api.h>
-
-form_t form_from_node(const char *file_content, TSNode node)
+void parse_eval(const char *file_content, uint32_t file_size)
 {
-  const char *node_type_str = ts_node_type(node);
-  if (streq(node_type_str, "word"))
+  rtlist_t top_level_forms = parse_all(file_content, file_size);
+  for (int i = 0; i < top_level_forms.len; i++)
   {
-    const uint32_t word = ts_node_start_byte(node);
-    const uint32_t len = ts_node_end_byte(node) - word;
-    char *new_word = malloc(len + 1);
-    memcpy(new_word, file_content + word, len);
-    new_word[len] = '\0';
-    return (form_t){.tag = form_word, .len = len, .word = new_word};
-  }
-  if (streq(node_type_str, "list"))
-  {
-    const int len = ts_node_named_child_count(node);
-    form_t *forms = malloc(sizeof(form_t) * len);
-    for (int i = 0; i < len; i++)
-      forms[i] = form_from_node(file_content, ts_node_named_child(node, i));
-    return (form_t){.tag = form_list, .len = len, .forms = forms};
-  }
-  printf("Error: form_from_node unknown node type %s\n", node_type_str);
-  exit(1);
-}
-
-const TSLanguage *tree_sitter_wuns(void);
-
-void parse_eval(char *file_content, uint32_t file_size)
-{
-  TSParser *parser = ts_parser_new();
-
-  ts_parser_set_language(parser, tree_sitter_wuns());
-
-  TSTree *tree = ts_parser_parse_string(
-      parser,
-      NULL,
-      file_content,
-      file_size);
-
-  // Get the root node of the syntax tree.
-  TSNode root_node = ts_tree_root_node(tree);
-  for (int i = 0; i < ts_node_named_child_count(root_node); i++)
-  {
-    TSNode child = ts_node_named_child(root_node, i);
-    form_t form = form_from_node(file_content, child);
+    rtval_t* form = top_level_forms.elements[i];
     print_form(form);
     printf("\n");
-    form_t result = eval(form, NULL);
+    rtval_t* result = eval(form, NULL);
     print_form(result);
     printf("\n");
   }
-
-  ts_tree_delete(tree);
-  ts_parser_delete(parser);
 }
 
 int main(int argc, char **argv)
 {
+  zero = rtval_from_int(0);
+  one = rtval_from_int(1);
+  two = rtval_from_int(2);
+
+  rt_unit = &(rtlist_t){.len = 0, .elements = NULL};
+
+  unit = &(rtval_t){.tag = rtval_list, .list = rt_unit};
+
   if (argc < 2)
   {
     printf("Usage: %s <filename>\n", argv[0]);
@@ -749,7 +845,7 @@ int main(int argc, char **argv)
     printf("Error: could not seek file\n");
     exit(1);
   }
-  const char *file_content = malloc(file_size);
+  const void *file_content = malloc(file_size);
   if (file_content == NULL)
   {
     printf("Error: could not allocate memory\n");
