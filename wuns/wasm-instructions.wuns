@@ -1,21 +1,21 @@
-[func make-operation-obj [name opcode immediate-parameters parameters results]
-  [concat
-    [quote [name]] [list name]
-    [quote [opcode]] [list opcode]
-    [quote [immediate-parameters]] [list immediate-parameters]
-    [quote [parameters]] [list parameters]
-    [quote [arity]] [list [add [size immediate-parameters] [size parameters]]]
-    [quote [results]] [list results]]]
+[defn make-operation-obj [name opcode immediate-parameters parameters results]
+  [kv-map
+    name name
+    opcode opcode
+    immediate-parameters immediate-parameters
+    parameters parameters
+    arity [add [size immediate-parameters] [size parameters]]
+    results results]]
 
-[constant i32 [quote i32]]
-[constant immediate-u32 [quote immediate-u32]]
-[constant immediate-s32 [quote immediate-s32]]
-[constant empty-tuple [quote [tuple]]]
+[def i32 [quote i32]]
+[def immediate-u32 [quote immediate-u32]]
+[def immediate-s32 [quote immediate-s32]]
+[def empty-tuple [quote [tuple]]]
 
-[macro make-binary-i32 [name opcode]
+[defmacro make-binary-i32 [name opcode]
   [list [quote quote] [make-operation-obj name opcode [list] [list i32 i32] i32]]]
 
-[constant instructions
+[def instructions
   [list
     [make-operation-obj [quote unreachable] [quote 0x00] [list] [list] empty-tuple]
     [make-operation-obj [quote nop] [quote 0x01] [list] [list] empty-tuple]
@@ -59,11 +59,11 @@
       [list immediate-u32 immediate-u32] [list i32 i32 i32] empty-tuple]
     ]]
 
-[func get-instruction [name]
-  [loop [i 0]
-    [if [lt i [size instructions]]
-      [let [o [at instructions i]]
-        [if [eq-word [assoc-list-get o [quote name]] name]
-          o
-          [continue i [inc i]]]]
-      [list]]]]
+[def instructions-by-name
+  [let [instructions-by-name [transient-kv-map]]
+    [for-each instruction-obj instructions
+      [set instructions-by-name [getq instruction-obj name] instruction-obj]]
+    [persistent-kv-map instructions-by-name]]]
+
+[defn get-instruction [name]
+  [get instructions-by-name name]]

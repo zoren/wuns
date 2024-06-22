@@ -164,10 +164,6 @@
       [push result [mf [at coll i]]]]
     result]]
 
-[defn for-each [mf coll]
-  [for i 0 [size coll]
-    [mf [at coll i]]]]
-
 [defmacro for-each [element-var collection .. forms]
   [assert [is-word element-var] for-each requires a word as the first argument]
   [let [iteration-var [genword]
@@ -184,3 +180,24 @@
             forms
             [list [list [quote continue] iteration-var [list [quote add] iteration-var [quote 1]]]]]
           [list]]]]]]
+
+[defmacro kv-map [.. entries]
+  [let [ml [mutable-list]]
+    [push ml [quote transient-kv-map]]
+    [for-inc i 0 2 [size entries]
+      [push ml
+        [let [k [at entries i]]
+                [if [is-word k]
+                  [list [quote quote] k]
+                  k]]]
+      [push ml [at entries [inc i]]]]
+    [concat [quote [persistent-kv-map]] [list ml]]]]
+
+[defmacro getq [m w]
+  [list [quote get] m [list [quote quote] w]]]
+
+[defmacro hasq [m w]
+  [list [quote has] m [list [quote quote] w]]]
+
+[defmacro setq [m w v]
+  [list [quote set] m [list [quote quote] w] v]]
