@@ -384,7 +384,7 @@ rtval_t* bi_at(rtval_t* a, rtval_t* b)
 
 rtlist_t* rt_unit;
 
-rtlist_t* slice(ssize_t len, rtval_t* elements, int start, int end)
+rtlist_t* slice(ssize_t len, rtval_t** elements, int start, int end)
 {
   // do it like in js https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/slice
   // as ousterhout says as well don't throw errors, just return empty list
@@ -405,14 +405,12 @@ rtlist_t* slice(ssize_t len, rtval_t* elements, int start, int end)
   const int length = end - start;
   if (length <= 0)
     return rt_unit;
-  rtval_t *slice_forms = malloc(sizeof(rtval_t) * length);
-  for (int i = 0; i < length; i++)
-    slice_forms[i] = elements[start + i];
 
-  rtlist_t* l = malloc(sizeof(rtlist_t));
-  l->len = length;
-  l->elements = slice_forms;
-  return l;
+  rtlist_t* result_list = alloc_list(length);
+  for (int i = 0; i < length; i++)
+    result_list->elements[i] = elements[start + i];
+
+  return result_list;
 }
 
 rtval_t* bi_slice(rtval_t* v, rtval_t* i, rtval_t* j)
@@ -593,8 +591,13 @@ rtval_t* eval(rtval_t* form, const Env_t *env)
   const char *first_word = first->word->chars;
   if (streq(first_word, "quote"))
   {
-    assert(length == 2 && "quote takes exactly one argument");
-    return forms[1];
+    // assert(length == 2 && "quote takes exactly one argument");
+    if (length == 2)
+      return forms[1];
+    rtlist_t* list = slice(length, forms, 1, length);
+    rtval_t* val = alloc_val(rtval_list);
+    val->list = list;
+    return val;
   }
   if (streq(first_word, "if"))
   {
@@ -797,8 +800,8 @@ void parse_eval(const char *file_content, uint32_t file_size)
   for (int i = 0; i < top_level_forms.len; i++)
   {
     rtval_t* form = top_level_forms.elements[i];
-    print_form(form);
-    printf("\n");
+    // print_form(form);
+    // printf("\n");
     rtval_t* result = eval(form, NULL);
     print_form(result);
     printf("\n");
