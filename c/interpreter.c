@@ -805,22 +805,8 @@ void parse_eval(const char *file_content, uint32_t file_size)
   }
 }
 
-int main(int argc, char **argv)
-{
-  zero = rtval_from_int(0);
-  one = rtval_from_int(1);
-  two = rtval_from_int(2);
-
-  rt_unit = &(rtlist_t){.len = 0, .elements = NULL};
-
-  unit = &(rtval_t){.tag = rtval_list, .list = rt_unit};
-
-  if (argc < 2)
-  {
-    printf("Usage: %s <filename>\n", argv[0]);
-    exit(1);
-  }
-  FILE *file = fopen(argv[1], "r");
+void eval_file(const char* filename) {
+  FILE *file = fopen(filename, "r");
   if (file == NULL)
   {
     printf("Error: could not open file\n");
@@ -861,4 +847,73 @@ int main(int argc, char **argv)
   parse_eval(file_content, file_size);
 
   fclose(file);
+}
+
+#include <stdio.h>
+#include <string.h>
+
+#define OK       0
+#define NO_INPUT 1
+#define TOO_LONG 2
+static int getLine (char *prmpt, char *buff, size_t sz) {
+    int ch, extra;
+
+    // Get line with buffer overrun protection.
+    if (prmpt != NULL) {
+        printf ("%s", prmpt);
+        fflush (stdout);
+    }
+    if (fgets (buff, sz, stdin) == NULL)
+        return NO_INPUT;
+
+    // If it was too long, there'll be no newline. In that case, we flush
+    // to end of line so that excess doesn't affect the next call.
+    if (buff[strlen(buff)-1] != '\n') {
+        extra = 0;
+        while (((ch = getchar()) != '\n') && (ch != EOF))
+            extra = 1;
+        return (extra == 1) ? TOO_LONG : OK;
+    }
+
+    // Otherwise remove newline and give string back to caller.
+    buff[strlen(buff)-1] = '\0';
+    return OK;
+}
+
+int main(int argc, char **argv)
+{
+  zero = rtval_from_int(0);
+  one = rtval_from_int(1);
+  two = rtval_from_int(2);
+
+  rt_unit = &(rtlist_t){.len = 0, .elements = NULL};
+
+  unit = &(rtval_t){.tag = rtval_list, .list = rt_unit};
+
+  for (int i = 1; i < argc; i++)
+    eval_file(argv[i]);
+  while(1)
+  {
+    char buff[128];
+
+    int rc = getLine ("cwuns> ", buff, sizeof(buff));
+    if (rc == NO_INPUT) {
+        // Extra NL since my system doesn't output that on EOF.
+        printf ("\nNo input\n");
+        return 1;
+    }
+
+    if (rc == TOO_LONG) {
+        printf ("Input too long [%s]\n", buff);
+        return 1;
+    }
+    int len = strlen(buff);
+    if (len == 0){
+      printf ("bye\n");
+      break;
+    }
+    parse_eval(buff, len);
+  }
+
+  return 0;
 }
