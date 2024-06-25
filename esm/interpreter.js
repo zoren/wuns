@@ -14,8 +14,8 @@ import {
   meta,
   callClosure,
 } from './core.js'
+import { instructions } from './instructions.js'
 import { parseStringToForms } from './parseTreeSitter.js'
-import { i32binops } from './instructions.js'
 
 class RuntimeError extends Error {
   constructor(message, form) {
@@ -66,12 +66,6 @@ const getCtxVar = (ctx, v) => {
   }
 }
 
-const instructions = []
-for (const [name, op] of Object.entries(i32binops)) {
-  const opfn = Function('a', 'b', `return (a ${op} b) | 0`)
-  instructions.push([name, (a, b) => opfn(number(a), number(b))])
-}
-
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 
 export const makeInterpreterContext = () => {
@@ -94,7 +88,15 @@ export const makeInterpreterContext = () => {
   }
   defSetVar('var', (vn) => getVarObject(wordValue(vn)))
   defSetVar('eval', wunsEval)
-  for (const [name, f] of instructions) defSetVar(name, f)
+
+  const memories = []
+  const addMemory = (memory) => {
+    const index = memories.length
+    memories.push(memory)
+    return index
+  }
+  const instContext = { memories }
+
   for (const [name, f] of hostExports) defSetVar(name, f)
 
   const compBodies = (ctx, bodies) => {
@@ -119,6 +121,7 @@ export const makeInterpreterContext = () => {
         return varObj.getValue()
       }
     }
+    // maybe we should just return non lists as is?
     ctAssert(isList(form), `cannot eval ${form} expected word or list`)
     if (form.length === 0) return () => unit
     const [firstForm, ...args] = form
@@ -260,13 +263,30 @@ export const makeInterpreterContext = () => {
       return (env) => caller(getVarValue(env, firstWordValue), env)
     }
     const varObj = getVarObject(firstWordValue)
-    if (!varObj) throw new CompileError(`function ${firstWordValue} not found ${print(form)}`)
-    if (meta(varObj)['is-macro']) {
-      const macResult = callClosure(varObj.getValue(), args)
-      return wunsComp(ctx, macResult)
+    if (varObj) {
+      if (meta(varObj)['is-macro']) {
+        const macResult = callClosure(varObj.getValue(), args)
+        return wunsComp(ctx, macResult)
+      }
+      const caller = rtCallFunc()
+      return (env) => caller(varObj.getValue(), env)
     }
-    const caller = rtCallFunc()
-    return (env) => caller(varObj.getValue(), env)
+    const instruction = instructions[firstWordValue]
+    if (!instruction) throw new CompileError(`function ${firstWordValue} not found ${print(form)}`)
+    if (typeof instruction === 'function') {
+      const cargs = args.map((a) => wunsComp(ctx, a))
+      return () => instruction(instContext, ...cargs.map((carg) => carg(env)))
+    }
+    const { immediateParams, params, func } = instruction
+    const immArity = immediateParams.length
+    const arity = immArity + params.length
+    if (arity !== args.length)
+      throw new CompileError(`function ${firstWordValue} expected ${arity} arguments, got ${args.length}`)
+    const immArgs = args.slice(0, immArity).map(number)
+    const nonImmArgs = args.slice(immArity)
+    const funcWithImmediate = func(...immArgs)
+    const cargs = nonImmArgs.map((a) => wunsComp(ctx, a))
+    return (env) => funcWithImmediate(instContext, ...cargs.map((carg) => carg(env)))
   }
 
   const evalLogForms = (forms) => {
@@ -292,5 +312,6 @@ export const makeInterpreterContext = () => {
     evalLogForms,
     parseEvalString,
     parseEvalFile,
+    addMemory,
   }
 }
