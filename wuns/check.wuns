@@ -1,18 +1,18 @@
-[constant - [quote -]]
-[constant .. [quote ..]]
+[def - [quote -]]
+[def .. [quote ..]]
 
-[macro report-when [cond form .. lmsg]
+[defmacro report-when [cond form .. lmsg]
   [list [quote when] cond
     [list [quote report-error] [list [quote quote] lmsg] form]]]
 
-[macro report-when-not [cond form .. lmsg]
+[defmacro report-when-not [cond form .. lmsg]
   [list [quote when-not] cond
     [list [quote report-error] [list [quote quote] lmsg] form]]]
 
-[macro report [form .. lmsg]
+[defmacro report [form .. lmsg]
   [list [quote report-error] [list [quote quote] lmsg] form]]
 
-[func is-decimal [dw]
+[defn is-decimal [dw]
   [let [s [size dw]]
     [loop [i [if [eq [at-word dw 0] [quote 45]] 1 0]]
       [if [lt i s]
@@ -22,20 +22,20 @@
             0]]
         1]]]]
 
-[constant type-word [quote word]]
-[constant type-i32 [quote i32]]
-[constant type-f64 [quote f64]]
-[constant type-form [quote form]]
-[constant type-any [quote any]]
-[constant type-error [quote type-error]]
+[def type-word [quote word]]
+[def type-i32 [quote i32]]
+[def type-f64 [quote f64]]
+[def type-form [quote form]]
+[def type-any [quote any]]
+[def type-error [quote type-error]]
 
-[func is-word-type [t] [or [eq-form t type-word] [eq-form t type-i32]]]
+[defn is-word-type [t] [or [eq-form t type-word] [eq-form t type-i32]]]
 
-[func type-list [element-type] [list [quote list] element-type]]
-[func type-tuple [.. types] [concat [quote [tuple]] types]]
-[constant type-empty [type-tuple]]
+[defn type-list [element-type] [list [quote list] element-type]]
+[defn type-tuple [.. types] [concat [quote [tuple]] types]]
+[def type-empty [type-tuple]]
 
-[func is-atomic-type [t]
+[defn is-atomic-type [t]
   [or
     [eq-form t type-form]
     [eq-form t type-word]
@@ -44,10 +44,10 @@
     [eq-form t type-any]
     [eq-form t type-error]]]
 
-[func is-mutable-list-type [t] [and [is-list t] [eq [size t] 2] [eq-word [first t] [quote mutable-list]] [is-atomic-type [second t]]]]
-[func is-tuple-type [t] [and [is-list t] [gt [size t] 0] [eq-form [first t] [quote tuple]]]]
+[defn is-mutable-list-type [t] [and [is-list t] [eq [size t] 2] [eq-word [first t] [quote mutable-list]] [is-atomic-type [second t]]]]
+[defn is-tuple-type [t] [and [is-list t] [gt [size t] 0] [eq-form [first t] [quote tuple]]]]
 
-[func is-type [t]
+[defn is-type [t]
   [or
     [is-atomic-type t]
     [and [is-list t] [eq [size t] 2]
@@ -62,17 +62,17 @@
             0]
           1]]]]]
 
-[func is-list-or-mut-list-type [t]
+[defn is-list-or-mut-list-type [t]
   [and [is-list t] [eq [size t] 2]
     [or [eq-word [first t] [quote list]] [eq-word [first t] [quote mutable-list]]]
     [is-type [second t]]]]
 
-[func is-list-type [t]
+[defn is-list-type [t]
   [and [is-list t] [eq [size t] 2]
     [eq-word [first t] [quote list]]
     [is-type [second t]]]]
 
-[func is-type-list [ts]
+[defn is-type-list [ts]
   [loop [i 0]
     [if [lt i [size ts]]
       [if [is-type [at ts i]]
@@ -80,10 +80,10 @@
         0]
       1]]]
 
-[func check-type [t]
+[defn check-type [t]
   [report-when-not [is-type t] t not a type]]
 
-[func check-type-list [ts]
+[defn check-type-list [ts]
   [loop [i 0]
     [when [lt i [size ts]]
       [let [t [at ts i]]
@@ -91,7 +91,7 @@
         [continue i [inc i]]]]]
   ts]
 
-[func check-param-arg-conform [param-type arg-t]
+[defn check-param-arg-conform [param-type arg-t]
   [or
     [eq-form param-type type-any]
     [eq-form param-type arg-t]
@@ -109,63 +109,63 @@
                0]
              1]]]]]
 
-[constant global-ctx [mutable-list]]
+[def global-ctx [transient-kv-map]]
 
-[func add-sig [name sig-obj]
-  [if [assoc-list-has global-ctx name]
+[defn add-sig [name sig-obj]
+  [if [has global-ctx name]
     [report name function already defined]
-    [assoc-list-set global-ctx name sig-obj]]]
+    [set global-ctx name sig-obj]]]
 
-[func try-get-global-sig [name]
-  [let [index [assoc-list-index global-ctx name]]
-    [if [is-negative index]
-      []
-      [at global-ctx [inc index]]]]]
+[defn try-get-global-sig [name]
+  [if [has global-ctx name]
+    []
+    [get global-ctx name]]]
 
-[constant predicate-to-type
-  [quote
-    is-word word
-    is-i32 i32
-    is-list [list any]]]
+[def predicate-to-type
+  [kv-map
+    is-word [quote word]
+    is-i32 [quote i32]
+    is-list [quote [any]]]]
 
-[func is-external-func [name]
+[defn is-external-func [name]
   [let [sig [try-get-global-sig name]]
-    [and [gt [size sig] 0] [eq-word [assoc-list-get sig [quote def]] [quote external-func]]]]]
+    [and [gt [size sig] 0] [eq-word [getq sig def] [quote external-func]]]]]
 
-[func try-bind-type-predicate [local-ctx t-form]
+[defn try-bind-type-predicate [local-ctx t-form]
   [if [and [is-list t-form] [eq [size t-form] 2]]
     [let [f [first t-form] a [second t-form]]
-      [if [and [is-word f] [is-word a] [is-external-func f] [assoc-list-has predicate-to-type f]]
+      [if [and [is-word f] [is-word a] [is-external-func f] [has predicate-to-type f]]
         [do
           [log [list [quote try-bind-type-predicate] t-form f a]]
-          [list [list a [assoc-list-get predicate-to-type f]] local-ctx [quote type-pred]]]
+          [list [list a [get predicate-to-type f]] local-ctx [quote type-pred]]]
         local-ctx]]
     local-ctx]]
 
-[constant node-types [mutable-list]]
+[def node-types [transient-kv-map]]
 
-[func push-node-type [node type]
-  [push node-types [assoc-list-get [meta node] [quote node-id]]]
+[defn get-node-id [node]
+  [getq [meta node] node-id]]
+
+[defn push-node-type [node type]
+  [push node-types [get-node-id node]]
   [push node-types type]
   type]
 
-[func try-get-node-type [node]
-  [let [node-id [assoc-list-get [meta node] [quote node-id]]
-        index [assoc-list-index node-types node-id]]
-    [if [is-negative index]
+[defn try-get-node-type [node]
+  [let [node-id [get-node-id node]]
+    [if [has node-types node-id]
       type-error
-      [at node-types [inc index]]]]]
+      [get node-types node-id]]]]
 
-[constant interpreter-context [make-interpreter-context [quote check]]]
+[def interpreter-context []]
 
-[func check-form [local-ctx tail-pos form]
+[defn check-form [local-ctx tail-pos form]
   [ifs
     [is-word form]
     [loop [cur-ctx local-ctx]
       [if [eq [size cur-ctx] 1]
-        [let [param-ctx [first cur-ctx]
-              index [assoc-list-index param-ctx form]]
-          [if [is-negative index]
+        [let [param-ctx [first cur-ctx]]
+          [if-not [has param-ctx form]
             [let [sig [try-get-global-sig form]]
               [if [eq [size sig] 0]
                 [do
@@ -178,14 +178,13 @@
                     [log [list [quote c] form [quote not a constant]]]
                     [log global-ctx]
                     type-error]]]]
-            [at param-ctx [inc index]]]]
+            [get param-ctx form]]]
         [let
           [vars [first cur-ctx]
-           outer [second cur-ctx]
-           index [assoc-list-index vars form]]
-          [if [is-negative index]
+           outer [second cur-ctx]]
+          [if [has vars form]
             [continue cur-ctx outer]
-            [push-node-type form [at vars [inc index]]]]]]]
+            [push-node-type form [get vars form]]]]]]
 
     [eq-form [size form] 0]
     [do
@@ -301,11 +300,10 @@
                     [when [lt i n-of-args]
                       [let [var [at form i]
                             value [at form [inc i]]
-                            val-type [check-form cur-ctx 0 value]
-                            index [assoc-list-index loop-vars var]]
-                        [if [is-negative index]
+                            val-type [check-form cur-ctx 0 value]]
+                        [if-not [hasq loop-vars var]
                           [report var loop var not found]
-                          [let [type [at loop-vars [inc index]]]
+                          [let [type [get loop-vars var]]
                             [report-when-not [eq-form type val-type] value type mismatch]]]
                       [continue i [add i 2]]]]]]
                 [report-when-not tail-pos form continue not at tail position of loop]
@@ -322,8 +320,8 @@
         [let [name [second form]
               value [third form]
               value-type [check-form local-ctx 0 value]]
-          [add-sig name [list [quote constant] value-type
-                              [quote def] first-form]]]
+          [add-sig name [kv-map constant value-type
+                                def first-form]]]
 
         [eq-form first-form [quote external-func]]
         [if [gt [size form] 1]
@@ -338,9 +336,9 @@
                       [check-type [fourth form]]
                       type-error]]
                 [add-sig name
-                  [list [quote parameters] param-types
-                        [quote results] [fourth form]
-                        [quote def] first-form]]]
+                  [kv-map parameters param-types
+                          result [fourth form]
+                          def first-form]]]
               [report name external-func expects a name]]]
           [report form external-func expects a name]]
 
@@ -389,7 +387,7 @@
                         pt [if anno-params [at anno-params i] [quote any]]]
                     [report-when [eq-form p ..] p .. must be at second last position]
                     [when-not [eq-form p -]
-                      [report-when [assoc-list-has param-ctx p] p duplicate parameter]
+                      [report-when [has param-ctx p] p duplicate parameter]
                       [push-node-type p pt]
                       [push param-ctx p]
                       [push param-ctx pt]]
@@ -401,7 +399,7 @@
                       pt [if anno-params [last anno-params] type-any]]
                   [report-when-not [is-word p] p not a word]
                   [when-not [eq-form p -]
-                    [report-when [assoc-list-has param-ctx p] p duplicate parameter]
+                    [report-when [has param-ctx p] p duplicate parameter]
                     [push param-ctx p]
                     [push param-ctx [type-list pt]]]
                   pt]
@@ -425,27 +423,24 @@
             [if [gt s-form 1]
               [let [name [second form]]
                 [if [is-word name]
-                  [let [ml [mutable-list]]
-                    [push-all ml
-                      [list [quote parameters] parameter-type-list
-                            [quote results] result-type
-                            [quote def] first-form]]
+                  [let [ml [transient-kv-map [quote parameters] parameter-type-list
+                                           [quote results] result-type
+                                           [quote def] first-form]]
                     [when rest-param-element-type
-                      [push-all ml
-                        [list [quote rest-param-element-type] rest-param-element-type]]]
-                    [add-sig name ml]]
+                      [setq ml rest-param-element-type rest-param-element-type]]
+                    [add-sig name [persistent-kv-map ml]]]
                   [report name expected a word here]]]
               []]]
 
         [let [sig [try-get-global-sig first-form]
-              sig-def [if [assoc-list-has sig [quote def]] [assoc-list-get sig [quote def]] 0]]
+              sig-def [if [hasq sig def] [getq sig def] 0]]
           [if [eq 0 [size sig]]
             [let [instruction [get-instruction first-form]]
               [if [ne 0 [size instruction]]
-                [let [parameters [assoc-list-get instruction [quote parameters]]
-                      imm-parameters [assoc-list-get instruction [quote immediate-parameters]]
-                      n-of-parameters [assoc-list-get instruction [quote arity]]
-                      results [assoc-list-get instruction [quote results]]]
+                [let [parameters [getq instruction parameters]
+                      imm-parameters [getq instruction immediate-parameters]
+                      n-of-parameters [getq instruction arity]
+                      results [getq instruction results]]
                   [report-when-not [eq n-of-args n-of-parameters] form wrong number of arguments]
                   [loop [i 1]
                     [when [lt i s-form]
@@ -459,19 +454,18 @@
                       [continue i [inc i]]]]]
                   results]
                 [report form function not found]]]
-            [let [parameters [assoc-list-get sig [quote parameters]]
-                  index-rest [assoc-list-index sig [quote rest-param-element-type]]
+            [let [parameters [getq sig parameters]
                   n-of-parameters [size parameters]]
               [report-when-not [ge n-of-args n-of-parameters] form
                 missing arguments]
               [if [eq-word sig-def [quote macro]]
-                [let [expanded [context-macro-expand interpreter-context form]
+                [comment [let [expanded [context-macro-expand interpreter-context form]
                       ex-type [check-form local-ctx tail-pos expanded]]
                   [log [list [quote macro-form] form]]
                   [log [list [quote expanded] expanded ]]
                   [log [list [quote type-of-expanded] ex-type]]
                   ex-type
-                  ]
+                  ]]
                 [do
                   [loop [i 1]
                     [when [lt i s-form]
@@ -483,12 +477,12 @@
                             [when-not [check-param-arg-conform pt arg-t]
                               [report-error [concat [quote parameter does not match] [list pt arg-t]] arg]]]]
                         [continue i [inc i]]]]]
-                  [when [is-negative index-rest]
+                  [when [hasq sig rest-param-element-type]
                     [loop [i [inc n-of-parameters]]
                       [when [lt i s-form]
                         [report [at form i] extra arguments ignored]
                         [continue i [inc i]]]]
-                    [let [rest-param-element-type [at sig [inc index-rest]]]
+                    [let [rest-param-element-type [getq sig rest-param-element-type]]
                       [loop [i [inc n-of-parameters]]
                         [when [lt i s-form]
                           [let [arg [at form i]
@@ -496,18 +490,18 @@
                             [report-when-not [check-param-arg-conform rest-param-element-type arg-t] arg
                               rest parameter type mismatch]]
                           [continue i [inc i]]]]]]
-                          [assoc-list-get sig [quote results]]
+                          [getq sig results]
                           ]
                           ]
                 ]
 
             ]]]]]]
 
-[func check-top-form [form]
+[defn check-top-form [form]
   [check-form [list []] 0 form]
-  [context-eval interpreter-context form]]
+  ]
 
-[func check-forms [forms]
+[defn check-forms [forms]
   [for i 0 [size forms]
     [let [f [at forms i]]
       [check-top-form f]
@@ -518,13 +512,12 @@
 [comment
   [check-forms
     [quote
-      [func f [x y] [add x y]]
-      [func g [x y] [sub x y]]]]
-  [check-forms [quote [func f [x y] [add x y]] [func g [x y] [sub x y]]]]
+      [defn f [x y] [add x y]]
+      [defn g [x y] [sub x y]]]]
+  [check-forms [quote [defn f [x y] [add x y]] [defn g [x y] [sub x y]]]]
 
   [check-forms
     [quote
-      [func f [x y] [add x y]]
-      [func g [x y] [sub x y]]]]
+      [defn f [x y] [add x y]]
+      [defn g [x y] [sub x y]]]]
 ]
-[export check-top-form check-forms try-get-node-type node-types]

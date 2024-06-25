@@ -1,24 +1,3 @@
-[defmacro kv-map [.. entries]
-  [let [ml [mutable-list]]
-    [push ml [quote transient-kv-map]]
-    [for-inc i 0 2 [size entries]
-      [push ml
-        [let [k [at entries i]]
-                [if [is-word k]
-                  [list [quote quote] k]
-                  k]]]
-      [push ml [at entries [inc i]]]]
-    [concat [quote [persistent-kv-map]] [list ml]]]]
-
-[defmacro getq [m w]
-  [list [quote get] m [list [quote quote] w]]]
-
-[defmacro hasq [m w]
-  [list [quote has] m [list [quote quote] w]]]
-
-[defmacro setq [m w v]
-  [list [quote set] m [list [quote quote] w] v]]
-
 [defn make-top-ctx []
   [kv-map var-descriptors [transient-kv-map]]]
 
@@ -89,12 +68,14 @@
   mul
   div
   rem
+
   eq
   ne
   lt
   le
   gt
   ge
+
   bitwise-and
   bitwise-ior
   bitwise-xor
@@ -148,7 +129,8 @@
 [defn make-eval-context []
 [let [var-objects [transient-kv-map]
       get-var-object [func get-var-object [var] [get var-objects var]]
-      def-set-var [func def-set-var [var-name value]
+      def-set-var
+      [func def-set-var [var-name value]
         [let [v [if [has var-objects var-name]
                   [get var-objects var-name]
                   [let [new-var [make-var-obj]]

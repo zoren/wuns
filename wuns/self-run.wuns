@@ -1,7 +1,6 @@
 [def ectx [make-eval-context]]
 
-[defn ev-cc [form]
-  [[getq ectx eval] form]]
+[defn ev-cc [form] [[getq ectx eval] form]]
 
 [defn eval-many [forms]
   [let [res [mutable-list]]

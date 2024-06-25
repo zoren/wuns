@@ -69,6 +69,12 @@
     [list]
     [concat [quote [do]] forms]]]
 
+[defmacro if-not [cond false-form true-form]
+  [list
+    [quote if] cond
+    false-form
+    true-form]]
+
 [defn quote-list [lmsg]
   [let [msg [mutable-list [quote list]]]
     [loop [i 0]

@@ -8,19 +8,21 @@
     results results]]
 
 [def i32 [quote i32]]
+[def i32i32 [quote [i32 i32]]]
 [def immediate-u32 [quote immediate-u32]]
 [def immediate-s32 [quote immediate-s32]]
 [def empty-tuple [quote [tuple]]]
+[def imm-u32u32 [list immediate-u32 immediate-u32]]
 
 [defmacro make-binary-i32 [name opcode]
-  [list [quote quote] [make-operation-obj name opcode [list] [list i32 i32] i32]]]
+  [list [quote quote] [make-operation-obj name opcode [] i32i32 i32]]]
 
 [def instructions
   [list
-    [make-operation-obj [quote unreachable] [quote 0x00] [list] [list] empty-tuple]
-    [make-operation-obj [quote nop] [quote 0x01] [list] [list] empty-tuple]
+    [make-operation-obj [quote unreachable] [quote 0x00] [] [] empty-tuple]
+    [make-operation-obj [quote nop] [quote 0x01] [] [] empty-tuple]
 
-    [make-operation-obj [quote const] [quote 0x41] [list immediate-s32] [list] i32]
+    [make-operation-obj [quote const] [quote 0x41] [list immediate-s32] [] i32]
 
     [make-binary-i32 eq  0x46]
     [make-binary-i32 ne  0x47]
@@ -41,22 +43,22 @@
     [make-binary-i32 bitwise-shift-left 0x74]
 
     [make-operation-obj [quote load] [quote 0x28]
-      [list immediate-u32 immediate-u32] [list i32] i32]
+      imm-u32u32 [list i32] i32]
     [make-operation-obj [quote load8-signed] [quote 0x2c]
-      [list immediate-u32 immediate-u32] [list i32] i32]
+      imm-u32u32 [list i32] i32]
     [make-operation-obj [quote load8-unsigned] [quote 0x2d]
-      [list immediate-u32 immediate-u32] [list i32] i32]
+      imm-u32u32 [list i32] i32]
 
     [make-operation-obj [quote store] [quote 0x36]
-      [list immediate-u32 immediate-u32] [list i32 i32] empty-tuple]
+      imm-u32u32 i32i32 empty-tuple]
     [make-operation-obj [quote store8] [quote 0x3a]
-      [list immediate-u32 immediate-u32] [list i32 i32] empty-tuple]
+      imm-u32u32 i32i32 empty-tuple]
     [make-operation-obj [quote memory.size] [quote 0x3f]
-      [list immediate-u32] [list] i32]
+      [list immediate-u32] [] i32]
     [make-operation-obj [quote memory.grow] [quote 0x40]
       [list immediate-u32] [list i32] i32]
     [make-operation-obj [quote memory.init] [quote 0xfc 0x08]
-      [list immediate-u32 immediate-u32] [list i32 i32 i32] empty-tuple]
+      imm-u32u32 [list i32 i32 i32] empty-tuple]
     ]]
 
 [def instructions-by-name

@@ -1,4 +1,3 @@
-
 [func reverse [l]
   [let [res [mutable-list]]
     [loop [i [dec [size l]]]
