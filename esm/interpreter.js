@@ -95,7 +95,24 @@ export const makeInterpreterContext = () => {
     memories.push(memory)
     return index
   }
-  const instContext = { memories }
+  const segments = []
+  const instContext = { memories, segments }
+  defSetVar('add-data-segment-passive', (data) => {
+    const index = segments.length
+    segments.push(data)
+    return index
+  })
+
+  defSetVar('log-size-pointer', (memoryIndex, size, p) => {
+    const memory = memories[memoryIndex]
+    if (!memory) throw new RuntimeError('memory not found: ' + memoryIndex)
+    const textDecoder = new TextDecoder()
+    const buffer = new Uint8Array(memory.buffer)
+    const segment = buffer.slice(p, p + size)
+    const str = textDecoder.decode(segment)
+    console.log(str)
+    return unit
+  })
 
   for (const [name, f] of hostExports) defSetVar(name, f)
 
@@ -274,19 +291,20 @@ export const makeInterpreterContext = () => {
     const instruction = instructions[firstWordValue]
     if (!instruction) throw new CompileError(`function ${firstWordValue} not found ${print(form)}`)
     if (typeof instruction === 'function') {
+      if (instruction.length !== args.length)
+        throw new Error(`instruction ${firstWordValue} expected ${instruction.length} arguments, got ${args.length}`)
       const cargs = args.map((a) => wunsComp(ctx, a))
-      return () => instruction(instContext, ...cargs.map((carg) => carg(env)))
+      return (env) => jsToWuns(instruction(...cargs.map((carg) => number(carg(env)))))
     }
     const { immediateParams, params, func } = instruction
     const immArity = immediateParams.length
     const arity = immArity + params.length
     if (arity !== args.length)
-      throw new CompileError(`function ${firstWordValue} expected ${arity} arguments, got ${args.length}`)
+      throw new CompileError(`instruction ${firstWordValue} expected ${arity} arguments, got ${args.length}`)
     const immArgs = args.slice(0, immArity).map(number)
-    const nonImmArgs = args.slice(immArity)
     const funcWithImmediate = func(...immArgs)
-    const cargs = nonImmArgs.map((a) => wunsComp(ctx, a))
-    return (env) => funcWithImmediate(instContext, ...cargs.map((carg) => carg(env)))
+    const cargs = args.slice(immArity).map((a) => wunsComp(ctx, a))
+    return (env) => jsToWuns(funcWithImmediate(instContext, ...cargs.map((carg) => number(carg(env)))))
   }
 
   const evalLogForms = (forms) => {

@@ -30,8 +30,6 @@
 
 [defn is-odd [x] [bitwise-and x 1]]
 
-[defn is-odd2 [x] [is-odd x]]
-
 [defn is-even [x] [not [is-odd x]]]
 
 [defn is-negative [x] [lt x 0]]
