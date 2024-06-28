@@ -69,12 +69,7 @@ export const list = (...args) => makeList(...args)
 
 export const mutable_list = (...args) => args
 export const is_mutable = (f) => (Array.isArray(f) && !Object.isFrozen(f)) | 0
-// come up with a better name, the list is not frozen, a frozen copy is made
-export const freeze = (ar) => {
-  if (!Array.isArray(ar)) throw new Error('freeze expects array')
-  if (Object.isFrozen(ar)) throw new Error('freeze expects mutable array')
-  return makeList(...ar)
-}
+
 export const persistent_array = (o) => {
   if (!Array.isArray(o)) throw new Error('persistent-array expects array')
   return makeList(...o)
@@ -160,8 +155,7 @@ export const transient_kv_map = (...entries) => {
 }
 export const assoc = (m, k, v) => {
   if (typeof m !== 'object' || !Object.isFrozen(m)) throw new Error('assoc expects frozen map')
-  const map = { ...m, [wordValue(k)]: v }
-  return Object.freeze(map)
+  return Object.freeze({ ...m, [wordValue(k)]: v })
 }
 export const has = (m, k) => {
   if (typeof m !== 'object') throw new Error('get expects map')

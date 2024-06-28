@@ -68,7 +68,7 @@ const getCtxVar = (ctx, v) => {
 
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 
-export const makeInterpreterContext = () => {
+export const makeInterpreterContext = ({ importObject }) => {
   const wunsEval = (form) => {
     const cform = wunsComp(null, form)
     return cform(null)
@@ -101,17 +101,6 @@ export const makeInterpreterContext = () => {
     const index = segments.length
     segments.push(data)
     return index
-  })
-
-  defSetVar('log-size-pointer', (memoryIndex, size, p) => {
-    const memory = memories[memoryIndex]
-    if (!memory) throw new RuntimeError('memory not found: ' + memoryIndex)
-    const textDecoder = new TextDecoder()
-    const buffer = new Uint8Array(memory.buffer)
-    const segment = buffer.slice(p, p + size)
-    const str = textDecoder.decode(segment)
-    console.log(str)
-    return unit
   })
 
   for (const [name, f] of hostExports) defSetVar(name, f)
@@ -244,6 +233,42 @@ export const makeInterpreterContext = () => {
           return unit
         }
       }
+      case 'import': {
+        const [moduleName, importName, importDecl] = args
+        const mname = wordValue(moduleName)
+        const iname = wordValue(importName)
+        const importObj = importObject[mname]
+        if (!importObj) throw new CompileError(`module ${mname} not found`)
+        const importValue = importObj[iname]
+        if (!importValue) throw new CompileError(`import ${iname} not found in module ${mname}`)
+        ctAssert(isList(importDecl), `import declaration must be a list, got ${importDecl}`)
+        ctAssert(importDecl.length > 0, `import declaration must have at least one element, got ${importDecl}`)
+        const [declName, ...declArgs] = importDecl
+        switch (wordValue(declName)) {
+          case 'memory': {
+            ctAssert(declArgs.length === 1, `memory declaration expects 1 argument, got ${declArgs.length}`)
+            ctAssert(importValue instanceof WebAssembly.Memory, `imported value is not a memory`)
+            const minSizePages = number(declArgs[0])
+            ctAssert(minSizePages !== importValue.buffer.byteLength >> 16, `imported memory size mismatch`)
+            const memIndex = addMemory(importValue)
+            return () => memIndex
+          }
+          case 'func': {
+            ctAssert(declArgs.length === 2, `func declaration expects 2 arguments, got ${declArgs.length}`)
+            const [params, result] = declArgs
+            ctAssert(isList(params), `func params must be a list, got ${params}`)
+            const paramNames = params.map(wordValue)
+            const resultNames = result.map(wordValue)
+            ctAssert(typeof importValue === 'function', `imported value is not a function`)
+            return () => {
+              defSetVar(iname, importValue)
+              return unit
+            }
+          }
+          default:
+            throw new CompileError(`import declaration ${declName} not recognized`)
+        }
+      }
       case 'func': {
         const [fmname, origParams, ...bodies] = args
         const n = wordValue(fmname)
@@ -330,6 +355,6 @@ export const makeInterpreterContext = () => {
     evalLogForms,
     parseEvalString,
     parseEvalFile,
-    addMemory,
+    getMemory: (index) => memories[index],
   }
 }

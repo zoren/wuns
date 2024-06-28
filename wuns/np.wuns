@@ -1,3 +1,5 @@
+[import env mem [memory 0]]
+
 [defn bump-alloc-init []
   [if [eq [load 0 2 0 [const 0]] [const 0]]
     [store 0 2 0 [const 0] [const 16]]
@@ -34,7 +36,7 @@
 
 [defn is-power-of-2 [x] [eq [quote 0] [bitwise-and x [dec x]]]]
 
-[defmacro align [n x]
+[defn align [n x]
   [assert n must not be zero]
   [assert [is-power-of-2 n] must be power of 2]
   [let [dn [dec n]]
@@ -42,11 +44,15 @@
       [list [quote add] [mk-i32 dn] x]
       [mk-i32 [bitwise-xor [i32.const -1] dn]]]]]
 
+[defmacro mem-align [x] [align mem-alloc-size x]]
+
+[import env log-size-pointer [func [i32 i32 i32] []]]
+
 [defn test-log []
   [let [start [i32.const 32]
         end [i32.const 127]
         s [sub end start]
-        alloc-size [align 4 s]
+        alloc-size [mem-align s]
         p [bump-alloc alloc-size]]
     [loop [i [i32.const 0]]
       [when [lt i s]

@@ -80,7 +80,7 @@
         [let [e [at lmsg i]]
           [push msg [if [is-word e] [list [quote quote] e] e]]
           [continue i [inc i]]]]]
-    [freeze msg]]]
+    [persistent-array msg]]]
 
 [defmacro log-abort [.. lmsg]
   [list [quote let] [list]

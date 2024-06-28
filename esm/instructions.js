@@ -87,6 +87,26 @@ addI32Instruction('load', {
   params: [i32],
   func: load(4, true),
 })
+addI32Instruction('load8-s', {
+  immediateParams: [u32, u32, u32],
+  params: [i32],
+  func: load(1, true),
+})
+addI32Instruction('load8-u', {
+  immediateParams: [u32, u32, u32],
+  params: [i32],
+  func: load(1, false),
+})
+addI32Instruction('load16-s', {
+  immediateParams: [u32, u32, u32],
+  params: [i32],
+  func: load(2, true),
+})
+addI32Instruction('load16-u', {
+  immediateParams: [u32, u32, u32],
+  params: [i32],
+  func: load(2, false),
+})
 const store = (byteSize, signed) => {
   const tArCtor = typedArrayCtorByByteSizeSigned(byteSize, signed)
   return (memoryIndex, align, offset) => {
