@@ -54,12 +54,12 @@ export const print = (ox) => {
     if (Array.isArray(x)) return `[${x.map(go).join(' ')}]`
     if ('funMacDesc' in x) return `[closure ${x.funMacDesc.name}]`
     if (Object.isFrozen(x))
-      return `[kv-map ${Object.entries(x)
-        .map(([k, v]) => `[quote ${k}] ${go(v)}`)
-        .join(' ')}]`
-    return `[trans-kv-map ${Object.entries(x)
-      .map(([k, v]) => `[quote ${k}] ${go(v)}`)
-      .join(' ')}]`
+      return `[kv-map${Object.entries(x)
+        .map(([k, v]) => ` ${k} ${go(v)}`)
+        .join('')}]`
+    return `[transient-kv-map${Object.entries(x)
+      .map(([k, v]) => ` ${k} ${go(v)}`)
+      .join('')}]`
   }
   return go(ox)
 }
