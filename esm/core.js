@@ -124,18 +124,14 @@ export const setMeta = (v, meta) => {
 
 export const callClosure = (closure, args) => {
   const { funMacDesc, closureEnv } = closure
-  if (!funMacDesc) {
-    console.log('closure', closure)
-    throw new RuntimeError('closure has no funMacDesc')
-  }
+  if (!funMacDesc) throw new RuntimeError('closure has no funMacDesc')
   const { name, params, restParam, cbodies } = funMacDesc
   const numberOfGivenArgs = args.length
   const arity = params.length
   const varValues = new Map()
 
   if (restParam === null) {
-    if (arity !== numberOfGivenArgs)
-      throw new Error(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
+    if (arity !== numberOfGivenArgs) throw new Error(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
     for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
   } else {
     if (arity > numberOfGivenArgs)
