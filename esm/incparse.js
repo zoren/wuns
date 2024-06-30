@@ -9,7 +9,7 @@ const parse = (db, inputBytes) => {
     return node
   }
   const insertParentNode = (type, parent, options) => insertNode(type, { parentId: parent.id, ...options })
-
+  const insertTerminal = (type, parent, byteLength) => insertParentNode(type, parent, { byteLength })
   let i = 0
 
   const go = (parent) => {
@@ -18,7 +18,7 @@ const parse = (db, inputBytes) => {
     switch (c) {
       case 91: {
         const listNode = insertParentNode('list', parent)
-        insertParentNode('[', listNode, { byteLength: 1 })
+        insertTerminal('[', listNode, 1)
         i++
         while (true) {
           const n = go(listNode)
@@ -27,21 +27,19 @@ const parse = (db, inputBytes) => {
         return listNode
       }
       case 93: {
-        // ? what about when parent is not a list?
-        const node = insertParentNode(']', parent, { byteLength: 1 })
         i++
-        return node
+        return insertTerminal(parent.type === 'list' ? ']' : 'extra-]', parent, 1)
       }
       default: {
         const scan = (pred, type) => {
           const start = i
           i++
           while (i < inputBytes.length && pred(inputBytes[i])) i++
-          return insertParentNode(type, parent, { byteLength: i - start })
+          return insertTerminal(type, parent, i - start)
         }
         if (isWordChar(c)) return scan(isWordChar, 'word')
         if (isWhitespace(c)) return scan(isWhitespace, 'whitespace')
-        return scan((c) => !isWhitespace(c) && !isWordChar(c) && c !== 91 && c !== 93, 'error')
+        return scan((c) => !isWhitespace(c) && !isWordChar(c) && c !== 91 && c !== 93, 'illegal-chars')
       }
     }
   }
@@ -155,7 +153,7 @@ const visitTree = (db, root) => {
 }
 
 const textDecoder = new TextDecoder()
-const printTree = (db, root, bytes) => {
+const treeToString = (db, root, bytes) => {
   const cursor = newTreeCursor(db, root)
   let result = ''
   for (const node of preorderGeneratorFromCursor(cursor)) {
@@ -166,20 +164,19 @@ const printTree = (db, root, bytes) => {
     const str = textDecoder.decode(slice)
     result += str
   }
-  console.log(result)
+  return result
 }
 
-const tests = ['', 'abc 123', '[quote 34]', '[quote 34', 'ILLEGAL but then legal', `[if [eq 4 x] [] x]`]
+const tests = ['', 'abc 123', '[quote 34]', '[quote 34', 'ILLEGAL but then legal', `[if [eq 4 x] [] x]`, '[]]']
 const textEncoder = new TextEncoder()
 for (const test of tests) {
   const db = []
   const bytes = textEncoder.encode(test)
   const root = parse(db, bytes)
   console.log()
-  console.log()
-  console.log(test)
+  console.log(`'${test}'`)
 
-  printTree(db, root, bytes)
+  console.log(`'${treeToString(db, root, bytes)}'`)
 }
 
 if (false) {
