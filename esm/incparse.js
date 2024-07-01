@@ -19,10 +19,6 @@ const getChildNumber = (db, nodeId, childIndex) => {
 }
 const getChildren = (db, nodeId) => getChildrenIds(db, nodeId).map((childId) => getNodeById(db, childId))
 
-const getNodeByteLength = (db, { byteLength, id }) => {
-  if (byteLength !== undefined) return byteLength
-  return getChildren(db, id).reduce((acc, child) => acc + getNodeByteLength(db, child), 0)
-}
 export const getTotalNumberOfNodes = (db) => db.nodes.length
 export const calcTotalNumberOfEdges = (db) => {
   let count = 0
@@ -149,14 +145,10 @@ export const parse = (inputBytes, oldTree) => {
   return { root, db, changes: [] }
 }
 
-// {rangeOffset: 4, rangeLength: 0, text: 'a'}
-// {rangeOffset: 2, rangeLength: 0, text: 'a'}
-// {rangeOffset: 0, rangeLength: 0, text: 'a'}
-
 const newTreeCursor = (db, rootNode) => {
+  if (rootNode.type !== 'root') throw new Error('expected root node')
   let offset = 0
   let node = rootNode
-  if (node.type !== 'root') throw new Error('expected root node')
   const path = []
   return {
     gotoFirstChild: () => {
@@ -174,7 +166,7 @@ const newTreeCursor = (db, rootNode) => {
       if (cur.childIndex === nOfChildren - 1) return false
       const newChildIndex = cur.childIndex + 1
       cur.childIndex = newChildIndex
-      offset += getNodeByteLength(db, node)
+      offset += node.byteLength
       node = getChildNumber(db, cur.id, newChildIndex)
       return true
     },
@@ -183,7 +175,7 @@ const newTreeCursor = (db, rootNode) => {
       const cur = path.pop()
       const allSiblings = getChildren(db, cur.id)
       const prevSiblings = allSiblings.slice(0, cur.childIndex)
-      offset -= prevSiblings.reduce((acc, child) => acc + getNodeByteLength(db, child), 0)
+      offset -= prevSiblings.reduce((acc, child) => acc + child.byteLength, 0)
       node = getNodeById(db, cur.id)
       return true
     },
