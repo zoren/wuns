@@ -6,22 +6,15 @@ const isWordChar = (c) => (48 <= c && c <= 57) || (97 <= c && c <= 122)
 // type: word, whitespace, list, illegal-chars, extra-]
 // byteLength: number of bytes in a terminal node, could be the aggregated sum of children for non-terminal nodes
 
-export const parse = (inputBytes, oldTree) => {
-  let db
-  if (oldTree) {
-    db = oldTree.db
-  } else {
-    db = []
-  }
+const internalParseDB = (inputBytes, db) => {
   const insertNode = (type, options) => {
     const id = db.length
-    const node = Object.freeze({ id, type, ...options })
+    const node = { id, type, ...options }
     db.push(node)
     return node
   }
   const insertTerminal = (type, parent, byteLength) => insertNode(type, { parentId: parent.id, byteLength })
   let i = 0
-
   const go = (parent) => {
     if (i >= inputBytes.length) return null
     const c = inputBytes[i]
@@ -30,10 +23,14 @@ export const parse = (inputBytes, oldTree) => {
         const listNode = insertNode('list', { parentId: parent.id })
         insertTerminal('[', listNode, 1)
         i++
+        let totalByteLength = 1
         while (true) {
           const n = go(listNode)
-          if (n === null || n.type === ']') break
+          if (n === null) break
+          totalByteLength += n.byteLength
+          if (n.type === ']') break
         }
+        listNode.byteLength = totalByteLength
         return listNode
       }
       case 93: {
@@ -54,11 +51,60 @@ export const parse = (inputBytes, oldTree) => {
     }
   }
   const root = insertNode('root', {})
-  while (go(root) !== null);
-  return { root, db }
+  let totalByteLength = 0
+  while (true) {
+    const n = go(root)
+    if (n === null) break
+    totalByteLength += n.byteLength
+  }
+  if (totalByteLength !== inputBytes.length) throw new Error('byte length mismatch')
+  root.byteLength = totalByteLength
+  return root
 }
 
-// export const makeDB = () => []
+export const parse = (inputBytes, oldTree) => {
+  let db
+  if (oldTree) {
+    db = oldTree.db
+    if (oldTree.changes.length !== 1) throw new Error('multiple changes not implemented')
+    const change = oldTree.changes[0]
+    const { rangeOffset, rangeLength, bytes } = change
+
+    // search for changed terminal nodes
+    let root = oldTree.root
+    // const path = []
+    const cursor = newTreeCursor(db, root)
+    console.log('searching for', { rangeOffset, rangeLength })
+    while (true) {
+      const node = cursor.currentNode()
+      const offset = cursor.getOffset()
+      const end = offset + node.byteLength
+      console.log({ offset, end, type: node.type })
+      if (offset <= rangeOffset && rangeOffset + rangeLength <= end) {
+        if (cursor.gotoFirstChild()) continue
+        break
+      }
+      if (!cursor.gotoNextSibling()) break
+    }
+    console.log('found', cursor.getPathCopy())
+    if (bytes.length === 0) {
+      // create new node with rangeLength bytes removed
+    } else {
+      // parse bytes and merge the resulting root node into the found node creating new nodes all the way to the root
+      const changeRoot = internalParseDB(bytes, db)
+    }
+
+    // if (rangeOffset > cursor.getOffset() + cursor.currentNode().byteLength) throw new Error('rangeOffset out of bounds')
+
+    // while (cursor.gotoFirstChild());
+    // if (cursor.getOffset() !== 0) throw new Error('expected cursor to be at start')
+  } else {
+    db = []
+  }
+  const root = internalParseDB(inputBytes, db)
+  return { root, db, changes: [] }
+}
+
 const getNumberOfChildren = (db, nodeId) => db.reduce((acc, { parentId }) => acc + (parentId === nodeId), 0)
 const getChildren = (db, nodeId) => db.filter(({ parentId }) => parentId === nodeId)
 const getChildNumber = (db, nodeId, childIndex) => {
@@ -74,11 +120,15 @@ const getNodeByteLength = (db, { byteLength, id }) => {
   if (byteLength !== undefined) return byteLength
   return getChildren(db, id).reduce((acc, child) => acc + getNodeByteLength(db, child), 0)
 }
+
+// {rangeOffset: 4, rangeLength: 0, text: 'a'}
+// {rangeOffset: 2, rangeLength: 0, text: 'a'}
+// {rangeOffset: 0, rangeLength: 0, text: 'a'}
+
 const newTreeCursor = (db, rootNode) => {
   let offset = 0
   let node = rootNode
   if (node.type !== 'root') throw new Error('expected root node')
-  if (node.parentId) throw new Error('root node should not have a parent')
   const path = []
   return {
     gotoFirstChild: () => {
@@ -94,7 +144,7 @@ const newTreeCursor = (db, rootNode) => {
       const nOfChildren = getNumberOfChildren(db, parentId)
       const curIndex = path.at(-1)
       if (curIndex === nOfChildren - 1) return false
-      const newChildIndex = path[path.length - 1] + 1
+      const newChildIndex = curIndex + 1
       path[path.length - 1] = newChildIndex
       offset += getNodeByteLength(db, node)
       node = getChildNumber(db, parentId, newChildIndex)
@@ -111,9 +161,8 @@ const newTreeCursor = (db, rootNode) => {
       return true
     },
     currentNode: () => node,
-    get offset() {
-      return offset
-    },
+    getOffset: () => offset,
+    getPathCopy: () => [...path],
   }
 }
 
@@ -162,9 +211,9 @@ const textDecoder = new TextDecoder()
 export const treeToString = (db, root, bytes) => {
   const cursor = newTreeCursor(db, root)
   let result = ''
-  for (const { byteLength } of preorderGeneratorFromCursor(cursor)) {
-    if (!byteLength) continue
-    const offset = cursor.offset
+  for (const { byteLength, type } of preorderGeneratorFromCursor(cursor)) {
+    if (type === 'root' || type === 'list') continue
+    const offset = cursor.getOffset()
     result += textDecoder.decode(bytes.slice(offset, offset + byteLength))
   }
   return result
@@ -177,7 +226,7 @@ export function preorderTreesGeneratorFromCursor(db, root, bytes) {
   const go = (outList) => {
     const node = cursor.currentNode()
     const { type, id } = node
-    const offset = cursor.offset
+    const offset = cursor.getOffset()
     const metaData = { 'node-id': String(id), startIndex: offset }
     switch (type) {
       case 'word': {
@@ -195,7 +244,7 @@ export function preorderTreesGeneratorFromCursor(db, root, bytes) {
             go(l)
             if (!cursor.gotoNextSibling()) break
           }
-          metaData.endIndex = cursor.offset + 1
+          metaData.endIndex = cursor.getOffset() + 1
           cursor.gotoParent()
         }
         outList.push(listWithMeta(l, metaData))
