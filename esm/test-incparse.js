@@ -1,4 +1,4 @@
-import { parse, treeToString, getTotalNumberOfNodes, getTotalNumberOfEdges } from './incparse.js'
+import { parse, treeToString, getTotalNumberOfNodes, calcTotalNumberOfEdges } from './incparse.js'
 
 const tests = ['', 'abc 123', '[]', '[ ]', '[quote 34]', '[quote 34', 'ILLEGAL but then legal', `[if [eq 4 x] [] x]`, '[]]']
 const textEncoder = new TextEncoder()
@@ -9,7 +9,7 @@ for (const test of tests) {
   console.log(`'${test}'`)
 
   console.log(`'${treeToString(db, root, bytes)}'`)
-  console.log(`db nodes: ${getTotalNumberOfNodes(db)} edges: ${getTotalNumberOfEdges(db)}`)
+  console.log(`db nodes: ${getTotalNumberOfNodes(db)} edges: ${calcTotalNumberOfEdges(db)}`)
   // const tree = preorderTreesGeneratorFromCursor(db, root, bytes)
   // console.log(JSON.stringify(tree, null, 2))
 }

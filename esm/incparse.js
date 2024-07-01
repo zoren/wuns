@@ -6,38 +6,52 @@ const isWordChar = (c) => (48 <= c && c <= 57) || (97 <= c && c <= 122)
 // byteLength: number of bytes in a terminal node, could be the aggregated sum of children for non-terminal nodes
 
 const makeDB = () => {
-  return { nodes: [], edges: [] }
+  return { nodes: [], parentToChildren: new Map() }
 }
-
-const getNumberOfChildren = (db, nodeId) => db.edges.reduce((acc, { parentId }) => acc + (parentId === nodeId), 0)
-const getChildNumber = (db, nodeId, childIndex) => {
-  for (const { parentId, childId } of db.edges) {
-    if (parentId !== nodeId) continue
-    if (childIndex === 0) return db.nodes[childId]
-    childIndex--
-  }
-  throw new Error('child not found')
-}
+const getChildrenIds = (db, parentId) => db.parentToChildren.get(parentId) || []
+const getNumberOfChildren = (db, nodeId) => getChildrenIds(db, nodeId).length
 const getNodeById = (db, nodeId) => db.nodes[nodeId]
-const getChildren = (db, nodeId) =>
-  db.edges.filter(({ parentId }) => parentId === nodeId).map(({ childId }) => getNodeById(db, childId))
+const getChildNumber = (db, nodeId, childIndex) => {
+  if (childIndex < 0) throw new Error('childIndex out of bounds')
+  const childrenIds = getChildrenIds(db, nodeId)
+  if (childIndex >= childrenIds.length) throw new Error('child not found')
+  return getNodeById(db, childrenIds[childIndex])
+}
+const getChildren = (db, nodeId) => getChildrenIds(db, nodeId).map((childId) => getNodeById(db, childId))
 
 const getNodeByteLength = (db, { byteLength, id }) => {
   if (byteLength !== undefined) return byteLength
   return getChildren(db, id).reduce((acc, child) => acc + getNodeByteLength(db, child), 0)
 }
 export const getTotalNumberOfNodes = (db) => db.nodes.length
-export const getTotalNumberOfEdges = (db) => db.edges.length
+export const calcTotalNumberOfEdges = (db) => {
+  let count = 0
+  for (const [, childIds] of db.parentToChildren) {
+    count += childIds.length
+  }
+  return count
+}
+
+const insertOneToMany = (m, key, value) => {
+  let l = m.get(key)
+  if (l === undefined) {
+    l = []
+    m.set(key, l)
+  }
+  l.push(value)
+}
 
 const internalParseDB = (inputBytes, db) => {
-  const { nodes, edges } = db
+  const { nodes } = db
   const insertNode = (type, options) => {
     const id = nodes.length
     const node = { id, type, ...options }
     nodes.push(node)
     return node
   }
-  const insertDBEdge = (parentId, childId) => edges.push({ parentId, childId })
+  const insertDBEdge = (parentId, childId) => {
+    insertOneToMany(db.parentToChildren, parentId, childId)
+  }
   const insertTerminal = (type, parent, byteLength) => {
     const node = insertNode(type, { byteLength })
     insertDBEdge(parent.id, node.id)
