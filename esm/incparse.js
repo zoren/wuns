@@ -132,32 +132,31 @@ const newTreeCursor = (db, rootNode) => {
   const path = []
   return {
     gotoFirstChild: () => {
-      const nOfChildren = getNumberOfChildren(db, node.id)
+      const { id } = node
+      const nOfChildren = getNumberOfChildren(db, id)
       if (nOfChildren === 0) return false
-      node = getChildNumber(db, node.id, 0)
-      path.push(0)
+      node = getChildNumber(db, id, 0)
+      path.push({ id, childIndex: 0 })
       return true
     },
     gotoNextSibling: () => {
-      const { parentId } = node
-      if (typeof parentId === 'undefined') return false
-      const nOfChildren = getNumberOfChildren(db, parentId)
-      const curIndex = path.at(-1)
-      if (curIndex === nOfChildren - 1) return false
-      const newChildIndex = curIndex + 1
-      path[path.length - 1] = newChildIndex
+      if (path.length === 0) return false
+      const cur = path.at(-1)
+      const nOfChildren = getNumberOfChildren(db, cur.id)
+      if (cur.childIndex === nOfChildren - 1) return false
+      const newChildIndex = cur.childIndex + 1
+      cur.childIndex = newChildIndex
       offset += getNodeByteLength(db, node)
-      node = getChildNumber(db, parentId, newChildIndex)
+      node = getChildNumber(db, cur.id, newChildIndex)
       return true
     },
     gotoParent: () => {
-      const { parentId } = node
-      if (typeof parentId === 'undefined') return false
-      const curChildIndex = path.pop()
-      const allSiblings = getChildren(db, parentId)
-      const prevSiblings = allSiblings.slice(0, curChildIndex)
+      if (path.length === 0) return false
+      const cur = path.pop()
+      const allSiblings = getChildren(db, cur.id)
+      const prevSiblings = allSiblings.slice(0, cur.childIndex)
       offset -= prevSiblings.reduce((acc, child) => acc + getNodeByteLength(db, child), 0)
-      node = getNodeById(db, parentId)
+      node = getNodeById(db, cur.id)
       return true
     },
     currentNode: () => node,
