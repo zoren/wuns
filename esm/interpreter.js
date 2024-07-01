@@ -48,6 +48,8 @@ const jsToWuns = (js) => {
   return js
 }
 
+export const apply = (f, ...args) => callClosure(f, args.map(jsToWuns))
+
 const getVarValue = (env, v) => {
   while (true) {
     if (!env) throw new RuntimeError(`variable ${v} not found`)
@@ -247,9 +249,9 @@ export const makeInterpreterContext = ({ importObject }) => {
         switch (wordValue(declName)) {
           case 'memory': {
             ctAssert(declArgs.length === 1, `memory declaration expects 1 argument, got ${declArgs.length}`)
-            ctAssert(importValue instanceof WebAssembly.Memory, `imported value is not a memory`)
             const minSizePages = number(declArgs[0])
-            ctAssert(minSizePages !== importValue.buffer.byteLength >> 16, `imported memory size mismatch`)
+            ctAssert(importValue instanceof WebAssembly.Memory, `imported value is not a memory`)
+            ctAssert(minSizePages < importValue.buffer.byteLength >> 16, `imported memory size mismatch`)
             const memIndex = addMemory(importValue)
             return () => memIndex
           }
@@ -257,6 +259,7 @@ export const makeInterpreterContext = ({ importObject }) => {
             ctAssert(declArgs.length === 2, `func declaration expects 2 arguments, got ${declArgs.length}`)
             const [params, result] = declArgs
             ctAssert(isList(params), `func params must be a list, got ${params}`)
+            ctAssert(isList(result), `func result must be a list, got ${result}`)
             const paramNames = params.map(wordValue)
             const resultNames = result.map(wordValue)
             ctAssert(typeof importValue === 'function', `imported value is not a function`)
@@ -356,5 +359,6 @@ export const makeInterpreterContext = ({ importObject }) => {
     parseEvalString,
     parseEvalFile,
     getMemory: (index) => memories[index],
+    getVarObject,
   }
 }
