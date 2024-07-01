@@ -2,30 +2,55 @@ const isWhitespace = (c) => c === 32 || c === 9 || c === 10
 const isWordChar = (c) => (48 <= c && c <= 57) || (97 <= c && c <= 122)
 // nodes have
 // id: number
-// parentId, null for root nodes
 // type: word, whitespace, list, illegal-chars, extra-]
 // byteLength: number of bytes in a terminal node, could be the aggregated sum of children for non-terminal nodes
 
-// todo move parentId to separate edge table, this way we can share nodes between different trees
 const makeDB = () => {
-  return { nodes: [] }
+  return { nodes: [], edges: [] }
 }
+
+const getNumberOfChildren = (db, nodeId) => db.edges.reduce((acc, { parentId }) => acc + (parentId === nodeId), 0)
+const getChildNumber = (db, nodeId, childIndex) => {
+  for (const { parentId, childId } of db.edges) {
+    if (parentId !== nodeId) continue
+    if (childIndex === 0) return db.nodes[childId]
+    childIndex--
+  }
+  throw new Error('child not found')
+}
+const getNodeById = (db, nodeId) => db.nodes[nodeId]
+const getChildren = (db, nodeId) =>
+  db.edges.filter(({ parentId }) => parentId === nodeId).map(({ childId }) => getNodeById(db, childId))
+
+const getNodeByteLength = (db, { byteLength, id }) => {
+  if (byteLength !== undefined) return byteLength
+  return getChildren(db, id).reduce((acc, child) => acc + getNodeByteLength(db, child), 0)
+}
+export const getTotalNumberOfNodes = (db) => db.nodes.length
+export const getTotalNumberOfEdges = (db) => db.edges.length
+
 const internalParseDB = (inputBytes, db) => {
-  const { nodes } = db
+  const { nodes, edges } = db
   const insertNode = (type, options) => {
     const id = nodes.length
     const node = { id, type, ...options }
     nodes.push(node)
     return node
   }
-  const insertTerminal = (type, parent, byteLength) => insertNode(type, { parentId: parent.id, byteLength })
+  const insertDBEdge = (parentId, childId) => edges.push({ parentId, childId })
+  const insertTerminal = (type, parent, byteLength) => {
+    const node = insertNode(type, { byteLength })
+    insertDBEdge(parent.id, node.id)
+    return node
+  }
   let i = 0
   const go = (parent) => {
     if (i >= inputBytes.length) return null
     const c = inputBytes[i]
     switch (c) {
       case 91: {
-        const listNode = insertNode('list', { parentId: parent.id })
+        const listNode = insertNode('list')
+        insertDBEdge(parent.id, listNode.id)
         insertTerminal('[', listNode, 1)
         i++
         let totalByteLength = 1
@@ -109,23 +134,6 @@ export const parse = (inputBytes, oldTree) => {
   const root = internalParseDB(inputBytes, db)
   return { root, db, changes: [] }
 }
-
-const getNumberOfChildren = (db, nodeId) => db.nodes.reduce((acc, { parentId }) => acc + (parentId === nodeId), 0)
-const getChildren = (db, nodeId) => db.nodes.filter(({ parentId }) => parentId === nodeId)
-const getChildNumber = (db, nodeId, childIndex) => {
-  for (const node of db.nodes) {
-    if (node.parentId !== nodeId) continue
-    if (childIndex === 0) return node
-    childIndex--
-  }
-  throw new Error('child not found')
-}
-const getNodeById = (db, nodeId) => db.nodes[nodeId]
-const getNodeByteLength = (db, { byteLength, id }) => {
-  if (byteLength !== undefined) return byteLength
-  return getChildren(db, id).reduce((acc, child) => acc + getNodeByteLength(db, child), 0)
-}
-export const getTotalNumberOfNodes = (db) => db.nodes.length
 
 // {rangeOffset: 4, rangeLength: 0, text: 'a'}
 // {rangeOffset: 2, rangeLength: 0, text: 'a'}
