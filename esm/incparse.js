@@ -6,11 +6,16 @@ const isWordChar = (c) => (48 <= c && c <= 57) || (97 <= c && c <= 122)
 // type: word, whitespace, list, illegal-chars, extra-]
 // byteLength: number of bytes in a terminal node, could be the aggregated sum of children for non-terminal nodes
 
+// todo move parentId to separate edge table, this way we can share nodes between different trees
+const makeDB = () => {
+  return { nodes: [] }
+}
 const internalParseDB = (inputBytes, db) => {
+  const { nodes } = db
   const insertNode = (type, options) => {
-    const id = db.length
+    const id = nodes.length
     const node = { id, type, ...options }
-    db.push(node)
+    nodes.push(node)
     return node
   }
   const insertTerminal = (type, parent, byteLength) => insertNode(type, { parentId: parent.id, byteLength })
@@ -99,27 +104,28 @@ export const parse = (inputBytes, oldTree) => {
     // while (cursor.gotoFirstChild());
     // if (cursor.getOffset() !== 0) throw new Error('expected cursor to be at start')
   } else {
-    db = []
+    db = makeDB()
   }
   const root = internalParseDB(inputBytes, db)
   return { root, db, changes: [] }
 }
 
-const getNumberOfChildren = (db, nodeId) => db.reduce((acc, { parentId }) => acc + (parentId === nodeId), 0)
-const getChildren = (db, nodeId) => db.filter(({ parentId }) => parentId === nodeId)
+const getNumberOfChildren = (db, nodeId) => db.nodes.reduce((acc, { parentId }) => acc + (parentId === nodeId), 0)
+const getChildren = (db, nodeId) => db.nodes.filter(({ parentId }) => parentId === nodeId)
 const getChildNumber = (db, nodeId, childIndex) => {
-  for (const node of db) {
+  for (const node of db.nodes) {
     if (node.parentId !== nodeId) continue
     if (childIndex === 0) return node
     childIndex--
   }
   throw new Error('child not found')
 }
-const getNodeById = (db, nodeId) => db[nodeId]
+const getNodeById = (db, nodeId) => db.nodes[nodeId]
 const getNodeByteLength = (db, { byteLength, id }) => {
   if (byteLength !== undefined) return byteLength
   return getChildren(db, id).reduce((acc, child) => acc + getNodeByteLength(db, child), 0)
 }
+export const getTotalNumberOfNodes = (db) => db.nodes.length
 
 // {rangeOffset: 4, rangeLength: 0, text: 'a'}
 // {rangeOffset: 2, rangeLength: 0, text: 'a'}
