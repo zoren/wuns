@@ -1,15 +1,25 @@
 const isWhitespace = (c) => c === 32 || c === 9 || c === 10
 const isWordChar = (c) => (48 <= c && c <= 57) || (97 <= c && c <= 122)
+// nodes have
+// id: number
+// parentId, null for root nodes
+// type: word, whitespace, list, illegal-chars, extra-]
+// byteLength: number of bytes in a terminal node, could be the aggregated sum of children for non-terminal nodes
 
-const parse = (db, inputBytes) => {
+export const parse = (inputBytes, oldTree) => {
+  let db
+  if (oldTree) {
+    db = oldTree.db
+  } else {
+    db = []
+  }
   const insertNode = (type, options) => {
     const id = db.length
     const node = Object.freeze({ id, type, ...options })
     db.push(node)
     return node
   }
-  const insertParentNode = (type, parent, options) => insertNode(type, { parentId: parent.id, ...options })
-  const insertTerminal = (type, parent, byteLength) => insertParentNode(type, parent, { byteLength })
+  const insertTerminal = (type, parent, byteLength) => insertNode(type, { parentId: parent.id, byteLength })
   let i = 0
 
   const go = (parent) => {
@@ -17,7 +27,7 @@ const parse = (db, inputBytes) => {
     const c = inputBytes[i]
     switch (c) {
       case 91: {
-        const listNode = insertParentNode('list', parent)
+        const listNode = insertNode('list', { parentId: parent.id })
         insertTerminal('[', listNode, 1)
         i++
         while (true) {
@@ -39,19 +49,17 @@ const parse = (db, inputBytes) => {
         }
         if (isWordChar(c)) return scan(isWordChar, 'word')
         if (isWhitespace(c)) return scan(isWhitespace, 'whitespace')
-        return scan((c) => !isWhitespace(c) && !isWordChar(c) && c !== 91 && c !== 93, 'illegal-chars')
+        return scan((c) => !isWordChar(c) && !isWhitespace(c) && c !== 91 && c !== 93, 'illegal-chars')
       }
     }
   }
   const root = insertNode('root', {})
-  while (true) {
-    const n = go(root)
-    if (n === null) break
-  }
-  return root
+  while (go(root) !== null);
+  return { root, db }
 }
 
-const getNumberOfChildren = (db, nodeId) => db.reduce((acc, { parentId }) => acc + (parentId === nodeId ? 1 : 0), 0)
+// export const makeDB = () => []
+const getNumberOfChildren = (db, nodeId) => db.reduce((acc, { parentId }) => acc + (parentId === nodeId), 0)
 const getChildren = (db, nodeId) => db.filter(({ parentId }) => parentId === nodeId)
 const getChildNumber = (db, nodeId, childIndex) => {
   for (const node of db) {
@@ -59,20 +67,19 @@ const getChildNumber = (db, nodeId, childIndex) => {
     if (childIndex === 0) return node
     childIndex--
   }
-  console.log({ nodeId, childIndex })
   throw new Error('child not found')
 }
-
+const getNodeById = (db, nodeId) => db[nodeId]
+const getNodeByteLength = (db, { byteLength, id }) => {
+  if (byteLength !== undefined) return byteLength
+  return getChildren(db, id).reduce((acc, child) => acc + getNodeByteLength(db, child), 0)
+}
 const newTreeCursor = (db, rootNode) => {
   let offset = 0
   let node = rootNode
   if (node.type !== 'root') throw new Error('expected root node')
   if (node.parentId) throw new Error('root node should not have a parent')
   const path = []
-  const getNodeByteLength = (node) => {
-    if (node.byteLength !== undefined) return node.byteLength
-    return getChildren(db, node.id).reduce((acc, child) => acc + getNodeByteLength(child), 0)
-  }
   return {
     gotoFirstChild: () => {
       const nOfChildren = getNumberOfChildren(db, node.id)
@@ -89,19 +96,18 @@ const newTreeCursor = (db, rootNode) => {
       if (curIndex === nOfChildren - 1) return false
       const newChildIndex = path[path.length - 1] + 1
       path[path.length - 1] = newChildIndex
-      offset += getNodeByteLength(node)
+      offset += getNodeByteLength(db, node)
       node = getChildNumber(db, parentId, newChildIndex)
       return true
     },
     gotoParent: () => {
       const { parentId } = node
       if (typeof parentId === 'undefined') return false
-      if (path.length === 0) throw new Error('path is empty')
       const curChildIndex = path.pop()
       const allSiblings = getChildren(db, parentId)
       const prevSiblings = allSiblings.slice(0, curChildIndex)
-      offset -= prevSiblings.reduce((acc, child) => acc + getNodeByteLength(child), 0)
-      node = db[parentId]
+      offset -= prevSiblings.reduce((acc, child) => acc + getNodeByteLength(db, child), 0)
+      node = getNodeById(db, parentId)
       return true
     },
     currentNode: () => node,
@@ -153,41 +159,57 @@ const visitTree = (db, root) => {
 }
 
 const textDecoder = new TextDecoder()
-const treeToString = (db, root, bytes) => {
+export const treeToString = (db, root, bytes) => {
   const cursor = newTreeCursor(db, root)
   let result = ''
-  for (const node of preorderGeneratorFromCursor(cursor)) {
-    if (!node.byteLength) continue
+  for (const { byteLength } of preorderGeneratorFromCursor(cursor)) {
+    if (!byteLength) continue
     const offset = cursor.offset
-    const endOffset = offset + node.byteLength
-    const slice = bytes.slice(offset, endOffset)
-    const str = textDecoder.decode(slice)
-    result += str
+    result += textDecoder.decode(bytes.slice(offset, offset + byteLength))
   }
   return result
 }
 
-const tests = ['', 'abc 123', '[quote 34]', '[quote 34', 'ILLEGAL but then legal', `[if [eq 4 x] [] x]`, '[]]']
-const textEncoder = new TextEncoder()
-for (const test of tests) {
-  const db = []
-  const bytes = textEncoder.encode(test)
-  const root = parse(db, bytes)
-  console.log()
-  console.log(`'${test}'`)
+import { wordWithMeta, listWithMeta } from './core.js'
 
-  console.log(`'${treeToString(db, root, bytes)}'`)
-}
-
-if (false) {
-  // .load incparse.js
-  let s = `abc 123`
-  let db = []
-  let root = parse(db, textEncoder.encode(s))
-  let cursor = newTreeCursor(db, root)
-  // cursorNext(cursor)
-  cursor.currentNode()
-
-  cursor.gotoFirstChild()
-  cursor.gotoNextSibling()
+export function preorderTreesGeneratorFromCursor(db, root, bytes) {
+  const cursor = newTreeCursor(db, root)
+  const go = (outList) => {
+    const node = cursor.currentNode()
+    const { type, id } = node
+    const offset = cursor.offset
+    const metaData = { 'node-id': String(id), startIndex: offset }
+    switch (type) {
+      case 'word': {
+        const { byteLength } = node
+        const endIndex = offset + byteLength
+        metaData.endIndex = endIndex
+        const text = textDecoder.decode(bytes.slice(offset, endIndex))
+        outList.push(wordWithMeta(text, metaData))
+        return
+      }
+      case 'list': {
+        const l = []
+        if (cursor.gotoFirstChild()) {
+          while (true) {
+            go(l)
+            if (!cursor.gotoNextSibling()) break
+          }
+          metaData.endIndex = cursor.offset + 1
+          cursor.gotoParent()
+        }
+        outList.push(listWithMeta(l, metaData))
+        return
+      }
+      default:
+        return
+    }
+  }
+  const l = []
+  if (cursor.gotoFirstChild())
+    while (true) {
+      go(l)
+      if (!cursor.gotoNextSibling()) break
+    }
+  return l
 }
