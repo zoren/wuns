@@ -179,6 +179,10 @@ const newTreeCursor = (db, rootNode) => {
       node = getNodeById(db, cur.id)
       return true
     },
+    getParentId: () => {
+      if (path.length === 0) return null
+      return path.at(-1).id
+    },
     currentNode: () => node,
     getOffset: () => offset,
     getPathCopy: () => [...path],
@@ -229,6 +233,29 @@ export const treeToString = (db, root, bytes) => {
     result += textDecoder.decode(bytes.slice(offset, offset + byteLength))
   }
   return result
+}
+
+export const getErrors = ({ db, root }) => {
+  const cursor = newTreeCursor(db, root)
+  const errors = []
+  for (const node of preorderGeneratorFromCursor(cursor)) {
+    switch (node.type) {
+      case 'illegal-chars':
+        errors.push({ message: 'illegal-characters', node })
+        break
+      case ']':
+        const parentId = cursor.getParentId()
+        if (parentId === null) throw new Error('expected parent')
+        if (getNodeById(db, parentId).type !== 'list') errors.push({ message: 'extra-closing', node })
+        break
+      case 'list':
+        const children = getChildren(db, node.id)
+        if (children.length === 0) throw new Error('list has no children')
+        if (children.at(-1).type !== ']') errors.push({ message: 'unclosed-list', node })
+        break
+    }
+  }
+  return errors
 }
 
 import { wordWithMeta, listWithMeta } from './core.js'
