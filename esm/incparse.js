@@ -45,7 +45,7 @@ const internalParseDB = (inputBytes, db) => {
   }
   const insertDBEdge = (parentId, childId) => insertOneToMany(db.parentToChildren, parentId, childId)
   const insertTerminal = (type, parentId, byteLength) => {
-    const nodeId = insertNode({ type, byteLength })
+    const nodeId = insertNode(Object.freeze({ type, byteLength }))
     insertDBEdge(parentId, nodeId)
     return nodeId
   }
@@ -69,6 +69,7 @@ const internalParseDB = (inputBytes, db) => {
           if (type === ']') break
         }
         listNode.byteLength = totalByteLength
+        Object.freeze(listNode)
         return listNodeId
       }
       case 93: {
@@ -99,6 +100,7 @@ const internalParseDB = (inputBytes, db) => {
   }
   if (totalByteLength !== inputBytes.length) throw new Error('byte length mismatch')
   root.byteLength = totalByteLength
+  Object.freeze(root)
   return rootId
 }
 
