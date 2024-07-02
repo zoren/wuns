@@ -17,7 +17,6 @@ const getNodeById = (db, nodeId) => {
   if (v === undefined) throw new Error('node not found: ' + nodeId)
   return v
 }
-const getChildren = (db, nodeId) => getChildrenIds(db, nodeId).map((childId) => getNodeById(db, childId))
 
 export const getTotalNumberOfNodes = (db) => db.nodes.length
 export const calcTotalNumberOfEdges = (db) => {
@@ -174,9 +173,9 @@ const newTreeCursor = (db, rootId) => {
     gotoParent: () => {
       if (path.length === 0) return false
       const cur = path.pop()
-      const allSiblings = getChildren(db, cur.id)
-      const prevSiblings = allSiblings.slice(0, cur.childIndex)
-      offset -= prevSiblings.reduce((acc, child) => acc + child.byteLength, 0)
+      const allSiblingIds = getChildrenIds(db, cur.id)
+      const prevSiblingIds = allSiblingIds.slice(0, cur.childIndex)
+      offset -= prevSiblingIds.reduce((acc, childId) => acc + getNodeById(db, childId).byteLength, 0)
       nodeId = cur.id
       return true
     },
@@ -252,9 +251,9 @@ export const getErrors = ({ db, rootId }) => {
         break
       case 'list':
         const currentNodeId = cursor.currentNodeId()
-        const children = getChildren(db, currentNodeId)
-        if (children.length === 0) throw new Error('list has no children')
-        if (children.at(-1).type !== ']') errors.push({ message: 'unclosed-list', node })
+        const childrenIds = getChildrenIds(db, currentNodeId)
+        if (childrenIds.length === 0) throw new Error('list has no children')
+        if (getNodeById(db, childrenIds.at(-1)).type !== ']') errors.push({ message: 'unclosed-list', node })
         break
     }
   }
