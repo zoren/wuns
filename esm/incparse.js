@@ -59,16 +59,15 @@ const internalParseDB = (inputBytes, db) => {
         const listNodeId = insertNode(listNode)
         insertDBEdge(parentId, listNodeId)
         insertTerminal('[', listNodeId, 1)
+        const start = i
         i++
-        let totalByteLength = 1
         while (true) {
           const elementId = go(listNodeId)
           if (elementId === null) break
-          const { byteLength, type } = getNodeById(db, elementId)
-          totalByteLength += byteLength
+          const { type } = getNodeById(db, elementId)
           if (type === ']') break
         }
-        listNode.byteLength = totalByteLength
+        listNode.byteLength = i - start
         Object.freeze(listNode)
         return listNodeId
       }
@@ -91,15 +90,9 @@ const internalParseDB = (inputBytes, db) => {
   }
   const root = { type: 'root', byteLength: 0 }
   const rootId = insertNode(root)
-  let totalByteLength = 0
-  while (true) {
-    const topLevelNodeId = go(rootId)
-    if (topLevelNodeId === null) break
-    const { byteLength } = getNodeById(db, topLevelNodeId)
-    totalByteLength += byteLength
-  }
-  if (totalByteLength !== inputBytes.length) throw new Error('byte length mismatch')
-  root.byteLength = totalByteLength
+  while (go(rootId) !== null);
+  if (i !== inputBytes.length) throw new Error('expected to be at end of input')
+  root.byteLength = inputBytes.length
   Object.freeze(root)
   return rootId
 }
