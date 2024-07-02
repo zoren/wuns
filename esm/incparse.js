@@ -1,5 +1,7 @@
 const isWhitespace = (c) => c === 32 || c === 9 || c === 10
-const isWordChar = (c) => (48 <= c && c <= 57) || (97 <= c && c <= 122)
+// .=/-
+const otherWordChars = new Set([...'.=/-'].map((c) => c.charCodeAt(0)))
+const isWordChar = (c) => (97 <= c && c <= 122) || (48 <= c && c <= 57) || otherWordChars.has(c)
 // nodes have
 // id: number
 // type: word, whitespace, list, illegal-chars, extra-]
@@ -45,9 +47,7 @@ const internalParseDB = (inputBytes, db) => {
     nodes.push(node)
     return node
   }
-  const insertDBEdge = (parentId, childId) => {
-    insertOneToMany(db.parentToChildren, parentId, childId)
-  }
+  const insertDBEdge = (parentId, childId) => insertOneToMany(db.parentToChildren, parentId, childId)
   const insertTerminal = (type, parent, byteLength) => {
     const node = insertNode(type, { byteLength })
     insertDBEdge(parent.id, node.id)
@@ -216,13 +216,6 @@ function* preorderGeneratorFromCursor(cursor) {
       if (!cursor.gotoParent()) return
       if (cursor.gotoNextSibling()) break
     }
-  }
-}
-
-const visitTree = (db, root) => {
-  const cursor = newTreeCursor(db, root)
-  for (const node of preorderGeneratorFromCursor(cursor)) {
-    console.log(node)
   }
 }
 
