@@ -172,11 +172,10 @@ const newTreeCursor = (db, rootId) => {
     },
     gotoParent: () => {
       if (path.length === 0) return false
-      const cur = path.pop()
-      const allSiblingIds = getChildrenIds(db, cur.id)
-      const prevSiblingIds = allSiblingIds.slice(0, cur.childIndex)
-      offset -= prevSiblingIds.reduce((acc, childId) => acc + getNodeById(db, childId).byteLength, 0)
-      nodeId = cur.id
+      const { id, childIndex } = path.pop()
+      const allSiblingIds = getChildrenIds(db, id)
+      for (let i = 0; i < childIndex; i++) offset -= getNodeById(db, allSiblingIds[i]).byteLength
+      nodeId = id
       return true
     },
     getParentId: () => {
