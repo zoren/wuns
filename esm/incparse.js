@@ -2,7 +2,6 @@ const isWhitespace = (c) => c === 32 || c === 9 || c === 10
 const otherWordChars = new Set([...'.=/-'].map((c) => c.charCodeAt(0)))
 const isWordChar = (c) => (97 <= c && c <= 122) || (48 <= c && c <= 57) || otherWordChars.has(c)
 // nodes have
-// id: number
 // type: word, whitespace, list, illegal-chars, extra-]
 // byteLength: number of bytes in a terminal node, could be the aggregated sum of children for non-terminal nodes
 
@@ -43,7 +42,20 @@ const internalParseDB = (inputBytes, db) => {
     nodes.push(node)
     return id
   }
-  const insertTerminal = (type, byteLength) => insertNode(Object.freeze({ type, byteLength }))
+  const terminalCache = new Map()
+  const insertTerminal = (type, byteLength) => {
+    let cached = terminalCache.get(type)
+    if (cached === undefined) {
+      cached = new Map()
+      terminalCache.set(type, cached)
+    }
+    let cachedNodeId = cached.get(byteLength)
+    if (cachedNodeId === undefined) {
+      cachedNodeId = insertNode(Object.freeze({ type, byteLength }))
+      cached.set(byteLength, cachedNodeId)
+    }
+    return cachedNodeId
+  }
   let i = 0
   const go = () => {
     if (i >= inputBytes.length) return null
