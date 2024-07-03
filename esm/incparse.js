@@ -18,23 +18,23 @@ const getNodeById = (db, nodeId) => {
   return v
 }
 
+const getNodeTypeById = (db, nodeId) => getNodeById(db, nodeId).type
+const getByteLengthById = (db, nodeId) => getNodeById(db, nodeId).byteLength
+
 export const getTotalNumberOfNodes = (db) => db.nodes.length
 export const calcTotalNumberOfEdges = (db) => {
   let count = 0
-  for (const [, childIds] of db.parentToChildren) {
-    count += childIds.length
-  }
+  for (const [, childIds] of db.parentToChildren) count += childIds.length
   return count
 }
 
-const insertOneToMany = (m, key, value) => {
-  let l = m.get(key)
-  if (l === undefined) {
-    l = []
-    m.set(key, l)
-  }
-  l.push(value)
-}
+const nodeTypeList = 'list'
+const nodeTypeRoot = 'root'
+const nodeTypeStartBracket = '['
+const nodeTypeEndBracket = ']'
+const nodeTypeWord = 'word'
+const nodeTypeWhitespace = 'whitespace'
+const nodeTypeIllegalChars = 'illegal-chars'
 
 const internalParseDB = (inputBytes, db) => {
   const { nodes } = db
@@ -43,95 +43,80 @@ const internalParseDB = (inputBytes, db) => {
     nodes.push(node)
     return id
   }
-  const insertDBEdge = (parentId, childId) => insertOneToMany(db.parentToChildren, parentId, childId)
-  const insertTerminal = (type, parentId, byteLength) => {
-    const nodeId = insertNode(Object.freeze({ type, byteLength }))
-    insertDBEdge(parentId, nodeId)
-    return nodeId
-  }
+  const insertTerminal = (type, byteLength) => insertNode(Object.freeze({ type, byteLength }))
   let i = 0
-  const go = (parentId) => {
+  const go = () => {
     if (i >= inputBytes.length) return null
     const c = inputBytes[i]
     switch (c) {
       case 91: {
-        const listNode = { type: 'list', byteLength: 0 }
+        const listNode = { type: nodeTypeList, byteLength: 0 }
         const listNodeId = insertNode(listNode)
-        insertDBEdge(parentId, listNodeId)
-        insertTerminal('[', listNodeId, 1)
+        const startId = insertTerminal(nodeTypeStartBracket, 1)
+        const childIds = [startId]
         const start = i
         i++
         while (true) {
-          const elementId = go(listNodeId)
+          const elementId = go()
           if (elementId === null) break
-          const { type } = getNodeById(db, elementId)
-          if (type === ']') break
+          childIds.push(elementId)
+          const type = getNodeTypeById(db, elementId)
+          if (type === nodeTypeEndBracket) break
         }
         listNode.byteLength = i - start
         Object.freeze(listNode)
+        db.parentToChildren.set(listNodeId, Object.freeze(childIds))
         return listNodeId
       }
       case 93: {
         i++
-        return insertTerminal(']', parentId, 1)
+        return insertTerminal(nodeTypeEndBracket, 1)
       }
       default: {
         const scan = (pred, type) => {
           const start = i
           i++
           while (i < inputBytes.length && pred(inputBytes[i])) i++
-          return insertTerminal(type, parentId, i - start)
+          return insertTerminal(type, i - start)
         }
-        if (isWordChar(c)) return scan(isWordChar, 'word')
-        if (isWhitespace(c)) return scan(isWhitespace, 'whitespace')
-        return scan((c) => !isWordChar(c) && !isWhitespace(c) && c !== 91 && c !== 93, 'illegal-chars')
+        if (isWordChar(c)) return scan(isWordChar, nodeTypeWord)
+        if (isWhitespace(c)) return scan(isWhitespace, nodeTypeWhitespace)
+        return scan((c) => !isWordChar(c) && !isWhitespace(c) && c !== 91 && c !== 93, nodeTypeIllegalChars)
       }
     }
   }
-  const root = { type: 'root', byteLength: 0 }
+  const root = { type: nodeTypeRoot, byteLength: 0 }
   const rootId = insertNode(root)
-  while (go(rootId) !== null);
+  const childIds = []
+  while (true) {
+    const elementId = go()
+    if (elementId === null) break
+    childIds.push(elementId)
+  }
   if (i !== inputBytes.length) throw new Error('expected to be at end of input')
   root.byteLength = inputBytes.length
+  db.parentToChildren.set(rootId, Object.freeze(childIds))
   Object.freeze(root)
   return rootId
+}
+
+const tryIncrementParse = (inputBytes, oldTree) => {
+  const db = oldTree.db
+  console.log({ oldTreeChanges: oldTree.changes })
+
+  searchRanges2(oldTree, oldTree.changes)
 }
 
 export const parse = (inputBytes, oldTree) => {
   let db
   if (oldTree) {
+    const incrementalParseResult = tryIncrementParse(inputBytes, oldTree)
+    if (incrementalParseResult) {
+      // check if incremental matches full parse
+      const fullParseDB = makeDB()
+      const fullParseRootId = internalParseDB(inputBytes, fullParseDB)
+    }
     db = oldTree.db
-    if (oldTree.changes.length !== 1) throw new Error('multiple changes not implemented')
-    const change = oldTree.changes[0]
-    const { rangeOffset, rangeLength, bytes } = change
-
-    // search for changed terminal nodes
-    let root = oldTree.root
-    // const path = []
-    const cursor = newTreeCursor(db, root)
-    console.log('searching for', { rangeOffset, rangeLength })
-    while (true) {
-      const node = cursor.currentNode()
-      const offset = cursor.getOffset()
-      const end = offset + node.byteLength
-      if (offset <= rangeOffset && rangeOffset + rangeLength <= end) {
-        if (cursor.gotoFirstChild()) continue
-        break
-      }
-      if (!cursor.gotoNextSibling()) break
-    }
-    console.log('found', cursor.getPathCopy())
-    if (bytes.length === 0) {
-      // create new node with rangeLength bytes removed
-    } else {
-      // parse bytes and merge the resulting root node into the found node creating new nodes all the way to the root
-      const changeRoot = internalParseDB(bytes, db)
-    }
-
-    // if (rangeOffset > cursor.getOffset() + cursor.currentNode().byteLength) throw new Error('rangeOffset out of bounds')
-
-    // while (cursor.gotoFirstChild());
-    // if (cursor.getOffset() !== 0) throw new Error('expected cursor to be at start')
   } else {
     db = makeDB()
   }
@@ -139,8 +124,8 @@ export const parse = (inputBytes, oldTree) => {
   return { rootId, db, changes: [] }
 }
 
-const newTreeCursor = (db, rootId) => {
-  if (getNodeById(db, rootId).type !== 'root') throw new Error('expected root node')
+const newTreeCursor = ({ db, rootId }) => {
+  if (getNodeTypeById(db, rootId) !== nodeTypeRoot) throw new Error('expected root node')
   let offset = 0
   let nodeId = rootId
   const path = []
@@ -160,7 +145,7 @@ const newTreeCursor = (db, rootId) => {
       if (cur.childIndex === nOfChildren - 1) return false
       const newChildIndex = cur.childIndex + 1
       cur.childIndex = newChildIndex
-      const { byteLength } = getNodeById(db, nodeId)
+      const byteLength = getByteLengthById(db, nodeId)
       nodeId = parentChildrenIds[newChildIndex]
       offset += byteLength
       return true
@@ -169,7 +154,7 @@ const newTreeCursor = (db, rootId) => {
       if (path.length === 0) return false
       const { id, childIndex } = path.pop()
       const allSiblingIds = getChildrenIds(db, id)
-      for (let i = 0; i < childIndex; i++) offset -= getNodeById(db, allSiblingIds[i]).byteLength
+      for (let i = 0; i < childIndex; i++) offset -= getByteLengthById(db, allSiblingIds[i])
       nodeId = id
       return true
     },
@@ -181,28 +166,7 @@ const newTreeCursor = (db, rootId) => {
     currentNode: () => getNodeById(db, nodeId),
     getOffset: () => offset,
     getPathCopy: () => [...path],
-  }
-}
-
-//  https://docs.rs/tree-sitter-traversal/latest/src/tree_sitter_traversal/lib.rs.html#376-381
-function* generatorFromCursor(cursor, order = 'pre') {
-  while (true) {
-    if (order === 'pre') yield cursor.currentNode()
-    if (cursor.gotoFirstChild()) continue
-    const node = cursor.currentNode()
-    if (cursor.gotoNextSibling()) {
-      if (order === 'post') yield node
-      continue
-    }
-    while (true) {
-      if (order === 'post') yield cursor.currentNode()
-      if (!cursor.gotoParent()) return
-      const node = cursor.currentNode()
-      if (cursor.gotoNextSibling()) {
-        if (order === 'post') yield node
-        break
-      }
-    }
+    getState: () => ({ offset, nodeId, path: [...path] }),
   }
 }
 
@@ -218,36 +182,75 @@ function* preorderGeneratorFromCursor(cursor) {
   }
 }
 
+const searchRanges2 = (tree) => {
+  const rangeWorkList = [...tree.changes]
+  const db = tree.db
+  const cursor = newTreeCursor(tree)
+  const searchRange = ({ rangeOffset, rangeLength }) => {
+    while (true) {
+      const offset = cursor.getOffset()
+      const nodeEnd = offset + getByteLengthById(db, cursor.currentNodeId())
+      const rangeIsContainedInNode = offset <= rangeOffset && rangeOffset + rangeLength <= nodeEnd
+      if (rangeIsContainedInNode) {
+        const path = cursor.getPathCopy()
+        if (cursor.gotoFirstChild()) continue
+        console.log('terminal containing range', path)
+        return
+      }
+      if (cursor.gotoNextSibling()) continue
+      while (true) {
+        if (!cursor.gotoParent()) {
+          console.log('range not found', { rangeOffset, rangeLength })
+          return
+        }
+        const offset = cursor.getOffset()
+        const rangeIsContainedInNode =
+          offset <= rangeOffset && rangeOffset + rangeLength <= offset + getByteLengthById(db, cursor.currentNodeId())
+        // console.log({ offset, nodeEnd, isContainedUp: rangeIsContainedInNode })
+        if (rangeIsContainedInNode) {
+          console.log('non-terminal containing range')
+          return
+        }
+        if (cursor.gotoNextSibling()) break
+      }
+    }
+  }
+  for (const range of rangeWorkList.reverse()) {
+    searchRange(range)
+  }
+}
+
 const textDecoder = new TextDecoder()
-export const treeToString = ({ db, rootId }, bytes) => {
-  const cursor = newTreeCursor(db, rootId)
+export const treeToString = (tree, bytes) => {
+  const cursor = newTreeCursor(tree)
   let result = ''
   for (const { byteLength, type } of preorderGeneratorFromCursor(cursor)) {
-    if (type === 'root' || type === 'list') continue
+    if (type === nodeTypeRoot || type === nodeTypeList) continue
     const offset = cursor.getOffset()
     result += textDecoder.decode(bytes.slice(offset, offset + byteLength))
   }
   return result
 }
 
-export const getErrors = ({ db, rootId }) => {
-  const cursor = newTreeCursor(db, rootId)
+export const getErrors = (tree) => {
+  const cursor = newTreeCursor(tree)
+  const { db } = tree
   const errors = []
   for (const node of preorderGeneratorFromCursor(cursor)) {
     switch (node.type) {
-      case 'illegal-chars':
+      case nodeTypeIllegalChars:
         errors.push({ message: 'illegal-characters', node })
         break
-      case ']':
+      case nodeTypeEndBracket:
         const parentId = cursor.getParentId()
         if (parentId === null) throw new Error('expected parent')
-        if (getNodeById(db, parentId).type !== 'list') errors.push({ message: 'extra-closing', node })
+        if (getNodeTypeById(db, parentId) !== nodeTypeList) errors.push({ message: 'extra-closing', node })
         break
-      case 'list':
+      case nodeTypeList:
         const currentNodeId = cursor.currentNodeId()
         const childrenIds = getChildrenIds(db, currentNodeId)
         if (childrenIds.length === 0) throw new Error('list has no children')
-        if (getNodeById(db, childrenIds.at(-1)).type !== ']') errors.push({ message: 'unclosed-list', node })
+        if (getNodeTypeById(db, childrenIds.at(-1)) !== nodeTypeEndBracket) errors.push({ message: 'unclosed-list', node })
         break
     }
   }
@@ -256,23 +259,23 @@ export const getErrors = ({ db, rootId }) => {
 
 import { wordWithMeta, listWithMeta } from './core.js'
 
-export function preorderTreesGeneratorFromCursor(db, root, bytes) {
-  const cursor = newTreeCursor(db, root)
+export function preorderTreesGeneratorFromCursor(tree, bytes) {
+  const cursor = newTreeCursor(tree)
+  const db = tree.db
   const go = (outList) => {
-    const node = cursor.currentNode()
-    const { type, id } = node
+    const id = cursor.currentNodeId()
+    const type = getNodeTypeById(db, id)
     const offset = cursor.getOffset()
     const metaData = { 'node-id': String(id), startIndex: offset }
     switch (type) {
-      case 'word': {
-        const { byteLength } = node
-        const endIndex = offset + byteLength
+      case nodeTypeWord: {
+        const endIndex = offset + getByteLengthById(db, id)
         metaData.endIndex = endIndex
         const text = textDecoder.decode(bytes.slice(offset, endIndex))
         outList.push(wordWithMeta(text, metaData))
         return
       }
-      case 'list': {
+      case nodeTypeList: {
         const l = []
         if (cursor.gotoFirstChild()) {
           while (true) {
