@@ -328,18 +328,15 @@ const patchTreeSearch = (oldTree) => {
         return [start[0], ...merge2ChildrenOfSameType(start[1], createTerminal(type, distEnd))]
       })()
       const go = (node, path) => {
-        const { type, byteLength, children } = node
+        const { type, children } = node
         if (children === undefined) throw new Error('expected children')
         const { childIndex } = path.shift()
-        const before = children.slice(0, childIndex)
-        const after = children.slice(childIndex + 1)
-        if (path.length === 0) {
-          const updatedChildren = mergeNChildrenOfSameType(...before, ...diff, ...after)
-          const newLength = updatedChildren.reduce((acc, { byteLength }) => acc + byteLength, 0)
-          return createNonTerminal(type, newLength, updatedChildren)
-        }
-        const newNode = go(children[childIndex], path)
-        const updatedChildren = mergeNChildrenOfSameType(...before, newNode, ...after)
+        const newNodes = path.length === 0 ? diff : [go(children[childIndex], path)]
+        const updatedChildren = mergeNChildrenOfSameType(
+          ...children.slice(0, childIndex),
+          ...newNodes,
+          ...children.slice(childIndex + 1),
+        )
         const newLength = updatedChildren.reduce((acc, { byteLength }) => acc + byteLength, 0)
         return createNonTerminal(type, newLength, updatedChildren)
       }
