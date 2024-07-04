@@ -277,7 +277,7 @@ const patchTreeSearch = (oldTree) => {
       }
       if (cursor.gotoNextSibling()) continue
       while (true) {
-        if (!cursor.gotoParent()) return 'non-terminal'
+        if (!cursor.gotoParent()) return 'root'
         // contained in a non-terminal node
         if (!insertNonTerminalNodeType(cursor.currentNode().type)) throw new Error('expected non-terminal')
         if (isContained()) return 'non-terminal'
@@ -285,13 +285,11 @@ const patchTreeSearch = (oldTree) => {
       }
     }
   }
-  const data = []
   for (const change of [...changes].reverse()) {
     const termOrNot = searchRange(change)
-    const path = cursor.getPathCopy()
     const offset = cursor.getOffset()
     const node = cursor.currentNode()
-    const { type, children, byteLength } = node
+    const { type, byteLength } = node
     const { rangeOffset, rangeLength, text } = change
     const distStart = rangeOffset - offset
     const rangeEnd = rangeOffset + rangeLength
@@ -300,9 +298,9 @@ const patchTreeSearch = (oldTree) => {
     if (distStart < 0 || distEnd < 0) throw new Error('expected distStart and distEnd to be non-negative')
 
     const replaceNode = internalParseDAG(textEncoder.encode(text), db)
-    // if replace node has unbalanced brackets, we give up
+    // todo if replace node has unbalanced brackets, we should give up
     const replaceChildren = replaceNode.children
-
+    if (termOrNot === 'root') return replaceNode
     if (termOrNot === 'terminal') {
       const diff = (() => {
         // we are replacing the node completely
@@ -334,7 +332,6 @@ const patchTreeSearch = (oldTree) => {
         if (children === undefined) throw new Error('expected children')
         const { childIndex } = path.shift()
         const before = children.slice(0, childIndex)
-        // const replacedChild = children[childIndex]
         const after = children.slice(childIndex + 1)
         if (path.length === 0) {
           const updatedChildren = mergeNChildrenOfSameType(...before, ...diff, ...after)
@@ -346,7 +343,6 @@ const patchTreeSearch = (oldTree) => {
         const newLength = updatedChildren.reduce((acc, { byteLength }) => acc + byteLength, 0)
         return createNonTerminal(type, newLength, updatedChildren)
       }
-      console.log({ change, termOrNot, offset, path: path.map(({ childIndex }) => childIndex), text, diff })
       return go(root, cursor.getPathCopy())
     }
     if (termOrNot !== 'non-terminal') throw new Error('expected non-terminal')
