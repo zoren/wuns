@@ -10,12 +10,39 @@ const nodeTypeWord = 'word'
 const nodeTypeWhitespace = 'whitespace'
 const nodeTypeIllegalChars = 'illegal-chars'
 
-const makeDB = () => {
-  const terminalCache = new Map()
-  return { terminalCache }
+const isVariableLengthTerminalNodeType = (type) =>
+  type === nodeTypeWord || type === nodeTypeIllegalChars || type === nodeTypeWhitespace
+
+const isTerminalNodeType = (type) =>
+  isVariableLengthTerminalNodeType(type) || type === nodeTypeStartBracket || type === nodeTypeEndBracket
+
+const insertNonTerminalNodeType = (type) => type === nodeTypeList || type === nodeTypeRoot
+
+const validateNode = (node) => {
+  const { type, byteLength, children } = node
+  if (byteLength === undefined || byteLength < 0) throw new Error('expected positive byte length')
+  if (type !== nodeTypeRoot && byteLength === 0) throw new Error('expected non-root node to have non-zero byte')
+  if ((type === nodeTypeStartBracket || type === nodeTypeEndBracket) && byteLength !== 1)
+    throw new Error('expected start bracket to have byte length 1')
+  if (!children) return
+  if (type !== nodeTypeList && type !== nodeTypeRoot) throw new Error('expected non-terminal node to have children')
+  if (type !== nodeTypeRoot && children.length === 0) throw new Error('expected non-terminal node to have children')
+
+  let prevSiblingType = null
+  let totalByteLength = 0
+  for (const child of children) {
+    const { type, byteLength } = child
+    if (isVariableLengthTerminalNodeType(type) && prevSiblingType === type)
+      throw new Error('var length terminals of same type cannot be adjacent')
+    prevSiblingType = type
+    validateNode(child)
+    totalByteLength += byteLength
+  }
+  if (totalByteLength !== byteLength) throw new Error('expected sum of child byte lengths to equal byte length')
 }
 
-const internalParseDAG = (inputBytes, { terminalCache }) => {
+const makeDB = () => {
+  const terminalCache = new Map()
   const createTerminal = (type, byteLength) => {
     let cached = terminalCache.get(type)
     if (cached === undefined) {
@@ -29,12 +56,18 @@ const internalParseDAG = (inputBytes, { terminalCache }) => {
     }
     return cachedNode
   }
-  const createNonTerminal = (type, byteLength, children) => {
-    if (children.reduce((acc, { byteLength }) => acc + byteLength, 0) !== byteLength)
-      throw new Error('expected sum of child byte lengths to equal byte length')
-    return Object.freeze({ type, byteLength, children: Object.freeze(children) })
-  }
+  return Object.freeze({ createTerminal })
+}
+
+const createNonTerminal = (type, byteLength, children) => {
+  if (children.reduce((acc, { byteLength }) => acc + byteLength, 0) !== byteLength)
+    throw new Error('expected sum of child byte lengths to equal byte length')
+  return Object.freeze({ type, byteLength, children: Object.freeze(children) })
+}
+
+const internalParseDAG = (inputBytes, { createTerminal }) => {
   let i = 0
+  const errors = []
   const go = () => {
     if (i >= inputBytes.length) return null
     const c = inputBytes[i]
@@ -45,7 +78,10 @@ const internalParseDAG = (inputBytes, { terminalCache }) => {
         i++
         while (true) {
           const elementNode = go()
-          if (elementNode === null) break
+          if (elementNode === null) {
+            errors.push({ message: 'unclosed-list', start })
+            break
+          }
           children.push(elementNode)
           if (elementNode.type === nodeTypeEndBracket) break
         }
@@ -75,7 +111,9 @@ const internalParseDAG = (inputBytes, { terminalCache }) => {
     topLevelNodes.push(node)
   }
   if (i !== inputBytes.length) throw new Error('expected to be at end of input')
-  return createNonTerminal(nodeTypeRoot, inputBytes.length, topLevelNodes)
+  const root = createNonTerminal(nodeTypeRoot, inputBytes.length, topLevelNodes)
+  validateNode(root)
+  return root
 }
 
 const newTreeCursor = (rootNode) => {
@@ -171,8 +209,8 @@ function* preorderGeneratorFromCursor(cursor) {
   }
 }
 
-const getErrors = (tree) => {
-  const cursor = newTreeCursor(tree)
+const getErrors = (root) => {
+  const cursor = newTreeCursor(root)
   const errors = []
   for (const node of preorderGeneratorFromCursor(cursor)) {
     switch (node.type) {
@@ -195,69 +233,151 @@ const getErrors = (tree) => {
   return errors
 }
 
-const searchRanges2 = (tree) => {
-  const { root } = tree
+const patchTreeSearch = (oldTree) => {
+  const { root, changes, db } = oldTree
+  const { createTerminal } = db
   const cursor = newTreeCursor(root)
+  const merge2ChildrenOfSameType = (child1, child2) => {
+    const { type } = child1
+    if (isVariableLengthTerminalNodeType(type) && type === child2.type)
+      return [createTerminal(type, child1.byteLength + child2.byteLength)]
+    return [child1, child2]
+  }
+
+  const mergeNChildrenOfSameType = (...children) => {
+    if (children.length <= 1) return children
+    const newChildren = [{ ...children[0] }]
+    for (let i = 1; i < children.length; i++) {
+      const prev = newChildren.at(-1)
+      const next = children[i]
+      if (prev.type === next.type)
+        newChildren[newChildren.length - 1] = createTerminal(prev.type, prev.byteLength + next.byteLength)
+      else newChildren.push(next)
+    }
+    return newChildren
+  }
+
   const searchRange = (range) => {
-    const { rangeOffset, rangeLength, text } = range
+    const { rangeOffset, rangeLength } = range
+    if (rangeOffset < cursor.getOffset()) throw new Error('expected range to be in order')
     const isContained = () => {
       const offset = cursor.getOffset()
       return offset <= rangeOffset && rangeOffset + rangeLength <= offset + cursor.currentNode().byteLength
     }
-    const parsedNode = internalParseDAG(textEncoder.encode(text), tree.db)
-    const parsedCursor = newTreeCursor(parsedNode)
-    let firstTerminal = null
-    for (const node of preorderGeneratorFromCursor(parsedCursor)) {
-      if (node.type === nodeTypeRoot || node.type === nodeTypeList) continue
-      firstTerminal = node
-      break
-    }
-    if (firstTerminal !== null) console.log({ text, firstTerminal })
     while (true) {
       if (isContained()) {
         if (cursor.gotoFirstChild()) continue
+        const node = cursor.currentNode()
         // contained in a terminal node
-        return
+        if (node.type === nodeTypeList) {
+          console.log({ node, range })
+          throw new Error('expected terminal')
+        }
+        if (node.type !== nodeTypeRoot) return 'terminal'
       }
       if (cursor.gotoNextSibling()) continue
       while (true) {
-        if (!cursor.gotoParent()) throw new Error('expected parent')
+        if (!cursor.gotoParent()) return 'non-terminal'
         // contained in a non-terminal node
-        if (isContained()) return
+        if (!insertNonTerminalNodeType(cursor.currentNode().type)) throw new Error('expected non-terminal')
+        if (isContained()) return 'non-terminal'
         if (cursor.gotoNextSibling()) break
       }
     }
   }
-  const changesRev = [...tree.changes]
-  const results = []
-  for (const change of changesRev.reverse()) {
-    searchRange(change)
-    const { rangeOffset, rangeLength } = change
-    const rangeEnd = rangeOffset + rangeLength
+  const data = []
+  for (const change of [...changes].reverse()) {
+    const termOrNot = searchRange(change)
+    const path = cursor.getPathCopy()
+    const offset = cursor.getOffset()
     const node = cursor.currentNode()
-    const nodeOffset = cursor.getOffset()
-    const nodeEnd = nodeOffset + node.byteLength
+    const { type, children, byteLength } = node
+    const { rangeOffset, rangeLength, text } = change
+    const distStart = rangeOffset - offset
+    const rangeEnd = rangeOffset + rangeLength
+    const nodeEnd = offset + byteLength
+    const distEnd = nodeEnd - rangeEnd
+    if (distStart < 0 || distEnd < 0) throw new Error('expected distStart and distEnd to be non-negative')
 
-    const data = {
-      change,
-      path: cursor.getPathCopy(),
-      nodeOffset,
-      node,
-      distStart: rangeOffset - nodeOffset,
-      distEnd: nodeEnd - rangeEnd,
+    const replaceNode = internalParseDAG(textEncoder.encode(text), db)
+    // if replace node has unbalanced brackets, we give up
+    const replaceChildren = replaceNode.children
+
+    if (termOrNot === 'terminal') {
+      const diff = (() => {
+        // we are replacing the node completely
+        // what if it's a bracket?
+        // if it's a start bracket we need to merge the list elements into the parent
+        // if it's an end bracket we just replace it
+        if (distStart === 0 && distEnd === 0) return replaceChildren
+
+        // we are replacing the start of the node
+        if (distStart === 0)
+          return [
+            ...replaceChildren.slice(0, -1),
+            ...merge2ChildrenOfSameType(replaceChildren.at(-1), createTerminal(type, distEnd)),
+          ]
+        // we are replacing the end of the node
+        if (distEnd === 0)
+          return [
+            ...merge2ChildrenOfSameType(createTerminal(type, distStart), replaceChildren[0]),
+            ...replaceChildren.slice(1),
+          ]
+
+        // we are replacing the middle of the node
+        const start = merge2ChildrenOfSameType(createTerminal(type, distStart), replaceChildren[0])
+        if (start.length === 1) return merge2ChildrenOfSameType(start[0], createTerminal(type, distEnd))
+        return [start[0], ...merge2ChildrenOfSameType(start[1], createTerminal(type, distEnd))]
+      })()
+      const go = (node, path) => {
+        const { type, byteLength, children } = node
+        if (children === undefined) throw new Error('expected children')
+        const { childIndex } = path.shift()
+        const before = children.slice(0, childIndex)
+        // const replacedChild = children[childIndex]
+        const after = children.slice(childIndex + 1)
+        if (path.length === 0) {
+          const updatedChildren = mergeNChildrenOfSameType(...before, ...diff, ...after)
+          const newLength = updatedChildren.reduce((acc, { byteLength }) => acc + byteLength, 0)
+          return createNonTerminal(type, newLength, updatedChildren)
+        }
+        const newNode = go(children[childIndex], path)
+        const updatedChildren = mergeNChildrenOfSameType(...before, newNode, ...after)
+        const newLength = updatedChildren.reduce((acc, { byteLength }) => acc + byteLength, 0)
+        return createNonTerminal(type, newLength, updatedChildren)
+      }
+      console.log({ change, termOrNot, offset, path: path.map(({ childIndex }) => childIndex), text, diff })
+      return go(root, cursor.getPathCopy())
     }
-    results.push(data)
+    if (termOrNot !== 'non-terminal') throw new Error('expected non-terminal')
   }
-  return results
+  return null
 }
+
 const textEncoder = new TextEncoder()
+
+const assertTreeEq = (a, b) => {
+  if (a === b) return
+  if (a.type !== b.type) throw new Error('expected types to be equal')
+  if (a.byteLength !== b.byteLength) throw new Error('expected byteLength to be equal')
+  if (a.children === undefined && b.children === undefined) return
+  if (a.children === undefined || b.children === undefined) throw new Error('expected children to be equal')
+  if (a.children.length !== b.children.length) throw new Error('expected children length to be equal')
+  for (let i = 0; i < a.children.length; i++) assertTreeEq(a.children[i], b.children[i])
+}
 
 const parse = (inputText, oldTree, oldText) => {
   const inputBytes = textEncoder.encode(inputText)
   let db
   if (oldTree) {
-    const searchResult = searchRanges2(oldTree)
-    console.dir({ oldText, inputText, searchResult }, { depth: null })
+    const patchedTree = patchTreeSearch(oldTree)
+    console.dir({ prev: oldText, next: inputText, patchedTree }, { depth: null })
+    if (patchedTree) {
+      const reparsed = parse(inputText)
+      assertTreeEq(reparsed.root, patchedTree)
+      return { root: patchedTree, db, changes: [] }
+    }
+    console.log('no patch')
     db = oldTree.db
   } else {
     db = makeDB()
@@ -279,8 +399,8 @@ const textDecoder = new TextDecoder()
 const treeToString = (root, bytes) => {
   const cursor = newTreeCursor(root)
   let result = ''
-  for (const { byteLength, type } of preorderGeneratorFromCursor(cursor)) {
-    if (type === nodeTypeRoot || type === nodeTypeList) continue
+  for (const { byteLength, children } of preorderGeneratorFromCursor(cursor)) {
+    if (children) continue
     const offset = cursor.getOffset()
     result += textDecoder.decode(bytes.slice(offset, offset + byteLength))
   }
