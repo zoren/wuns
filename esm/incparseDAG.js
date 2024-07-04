@@ -10,8 +10,12 @@ const nodeTypeWord = 'word'
 const nodeTypeWhitespace = 'whitespace'
 const nodeTypeIllegalChars = 'illegal-chars'
 
-const internalParseDAG = (inputBytes) => {
+const makeDB = () => {
   const terminalCache = new Map()
+  return { terminalCache }
+}
+
+const internalParseDAG = (inputBytes, { terminalCache }) => {
   const createTerminal = (type, byteLength) => {
     let cached = terminalCache.get(type)
     if (cached === undefined) {
@@ -25,8 +29,11 @@ const internalParseDAG = (inputBytes) => {
     }
     return cachedNode
   }
-  const createNonTerminal = (type, byteLength, children) =>
-    Object.freeze({ type, byteLength, children: Object.freeze(children) })
+  const createNonTerminal = (type, byteLength, children) => {
+    if (children.reduce((acc, { byteLength }) => acc + byteLength, 0) !== byteLength)
+      throw new Error('expected sum of child byte lengths to equal byte length')
+    return Object.freeze({ type, byteLength, children: Object.freeze(children) })
+  }
   let i = 0
   const go = () => {
     if (i >= inputBytes.length) return null
@@ -80,11 +87,19 @@ const newTreeCursor = (rootNode) => {
     const { parentNode, childIndex } = path.at(-1)
     return parentNode.children[childIndex]
   }
+  const getPathCopy = () => path.map(({ parentNode, childIndex }) => ({ parentNode, childIndex }))
   return {
     gotoFirstChild: () => {
       const node = currentNode()
       if (node.children === undefined || node.children.length === 0) return false
       path.push({ parentNode: node, childIndex: 0 })
+      return true
+    },
+    gotoLastChild: () => {
+      const node = currentNode()
+      if (node.children === undefined || node.children.length === 0) return false
+      path.push({ parentNode: node, childIndex: node.children.length - 1 })
+      offset += node.byteLength - node.children.at(-1).byteLength
       return true
     },
     gotoNextSibling: () => {
@@ -96,6 +111,17 @@ const newTreeCursor = (rootNode) => {
       const { byteLength } = children[childIndex]
       cur.childIndex++
       offset += byteLength
+      return true
+    },
+    gotoPrevSibling: () => {
+      if (path.length === 0) return false
+      const cur = path.at(-1)
+      const { parentNode, childIndex } = cur
+      if (childIndex === 0) return false
+      const { children } = parentNode
+      const { byteLength } = children[childIndex - 1]
+      cur.childIndex--
+      offset -= byteLength
       return true
     },
     gotoParent: () => {
@@ -112,19 +138,36 @@ const newTreeCursor = (rootNode) => {
     },
     currentNode,
     getOffset: () => offset,
-    getPathCopy: () => [...path],
+    getPathCopy,
+  }
+}
+
+const gotoNext = (cursor) => {
+  while (true) {
+    if (cursor.gotoFirstChild()) return true
+    if (cursor.gotoNextSibling()) return true
+    while (true) {
+      if (!cursor.gotoParent()) return false
+      if (cursor.gotoNextSibling()) return true
+    }
+  }
+}
+
+const gotoPrev = (cursor) => {
+  while (true) {
+    if (cursor.gotoLastChild()) return true
+    if (cursor.gotoPrevSibling()) return true
+    while (true) {
+      if (!cursor.gotoParent()) return false
+      if (cursor.gotoPrevSibling()) return true
+    }
   }
 }
 
 function* preorderGeneratorFromCursor(cursor) {
   while (true) {
     yield cursor.currentNode()
-    if (cursor.gotoFirstChild()) continue
-    if (cursor.gotoNextSibling()) continue
-    while (true) {
-      if (!cursor.gotoParent()) return
-      if (cursor.gotoNextSibling()) break
-    }
+    if (!gotoNext(cursor)) return
   }
 }
 
@@ -153,37 +196,235 @@ const getErrors = (tree) => {
 }
 
 const searchRanges2 = (tree) => {
-  const cursor = newTreeCursor(tree)
-  const searchRange = ({ rangeOffset, rangeLength }) => {
-    while (true) {
+  const { root } = tree
+  const cursor = newTreeCursor(root)
+  const searchRange = (range) => {
+    const { rangeOffset, rangeLength, text } = range
+    const isContained = () => {
       const offset = cursor.getOffset()
-      const nodeEnd = offset + cursor.currentNode().byteLength
-      const rangeIsContainedInNode = offset <= rangeOffset && rangeOffset + rangeLength <= nodeEnd
-      if (rangeIsContainedInNode) {
-        const path = cursor.getPathCopy()
+      return offset <= rangeOffset && rangeOffset + rangeLength <= offset + cursor.currentNode().byteLength
+    }
+    const parsedNode = internalParseDAG(textEncoder.encode(text), tree.db)
+    const parsedCursor = newTreeCursor(parsedNode)
+    let firstTerminal = null
+    for (const node of preorderGeneratorFromCursor(parsedCursor)) {
+      if (node.type === nodeTypeRoot || node.type === nodeTypeList) continue
+      firstTerminal = node
+      break
+    }
+    if (firstTerminal !== null) console.log({ text, firstTerminal })
+    while (true) {
+      if (isContained()) {
         if (cursor.gotoFirstChild()) continue
-        console.log('terminal containing range', path)
+        // contained in a terminal node
         return
       }
       if (cursor.gotoNextSibling()) continue
       while (true) {
-        if (!cursor.gotoParent()) {
-          console.log('range not found', { rangeOffset, rangeLength })
-          return
-        }
-        const offset = cursor.getOffset()
-        const rangeIsContainedInNode =
-          offset <= rangeOffset && rangeOffset + rangeLength <= offset + cursor.currentNode().byteLength
-        if (rangeIsContainedInNode) {
-          console.log('non-terminal containing range')
-          return
-        }
+        if (!cursor.gotoParent()) throw new Error('expected parent')
+        // contained in a non-terminal node
+        if (isContained()) return
         if (cursor.gotoNextSibling()) break
       }
     }
   }
-  const rangeWorkList = [...tree.changes]
-  for (const range of rangeWorkList.reverse()) {
-    searchRange(range)
+  const changesRev = [...tree.changes]
+  const results = []
+  for (const change of changesRev.reverse()) {
+    searchRange(change)
+    const { rangeOffset, rangeLength } = change
+    const rangeEnd = rangeOffset + rangeLength
+    const node = cursor.currentNode()
+    const nodeOffset = cursor.getOffset()
+    const nodeEnd = nodeOffset + node.byteLength
+
+    const data = {
+      change,
+      path: cursor.getPathCopy(),
+      nodeOffset,
+      node,
+      distStart: rangeOffset - nodeOffset,
+      distEnd: nodeEnd - rangeEnd,
+    }
+    results.push(data)
+  }
+  return results
+}
+const textEncoder = new TextEncoder()
+
+const parse = (inputText, oldTree, oldText) => {
+  const inputBytes = textEncoder.encode(inputText)
+  let db
+  if (oldTree) {
+    const searchResult = searchRanges2(oldTree)
+    console.dir({ oldText, inputText, searchResult }, { depth: null })
+    db = oldTree.db
+  } else {
+    db = makeDB()
+  }
+  const root = internalParseDAG(inputBytes, db)
+  return { root, db, changes: [] }
+}
+
+const okTests = ['', 'abc 123', '[]', '[ ]', '[quote 34]', `[if [eq 4 x] [] x]`, 'we-allow-dashes']
+const errorTests = [
+  [['illegal-characters'], '234 ILLEGAL but then legal'],
+  [['extra-closing'], '[]]'],
+  [['unclosed-list'], '[quote 34'],
+]
+
+const tests = okTests.map((test) => [[], test]).concat(errorTests)
+const textDecoder = new TextDecoder()
+
+const treeToString = (root, bytes) => {
+  const cursor = newTreeCursor(root)
+  let result = ''
+  for (const { byteLength, type } of preorderGeneratorFromCursor(cursor)) {
+    if (type === nodeTypeRoot || type === nodeTypeList) continue
+    const offset = cursor.getOffset()
+    result += textDecoder.decode(bytes.slice(offset, offset + byteLength))
+  }
+  return result
+}
+
+for (const [expectedErrors, test] of tests) {
+  const bytes = textEncoder.encode(test)
+  const root = internalParseDAG(bytes, makeDB())
+  const errors = getErrors(root)
+  if (expectedErrors.length !== errors.length) {
+    console.log(`expected errors: ${expectedErrors.length} actual errors: ${errors.length}`)
+    console.log(`expected: ${JSON.stringify(expectedErrors)} actual: ${JSON.stringify(errors)}`)
+    continue
+  }
+  for (let i = 0; i < expectedErrors.length; i++) {
+    if (expectedErrors[i] !== errors[i].message) {
+      console.log(`expected error: ${expectedErrors[i]} actual error: ${errors[i].message}`)
+      console.log(`expected: ${JSON.stringify(expectedErrors)} actual: ${JSON.stringify(errors)}`)
+      break
+    }
+  }
+  console.log()
+  console.log(`'${test}'`)
+
+  console.log(`'${treeToString(root, bytes)}'`)
+
+  // const cursor = newTreeCursor(tree)
+  // for (const node of preorderGeneratorFromCursor(cursor)) {
+  //   console.log(node)
+  // }
+}
+
+const deltas = [
+  {
+    oldText: '',
+    changes: [{ rangeOffset: 0, rangeLength: 0, text: 'a' }],
+    newText: 'a',
+  },
+  {
+    oldText: 'a',
+    changes: [{ rangeOffset: 1, rangeLength: 0, text: 'b' }],
+    newText: 'ab',
+  },
+  {
+    oldText: 'ab',
+    changes: [{ rangeOffset: 0, rangeLength: 0, text: 'c' }],
+    newText: 'cab',
+  },
+  {
+    oldText: 'asdf',
+    changes: [{ rangeOffset: 0, rangeLength: 4, text: '' }],
+    newText: '',
+  },
+  {
+    oldText: 'asdf',
+    changes: [{ rangeOffset: 2, rangeLength: 0, text: ' ' }],
+    newText: 'as df',
+  },
+  {
+    oldText: 'asdf',
+    changes: [{ rangeOffset: 2, rangeLength: 0, text: 'x' }],
+    newText: 'asxdf',
+  },
+  {
+    oldText: 'as df',
+    changes: [{ rangeOffset: 2, rangeLength: 1, text: 'x' }],
+    newText: 'asxdf',
+  },
+  // {
+  //   oldText: '[if [eq 0 x] [list 1 2 3]]',
+  //   changes: [{ rangeOffset: 4, rangeLength: 8, text: 'd' }],
+  //   newText: '[if d [list 1 2 3]]',
+  // },
+  // {
+  //   oldText: '[if [eq 0 [add 1 x]] [list 1 2 3]]',
+  //   changes: [{ rangeOffset: 11, rangeLength: 5, text: 'inc' }],
+  //   newText: '[if [eq 0 [inc x]] [list 1 2 3]]',
+  // },
+  // {
+  //   oldText: '[if [eq 0 [add 1 x]] [list 1 2 3]]',
+  //   changes: [{ rangeOffset: 11, rangeLength: 0, text: 'i' }],
+  //   newText: '[if [eq 0 [iadd 1 x]] [list 1 2 3]]',
+  // },
+  // {
+  //   oldText: '[if [eq 0 [iadd 1 x]] [list 1 2 3]]',
+  //   changes: [{ rangeOffset: 12, rangeLength: 2, text: 'f' }],
+  //   newText: '[if [eq 0 [ifd 1 x]] [list 1 2 3]]',
+  // },
+  // {
+  //   oldText: '[if 3 []]\n[if 3 [list 1 2 3]]',
+  //   newText: '[if [3] []]\n[if [3] [list 1 2 3]]',
+  //   changes: [
+  //     { rangeOffset: 15, rangeLength: 0, text: ']' },
+  //     { rangeOffset: 14, rangeLength: 0, text: '[' },
+  //     { rangeOffset: 5, rangeLength: 0, text: ']' },
+  //     { rangeOffset: 4, rangeLength: 0, text: '[' },
+  //   ],
+  // },
+  // {
+  //   oldText: 'xy23\nxy23',
+  //   newText: 'xyz123\nxyz123',
+  //   changes: [
+  //     { rangeLength: 0, rangeOffset: 7, text: 'z1' },
+  //     { rangeLength: 0, rangeOffset: 2, text: 'z1' },
+  //   ],
+  // },
+]
+
+const assertDesc = (changes) => {
+  // check changes descending by offset
+  let offset = null
+  for (const { rangeOffset } of changes) {
+    if (offset !== null && rangeOffset > offset) throw new Error('expected changes to be sorted by offset')
+    offset = rangeOffset
+  }
+}
+
+const applyChanges = ({ oldText, changes }) => {
+  let newTextFromChanges = oldText
+  for (const { rangeOffset, rangeLength, text } of changes)
+    newTextFromChanges =
+      newTextFromChanges.slice(0, rangeOffset) + text + newTextFromChanges.slice(rangeOffset + rangeLength)
+  return newTextFromChanges
+}
+
+for (const delta of deltas) {
+  const { oldText, changes, newText } = delta
+  assertDesc(changes)
+  if (applyChanges(delta) !== newText) {
+    console.log({ oldText, changes, newText, newTextFromChanges: applyChanges(delta) })
+    throw new Error('expected newTextFromChanges to equal newText')
+  }
+  const tree = parse(oldText)
+  const errors = getErrors(tree.root)
+  if (errors.length) {
+    console.log(errors)
+    throw new Error('expected no errors')
+  }
+  tree.changes.push(...changes)
+  const newTree = parse(newText, tree, oldText)
+  const newErrors = getErrors(newTree.root)
+  if (newErrors.length) {
+    console.log(newErrors)
+    throw new Error('expected no errors')
   }
 }
