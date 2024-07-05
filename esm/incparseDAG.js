@@ -68,6 +68,12 @@ const validateNode = (node) => {
   if (totalByteLength !== byteLength) throw new Error('expected sum of child byte lengths to equal byte length')
 }
 
+const logNode = ({ type, byteLength, children }, depth = 0) => {
+  const indent = '  '.repeat(depth)
+  console.log(indent + type + ' ' + byteLength)
+  if (children) for (const child of children) logNode(child, depth + 1)
+}
+
 const makeDB = () => {
   const terminalCache = new Map()
   const createTerminal = (type, byteLength) => {
@@ -89,9 +95,11 @@ const makeDB = () => {
   return Object.freeze({ createTerminal })
 }
 
+const sumByteLengths = (children) => children.reduce((acc, { byteLength }) => acc + byteLength, 0)
+
 const createNonTerminal = (type, byteLength, children) => {
   if (type !== nodeTypeRoot && children.length === 0) throw new Error('expected non-terminal node to have children')
-  if (children.reduce((acc, { byteLength }) => acc + byteLength, 0) !== byteLength)
+  if (sumByteLengths(children) !== byteLength)
     throw new Error('expected sum of child byte lengths to equal byte length')
   return Object.freeze({ type, byteLength, children: Object.freeze(children) })
 }
@@ -139,6 +147,47 @@ const internalParseDAG = (inputBytes, { createTerminal }) => {
   return root
 }
 
+// parse with an explicit stack for
+const internalParseDAGEStack = (inputBytes, { createTerminal }) => {
+  const topLevelNodes = []
+  const root = { type: nodeTypeRoot, byteLength: 0, children: topLevelNodes }
+  const stack = [root]
+  const pushTop = (node) => {
+    const { byteLength } = node
+    for (const s of stack) s.byteLength += byteLength
+    stack.at(-1).children.push(node)
+  }
+  let i = 0
+  for (; i < inputBytes.length; i++) {
+    const ctokenType = codeToTerminalType(inputBytes[i])
+    switch (ctokenType) {
+      case nodeTypeStartBracket: {
+        const node = { type: nodeTypeList, byteLength: 0, children: [] }
+        pushTop(node)
+        stack.push(node)
+        pushTop(createTerminal(nodeTypeStartBracket, 1))
+        continue
+      }
+      case nodeTypeEndBracket: {
+        pushTop(createTerminal(nodeTypeEndBracket, 1))
+        if (stack.length !== 1) stack.pop()
+        continue
+      }
+    }
+    const pred = terminalTypeToPredicate(ctokenType)
+    const start = i
+    while (i < inputBytes.length) {
+      if (pred(inputBytes[i + 1])) {
+        i++
+      } else break
+    }
+    const node = createTerminal(ctokenType, i - start + 1)
+    pushTop(node)
+  }
+  if (i !== inputBytes.length) throw new Error('expected to be at end of input: ' + i + ' ' + inputBytes.length)
+  validateNode(root)
+  return root
+}
 const newTreeCursor = (rootNode) => {
   const initialNode = rootNode
   let offset = 0
