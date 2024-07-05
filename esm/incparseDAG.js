@@ -1,6 +1,7 @@
 const isWhitespace = (c) => c === 32 || c === 9 || c === 10
 const otherWordChars = new Set([...'.=/-'].map((c) => c.charCodeAt(0)))
 const isWordChar = (c) => (97 <= c && c <= 122) || (48 <= c && c <= 57) || otherWordChars.has(c)
+const isIllegal = (c) => !isWordChar(c) && !isWhitespace(c) && c !== 91 && c !== 93
 
 const nodeTypeList = 'list'
 const nodeTypeRoot = 'root'
@@ -9,6 +10,32 @@ const nodeTypeEndBracket = ']'
 const nodeTypeWord = 'word'
 const nodeTypeWhitespace = 'whitespace'
 const nodeTypeIllegalChars = 'illegal-chars'
+
+const terminalTypeToPredicate = (type) => {
+  switch (type) {
+    case nodeTypeWord:
+      return isWordChar
+    case nodeTypeWhitespace:
+      return isWhitespace
+    case nodeTypeIllegalChars:
+      return isIllegal
+  }
+  throw new Error('unexpected terminal type')
+}
+
+const codeToTerminalType = (c) => {
+  switch (c) {
+    case 91:
+      return nodeTypeStartBracket
+    case 93:
+      return nodeTypeEndBracket
+    default:
+      if (isWordChar(c)) return nodeTypeWord
+      if (isWhitespace(c)) return nodeTypeWhitespace
+      if (isIllegal(c)) return nodeTypeIllegalChars
+      throw new Error('unexpected character')
+  }
+}
 
 const isVariableLengthTerminalNodeType = (type) =>
   type === nodeTypeWord || type === nodeTypeIllegalChars || type === nodeTypeWhitespace
@@ -44,6 +71,9 @@ const validateNode = (node) => {
 const makeDB = () => {
   const terminalCache = new Map()
   const createTerminal = (type, byteLength) => {
+    if (!isTerminalNodeType(type)) throw new Error('expected terminal node type')
+    if (byteLength <= 0) throw new Error('expected positive byte length')
+    if (!isVariableLengthTerminalNodeType(type) && byteLength !== 1) throw new Error('expected byte length to be 1')
     let cached = terminalCache.get(type)
     if (cached === undefined) {
       cached = new Map()
@@ -60,6 +90,7 @@ const makeDB = () => {
 }
 
 const createNonTerminal = (type, byteLength, children) => {
+  if (type !== nodeTypeRoot && children.length === 0) throw new Error('expected non-terminal node to have children')
   if (children.reduce((acc, { byteLength }) => acc + byteLength, 0) !== byteLength)
     throw new Error('expected sum of child byte lengths to equal byte length')
   return Object.freeze({ type, byteLength, children: Object.freeze(children) })
@@ -67,40 +98,32 @@ const createNonTerminal = (type, byteLength, children) => {
 
 const internalParseDAG = (inputBytes, { createTerminal }) => {
   let i = 0
-  const errors = []
   const go = () => {
     if (i >= inputBytes.length) return null
-    const c = inputBytes[i]
-    switch (c) {
-      case 91: {
+    const ctokenType = codeToTerminalType(inputBytes[i])
+    switch (ctokenType) {
+      case nodeTypeStartBracket: {
         const children = [createTerminal(nodeTypeStartBracket, 1)]
         const start = i
         i++
         while (true) {
           const elementNode = go()
-          if (elementNode === null) {
-            errors.push({ message: 'unclosed-list', start })
-            break
-          }
+          if (elementNode === null) break
           children.push(elementNode)
           if (elementNode.type === nodeTypeEndBracket) break
         }
         return createNonTerminal(nodeTypeList, i - start, children)
       }
-      case 93: {
+      case nodeTypeEndBracket: {
         i++
         return createTerminal(nodeTypeEndBracket, 1)
       }
       default: {
-        const scan = (pred, type) => {
-          const start = i
-          i++
-          while (i < inputBytes.length && pred(inputBytes[i])) i++
-          return createTerminal(type, i - start)
-        }
-        if (isWordChar(c)) return scan(isWordChar, nodeTypeWord)
-        if (isWhitespace(c)) return scan(isWhitespace, nodeTypeWhitespace)
-        return scan((c) => !isWordChar(c) && !isWhitespace(c) && c !== 91 && c !== 93, nodeTypeIllegalChars)
+        const pred = terminalTypeToPredicate(ctokenType)
+        const start = i
+        i++
+        while (i < inputBytes.length && pred(inputBytes[i])) i++
+        return createTerminal(ctokenType, i - start)
       }
     }
   }
