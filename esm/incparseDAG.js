@@ -47,6 +47,7 @@ const insertNonTerminalNodeType = (type) => type === nodeTypeList || type === no
 
 const validateNode = (node) => {
   const { type, byteLength, children } = node
+  if (!Object.isFrozen(node)) throw new Error('expected node to be frozen')
   if (byteLength === undefined || byteLength < 0) throw new Error('expected positive byte length')
   if (type !== nodeTypeRoot && byteLength === 0) throw new Error('expected non-root node to have non-zero byte')
   if ((type === nodeTypeStartBracket || type === nodeTypeEndBracket) && byteLength !== 1)
@@ -147,10 +148,14 @@ const internalParseDAG = (inputBytes, { createTerminal }) => {
   return root
 }
 
+const freezeNode = (node) => {
+  if (node.children) Object.freeze(node.children)
+  Object.freeze(node)
+}
+
 // parse with an explicit stack for
 const internalParseDAGEStack = (inputBytes, { createTerminal }) => {
-  const topLevelNodes = []
-  const root = { type: nodeTypeRoot, byteLength: 0, children: topLevelNodes }
+  const root = { type: nodeTypeRoot, byteLength: 0, children: [] }
   const stack = [root]
   const pushTop = (node) => {
     const { byteLength } = node
@@ -170,7 +175,7 @@ const internalParseDAGEStack = (inputBytes, { createTerminal }) => {
       }
       case nodeTypeEndBracket: {
         pushTop(createTerminal(nodeTypeEndBracket, 1))
-        if (stack.length !== 1) stack.pop()
+        if (stack.length !== 1) freezeNode(stack.pop())
         continue
       }
     }
@@ -185,6 +190,7 @@ const internalParseDAGEStack = (inputBytes, { createTerminal }) => {
     pushTop(node)
   }
   if (i !== inputBytes.length) throw new Error('expected to be at end of input: ' + i + ' ' + inputBytes.length)
+  for (const node of stack) freezeNode(node)
   validateNode(root)
   return root
 }
