@@ -105,108 +105,16 @@ const createNonTerminal = (type, byteLength, children) => {
   return Object.freeze({ type, byteLength, children: Object.freeze(children) })
 }
 
-const internalParseDAG = (inputBytes, { createTerminal }) => {
-  let i = 0
-  const go = () => {
-    if (i >= inputBytes.length) return null
-    const ctokenType = codeToTerminalType(inputBytes[i])
-    switch (ctokenType) {
-      case nodeTypeStartBracket: {
-        const children = [createTerminal(nodeTypeStartBracket, 1)]
-        const start = i
-        i++
-        while (true) {
-          const elementNode = go()
-          if (elementNode === null) break
-          children.push(elementNode)
-          if (elementNode.type === nodeTypeEndBracket) break
-        }
-        return createNonTerminal(nodeTypeList, i - start, children)
-      }
-      case nodeTypeEndBracket: {
-        i++
-        return createTerminal(nodeTypeEndBracket, 1)
-      }
-      default: {
-        const pred = terminalTypeToPredicate(ctokenType)
-        const start = i
-        i++
-        while (i < inputBytes.length && pred(inputBytes[i])) i++
-        return createTerminal(ctokenType, i - start)
-      }
-    }
-  }
-  const topLevelNodes = []
-  while (true) {
-    const node = go()
-    if (node === null) break
-    topLevelNodes.push(node)
-  }
-  if (i !== inputBytes.length) throw new Error('expected to be at end of input')
-  const root = createNonTerminal(nodeTypeRoot, inputBytes.length, topLevelNodes)
-  validateNode(root)
-  return root
-}
-
 const freezeNode = (node) => {
   if (node.children) Object.freeze(node.children)
   Object.freeze(node)
 }
 
-// parse with an explicit stack for
-const internalParseDAGEStack = (inputBytes, { createTerminal }) => {
-  const root = { type: nodeTypeRoot, byteLength: 0, children: [] }
-  const stack = [root]
-  const pushTop = (node) => {
-    const { byteLength } = node
-    for (const s of stack) s.byteLength += byteLength
-    stack.at(-1).children.push(node)
-  }
-  let i = 0
-  for (; i < inputBytes.length; i++) {
-    const ctokenType = codeToTerminalType(inputBytes[i])
-    switch (ctokenType) {
-      case nodeTypeStartBracket: {
-        const node = { type: nodeTypeList, byteLength: 0, children: [] }
-        pushTop(node)
-        stack.push(node)
-        pushTop(createTerminal(nodeTypeStartBracket, 1))
-        continue
-      }
-      case nodeTypeEndBracket: {
-        pushTop(createTerminal(nodeTypeEndBracket, 1))
-        if (stack.length !== 1) freezeNode(stack.pop())
-        continue
-      }
-    }
-    const pred = terminalTypeToPredicate(ctokenType)
-    const start = i
-    while (i < inputBytes.length) {
-      if (pred(inputBytes[i + 1])) {
-        i++
-      } else break
-    }
-    const node = createTerminal(ctokenType, i - start + 1)
-    pushTop(node)
-  }
-  if (i !== inputBytes.length) throw new Error('expected to be at end of input: ' + i + ' ' + inputBytes.length)
-  for (const node of stack) freezeNode(node)
-  validateNode(root)
-  return root
-}
-
 const textEncoder = new TextEncoder()
 
 const incrementalParseDAG = (oldTree) => {
-  const { root, changes, db } = oldTree
+  const db = oldTree ? oldTree.db : makeDB()
   const { createTerminal } = db
-  const changeBuffers = changes.map(({ rangeOffset, rangeLength, text }) => ({
-    rangeOffset,
-    rangeLength,
-    changeBytes: textEncoder.encode(text),
-    bufOffset: 0,
-  }))
-  changeBuffers.reverse()
   const rootMutable = { type: nodeTypeRoot, byteLength: 0, children: [] }
   // stack needs mutable nodes
   const stack = [rootMutable]
@@ -255,6 +163,14 @@ const incrementalParseDAG = (oldTree) => {
     }
     if (i !== changeBytes.length) throw new Error('expected to be at end of input: ' + i + ' ' + inputBytes.length)
   }
+  const { root, changes } = oldTree
+  const changeBuffers = changes.map(({ rangeOffset, rangeLength, text }) => ({
+    rangeOffset,
+    rangeLength,
+    changeBytes: textEncoder.encode(text),
+    bufOffset: 0,
+  }))
+  changeBuffers.reverse()
   let offset = 0
 
   for (const change of changeBuffers) {
@@ -478,9 +394,16 @@ const treeToString = (root, bytes) => {
   return result
 }
 
+const parseTextDummy = (text, db) =>
+  incrementalParseDAG({
+    root: createNonTerminal(nodeTypeRoot, 0, []),
+    changes: [{ rangeOffset: 0, rangeLength: 0, text }],
+    db,
+  })
+
 for (const [expectedErrors, test] of tests) {
   const bytes = textEncoder.encode(test)
-  const root = internalParseDAGEStack(bytes, makeDB())
+  const root = parseTextDummy(test, makeDB())
   const errors = getErrors(root)
   if (expectedErrors.length !== errors.length) {
     console.log(`expected errors: ${expectedErrors.length} actual errors: ${errors.length}`)
@@ -501,21 +424,11 @@ for (const [expectedErrors, test] of tests) {
 }
 
 const parse = (inputText, oldTree) => {
-  const inputBytes = textEncoder.encode(inputText)
   let db
-  if (oldTree) {
-    const patchedTree = incrementalParseDAG(oldTree)
-    // console.dir({ prev: oldText, next: inputText, patchedTree }, { depth: null })
-    if (patchedTree) {
-      return { root: patchedTree, db, changes: [] }
-    }
-    console.log('not able to patch')
-    db = oldTree.db
-  } else {
-    db = makeDB()
-  }
-  const root = internalParseDAG(inputBytes, db)
-  return { root, db, changes: [] }
+  if (oldTree)
+    return { root: incrementalParseDAG(oldTree), db, changes: [] }
+  db = makeDB()
+  return { root: parseTextDummy(inputText, db), db, changes: [] }
 }
 
 const deltas = [
