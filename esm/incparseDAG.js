@@ -173,8 +173,7 @@ const incrementalParseDAG = (oldTree) => {
   changeBuffers.reverse()
   let offset = 0
 
-  for (const change of changeBuffers) {
-    const { rangeOffset, rangeLength, changeBytes } = change
+  for (const { rangeOffset, rangeLength, changeBytes } of changeBuffers) {
     const splitBefore = (node) => {
       // if we are searching for something we've already skipped, the invariant is broken
       if (rangeOffset < offset) throw new Error('expected node to be before change')
@@ -219,20 +218,16 @@ const incrementalParseDAG = (oldTree) => {
         offset += byteLength - distEnd
         return
       }
-      let i = 0
-      for (; i < children.length; i++) {
+      for (let i = 0; i < children.length; i++) {
         const child = children[i]
         const childEnd = offset + child.byteLength
         if (childEnd > rangeEnd) {
           splitAfter(child)
           if (child.type === nodeTypeList && stack.length !== 1) freezeNode(stack.pop())
-          break
+          for (let j = i + 1; j < children.length; j++) pushTop(children[j])
+          return
         }
         offset = childEnd
-      }
-      i++
-      for (; i < children.length; i++) {
-        pushTop(children[i])
       }
     }
     splitAfter(root)
@@ -425,8 +420,7 @@ for (const [expectedErrors, test] of tests) {
 
 const parse = (inputText, oldTree) => {
   let db
-  if (oldTree)
-    return { root: incrementalParseDAG(oldTree), db, changes: [] }
+  if (oldTree) return { root: incrementalParseDAG(oldTree), db, changes: [] }
   db = makeDB()
   return { root: parseTextDummy(inputText, db), db, changes: [] }
 }
