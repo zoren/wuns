@@ -175,15 +175,10 @@ const incrementalParseDAG = (oldTree) => {
 
   for (const { rangeOffset, rangeLength, changeBytes } of changeBuffers) {
     const splitBefore = (node) => {
-      // if we are searching for something we've already skipped, the invariant is broken
-      if (rangeOffset < offset) throw new Error('expected node to be before change')
-      // we are inserting before the node, so we don't need to split
       if (rangeOffset === offset) return
       const { type, children } = node
       if (!children) {
-        if (!isTerminalNodeType(type)) throw new Error('expected terminal node')
-        const distStart = rangeOffset - offset
-        pushMergeChild(createTerminal(type, distStart))
+        pushMergeChild(createTerminal(type, rangeOffset - offset))
         offset = rangeOffset
         return
       }
@@ -209,13 +204,10 @@ const incrementalParseDAG = (oldTree) => {
     const rangeEnd = rangeOffset + rangeLength
     offset = 0
     const splitAfter = (node) => {
-      if (rangeEnd < offset) throw new Error('expected node to be before change')
       const { type, byteLength, children } = node
       if (!children) {
-        if (!isTerminalNodeType(type)) throw new Error('expected terminal node')
-        const distEnd = offset + byteLength - rangeEnd
-        pushMergeChild(createTerminal(type, distEnd))
-        offset += byteLength - distEnd
+        pushMergeChild(createTerminal(type, offset + byteLength - rangeEnd))
+        offset = rangeEnd
         return
       }
       for (let i = 0; i < children.length; i++) {
