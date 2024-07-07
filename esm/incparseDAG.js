@@ -171,50 +171,50 @@ const incrementalParseDAG = (oldTree) => {
     bufOffset: 0,
   }))
   changeBuffers.reverse()
-  let offset = 0
-
-  for (const { rangeOffset, rangeLength, changeBytes } of changeBuffers) {
-    const splitBefore = (node) => {
-      if (rangeOffset === offset) return
+  const splitBefore = (needle) => {
+    let offset = 0
+    const go = (node) => {
+      if (needle === offset) return
       const { type, children } = node
       if (!children) {
-        pushMergeChild(createTerminal(type, rangeOffset - offset))
-        offset = rangeOffset
+        pushMergeChild(createTerminal(type, needle - offset))
+        offset = needle
         return
       }
       for (let i = 0; i < children.length; i++) {
-        if (rangeOffset === offset) return
+        if (needle === offset) return
         const child = children[i]
         const childEnd = offset + child.byteLength
-        if (childEnd >= rangeOffset) {
+        if (childEnd >= needle) {
           if (child.type === nodeTypeList) {
             const node = { type: nodeTypeList, byteLength: 0, children: [] }
             pushTop(node)
             stack.push(node)
           }
-          splitBefore(child)
+          go(child)
           break
         }
         offset = childEnd
         pushTop(child)
       }
     }
-    splitBefore(root)
-    parseBuffer(changeBytes)
-    const rangeEnd = rangeOffset + rangeLength
-    offset = 0
-    const splitAfter = (node) => {
+    go(root)
+  }
+
+  const splitAfter = (needle) => {
+    let offset = 0
+    const go = (node) => {
       const { type, byteLength, children } = node
       if (!children) {
-        pushMergeChild(createTerminal(type, offset + byteLength - rangeEnd))
-        offset = rangeEnd
+        pushMergeChild(createTerminal(type, offset + byteLength - needle))
+        offset = needle
         return
       }
       for (let i = 0; i < children.length; i++) {
         const child = children[i]
         const childEnd = offset + child.byteLength
-        if (childEnd > rangeEnd) {
-          splitAfter(child)
+        if (childEnd > needle) {
+          go(child)
           if (child.type === nodeTypeList && stack.length !== 1) freezeNode(stack.pop())
           for (let j = i + 1; j < children.length; j++) pushTop(children[j])
           return
@@ -222,10 +222,22 @@ const incrementalParseDAG = (oldTree) => {
         offset = childEnd
       }
     }
-    splitAfter(root)
+    go(root)
+  }
+
+  for (const { rangeOffset, rangeLength, changeBytes } of changeBuffers) {
+    splitBefore(rangeOffset)
+    parseBuffer(changeBytes)
+    splitAfter(rangeOffset + rangeLength)
   }
   for (const node of stack) freezeNode(node)
-  validateNode(rootMutable)
+  try {
+    validateNode(rootMutable)
+  } catch (e) {
+    console.log('error', e.message)
+    logNode(rootMutable)
+    throw e
+  }
   return rootMutable
 }
 
@@ -497,6 +509,11 @@ const deltas = [
     oldText: '[if [eq 0 [iadd 1 x]] [list 1 2 3]]',
     changes: [{ rangeOffset: 12, rangeLength: 2, text: 'f' }],
     newText: '[if [eq 0 [ifd 1 x]] [list 1 2 3]]',
+  },
+  {
+    oldText: '[][[]]',
+    changes: [{ rangeOffset: 1, rangeLength: 4, text: 'x' }],
+    newText: '[x]',
   },
   // {
   //   oldText: 'long-identifier-name',
