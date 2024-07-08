@@ -98,56 +98,139 @@ const newTreeCursor = (rootNode) => {
   }
 }
 
-const splitBeforeCursor = (root, needle) => {
-  if (needle < 0) throw new Error('needle out of bounds')
-  if (needle > root.length) throw new Error('needle out of bounds')
-  if (!isNonterm(root)) throw new Error('expected nonterm root')
-  const stack = [{ children: [] }]
-  const pushTop = (node) => {
-    stack.at(-1).children.push(node)
-  }
-  const cursor = newTreeCursor(root)
-  cursor.gotoFirstChild()
-  // scan siblings until we find the node that contains the needle
-  while (true) {
-    {
-      const offset = cursor.getOffset()
-      if (needle < offset) throw new Error('unexpected offset')
-      // the needle is just before the current node so we're done
-      if (needle === offset) break
-      const node = cursor.currentNode()
-      const nodeEnd = offset + node.length
-      if (nodeEnd < needle) {
-        pushTop(node)
-        if (!cursor.gotoNextSibling()) throw new Error('unexpected offset')
-        continue
-      }
-    }
-    // the needle is inside the current node
-    if (!cursor.gotoFirstChild()) {
-      // the current node is a term node and we need to cut it
-      pushTop(term(needle - cursor.getOffset()))
-      break
-    }
-    {
-      // the current node is a nonterm node, we push a new nonterm node to the stack
-      const newNode = { children: [] }
-      pushTop(newNode)
-      stack.push(newNode)
-    }
-  }
-  // set lengths of the new nodes on the stack and freeze them
+const updateStackLengths = (stack) => {
   for (let i = stack.length - 1; i >= 0; i--) {
     const node = stack[i]
     const { children } = node
-    if (!children) continue
-    node.length = children.reduce((acc, child) => acc + child.length, 0)
-    Object.freeze(node)
+    if (!children) throw new Error('expected nonterm node')
+    node.length = children.reduce((acc, { length }) => {
+      if (!length) throw new Error('expected child to have length')
+      return acc + length
+    }, 0)
   }
-  return stack[0]
 }
 
-const testsBefore = [
+const gotoNext = (cursor) => {
+  while (true) {
+    if (cursor.gotoFirstChild()) return true
+    if (cursor.gotoNextSibling()) return true
+    while (true) {
+      if (!cursor.gotoParent()) return false
+      if (cursor.gotoNextSibling()) return true
+    }
+  }
+}
+
+function* preorderGeneratorFromCursor(cursor) {
+  while (true) {
+    yield cursor.currentNode()
+    if (!gotoNext(cursor)) return
+  }
+}
+
+// advance cursor to next terminal containing the index
+const advanceCursorToIndexN = (
+  cursor,
+  index,
+  { wentNextSibling = () => {}, wentToParent = () => {}, wentToFirstChild = () => {} } = {},
+) => {
+  while (true) {
+    const offset = cursor.getOffset()
+    if (index < offset) throw new Error('index before offset')
+    const node = cursor.currentNode()
+    if (offset + node.length <= index) {
+      if (cursor.gotoNextSibling()) {
+        wentNextSibling(node)
+        continue
+      }
+      if (!cursor.gotoParent()) {
+        return
+      }
+      wentToParent()
+      continue
+    }
+    if (!cursor.gotoFirstChild()) break
+    wentToFirstChild()
+  }
+}
+
+{
+  const tests = [
+    {
+      tree: nonterm(term(3), nonterm(term(2), term(1))),
+      asserts: [
+        { path: [0], index: 0 },
+        { path: [0], index: 1 },
+        { path: [0], index: 2 },
+        { path: [1, 0], index: 3 },
+        { path: [1, 0], index: 4 },
+        { path: [1, 1], index: 5 },
+      ],
+    },
+    {
+      tree: nonterm(nonterm(term(1), term(2)), nonterm(term(2), term(1))),
+      asserts: [
+        { path: [0, 0], index: 0 },
+        { path: [0, 1], index: 1 },
+        { path: [0, 1], index: 2 },
+        { path: [1, 0], index: 3 },
+        { path: [1, 0], index: 4 },
+        { path: [1, 1], index: 5 },
+      ],
+    },
+    {
+      tree: nonterm(term(1)),
+      asserts: [{ path: [0], index: 0 }],
+    },
+  ]
+  for (const { tree, asserts } of tests) {
+    for (const { path, index } of asserts) {
+      const cursor = newTreeCursor(tree)
+      advanceCursorToIndexN(cursor, index)
+      const actualPath = cursor.getPathCopy().map(({ childIndex }) => childIndex)
+      if (actualPath.every((n, i) => n === path[i])) continue
+      console.dir({ path, actualPath, index }, { depth: null })
+      throw new Error('expected path')
+    }
+  }
+}
+
+const updateNonTermLengths = (node) => {
+  if (!isNonterm(node)) return
+  node.length = node.children.reduce((acc, child) => acc + child.length, 0)
+  for (const child of node.children) updateNonTermLengths(child)
+}
+
+const takeN = (root, n) => {
+  if (n === root.length) return root
+  const stack = [[]]
+  const pushTop = (node) => {
+    stack.at(-1).push(node)
+  }
+  const eventHandler = {
+    wentNextSibling: (node) => {
+      pushTop(node)
+    },
+    wentToParent: () => {
+      stack.pop()
+    },
+    wentToFirstChild: () => {
+      const children = []
+      const newNode = { children }
+      pushTop(newNode)
+      stack.push(children)
+    },
+  }
+  const cursor = newTreeCursor(root)
+  advanceCursorToIndexN(cursor, n, eventHandler)
+  const cutLength = n - cursor.getOffset()
+  if (cutLength > 0) pushTop(term(cutLength))
+  const rootMut = stack[0][0]
+  updateNonTermLengths(rootMut)
+  return rootMut
+}
+
+const testsTake = [
   { expected: nonterm(), node: nonterm(), needle: 0 },
 
   { expected: nonterm(), node: nonterm(term(1)), needle: 0 },
@@ -173,78 +256,65 @@ const testsBefore = [
   { expected: nonterm(term(5), term(3)), node: nonterm(term(5), term(3)), needle: 8 },
 ]
 
-for (const { expected, node, needle } of testsBefore) {
-  // console.log()
-  // console.log()
-  const actual = splitBeforeCursor(node, needle)
-  // logNode(expected)
-  // logNode(actual)
-
+for (const { expected, node, needle } of testsTake) {
+  const actual = takeN(node, needle)
   if (!nodesEq(expected, actual)) {
     console.dir({ node, needle, expected, actual }, { depth: null })
     throw new Error('expected !== actual')
   }
 }
 
-const splitAfter = (root, needle) => {
-  let offset = 0
-  const go = (node) => {
-    if (needle === offset) return node
-    const { length, children } = node
-    if (!children) {
-      const cutLength = offset + length - needle
-      offset += length - cutLength
-      return term(cutLength)
-    }
-    const newChildren = []
-    let i = 0
-    for (; i < children.length; i++) {
-      const child = children[i]
-      const childEnd = offset + child.length
-      if (childEnd > needle) {
-        newChildren.push(go(child))
-        break
-      }
-      offset = childEnd
-    }
-    newChildren.push(...children.slice(i + 1))
-    return nonterm(...newChildren)
+const dropN = (root, n) => {
+  if (n < 0) throw new Error('needle out of bounds')
+  if (n > root.length) throw new Error('needle out of bounds')
+  if (!isNonterm(root)) throw new Error('expected nonterm root')
+  const stack = [{ children: [] }]
+  const pushTop = (node) => {
+    stack.at(-1).children.push(node)
   }
-  return go(root)
+  const cursor = newTreeCursor(root)
+  cursor.gotoFirstChild()
+  // scan siblings until we find the node that contains the needle
+  // while (true) {
+
+  // }
+  // set lengths of the new nodes on the stack and freeze them
+  updateStackLengths(stack)
+  return stack[0]
 }
 
-const testsAfter = [
-  { expected: nonterm(), node: nonterm(), needle: 0 },
+const testsDrop = [
+  { expected: nonterm(), node: nonterm(), n: 0 },
 
-  { expected: nonterm(term(1)), node: nonterm(term(1)), needle: 0 },
-  { expected: nonterm(), node: nonterm(term(1)), needle: 1 },
+  { expected: nonterm(), node: nonterm(term(1)), n: 1 },
+  { expected: nonterm(term(1)), node: nonterm(term(1)), n: 0 },
 
-  { expected: nonterm(term(3)), node: nonterm(term(3)), needle: 0 },
-  { expected: nonterm(term(2)), node: nonterm(term(3)), needle: 1 },
-  { expected: nonterm(term(1)), node: nonterm(term(3)), needle: 2 },
-  { expected: nonterm(), node: nonterm(term(3)), needle: 3 },
+  { expected: nonterm(term(3)), node: nonterm(term(3)), n: 0 },
+  { expected: nonterm(term(2)), node: nonterm(term(3)), n: 1 },
+  { expected: nonterm(term(1)), node: nonterm(term(3)), n: 2 },
+  { expected: nonterm(), node: nonterm(term(3)), n: 3 },
 
-  { expected: nonterm(term(1)), node: nonterm(term(2)), needle: 1 },
-  { expected: nonterm(term(3)), node: nonterm(term(2), term(3)), needle: 2 },
-  { expected: nonterm(term(1), term(3)), node: nonterm(term(2), term(3)), needle: 1 },
+  { expected: nonterm(term(1)), node: nonterm(term(2)), n: 1 },
+  { expected: nonterm(term(3)), node: nonterm(term(2), term(3)), n: 2 },
+  { expected: nonterm(term(1), term(3)), node: nonterm(term(2), term(3)), n: 1 },
 
-  { expected: nonterm(term(5), term(3)), node: nonterm(term(5), term(3)), needle: 0 },
-  { expected: nonterm(term(4), term(3)), node: nonterm(term(5), term(3)), needle: 1 },
-  { expected: nonterm(term(3), term(3)), node: nonterm(term(5), term(3)), needle: 2 },
-  { expected: nonterm(term(2), term(3)), node: nonterm(term(5), term(3)), needle: 3 },
-  { expected: nonterm(term(1), term(3)), node: nonterm(term(5), term(3)), needle: 4 },
-  { expected: nonterm(term(3)), node: nonterm(term(5), term(3)), needle: 5 },
-  { expected: nonterm(term(2)), node: nonterm(term(5), term(3)), needle: 6 },
-  { expected: nonterm(term(1)), node: nonterm(term(5), term(3)), needle: 7 },
-  { expected: nonterm(), node: nonterm(term(5), term(3)), needle: 8 },
+  { expected: nonterm(term(5), term(3)), node: nonterm(term(5), term(3)), n: 0 },
+  { expected: nonterm(term(4), term(3)), node: nonterm(term(5), term(3)), n: 1 },
+  { expected: nonterm(term(3), term(3)), node: nonterm(term(5), term(3)), n: 2 },
+  { expected: nonterm(term(2), term(3)), node: nonterm(term(5), term(3)), n: 3 },
+  { expected: nonterm(term(1), term(3)), node: nonterm(term(5), term(3)), n: 4 },
+  { expected: nonterm(term(3)), node: nonterm(term(5), term(3)), n: 5 },
+  { expected: nonterm(term(2)), node: nonterm(term(5), term(3)), n: 6 },
+  { expected: nonterm(term(1)), node: nonterm(term(5), term(3)), n: 7 },
+  { expected: nonterm(), node: nonterm(term(5), term(3)), n: 8 },
 ]
 
-for (const { expected, node, needle } of testsAfter) {
-  const actual = splitAfter(node, needle)
-  const expectedJSON = JSON.stringify(expected)
-  const actualJSON = JSON.stringify(actual)
-  if (expectedJSON !== actualJSON) {
-    console.dir({ expected, actual, node, needle }, { depth: null })
-    throw new Error('expected !== actual')
-  }
-}
+// for (const { expected, node, n } of testsDrop) {
+//   const actual = dropN(node, n)
+//   if (!nodesEq(expected, actual)) {
+//     console.dir({ node, n, expected, actual }, { depth: null })
+//     throw new Error('expected !== actual')
+//   } else {
+//     console.dir({ expected, node, n }, { depth: null })
+//   }
+// }
