@@ -34,33 +34,6 @@ const nodesEq = (a, b) => {
   return a.length === b.length
 }
 
-const splitBefore = (root, needle) => {
-  let offset = 0
-  const go = (node) => {
-    const { length, children } = node
-    if (needle === offset + length) return node
-    if (!children) {
-      const cutLength = needle - offset
-      offset = needle
-      return term(cutLength)
-    }
-    const newChildren = []
-    for (let i = 0; i < children.length; i++) {
-      if (needle === offset) break
-      const child = children[i]
-      const childEnd = offset + child.length
-      if (childEnd >= needle) {
-        newChildren.push(go(child))
-        break
-      }
-      offset = childEnd
-      newChildren.push(child)
-    }
-    return nonterm(...newChildren)
-  }
-  return go(root)
-}
-
 const newTreeCursor = (rootNode) => {
   const initialNode = rootNode
   let offset = 0
@@ -137,32 +110,30 @@ const splitBeforeCursor = (root, needle) => {
   cursor.gotoFirstChild()
   // scan siblings until we find the node that contains the needle
   while (true) {
-    const offset = cursor.getOffset()
-    if (needle < offset) throw new Error('unexpected offset')
-    // the needle is just before the current node so we're done
-    if (offset === needle) break
-    const node = cursor.currentNode()
-    const nodeEnd = offset + node.length
-    if (nodeEnd === needle) {
-      pushTop(node)
-      break
-    }
-    if (nodeEnd < needle) {
-      pushTop(node)
-      if (!cursor.gotoNextSibling()) throw new Error('unexpected offset')
-      continue
+    {
+      const offset = cursor.getOffset()
+      if (needle < offset) throw new Error('unexpected offset')
+      // the needle is just before the current node so we're done
+      if (needle === offset) break
+      const node = cursor.currentNode()
+      const nodeEnd = offset + node.length
+      if (nodeEnd < needle) {
+        pushTop(node)
+        if (!cursor.gotoNextSibling()) throw new Error('unexpected offset')
+        continue
+      }
     }
     // the needle is inside the current node
-    if (cursor.gotoFirstChild()) {
-      // the current node is a nonterm node, we push a new nonterm node to the stack
-      const node = { children: [] }
-      pushTop(node)
-      stack.push(node)
-    } else {
+    if (!cursor.gotoFirstChild()) {
       // the current node is a term node and we need to cut it
-      const cutLength = needle - cursor.getOffset()
-      pushTop(term(cutLength))
+      pushTop(term(needle - cursor.getOffset()))
       break
+    }
+    {
+      // the current node is a nonterm node, we push a new nonterm node to the stack
+      const newNode = { children: [] }
+      pushTop(newNode)
+      stack.push(newNode)
     }
   }
   // set lengths of the new nodes on the stack and freeze them
