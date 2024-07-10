@@ -1,10 +1,10 @@
 const isWhitespace = (c) => c === 32 || c === 9 || c === 10
-const otherWordChars = new Set([...'.=/-'].map((c) => c.charCodeAt(0)))
+const otherWordChars = new Set([...'-./='].map((c) => c.charCodeAt(0)))
 const isWordChar = (c) => (97 <= c && c <= 122) || (48 <= c && c <= 57) || otherWordChars.has(c)
 const isIllegal = (c) => !isWordChar(c) && !isWhitespace(c) && c !== 91 && c !== 93
 
-const nodeTypeList = 'list'
 const nodeTypeRoot = 'root'
+const nodeTypeList = 'list'
 const nodeTypeStartBracket = '['
 const nodeTypeEndBracket = ']'
 const nodeTypeWord = 'word'
@@ -43,19 +43,20 @@ const isVariableLengthTerminalNodeType = (type) =>
 const isTerminalNodeType = (type) =>
   isVariableLengthTerminalNodeType(type) || type === nodeTypeStartBracket || type === nodeTypeEndBracket
 
-const insertNonTerminalNodeType = (type) => type === nodeTypeList || type === nodeTypeRoot
+const isNonTerminalNodeType = (type) => type === nodeTypeList || type === nodeTypeRoot
 
 const validateNode = (node) => {
   const { type, byteLength, children } = node
   if (!Object.isFrozen(node)) throw new Error('expected node to be frozen')
-  if (byteLength === undefined || byteLength < 0) throw new Error('expected positive byte length')
+  if (byteLength === undefined || byteLength < 0 || !Number.isInteger(byteLength))
+    throw new Error('expected positive byte length')
   if (type !== nodeTypeRoot && byteLength === 0) throw new Error('expected non-root node to have non-zero byte')
   if ((type === nodeTypeStartBracket || type === nodeTypeEndBracket) && byteLength !== 1)
     throw new Error('expected start bracket to have byte length 1')
   if (!children) return
   if (type !== nodeTypeList && type !== nodeTypeRoot) throw new Error('expected non-terminal node to have children')
   if (type !== nodeTypeRoot && children.length === 0) throw new Error('expected non-terminal node to have children')
-
+  if (type === nodeTypeList && byteLength === 0) throw new Error('expected list to have non-zero byte length')
   let prevSiblingType = null
   let totalByteLength = 0
   for (const child of children) {
@@ -69,176 +70,12 @@ const validateNode = (node) => {
   if (totalByteLength !== byteLength) throw new Error('expected sum of child byte lengths to equal byte length')
 }
 
-const logNode = ({ type, byteLength, children }, depth = 0) => {
-  const indent = '  '.repeat(depth)
+export const logNode = ({ type, byteLength, children }, indent = '') => {
   console.log(indent + type + ' ' + byteLength)
-  if (children) for (const child of children) logNode(child, depth + 1)
-}
-
-const makeDB = () => {
-  const terminalCache = new Map()
-  const createTerminal = (type, byteLength) => {
-    if (!isTerminalNodeType(type)) throw new Error('expected terminal node type')
-    if (byteLength <= 0) throw new Error('expected positive byte length')
-    if (!isVariableLengthTerminalNodeType(type) && byteLength !== 1) throw new Error('expected byte length to be 1')
-    let cached = terminalCache.get(type)
-    if (cached === undefined) {
-      cached = new Map()
-      terminalCache.set(type, cached)
-    }
-    let cachedNode = cached.get(byteLength)
-    if (cachedNode === undefined) {
-      cachedNode = Object.freeze({ type, byteLength })
-      cached.set(byteLength, cachedNode)
-    }
-    return cachedNode
+  if (children) {
+    indent += '  '
+    for (const child of children) logNode(child, indent)
   }
-  return Object.freeze({ createTerminal })
-}
-
-const sumByteLengths = (children) => children.reduce((acc, { byteLength }) => acc + byteLength, 0)
-
-const createNonTerminal = (type, byteLength, children) => {
-  if (type !== nodeTypeRoot && children.length === 0) throw new Error('expected non-terminal node to have children')
-  if (sumByteLengths(children) !== byteLength)
-    throw new Error('expected sum of child byte lengths to equal byte length')
-  return Object.freeze({ type, byteLength, children: Object.freeze(children) })
-}
-
-const freezeNode = (node) => {
-  if (node.children) Object.freeze(node.children)
-  Object.freeze(node)
-}
-
-const textEncoder = new TextEncoder()
-
-const incrementalParseDAG = (oldTree) => {
-  const db = oldTree ? oldTree.db : makeDB()
-  const { createTerminal } = db
-  const rootMutable = { type: nodeTypeRoot, byteLength: 0, children: [] }
-  // stack needs mutable nodes
-  const stack = [rootMutable]
-  const pushTop = (node) => {
-    const { byteLength } = node
-    for (const s of stack) s.byteLength += byteLength
-    stack.at(-1).children.push(node)
-  }
-  const pushMergeChild = (newChild) => {
-    const { children } = stack.at(-1)
-    const newChildByteLength = newChild.byteLength
-    for (const s of stack) s.byteLength += newChildByteLength
-    if (children.length === 0) return children.push(newChild)
-    const { type, byteLength } = children.at(-1)
-    const canMerge = isVariableLengthTerminalNodeType(type) && type === newChild.type
-    if (!canMerge) return children.push(newChild)
-    children.pop()
-    children.push(createTerminal(type, byteLength + newChild.byteLength))
-  }
-  const parseBuffer = (changeBytes) => {
-    let i = 0
-    for (; i < changeBytes.length; i++) {
-      const ctokenType = codeToTerminalType(changeBytes[i])
-      switch (ctokenType) {
-        case nodeTypeStartBracket: {
-          const node = { type: nodeTypeList, byteLength: 0, children: [] }
-          pushTop(node)
-          stack.push(node)
-          pushTop(createTerminal(nodeTypeStartBracket, 1))
-          continue
-        }
-        case nodeTypeEndBracket: {
-          pushTop(createTerminal(nodeTypeEndBracket, 1))
-          if (stack.length !== 1) freezeNode(stack.pop())
-          continue
-        }
-      }
-      const pred = terminalTypeToPredicate(ctokenType)
-      const start = i
-      while (i < changeBytes.length) {
-        if (pred(changeBytes[i + 1])) {
-          i++
-        } else break
-      }
-      pushMergeChild(createTerminal(ctokenType, i - start + 1))
-    }
-    if (i !== changeBytes.length) throw new Error('expected to be at end of input: ' + i + ' ' + inputBytes.length)
-  }
-  const { root, changes } = oldTree
-  const changeBuffers = changes.map(({ rangeOffset, rangeLength, text }) => ({
-    rangeOffset,
-    rangeLength,
-    changeBytes: textEncoder.encode(text),
-    bufOffset: 0,
-  }))
-  changeBuffers.reverse()
-  const splitBefore = (needle) => {
-    let offset = 0
-    const go = (node) => {
-      if (needle === offset) return
-      const { type, children } = node
-      if (!children) {
-        pushMergeChild(createTerminal(type, needle - offset))
-        offset = needle
-        return
-      }
-      for (let i = 0; i < children.length; i++) {
-        if (needle === offset) return
-        const child = children[i]
-        const childEnd = offset + child.byteLength
-        if (childEnd >= needle) {
-          if (child.type === nodeTypeList) {
-            const node = { type: nodeTypeList, byteLength: 0, children: [] }
-            pushTop(node)
-            stack.push(node)
-          }
-          go(child)
-          break
-        }
-        offset = childEnd
-        pushTop(child)
-      }
-    }
-    go(root)
-  }
-
-  const splitAfter = (needle) => {
-    let offset = 0
-    const go = (node) => {
-      const { type, byteLength, children } = node
-      if (!children) {
-        pushMergeChild(createTerminal(type, offset + byteLength - needle))
-        offset = needle
-        return
-      }
-      for (let i = 0; i < children.length; i++) {
-        const child = children[i]
-        const childEnd = offset + child.byteLength
-        if (childEnd > needle) {
-          go(child)
-          if (child.type === nodeTypeList && stack.length !== 1) freezeNode(stack.pop())
-          for (let j = i + 1; j < children.length; j++) pushTop(children[j])
-          return
-        }
-        offset = childEnd
-      }
-    }
-    go(root)
-  }
-
-  for (const { rangeOffset, rangeLength, changeBytes } of changeBuffers) {
-    splitBefore(rangeOffset)
-    parseBuffer(changeBytes)
-    splitAfter(rangeOffset + rangeLength)
-  }
-  for (const node of stack) freezeNode(node)
-  try {
-    validateNode(rootMutable)
-  } catch (e) {
-    console.log('error', e.message)
-    logNode(rootMutable)
-    throw e
-  }
-  return rootMutable
 }
 
 const newTreeCursor = (rootNode) => {
@@ -305,37 +142,149 @@ const newTreeCursor = (rootNode) => {
   }
 }
 
-const gotoNext = (cursor) => {
+const advanceCursorToIndexN = (
+  cursor,
+  index,
+  { wentNextSibling = () => {}, wentToParent = () => {}, wentToFirstChild = () => {} } = {},
+) => {
   while (true) {
-    if (cursor.gotoFirstChild()) return true
-    if (cursor.gotoNextSibling()) return true
-    while (true) {
-      if (!cursor.gotoParent()) return false
-      if (cursor.gotoNextSibling()) return true
+    const offset = cursor.getOffset()
+    if (index < offset) throw new Error('index before offset')
+    const node = cursor.currentNode()
+    if (offset + node.byteLength <= index) {
+      if (cursor.gotoNextSibling()) {
+        wentNextSibling(node)
+        continue
+      }
+      if (!cursor.gotoParent()) return { done: true }
+      wentToParent()
+      continue
+    }
+    if (!cursor.gotoFirstChild()) return { done: true, offset }
+    wentToFirstChild()
+  }
+}
+
+const pushTop = (stack, node) => {
+  const { type } = node
+  if (type === nodeTypeRoot) throw new Error('root cannot be pushed')
+  const top = stack.at(-1)
+  if (type === nodeTypeStartBracket && top.type !== nodeTypeList) throw new Error('start brackets can only be in lists')
+  top.children.push(node)
+}
+
+const sumByteLengths = (children) =>
+  children.reduce((acc, node) => {
+    const { byteLength } = node
+    if (!node.byteLength) {
+      console.log({ node })
+      throw new Error('expected byte length')
+    }
+    return acc + byteLength
+  }, 0)
+
+const finishNonTerminal = (stack) => {
+  const node = stack.pop()
+  node.byteLength = sumByteLengths(node.children)
+  Object.freeze(node.children)
+  Object.freeze(node)
+}
+
+const finishStack = (stack) => {
+  while (stack.length > 0) finishNonTerminal(stack)
+}
+
+const terminalCache = new Map()
+
+const createTerminal = (type, byteLength) => {
+  if (!isTerminalNodeType(type)) throw new Error('expected terminal node type')
+  if (byteLength <= 0) throw new Error('expected positive byte length')
+  if (!isVariableLengthTerminalNodeType(type) && byteLength !== 1) throw new Error('expected byte length to be 1')
+  let cached = terminalCache.get(type)
+  if (cached === undefined) {
+    cached = new Map()
+    terminalCache.set(type, cached)
+  }
+  let cachedNode = cached.get(byteLength)
+  if (cachedNode) return cachedNode
+  cachedNode = Object.freeze({ type, byteLength })
+  cached.set(byteLength, cachedNode)
+  return cachedNode
+}
+
+const createNonTerminal = (type, byteLength, children) => {
+  if (!isNonTerminalNodeType(type)) throw new Error('expected non-terminal node type')
+  if (type !== nodeTypeRoot && children.length === 0) throw new Error('expected non-terminal node to have children')
+  for (const { type, byteLength } of children) {
+    if (type === nodeTypeRoot) throw new Error('root cannot be child')
+    if (!Number.isInteger(byteLength) || byteLength <= 0) throw new Error('expected positive byte length')
+  }
+  if (sumByteLengths(children) !== byteLength)
+    throw new Error('expected sum of child byte lengths to equal byte length')
+  return Object.freeze({ type, byteLength, children: Object.freeze(children) })
+}
+
+const parseBuffer = (stack, uft8bytes) => {
+  let i = 0
+  for (; i < uft8bytes.length; i++) {
+    const ctokenType = codeToTerminalType(uft8bytes[i])
+    switch (ctokenType) {
+      case nodeTypeStartBracket: {
+        const node = { type: nodeTypeList, byteLength: 0, children: [] }
+        pushTop(stack, node)
+        stack.push(node)
+        pushTop(stack, createTerminal(nodeTypeStartBracket, 1))
+        continue
+      }
+      case nodeTypeEndBracket: {
+        pushTop(stack, createTerminal(nodeTypeEndBracket, 1))
+        if (stack.length !== 1) finishNonTerminal(stack)
+        continue
+      }
+    }
+    const pred = terminalTypeToPredicate(ctokenType)
+    const start = i
+    while (i + 1 < uft8bytes.length) {
+      if (!pred(uft8bytes[i + 1])) break
+      i++
+    }
+    const length = i - start + 1
+    const top = stack.at(-1)
+    const { children } = top
+    const lastChild = children.at(-1)
+    if (lastChild && lastChild.type === ctokenType) {
+      children[children.length - 1] = createTerminal(ctokenType, lastChild.byteLength + length)
+    } else {
+      children.push(createTerminal(ctokenType, length))
     }
   }
 }
 
-const gotoPrev = (cursor) => {
-  while (true) {
-    if (cursor.gotoLastChild()) return true
-    if (cursor.gotoPrevSibling()) return true
-    while (true) {
-      if (!cursor.gotoParent()) return false
-      if (cursor.gotoPrevSibling()) return true
-    }
-  }
+const textEncoder = new TextEncoder()
+
+export const parseString = (text) => {
+  const rootMut = { type: nodeTypeRoot, byteLength: 0, children: [] }
+  const stack = [rootMut]
+  parseBuffer(stack, textEncoder.encode(text))
+  finishStack(stack)
+  validateNode(rootMut)
+  return rootMut
 }
 
 function* preorderGeneratorFromCursor(cursor) {
   while (true) {
     yield cursor.currentNode()
-    if (!gotoNext(cursor)) return
+    if (cursor.gotoFirstChild()) continue
+    if (cursor.gotoNextSibling()) continue
+    while (true) {
+      if (!cursor.gotoParent()) return
+      if (cursor.gotoNextSibling()) break
+    }
   }
 }
 
-const getErrors = (root) => {
-  const cursor = newTreeCursor(root)
+export const getErrors = (tree) => {
+  const cursor = newTreeCursor(tree)
   const errors = []
   for (const node of preorderGeneratorFromCursor(cursor)) {
     switch (node.type) {
@@ -343,233 +292,13 @@ const getErrors = (root) => {
         errors.push({ message: 'illegal-characters', node })
         break
       case nodeTypeEndBracket:
-        const parent = cursor.getParent()
-        if (parent === null) throw new Error('expected parent')
-        if (parent.type !== nodeTypeList) errors.push({ message: 'extra-closing', node })
+        if (cursor.getParent().type !== nodeTypeList) errors.push({ message: 'extra-closing', node })
         break
-      case nodeTypeList: {
-        const { children } = node
-        if (children.length === 0) throw new Error('list has no children')
-        if (children.at(-1).type !== nodeTypeEndBracket) errors.push({ message: 'unclosed-list', node })
+      case nodeTypeList:
+        // console.log('getErrors nodeTypeList', { node, end: node.children.at(-1) })
+        if (node.children.at(-1).type !== nodeTypeEndBracket) errors.push({ message: 'unclosed-list', node })
         break
-      }
     }
   }
   return errors
-}
-
-const assertTreeEq = (a, b) => {
-  if (a === b) return
-  if (a.type !== b.type) throw new Error('expected types to be equal')
-  if (a.byteLength !== b.byteLength) throw new Error('expected byteLength to be equal')
-  if (a.children === undefined && b.children === undefined) return
-  if (a.children === undefined || b.children === undefined) throw new Error('expected children to be equal')
-  if (a.children.length !== b.children.length) {
-    console.dir(a.children, { depth: null })
-    console.dir(b.children, { depth: null })
-    throw new Error('expected children length to be equal')
-  }
-  for (let i = 0; i < a.children.length; i++) assertTreeEq(a.children[i], b.children[i])
-}
-
-const okTests = ['', 'abc 123', 'we-allow-dashes', '[]', '[ ]', '[quote 34]', `[if [eq 4 x] [] x]`]
-const errorTests = [
-  [['illegal-characters'], '234 ILLEGAL but then legal'],
-  [['extra-closing'], '[]]'],
-  [['unclosed-list'], '[quote 34'],
-]
-
-const tests = okTests.map((test) => [[], test]).concat(errorTests)
-const textDecoder = new TextDecoder()
-
-const treeToString = (root, bytes) => {
-  const cursor = newTreeCursor(root)
-  let result = ''
-  for (const { byteLength, children } of preorderGeneratorFromCursor(cursor)) {
-    if (children) continue
-    const offset = cursor.getOffset()
-    result += textDecoder.decode(bytes.slice(offset, offset + byteLength))
-  }
-  return result
-}
-
-const parseTextDummy = (text, db) =>
-  incrementalParseDAG({
-    root: createNonTerminal(nodeTypeRoot, 0, []),
-    changes: [{ rangeOffset: 0, rangeLength: 0, text }],
-    db,
-  })
-
-for (const [expectedErrors, test] of tests) {
-  const bytes = textEncoder.encode(test)
-  const root = parseTextDummy(test, makeDB())
-  const errors = getErrors(root)
-  if (expectedErrors.length !== errors.length) {
-    console.log(`expected errors: ${expectedErrors.length} actual errors: ${errors.length}`)
-    console.log(`expected: ${JSON.stringify(expectedErrors)} actual: ${JSON.stringify(errors)}`)
-    continue
-  }
-  for (let i = 0; i < expectedErrors.length; i++) {
-    if (expectedErrors[i] !== errors[i].message) {
-      console.log(`expected error: ${expectedErrors[i]} actual error: ${errors[i].message}`)
-      console.log(`expected: ${JSON.stringify(expectedErrors)} actual: ${JSON.stringify(errors)}`)
-      break
-    }
-  }
-  console.log()
-  console.log(`'${test}'`)
-
-  console.log(`'${treeToString(root, bytes)}'`)
-}
-
-const parse = (inputText, oldTree) => {
-  let db
-  if (oldTree) return { root: incrementalParseDAG(oldTree), db, changes: [] }
-  db = makeDB()
-  return { root: parseTextDummy(inputText, db), db, changes: [] }
-}
-
-const deltas = [
-  {
-    oldText: '',
-    changes: [{ rangeOffset: 0, rangeLength: 0, text: 'a' }],
-    newText: 'a',
-  },
-  {
-    oldText: 'a',
-    changes: [{ rangeOffset: 1, rangeLength: 0, text: 'b' }],
-    newText: 'ab',
-  },
-  {
-    oldText: 'ab',
-    changes: [{ rangeOffset: 0, rangeLength: 0, text: 'c' }],
-    newText: 'cab',
-  },
-  {
-    oldText: 'asdf',
-    changes: [{ rangeOffset: 0, rangeLength: 4, text: '' }],
-    newText: '',
-  },
-  {
-    oldText: 'asdf',
-    changes: [{ rangeOffset: 2, rangeLength: 0, text: ' ' }],
-    newText: 'as df',
-  },
-  {
-    oldText: 'asdf',
-    changes: [{ rangeOffset: 2, rangeLength: 0, text: 'x' }],
-    newText: 'asxdf',
-  },
-  {
-    oldText: 'as df',
-    changes: [{ rangeOffset: 2, rangeLength: 1, text: 'x' }],
-    newText: 'asxdf',
-  },
-  {
-    oldText: ']',
-    changes: [{ rangeOffset: 0, rangeLength: 0, text: '[' }],
-    newText: '[]',
-  },
-  {
-    oldText: '[]',
-    changes: [{ rangeOffset: 1, rangeLength: 1, text: '' }],
-    newText: '[',
-  },
-  {
-    oldText: '[]',
-    changes: [{ rangeOffset: 0, rangeLength: 1, text: '' }],
-    newText: ']',
-  },
-  {
-    oldText: '[list 1]',
-    changes: [{ rangeOffset: 0, rangeLength: 1, text: '' }],
-    newText: 'list 1]',
-  },
-  {
-    oldText: '[if 1 2]',
-    changes: [{ rangeOffset: 4, rangeLength: 3, text: '3' }],
-    newText: '[if 3]',
-  },
-  {
-    oldText: '[if [eq 0 x] [list 1 2 3]]',
-    changes: [{ rangeOffset: 4, rangeLength: 8, text: 'd' }],
-    newText: '[if d [list 1 2 3]]',
-  },
-  {
-    oldText: '[if [eq 0 [add 1 x]] [list 1 2 3]]',
-    changes: [{ rangeOffset: 11, rangeLength: 5, text: 'inc' }],
-    newText: '[if [eq 0 [inc x]] [list 1 2 3]]',
-  },
-  {
-    oldText: '[if [eq 0 [add 1 x]] [list 1 2 3]]',
-    changes: [{ rangeOffset: 11, rangeLength: 0, text: 'i' }],
-    newText: '[if [eq 0 [iadd 1 x]] [list 1 2 3]]',
-  },
-  {
-    oldText: '[if [eq 0 [iadd 1 x]] [list 1 2 3]]',
-    changes: [{ rangeOffset: 12, rangeLength: 2, text: 'f' }],
-    newText: '[if [eq 0 [ifd 1 x]] [list 1 2 3]]',
-  },
-  {
-    oldText: '[][[]]',
-    changes: [{ rangeOffset: 1, rangeLength: 4, text: 'x' }],
-    newText: '[x]',
-  },
-  // {
-  //   oldText: 'long-identifier-name',
-  //   changes: [
-  //     { rangeOffset: 15, rangeLength: 1, text: 'x' },
-  //     { rangeOffset: 4, rangeLength: 1, text: 'x' },
-  //   ],
-  //   newText: 'longxidentifierxname',
-  // },
-  // {
-  //   oldText: '[if 3 []]\n[if 3 [list 1 2 3]]',
-  //   newText: '[if [3] []]\n[if [3] [list 1 2 3]]',
-  //   changes: [
-  //     { rangeOffset: 15, rangeLength: 0, text: ']' },
-  //     { rangeOffset: 14, rangeLength: 0, text: '[' },
-  //     { rangeOffset: 5, rangeLength: 0, text: ']' },
-  //     { rangeOffset: 4, rangeLength: 0, text: '[' },
-  //   ],
-  // },
-  // {
-  //   oldText: 'xy23\nxy23',
-  //   newText: 'xyz123\nxyz123',
-  //   changes: [
-  //     { rangeLength: 0, rangeOffset: 7, text: 'z1' },
-  //     { rangeLength: 0, rangeOffset: 2, text: 'z1' },
-  //   ],
-  // },
-]
-
-const assertDesc = (changes) => {
-  // check changes descending by offset
-  let offset = null
-  for (const { rangeOffset } of changes) {
-    if (offset !== null && rangeOffset > offset) throw new Error('expected changes to be sorted by offset')
-    offset = rangeOffset
-  }
-}
-
-const applyChanges = ({ oldText, changes }) => {
-  let newTextFromChanges = oldText
-  for (const { rangeOffset, rangeLength, text } of changes)
-    newTextFromChanges =
-      newTextFromChanges.slice(0, rangeOffset) + text + newTextFromChanges.slice(rangeOffset + rangeLength)
-  return newTextFromChanges
-}
-
-for (const delta of deltas) {
-  const { oldText, changes, newText } = delta
-  assertDesc(changes)
-  if (applyChanges(delta) !== newText) {
-    console.log({ oldText, changes, newText, newTextFromChanges: applyChanges(delta) })
-    throw new Error('expected newTextFromChanges to equal newText')
-  }
-  const tree = parse(oldText)
-  tree.changes.push(...changes)
-  const patchedTree = parse(newText, tree)
-  const reparsed = parse(newText)
-  assertTreeEq(patchedTree.root, reparsed.root)
 }
