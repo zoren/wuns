@@ -338,6 +338,9 @@ const deltas = [
       { rangeOffset: 4, rangeLength: 0, text: '[' },
     ],
   },
+  { oldText: 's', changes: [{ rangeOffset: 1, rangeLength: 0, text: 'ø' }], newText: 'sø' },
+  { oldText: 'søren', changes: [{ rangeOffset: 1, rangeLength: 1, text: '' }], newText: 'sren' },
+  { oldText: 's💧ren', changes: [{ rangeOffset: 1, rangeLength: 2, text: 'ø' }], newText: 'søren' },
 ]
 
 const assertDesc = (changes) => {

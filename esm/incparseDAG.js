@@ -44,8 +44,7 @@ const codeToTerminalType = (c) => {
     default:
       if (isWordChar(c)) return nodeTypeWord
       if (isWhitespace(c)) return nodeTypeWhitespace
-      if (isIllegal(c)) return nodeTypeIllegalChars
-      throw new Error('unexpected character')
+      return nodeTypeIllegalChars
   }
 }
 
@@ -60,8 +59,7 @@ const isNonTerminalNodeType = (type) => type === nodeTypeList || type === nodeTy
 export const validateNode = (node) => {
   const { type, length, children } = node
   if (!Object.isFrozen(node)) throw new Error('expected node to be frozen')
-  if (length === undefined || length < 0 || !Number.isInteger(length))
-    throw new Error('expected positive byte length')
+  if (length === undefined || length < 0 || !Number.isInteger(length)) throw new Error('expected positive byte length')
   if (type !== nodeTypeRoot && length === 0) throw new Error('expected non-root node to have non-zero byte')
   if ((type === nodeTypeStartBracket || type === nodeTypeEndBracket) && length !== 1)
     throw new Error('expected start bracket to have byte length 1')
@@ -193,8 +191,7 @@ const createNonTerminal = (type, length, children) => {
     if (type === nodeTypeRoot) throw new Error('root cannot be child')
     if (!Number.isInteger(length) || length <= 0) throw new Error('expected positive byte length')
   }
-  if (sumLengths(children) !== length)
-    throw new Error('expected sum of child byte lengths to equal byte length')
+  if (sumLengths(children) !== length) throw new Error('expected sum of child byte lengths to equal byte length')
   return Object.freeze({ type, length, children: Object.freeze(children) })
 }
 
@@ -329,8 +326,6 @@ export const patchNode = (oldTree, changes) => {
   return mergeNodes(result, curOld)
 }
 
-const textEncoder = new TextEncoder()
-
 export const parseString = (text) => {
   const root = { type: nodeTypeRoot, length: 0, children: [] }
   const stack = [root]
@@ -341,9 +336,8 @@ export const parseString = (text) => {
     Object.freeze(node)
   }
   const pushTop = (node) => stack.at(-1).children.push(node)
-  const utf8bytes = textEncoder.encode(text)
-  for (let i = 0; i < utf8bytes.length; i++) {
-    const ctokenType = codeToTerminalType(utf8bytes[i])
+  for (let i = 0; i < text.length; i++) {
+    const ctokenType = codeToTerminalType(text.charCodeAt(i))
     switch (ctokenType) {
       case nodeTypeStartBracket: {
         const node = { type: nodeTypeList, length: 1, children: [lsqb] }
@@ -359,7 +353,7 @@ export const parseString = (text) => {
     }
     const pred = terminalTypeToPredicate(ctokenType)
     let j = i + 1
-    for (; j < utf8bytes.length && pred(utf8bytes[j]); j++);
+    for (; j < text.length && pred(text.charCodeAt(j)); j++);
     pushTop(createTerminal(ctokenType, j - i))
     i = j - 1
   }
