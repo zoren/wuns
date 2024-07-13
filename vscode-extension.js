@@ -83,6 +83,7 @@ const onDidChangeTextDocument = (e) => {
   cacheObj.forms = forms
   cacheObj.version = version
 }
+
 // https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide
 const tokenTypes = ['variable', 'keyword', 'function', 'macro', 'parameter', 'string', 'number', 'comment', 'type']
 
@@ -388,13 +389,55 @@ const provideSelectionRanges = (document, positions) => {
   return selRanges
 }
 
+const cacheSelfParsed = new Map()
+
+let incParseModule = null
+
+const onDidChangeTextDocumentOwnParser = (e) => {
+  const { document, contentChanges, reason } = e
+  if (contentChanges.length === 0) return
+  const { languageId, uri, version } = document
+  if (languageId !== wunsLanguageId) return
+
+  const uriStr = uri.toString()
+  let docObj = cacheSelfParsed.get(uriStr)
+  const text = document.getText()
+  const { parseString, patchNode } = incParseModule
+  let tree
+  if (!docObj) {
+    const watch = makeStopWatch()
+    tree = parseString(text)
+    console.log('parseString took', watch(), 'ms')
+    docObj = { version, text, tree }
+    cacheSelfParsed.set(uriStr, docObj)
+    return
+  }
+  const watch = makeStopWatch()
+  const newTree = patchNode(docObj.tree, contentChanges)
+  console.log('patchNode took ', watch(), 'ms')
+  docObj.version = version
+  docObj.text = text
+  docObj.tree = newTree
+}
+
 /**
  * @param {vscode.ExtensionContext} context
  */
 async function activate(context) {
   const { parse, treeToForms } = await import('./esm/parseTreeSitter.js')
+  incParseModule = await import('./esm/incparseDAG.js')
+  const { meta, print, isWord } = await import('./esm/core.js')
+  const go = (x) => {
+    const m = meta(x)
+    const { startIndex, endIndex } = m
+    if (isWord(x)) return `{${startIndex} - ${endIndex}}` + String(x)
+    if (Array.isArray(x)) return `[{${startIndex} - ${endIndex}} ${x.map(go).join(' ')}]`
+    throw new Error('unexpected form: ' + print(x))
+  }
   parseDocument = (document, oldTree) => {
+    const watch = makeStopWatch()
     const tree = parse(document.getText(), oldTree)
+    console.log('parse treesitter took', watch(), 'ms')
     return { tree, forms: treeToForms(tree) }
   }
   console.log('starting wuns lang extension: ' + context.extensionPath)
@@ -403,7 +446,6 @@ async function activate(context) {
   context.subscriptions.push(commands.registerCommand('wunslang.check', await makeCheckCurrentFileCommand(context)))
 
   const selector = { language: 'wuns', scheme: 'file' }
-
   context.subscriptions.push(
     languages.registerDocumentSemanticTokensProvider(
       selector,
@@ -415,6 +457,7 @@ async function activate(context) {
     languages.registerSelectionRangeProvider(selector, { provideSelectionRanges }),
   )
   workspace.onDidChangeTextDocument(onDidChangeTextDocument)
+  workspace.onDidChangeTextDocument(onDidChangeTextDocumentOwnParser)
   console.log('Congratulations, your extension "wunslang" is now active!')
 }
 
