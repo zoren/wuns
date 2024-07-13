@@ -353,9 +353,7 @@ export const parseString = (text) => {
   const rootMut = { type: nodeTypeRoot, byteLength: 0, children: [] }
   const stack = [rootMut]
   const utf8bytes = textEncoder.encode(text)
-  const pushTop = (node) => {
-    stack.at(-1).children.push(node)
-  }
+  const pushTop = (node) => stack.at(-1).children.push(node)
   for (let i = 0; i < utf8bytes.length; i++) {
     const ctokenType = codeToTerminalType(utf8bytes[i])
     switch (ctokenType) {
@@ -372,13 +370,10 @@ export const parseString = (text) => {
       }
     }
     const pred = terminalTypeToPredicate(ctokenType)
-    const start = i
-    while (i + 1 < utf8bytes.length) {
-      if (!pred(utf8bytes[i + 1])) break
-      i++
-    }
-    const length = i - start + 1
-    pushMergedTerminal(stack, ctokenType, length)
+    let j = i + 1
+    for (; j < utf8bytes.length && pred(utf8bytes[j]); j++);
+    pushMergedTerminal(stack, ctokenType, j - i)
+    i = j - 1
   }
   return finishStack(stack)
 }
