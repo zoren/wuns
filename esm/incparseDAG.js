@@ -12,10 +12,10 @@ const nodeTypeWhitespace = 'whitespace'
 const nodeTypeIllegalChars = 'illegal-chars'
 
 export const treesEqual = (a, b) => {
-  if (a.type !== b.type || a.byteLength !== b.byteLength) return false
+  if (a.type !== b.type || a.length !== b.length) return false
   const achil = a.children
   const bchil = b.children
-  if (achil === undefined && bchil === undefined) return a.type === b.type || a.byteLength === b.byteLength
+  if (achil === undefined && bchil === undefined) return a.type === b.type || a.length === b.length
   if (achil === undefined || bchil === undefined) return false
   const noChildren = achil.length
   if (noChildren !== bchil.length) return false
@@ -58,32 +58,32 @@ const isTerminalNodeType = (type) =>
 const isNonTerminalNodeType = (type) => type === nodeTypeList || type === nodeTypeRoot
 
 export const validateNode = (node) => {
-  const { type, byteLength, children } = node
+  const { type, length, children } = node
   if (!Object.isFrozen(node)) throw new Error('expected node to be frozen')
-  if (byteLength === undefined || byteLength < 0 || !Number.isInteger(byteLength))
+  if (length === undefined || length < 0 || !Number.isInteger(length))
     throw new Error('expected positive byte length')
-  if (type !== nodeTypeRoot && byteLength === 0) throw new Error('expected non-root node to have non-zero byte')
-  if ((type === nodeTypeStartBracket || type === nodeTypeEndBracket) && byteLength !== 1)
+  if (type !== nodeTypeRoot && length === 0) throw new Error('expected non-root node to have non-zero byte')
+  if ((type === nodeTypeStartBracket || type === nodeTypeEndBracket) && length !== 1)
     throw new Error('expected start bracket to have byte length 1')
   if (!children) return
   if (type !== nodeTypeList && type !== nodeTypeRoot) throw new Error('expected non-terminal node to have children')
   if (type !== nodeTypeRoot && children.length === 0) throw new Error('expected non-terminal node to have children')
-  if (type === nodeTypeList && byteLength === 0) throw new Error('expected list to have non-zero byte length')
+  if (type === nodeTypeList && length === 0) throw new Error('expected list to have non-zero byte length')
   let prevSiblingType = null
-  let totalByteLength = 0
+  let totallength = 0
   for (const child of children) {
-    const { type, byteLength } = child
+    const { type, length } = child
     if (isVariableLengthTerminalNodeType(type) && prevSiblingType === type)
       throw new Error('var length terminals of same type cannot be adjacent')
     prevSiblingType = type
     validateNode(child)
-    totalByteLength += byteLength
+    totallength += length
   }
-  if (totalByteLength !== byteLength) throw new Error('expected sum of child byte lengths to equal byte length')
+  if (totallength !== length) throw new Error('expected sum of child byte lengths to equal byte length')
 }
 
-export const logNode = ({ type, byteLength, children }, indent = '') => {
-  console.log(indent + type + ' ' + byteLength)
+export const logNode = ({ type, length, children }, indent = '') => {
+  console.log(indent + type + ' ' + length)
   if (children) {
     indent += '  '
     for (const child of children) logNode(child, indent)
@@ -111,7 +111,7 @@ export const newTreeCursor = (rootNode) => {
       const node = currentNode()
       if (node.children === undefined || node.children.length === 0) return false
       path.push({ parentNode: node, childIndex: node.children.length - 1 })
-      offset += node.byteLength - node.children.at(-1).byteLength
+      offset += node.length - node.children.at(-1).length
       return true
     },
     gotoNextSibling: () => {
@@ -120,9 +120,9 @@ export const newTreeCursor = (rootNode) => {
       const { parentNode, childIndex } = cur
       const { children } = parentNode
       if (childIndex === children.length - 1) return false
-      const { byteLength } = children[childIndex]
+      const { length } = children[childIndex]
       cur.childIndex++
-      offset += byteLength
+      offset += length
       return true
     },
     gotoPrevSibling: () => {
@@ -131,16 +131,16 @@ export const newTreeCursor = (rootNode) => {
       const { parentNode, childIndex } = cur
       if (childIndex === 0) return false
       const { children } = parentNode
-      const { byteLength } = children[childIndex - 1]
+      const { length } = children[childIndex - 1]
       cur.childIndex--
-      offset -= byteLength
+      offset -= length
       return true
     },
     gotoParent: () => {
       if (path.length === 0) return false
       const { parentNode, childIndex } = path.pop()
       const parentChildren = parentNode.children
-      for (let i = 0; i < childIndex; i++) offset -= parentChildren[i].byteLength
+      for (let i = 0; i < childIndex; i++) offset -= parentChildren[i].length
       return true
     },
     getParent: () => {
@@ -154,28 +154,28 @@ export const newTreeCursor = (rootNode) => {
   }
 }
 
-const sumByteLengths = (children) =>
+const sumLengths = (children) =>
   children.reduce((acc, node) => {
-    const { byteLength } = node
-    if (!Number.isInteger(byteLength) || byteLength === 0) throw new Error('expected byte length')
-    return acc + byteLength
+    const { length } = node
+    if (!Number.isInteger(length) || length === 0) throw new Error('expected byte length')
+    return acc + length
   }, 0)
 
 const terminalCache = new Map()
 
-const createTerminal = (type, byteLength) => {
+const createTerminal = (type, length) => {
   if (!isTerminalNodeType(type)) throw new Error('expected terminal node type')
-  if (byteLength <= 0) throw new Error('expected positive byte length')
-  if (!isVariableLengthTerminalNodeType(type) && byteLength !== 1) throw new Error('expected byte length to be 1')
+  if (length <= 0) throw new Error('expected positive byte length')
+  if (!isVariableLengthTerminalNodeType(type) && length !== 1) throw new Error('expected byte length to be 1')
   let cached = terminalCache.get(type)
   if (cached === undefined) {
     cached = new Map()
     terminalCache.set(type, cached)
   }
-  let cachedNode = cached.get(byteLength)
+  let cachedNode = cached.get(length)
   if (cachedNode) return cachedNode
-  cachedNode = Object.freeze({ type, byteLength })
-  cached.set(byteLength, cachedNode)
+  cachedNode = Object.freeze({ type, length })
+  cached.set(length, cachedNode)
   return cachedNode
 }
 
@@ -186,46 +186,46 @@ export const ille = (n) => createTerminal(nodeTypeIllegalChars, n)
 export const lsqb = createTerminal(nodeTypeStartBracket, 1)
 export const rsqb = createTerminal(nodeTypeEndBracket, 1)
 
-const createNonTerminal = (type, byteLength, children) => {
+const createNonTerminal = (type, length, children) => {
   if (!isNonTerminalNodeType(type)) throw new Error('expected non-terminal node type')
   if (type !== nodeTypeRoot && children.length === 0) throw new Error('expected non-terminal node to have children')
-  for (const { type, byteLength } of children) {
+  for (const { type, length } of children) {
     if (type === nodeTypeRoot) throw new Error('root cannot be child')
-    if (!Number.isInteger(byteLength) || byteLength <= 0) throw new Error('expected positive byte length')
+    if (!Number.isInteger(length) || length <= 0) throw new Error('expected positive byte length')
   }
-  if (sumByteLengths(children) !== byteLength)
+  if (sumLengths(children) !== length)
     throw new Error('expected sum of child byte lengths to equal byte length')
-  return Object.freeze({ type, byteLength, children: Object.freeze(children) })
+  return Object.freeze({ type, length, children: Object.freeze(children) })
 }
 
 const emptyRoot = createNonTerminal(nodeTypeRoot, 0, [])
 
 export const root = (...nodes) =>
-  nodes.length === 0 ? emptyRoot : createNonTerminal(nodeTypeRoot, sumByteLengths(nodes), nodes)
-export const list = (...nodes) => createNonTerminal(nodeTypeList, sumByteLengths(nodes), nodes)
+  nodes.length === 0 ? emptyRoot : createNonTerminal(nodeTypeRoot, sumLengths(nodes), nodes)
+export const list = (...nodes) => createNonTerminal(nodeTypeList, sumLengths(nodes), nodes)
 
 // splits a node before not including the index returning a new node containing the split off part
 export const nodeTake = (root, initIndex) => {
   if (root.type !== nodeTypeRoot) throw new Error('expected root node')
   if (initIndex < 0) throw new Error('expected index to be non-negative')
   if (initIndex === 0) return emptyRoot
-  if (initIndex === root.byteLength) return root
+  if (initIndex === root.length) return root
 
   const go = (node, index) => {
-    const { type, byteLength, children } = node
+    const { type, length, children } = node
     if (index < 0) throw new Error('expected index to be non-zero')
-    if (byteLength <= index) return node
+    if (length <= index) return node
     if (isTerminalNodeType(type)) return createTerminal(type, index)
     const newChildren = []
     let remaining = index
     for (const child of children) {
-      const { byteLength } = child
-      if (byteLength >= remaining) {
+      const { length } = child
+      if (length >= remaining) {
         newChildren.push(go(child, remaining))
         break
       }
       newChildren.push(child)
-      remaining -= byteLength
+      remaining -= length
     }
     return createNonTerminal(type, index, newChildren)
   }
@@ -235,23 +235,23 @@ export const nodeTake = (root, initIndex) => {
 // drops bytes of a node merging headless lists
 export const nodeDropMerge = (root, initIndex) => {
   if (root.type !== nodeTypeRoot) throw new Error('expected root node')
-  if (root.byteLength === initIndex) return emptyRoot
+  if (root.length === initIndex) return emptyRoot
   const go = (node, index) => {
-    const { type, byteLength, children } = node
+    const { type, length, children } = node
     if (index < 0) throw new Error('expected index to be non-negative')
     if (index === 0) return [node]
-    if (byteLength < index) throw new Error('expected index to be less than byte length')
-    if (isTerminalNodeType(type)) return [createTerminal(type, byteLength - index)]
+    if (length < index) throw new Error('expected index to be less than byte length')
+    if (isTerminalNodeType(type)) return [createTerminal(type, length - index)]
     const newChildren = []
     let remaining = index
     for (let childIndex = 0; childIndex < children.length; childIndex++) {
       const child = children[childIndex]
-      const childLength = child.byteLength
+      const childLength = child.length
       if (remaining < childLength) {
         newChildren.push(...go(child, remaining))
         newChildren.push(...children.slice(childIndex + 1))
         if (type === nodeTypeList) return newChildren
-        return [createNonTerminal(type, byteLength - index, newChildren)]
+        return [createNonTerminal(type, length - index, newChildren)]
       }
       remaining -= childLength
     }
@@ -274,12 +274,12 @@ export const mergeNodes = (a, b) => {
   // merge potentially unclosed lists of a with top nodes of b
   // if a has unclosed lists they will the last children of their parent
   const go = (node) => {
-    const { type, byteLength, children } = node
+    const { type, length, children } = node
     if (type === nodeTypeStartBracket) throw new Error('unexpected start bracket')
     if (type === nodeTypeEndBracket) return node
     if (isVariableLengthTerminalNodeType(type)) {
       if (bChildren.length === 0 || bChildren[0].type !== type) return node
-      return createTerminal(type, byteLength + bChildren.shift().byteLength)
+      return createTerminal(type, length + bChildren.shift().length)
     }
     if (type !== nodeTypeList) throw new Error('unexpected type')
     if (children.length === 0) throw new Error('expected list to have children')
@@ -289,7 +289,7 @@ export const mergeNodes = (a, b) => {
       const poped = spliceUnclosed()
       const [child] = children
       const merged = [child, ...poped]
-      const length = child.byteLength + sumByteLengths(poped)
+      const length = child.length + sumLengths(poped)
       return createNonTerminal(nodeTypeList, length, merged)
     }
     const lastChild = children.at(-1)
@@ -297,11 +297,11 @@ export const mergeNodes = (a, b) => {
     const newLast = go(lastChild)
     const poped = spliceUnclosed()
     const merged = children.slice(0, -1).concat(newLast, poped)
-    const length = byteLength - lastChild.byteLength + newLast.byteLength + sumByteLengths(poped)
-    return createNonTerminal(nodeTypeList, length, merged)
+    const charLength = length - lastChild.length + newLast.length + sumLengths(poped)
+    return createNonTerminal(nodeTypeList, charLength, merged)
   }
   const children = aChildren.slice(0, -1).concat(go(aChildren.at(-1)), bChildren)
-  return createNonTerminal(nodeTypeRoot, a.byteLength + b.byteLength, children)
+  return createNonTerminal(nodeTypeRoot, a.length + b.length, children)
 }
 
 export const patchNode = (oldTree, changes) => {
@@ -318,7 +318,7 @@ export const patchNode = (oldTree, changes) => {
   }
   changes.reverse()
   for (const { rangeOffset, rangeLength, text } of changes) {
-    const dropped = oldTree.byteLength - curOld.byteLength
+    const dropped = oldTree.length - curOld.length
     const relativeOffset = rangeOffset - dropped
     const split = nodeTake(curOld, relativeOffset)
     const insert = parseString(text)
@@ -332,11 +332,11 @@ export const patchNode = (oldTree, changes) => {
 const textEncoder = new TextEncoder()
 
 export const parseString = (text) => {
-  const root = { type: nodeTypeRoot, byteLength: 0, children: [] }
+  const root = { type: nodeTypeRoot, length: 0, children: [] }
   const stack = [root]
   const finishNonTerminal = () => {
     const node = stack.pop()
-    node.byteLength = sumByteLengths(node.children)
+    node.length = sumLengths(node.children)
     Object.freeze(node.children)
     Object.freeze(node)
   }
@@ -346,7 +346,7 @@ export const parseString = (text) => {
     const ctokenType = codeToTerminalType(utf8bytes[i])
     switch (ctokenType) {
       case nodeTypeStartBracket: {
-        const node = { type: nodeTypeList, byteLength: 1, children: [lsqb] }
+        const node = { type: nodeTypeList, length: 1, children: [lsqb] }
         pushTop(node)
         stack.push(node)
         continue
