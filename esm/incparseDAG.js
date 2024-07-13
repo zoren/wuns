@@ -271,18 +271,17 @@ export const parseString = (text) => {
     Object.freeze(node.children)
     Object.freeze(node)
   }
-  const pushTop = (node) => stack.at(-1).children.push(node)
   for (let i = 0; i < text.length; i++) {
     const ctokenType = codeToTerminalType(text.charCodeAt(i))
     switch (ctokenType) {
       case nodeTypeStartBracket: {
         const node = { type: nodeTypeList, length: 1, children: [lsqb] }
-        pushTop(node)
+        stack.at(-1).children.push(node)
         stack.push(node)
         continue
       }
       case nodeTypeEndBracket: {
-        pushTop(rsqb)
+        stack.at(-1).children.push(rsqb)
         if (1 < stack.length) finishNonTerminal()
         continue
       }
@@ -290,7 +289,7 @@ export const parseString = (text) => {
     const pred = terminalTypeToPredicate(ctokenType)
     let j = i + 1
     for (; j < text.length && pred(text.charCodeAt(j)); j++);
-    pushTop(createTerminal(ctokenType, j - i))
+    stack.at(-1).children.push(createTerminal(ctokenType, j - i))
     i = j - 1
   }
   while (stack.length > 0) finishNonTerminal()
