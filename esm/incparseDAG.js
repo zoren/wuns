@@ -154,19 +154,6 @@ export const newTreeCursor = (rootNode) => {
   }
 }
 
-export const pushTop = (stack, node) => {
-  const { type } = node
-  if (type === nodeTypeRoot) throw new Error('root cannot be pushed')
-  const top = stack.at(-1)
-  if (type === nodeTypeStartBracket) {
-    if (top.type !== nodeTypeList) throw new Error('start brackets can only be in lists')
-    if (top.children.length !== 0) throw new Error('start bracket cannot be in non-empty list')
-  }
-  if (top.type === nodeTypeList && top.children.length === 0 && node.type !== nodeTypeStartBracket)
-    throw new Error('expected start bracket')
-  top.children.push(node)
-}
-
 export const sumByteLengths = (children) =>
   children.reduce((acc, node) => {
     const { byteLength } = node
@@ -176,32 +163,6 @@ export const sumByteLengths = (children) =>
     }
     return acc + byteLength
   }, 0)
-
-const finishNonTerminal = (stack) => {
-  if (stack.length === 0) throw new Error('expected stack to be non-empty')
-  const node = stack.pop()
-  node.byteLength = sumByteLengths(node.children)
-  Object.freeze(node.children)
-  Object.freeze(node)
-  return node
-}
-
-export const finishStack = (stack) => {
-  if (stack.length === 0) throw new Error('expected stack to be non-empty')
-  let node = null
-  while (stack.length > 0) {
-    node = finishNonTerminal(stack)
-  }
-  return node
-}
-
-const tryFinishNonTerminal = (stack) => {
-  if (stack.length < 2) return false
-  finishNonTerminal(stack)
-  return true
-}
-
-const dir = (obj) => console.dir(obj, { depth: null })
 
 const terminalCache = new Map()
 
@@ -362,7 +323,6 @@ export const patchNode = (oldTree, changes) => {
   return mergeNodes(result, curOld)
 }
 
-
 const pushMergedTerminal = (stack, type, length) => {
   const top = stack.at(-1)
   const { children } = top
@@ -374,20 +334,32 @@ const pushMergedTerminal = (stack, type, length) => {
   }
 }
 
+const finishNonTerminal = (stack) => {
+  if (stack.length === 0) throw new Error('expected stack to be non-empty')
+  const node = stack.pop()
+  node.byteLength = sumByteLengths(node.children)
+  Object.freeze(node.children)
+  Object.freeze(node)
+  return node
+}
+
 const parseBuffer = (stack, uft8bytes) => {
   let i = 0
+  const pushTop = (node) => {
+    stack.at(-1).children.push(node)
+  }
   for (; i < uft8bytes.length; i++) {
     const ctokenType = codeToTerminalType(uft8bytes[i])
     switch (ctokenType) {
       case nodeTypeStartBracket: {
         const node = { type: nodeTypeList, byteLength: 1, children: [lsqb] }
-        pushTop(stack, node)
+        pushTop(node)
         stack.push(node)
         continue
       }
       case nodeTypeEndBracket: {
-        pushTop(stack, rsqb)
-        tryFinishNonTerminal(stack)
+        pushTop(rsqb)
+        if (1 < stack.length) finishNonTerminal(stack)
         continue
       }
     }
@@ -402,6 +374,23 @@ const parseBuffer = (stack, uft8bytes) => {
   }
 }
 
+const textEncoder = new TextEncoder()
+
+const finishStack = (stack) => {
+  if (stack.length === 0) throw new Error('expected stack to be non-empty')
+  let node = null
+  while (stack.length > 0) node = finishNonTerminal(stack)
+  return node
+}
+
+export const parseString = (text) => {
+  const rootMut = { type: nodeTypeRoot, byteLength: 0, children: [] }
+  const stack = [rootMut]
+  parseBuffer(stack, textEncoder.encode(text))
+  const root = finishStack(stack)
+  return root
+}
+
 const assertDesc = (changes) => {
   // check changes descending by offset
   let offset = null
@@ -410,16 +399,6 @@ const assertDesc = (changes) => {
     if (offset !== null && rangeOffset > offset) throw new Error('expected changes to be sorted by offset')
     offset = rangeOffset
   }
-}
-
-const textEncoder = new TextEncoder()
-
-export const parseString = (text) => {
-  const rootMut = { type: nodeTypeRoot, byteLength: 0, children: [] }
-  const stack = [rootMut]
-  parseBuffer(stack, textEncoder.encode(text))
-  const root = finishStack(stack)
-  return root
 }
 
 function* preorderGeneratorFromCursor(cursor) {
