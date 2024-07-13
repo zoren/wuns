@@ -167,17 +167,6 @@ export const pushTop = (stack, node) => {
   top.children.push(node)
 }
 
-const pushMergedTerminal = (stack, type, length) => {
-  const top = stack.at(-1)
-  const { children } = top
-  const lastChild = children.at(-1)
-  if (lastChild && lastChild.type === type) {
-    children[children.length - 1] = createTerminal(type, lastChild.byteLength + length)
-  } else {
-    children.push(createTerminal(type, length))
-  }
-}
-
 export const sumByteLengths = (children) =>
   children.reduce((acc, node) => {
     const { byteLength } = node
@@ -216,7 +205,7 @@ const dir = (obj) => console.dir(obj, { depth: null })
 
 const terminalCache = new Map()
 
-export const createTerminal = (type, byteLength) => {
+const createTerminal = (type, byteLength) => {
   if (!isTerminalNodeType(type)) throw new Error('expected terminal node type')
   if (byteLength <= 0) throw new Error('expected positive byte length')
   if (!isVariableLengthTerminalNodeType(type) && byteLength !== 1) throw new Error('expected byte length to be 1')
@@ -239,7 +228,7 @@ export const ille = (n) => createTerminal(nodeTypeIllegalChars, n)
 export const lsqb = createTerminal(nodeTypeStartBracket, 1)
 export const rsqb = createTerminal(nodeTypeEndBracket, 1)
 
-export const createNonTerminal = (type, byteLength, children) => {
+const createNonTerminal = (type, byteLength, children) => {
   if (!isNonTerminalNodeType(type)) throw new Error('expected non-terminal node type')
   if (type !== nodeTypeRoot && children.length === 0) throw new Error('expected non-terminal node to have children')
   for (const { type, byteLength } of children) {
@@ -284,41 +273,6 @@ export const nodeTake = (root, initIndex) => {
   }
   return go(root, initIndex)
 }
-
-// splits a node after the index returning a new node containing the split off part
-// const nodeDrop = (node, index) => {
-//   const { type, byteLength, children } = node
-//   if (index < 0) throw new Error('expected index to be non-negative')
-//   if (index === 0) return node
-//   if (byteLength <= index) throw new Error('expected index to be less than byte length')
-//   if (isTerminalNodeType(type)) return createTerminal(type, byteLength - index)
-//   const newChildren = []
-//   let remaining = index
-//   for (let childIndex = 0; childIndex < children.length; childIndex++) {
-//     const child = children[childIndex]
-//     const childLength = child.byteLength
-//     if (remaining < childLength) {
-//       newChildren.push(nodeDrop(child, remaining))
-//       newChildren.push(...children.slice(childIndex + 1))
-//       return createNonTerminal(type, byteLength - index, newChildren)
-//     }
-//     remaining -= childLength
-//   }
-// }
-
-// const isHeadLessList = ({ type, children }) => type === nodeTypeList && children[0].type !== nodeTypeStartBracket
-
-// const mergeHeadLessLists = (root) => {
-//   const go = (node) => {
-//     const { type, byteLength, children } = node
-//     if (isTerminalNodeType(type)) return [node]
-//     if (isHeadLessList(node)) return node.children.map(go).flat(1)
-//     const newChildren = []
-//     for (const child of children) newChildren.push(...go(child))
-//     return [createNonTerminal(type, byteLength, newChildren)]
-//   }
-//   return go(root)[0]
-// }
 
 // drops bytes of a node merging headless lists
 export const nodeDropMerge = (root, initIndex) => {
@@ -408,6 +362,18 @@ export const patchNode = (oldTree, changes) => {
   return mergeNodes(result, curOld)
 }
 
+
+const pushMergedTerminal = (stack, type, length) => {
+  const top = stack.at(-1)
+  const { children } = top
+  const lastChild = children.at(-1)
+  if (lastChild && lastChild.type === type) {
+    children[children.length - 1] = createTerminal(type, lastChild.byteLength + length)
+  } else {
+    children.push(createTerminal(type, length))
+  }
+}
+
 const parseBuffer = (stack, uft8bytes) => {
   let i = 0
   for (; i < uft8bytes.length; i++) {
@@ -446,125 +412,7 @@ const assertDesc = (changes) => {
   }
 }
 
-export const advanceCursorToIndexN = (
-  cursor,
-  index,
-  { wentNextSibling = () => {}, wentToParent = () => {}, wentToFirstChild = () => {} } = {},
-) => {
-  if (index < cursor.getOffset()) throw new Error('index before offset')
-  while (true) {
-    const offset = cursor.getOffset()
-    const node = cursor.currentNode()
-    if (offset + node.byteLength <= index) {
-      if (cursor.gotoNextSibling()) {
-        wentNextSibling(node)
-        continue
-      }
-      if (!cursor.gotoParent()) return 'end'
-      wentToParent()
-      continue
-    }
-    if (!cursor.gotoFirstChild()) return 'terminal'
-    wentToFirstChild()
-  }
-}
-
 const textEncoder = new TextEncoder()
-
-export const patchTree = (oldRoot, changes) => {
-  validateNode(oldRoot)
-  assertDesc(changes)
-  const rootMut = { type: nodeTypeRoot, byteLength: 0, children: [] }
-  const stack = [rootMut]
-  const cursor = newTreeCursor(oldRoot)
-  const pushUpToIndex = (index) => {
-    console.log('pushUpToIndex', { index, offset: cursor.getOffset() })
-    if (index < cursor.getOffset()) throw new Error('index before offset')
-    while (true) {
-      const offset = cursor.getOffset()
-      if (offset === index) return 'start-of-node'
-      const node = cursor.currentNode()
-      const nodeEnd = offset + node.byteLength
-      if (nodeEnd < index) {
-        if (cursor.gotoNextSibling()) {
-          pushTop(stack, node)
-          continue
-        }
-        if (!cursor.gotoParent()) return 'end'
-        tryFinishNonTerminal(stack)
-        continue
-      }
-      if (node.type === nodeTypeList && index === offset) {
-        throw new Error('unexpected list node')
-      }
-      // we're inside a node containing the index
-      if (!cursor.gotoFirstChild()) return 'terminal'
-      // if (index === cursor.getOffset()) return 'start-of-list'
-      {
-        const listNode = { type: nodeTypeList, byteLength: 0, children: [] }
-        pushTop(stack, listNode)
-        stack.push(listNode)
-      }
-    }
-  }
-  cursor.gotoFirstChild()
-  const reverseChanges = [...changes]
-  const pushBite = (type, length) => {
-    if (length === 0) return
-    switch (type) {
-      case nodeTypeStartBracket: {
-        // pushList(stack)
-        break
-      }
-      case nodeTypeEndBracket:
-        pushTop(stack, createTerminal(type, 1))
-        tryFinishNonTerminal(stack)
-        break
-      default: {
-        if (!isTerminalNodeType(type)) throw new Error('unexpected type: ' + type + ' ' + length)
-        if (!isVariableLengthTerminalNodeType(type)) throw new Error('unexpected terminal type')
-        pushMergedTerminal(stack, type, length)
-      }
-    }
-  }
-  for (const { rangeOffset, rangeLength, text } of reverseChanges) {
-    // push everything before the change
-    const result = pushUpToIndex(rangeOffset)
-    console.dir({ beforeResult: result, stack, curNode: cursor.currentNode() }, { depth: null })
-    // if we're inside a token we need to split the beginning
-    {
-      const { type } = cursor.currentNode()
-      const offset = cursor.getOffset()
-      const length = rangeOffset - offset
-      console.log('before', { type, offset, rangeOffset, rangeLength, length })
-      pushBite(type, length)
-    }
-    parseBuffer(stack, textEncoder.encode(text))
-    console.dir({ afterParse: stack }, { depth: null })
-    // skip the change
-    const afterResult = advanceCursorToIndexN(cursor, rangeOffset + rangeLength)
-    // if we're inside a token we need to split the end
-    console.dir({ afterResult, stack }, { depth: null })
-    {
-      const { type, byteLength } = cursor.currentNode()
-      const offset = cursor.getOffset()
-      const termEnd = offset + byteLength
-      const rangeEnd = rangeOffset + rangeLength
-      const length = termEnd - rangeEnd
-      console.log('after', { type, offset, rangeEnd, termEnd, length })
-      pushBite(type, length)
-    }
-  }
-  console.dir({ stack }, { depth: null })
-  // push the rest
-  pushUpToIndex(Infinity)
-  const finalTerm = cursor.currentNode()
-  dir({ finalTerm })
-  console.dir({ stack }, { depth: null })
-  const root = finishStack(stack)
-  validateNode(rootMut)
-  return root
-}
 
 export const parseString = (text) => {
   const rootMut = { type: nodeTypeRoot, byteLength: 0, children: [] }
