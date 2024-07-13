@@ -24,6 +24,8 @@ const errorTests = [
   [['unclosed-list'], '[quote 34'],
 ]
 
+let nOfAsserts = 0
+
 for (const [expectedErrors, test] of okTests.map((test) => [[], test]).concat(errorTests)) {
   const tree = parseString(test)
   console.log(`'${test}'`)
@@ -33,12 +35,14 @@ for (const [expectedErrors, test] of okTests.map((test) => [[], test]).concat(er
     console.log(`expected: ${JSON.stringify(expectedErrors)} actual: ${JSON.stringify(errors)}`)
     continue
   }
+  nOfAsserts++
   for (let i = 0; i < expectedErrors.length; i++) {
     if (expectedErrors[i] !== errors[i].message) {
       console.log(`expected error: ${expectedErrors[i]} actual error: ${errors[i].message}`)
       console.log(`expected: ${JSON.stringify(expectedErrors)} actual: ${JSON.stringify(errors)}`)
       break
     }
+    nOfAsserts++
   }
   console.log()
 }
@@ -61,6 +65,7 @@ for (const { expected, node, index } of [
   { expected: root(liop()), node: root(licl()), index: 1 },
 ]) {
   if (!treesEqual(expected, nodeTake(node, index))) throw new Error('expected trees to be equal')
+  nOfAsserts++
 }
 
 for (const { expected, node, index } of [
@@ -89,6 +94,7 @@ for (const { expected, node, index } of [
     logNode(merged)
     throw new Error('expected trees to be equal')
   }
+  nOfAsserts++
 }
 
 for (const { expected, input } of [
@@ -142,6 +148,7 @@ for (const { expected, input } of [
     dir({ expected, root })
     throw new Error('expected trees to be equal')
   }
+  nOfAsserts++
 }
 
 for (const { expected, a, b } of [
@@ -162,6 +169,7 @@ for (const { expected, a, b } of [
     logNode(merged)
     throw new Error('expected trees to be equal')
   }
+  nOfAsserts++
 }
 
 for (const s of [
@@ -189,6 +197,7 @@ for (const s of [
       logNode(merged)
       throw new Error('expected trees to be equal')
     }
+    nOfAsserts++
   }
 }
 
@@ -373,4 +382,7 @@ for (const delta of deltas) {
     logNode(newTreeReparsed)
     throw new Error('expected trees to be equal')
   }
+  nOfAsserts++
 }
+
+console.log(`all tests passed (${nOfAsserts} asserts)`)
