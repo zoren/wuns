@@ -319,11 +319,12 @@ export const patchNode = (oldTree, changes) => {
   changes.reverse()
   for (const { rangeOffset, rangeLength, text } of changes) {
     const dropped = oldTree.byteLength - curOld.byteLength
-    const split = nodeTake(curOld, rangeOffset - dropped)
+    const relativeOffset = rangeOffset - dropped
+    const split = nodeTake(curOld, relativeOffset)
     const insert = parseString(text)
     const splitInsert = mergeNodes(split, insert)
     result = mergeNodes(result, splitInsert)
-    curOld = nodeDropMerge(curOld, rangeOffset + rangeLength - dropped)
+    curOld = nodeDropMerge(curOld, relativeOffset + rangeLength)
   }
   return mergeNodes(result, curOld)
 }

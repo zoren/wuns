@@ -28,7 +28,6 @@ let nOfAsserts = 0
 
 for (const [expectedErrors, test] of okTests.map((test) => [[], test]).concat(errorTests)) {
   const tree = parseString(test)
-  console.log(`'${test}'`)
   const errors = getErrors(tree)
   if (expectedErrors.length !== errors.length) {
     console.log(`expected errors: ${expectedErrors.length} actual errors: ${errors.length}`)
@@ -44,7 +43,6 @@ for (const [expectedErrors, test] of okTests.map((test) => [[], test]).concat(er
     }
     nOfAsserts++
   }
-  console.log()
 }
 
 const liop = (...nodes) => list(lsqb, ...nodes)
