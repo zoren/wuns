@@ -154,13 +154,10 @@ export const newTreeCursor = (rootNode) => {
   }
 }
 
-export const sumByteLengths = (children) =>
+const sumByteLengths = (children) =>
   children.reduce((acc, node) => {
     const { byteLength } = node
-    if (!node.byteLength) {
-      console.log({ node })
-      throw new Error('expected byte length')
-    }
+    if (!Number.isInteger(byteLength) || byteLength === 0) throw new Error('expected byte length')
     return acc + byteLength
   }, 0)
 
@@ -425,7 +422,6 @@ export const getErrors = (tree) => {
         if (cursor.getParent().type !== nodeTypeList) errors.push({ message: 'extra-closing', node })
         break
       case nodeTypeList:
-        // console.log('getErrors nodeTypeList', { node, end: node.children.at(-1) })
         if (node.children.at(-1).type !== nodeTypeEndBracket) errors.push({ message: 'unclosed-list', node })
         break
     }
