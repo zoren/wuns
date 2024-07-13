@@ -1,16 +1,3 @@
-const isWhitespace = (c) => c === 32 || c === 9 || c === 10
-const otherWordChars = new Set([...'-./='].map((c) => c.charCodeAt(0)))
-const isWordChar = (c) => (97 <= c && c <= 122) || (48 <= c && c <= 57) || otherWordChars.has(c)
-const isIllegal = (c) => !isWordChar(c) && !isWhitespace(c) && c !== 91 && c !== 93
-
-const nodeTypeRoot = 'root'
-const nodeTypeList = 'list'
-const nodeTypeStartBracket = '['
-const nodeTypeEndBracket = ']'
-const nodeTypeWord = 'word'
-const nodeTypeWhitespace = 'whitespace'
-const nodeTypeIllegalChars = 'illegal-chars'
-
 export const treesEqual = (a, b) => {
   if (a.type !== b.type || a.length !== b.length) return false
   const achil = a.children
@@ -23,30 +10,28 @@ export const treesEqual = (a, b) => {
   return true
 }
 
-const terminalTypeToPredicate = (type) => {
-  switch (type) {
-    case nodeTypeWord:
-      return isWordChar
-    case nodeTypeWhitespace:
-      return isWhitespace
-    case nodeTypeIllegalChars:
-      return isIllegal
+export const logNode = ({ type, length, children }, indent = '') => {
+  console.log(indent + type + ' ' + length)
+  if (children) {
+    indent += '  '
+    for (const child of children) logNode(child, indent)
   }
-  throw new Error('unexpected terminal type')
 }
 
-const codeToTerminalType = (c) => {
-  switch (c) {
-    case 91:
-      return nodeTypeStartBracket
-    case 93:
-      return nodeTypeEndBracket
-    default:
-      if (isWordChar(c)) return nodeTypeWord
-      if (isWhitespace(c)) return nodeTypeWhitespace
-      return nodeTypeIllegalChars
-  }
-}
+const sumLengths = (children) =>
+  children.reduce((acc, node) => {
+    const { length } = node
+    if (!Number.isInteger(length) || length === 0) throw new Error('expected byte length')
+    return acc + length
+  }, 0)
+
+const nodeTypeRoot = 'root'
+const nodeTypeList = 'list'
+const nodeTypeStartBracket = '['
+const nodeTypeEndBracket = ']'
+const nodeTypeWord = 'word'
+const nodeTypeWhitespace = 'whitespace'
+const nodeTypeIllegalChars = 'illegal-chars'
 
 const isVariableLengthTerminalNodeType = (type) =>
   type === nodeTypeWord || type === nodeTypeIllegalChars || type === nodeTypeWhitespace
@@ -80,20 +65,29 @@ export const validateNode = (node) => {
   if (totallength !== length) throw new Error('expected sum of child byte lengths to equal byte length')
 }
 
-export const logNode = ({ type, length, children }, indent = '') => {
-  console.log(indent + type + ' ' + length)
-  if (children) {
-    indent += '  '
-    for (const child of children) logNode(child, indent)
+export const getErrors = (root) => {
+  if (root.type !== nodeTypeRoot) throw new Error('expected root node')
+  const errors = []
+  for (const topNode of root.children) {
+    if (topNode.type === nodeTypeEndBracket) {
+      errors.push({ message: 'extra-closing', node: topNode })
+      continue
+    }
+    const go = (node) => {
+      switch (node.type) {
+        case nodeTypeIllegalChars:
+          errors.push({ message: 'illegal-characters', node })
+          break
+        case nodeTypeList:
+          if (node.children.at(-1).type !== nodeTypeEndBracket) errors.push({ message: 'unclosed-list', node })
+          for (const child of node.children) go(child)
+          break
+      }
+    }
+    go(topNode)
   }
+  return errors
 }
-
-const sumLengths = (children) =>
-  children.reduce((acc, node) => {
-    const { length } = node
-    if (!Number.isInteger(length) || length === 0) throw new Error('expected byte length')
-    return acc + length
-  }, 0)
 
 const terminalCache = new Map()
 
@@ -237,29 +231,34 @@ export const mergeNodes = (a, b) => {
   return createNonTerminal(nodeTypeRoot, a.length + b.length, children)
 }
 
-export const patchNode = (oldTree, changes) => {
-  {
-    // check changes descending by offset
-    let offset = null
-    for (const { rangeOffset, rangeLength, text } of changes) {
-      if (rangeLength === 0 && text.length === 0) throw new Error('expected rangeLength or text to be non-zero')
-      if (offset !== null && rangeOffset > offset) throw new Error('expected changes to be sorted by offset')
-      offset = rangeOffset
-    }
+const isWhitespace = (c) => c === 32 || c === 9 || c === 10
+const otherWordChars = new Set([...'-./='].map((c) => c.charCodeAt(0)))
+const isWordChar = (c) => (97 <= c && c <= 122) || (48 <= c && c <= 57) || otherWordChars.has(c)
+const isIllegal = (c) => !isWordChar(c) && !isWhitespace(c) && c !== 91 && c !== 93
+
+const terminalTypeToPredicate = (type) => {
+  switch (type) {
+    case nodeTypeWord:
+      return isWordChar
+    case nodeTypeWhitespace:
+      return isWhitespace
+    case nodeTypeIllegalChars:
+      return isIllegal
   }
-  let curOld = oldTree
-  let result = emptyRoot
-  changes.reverse()
-  for (const { rangeOffset, rangeLength, text } of changes) {
-    const dropped = oldTree.length - curOld.length
-    const relativeOffset = rangeOffset - dropped
-    const split = nodeTake(curOld, relativeOffset)
-    const insert = parseString(text)
-    const splitInsert = mergeNodes(split, insert)
-    result = mergeNodes(result, splitInsert)
-    curOld = nodeDropMerge(curOld, relativeOffset + rangeLength)
+  throw new Error('unexpected terminal type')
+}
+
+const codeToTerminalType = (c) => {
+  switch (c) {
+    case 91:
+      return nodeTypeStartBracket
+    case 93:
+      return nodeTypeEndBracket
+    default:
+      if (isWordChar(c)) return nodeTypeWord
+      if (isWhitespace(c)) return nodeTypeWhitespace
+      return nodeTypeIllegalChars
   }
-  return mergeNodes(result, curOld)
 }
 
 export const parseString = (text) => {
@@ -296,26 +295,27 @@ export const parseString = (text) => {
   return root
 }
 
-export const getErrors = (root) => {
-  if (root.type !== nodeTypeRoot) throw new Error('expected root node')
-  const errors = []
-  for (const topNode of root.children) {
-    if (topNode.type === nodeTypeEndBracket) {
-      errors.push({ message: 'extra-closing', node: topNode })
-      continue
+export const patchNode = (oldTree, changes) => {
+  {
+    // check changes descending by offset
+    let offset = null
+    for (const { rangeOffset, rangeLength, text } of changes) {
+      if (rangeLength === 0 && text.length === 0) throw new Error('expected rangeLength or text to be non-zero')
+      if (offset !== null && rangeOffset > offset) throw new Error('expected changes to be sorted by offset')
+      offset = rangeOffset
     }
-    const go = (node) => {
-      switch (node.type) {
-        case nodeTypeIllegalChars:
-          errors.push({ message: 'illegal-characters', node })
-          break
-        case nodeTypeList:
-          if (node.children.at(-1).type !== nodeTypeEndBracket) errors.push({ message: 'unclosed-list', node })
-          for (const child of node.children) go(child)
-          break
-      }
-    }
-    go(topNode)
   }
-  return errors
+  let curOld = oldTree
+  let result = emptyRoot
+  changes.reverse()
+  for (const { rangeOffset, rangeLength, text } of changes) {
+    const dropped = oldTree.length - curOld.length
+    const relativeOffset = rangeOffset - dropped
+    const split = nodeTake(curOld, relativeOffset)
+    const insert = parseString(text)
+    const splitInsert = mergeNodes(split, insert)
+    result = mergeNodes(result, splitInsert)
+    curOld = nodeDropMerge(curOld, relativeOffset + rangeLength)
+  }
+  return mergeNodes(result, curOld)
 }
