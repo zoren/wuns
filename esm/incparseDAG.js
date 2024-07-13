@@ -213,19 +213,19 @@ export const mergeNodes = (a, b) => {
     if (children[0].type !== nodeTypeStartBracket) throw new Error('expected list to start with start bracket')
     if (bChildren.length === 0) return node
     if (children.length === 1) {
-      const poped = spliceUnclosed()
       const [child] = children
-      const merged = [child, ...poped]
-      const length = child.length + sumLengths(poped)
-      return createNonTerminal(nodeTypeList, length, merged)
+      const poped = spliceUnclosed()
+      return createNonTerminal(nodeTypeList, child.length + sumLengths(poped), [child, ...poped])
     }
     const lastChild = children.at(-1)
     if (lastChild.type === nodeTypeEndBracket) return node
     const newLast = go(lastChild)
     const poped = spliceUnclosed()
-    const merged = children.slice(0, -1).concat(newLast, poped)
-    const charLength = length - lastChild.length + newLast.length + sumLengths(poped)
-    return createNonTerminal(nodeTypeList, charLength, merged)
+    return createNonTerminal(
+      nodeTypeList,
+      length - lastChild.length + newLast.length + sumLengths(poped),
+      children.slice(0, -1).concat(newLast, poped),
+    )
   }
   const children = aChildren.slice(0, -1).concat(go(aChildren.at(-1)), bChildren)
   return createNonTerminal(nodeTypeRoot, a.length + b.length, children)
