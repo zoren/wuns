@@ -340,13 +340,24 @@ const finishNonTerminal = (stack) => {
   return node
 }
 
-const parseBuffer = (stack, uft8bytes) => {
-  let i = 0
+const textEncoder = new TextEncoder()
+
+const finishStack = (stack) => {
+  if (stack.length === 0) throw new Error('expected stack to be non-empty')
+  let node = null
+  while (stack.length > 0) node = finishNonTerminal(stack)
+  return node
+}
+
+export const parseString = (text) => {
+  const rootMut = { type: nodeTypeRoot, byteLength: 0, children: [] }
+  const stack = [rootMut]
+  const utf8bytes = textEncoder.encode(text)
   const pushTop = (node) => {
     stack.at(-1).children.push(node)
   }
-  for (; i < uft8bytes.length; i++) {
-    const ctokenType = codeToTerminalType(uft8bytes[i])
+  for (let i = 0; i < utf8bytes.length; i++) {
+    const ctokenType = codeToTerminalType(utf8bytes[i])
     switch (ctokenType) {
       case nodeTypeStartBracket: {
         const node = { type: nodeTypeList, byteLength: 1, children: [lsqb] }
@@ -362,30 +373,14 @@ const parseBuffer = (stack, uft8bytes) => {
     }
     const pred = terminalTypeToPredicate(ctokenType)
     const start = i
-    while (i + 1 < uft8bytes.length) {
-      if (!pred(uft8bytes[i + 1])) break
+    while (i + 1 < utf8bytes.length) {
+      if (!pred(utf8bytes[i + 1])) break
       i++
     }
     const length = i - start + 1
     pushMergedTerminal(stack, ctokenType, length)
   }
-}
-
-const textEncoder = new TextEncoder()
-
-const finishStack = (stack) => {
-  if (stack.length === 0) throw new Error('expected stack to be non-empty')
-  let node = null
-  while (stack.length > 0) node = finishNonTerminal(stack)
-  return node
-}
-
-export const parseString = (text) => {
-  const rootMut = { type: nodeTypeRoot, byteLength: 0, children: [] }
-  const stack = [rootMut]
-  parseBuffer(stack, textEncoder.encode(text))
-  const root = finishStack(stack)
-  return root
+  return finishStack(stack)
 }
 
 const assertDesc = (changes) => {
