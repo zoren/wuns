@@ -302,8 +302,6 @@ export const mergeNodes = (a, b) => {
 }
 
 export const patchNode = (oldTree, changes) => {
-  let curOld = oldTree
-  let result = emptyRoot
   {
     // check changes descending by offset
     let offset = null
@@ -313,6 +311,8 @@ export const patchNode = (oldTree, changes) => {
       offset = rangeOffset
     }
   }
+  let curOld = oldTree
+  let result = emptyRoot
   changes.reverse()
   for (const { rangeOffset, rangeLength, text } of changes) {
     const dropped = oldTree.length - curOld.length
@@ -373,20 +373,24 @@ function* preorderGeneratorFromCursor(cursor) {
   }
 }
 
-export const getErrors = (tree) => {
-  const cursor = newTreeCursor(tree)
+export const getErrors = (root) => {
+  if (root.type !== nodeTypeRoot) throw new Error('expected root node')
   const errors = []
-  for (const node of preorderGeneratorFromCursor(cursor)) {
-    switch (node.type) {
-      case nodeTypeIllegalChars:
-        errors.push({ message: 'illegal-characters', node })
-        break
-      case nodeTypeEndBracket:
-        if (cursor.getParent().type !== nodeTypeList) errors.push({ message: 'extra-closing', node })
-        break
-      case nodeTypeList:
-        if (node.children.at(-1).type !== nodeTypeEndBracket) errors.push({ message: 'unclosed-list', node })
-        break
+  for (const topNode of root.children) {
+    if (topNode.type === nodeTypeEndBracket) {
+      errors.push({ message: 'extra-closing', node: topNode })
+      continue
+    }
+    const cursor = newTreeCursor(topNode)
+    for (const node of preorderGeneratorFromCursor(cursor)) {
+      switch (node.type) {
+        case nodeTypeIllegalChars:
+          errors.push({ message: 'illegal-characters', node })
+          break
+        case nodeTypeList:
+          if (node.children.at(-1).type !== nodeTypeEndBracket) errors.push({ message: 'unclosed-list', node })
+          break
+      }
     }
   }
   return errors
