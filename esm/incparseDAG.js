@@ -320,17 +320,6 @@ export const patchNode = (oldTree, changes) => {
   return mergeNodes(result, curOld)
 }
 
-const pushMergedTerminal = (stack, type, length) => {
-  const top = stack.at(-1)
-  const { children } = top
-  const lastChild = children.at(-1)
-  if (lastChild && lastChild.type === type) {
-    children[children.length - 1] = createTerminal(type, lastChild.byteLength + length)
-  } else {
-    children.push(createTerminal(type, length))
-  }
-}
-
 const finishNonTerminal = (stack) => {
   if (stack.length === 0) throw new Error('expected stack to be non-empty')
   const node = stack.pop()
@@ -342,16 +331,9 @@ const finishNonTerminal = (stack) => {
 
 const textEncoder = new TextEncoder()
 
-const finishStack = (stack) => {
-  if (stack.length === 0) throw new Error('expected stack to be non-empty')
-  let node = null
-  while (stack.length > 0) node = finishNonTerminal(stack)
-  return node
-}
-
 export const parseString = (text) => {
-  const rootMut = { type: nodeTypeRoot, byteLength: 0, children: [] }
-  const stack = [rootMut]
+  const root = { type: nodeTypeRoot, byteLength: 0, children: [] }
+  const stack = [root]
   const utf8bytes = textEncoder.encode(text)
   const pushTop = (node) => stack.at(-1).children.push(node)
   for (let i = 0; i < utf8bytes.length; i++) {
@@ -372,10 +354,11 @@ export const parseString = (text) => {
     const pred = terminalTypeToPredicate(ctokenType)
     let j = i + 1
     for (; j < utf8bytes.length && pred(utf8bytes[j]); j++);
-    pushMergedTerminal(stack, ctokenType, j - i)
+    pushTop(createTerminal(ctokenType, j - i))
     i = j - 1
   }
-  return finishStack(stack)
+  while (stack.length > 0) finishNonTerminal(stack)
+  return root
 }
 
 const assertDesc = (changes) => {
