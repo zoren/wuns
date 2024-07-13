@@ -88,70 +88,6 @@ export const logNode = ({ type, length, children }, indent = '') => {
   }
 }
 
-export const newTreeCursor = (rootNode) => {
-  const initialNode = rootNode
-  let offset = 0
-  const path = []
-  const currentNode = () => {
-    if (path.length === 0) return initialNode
-    const { parentNode, childIndex } = path.at(-1)
-    return parentNode.children[childIndex]
-  }
-  const getPathCopy = () => path.map(({ parentNode, childIndex }) => ({ parentNode, childIndex }))
-  return {
-    gotoFirstChild: () => {
-      const node = currentNode()
-      if (node.children === undefined || node.children.length === 0) return false
-      path.push({ parentNode: node, childIndex: 0 })
-      return true
-    },
-    gotoLastChild: () => {
-      const node = currentNode()
-      if (node.children === undefined || node.children.length === 0) return false
-      path.push({ parentNode: node, childIndex: node.children.length - 1 })
-      offset += node.length - node.children.at(-1).length
-      return true
-    },
-    gotoNextSibling: () => {
-      if (path.length === 0) return false
-      const cur = path.at(-1)
-      const { parentNode, childIndex } = cur
-      const { children } = parentNode
-      if (childIndex === children.length - 1) return false
-      const { length } = children[childIndex]
-      cur.childIndex++
-      offset += length
-      return true
-    },
-    gotoPrevSibling: () => {
-      if (path.length === 0) return false
-      const cur = path.at(-1)
-      const { parentNode, childIndex } = cur
-      if (childIndex === 0) return false
-      const { children } = parentNode
-      const { length } = children[childIndex - 1]
-      cur.childIndex--
-      offset -= length
-      return true
-    },
-    gotoParent: () => {
-      if (path.length === 0) return false
-      const { parentNode, childIndex } = path.pop()
-      const parentChildren = parentNode.children
-      for (let i = 0; i < childIndex; i++) offset -= parentChildren[i].length
-      return true
-    },
-    getParent: () => {
-      if (path.length === 0) return null
-      const { parentNode } = path.at(-1)
-      return parentNode
-    },
-    currentNode,
-    getOffset: () => offset,
-    getPathCopy,
-  }
-}
-
 const sumLengths = (children) =>
   children.reduce((acc, node) => {
     const { length } = node
@@ -361,18 +297,6 @@ export const parseString = (text) => {
   return root
 }
 
-function* preorderGeneratorFromCursor(cursor) {
-  while (true) {
-    yield cursor.currentNode()
-    if (cursor.gotoFirstChild()) continue
-    if (cursor.gotoNextSibling()) continue
-    while (true) {
-      if (!cursor.gotoParent()) return
-      if (cursor.gotoNextSibling()) break
-    }
-  }
-}
-
 export const getErrors = (root) => {
   if (root.type !== nodeTypeRoot) throw new Error('expected root node')
   const errors = []
@@ -381,17 +305,18 @@ export const getErrors = (root) => {
       errors.push({ message: 'extra-closing', node: topNode })
       continue
     }
-    const cursor = newTreeCursor(topNode)
-    for (const node of preorderGeneratorFromCursor(cursor)) {
+    const go = (node) => {
       switch (node.type) {
         case nodeTypeIllegalChars:
           errors.push({ message: 'illegal-characters', node })
           break
         case nodeTypeList:
           if (node.children.at(-1).type !== nodeTypeEndBracket) errors.push({ message: 'unclosed-list', node })
+          for (const child of node.children) go(child)
           break
       }
     }
+    go(topNode)
   }
   return errors
 }
