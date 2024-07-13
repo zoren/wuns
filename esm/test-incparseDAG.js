@@ -14,6 +14,7 @@ import {
   ille,
   root,
   list,
+  validateNode,
 } from './incparseDAG.js'
 
 const okTests = ['', 'x', 'abc 123', '[]', '[ ]', '[quote 34]', `[if [eq 4 x] [] x]`, 'we-allow-dashes']
@@ -26,7 +27,6 @@ const errorTests = [
 for (const [expectedErrors, test] of okTests.map((test) => [[], test]).concat(errorTests)) {
   const tree = parseString(test)
   console.log(`'${test}'`)
-  // logNode(tree)
   const errors = getErrors(tree)
   if (expectedErrors.length !== errors.length) {
     console.log(`expected errors: ${expectedErrors.length} actual errors: ${errors.length}`)
@@ -79,15 +79,12 @@ for (const { expected, node, index } of [
   { expected: root(licl(), rsqb), node: root(licl(licl())), index: 1 },
   { expected: root(rsqb, rsqb), node: root(licl(licl())), index: 2 },
 ]) {
-  // const dropped = nodeDrop(node, index)
   const merged = nodeDropMerge(node, index)
   if (!treesEqual(expected, merged)) {
     console.log('original')
     logNode(node)
     console.log('expected')
     logNode(expected)
-    // console.log('dropped')
-    // logNode(dropped)
     console.log('merged')
     logNode(merged)
     throw new Error('expected trees to be equal')
@@ -349,92 +346,14 @@ const applyChanges = ({ oldText, changes }) => {
   assertDesc(changes)
   let newTextFromChanges = oldText
   for (const { rangeOffset, rangeLength, text } of changes) {
-    const afterRange = newTextFromChanges.slice(rangeOffset + rangeLength)
-    const before = newTextFromChanges.slice(0, rangeOffset)
-    // console.log({ before, text, afterRange })
-    newTextFromChanges = before + text + afterRange
+    newTextFromChanges =
+      newTextFromChanges.slice(0, rangeOffset) + text + newTextFromChanges.slice(rangeOffset + rangeLength)
   }
-
   return newTextFromChanges
-}
-// import {
-//   nodeTypeWord,
-//   nodeTypeWhitespace,
-//   nodeTypeStartBracket,
-//   nodeTypeEndBracket,
-//   nodeTypeRoot,
-//   nodeTypeList,
-//   sumByteLengths,
-//   newTreeCursor,
-//   advanceCursorToIndexN,
-//   finishStack,
-//   validateNode,
-//   pushTop,
-//   patchTree
-// } from './incparseDAG.js'
-
-// {
-//   const word = (n) => createTerminal(nodeTypeWord, n)
-//   const wspc = (n) => createTerminal(nodeTypeWhitespace, n)
-//   const lsqb = () => createTerminal(nodeTypeStartBracket, 1)
-//   const rsqb = () => createTerminal(nodeTypeEndBracket, 1)
-//   const root = (...nodes) => createNonTerminal(nodeTypeRoot, sumByteLengths(nodes), nodes)
-//   const list = (...nodes) => createNonTerminal(nodeTypeList, sumByteLengths(nodes), nodes)
-
-//   const tests = [
-//     // { expected: 'err', tree: root(), drop: 0 },
-//     { expected: root(word(1)), tree: root(word(1)), drop: 0 },
-//     { expected: root(), tree: root(word(1)), drop: 1 },
-//   ]
-
-//   // const tree = createNonTerminal(nodeTypeRoot, 1, [createTerminal(nodeTypeWord, 1)])
-//   // logNode(tree)
-//   for (const { expected, tree, drop } of tests) {
-//     const cursor = newTreeCursor(tree)
-//     const rootMut = { type: nodeTypeRoot, byteLength: 0, children: [] }
-//     const stack = [rootMut]
-//     const eventHandler = {
-//       wentNextSibling: (node) => {
-//         console.log('wentNextSibling', node)
-//         pushTop(stack, node)
-//       },
-//       wentToParent: () => {
-//         console.log('wentToParent')
-//         if (stack.length !== 1) stack.pop()
-//       },
-//       wentToFirstChild: () => {
-//         console.log('wentToFirstChild')
-//         const node = { type: nodeTypeList, byteLength: 0, children: [] }
-//         pushTop(stack, node)
-//         stack.push(node)
-//       },
-//     }
-//     // return rootMut
-//     advanceCursorToIndexN(cursor, rangeOffset, eventHandler)
-//     finishStack(stack)
-//     validateNode(rootMut)
-
-//     console.dir({ path: cursor.getPathCopy(), offset: cursor.getOffset() }, { depth: null })
-//   }
-// }
-
-const assertTreeEq = (a, b) => {
-  if (a === b) return
-  if (a.type !== b.type) throw new Error('expected types to be equal')
-  if (a.byteLength !== b.byteLength) throw new Error('expected byteLength to be equal')
-  if (a.children === undefined && b.children === undefined) return
-  if (a.children === undefined || b.children === undefined) throw new Error('expected children to be equal')
-  if (a.children.length !== b.children.length) {
-    console.dir(a.children, { depth: null })
-    console.dir(b.children, { depth: null })
-    throw new Error('expected children length to be equal')
-  }
-  for (let i = 0; i < a.children.length; i++) assertTreeEq(a.children[i], b.children[i])
 }
 
 for (const delta of deltas) {
   const { oldText, changes, newText } = delta
-  // console.log(delta)
   const newTextFromChanges = applyChanges(delta)
   if (newTextFromChanges !== newText) {
     console.log({ oldText, changes, newText, newTextFromChanges })
@@ -442,13 +361,16 @@ for (const delta of deltas) {
   }
   const oldTree = parseString(oldText)
   const patchedTree = patchNode(oldTree, changes)
+  validateNode(patchedTree)
   const newTreeReparsed = parseString(newText)
-  // console.log(delta)
-  // console.log('oldTree')
-  // logNode(oldTree)
-  // console.log('patchedTree')
-  // logNode(patchedTree)
-  // console.log('newTreeReparsed')
-  // logNode(newTreeReparsed)
-  assertTreeEq(patchedTree, newTreeReparsed)
+  if (!treesEqual(patchedTree, newTreeReparsed)) {
+    console.log({ oldText, changes, newText, newTextFromChanges })
+    console.log('oldTree')
+    logNode(oldTree)
+    console.log('patchedTree')
+    logNode(patchedTree)
+    console.log('newTreeReparsed')
+    logNode(newTreeReparsed)
+    throw new Error('expected trees to be equal')
+  }
 }
