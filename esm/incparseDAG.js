@@ -307,7 +307,15 @@ export const mergeNodes = (a, b) => {
 export const patchNode = (oldTree, changes) => {
   let curOld = oldTree
   let result = emptyRoot
-  assertDesc(changes)
+  {
+    // check changes descending by offset
+    let offset = null
+    for (const { rangeOffset, rangeLength, text } of changes) {
+      if (rangeLength === 0 && text.length === 0) throw new Error('expected rangeLength or text to be non-zero')
+      if (offset !== null && rangeOffset > offset) throw new Error('expected changes to be sorted by offset')
+      offset = rangeOffset
+    }
+  }
   changes.reverse()
   for (const { rangeOffset, rangeLength, text } of changes) {
     const dropped = oldTree.byteLength - curOld.byteLength
@@ -320,22 +328,19 @@ export const patchNode = (oldTree, changes) => {
   return mergeNodes(result, curOld)
 }
 
-const finishNonTerminal = (stack) => {
-  if (stack.length === 0) throw new Error('expected stack to be non-empty')
-  const node = stack.pop()
-  node.byteLength = sumByteLengths(node.children)
-  Object.freeze(node.children)
-  Object.freeze(node)
-  return node
-}
-
 const textEncoder = new TextEncoder()
 
 export const parseString = (text) => {
   const root = { type: nodeTypeRoot, byteLength: 0, children: [] }
   const stack = [root]
-  const utf8bytes = textEncoder.encode(text)
+  const finishNonTerminal = () => {
+    const node = stack.pop()
+    node.byteLength = sumByteLengths(node.children)
+    Object.freeze(node.children)
+    Object.freeze(node)
+  }
   const pushTop = (node) => stack.at(-1).children.push(node)
+  const utf8bytes = textEncoder.encode(text)
   for (let i = 0; i < utf8bytes.length; i++) {
     const ctokenType = codeToTerminalType(utf8bytes[i])
     switch (ctokenType) {
@@ -347,7 +352,7 @@ export const parseString = (text) => {
       }
       case nodeTypeEndBracket: {
         pushTop(rsqb)
-        if (1 < stack.length) finishNonTerminal(stack)
+        if (1 < stack.length) finishNonTerminal()
         continue
       }
     }
@@ -357,18 +362,8 @@ export const parseString = (text) => {
     pushTop(createTerminal(ctokenType, j - i))
     i = j - 1
   }
-  while (stack.length > 0) finishNonTerminal(stack)
+  while (stack.length > 0) finishNonTerminal()
   return root
-}
-
-const assertDesc = (changes) => {
-  // check changes descending by offset
-  let offset = null
-  for (const { rangeOffset, rangeLength, text } of changes) {
-    if (rangeLength === 0 && text.length === 0) throw new Error('expected rangeLength or text to be non-zero')
-    if (offset !== null && rangeOffset > offset) throw new Error('expected changes to be sorted by offset')
-    offset = rangeOffset
-  }
 }
 
 function* preorderGeneratorFromCursor(cursor) {
