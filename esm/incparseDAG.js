@@ -231,35 +231,11 @@ export const mergeNodes = (a, b) => {
   return createNonTerminal(nodeTypeRoot, a.length + b.length, children)
 }
 
-const isWhitespace = (c) => c === 32 || c === 9 || c === 10
-const otherWordChars = new Set([...'-./='].map((c) => c.charCodeAt(0)))
-const isWordChar = (c) => (97 <= c && c <= 122) || (48 <= c && c <= 57) || otherWordChars.has(c)
+// space, newline(\n)
+const isWhitespace = (c) => c === 32 || c === 10
+// a-z - . / 0-9
+const isWordChar = (c) => (97 <= c && c <= 122) || (45 <= c && c <= 57)
 const isIllegal = (c) => !isWordChar(c) && !isWhitespace(c) && c !== 91 && c !== 93
-
-const terminalTypeToPredicate = (type) => {
-  switch (type) {
-    case nodeTypeWord:
-      return isWordChar
-    case nodeTypeWhitespace:
-      return isWhitespace
-    case nodeTypeIllegalChars:
-      return isIllegal
-  }
-  throw new Error('unexpected terminal type')
-}
-
-const codeToTerminalType = (c) => {
-  switch (c) {
-    case 91:
-      return nodeTypeStartBracket
-    case 93:
-      return nodeTypeEndBracket
-    default:
-      if (isWordChar(c)) return nodeTypeWord
-      if (isWhitespace(c)) return nodeTypeWhitespace
-      return nodeTypeIllegalChars
-  }
-}
 
 export const parseString = (text) => {
   const root = { type: nodeTypeRoot, length: 0, children: [] }
@@ -271,21 +247,29 @@ export const parseString = (text) => {
     Object.freeze(node)
   }
   for (let i = 0; i < text.length; i++) {
-    const ctokenType = codeToTerminalType(text.charCodeAt(i))
-    switch (ctokenType) {
-      case nodeTypeStartBracket: {
+    const c = text.charCodeAt(i)
+    switch (c) {
+      case 91: {
         const node = { type: nodeTypeList, length: 1, children: [lsqb] }
         stack.at(-1).children.push(node)
         stack.push(node)
         continue
       }
-      case nodeTypeEndBracket: {
+      case 93: {
         stack.at(-1).children.push(rsqb)
         if (1 < stack.length) finishNonTerminal()
         continue
       }
     }
-    const pred = terminalTypeToPredicate(ctokenType)
+    let ctokenType = nodeTypeIllegalChars
+    let pred = isIllegal
+    if (isWordChar(c)) {
+      ctokenType = nodeTypeWord
+      pred = isWordChar
+    } else if (isWhitespace(c)) {
+      ctokenType = nodeTypeWhitespace
+      pred = isWhitespace
+    }
     let j = i + 1
     for (; j < text.length && pred(text.charCodeAt(j)); j++);
     stack.at(-1).children.push(createTerminal(ctokenType, j - i))

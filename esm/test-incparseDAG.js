@@ -109,6 +109,10 @@ for (const { expected, input } of [
     input: 'abc 123',
   },
   {
+    expected: root(word(5), wspc(1), word(3)),
+    input: '-1.23\nh/e',
+  },
+  {
     expected: root(word(3), wspc(1), ille(7), wspc(1), word(3)),
     input: 'abc ILLEGAL 123',
   },
@@ -143,7 +147,7 @@ for (const { expected, input } of [
 ]) {
   const root = parseString(input)
   if (!treesEqual(expected, root)) {
-    dir({ expected, root })
+    console.dir({ expected, root })
     throw new Error('expected trees to be equal')
   }
   nOfAsserts++
