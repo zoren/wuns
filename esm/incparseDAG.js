@@ -255,11 +255,10 @@ export const parseString = (text) => {
         stack.push(node)
         continue
       }
-      case 93: {
+      case 93:
         stack.at(-1).children.push(rsqb)
         if (1 < stack.length) finishNonTerminal()
         continue
-      }
     }
     let ctokenType = nodeTypeIllegalChars
     let pred = isIllegal
