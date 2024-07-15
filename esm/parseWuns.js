@@ -56,7 +56,7 @@ parseEvalFile('std3.wuns')
 parseEvalFile('np.wuns')
 const { getVarObject } = context
 apply(getVarObject('bump-alloc-init').getValue())
-const parse = getVarObject('parse').getValue()
+// const parse = getVarObject('parse').getValue()
 const lexOneUTF16 = getVarObject('lex-one-utf16').getValue()
 const bumpAlloc = getVarObject('bump-alloc').getValue()
 
@@ -128,7 +128,7 @@ for (const [expected, input] of [
     // console.log({ kind, lw })
     const length = parseInt(lw)
     const e = expected[expectedIndex++]
-    if (e.kind !== wordValue(kind)||e.length !== length/2) {
+    if (e.kind !== wordValue(kind) || e.length !== length / 2) {
       console.log({ input, e, kind, length })
       throw new Error('length mismatch')
     }
@@ -141,4 +141,10 @@ for (const [expected, input] of [
     console.log('input.length * 2:', input.length)
     throw new Error('totalTokenLength !== input.length * 2')
   }
+}
+
+const testList = getVarObject('test-list').getValue()
+{
+  const li = apply(testList)
+  console.log({ li })
 }

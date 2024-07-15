@@ -3,6 +3,7 @@
 [defmacro s32 [addr val] [list [quote i32.store] [quote 0] [quote 2] [quote 0] addr val]]
 [defmacro s32-offset [offset addr val] [list [quote i32.store] [quote 0] [quote 2] offset addr val]]
 [defmacro l32 [addr] [list [quote i32.load] [quote 0] [quote 2] [quote 0] addr]]
+[defmacro l32-offset [offset addr] [list [quote i32.load] [quote 0] [quote 2] offset addr]]
 
 [defn bump-alloc-init []
   [if [eq [l32 [const 0]] [const 0]]
@@ -148,23 +149,38 @@
     [s32-offset 4 p [create-size-buffer initial-size]]
     p]]
 
+[defn get-size [list] [l32 list]]
+
+[defn get-capacity [list] [l32 [l32-offset 4 list]]]
+
 [defn push-n-bytes [list n-bytes]
   [assert [not [is-negative n-bytes]] size must not be negative]
-  [let [size [load 0 0 0 list]
+  [let [size [l32 list]
         new-size [add size n-bytes]
-        buffer [load 0 0 4 list]
-        buffer-capacity [load 0 0 0 buffer]]
-    [if [le new-size buffer-capacity]
-      [s32 list new-size]
+        buffer [l32-offset 4 list]
+        buffer-capacity [l32 buffer]]
+    [s32 list new-size]
+    [when [gt new-size buffer-capacity]
       [let [new-buffer [create-size-buffer [add buffer-capacity buffer-capacity]]]
         [memory.copy 0 [add new-buffer 4] [add buffer 4] size]
-        [try-bump-free buffer [add 4 buffer-capacity]]]]]]
+        [try-bump-free buffer [add 4 buffer-capacity]]
+        [s32-offset 4 list new-buffer]]]]]
 
 [defn push-i32 [list i]
   [push-n-bytes list 4]
   [let [size [l32 list]
         buffer [l32 [add list 4]]]
     [s32 [add buffer size] i]]]
+
+[defn at-i32 [list i]
+  [l32-offset 4 [add [l32-offset 4 list] [mul i [const 4]]]]]
+
+[defn test-list []
+  [let [l [create-growable-list [const 4]]]
+    [push-i32 l [const 10]]
+    [push-i32 l [const 20]]
+    [push-i32 l [const 30]]
+    [list l [get-size l] [get-capacity l] [at-i32 l [const 0]] [at-i32 l 1] [at-i32 l 2]]]]
 
 [defmacro l16 [addr] [list [quote i32.load16-u] [quote 0] [quote 1] [quote 0] addr]]
 
