@@ -57,7 +57,7 @@ parseEvalFile('np.wuns')
 const { getVarObject } = context
 apply(getVarObject('bump-alloc-init').getValue())
 const parse = getVarObject('parse').getValue()
-const lexOne = getVarObject('lex-one').getValue()
+const lexOneUTF16 = getVarObject('lex-one-utf16').getValue()
 const bumpAlloc = getVarObject('bump-alloc').getValue()
 
 // for (const input of ['']) {
@@ -73,30 +73,72 @@ const bufferWord = apply(bumpAlloc, 64)
 const bufferNum = parseInt(bufferWord)
 const memory = getMemory(0)
 
-for (const input of ['', 'abc', 'abc 123', 'fun-with-dash 345 ILL', '[list 1 2]']) {
-  const buffer = new Uint8Array(memory.buffer, bufferNum, 64)
-  const { read, written } = textEncoder.encodeInto(input, buffer)
-  let cur = bufferNum
-  console.log({ input })
-
-  while (true) {
-    if (cur >= bufferNum + written) break
-    const [kind, lw] = apply(lexOne, cur, cur + written)
-    const length = parseInt(lw)
-    console.log({ kind: String(kind), length })
-    cur += (length)
+for (const [expected, input] of [
+  [[], ''],
+  [[{ kind: 'word', length: 3 }], 'abc'],
+  [
+    [
+      { kind: 'word', length: 3 },
+      { kind: 'wspc', length: 1 },
+      { kind: 'word', length: 4 },
+    ],
+    'abc 1234',
+  ],
+  [
+    [
+      { kind: 'word', length: 13 },
+      { kind: 'wspc', length: 1 },
+      { kind: 'word', length: 3 },
+      { kind: 'wspc', length: 1 },
+      { kind: 'ille', length: 3 },
+    ],
+    'fun-with-dash 345 ILL',
+  ],
+  [
+    [
+      { kind: 'lsqb', length: 1 },
+      { kind: 'word', length: 4 },
+      { kind: 'wspc', length: 1 },
+      { kind: 'word', length: 1 },
+      { kind: 'wspc', length: 1 },
+      { kind: 'word', length: 1 },
+      { kind: 'rsqb', length: 1 },
+    ],
+    '[list 1 2]',
+  ],
+  [[{ kind: 'word', length: 1 }], 'w'],
+  [[{ kind: 'ille', length: 1 }], 'W'],
+  [[{ kind: 'ille', length: 1 }], 'ø'],
+  [[{ kind: 'ille', length: 2 }], '😀'],
+]) {
+  const buffer16 = new Uint16Array(memory.buffer, bufferNum, 64)
+  let i = 0
+  while (i < input.length) {
+    buffer16[i] = input.charCodeAt(i)
+    i++
   }
-  console.log('')
-  // const handle = byteInputHandles.size
-  // byteInputHandles.set(String(handle), { bytes: textEncoder.encode(input), offset: 0 })
-  // apply(parse, handle, 64)
+  const end = bufferNum + input.length * 2
+  let cur = bufferNum
+  // console.log({ end, cur })
+  let totalTokenLength = 0
+  let expectedIndex = 0
+  while (true) {
+    if (cur >= end) break
+    const [kind, lw] = apply(lexOneUTF16, cur, end)
+    // console.log({ kind, lw })
+    const length = parseInt(lw)
+    const e = expected[expectedIndex++]
+    if (e.kind !== wordValue(kind)||e.length !== length/2) {
+      console.log({ input, e, kind, length })
+      throw new Error('length mismatch')
+    }
+    // console.log({ kind: String(kind), length, ldiv2: length / 2 })
+    cur += length
+    totalTokenLength += length
+  }
+  if (totalTokenLength !== input.length * 2) {
+    console.log('totalTokenLength:', totalTokenLength)
+    console.log('input.length * 2:', input.length)
+    throw new Error('totalTokenLength !== input.length * 2')
+  }
 }
-
-// const commandLineArgs = process.argv.slice(2)
-
-// for (const arg of commandLineArgs) {
-//   console.log('evaluating:', arg)
-//   parseEvalFile(arg)
-// }
-
-// runRepl(context)
