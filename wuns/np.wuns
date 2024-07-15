@@ -1,16 +1,26 @@
 [import env mem [memory 0]]
 
+[defmacro s32 [addr val] [list [quote i32.store] [quote 0] [quote 2] [quote 0] addr val]]
+[defmacro s32-offset [offset addr val] [list [quote i32.store] [quote 0] [quote 2] offset addr val]]
+[defmacro l32 [addr] [list [quote i32.load] [quote 0] [quote 2] [quote 0] addr]]
+
 [defn bump-alloc-init []
-  [if [eq [load 0 2 0 [const 0]] [const 0]]
-    [store 0 2 0 [const 0] [const 16]]
+  [if [eq [l32 [const 0]] [const 0]]
+    [s32 [const 0] [const 16]]
     [unreachable]]]
 
 [defn bump-free [p size]
-  [let [current-top [load 0 2 0 [const 0]]
+  [let [current-top [l32 [const 0]]
         popped-top [sub current-top size]]
     [if [eq popped-top p]
-      [store 0 2 0 [const 0] popped-top]
+      [s32 [const 0] popped-top]
       [unreachable]]]]
+
+[defn try-bump-free [p size] []
+  [let [current-top [l32 [const 0]]
+        popped-top [sub current-top size]]
+    [when [eq popped-top p]
+      [s32 [const 0] popped-top]]]]
 
 [defn mk-i32 [x] [list [quote i32.const] x]]
 
@@ -24,14 +34,14 @@
   [if [gt size [i32.const 65536]] [unreachable]]
   [if [not-is-address-aligned size] [unreachable]]
   [let
-    [current-top [load 0 2 0 [i32.const 0]]
+    [current-top [l32 [i32.const 0]]
      - [if [eq current-top [i32.const 0]] [unreachable]]
      - [if [not-is-address-aligned current-top] [unreachable]]
      mem-size-bytes [bitwise-shift-left [memory.size 0] [i32.const 16]]
      - [if [gt current-top mem-size-bytes] [unreachable]]
      new-top [add current-top size]]
     [if [gt new-top mem-size-bytes] [unreachable]]
-    [store 0 2 0 [i32.const 0] new-top]
+    [s32 [i32.const 0] new-top]
     current-top]]
 
 [defn is-power-of-2 [x] [eq [quote 0] [bitwise-and x [dec x]]]]
@@ -60,3 +70,177 @@
         [continue i [add i [i32.const 1]]]]]
     [log-size-pointer 0 s p]
     [bump-free p alloc-size]]]
+
+[defn byte-size [type]
+  [ifs
+    [eq-word [quote i8] type]
+    [i32.const 1]
+
+    [eq-word [quote i16] type]
+    [i32.const 2]
+
+    [eq-word [quote i32] type]
+    [i32.const 4]
+
+    [log-abort unknown type [identity type]]]]
+
+[comment [handle memory [pointer ui8] n-bytes] [err-no n-of-read-bytes]]
+[import env read [func [i32 i32 i32 i32] [i32 i32]]]
+[import env read-bytes [func [i32 i32 i32 i32 i32] [i32 i32]]]
+
+[defn is-whitespace [c]
+  [or [eq c [quote 32]] [eq c [quote 10]]]]
+
+[defn is-between-inclusive [lower c upper]
+  [and [le lower c] [le c upper]]]
+
+[defn is-a-to-z [c]
+  [is-between-inclusive [quote 97] c [quote 122]]]
+
+[defn is-digit-and-some [c]
+  [comment - . / 0 1 2 3 4 5 6 7 8 9]
+  [is-between-inclusive [quote 45] c [quote 57]]]
+
+[defn is-word-char [c]
+  [or
+    [is-a-to-z c]
+    [is-digit-and-some c]]]
+
+[defn is-square-bracket [c]
+  [or [eq c [quote 91]] [eq c [quote 93]]]]
+
+[defn is-illegal [c]
+  [not [or
+    [is-word-char c]
+    [is-whitespace c]
+    [is-square-bracket c]]]]
+
+[defn scan-word-char [start end]
+  [loop [j start]
+    [if [and [lt j end] [is-word-char [load8-u 0 0 0 j]]]
+      [continue j [inc j]]
+      j]]]
+
+[defn scan-whitespace [start end]
+  [loop [j start]
+    [if [and [lt j end] [is-whitespace [load8-u 0 0 0 j]]]
+      [continue j [inc j]]
+      j]]]
+
+[defn scan-illegal [start end]
+  [loop [j start]
+    [if [and [lt j end] [is-illegal [load8-u 0 0 0 j]]]
+      [continue j [inc j]]
+      j]]]
+
+[defn shift-input-buffer [buffer cur]
+  ]
+
+[defn create-size-buffer [capacity]
+  [let [p [bump-alloc [add 4 capacity]]]
+    [s32 p capacity]
+    p]]
+
+[comment a i32 size and a pointer to a buffer that has buffer size and ]
+[defn create-growable-list [initial-size]
+  [let [p [bump-alloc [const 8]]]
+    [s32 p [i32.const 0]]
+    [s32-offset 4 p [create-size-buffer initial-size]]
+    p]]
+
+[defn push-n-bytes [list n-bytes]
+  [assert [not [is-negative n-bytes]] size must not be negative]
+  [let [size [load 0 0 0 list]
+        new-size [add size n-bytes]
+        buffer [load 0 0 4 list]
+        buffer-capacity [load 0 0 0 buffer]]
+    [if [le new-size buffer-capacity]
+      [s32 list new-size]
+      [let [new-buffer [create-size-buffer [add buffer-capacity buffer-capacity]]]
+        [memory.copy 0 [add new-buffer 4] [add buffer 4] size]
+        [try-bump-free buffer [add 4 buffer-capacity]]]]]]
+
+[defn push-i32 [list i]
+  [push-n-bytes list 4]
+  [let [size [l32 list]
+        buffer [l32 [add list 4]]]
+    [s32 [add buffer size] i]]]
+
+[defmacro l8 [addr] [list [quote i32.load8-u] [quote 0] [quote 0] [quote 0] addr]]
+
+[defn lex-one [p end]
+  [when [ge p end]
+    [list [const 0] p]]
+  [let [c [l8 p]]
+    [ifs
+      [is-word-char c]
+      [loop [j p]
+        [if [and [lt j end] [is-word-char [l8 j]]]
+          [continue j [inc j]]
+          [list [const 45] [sub j p]]]]
+
+      [is-whitespace c]
+      [loop [j p]
+        [if [and [lt j end] [is-whitespace [l8 j]]]
+          [continue j [inc j]]
+          [list [const 32] [sub j p]]]]
+
+      [eq c [const 91]]
+      [list [const 91] 1]
+
+      [eq c [const 93]]
+      [list [const 93] 1]
+
+      [loop [j p]
+        [if [and [lt j end] [is-illegal [l8 j]]]
+          [continue j [inc j]]
+          [list [const 128] [sub j p]]]]]]]
+
+[defn parse [handle buffer-size]
+  [let [buffer [bump-alloc buffer-size]
+        result-list [create-growable-list [const 4]]
+        ]
+    [loop [p buffer]
+      [let
+        [n-read-bytes [read-bytes 0 handle p [sub buffer-size [sub p buffer]]]
+         end [add p n-read-bytes]]
+        [when [lt 0 n-read-bytes]
+          [loop [cur p]
+            [when [lt p end]
+              [let [c [load8-u 0 0 0 cur]]
+                [ifs
+                  [is-word-char c]
+                  [scan-word-char cur end]
+
+                  [is-whitespace c]
+                  [scan-whitespace cur end]
+
+                  [is-square-bracket c]
+                  [assert 0 unexpected square bracket [identity c] at [sub cur p]]
+
+                  [do
+                    [scan-illegal cur end]]]]]]
+          [continue p [add p [sub end p]]]]]]
+    [bump-free buffer buffer-size]]]
+
+[comment
+  states
+  init 1
+  whitespace 2
+  word 97
+  square-bracket-left 91
+  square-bracket-right 93
+  list 5]
+
+[def buffer-size [quote 256]]
+
+[defn fill [handle cur end]
+  [read-bytes 0 handle cur [sub buffer-size [sub end cur]]]]
+
+[defn parse-state [handle parent]
+  [let [buffer [bump-alloc buffer-size]]
+    []]]
+
+[defn parse-root [handle]
+  []]
+
