@@ -247,7 +247,15 @@ export const parseString = (text) => {
   while (i < text.length) {
     const start = i
     const c = text.charCodeAt(i++)
+    const pushTerm = (pred, type) => {
+      while (i < text.length && pred(text.charCodeAt(i))) i++
+      stack.at(-1).push(createTerminal(type, i - start))
+    }
     switch (c) {
+      case 10:
+      case 32:
+        pushTerm(isSpaceOrNewline, nodeTypeWhitespace)
+        continue
       case 91:
         stack.push([lsqb])
         continue
@@ -256,17 +264,8 @@ export const parseString = (text) => {
         if (1 < stack.length) finishList()
         continue
     }
-    let ctokenType = nodeTypeIllegalChars
-    let pred = isIllegal
-    if (isWordChar(c)) {
-      ctokenType = nodeTypeWord
-      pred = isWordChar
-    } else if (isSpaceOrNewline(c)) {
-      ctokenType = nodeTypeWhitespace
-      pred = isSpaceOrNewline
-    }
-    while (i < text.length && pred(text.charCodeAt(i))) i++
-    stack.at(-1).push(createTerminal(ctokenType, i - start))
+    if (isWordChar(c)) pushTerm(isWordChar, nodeTypeWord)
+    else pushTerm(isIllegal, nodeTypeIllegalChars)
   }
   while (1 < stack.length) finishList()
   const rootChildren = stack.pop()
