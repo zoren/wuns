@@ -139,22 +139,22 @@ export const nodeTake = (root, initIndex) => {
   if (initIndex === root.length) return root
 
   const go = (node, index) => {
+    if (index <= 0) throw new Error('expected index to be non-zero')
     const { type, length, children } = node
-    if (index < 0) throw new Error('expected index to be non-zero')
     if (length <= index) return node
     if (isTerminalNodeType(type)) return createTerminal(type, index)
-    const newChildren = []
-    let remaining = index
+    const start = index
+    let childIndex = 0
     for (const child of children) {
       const { length } = child
-      if (remaining <= length) {
-        newChildren.push(go(child, remaining))
-        break
+      if (index <= length) {
+        const newChildren = children.slice(0, childIndex)
+        newChildren.push(go(child, index))
+        return createNonTerminal(type, start, newChildren)
       }
-      newChildren.push(child)
-      remaining -= length
+      childIndex++
+      index -= length
     }
-    return createNonTerminal(type, index, newChildren)
   }
   return go(root, initIndex)
 }
@@ -164,9 +164,9 @@ export const nodeDropMerge = (root, initIndex) => {
   if (root.type !== nodeTypeRoot) throw new Error('expected root node')
   if (root.length === initIndex) return emptyRoot
   const go = (node, index) => {
-    const { type, length, children } = node
     if (index < 0) throw new Error('expected index to be non-negative')
     if (index === 0) return [node]
+    const { type, length, children } = node
     if (length < index) throw new Error('expected index to be less than byte length')
     if (isTerminalNodeType(type)) return [createTerminal(type, length - index)]
     const newChildren = []
