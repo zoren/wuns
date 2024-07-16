@@ -147,7 +147,7 @@ export const nodeTake = (root, initIndex) => {
     let remaining = index
     for (const child of children) {
       const { length } = child
-      if (length >= remaining) {
+      if (remaining <= length) {
         newChildren.push(go(child, remaining))
         break
       }

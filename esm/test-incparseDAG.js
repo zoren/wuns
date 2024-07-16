@@ -49,6 +49,7 @@ const liop = (...nodes) => list(lsqb, ...nodes)
 const licl = (...nodes) => list(lsqb, ...nodes, rsqb)
 
 for (const { expected, node, index } of [
+  { expected: root(), node: root(word(3)), index: 0 },
   { expected: root(word(1)), node: root(word(3)), index: 1 },
   { expected: root(word(2)), node: root(word(3)), index: 2 },
   { expected: root(word(3)), node: root(word(3)), index: 3 },
