@@ -243,8 +243,10 @@ export const parseString = (text) => {
     const children = stack.pop()
     stack.at(-1).push(createNonTerminal(nodeTypeList, sumLengths(children), children))
   }
-  for (let i = 0; i < text.length; i++) {
-    const c = text.charCodeAt(i)
+  let i = 0
+  while (i < text.length) {
+    const start = i
+    const c = text.charCodeAt(i++)
     switch (c) {
       case 91:
         stack.push([lsqb])
@@ -263,10 +265,8 @@ export const parseString = (text) => {
       ctokenType = nodeTypeWhitespace
       pred = isSpaceOrNewline
     }
-    let j = i + 1
-    for (; j < text.length && pred(text.charCodeAt(j)); j++);
-    stack.at(-1).push(createTerminal(ctokenType, j - i))
-    i = j - 1
+    while (i < text.length && pred(text.charCodeAt(i))) i++
+    stack.at(-1).push(createTerminal(ctokenType, i - start))
   }
   while (1 < stack.length) finishList()
   const rootChildren = stack.pop()
