@@ -162,21 +162,21 @@ export const nodeTake = (root, initIndex) => {
 // drops bytes of a node merging headless lists
 export const nodeDropMerge = (root, initIndex) => {
   if (root.type !== nodeTypeRoot) throw new Error('expected root node')
+  if (initIndex < 0) throw new Error('expected index to be non-negative')
+  if (initIndex === 0) return root
   if (root.length === initIndex) return emptyRoot
   const go = (node, index) => {
-    if (index < 0) throw new Error('expected index to be non-negative')
-    if (index === 0) return [node]
+    if (index <= 0) throw new Error('expected index to be non-negative')
     const { type, length, children } = node
     if (length < index) throw new Error('expected index to be less than byte length')
     if (isTerminalNodeType(type)) return [createTerminal(type, length - index)]
-    const newChildren = []
     let remaining = index
     for (let childIndex = 0; childIndex < children.length; childIndex++) {
       const child = children[childIndex]
       const childLength = child.length
       if (remaining < childLength) {
-        newChildren.push(...go(child, remaining))
-        newChildren.push(...children.slice(childIndex + 1))
+        const newChildren =
+          remaining === 0 ? children.slice(childIndex) : [...go(child, remaining), ...children.slice(childIndex + 1)]
         if (type === nodeTypeList) return newChildren
         return [createNonTerminal(type, length - index, newChildren)]
       }
