@@ -232,32 +232,27 @@ export const mergeNodes = (a, b) => {
 }
 
 // space, newline(\n)
-const isWhitespace = (c) => c === 32 || c === 10
+const isSpaceOrNewline = (c) => c === 32 || c === 10
 // a-z - . / 0-9
 const isWordChar = (c) => (97 <= c && c <= 122) || (45 <= c && c <= 57)
-const isIllegal = (c) => !isWordChar(c) && !isWhitespace(c) && c !== 91 && c !== 93
+const isIllegal = (c) => !isWordChar(c) && !isSpaceOrNewline(c) && c !== 91 && c !== 93
 
 export const parseString = (text) => {
-  const root = { type: nodeTypeRoot, length: 0, children: [] }
-  const stack = [root]
-  const finishNonTerminal = () => {
-    const node = stack.pop()
-    node.length = sumLengths(node.children)
-    Object.freeze(node.children)
-    Object.freeze(node)
+  const rootChildren = []
+  const stack = [rootChildren]
+  const finishList = () => {
+    const children = stack.pop()
+    stack.at(-1).push(createNonTerminal(nodeTypeList, sumLengths(children), children))
   }
   for (let i = 0; i < text.length; i++) {
     const c = text.charCodeAt(i)
     switch (c) {
-      case 91: {
-        const node = { type: nodeTypeList, length: 1, children: [lsqb] }
-        stack.at(-1).children.push(node)
-        stack.push(node)
+      case 91:
+        stack.push([lsqb])
         continue
-      }
       case 93:
-        stack.at(-1).children.push(rsqb)
-        if (1 < stack.length) finishNonTerminal()
+        stack.at(-1).push(rsqb)
+        if (1 < stack.length) finishList()
         continue
     }
     let ctokenType = nodeTypeIllegalChars
@@ -265,17 +260,17 @@ export const parseString = (text) => {
     if (isWordChar(c)) {
       ctokenType = nodeTypeWord
       pred = isWordChar
-    } else if (isWhitespace(c)) {
+    } else if (isSpaceOrNewline(c)) {
       ctokenType = nodeTypeWhitespace
-      pred = isWhitespace
+      pred = isSpaceOrNewline
     }
     let j = i + 1
     for (; j < text.length && pred(text.charCodeAt(j)); j++);
-    stack.at(-1).children.push(createTerminal(ctokenType, j - i))
+    stack.at(-1).push(createTerminal(ctokenType, j - i))
     i = j - 1
   }
-  while (stack.length > 0) finishNonTerminal()
-  return root
+  while (1 < stack.length) finishList()
+  return createNonTerminal(nodeTypeRoot, sumLengths(rootChildren), rootChildren)
 }
 
 export const patchNode = (oldTree, changes) => {
