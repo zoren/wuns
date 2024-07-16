@@ -238,8 +238,7 @@ const isWordChar = (c) => (97 <= c && c <= 122) || (45 <= c && c <= 57)
 const isIllegal = (c) => !isWordChar(c) && !isSpaceOrNewline(c) && c !== 91 && c !== 93
 
 export const parseString = (text) => {
-  const rootChildren = []
-  const stack = [rootChildren]
+  const stack = [[]]
   const finishList = () => {
     const children = stack.pop()
     stack.at(-1).push(createNonTerminal(nodeTypeList, sumLengths(children), children))
@@ -270,6 +269,7 @@ export const parseString = (text) => {
     i = j - 1
   }
   while (1 < stack.length) finishList()
+  const rootChildren = stack.pop()
   return createNonTerminal(nodeTypeRoot, sumLengths(rootChildren), rootChildren)
 }
 
