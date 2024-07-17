@@ -90,7 +90,7 @@
 [defmacro assert [cond .. lmsg]
   [list [quote when-not] cond
     [list [quote log] [quote-list lmsg]]
-    [quote [abort]]]]
+    [quote [unreachable]]]]
 
 [defn identity [x] x]
 

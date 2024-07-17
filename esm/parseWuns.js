@@ -174,4 +174,85 @@ const testList = getVarObject('test-list').getValue()
     go(rootNodeP)
     console.log()
   }
+
+  const treeToForms = getVarObject('tree-to-forms').getValue()
+  const nodeToForm = getVarObject('node-to-form').getValue()
+  const size = getVarObject('get-size').getValue()
+  const at = getVarObject('at-i32').getValue()
+  const isWord = getVarObject('is-word').getValue()
+  const wordSize = getVarObject('word-size').getValue()
+  const wordPointer = getVarObject('word-pointer').getValue()
+
+  const isList = getVarObject('is-list').getValue()
+  const listSize = getVarObject('list-size').getValue()
+  const tag = getVarObject('tag').getValue()
+  const atAllocList = getVarObject('at-alloc-list').getValue()
+
+  for (const input of [
+    '',
+    'a',
+    'abc',
+    'abc 123',
+    '[]',
+    '[list IL ab]',
+    '[[af f] 3 [list 2 53 /]]',
+    '[a',
+    '[[abc',
+    'hej  ',
+    '[[ILDB@ sdf',
+  ]) {
+    console.log('evaluating:', input)
+    const buffer16 = new Uint16Array(memory.buffer, bufferNum, 64)
+    let i = 0
+    while (i < input.length) {
+      buffer16[i] = input.charCodeAt(i)
+      i++
+    }
+    const end = bufferNum + input.length * 2
+    let cur = bufferNum
+
+    const rootNodeP = apply(parse, cur, end)
+
+    const go = (tokenP, indent = '') => {
+      const tag = +apply(nodeTag, tokenP)
+      const size = +apply(nodeSize, tokenP) / 2
+      console.log(`${indent}tag: ${tag}, size: ${size}`)
+      if (tag === 5 || tag === 7)
+        for (let j = 0; j < +apply(nodeNumberOfChildren, tokenP); j++) go(apply(nodeChild, tokenP, j), indent + '  ')
+    }
+    go(rootNodeP)
+    const formsP = apply(treeToForms, cur, rootNodeP)
+    const formsSize = +apply(size, formsP) / 4
+    console.log('formsSize:', formsSize)
+
+    const dumpForm = (formP, indent = '') => {
+      if (+apply(isWord, formP)) {
+        const size = +apply(wordSize, formP)
+        const pointer = +apply(wordPointer, formP)
+        // console.log({ size, pointer })
+        const buffer = new Uint16Array(memory.buffer, pointer, size / 2)
+        const str = textDecoder.decode(buffer)
+        console.log(`${indent}word(${size},${size / 2}): ${str}`)
+        return
+      }
+      if (+apply(isList, formP)) {
+        const size = +apply(listSize, formP)
+        console.log(`${indent}list: ${size}`)
+        const newIndent = indent + '  '
+        for (let j = 0; j < size; j++) {
+          const child = apply(atAllocList, formP, j)
+          dumpForm(child, newIndent)
+        }
+        return
+      }
+      console.log(apply(tag, formP))
+      throw new Error('unexpected form: ' + formP)
+    }
+
+    for (let i = 0; i < formsSize; i++) {
+      const formP = apply(at, formsP, i)
+      dumpForm(formP)
+    }
+    console.log()
+  }
 }

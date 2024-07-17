@@ -231,7 +231,7 @@
     [s32-offset 4 p tag]
     p]]
 
-[def list-tag [quote 5]]
+[def tag-list [quote 5]]
 [def root-tag [quote 7]]
 
 [defn set-child-n [non-term n child]
@@ -272,6 +272,8 @@
     [assert [gt s 0] last-i32 list must not be empty]
     [at-i32 list [dec [div s 4]]]]]
 
+[def tag-word [const 97]]
+
 [defn parse [start end]
   [let [root-children [create-growable-list [const 4]]
         stack [create-growable-list [const 4]]]
@@ -281,18 +283,18 @@
         [let [c [l16 p]]
           [ifs
             [is-word-char c]
-            [let [end [loop [q [add 2 p]] [if [is-word-char [l16 q]] [continue q [add 2 q]] q]]]
+            [let [wend [loop [q [add 2 p]] [if [and [lt q end] [is-word-char [l16 q]]] [continue q [add 2 q]] q]]]
               [push-i32
                 [last-i32 stack]
-                [create-terminal [const 97] [sub end p]]]
-              [continue p end]]
+                [create-terminal tag-word [sub wend p]]]
+              [continue p wend]]
 
             [is-whitespace c]
-            [let [end [loop [q [add 2 p]] [if [is-whitespace [l16 q]] [continue q [add 2 q]] q]]]
+            [let [wend [loop [q [add 2 p]] [if [and [lt q end] [is-whitespace [l16 q]]] [continue q [add 2 q]] q]]]
               [push-i32
                 [last-i32 stack]
-                [create-terminal [const 32] [sub end p]]]
-              [continue p end]]
+                [create-terminal [const 32] [sub wend p]]]
+              [continue p wend]]
 
             [eq c [const 91]]
             [let [new-children-list [create-growable-list [const 8]]]
@@ -308,36 +310,117 @@
               [when [lt 1 stack-size]
                 [let [children [last-i32 stack]]
                   [pop-n-bytes stack 4]
-                  [push-i32 [last-i32 stack] [create-non-terminal-from-list list-tag children]]]]
+                  [push-i32 [last-i32 stack] [create-non-terminal-from-list tag-list children]]]]
               [continue p [add 2 p]]]
 
-            [let [end [loop [q [add 2 p]] [if [is-illegal [l16 q]] [continue q [add 2 q]] q]]]
+            [let [wend [loop [q [add 2 p]] [if [and [lt q end] [is-illegal [l16 q]]] [continue q [add 2 q]] q]]]
               [push-i32
                 [last-i32 stack]
-                [create-terminal [const -1] [sub end p]]]
-              [continue p end]]]]]]
-    [comment [loop over the stack popping unclosed lists and creating non-terminals and freeing the temporary growable lists]]
-    [create-non-terminal-from-list root-tag root-children]
-    ]]
+                [create-terminal [const -1] [sub wend p]]]
+              [continue p wend]]]]]]
+    [loop [stack-size [div [get-size stack] 4]]
+      [when [lt 1 stack-size]
+        [let [children [at-i32 stack [dec stack-size]]]
+          [pop-n-bytes stack 4]
+          [push-i32 [last-i32 stack] [create-non-terminal-from-list tag-list children]]]
+        [continue stack-size [dec stack-size]]]]
+    [create-non-terminal-from-list root-tag root-children]]]
 
-[comment
-  states
-  init 1
-  whitespace 2
-  word 97
-  square-bracket-left 91
-  square-bracket-right 93
-  list 5]
+[defn alloc-tagged-word [n-bytes]
+  [let [p [bump-alloc [add [const 8] [mem-align n-bytes]]]]
+    [s32 p tag-word]
+    [s32-offset 4 p n-bytes]
+    p]]
 
-[def buffer-size [quote 256]]
+[defn is-word [form]
+  [eq [l32 form] tag-word]]
 
-[defn fill [handle cur end]
-  [read-bytes 0 handle cur [sub buffer-size [sub end cur]]]]
+[defn word-size [word]
+  [l32-offset 4 word]]
 
-[defn parse-state [handle parent]
-  [let [buffer [bump-alloc buffer-size]]
-    []]]
+[defn word-pointer [word]
+  [add word [const 8]]]
 
-[defn parse-root [handle]
-  []]
+[defn validate-word [word]
+  [let [s [l32-offset 4 word]]
+    [when [is-negative s] [unreachable]]
+    [when [eq 0 s] [unreachable]]
+    [when [not [eq [l32 word] tag-word]] [unreachable]]
+    [loop [i 0]
+      [when [lt i s]
+        [when [not [is-word-char [load8-u 0 0 8 i]]]
+          [unreachable]]
+        [continue i [inc i]]]]
+    s]]
 
+[defn alloc-tagged-list [n-elements]
+  [let [p [bump-alloc [add [const 8] [mul 4 n-elements]]]]
+    [s32 p tag-list]
+    [s32-offset 4 p n-elements]
+    p]]
+
+[defn is-list [form]
+  [eq [l32 form] tag-list]]
+
+[defn tag [form] [l32 form]]
+
+[defn list-size [list]
+  [l32-offset 4 list]]
+
+[defn at-alloc-list [form i]
+  [assert [is-list form] at-alloc-list form must be a list]
+  [assert [not [is-negative i]] at-alloc-list i must not be negative]
+  [let [s [list-size form]]
+    [assert [lt i s] at-alloc-list i must be less than the size of the list]
+    [l32-offset 8 [add form [mul i 4]]]]]
+
+[defn number-of-word-or-list [node]
+  [let [n-children [get-node-number-of-children node]]
+    [loop [i 0 sum 0]
+      [if [ge i n-children]
+        sum
+        [let [child [get-node-child node i]
+              tag [get-node-tag child]]
+          [if [or [eq tag tag-word] [eq tag tag-list]]
+            [continue i [inc i] sum [inc sum]]
+            [continue i [inc i]]]]]]]]
+
+[defn node-to-form [text node]
+  [let [tag [get-node-tag node]]
+    [ifs
+      [eq tag tag-word]
+      [let [s [get-node-size node]
+            tw [alloc-tagged-word s]]
+        [memory.copy 0 [word-pointer tw] text s]
+        tw]
+
+      [eq tag tag-list]
+      [let [n-form-children [number-of-word-or-list node]
+            tl [alloc-tagged-list n-form-children]
+            n-children [get-node-number-of-children node]]
+        [loop [p text node-index 0 form-index 0]
+          [if [ge node-index n-children]
+            tl
+            [let [child [get-node-child node node-index]
+                  s [get-node-size child]
+                  form [node-to-form p child]]
+              [if form
+                [do
+                  [s32-offset 8 [add tl [mul form-index 4]] form]
+                  [continue p [add p s] node-index [inc node-index] form-index [inc form-index]]]
+                [continue p [add p s] node-index [inc node-index]]]]]]]
+
+       0]]]
+
+[defn tree-to-forms [text node]
+  [let [n-form-children [number-of-word-or-list node]
+        gl [create-growable-list [mul 4 n-form-children]]
+        n-children [get-node-number-of-children node]]
+    [loop [p text node-index 0]
+      [if [ge node-index n-children]
+        gl
+        [let [child [get-node-child node node-index]
+              s [get-node-size child]
+              form [node-to-form p child]]
+          [when form [push-i32 gl form]]
+          [continue p [add p s] node-index [inc node-index]]]]]]]
