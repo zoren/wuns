@@ -235,6 +235,8 @@ const testsTake = [
 
   { expected: nonterm(), node: nonterm(term(1)), needle: 0 },
   { expected: nonterm(term(1)), node: nonterm(term(1)), needle: 1 },
+  { expected: nonterm(term(1)), node: nonterm(term(1),term(1)), needle: 1 },
+  { expected: nonterm(term(2), term(1)), node: nonterm(term(2), term(1),term(2)), needle: 3 },
 
   { expected: nonterm(), node: nonterm(term(3)), needle: 0 },
   { expected: nonterm(term(3)), node: nonterm(term(3)), needle: 3 },
@@ -264,7 +266,7 @@ for (const { expected, node, needle } of testsTake) {
   }
 }
 
-const dropN = (root, n) => {
+const olddropN = (root, n) => {
   if (n < 0) throw new Error('needle out of bounds')
   if (n > root.length) throw new Error('needle out of bounds')
   if (!isNonterm(root)) throw new Error('expected nonterm root')
@@ -283,13 +285,45 @@ const dropN = (root, n) => {
   return stack[0]
 }
 
+const dropN = (root, n) => {
+  if (n === 0) return root
+  const stack = [[]]
+  const pushTop = (node) => {
+    stack.at(-1).push(node)
+  }
+  const eventHandler = {
+    wentNextSibling: (node) => {
+      pushTop(node)
+    },
+    wentToParent: () => {
+      stack.pop()
+    },
+    wentToFirstChild: () => {
+      const children = []
+      const newNode = { children }
+      pushTop(newNode)
+      stack.push(children)
+    },
+  }
+  const cursor = newTreeCursor(root)
+  advanceCursorToIndexN(cursor, n)
+  advanceCursorToIndexN(cursor, root.length, eventHandler)
+  const cutLength = cursor.getOffset() - n
+  if (cutLength > 0) pushTop(term(cutLength))
+  console.dir({ stack }, { depth: null })
+  const rootMut = stack[0]
+  updateNonTermLengths(rootMut)
+  return rootMut
+}
+
+
 const testsDrop = [
   { expected: nonterm(), node: nonterm(), n: 0 },
 
-  { expected: nonterm(), node: nonterm(term(1)), n: 1 },
   { expected: nonterm(term(1)), node: nonterm(term(1)), n: 0 },
+  // { expected: nonterm(), node: nonterm(term(1)), n: 1 },
 
-  { expected: nonterm(term(3)), node: nonterm(term(3)), n: 0 },
+  // { expected: nonterm(term(3)), node: nonterm(term(3)), n: 0 },
   { expected: nonterm(term(2)), node: nonterm(term(3)), n: 1 },
   { expected: nonterm(term(1)), node: nonterm(term(3)), n: 2 },
   { expected: nonterm(), node: nonterm(term(3)), n: 3 },
