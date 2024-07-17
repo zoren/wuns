@@ -56,17 +56,8 @@ parseEvalFile('std3.wuns')
 parseEvalFile('np.wuns')
 const { getVarObject } = context
 apply(getVarObject('bump-alloc-init').getValue())
-// const parse = getVarObject('parse').getValue()
 const lexOneUTF16 = getVarObject('lex-one-utf16').getValue()
 const bumpAlloc = getVarObject('bump-alloc').getValue()
-
-// for (const input of ['']) {
-//   console.log('evaluating:', input)
-//   // parseEvalFile(input)
-//   const handle = stringInputHandles.size
-//   stringInputHandles.set(handle, { readChars: 0, input })
-//   callClosure(parse, [handle])
-// }
 
 const bufferWord = apply(bumpAlloc, 64)
 // console.log('buffer:', bufferWord)
@@ -147,4 +138,40 @@ const testList = getVarObject('test-list').getValue()
 {
   const li = apply(testList)
   console.log({ li })
+}
+
+{
+  const parse = getVarObject('parse').getValue()
+  const nodeSize = getVarObject('get-node-size').getValue()
+  const nodeTag = getVarObject('get-node-tag').getValue()
+  const nodeNumberOfChildren = getVarObject('get-node-number-of-children').getValue()
+  const nodeChild = getVarObject('get-node-child').getValue()
+
+  const bufferWord = apply(bumpAlloc, 64)
+  // console.log('buffer:', bufferWord)
+  const bufferNum = parseInt(bufferWord)
+
+  for (const input of ['', 'a', 'abc', 'abc 123', 'bla ILLEGAL df', '[]']) {
+    console.log('evaluating:', input)
+    const buffer16 = new Uint16Array(memory.buffer, bufferNum, 64)
+    let i = 0
+    while (i < input.length) {
+      buffer16[i] = input.charCodeAt(i)
+      i++
+    }
+    const end = bufferNum + input.length * 2
+    let cur = bufferNum
+
+    const rootNodeP = apply(parse, cur, end)
+
+    const go = (tokenP, indent = '') => {
+      const tag = +apply(nodeTag, tokenP)
+      const size = +apply(nodeSize, tokenP) / 2
+      console.log(`${indent}tag: ${tag}, size: ${size}`)
+      if (tag === 5 || tag === 7)
+        for (let j = 0; j < +apply(nodeNumberOfChildren, tokenP); j++) go(apply(nodeChild, tokenP, j), indent + '  ')
+    }
+    go(rootNodeP)
+    console.log()
+  }
 }

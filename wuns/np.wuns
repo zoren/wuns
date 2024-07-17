@@ -30,6 +30,7 @@
 [defmacro not-is-address-aligned [x]
   [list [quote bitwise-and] [mk-i32 [dec mem-alloc-size]] x]]
 
+[comment maybe memset newly allocated memory to zero]
 [defn bump-alloc [size]
   [if [le size [i32.const 0]] [unreachable]]
   [if [gt size [i32.const 65536]] [unreachable]]
@@ -149,13 +150,16 @@
     [s32-offset 4 p [create-size-buffer initial-size]]
     p]]
 
-[defn get-size [list] [l32 list]]
+[defn get-size [list]
+  [let [s [l32 list]]
+    [when [is-negative s] [unreachable]]
+    s]]
 
 [defn get-capacity [list] [l32 [l32-offset 4 list]]]
 
 [defn push-n-bytes [list n-bytes]
   [assert [not [is-negative n-bytes]] size must not be negative]
-  [let [size [l32 list]
+  [let [size [get-size list]
         new-size [add size n-bytes]
         buffer [l32-offset 4 list]
         buffer-capacity [l32 buffer]]
@@ -166,6 +170,14 @@
         [try-bump-free buffer [add 4 buffer-capacity]]
         [s32-offset 4 list new-buffer]]]]]
 
+[defn pop-n-bytes [list n-bytes]
+  [assert [not [is-negative n-bytes]] size must not be negative]
+  [let [size [get-size list]
+        new-size [sub size n-bytes]
+        buffer [l32-offset 4 list]]
+    [assert [not [is-negative new-size]] cannot pop more than what is in the list]
+    [s32 list new-size]]]
+
 [defn push-i32 [list i]
   [push-n-bytes list 4]
   [let [size [l32 list]
@@ -173,7 +185,9 @@
     [s32 [add buffer size] i]]]
 
 [defn at-i32 [list i]
-  [l32-offset 4 [add [l32-offset 4 list] [mul i [const 4]]]]]
+  [when [is-negative i] [unreachable]]
+  [when [ge i [div [get-size list] 4]] [unreachable]]
+  [l32-offset 4 [add [l32-offset 4 list] [mul i 4]]]]
 
 [defn test-list []
   [let [l [create-growable-list [const 4]]]
@@ -185,8 +199,7 @@
 [defmacro l16 [addr] [list [quote i32.load16-u] [quote 0] [quote 1] [quote 0] addr]]
 
 [defn lex-one-utf16 [p end]
-  [when [ge p end]
-    [list [quote end] p]]
+  [when [ge p end] [unreachable]]
   [let [c [l16 p]]
     [ifs
       [is-word-char c]
@@ -212,32 +225,100 @@
           [continue j [add 2 j]]
           [list [quote ille] [sub j p]]]]]]]
 
-[defn parse [handle buffer-size]
-  [let [buffer [bump-alloc buffer-size]
-        result-list [create-growable-list [const 4]]
-        ]
-    [loop [p buffer]
-      [let
-        [n-read-bytes [read-bytes 0 handle p [sub buffer-size [sub p buffer]]]
-         end [add p n-read-bytes]]
-        [when [lt 0 n-read-bytes]
-          [loop [cur p]
-            [when [lt p end]
-              [let [c [load8-u 0 0 0 cur]]
-                [ifs
-                  [is-word-char c]
-                  [scan-word-char cur end]
+[defn create-terminal [tag size]
+  [let [p [bump-alloc [const 8]]]
+    [s32 p size]
+    [s32-offset 4 p tag]
+    p]]
 
-                  [is-whitespace c]
-                  [scan-whitespace cur end]
+[def list-tag [quote 5]]
+[def root-tag [quote 7]]
 
-                  [is-square-bracket c]
-                  [assert 0 unexpected square bracket [identity c] at [sub cur p]]
+[defn set-child-n [non-term n child]
+  [s32-offset 8 [add non-term [mul n 4]] child]]
 
-                  [do
-                    [scan-illegal cur end]]]]]]
-          [continue p [add p [sub end p]]]]]]
-    [bump-free buffer buffer-size]]]
+[defn get-node-size [node] [l32 node]]
+
+[defn get-node-tag [node] [l32-offset 4 node]]
+
+[defn get-node-number-of-children [node] [l32-offset 8 node]]
+
+[defn get-node-child [node i]
+  [let [n [get-node-number-of-children node]]
+    [assert [lt i n] get-node-child i must be less than number of children]
+    [l32-offset 12 [add node [mul i 4]]]]]
+
+[defn sum-byte-sizes [nodes]
+  [let [n [div [get-size nodes] 4]]
+    [loop [i 0 sum 0]
+      [if [lt i n]
+        [let [child [at-i32 nodes i]]
+          [continue
+            i [inc i]
+            sum [add sum [get-node-size child]]]]
+        sum]]]]
+
+[defn create-non-terminal-from-list [tag children]
+  [let [s [get-size children]
+        p [bump-alloc [add [const 12] s]]]
+    [s32 p [sum-byte-sizes children]]
+    [s32-offset 4 p tag]
+    [s32-offset 8 p [div s 4]]
+    [memory.copy 0 [add p [const 12]] [add 4 [l32-offset 4 children]] s]
+    p]]
+
+[defn last-i32 [list]
+  [let [s [get-size list]]
+    [assert [gt s 0] last-i32 list must not be empty]
+    [at-i32 list [dec [div s 4]]]]]
+
+[defn parse [start end]
+  [let [root-children [create-growable-list [const 4]]
+        stack [create-growable-list [const 4]]]
+    [push-i32 stack root-children]
+    [loop [p start]
+      [when [lt p end]
+        [let [c [l16 p]]
+          [ifs
+            [is-word-char c]
+            [let [end [loop [q [add 2 p]] [if [is-word-char [l16 q]] [continue q [add 2 q]] q]]]
+              [push-i32
+                [last-i32 stack]
+                [create-terminal [const 97] [sub end p]]]
+              [continue p end]]
+
+            [is-whitespace c]
+            [let [end [loop [q [add 2 p]] [if [is-whitespace [l16 q]] [continue q [add 2 q]] q]]]
+              [push-i32
+                [last-i32 stack]
+                [create-terminal [const 32] [sub end p]]]
+              [continue p end]]
+
+            [eq c [const 91]]
+            [let [new-children-list [create-growable-list [const 8]]]
+              [comment [if [there is already an empty list on the stack reuse it] [create-growable-list [const 8]]]]
+              [push-i32 new-children-list [create-terminal [const 91] 2]]
+              [push-i32 stack new-children-list]
+              [continue p [add 2 p]]]
+
+            [eq c [const 93]]
+            [let [stack-size [div [get-size stack] 4]
+                  top [at-i32 stack [dec stack-size]]]
+              [push-i32 top [create-terminal [const 93] 2]]
+              [when [lt 1 stack-size]
+                [let [children [last-i32 stack]]
+                  [pop-n-bytes stack 4]
+                  [push-i32 [last-i32 stack] [create-non-terminal-from-list list-tag children]]]]
+              [continue p [add 2 p]]]
+
+            [let [end [loop [q [add 2 p]] [if [is-illegal [l16 q]] [continue q [add 2 q]] q]]]
+              [push-i32
+                [last-i32 stack]
+                [create-terminal [const -1] [sub end p]]]
+              [continue p end]]]]]]
+    [comment [loop over the stack popping unclosed lists and creating non-terminals and freeing the temporary growable lists]]
+    [create-non-terminal-from-list root-tag root-children]
+    ]]
 
 [comment
   states
