@@ -56,13 +56,21 @@ parseEvalFile('std3.wuns')
 parseEvalFile('np.wuns')
 const { getVarObject } = context
 apply(getVarObject('bump-alloc-init').getValue())
-const lexOneUTF16 = getVarObject('lex-one-utf16').getValue()
 const bumpAlloc = getVarObject('bump-alloc').getValue()
 
 const bufferWord = apply(bumpAlloc, 64)
 // console.log('buffer:', bufferWord)
 const bufferNum = parseInt(bufferWord)
 const memory = getMemory(0)
+
+
+const testList = getVarObject('test-list').getValue()
+{
+  const li = apply(testList)
+  console.log({ li })
+}
+
+const lexOneUTF16 = getVarObject('lex-one-utf16').getValue()
 
 for (const [expected, input] of [
   [[], ''],
@@ -134,12 +142,6 @@ for (const [expected, input] of [
   }
 }
 
-const testList = getVarObject('test-list').getValue()
-{
-  const li = apply(testList)
-  console.log({ li })
-}
-
 {
   const parse = getVarObject('parse').getValue()
   const nodeSize = getVarObject('get-node-size').getValue()
@@ -179,14 +181,15 @@ const testList = getVarObject('test-list').getValue()
   const nodeToForm = getVarObject('node-to-form').getValue()
   const size = getVarObject('get-size').getValue()
   const at = getVarObject('at-i32').getValue()
-  const isWord = getVarObject('is-word').getValue()
+  const isWord = getVarObject('is-word-pointer').getValue()
   const wordSize = getVarObject('word-size').getValue()
   const wordPointer = getVarObject('word-pointer').getValue()
 
-  const isList = getVarObject('is-list').getValue()
+  const isList = getVarObject('is-list-pointer').getValue()
   const listSize = getVarObject('list-size').getValue()
   const tag = getVarObject('tag').getValue()
   const atAllocList = getVarObject('at-alloc-list').getValue()
+  const print = getVarObject('print').getValue()
 
   for (const input of [
     '',
@@ -252,7 +255,10 @@ const testList = getVarObject('test-list').getValue()
     for (let i = 0; i < formsSize; i++) {
       const formP = apply(at, formsP, i)
       dumpForm(formP)
+      const printP = apply(print, formP)
+      const printSize = +apply(size, printP)
+      console.log('printSize:', {printP, printSize})
+      console.log()
     }
-    console.log()
   }
 }

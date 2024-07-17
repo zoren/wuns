@@ -180,9 +180,15 @@
 
 [defn push-i32 [list i]
   [push-n-bytes list 4]
-  [let [size [l32 list]
-        buffer [l32 [add list 4]]]
+  [let [size [get-size list]
+        buffer [l32-offset 4 list]]
     [s32 [add buffer size] i]]]
+
+[defn push-i8 [list i]
+  [push-n-bytes list 1]
+  [let [size [get-size list]
+        buffer [l32-offset 4 list]]
+    [store8 0 0 0 [add buffer size] i]]]
 
 [defn at-i32 [list i]
   [when [is-negative i] [unreachable]]
@@ -194,7 +200,9 @@
     [push-i32 l [const 10]]
     [push-i32 l [const 20]]
     [push-i32 l [const 30]]
-    [list l [get-size l] [get-capacity l] [at-i32 l [const 0]] [at-i32 l 1] [at-i32 l 2]]]]
+    [list l [get-size l] [get-capacity l]
+      [at-i32 l [const 0]] [at-i32 l 1] [at-i32 l 2]
+      [get-size l] [div [get-size l] 4]]]]
 
 [defmacro l16 [addr] [list [quote i32.load16-u] [quote 0] [quote 1] [quote 0] addr]]
 
@@ -332,7 +340,7 @@
     [s32-offset 4 p n-bytes]
     p]]
 
-[defn is-word [form]
+[defn is-word-pointer [form]
   [eq [l32 form] tag-word]]
 
 [defn word-size [word]
@@ -359,7 +367,7 @@
     [s32-offset 4 p n-elements]
     p]]
 
-[defn is-list [form]
+[defn is-list-pointer [form]
   [eq [l32 form] tag-list]]
 
 [defn tag [form] [l32 form]]
@@ -368,10 +376,10 @@
   [l32-offset 4 list]]
 
 [defn at-alloc-list [form i]
-  [assert [is-list form] at-alloc-list form must be a list]
-  [assert [not [is-negative i]] at-alloc-list i must not be negative]
+  [assert [is-list-pointer form] at-alloc-list1 form must be a list]
+  [assert [not [is-negative i]] at-alloc-list2 i must not be negative]
   [let [s [list-size form]]
-    [assert [lt i s] at-alloc-list i must be less than the size of the list]
+    [assert [lt i s] at-alloc-list3 i must be less than the size of the list]
     [l32-offset 8 [add form [mul i 4]]]]]
 
 [defn number-of-word-or-list [node]
@@ -424,3 +432,28 @@
               form [node-to-form p child]]
           [when form [push-i32 gl form]]
           [continue p [add p s] node-index [inc node-index]]]]]]]
+
+[defn print-recursive [mut-list node]
+  [ifs
+    [is-word-pointer node]
+    [let [s [word-size node]
+          p [word-pointer node]
+          size [get-size mut-list]]
+      [push-n-bytes mut-list s]
+      [loop [i 0]
+        [when [lt i s]
+          [push-i8 mut-list [load8-u 0 0 8 [add p i]]]
+          [continue i [inc i]]]]]
+
+    [is-list-pointer node]
+    [let [size [get-size mut-list]]
+      [push-n-bytes mut-list 1]
+      [push-i8 mut-list [const 91]]
+      ]
+
+    []]]
+
+[defn print [node]
+  [let [mut-list [create-growable-list [const 4]]]
+    [print-recursive mut-list node]
+    mut-list]]
