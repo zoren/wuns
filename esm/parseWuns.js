@@ -55,8 +55,9 @@ env['read-bytes'] = (memoryIndex, handle, p, l) => {
 parseEvalFile('std3.wuns')
 parseEvalFile('np.wuns')
 const { getVarObject } = context
-apply(getVarObject('bump-alloc-init').getValue())
-const bumpAlloc = getVarObject('bump-alloc').getValue()
+const getVarVal = (name) => getVarObject(name).getValue()
+apply(getVarVal('bump-alloc-init'))
+const bumpAlloc = getVarVal('bump-alloc')
 
 const bufferWord = apply(bumpAlloc, 64)
 // console.log('buffer:', bufferWord)
@@ -64,13 +65,13 @@ const bufferNum = parseInt(bufferWord)
 const memory = getMemory(0)
 
 
-const testList = getVarObject('test-list').getValue()
+const testList = getVarVal('test-list')
 {
   const li = apply(testList)
   console.log({ li })
 }
 
-const lexOneUTF16 = getVarObject('lex-one-utf16').getValue()
+const lexOneUTF16 = getVarVal('lex-one-utf16')
 
 for (const [expected, input] of [
   [[], ''],
@@ -143,11 +144,11 @@ for (const [expected, input] of [
 }
 
 {
-  const parse = getVarObject('parse').getValue()
-  const nodeSize = getVarObject('get-node-size').getValue()
-  const nodeTag = getVarObject('get-node-tag').getValue()
-  const nodeNumberOfChildren = getVarObject('get-node-number-of-children').getValue()
-  const nodeChild = getVarObject('get-node-child').getValue()
+  const parse = getVarVal('parse')
+  const nodeSize = getVarVal('get-node-size')
+  const nodeTag = getVarVal('get-node-tag')
+  const nodeNumberOfChildren = getVarVal('get-node-number-of-children')
+  const nodeChild = getVarVal('get-node-child')
 
   const bufferWord = apply(bumpAlloc, 64)
   // console.log('buffer:', bufferWord)
@@ -177,19 +178,19 @@ for (const [expected, input] of [
     console.log()
   }
 
-  const treeToForms = getVarObject('tree-to-forms').getValue()
-  const nodeToForm = getVarObject('node-to-form').getValue()
-  const size = getVarObject('get-size').getValue()
-  const at = getVarObject('at-i32').getValue()
-  const isWord = getVarObject('is-word-pointer').getValue()
-  const wordSize = getVarObject('word-size').getValue()
-  const wordPointer = getVarObject('word-pointer').getValue()
+  const treeToForms = getVarVal('tree-to-forms')
+  const nodeToForm = getVarVal('node-to-form')
+  const size = getVarVal('get-size')
+  const at = getVarVal('at-i32')
+  const isWord = getVarVal('is-word-pointer')
+  const wordSize = getVarVal('word-size')
+  const wordPointer = getVarVal('word-pointer')
 
-  const isList = getVarObject('is-list-pointer').getValue()
-  const listSize = getVarObject('list-size').getValue()
-  const tag = getVarObject('tag').getValue()
-  const atAllocList = getVarObject('at-alloc-list').getValue()
-  const print = getVarObject('print').getValue()
+  const isList = getVarVal('is-list-pointer')
+  const listSize = getVarVal('list-size')
+  const tag = getVarVal('tag')
+  const atAllocList = getVarVal('at-alloc-list')
+  const print = getVarVal('print')
 
   for (const input of [
     '',
