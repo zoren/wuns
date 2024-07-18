@@ -135,9 +135,6 @@
       [continue j [inc j]]
       j]]]
 
-[defn shift-input-buffer [buffer cur]
-  ]
-
 [defn create-size-buffer [capacity]
   [assert [not [is-negative capacity]] capacity must not be negative]
   [let [p [bump-alloc [add 4 capacity]]]
@@ -157,6 +154,8 @@
     s]]
 
 [defn get-capacity [list] [l32 [l32-offset 4 list]]]
+
+[defn get-buffer-pointer [list] [add 4 [l32-offset 4 list]]]
 
 [defn push-n-bytes [list-p n-bytes]
   [assert [not [is-negative n-bytes]] size must not be negative]
@@ -244,7 +243,7 @@
     p]]
 
 [def tag-list [quote 5]]
-[def root-tag [quote 7]]
+[def tag-root [quote 7]]
 
 [defn set-child-n [non-term n child]
   [s32-offset 8 [add non-term [mul n 4]] child]]
@@ -336,7 +335,7 @@
           [pop-n-bytes stack 4]
           [push-i32 [last-i32 stack] [create-non-terminal-from-list tag-list children]]]
         [continue stack-size [dec stack-size]]]]
-    [create-non-terminal-from-list root-tag root-children]]]
+    [create-non-terminal-from-list tag-root root-children]]]
 
 [defn alloc-tagged-word [n-bytes]
   [let [p [bump-alloc [add [const 8] [mem-align n-bytes]]]]
@@ -401,9 +400,11 @@
   [let [tag [get-node-tag node]]
     [ifs
       [eq tag tag-word]
-      [let [s [get-node-size node]
-            end [add text s]
+      [let [ns [get-node-size node]
+            s [div ns 2]
+            end [add text ns]
             tw [alloc-tagged-word s]]
+        [log [list [quote node-to-form] [quote word] ns s]]
         [loop [cur text wp [word-pointer tw]]
           [when [lt cur end]
             [store8 0 0 0 wp [load16-u 0 1 0 cur]]
@@ -441,31 +442,31 @@
           [when form [push-i32 gl form]]
           [continue p [add p s] node-index [inc node-index]]]]]]]
 
-[defn print-recursive [mut-list node]
+[defn print-recursive [mut-list form]
   [ifs
-    [is-word-pointer node]
-    [let [s [word-size node]
-          size [get-size mut-list]]
+    [is-word-pointer form]
+    [let [s [word-size form]
+          size-before [get-size mut-list]]
       [push-n-bytes mut-list s]
-      [loop [i 0]
+      [loop [p [add size-before [l32-offset 4 mut-list]] i 0]
         [when [lt i s]
-          [push-i8 mut-list [load8-u 0 0 8 [add node i]]]
-          [continue i [inc i]]]]]
+          [store8 0 0 4 p [load8-u 0 0 8 [add form i]]]
+          [continue p [inc p] i [inc i]]]]]
 
-    [is-list-pointer node]
-    [let [size [get-size mut-list]]
-      [push-n-bytes mut-list 1]
+    [is-list-pointer form]
+    [let [s [list-size form]]
       [push-i8 mut-list [const 91]]
-      ]
+      [when s
+        [print-recursive mut-list [at-alloc-list form 0]]
+        [for i 1 s
+          [push-i8 mut-list [const 32]]
+          [print-recursive mut-list [at-alloc-list form i]]]]
+      [push-i8 mut-list [const 93]]]
 
-    [do [log [quote unknown node]]
+    [do [log [list [quote unknown node] form [l32 form]]]
       [unreachable]]]]
 
-[defmacro ll [e] [list [quote load] 0 [add 1 1] 0 e]]
-[defmacro ll1 [e] [list [quote load] 0 [quote f] 0 e]]
-
 [defn print [node]
-  [ll [const 0]]
   [let [mut-list [create-growable-list [const 64]]]
     [print-recursive mut-list node]
     mut-list]]

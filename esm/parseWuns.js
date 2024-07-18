@@ -187,14 +187,15 @@ for (const [expected, input] of [
   const tag = getVarVal('tag')
   const atAllocList = getVarVal('at-alloc-list')
   const print = getVarVal('print')
+  const bufferPointer = getVarVal('get-buffer-pointer')
 
   const dumpForm = (formP, indent = '') => {
     if (+apply(isWord, formP)) {
       const size = +apply(wordSize, formP)
       const pointer = +apply(wordPointer, formP)
-      const buffer = new Uint16Array(memory.buffer, pointer, size / 2)
+      const buffer = new Uint8Array(memory.buffer, pointer, size)
       const str = textDecoder.decode(buffer)
-      console.log(`${indent}word(${size},${size / 2}): ${str}`)
+      console.log(`${indent}word(${size}): ${str}`)
       return
     }
     if (+apply(isList, formP)) {
@@ -215,8 +216,13 @@ for (const [expected, input] of [
     '',
     'a',
     'abc',
-    'abc 123',
+    'abc 12345',
     '[]',
+    '[a]',
+    '[ab]',
+    '[abc]',
+    '[abcd]',
+    '[abcd 123]',
     '[list IL ab]',
     '[[af f] 3 [list 2 53 /]]',
     '[a',
@@ -245,10 +251,14 @@ for (const [expected, input] of [
       const formP = apply(at, formsP, i)
       dumpForm(formP)
       const printP = +apply(print, formP)
-      console.log('print:', { printP, capacity: +apply(capacity, printP) })
+      const buf = +apply(bufferPointer, printP)
       const printSize = +apply(size, printP)
-      console.log('printSize:', { printSize })
-      console.log()
+      const printCapacity = +apply(capacity, printP)
+      console.log({ buf, printSize })
+      const buffer = new Uint8Array(memory.buffer, buf, printSize)
+      const str = textDecoder.decode(buffer)
+      console.log('printSize:', { printSize, printCapacity, str })
     }
+    console.log()
   }
 }
