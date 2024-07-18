@@ -3,9 +3,8 @@ const wordRegex = /^[a-z0-9.=/-]+$/
 export const isWordString = (s) => typeof s === 'string' && s.length > 0 && wordRegex.test(s)
 class Word {
   constructor(value) {
-    if (isWordString(value)) {
-      this.value = value
-    } else throw new Error('invalid word: "' + value + '" ' + typeof value)
+    if (!isWordString(value)) throw new Error('invalid word: "' + value + '" ' + typeof value)
+    this.value = value
   }
 
   toString() {
@@ -122,9 +121,11 @@ export const setMeta = (v, meta) => {
   return v
 }
 
+export const isClosure = (f) => 'funMacDesc' in f && 'closureEnv' in f
+
 export const callClosure = (closure, args) => {
+  if(!isClosure(closure)) throw new Error('not a closure')
   const { funMacDesc, closureEnv } = closure
-  if (!funMacDesc) throw new RuntimeError('closure has no funMacDesc')
   const { name, params, restParam, cbodies } = funMacDesc
   const numberOfGivenArgs = args.length
   const arity = params.length

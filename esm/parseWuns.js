@@ -1,6 +1,5 @@
 import { wordValue } from './core.js'
 import { makeInterpreterContext, apply } from './interpreter.js'
-// import { callClosure } from './core.js'
 
 const env = {
   mem: new WebAssembly.Memory({ initial: 1 }),
@@ -64,7 +63,6 @@ const bufferWord = apply(bumpAlloc, 64)
 const bufferNum = parseInt(bufferWord)
 const memory = getMemory(0)
 
-
 const testList = getVarVal('test-list')
 {
   const li = apply(testList)
@@ -119,20 +117,17 @@ for (const [expected, input] of [
   }
   const end = bufferNum + input.length * 2
   let cur = bufferNum
-  // console.log({ end, cur })
   let totalTokenLength = 0
   let expectedIndex = 0
   while (true) {
     if (cur >= end) break
     const [kind, lw] = apply(lexOneUTF16, cur, end)
-    // console.log({ kind, lw })
     const length = parseInt(lw)
     const e = expected[expectedIndex++]
     if (e.kind !== wordValue(kind) || e.length !== length / 2) {
       console.log({ input, e, kind, length })
       throw new Error('length mismatch')
     }
-    // console.log({ kind: String(kind), length, ldiv2: length / 2 })
     cur += length
     totalTokenLength += length
   }
@@ -151,8 +146,17 @@ for (const [expected, input] of [
   const nodeChild = getVarVal('get-node-child')
 
   const bufferWord = apply(bumpAlloc, 64)
-  // console.log('buffer:', bufferWord)
   const bufferNum = parseInt(bufferWord)
+
+  const dumpToken = (tokenP, indent = '') => {
+    const tag = +apply(nodeTag, tokenP)
+    const size = +apply(nodeSize, tokenP) / 2
+    console.log(`${indent}tag: ${tag}, size: ${size}`)
+    if (tag === 5 || tag === 7) {
+      const newIndent = indent + '  '
+      for (let j = 0; j < +apply(nodeNumberOfChildren, tokenP); j++) dumpToken(apply(nodeChild, tokenP, j), newIndent)
+    }
+  }
 
   for (const input of ['', 'a', 'abc', 'abc 123', 'bla ILLEGAL df', '[]']) {
     console.log('evaluating:', input)
@@ -166,21 +170,13 @@ for (const [expected, input] of [
     let cur = bufferNum
 
     const rootNodeP = apply(parse, cur, end)
-
-    const go = (tokenP, indent = '') => {
-      const tag = +apply(nodeTag, tokenP)
-      const size = +apply(nodeSize, tokenP) / 2
-      console.log(`${indent}tag: ${tag}, size: ${size}`)
-      if (tag === 5 || tag === 7)
-        for (let j = 0; j < +apply(nodeNumberOfChildren, tokenP); j++) go(apply(nodeChild, tokenP, j), indent + '  ')
-    }
-    go(rootNodeP)
+    dumpToken(rootNodeP)
     console.log()
   }
 
   const treeToForms = getVarVal('tree-to-forms')
-  const nodeToForm = getVarVal('node-to-form')
   const size = getVarVal('get-size')
+  const capacity = getVarVal('get-capacity')
   const at = getVarVal('at-i32')
   const isWord = getVarVal('is-word-pointer')
   const wordSize = getVarVal('word-size')
@@ -191,6 +187,29 @@ for (const [expected, input] of [
   const tag = getVarVal('tag')
   const atAllocList = getVarVal('at-alloc-list')
   const print = getVarVal('print')
+
+  const dumpForm = (formP, indent = '') => {
+    if (+apply(isWord, formP)) {
+      const size = +apply(wordSize, formP)
+      const pointer = +apply(wordPointer, formP)
+      const buffer = new Uint16Array(memory.buffer, pointer, size / 2)
+      const str = textDecoder.decode(buffer)
+      console.log(`${indent}word(${size},${size / 2}): ${str}`)
+      return
+    }
+    if (+apply(isList, formP)) {
+      const size = +apply(listSize, formP)
+      console.log(`${indent}list: ${size}`)
+      const newIndent = indent + '  '
+      for (let j = 0; j < size; j++) {
+        const child = apply(atAllocList, formP, j)
+        dumpForm(child, newIndent)
+      }
+      return
+    }
+    console.log(apply(tag, formP))
+    throw new Error('unexpected form: ' + formP)
+  }
 
   for (const input of [
     '',
@@ -217,48 +236,18 @@ for (const [expected, input] of [
 
     const rootNodeP = apply(parse, cur, end)
 
-    const go = (tokenP, indent = '') => {
-      const tag = +apply(nodeTag, tokenP)
-      const size = +apply(nodeSize, tokenP) / 2
-      console.log(`${indent}tag: ${tag}, size: ${size}`)
-      if (tag === 5 || tag === 7)
-        for (let j = 0; j < +apply(nodeNumberOfChildren, tokenP); j++) go(apply(nodeChild, tokenP, j), indent + '  ')
-    }
-    go(rootNodeP)
+    dumpToken(rootNodeP)
     const formsP = apply(treeToForms, cur, rootNodeP)
     const formsSize = +apply(size, formsP) / 4
     console.log('formsSize:', formsSize)
 
-    const dumpForm = (formP, indent = '') => {
-      if (+apply(isWord, formP)) {
-        const size = +apply(wordSize, formP)
-        const pointer = +apply(wordPointer, formP)
-        // console.log({ size, pointer })
-        const buffer = new Uint16Array(memory.buffer, pointer, size / 2)
-        const str = textDecoder.decode(buffer)
-        console.log(`${indent}word(${size},${size / 2}): ${str}`)
-        return
-      }
-      if (+apply(isList, formP)) {
-        const size = +apply(listSize, formP)
-        console.log(`${indent}list: ${size}`)
-        const newIndent = indent + '  '
-        for (let j = 0; j < size; j++) {
-          const child = apply(atAllocList, formP, j)
-          dumpForm(child, newIndent)
-        }
-        return
-      }
-      console.log(apply(tag, formP))
-      throw new Error('unexpected form: ' + formP)
-    }
-
     for (let i = 0; i < formsSize; i++) {
       const formP = apply(at, formsP, i)
       dumpForm(formP)
-      const printP = apply(print, formP)
+      const printP = +apply(print, formP)
+      console.log('print:', { printP, capacity: +apply(capacity, printP) })
       const printSize = +apply(size, printP)
-      console.log('printSize:', {printP, printSize})
+      console.log('printSize:', { printSize })
       console.log()
     }
   }

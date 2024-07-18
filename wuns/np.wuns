@@ -139,15 +139,16 @@
   ]
 
 [defn create-size-buffer [capacity]
+  [assert [not [is-negative capacity]] capacity must not be negative]
   [let [p [bump-alloc [add 4 capacity]]]
     [s32 p capacity]
     p]]
 
 [comment a i32 size and a pointer to a buffer that has buffer size and ]
-[defn create-growable-list [initial-size]
+[defn create-growable-list [initial-capacity]
   [let [p [bump-alloc [const 8]]]
     [s32 p [i32.const 0]]
-    [s32-offset 4 p [create-size-buffer initial-size]]
+    [s32-offset 4 p [create-size-buffer initial-capacity]]
     p]]
 
 [defn get-size [list]
@@ -157,18 +158,21 @@
 
 [defn get-capacity [list] [l32 [l32-offset 4 list]]]
 
-[defn push-n-bytes [list n-bytes]
+[defn push-n-bytes [list-p n-bytes]
   [assert [not [is-negative n-bytes]] size must not be negative]
-  [let [size [get-size list]
+  [let [size [get-size list-p]
         new-size [add size n-bytes]
-        buffer [l32-offset 4 list]
+        buffer [l32-offset 4 list-p]
         buffer-capacity [l32 buffer]]
-    [s32 list new-size]
+    [when [is-negative buffer-capacity] [unreachable]]
+    [when [lt buffer-capacity n-bytes]
+      [unreachable]]
+    [s32 list-p new-size]
     [when [gt new-size buffer-capacity]
       [let [new-buffer [create-size-buffer [add buffer-capacity buffer-capacity]]]
         [memory.copy 0 [add new-buffer 4] [add buffer 4] size]
         [try-bump-free buffer [add 4 buffer-capacity]]
-        [s32-offset 4 list new-buffer]]]]]
+        [s32-offset 4 list-p new-buffer]]]]]
 
 [defn pop-n-bytes [list n-bytes]
   [assert [not [is-negative n-bytes]] size must not be negative]
@@ -178,17 +182,17 @@
     [assert [not [is-negative new-size]] cannot pop more than what is in the list]
     [s32 list new-size]]]
 
-[defn push-i32 [list i]
-  [push-n-bytes list 4]
-  [let [size [get-size list]
-        buffer [l32-offset 4 list]]
-    [s32 [add buffer size] i]]]
+[defn push-i32 [l i]
+  [let [size [get-size l]
+        -  [push-n-bytes l 4]
+        buffer [l32-offset 4 l]]
+    [s32-offset 4 [add buffer size] i]]]
 
-[defn push-i8 [list i]
-  [push-n-bytes list 1]
-  [let [size [get-size list]
-        buffer [l32-offset 4 list]]
-    [store8 0 0 0 [add buffer size] i]]]
+[defn push-i8 [l i]
+  [let [size [get-size l]
+        - [push-n-bytes l 1]
+        buffer [l32-offset 4 l]]
+    [store8 0 0 4 [add buffer size] i]]]
 
 [defn at-i32 [list i]
   [when [is-negative i] [unreachable]]
@@ -398,8 +402,12 @@
     [ifs
       [eq tag tag-word]
       [let [s [get-node-size node]
+            end [add text s]
             tw [alloc-tagged-word s]]
-        [memory.copy 0 [word-pointer tw] text s]
+        [loop [cur text wp [word-pointer tw]]
+          [when [lt cur end]
+            [store8 0 0 0 wp [load16-u 0 1 0 cur]]
+            [continue cur [add 2 cur] wp [inc wp]]]]
         tw]
 
       [eq tag tag-list]
@@ -437,12 +445,11 @@
   [ifs
     [is-word-pointer node]
     [let [s [word-size node]
-          p [word-pointer node]
           size [get-size mut-list]]
       [push-n-bytes mut-list s]
       [loop [i 0]
         [when [lt i s]
-          [push-i8 mut-list [load8-u 0 0 8 [add p i]]]
+          [push-i8 mut-list [load8-u 0 0 8 [add node i]]]
           [continue i [inc i]]]]]
 
     [is-list-pointer node]
@@ -451,9 +458,26 @@
       [push-i8 mut-list [const 91]]
       ]
 
-    []]]
+    [do [log [quote unknown node]]
+      [unreachable]]]]
+
+[defmacro ll [e] [list [quote load] 0 [add 1 1] 0 e]]
+[defmacro ll1 [e] [list [quote load] 0 [quote f] 0 e]]
 
 [defn print [node]
-  [let [mut-list [create-growable-list [const 4]]]
+  [ll [const 0]]
+  [let [mut-list [create-growable-list [const 64]]]
     [print-recursive mut-list node]
     mut-list]]
+
+[defn compile [form]
+  [ifs
+    [is-word-pointer form]
+    []
+
+    [is-list-pointer form]
+    [let [s []]
+      ]
+
+    [do [log [quote unknown form]]
+      [unreachable]]]]
