@@ -9,10 +9,12 @@ import { word, makeList, wordWithMeta, listWithMeta } from './core.js'
  * @param {TSParser.SyntaxNode} node
  */
 const nodeToOurForm = (node) => {
-  const { type, text, namedChildren, startPosition, endPosition, isError } = node
+  const { type, text, namedChildren, startPosition, endPosition, isError, startIndex, endIndex } = node
   if (isError) return null
   const range = makeList(...[startPosition.row, startPosition.column, endPosition.row, endPosition.column])
-  const metaData = makeList(word('range'), range, word('node-id'), String(node.id))
+  // const metaData = makeList(word('range'), range, word('node-id'), String(node.id))
+  const metaData = { range, 'node-id': String(node.id), startIndex, endIndex }
+  // (word('range'), range, word('node-id'), String(node.id))
   switch (type) {
     case 'word':
       return wordWithMeta(text, metaData)

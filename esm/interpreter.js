@@ -13,6 +13,7 @@ import {
   makeVar,
   meta,
   callClosure,
+  isSigned32BitInteger,
 } from './core.js'
 import { instructions } from './instructions.js'
 import { parseStringToForms } from './parseTreeSitter.js'
@@ -78,13 +79,9 @@ export const makeInterpreterContext = ({ importObject }) => {
   const varObjects = new Map()
   const getVarObject = (name) => varObjects.get(name)
   const defSetVar = (name, value) => {
-    let v
-    if (varObjects.has(name)) {
-      v = varObjects.get(name)
-    } else {
-      v = makeVar(name)
-      varObjects.set(name, v)
-    }
+    if (varObjects.has(name)) throw new RuntimeError(`redefining var ${name}`)
+    const v = makeVar(name)
+    varObjects.set(name, v)
     v.bind(value)
     return v
   }
@@ -290,9 +287,10 @@ export const makeInterpreterContext = ({ importObject }) => {
           params: params.map(wordValue),
           restParam,
         }
-        // for recursive calls
+        // for recursive calls we put it in the varDescs before we compile the bodies
         varDescs.set(n, funMacDesc)
         const newCtx = { varDescs, outer: ctx, ctxType: wordValue(firstForm) }
+        // add bodies so we can call the function recursively
         funMacDesc.cbodies = compBodies(newCtx, bodies)
         Object.freeze(funMacDesc)
         return (env) => {
@@ -322,7 +320,13 @@ export const makeInterpreterContext = ({ importObject }) => {
       if (instruction.length !== args.length)
         throw new Error(`instruction ${firstWordValue} expected ${instruction.length} arguments, got ${args.length}`)
       const cargs = args.map((a) => wunsComp(ctx, a))
-      return (env) => jsToWuns(instruction(...cargs.map((carg) => number(carg(env)))))
+      return (env) => {
+        try {
+          return jsToWuns(instruction(...cargs.map((carg) => number(carg(env)))))
+        } catch (error) {
+          throw new RuntimeError(`error in instruction ${firstWordValue}: ${error.message}`, form)
+        }
+      }
     }
     const { immediateParams, params, func } = instruction
     const immArity = immediateParams.length
@@ -330,19 +334,29 @@ export const makeInterpreterContext = ({ importObject }) => {
     if (arity !== args.length)
       throw new CompileError(`instruction ${firstWordValue} expected ${arity} arguments, got ${args.length}`)
     const immArgs = args.slice(0, immArity).map(number)
-    const funcWithImmediate = func(...immArgs)
+    for (let i = 0; i < immArity; i++) {
+      const immArg = immArgs[i]
+      if (!Number.isInteger(immArg)) throw new CompileError(`invalid immediate param ${immArg}`)
+      switch (immediateParams[i]) {
+        case 'u32':
+          if (immArg < 0 || immArg > 2 ** 32 - 1) throw new CompileError(`invalid immediate param ${immArg}`)
+          break
+        case 's32':
+          if (!isSigned32BitInteger(immArg)) throw new CompileError(`invalid immediate param ${immArg}`)
+          break
+        default:
+          throw new CompileError(`invalid immediate param type ${immediateParams[i]}`)
+      }
+    }
+    const instWithImmediate = func(...immArgs)
     const cargs = args.slice(immArity).map((a) => wunsComp(ctx, a))
-    return (env) => jsToWuns(funcWithImmediate(instContext, ...cargs.map((carg) => number(carg(env)))))
+    return (env) => jsToWuns(instWithImmediate(instContext, ...cargs.map((carg) => number(carg(env)))))
   }
 
   const evalLogForms = (forms) => {
-    try {
-      for (const form of forms) {
-        const v = wunsEval(form)
-        if (!isUnit(v)) console.log(print(v))
-      }
-    } catch (e) {
-      console.error('error evaluating', e)
+    for (const form of forms) {
+      const v = wunsEval(form)
+      if (!isUnit(v)) console.log(print(v))
     }
   }
 

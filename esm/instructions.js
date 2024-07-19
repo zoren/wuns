@@ -141,6 +141,38 @@ instructions['memory.size'] = {
       return memory.buffer.byteLength >> 16
     },
 }
+instructions['memory.grow'] = {
+  immediateParams: [u32],
+  params: [i32],
+  func:
+    (memoryIndex, delta) =>
+    ({ memories }) => {
+      const memory = memories[memoryIndex]
+      if (!memory) throw new Error('memory not found: ' + memoryIndex)
+      const prev = memory.buffer.byteLength >> 16
+      try {
+        memory.grow(delta)
+        return prev
+      } catch (e) {
+        if (e instanceof RangeError) return -1
+      }
+    },
+}
+// (memory.copy (i32.add $string 8) (local.get $start) (local.get $size))
+instructions['memory.copy'] = {
+  immediateParams: [u32],
+  params: [i32, i32, i32],
+  func:
+    (memoryIndex) =>
+    ({ memories }, dest, src, byteSize) => {
+      const memory = memories[memoryIndex]
+      if (!memory) throw new Error('memory not found: ' + memoryIndex)
+      const ui8 = new Uint8Array(memory.buffer)
+      const srcSub = ui8.subarray(src, src + byteSize)
+      ui8.set(srcSub, dest)
+      return unit
+    },
+}
 addI32Instruction('const', {
   immediateParams: [s32],
   params: [],

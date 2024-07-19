@@ -1,4 +1,5 @@
 import {
+  isClosure,
   unit,
   isWord,
   isList,
@@ -18,16 +19,7 @@ import {
   isVar,
   varWithMeta,
   setMeta,
-  callClosure
 } from './core.js'
-
-export const apply = (f, ...args) => {
-  const butLast = args.slice(0, -1)
-  const last = args.at(-1)
-  if (typeof f === 'function') return f(...butLast, ...last)
-  if (isClosure(f)) return callClosure(f, butLast.concat(last))
-  throw new Error('apply expects function or closure')
-}
 
 export const is_word = (f) => isWord(f)
 
@@ -35,9 +27,7 @@ export const is_i32 = (f) => isWord(f) && isSigned32BitInteger(Number(wordValue(
 
 export const is_list = (f) => isList(f)
 
-const isClosure = (f) => 'funMacDesc' in f && 'closureEnv' in f
-
-export const is_fn = (f) => (typeof f === 'function') || isClosure(f)
+export const is_fn = (f) => typeof f === 'function' || isClosure(f)
 
 export const eq_word = (a, b) => isWord(a) && isWord(b) && (a === b || wordValue(a) === wordValue(b))
 
@@ -115,18 +105,7 @@ export const slice = (v, i, j) => {
 export const abort = () => {
   throw new Error('abort')
 }
-export const concat_words = (l) => {
-  return word(
-    l
-      .map((w) => {
-        const v = wordValue(w)
-        if (typeof v === 'string') return v
-        if (typeof v === 'number') return String(v)
-        throw new Error('concat-words expects list of words')
-      })
-      .join(''),
-  )
-}
+export const concat_words = (l) => word(l.map(wordValue).join(''))
 export const log = (form) => {
   console.log(print(form))
   return unit
@@ -148,7 +127,7 @@ export const concat_lists = (l) => {
 }
 export const concat = (...lists) => concat_lists(lists)
 export const transient_kv_map = (...entries) => {
-  if (entries.length % 2 !== 0) throw new Error('kv-map expects even number of arguments')
+  if (entries.length % 2 !== 0) throw new Error('transient-kv-map expects even number of arguments')
   const map = {}
   for (let i = 0; i < entries.length; i += 2) map[wordValue(entries[i])] = entries[i + 1]
   return map
@@ -158,7 +137,7 @@ export const assoc = (m, k, v) => {
   return Object.freeze({ ...m, [wordValue(k)]: v })
 }
 export const has = (m, k) => {
-  if (typeof m !== 'object') throw new Error('get expects map')
+  if (typeof m !== 'object') throw new Error('has expects map')
   return wordValue(k) in m
 }
 
