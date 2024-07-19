@@ -159,22 +159,6 @@ for (const [expected, input] of [
     }
   }
 
-  for (const input of ['', 'a', 'abc', 'abc 123', 'bla ILLEGAL df', '[]']) {
-    console.log('evaluating:', input)
-    const buffer16 = new Uint16Array(memory.buffer, bufferNum, 64)
-    let i = 0
-    while (i < input.length) {
-      buffer16[i] = input.charCodeAt(i)
-      i++
-    }
-    const end = bufferNum + input.length * 2
-    let cur = bufferNum
-
-    const rootNodeP = apply(parse, cur, end)
-    dumpToken(rootNodeP)
-    console.log()
-  }
-
   const treeToForms = getVarVal('tree-to-forms')
   const size = getVarVal('get-size')
   const capacity = getVarVal('get-capacity')
@@ -218,6 +202,7 @@ for (const [expected, input] of [
     'a',
     'abc',
     'abc 12345',
+    'bla ILLEGAL df',
     '[]',
     '[a]',
     '[ab]',

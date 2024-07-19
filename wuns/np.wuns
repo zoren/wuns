@@ -242,8 +242,9 @@
     [s32-offset 4 p tag]
     p]]
 
-[def tag-list [quote 5]]
-[def tag-root [quote 7]]
+[def tag-node-list [quote 5]]
+[def tag-node-root [quote 7]]
+[def tag-node-word [const 97]]
 
 [defn set-child-n [non-term n child]
   [s32-offset 8 [add non-term [mul n 4]] child]]
@@ -254,7 +255,7 @@
 
 [defn is-non-terminal [form]
   [let [tag [get-node-tag form]]
-    [or [eq tag-list tag] [eq tag-root tag]]]]
+    [or [eq tag-node-list tag] [eq tag-node-root tag]]]]
 
 [defn get-node-number-of-children [node]
   [if [is-non-terminal node]
@@ -262,6 +263,7 @@
     0]]
 
 [defn get-node-child [node i]
+  [assert [not [is-negative i]] get-node-child i must not be negative]
   [let [n [get-node-number-of-children node]]
     [assert [lt i n] get-node-child i must be less than number of children]
     [l32-offset 12 [add node [mul i 4]]]]]
@@ -289,8 +291,6 @@
   [let [s [get-size list]]
     [assert [gt s 0] last-i32 list must not be empty]
     [at-i32 list [dec [div s 4]]]]]
-
-[def tag-node-word [const 97]]
 
 [defn parse [start end]
   [let [root-children [create-growable-list [const 4]]
@@ -328,7 +328,7 @@
               [when [lt 1 stack-size]
                 [let [children [last-i32 stack]]
                   [pop-n-bytes stack 4]
-                  [push-i32 [last-i32 stack] [create-non-terminal-from-list tag-list children]]]]
+                  [push-i32 [last-i32 stack] [create-non-terminal-from-list tag-node-list children]]]]
               [continue p [add 2 p]]]
 
             [let [wend [loop [q [add 2 p]] [if [and [lt q end] [is-illegal [l16 q]]] [continue q [add 2 q]] q]]]
@@ -340,9 +340,9 @@
       [when [lt 1 stack-size]
         [let [children [at-i32 stack [dec stack-size]]]
           [pop-n-bytes stack 4]
-          [push-i32 [last-i32 stack] [create-non-terminal-from-list tag-list children]]]
+          [push-i32 [last-i32 stack] [create-non-terminal-from-list tag-node-list children]]]
         [continue stack-size [dec stack-size]]]]
-    [create-non-terminal-from-list tag-root root-children]]]
+    [create-non-terminal-from-list tag-node-root root-children]]]
 
 [def tag-word [const 97]]
 
@@ -373,14 +373,16 @@
         [continue i [inc i]]]]
     s]]
 
+[def tag-mutable-list [const 5]]
+
 [defn alloc-tagged-list [n-elements]
   [let [p [bump-alloc [add [const 8] [mul 4 n-elements]]]]
-    [s32 p tag-list]
+    [s32 p tag-mutable-list]
     [s32-offset 4 p n-elements]
     p]]
 
 [defn is-list-pointer [form]
-  [eq [l32 form] tag-list]]
+  [eq [l32 form] tag-mutable-list]]
 
 [defn tag [form] [l32 form]]
 
@@ -401,7 +403,7 @@
         sum
         [let [child [get-node-child node i]
               tag [get-node-tag child]]
-          [if [or [eq tag tag-word] [eq tag tag-list]]
+          [if [or [eq tag tag-word] [eq tag tag-mutable-list]]
             [continue i [inc i] sum [inc sum]]
             [continue i [inc i]]]]]]]]
 
@@ -420,7 +422,7 @@
             [continue cur [add 2 cur] wp [inc wp]]]]
         tw]
 
-      [eq tag tag-list]
+      [eq tag tag-mutable-list]
       [let [n-form-children [number-of-word-or-list node]
             tl [alloc-tagged-list n-form-children]
             n-children [get-node-number-of-children node]]
