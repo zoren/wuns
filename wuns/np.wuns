@@ -252,7 +252,14 @@
 
 [defn get-node-tag [node] [l32-offset 4 node]]
 
-[defn get-node-number-of-children [node] [l32-offset 8 node]]
+[defn is-non-terminal [form]
+  [let [tag [get-node-tag form]]
+    [or [eq tag-list tag] [eq tag-root tag]]]]
+
+[defn get-node-number-of-children [node]
+  [if [is-non-terminal node]
+    [l32-offset 8 node]
+    0]]
 
 [defn get-node-child [node i]
   [let [n [get-node-number-of-children node]]
@@ -283,7 +290,7 @@
     [assert [gt s 0] last-i32 list must not be empty]
     [at-i32 list [dec [div s 4]]]]]
 
-[def tag-word [const 97]]
+[def tag-node-word [const 97]]
 
 [defn parse [start end]
   [let [root-children [create-growable-list [const 4]]
@@ -297,7 +304,7 @@
             [let [wend [loop [q [add 2 p]] [if [and [lt q end] [is-word-char [l16 q]]] [continue q [add 2 q]] q]]]
               [push-i32
                 [last-i32 stack]
-                [create-terminal tag-word [sub wend p]]]
+                [create-terminal tag-node-word [sub wend p]]]
               [continue p wend]]
 
             [is-whitespace c]
@@ -336,6 +343,8 @@
           [push-i32 [last-i32 stack] [create-non-terminal-from-list tag-list children]]]
         [continue stack-size [dec stack-size]]]]
     [create-non-terminal-from-list tag-root root-children]]]
+
+[def tag-word [const 97]]
 
 [defn alloc-tagged-word [n-bytes]
   [let [p [bump-alloc [add [const 8] [mem-align n-bytes]]]]

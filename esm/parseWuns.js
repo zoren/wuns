@@ -151,10 +151,11 @@ for (const [expected, input] of [
   const dumpToken = (tokenP, indent = '') => {
     const tag = +apply(nodeTag, tokenP)
     const size = +apply(nodeSize, tokenP) / 2
-    console.log(`${indent}tag: ${tag}, size: ${size}`)
-    if (tag === 5 || tag === 7) {
+    const numberOfChildren = +apply(nodeNumberOfChildren, tokenP)
+    console.log(`${indent}tag: ${tag}, size: ${size} children: ${numberOfChildren}`)
+    if (numberOfChildren) {
       const newIndent = indent + '  '
-      for (let j = 0; j < +apply(nodeNumberOfChildren, tokenP); j++) dumpToken(apply(nodeChild, tokenP, j), newIndent)
+      for (let j = 0; j < numberOfChildren; j++) dumpToken(apply(nodeChild, tokenP, j), newIndent)
     }
   }
 
