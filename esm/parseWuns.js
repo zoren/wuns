@@ -70,7 +70,7 @@ const testList = getVarVal('test-list')
 }
 
 const lexOneUTF16 = getVarVal('lex-one-utf16')
-
+let assertCount = 0
 for (const [expected, input] of [
   [[], ''],
   [[{ kind: 'word', length: 3 }], 'abc'],
@@ -136,7 +136,10 @@ for (const [expected, input] of [
     console.log('input.length * 2:', input.length)
     throw new Error('totalTokenLength !== input.length * 2')
   }
+  assertCount++
 }
+
+import assert from 'node:assert'
 
 {
   const parse = getVarVal('parse')
@@ -157,6 +160,23 @@ for (const [expected, input] of [
       const newIndent = indent + '  '
       for (let j = 0; j < numberOfChildren; j++) dumpToken(apply(nodeChild, tokenP, j), newIndent)
     }
+  }
+  const tagToString = (tag) => {
+    const buffer = new ArrayBuffer(4)
+    new DataView(buffer).setUint32(0, tag, false)
+    return textDecoder.decode(new Uint8Array(buffer))
+  }
+  const nodeP2Struct = (tokenP) => {
+    const tag = +apply(nodeTag, tokenP)
+    const size = +apply(nodeSize, tokenP) / 2
+    const numberOfChildren = +apply(nodeNumberOfChildren, tokenP)
+    const obj = { tag: tagToString(tag), size }
+    if (numberOfChildren) {
+      const children = []
+      for (let j = 0; j < numberOfChildren; j++) children.push(nodeP2Struct(apply(nodeChild, tokenP, j)))
+      obj.children = children
+    }
+    return obj
   }
 
   const treeToForms = getVarVal('tree-to-forms')
@@ -197,26 +217,298 @@ for (const [expected, input] of [
     throw new Error('unexpected form: ' + formP)
   }
 
-  for (const input of [
-    '',
-    'a',
-    'abc',
-    'abc 12345',
-    'bla ILLEGAL df',
-    '[]',
-    '[a]',
-    '[ab]',
-    '[abc]',
-    '[abcd]',
-    '[abcd 123]',
-    '[list IL ab]',
-    '[[af f] 3 [list 2 53 /]]',
-    '[a',
-    '[[abc',
-    'hej  ',
-    '[[ILDB@ sdf',
+  const form2StringArray = (formP) => {
+    if (+apply(isWord, formP)) {
+      const size = +apply(wordSize, formP)
+      const pointer = +apply(wordPointer, formP)
+      const buffer = new Uint8Array(memory.buffer, pointer, size)
+      return textDecoder.decode(buffer)
+    }
+    if (+apply(isList, formP)) {
+      const size = +apply(listSize, formP)
+      const children = []
+      for (let j = 0; j < size; j++) children.push(form2StringArray(apply(atAllocList, formP, j)))
+      return children
+    }
+    throw new Error('unexpected form: ' + formP)
+  }
+
+  for (const { expectedPP, expectedForms, expected, input } of [
+    {
+      expectedPP: [],
+      expectedForms: [],
+      expected: {
+        tag: 'root',
+        size: 0,
+      },
+      input: '',
+    },
+    {
+      expectedPP: ['a'],
+      expectedForms: ['a'],
+      expected: {
+        tag: 'root',
+        size: 1,
+        children: [
+          {
+            tag: 'word',
+            size: 1,
+          },
+        ],
+      },
+      input: 'a',
+    },
+    {
+      expectedPP: [],
+      expectedForms: [],
+      expected: {
+        tag: 'root',
+        size: 1,
+        children: [
+          {
+            tag: 'wspc',
+            size: 1,
+          },
+        ],
+      },
+      input: ' ',
+    },
+    {
+      expectedPP: [],
+      expectedForms: [],
+      expected: {
+        tag: 'root',
+        size: 1,
+        children: [
+          {
+            tag: 'ille',
+            size: 1,
+          },
+        ],
+      },
+      input: 'Z',
+    },
+    {
+      expectedPP: [],
+      expectedForms: [],
+      expected: {
+        tag: 'root',
+        size: 2,
+        children: [
+          {
+            tag: 'ille',
+            size: 2,
+          },
+        ],
+      },
+      input: '😀',
+    },
+    {
+      expectedPP: [],
+      expectedForms: [],
+      expected: {
+        tag: 'root',
+        size: 4,
+        children: [
+          {
+            tag: 'ille',
+            size: 4,
+          },
+        ],
+      },
+      input: '🧜🏾',
+    },
+    {
+      expectedPP: ['abc'],
+      expectedForms: ['abc'],
+      expected: {
+        tag: 'root',
+        size: 3,
+        children: [
+          {
+            tag: 'word',
+            size: 3,
+          },
+        ],
+      },
+      input: 'abc',
+    },
+    {
+      expectedPP: ['abc', '12345'],
+      expectedForms: ['abc', '12345'],
+      expected: {
+        tag: 'root',
+        size: 9,
+        children: [
+          {
+            tag: 'word',
+            size: 3,
+          },
+          {
+            tag: 'wspc',
+            size: 1,
+          },
+          {
+            tag: 'word',
+            size: 5,
+          },
+        ],
+      },
+      input: 'abc 12345',
+    },
+
+    {
+      expectedPP: ['bla', 'df'],
+      expectedForms: ['bla', 'df'],
+      expected: {
+        tag: 'root',
+        size: 14,
+        children: [
+          {
+            tag: 'word',
+            size: 3,
+          },
+          {
+            tag: 'wspc',
+            size: 1,
+          },
+          {
+            tag: 'ille',
+            size: 7,
+          },
+          {
+            tag: 'wspc',
+            size: 1,
+          },
+          {
+            tag: 'word',
+            size: 2,
+          },
+        ],
+      },
+      input: 'bla ILLEGAL df',
+    },
+    {
+      expectedPP: ['[]'],
+      expectedForms: [[]],
+      expected: {
+        tag: 'root',
+        size: 2,
+        children: [
+          {
+            tag: 'list',
+            size: 2,
+            children: [
+              { tag: 'lsqb', size: 1 },
+              { tag: 'rsqb', size: 1 },
+            ],
+          },
+        ],
+      },
+      input: '[]',
+    },
+    {
+      expectedPP: ['[a]'],
+      expectedForms: [['a']],
+      expected: {
+        tag: 'root',
+        size: 3,
+        children: [
+          {
+            tag: 'list',
+            size: 3,
+            children: [
+              { tag: 'lsqb', size: 1 },
+              { tag: 'word', size: 1 },
+              { tag: 'rsqb', size: 1 },
+            ],
+          },
+        ],
+      },
+      input: '[a]',
+    },
+    {
+      expectedPP: ['[abcd 123]'],
+      expectedForms: [['abcd', '123']],
+      expected: {
+        tag: 'root',
+        size: 10,
+        children: [
+          {
+            tag: 'list',
+            size: 10,
+            children: [
+              { tag: 'lsqb', size: 1 },
+              { tag: 'word', size: 4 },
+              { tag: 'wspc', size: 1 },
+              { tag: 'word', size: 3 },
+              { tag: 'rsqb', size: 1 },
+            ],
+          },
+        ],
+      },
+      input: '[abcd 123]',
+    },
+    {
+      expectedPP: ['hej'],
+      expectedForms: ['hej'],
+      expected: {
+        tag: 'root',
+        size: 5,
+        children: [
+          { tag: 'word', size: 3 },
+          { tag: 'wspc', size: 2 },
+        ],
+      },
+      input: 'hej  ',
+    },
+    {
+      expectedPP: ['[]'],
+      expectedForms: [[]],
+      expected: {
+        tag: 'root',
+        size: 1,
+        children: [
+          {
+            tag: 'list',
+            size: 1,
+            children: [{ tag: 'lsqb', size: 1 }],
+          },
+        ],
+      },
+      input: '[',
+    },
+    {
+      expectedPP: ['[[]]'],
+      expectedForms: [[[]]],
+      expected: {
+        tag: 'root',
+        size: 2,
+        children: [
+          {
+            tag: 'list',
+            size: 2,
+            children: [
+              { tag: 'lsqb', size: 1 },
+              {
+                tag: 'list',
+                size: 1,
+                children: [{ tag: 'lsqb', size: 1 }],
+              },
+            ],
+          },
+        ],
+      },
+      input: '[[',
+    },
+    // '[list IL ab]',
+    // '[[af f] 3 [list 2 53 /]]',
+    // '[a',
+    // '[[abc',
+    // 'hej  ',
+    // '[[ILDB@ sdf',
   ]) {
-    console.log('evaluating:', input)
+    // console.log('evaluating:', input)
     const buffer16 = new Uint16Array(memory.buffer, bufferNum, 64)
     let i = 0
     while (i < input.length) {
@@ -228,23 +520,29 @@ for (const [expected, input] of [
 
     const rootNodeP = apply(parse, cur, end)
 
-    dumpToken(rootNodeP)
+    const struct = nodeP2Struct(rootNodeP)
+    assert.deepStrictEqual(struct, expected)
+
     const formsP = apply(treeToForms, cur, rootNodeP)
     const formsSize = +apply(size, formsP) / 4
-    console.log('formsSize:', formsSize)
 
+    const topLevel = []
     for (let i = 0; i < formsSize; i++) {
       const formP = apply(at, formsP, i)
-      dumpForm(formP)
+      // dumpForm(formP)
+      const stringArray = form2StringArray(formP)
+      topLevel.push(stringArray)
       const printP = +apply(print, formP)
       const buf = +apply(bufferPointer, printP)
       const printSize = +apply(size, printP)
       const printCapacity = +apply(capacity, printP)
-      console.log({ buf, printSize })
       const buffer = new Uint8Array(memory.buffer, buf, printSize)
       const str = textDecoder.decode(buffer)
-      console.log('printSize:', { printSize, printCapacity, str })
+      assert.equal(str, expectedPP[i])
+      assertCount++
     }
-    console.log()
+    assert.deepStrictEqual(topLevel, expectedForms)
   }
 }
+
+console.log('assertCount:', assertCount)

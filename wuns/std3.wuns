@@ -43,15 +43,6 @@
 [defn rest [l]
   [slice l 1 [size l]]]
 
-[defn push-all [mut-list l]
-  [let [s-l [size l]]
-    [loop [i 0]
-      [if [lt i s-l]
-        [let []
-          [push mut-list [at l i]]
-          [continue i [inc i]]]
-        [list]]]]]
-
 [defmacro do [.. forms]
   [concat [quote [let []]] forms]]
 
@@ -156,17 +147,6 @@
 
 [defmacro for-inc [iw start increment end .. forms]
   [for-func iw start increment end forms]]
-
-[defn is-empty [l] [eq [size l] 0]]
-
-[defmacro fn [params .. forms]
-  [concat [list [quote func] [genword] params] forms]]
-
-[defn map [mf coll]
-  [let [result [mutable-list]]
-    [for i 0 [size coll]
-      [push result [mf [at coll i]]]]
-    result]]
 
 [defmacro for-each [element-var collection .. forms]
   [assert [is-word element-var] for-each requires a word as the first argument]

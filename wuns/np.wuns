@@ -73,19 +73,6 @@
     [log-size-pointer 0 s p]
     [bump-free p alloc-size]]]
 
-[defn byte-size [type]
-  [ifs
-    [eq-word [quote i8] type]
-    [i32.const 1]
-
-    [eq-word [quote i16] type]
-    [i32.const 2]
-
-    [eq-word [quote i32] type]
-    [i32.const 4]
-
-    [log-abort unknown type [identity type]]]]
-
 [comment [handle memory [pointer ui8] n-bytes] [err-no n-of-read-bytes]]
 [import env read [func [i32 i32 i32 i32] [i32 i32]]]
 [import env read-bytes [func [i32 i32 i32 i32 i32] [i32 i32]]]
@@ -242,9 +229,9 @@
     [s32-offset 4 p tag]
     p]]
 
-[def tag-node-list [quote 5]]
-[def tag-node-root [quote 7]]
-[def tag-node-word [const 97]]
+[def tag-node-list [quote 0x6c697374]]
+[def tag-node-root [quote 0x726f6f74]]
+[def tag-node-word [const 0x776f7264]]
 
 [defn set-child-n [non-term n child]
   [s32-offset 8 [add non-term [mul n 4]] child]]
@@ -292,6 +279,13 @@
     [assert [gt s 0] last-i32 list must not be empty]
     [at-i32 list [dec [div s 4]]]]]
 
+[comment
+  wspc 0x77737063
+  ille 0x696c6c65
+  lsqb 0x6c737162
+  rsqb 0x72737162
+  ]
+
 [defn parse [start end]
   [let [root-children [create-growable-list [const 4]]
         stack [create-growable-list [const 4]]]
@@ -311,20 +305,20 @@
             [let [wend [loop [q [add 2 p]] [if [and [lt q end] [is-whitespace [l16 q]]] [continue q [add 2 q]] q]]]
               [push-i32
                 [last-i32 stack]
-                [create-terminal [const 32] [sub wend p]]]
+                [create-terminal [const 0x77737063] [sub wend p]]]
               [continue p wend]]
 
             [eq c [const 91]]
             [let [new-children-list [create-growable-list [const 8]]]
               [comment [if [there is already an empty list on the stack reuse it] [create-growable-list [const 8]]]]
-              [push-i32 new-children-list [create-terminal [const 91] 2]]
+              [push-i32 new-children-list [create-terminal [const 0x6c737162] 2]]
               [push-i32 stack new-children-list]
               [continue p [add 2 p]]]
 
             [eq c [const 93]]
             [let [stack-size [div [get-size stack] 4]
                   top [at-i32 stack [dec stack-size]]]
-              [push-i32 top [create-terminal [const 93] 2]]
+              [push-i32 top [create-terminal [const 0x72737162] 2]]
               [when [lt 1 stack-size]
                 [let [children [last-i32 stack]]
                   [pop-n-bytes stack 4]
@@ -334,7 +328,7 @@
             [let [wend [loop [q [add 2 p]] [if [and [lt q end] [is-illegal [l16 q]]] [continue q [add 2 q]] q]]]
               [push-i32
                 [last-i32 stack]
-                [create-terminal [const -1] [sub wend p]]]
+                [create-terminal [const 0x696c6c65] [sub wend p]]]
               [continue p wend]]]]]]
     [loop [stack-size [div [get-size stack] 4]]
       [when [lt 1 stack-size]
@@ -345,6 +339,7 @@
     [create-non-terminal-from-list tag-node-root root-children]]]
 
 [def tag-word [const 97]]
+[def tag-list [const 5]]
 
 [defn alloc-tagged-word [n-bytes]
   [let [p [bump-alloc [add [const 8] [mem-align n-bytes]]]]
@@ -373,16 +368,14 @@
         [continue i [inc i]]]]
     s]]
 
-[def tag-mutable-list [const 5]]
-
 [defn alloc-tagged-list [n-elements]
   [let [p [bump-alloc [add [const 8] [mul 4 n-elements]]]]
-    [s32 p tag-mutable-list]
+    [s32 p tag-list]
     [s32-offset 4 p n-elements]
     p]]
 
 [defn is-list-pointer [form]
-  [eq [l32 form] tag-mutable-list]]
+  [eq [l32 form] tag-list]]
 
 [defn tag [form] [l32 form]]
 
@@ -403,26 +396,25 @@
         sum
         [let [child [get-node-child node i]
               tag [get-node-tag child]]
-          [if [or [eq tag tag-word] [eq tag tag-mutable-list]]
+          [if [or [eq tag tag-node-word] [eq tag tag-node-list]]
             [continue i [inc i] sum [inc sum]]
             [continue i [inc i]]]]]]]]
 
 [defn node-to-form [text node]
   [let [tag [get-node-tag node]]
     [ifs
-      [eq tag tag-word]
+      [eq tag tag-node-word]
       [let [ns [get-node-size node]
             s [div ns 2]
             end [add text ns]
             tw [alloc-tagged-word s]]
-        [log [list [quote node-to-form] [quote word] ns s]]
         [loop [cur text wp [word-pointer tw]]
           [when [lt cur end]
             [store8 0 0 0 wp [load16-u 0 1 0 cur]]
             [continue cur [add 2 cur] wp [inc wp]]]]
         tw]
 
-      [eq tag tag-mutable-list]
+      [eq tag tag-node-list]
       [let [n-form-children [number-of-word-or-list node]
             tl [alloc-tagged-list n-form-children]
             n-children [get-node-number-of-children node]]
