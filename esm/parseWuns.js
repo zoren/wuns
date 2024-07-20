@@ -20,37 +20,6 @@ env['log-size-pointer'] = (memoryIndex, size, p) => {
   console.log(str)
 }
 
-const textEncoder = new TextEncoder()
-
-const stringInputHandles = new Map()
-
-env['read'] = (memoryIndex, handle, p, l) => {
-  const memory = getMemory(memoryIndex)
-  if (!memory) throw new Error('memory not found: ' + memoryIndex)
-  const inputObj = stringInputHandles.get(handle)
-  if (!inputObj) throw new Error('string handle not found: ' + handle)
-  const { input, readChars } = inputObj
-  const buffer = new Uint8Array(memory.buffer, p, l)
-  const { written, read } = textEncoder.encodeInto(input.slice(readChars), buffer)
-  // console.log(`read: ${read}, written: ${written}`)
-  inputObj.readChars += read
-  return written
-}
-
-const byteInputHandles = new Map()
-
-env['read-bytes'] = (memoryIndex, handle, p, l) => {
-  const memory = getMemory(memoryIndex)
-  if (!memory) throw new Error('memory not found: ' + memoryIndex)
-  const inputObj = byteInputHandles.get(wordValue(handle))
-  if (!inputObj) throw new Error('binary handle not found: ' + handle)
-  const { bytes, offset } = inputObj
-  const buffer = new Uint8Array(memory.buffer, p, l)
-  const slice = bytes.slice(offset, offset + l)
-  buffer.set(slice)
-  inputObj.offset += slice.length
-  return slice.length
-}
 parseEvalFile('std3.wuns')
 parseEvalFile('np.wuns')
 const { getVarObject } = context
@@ -59,15 +28,8 @@ apply(getVarVal('bump-alloc-init'))
 const bumpAlloc = getVarVal('bump-alloc')
 
 const bufferWord = apply(bumpAlloc, 64)
-// console.log('buffer:', bufferWord)
 const bufferNum = parseInt(bufferWord)
 const memory = getMemory(0)
-
-const testList = getVarVal('test-list')
-{
-  const li = apply(testList)
-  console.log({ li })
-}
 
 const lexOneUTF16 = getVarVal('lex-one-utf16')
 let assertCount = 0

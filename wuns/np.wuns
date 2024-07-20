@@ -73,10 +73,6 @@
     [log-size-pointer 0 s p]
     [bump-free p alloc-size]]]
 
-[comment [handle memory [pointer ui8] n-bytes] [err-no n-of-read-bytes]]
-[import env read [func [i32 i32 i32 i32] [i32 i32]]]
-[import env read-bytes [func [i32 i32 i32 i32 i32] [i32 i32]]]
-
 [defn is-whitespace [c]
   [or [eq c [quote 32]] [eq c [quote 10]]]]
 
@@ -184,15 +180,6 @@
   [when [is-negative i] [unreachable]]
   [when [ge i [div [get-size list] 4]] [unreachable]]
   [l32-offset 4 [add [l32-offset 4 list] [mul i 4]]]]
-
-[defn test-list []
-  [let [l [create-growable-list [const 4]]]
-    [push-i32 l [const 10]]
-    [push-i32 l [const 20]]
-    [push-i32 l [const 30]]
-    [list l [get-size l] [get-capacity l]
-      [at-i32 l [const 0]] [at-i32 l 1] [at-i32 l 2]
-      [get-size l] [div [get-size l] 4]]]]
 
 [defmacro l16 [addr] [list [quote i32.load16-u] [quote 0] [quote 1] [quote 0] addr]]
 
