@@ -1,24 +1,16 @@
 import { wordValue } from './core.js'
 import { makeInterpreterContext, apply } from './interpreter.js'
 
-const env = {
-  mem: new WebAssembly.Memory({ initial: 1 }),
-}
+const memory = new WebAssembly.Memory({ initial: 1 })
 const importObject = {
-  env,
+  env: {
+    mem: memory,
+  }
 }
 const context = makeInterpreterContext({ importObject })
-const { parseEvalFile, getMemory } = context
+const { parseEvalFile } = context
 
 const textDecoder = new TextDecoder()
-
-env['log-size-pointer'] = (memoryIndex, size, p) => {
-  const memory = getMemory(memoryIndex)
-  if (!memory) throw new RuntimeError('memory not found: ' + memoryIndex)
-  const buffer = new Uint8Array(memory.buffer, p, size)
-  const str = textDecoder.decode(buffer)
-  console.log(str)
-}
 
 parseEvalFile('np.wuns')
 const { getVarObject } = context
@@ -28,7 +20,6 @@ const bumpAlloc = getVarVal('bump-alloc')
 
 const bufferWord = apply(bumpAlloc, 64)
 const bufferNum = parseInt(bufferWord)
-const memory = getMemory(0)
 
 const lexOneUTF16 = getVarVal('lex-one-utf16')
 let assertCount = 0

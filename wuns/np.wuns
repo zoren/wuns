@@ -234,21 +234,6 @@
 
 [defmacro mem-align [x] [align mem-alloc-size x]]
 
-[import env log-size-pointer [func [i32 i32 i32] []]]
-
-[defn test-log []
-  [let [start [i32.const 32]
-        end [i32.const 127]
-        s [sub end start]
-        alloc-size [mem-align s]
-        p [bump-alloc alloc-size]]
-    [loop [i [i32.const 0]]
-      [when [lt i s]
-        [store8 0 0 0 [add p i] [add start i]]
-        [continue i [add i [i32.const 1]]]]]
-    [log-size-pointer 0 s p]
-    [bump-free p alloc-size]]]
-
 [defn is-whitespace [c]
   [or [eq c [quote 32]] [eq c [quote 10]]]]
 
