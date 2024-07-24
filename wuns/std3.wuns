@@ -1,17 +1,3 @@
-[def defmacro
-  [func defmacro [name params .. forms]
-    [list [quote let] [list]
-      [list [quote def] name [concat [list [quote func] name params] forms]]
-      [list [quote set-meta] [list [quote var] [list [quote quote] name]]
-        [quote transient-kv-map [quote is-macro] [quote 1]]]]]]
-
-[set-meta [var [quote defmacro]] [transient-kv-map [quote is-macro] [quote 1]]]
-
-[defmacro defn [name params .. forms]
-  [list [quote def] name [concat [list [quote func] name params] forms]]]
-
-[defmacro comment [.. -] [list]]
-
 [def -2 [quote -2]]
 [def -1 [quote -1]]
 [def 0 [quote 0]]
@@ -20,11 +6,26 @@
 [def 3 [quote 3]]
 [def 4 [quote 4]]
 
+[def defmacro
+  [func defmacro [name params .. forms]
+    [list [quote let] [list]
+      [list [quote def] name [concat [list [quote func] name params] forms]]
+      [list [quote set-meta] [list [quote var] [list [quote quote] name]]
+        [quote transient-kv-map [quote is-macro] 1]]]]
+  ]
+
+[set-meta [var [quote defmacro]] [transient-kv-map [quote is-macro] 1]]
+
+[defmacro defn [name params .. forms]
+  [list [quote def] name [concat [list [quote func] name params] forms]]]
+
+[defmacro comment [.. -] [list]]
+
 [defn inc [x] [add x 1]]
 
 [defn dec [x] [sub x 1]]
 
-[defn not [c] [eq c 0]]
+[defn not [c] [if c 0 1]]
 
 [defn is-zero [x] [eq x 0]]
 
@@ -79,7 +80,7 @@
     [quote [abort]]]]
 
 [defmacro assert [cond .. lmsg]
-  [list [quote when-not] cond
+  [list [quote when] [list [quote not] cond]
     [list [quote log] [quote-list lmsg]]
     [quote [unreachable]]]]
 
@@ -156,13 +157,13 @@
     [list
       [quote let] [list col-var collection col-size-var [list [quote size] col-var]]
       [list
-        [quote loop] [list iteration-var [quote 0]]
+        [quote loop] [list iteration-var 0]
         [list [quote if]
           [list [quote lt] iteration-var col-size-var]
           [concat [quote [let]]
             [list [list element-var [list [quote at] col-var iteration-var]]]
             forms
-            [list [list [quote continue] iteration-var [list [quote add] iteration-var [quote 1]]]]]
+            [list [list [quote continue] iteration-var [list [quote add] iteration-var 1]]]]
           [list]]]]]]
 
 [defmacro kv-map [.. entries]
@@ -185,3 +186,6 @@
 
 [defmacro setq [m w v]
   [list [quote set] m [list [quote quote] w] v]]
+
+[defn is-empty [form]
+  [eq 0 [size form]]]

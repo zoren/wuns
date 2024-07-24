@@ -118,8 +118,8 @@
 
 [defn try-get-global-sig [name]
   [if [has global-ctx name]
-    []
-    [get global-ctx name]]]
+    [get global-ctx name]
+    0]]
 
 [def predicate-to-type
   [kv-map
@@ -129,7 +129,7 @@
 
 [defn is-external-func [name]
   [let [sig [try-get-global-sig name]]
-    [and [gt [size sig] 0] [eq-word [getq sig def] [quote external-func]]]]]
+    [eq-word [getq sig def] [quote external-func]]]]
 
 [defn try-bind-type-predicate [local-ctx t-form]
   [if [and [is-list t-form] [eq [size t-form] 2]]
@@ -147,15 +147,14 @@
   [getq [meta node] node-id]]
 
 [defn push-node-type [node type]
-  [push node-types [get-node-id node]]
-  [push node-types type]
+  [set node-types [get-node-id node] type]
   type]
 
 [defn try-get-node-type [node]
   [let [node-id [get-node-id node]]
     [if [has node-types node-id]
-      type-error
-      [get node-types node-id]]]]
+      [get node-types node-id]
+      type-error]]]
 
 [def interpreter-context []]
 
@@ -206,13 +205,6 @@
               [push res-types [check-form local-ctx 0 [at form i]]]
               [continue i [inc i]]]]
           res-types]
-
-        [eq-form first-form [quote i32]]
-        [do
-          [if [eq n-of-args 1]
-            [report-when-not [is-decimal [second form]] [second form] i32 expects a decimal]
-            [report form i32 expects one argument]]
-          type-i32]
 
         [eq-form first-form [quote quote]]
         [do
@@ -342,8 +334,7 @@
               [report name external-func expects a name]]]
           [report form external-func expects a name]]
 
-        [or [eq-form first-form [quote func]]
-            [eq-form first-form [quote macro]]]
+        [or [eq-form first-form [quote defn]]]
         [let [params
               [if [gt s-form 2]
                 [let [l [third form]]
@@ -404,8 +395,8 @@
                     [push param-ctx [type-list pt]]]
                   pt]
                 0]
-              func-ctx [list param-ctx [list []] first-form]
-              parameter-type-list [freeze mut-parameter-type-list]
+              func-ctx [list param-ctx [list [kv-map]] first-form]
+              parameter-type-list [persistent-array mut-parameter-type-list]
               locals [mutable-list]
               -
               [loop [i 3]
@@ -434,15 +425,29 @@
 
         [let [sig [try-get-global-sig first-form]
               sig-def [if [hasq sig def] [getq sig def] 0]]
-          [if [eq 0 [size sig]]
-            [let [instruction [get-instruction first-form]]
-              [if [ne 0 [size instruction]]
-                [let [parameters [getq instruction parameters]
-                      imm-parameters [getq instruction immediate-parameters]
-                      n-of-parameters [getq instruction arity]
+          [if [not sig]
+            [let [instruction [try-get-instruction first-form]]
+              [if instruction
+                [let [imm-parameters [getq instruction immediate-parameters]
+                      parameters [getq instruction parameters]
+                      n-of-parameters [add [size imm-parameters] [size parameters]]
                       results [getq instruction results]]
                   [report-when-not [eq n-of-args n-of-parameters] form wrong number of arguments]
-                  [loop [i 1]
+                  [for i 0 [size imm-parameters]
+                    [let [imm-p [at imm-parameters i]
+                          arg [at form [inc i]]]
+                      [ifs
+                        [eq-word imm-p immediate-s32]
+                        [report-when-not [is-decimal arg] arg expects a decimal]
+
+                        [eq-word imm-p immediate-s64]
+                        [report-when-not [is-decimal arg] arg expects a decimal]
+
+                        [assert 0 unknown immediate parameter type]]
+                        ]
+
+                    ]
+                  [loop [i [add [size imm-parameters] 1]]
                     [when [lt i s-form]
                       [let [arg [at form i]
                             arg-t [check-form local-ctx 0 arg]
@@ -452,7 +457,7 @@
                             [when-not [check-param-arg-conform pt arg-t]
                               [report-error [concat [quote parameter does not match] [list pt arg-t]] arg]]]]
                       [continue i [inc i]]]]]
-                  results]
+                  [push-node-type form results]]
                 [report form function not found]]]
             [let [parameters [getq sig parameters]
                   n-of-parameters [size parameters]]

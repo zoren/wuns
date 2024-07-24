@@ -5,16 +5,19 @@ const memory = new WebAssembly.Memory({ initial: 1 })
 const importObject = {
   env: {
     mem: memory,
-  }
+  },
 }
 const context = makeInterpreterContext({ importObject })
-const { parseEvalFile } = context
+const { parseEvalFile, getVarObject } = context
 
 const textDecoder = new TextDecoder()
 
 parseEvalFile('np.wuns')
-const { getVarObject } = context
-const getVarVal = (name) => getVarObject(name).getValue()
+const getVarVal = (name) => {
+  const vo = getVarObject(name)
+  if (!vo) throw new Error('getVarVal: ' + name)
+  return vo.getValue()
+}
 apply(getVarVal('bump-alloc-init'))
 const bumpAlloc = getVarVal('bump-alloc')
 
@@ -127,7 +130,7 @@ const nodeP2Struct = (tokenP) => {
   return obj
 }
 
-const treeToForms = getVarVal('tree-to-forms')
+const treeToFormPointers = getVarVal('tree-to-form-pointers')
 const size = getVarVal('get-size')
 const at = getVarVal('at-i32')
 const isWord = getVarVal('is-word-pointer')
@@ -139,7 +142,6 @@ const listSize = getVarVal('list-size')
 const tag = getVarVal('tag')
 const atAllocList = getVarVal('at-alloc-list')
 const print = getVarVal('print')
-const printParen = getVarVal('print-paren')
 const bufferPointer = getVarVal('get-buffer-pointer')
 
 const dumpForm = (formP, indent = '') => {
@@ -469,7 +471,7 @@ for (const { expectedPP, expectedForms, expected, input } of tests) {
   const struct = nodeP2Struct(rootNodeP)
   assert.deepStrictEqual(struct, expected)
 
-  const formsP = apply(treeToForms, cur, rootNodeP)
+  const formsP = apply(treeToFormPointers, cur, rootNodeP)
   const formsSize = +apply(size, formsP) / 4
 
   const topLevel = []

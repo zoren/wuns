@@ -36,5 +36,5 @@ const childrenToOurForm = (children) => {
 }
 
 export const parse = (content, oldTree) => parser.parse(content, oldTree)
-export const treeToForms = (tree) => childrenToOurForm(tree.rootNode.children)
+export const treeToForms = (tree) => childrenToOurForm(tree.rootNode.namedChildren)
 export const parseStringToForms = (content, oldTree) => treeToForms(parse(content, oldTree))

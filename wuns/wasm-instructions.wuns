@@ -8,9 +8,11 @@
     results results]]
 
 [def i32 [quote i32]]
-[def i32i32 [quote [i32 i32]]]
+[def i64 [quote i64]]
+[def i32i32 [list i32 i32]]
 [def immediate-u32 [quote immediate-u32]]
 [def immediate-s32 [quote immediate-s32]]
+[def immediate-s64 [quote immediate-s64]]
 [def empty-tuple [quote [tuple]]]
 [def imm-u32u32 [list immediate-u32 immediate-u32]]
 
@@ -22,7 +24,8 @@
     [make-operation-obj [quote unreachable] [quote 0x00] [] [] empty-tuple]
     [make-operation-obj [quote nop] [quote 0x01] [] [] empty-tuple]
 
-    [make-operation-obj [quote const] [quote 0x41] [list immediate-s32] [] i32]
+    [make-operation-obj [quote i32.const] [quote 0x41] [list immediate-s32] [] i32]
+    [make-operation-obj [quote i64.const] [quote 0x42] [list immediate-s64] [] i64]
 
     [make-binary-i32 eq  0x46]
     [make-binary-i32 ne  0x47]
@@ -69,3 +72,8 @@
 
 [defn get-instruction [name]
   [get instructions-by-name name]]
+
+[defn try-get-instruction [name]
+  [if [has instructions-by-name name]
+    [get instructions-by-name name]
+    0]]

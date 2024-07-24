@@ -40,9 +40,13 @@ const ctAssert = (cond, msg) => {
   if (!cond) throw new CompileError('compile assert failed: ' + msg)
 }
 
+const zero = word('0')
+
+const one = word('1')
+
 const jsToWuns = (js) => {
   if (isForm(js)) return js
-  if (typeof js === 'boolean') return js ? word('1') : word('0')
+  if (typeof js === 'boolean') return js ? one : zero
   if (typeof js === 'string') return word(js)
   if (typeof js === 'number') return word(String(js))
   if (js === undefined) return unit
@@ -310,6 +314,13 @@ export const makeInterpreterContext = ({ importObject }) => {
       if (meta(varObj)['is-macro']) {
         const macResult = callClosure(varObj.getValue(), args)
         return wunsComp(ctx, macResult)
+      }
+      // here we can check arity statically
+      const f = varObj.getValue()
+      if (typeof f === 'function' && !f.varargs) {
+        const arity = f.length
+        if (arity !== args.length)
+          throw new CompileError(`function ${firstWordValue} expected ${arity} arguments, got ${args.length}`)
       }
       const caller = rtCallFunc()
       return (env) => caller(varObj.getValue(), env)

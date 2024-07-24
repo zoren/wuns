@@ -1,0 +1,84 @@
+[defn compile-form [ctx is-tail form]
+  [ifs
+    [is-word form]
+    []
+
+    [is-list form]
+    [do
+      [assert [not [is-empty form]] a list must not be empty]
+      [let [fw [at form 0]
+            inst [try-get-instruction fw]]
+        [if inst
+          form
+          [assert 0 not an instruction]]
+
+        ]]
+
+    [do [log [quote unknown form]]
+      [unreachable]]]]
+
+[defn compile-top-form [form]
+  [check-top-form form]
+  [ifs
+    [is-word form]
+    []
+
+    [is-list form]
+    [do
+      [assert [not [is-empty form]] a list must not be empty]
+      [let [fw [at form 0]]
+        [assert [is-word fw] first element of a list must be a word]
+        [ifs
+          [eq-word [quote defn] fw]
+          [let [fname [at form 1]
+                params [at form 2]
+                wasm-params [list]
+                wasm-bodies [mutable-list]
+                ctx []
+                last-body [at form -1]]
+            [assert [is-word fname] second element of a list must be a word]
+            [assert [is-list params] third element of a list must be a list]
+            [for-each body [slice form 3 [dec [size form]]]
+              [push wasm-bodies [compile-form ctx 0 body]]]
+            [push wasm-bodies [compile-form ctx 1 last-body]]
+            [concat
+              [list [quote func] [list [quote export] [list [quote dq-string] fname]]]
+              wasm-params
+              [list [list [quote result] [try-get-node-type last-body]]]
+              wasm-bodies]]
+
+          [assert 0 sdf sdfsdf ]]]]
+
+    [do [log [quote unknown form]]
+      [unreachable]]]]
+
+[defn print-paren-recursive-form [mut-list form]
+  [ifs
+    [is-word form]
+    [for i 0 [size form]
+      [push mut-list [at-word form i]]]
+
+    [is-list form]
+    [let [s [size form]]
+      [if [and [eq s 2] [eq-word [first form] [quote dq-string]]]
+        [let [sf [second form]]
+          [push mut-list [const 0x22]]
+          [for i 0 [size sf]
+            [push mut-list [at-word sf i]]]
+          [push mut-list [const 0x22]]]
+        [do
+          [push mut-list [const 40]]
+          [when [lt 0 s]
+            [print-paren-recursive-form mut-list [at form 0]]
+            [for i 1 s
+              [push mut-list [const 32]]
+              [print-paren-recursive-form mut-list [at form i]]]]
+          [push mut-list [const 41]]]]]
+
+    [do [log [list [quote unknown node] form ]]
+      [unreachable]]]]
+
+[defn print-paren-form [form]
+  [let [mut-list [mutable-list]]
+    [print-paren-recursive-form mut-list form]
+    mut-list]]

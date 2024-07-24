@@ -56,9 +56,21 @@ export const push = (ar, e) => {
   return unit
 }
 export const list = (...args) => makeList(...args)
+list.varargs = true
 
 export const mutable_list = (...args) => args
+mutable_list.varargs = true
+export const mutable_list_of_size = (size) => {
+  const s = number(size)
+  if (s < 0) throw new Error('mutable-list-of-size expects non-negative size')
+  const zeroWord = word('0')
+  return Array.from({ length: s }, () => zeroWord)
+}
 export const is_mutable = (f) => (Array.isArray(f) && !Object.isFrozen(f)) | 0
+export const list_from_mutable = (f) => {
+  if (!Array.isArray(f)) throw new Error('list-from-mutable expects array')
+  return makeList(...f)
+}
 
 export const persistent_array = (o) => {
   if (!Array.isArray(o)) throw new Error('persistent-array expects array')
@@ -105,6 +117,7 @@ export const slice = (v, i, j) => {
 export const abort = () => {
   throw new Error('abort')
 }
+export const codepoint_to_word = (cp) => word(String.fromCodePoint(number(cp)))
 export const concat_words = (l) => word(l.map(wordValue).join(''))
 export const log = (form) => {
   console.log(print(form))
@@ -112,7 +125,7 @@ export const log = (form) => {
 }
 
 export const report_error = (msg, form) => {
-  console.error(msg, print(form))
+  console.error(msg.map(print).join(' '), print(form))
   return unit
 }
 export { atom, is_atom, atom_get, atom_set }
@@ -126,12 +139,14 @@ export const concat_lists = (l) => {
   return makeList(...result)
 }
 export const concat = (...lists) => concat_lists(lists)
+concat.varargs = true
 export const transient_kv_map = (...entries) => {
   if (entries.length % 2 !== 0) throw new Error('transient-kv-map expects even number of arguments')
   const map = {}
   for (let i = 0; i < entries.length; i += 2) map[wordValue(entries[i])] = entries[i + 1]
   return map
 }
+transient_kv_map.varargs = true
 export const assoc = (m, k, v) => {
   if (typeof m !== 'object' || !Object.isFrozen(m)) throw new Error('assoc expects frozen map')
   return Object.freeze({ ...m, [wordValue(k)]: v })

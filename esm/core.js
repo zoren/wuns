@@ -24,6 +24,7 @@ export const unit = Object.freeze([])
 export const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
 export const isUnit = (x) => x === unit || (Array.isArray(x) && Object.isFrozen(x) && x.length === 0)
 export const isList = (f) => Array.isArray(f)
+export const isClosure = (f) => typeof f === 'object' && 'funMacDesc' in f && 'closureEnv' in f
 
 const symbolMeta = Symbol.for('wuns-meta')
 export const wordWithMeta = (s, meta) => {
@@ -51,7 +52,7 @@ export const print = (ox) => {
     if (isVar(x)) return `[var ${x.name}]`
     if (typeof x === 'number') return String(x)
     if (Array.isArray(x)) return `[${x.map(go).join(' ')}]`
-    if ('funMacDesc' in x) return `[closure ${x.funMacDesc.name}]`
+    if (isClosure(x)) return `[closure ${x.funMacDesc.name}]`
     if (Object.isFrozen(x))
       return `[kv-map${Object.entries(x)
         .map(([k, v]) => ` ${k} ${go(v)}`)
@@ -120,8 +121,6 @@ export const setMeta = (v, meta) => {
   v[symbolMeta] = meta
   return v
 }
-
-export const isClosure = (f) => 'funMacDesc' in f && 'closureEnv' in f
 
 export const callClosure = (closure, args) => {
   if(!isClosure(closure)) throw new Error('not a closure')
