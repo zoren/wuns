@@ -7,11 +7,19 @@
     [do
       [assert [not [is-empty form]] a list must not be empty]
       [let [fw [at form 0]
-            inst [try-get-instruction fw]]
-        [if inst
-          form
+            instruction [try-get-instruction fw]]
+        [if instruction
+          [let [imm-parameters [getq instruction immediate-parameters]]
+            [if [eq-form imm-parameters imm-memargs]
+              [let [memargs [try-get-node-type [at form 1]]]
+                [list fw [getq memargs mem]
+                  [list [quote eq-pair] [quote offset] [getq memargs offset]]
+                  [list [quote eq-pair] [quote align] [getq memargs align]]
+                  [compile-form ctx 0 [at form 2]]
+                  ]]
+              form]
+            ]
           [assert 0 not an instruction]]
-
         ]]
 
     [do [log [quote unknown form]]
@@ -29,6 +37,14 @@
       [let [fw [at form 0]]
         [assert [is-word fw] first element of a list must be a word]
         [ifs
+          [eq-word [quote import] fw]
+          [let [module-name [at form 1]
+                name [at form 2]
+                t [at form 3]]
+
+              [list [quote import] [list [quote dq-string] module-name] [list [quote dq-string] name] t]
+              ]
+
           [eq-word [quote defn] fw]
           [let [fname [at form 1]
                 params [at form 2]
@@ -39,13 +55,16 @@
             [assert [is-word fname] second element of a list must be a word]
             [assert [is-list params] third element of a list must be a list]
             [for-each body [slice form 3 [dec [size form]]]
-              [push wasm-bodies [compile-form ctx 0 body]]]
+              [let [t [try-get-node-type body]]
+                [push wasm-bodies [if [is-atomic-type t] [list [quote drop] [compile-form ctx 0 body]] [compile-form ctx 0 body]]]]]
             [push wasm-bodies [compile-form ctx 1 last-body]]
             [concat
               [list [quote func] [list [quote export] [list [quote dq-string] fname]]]
               wasm-params
               [list [list [quote result] [try-get-node-type last-body]]]
               wasm-bodies]]
+
+
 
           [assert 0 sdf sdfsdf ]]]]
 
@@ -60,12 +79,23 @@
 
     [is-list form]
     [let [s [size form]]
-      [if [and [eq s 2] [eq-word [first form] [quote dq-string]]]
+      [ifs
+        [and [eq s 3] [eq-word [first form] [quote eq-pair]]]
+        [let [k [second form]
+              v [third form]]
+          [for i 0 [size k]
+            [push mut-list [at-word k i]]]
+          [push mut-list [const 61]]
+          [for i 0 [size v]
+            [push mut-list [at-word v i]]]]
+
+        [and [eq s 2] [eq-word [first form] [quote dq-string]]]
         [let [sf [second form]]
           [push mut-list [const 0x22]]
           [for i 0 [size sf]
             [push mut-list [at-word sf i]]]
           [push mut-list [const 0x22]]]
+
         [do
           [push mut-list [const 40]]
           [when [lt 0 s]

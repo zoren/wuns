@@ -15,6 +15,8 @@
 [def immediate-s64 [quote immediate-s64]]
 [def empty-tuple [quote [tuple]]]
 [def imm-u32u32 [list immediate-u32 immediate-u32]]
+[def imm-memarg [quote memarg]]
+[def imm-memargs [list imm-memarg]]
 
 [defmacro make-binary-i32 [name opcode]
   [list [quote quote] [make-operation-obj name opcode [] i32i32 i32]]]
@@ -45,8 +47,8 @@
 
     [make-binary-i32 bitwise-shift-left 0x74]
 
-    [make-operation-obj [quote load] [quote 0x28]
-      imm-u32u32 [list i32] i32]
+    [make-operation-obj [quote i32.load] [quote 0x28]
+      imm-memargs [list i32] i32]
     [make-operation-obj [quote load8-signed] [quote 0x2c]
       imm-u32u32 [list i32] i32]
     [make-operation-obj [quote load8-unsigned] [quote 0x2d]
