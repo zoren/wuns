@@ -43,9 +43,6 @@
 [defn fourth [l] [at l 3]]
 [defn last [l] [at l -1]]
 
-[defn rest [l]
-  [slice l 1 [size l]]]
-
 [defmacro do [.. forms]
   [concat [quote [let []]] forms]]
 
@@ -99,29 +96,15 @@
 
 [defmacro and [.. clauses]
   [let [s [size clauses]]
-    [ifs
-      [is-zero s]
+    [if [is-zero s]
       1
-
-      [eq s 1]
-      [first clauses]
-
-      [list [quote if] [first clauses]
-        [concat [quote [and]] [rest clauses]]
-        0]]]]
-
-[defmacro or [.. clauses]
-  [let [s [size clauses]]
-    [ifs
-      [is-zero s]
-      0
-
-      [eq s 1]
-      [first clauses]
-
-      [list [quote if] [first clauses]
-        1
-        [concat [quote [or]] [rest clauses]]]]]]
+      [loop [i [dec s]
+             res [at clauses -1]]
+        [if [eq i 0]
+          res
+          [continue
+            i [dec i]
+            res [list [quote if] [at clauses [dec i]] res 0]]]]]]]
 
 [def word-counter [atom 0]]
 
@@ -132,6 +115,19 @@
       [do [log [quote not int]]
         [abort]]]
     [concat-words [list [quote genword] c]]]]
+
+[defmacro or [.. clauses]
+  [let [s [size clauses]]
+    [if [is-zero s]
+      0
+      [loop [i [dec s]
+             res [at clauses -1]]
+        [if [eq i 0]
+          res
+          [continue
+            i [dec i]
+            res [let [w [genword]]
+              [list [quote let] [list w [at clauses [dec i]]] [list [quote if] w w res]]]]]]]]]
 
 [defn for-func [iw start increment end forms]
   [assert [gt increment 0] for-func increment must be positive]
