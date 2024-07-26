@@ -4,15 +4,14 @@
       [list [quote result] t]]]
 
 [defn compile-form [ctx is-tail form]
-  [ifs
-    [is-word form]
-    []
+  [if [is-word form]
+    [let [vn [get ctx form]]
+      [list [quote dollar] vn]]
 
-    [is-list form]
     [do
-      [assert [not [is-empty form]] a list must not be empty]
-      [let [fw [at form 0]
-            instruction [try-get-instruction fw]]
+      [assert [is-list form] form must be a list]
+      [assert [not [is-empty form]] list must not be empty]
+      [let [fw [at form 0]]
         [ifs
           [eq-word [quote if] fw]
           [list [quote if]
@@ -21,7 +20,7 @@
             [list [quote then] [compile-form ctx is-tail [at form 2]]]
             [list [quote else] [compile-form ctx is-tail [at form 3]]]]
 
-          [do
+          [let [instruction [try-get-instruction fw]]
             [assert instruction not an instruction]
             [let [imm-parameters [getq instruction immediate-parameters]]
               [if [eq-form imm-parameters imm-memargs]
@@ -36,19 +35,15 @@
                           [push res [compile-form ctx 0 [at form i]]]
                           [continue i [inc i]]]
                         res]]]]
-                form]]]]]]
-
-    [do [log [quote unknown form]]
-      [unreachable]]]]
+                form]]]]]]]]
 
 [defn compile-top-form [form]
   [check-top-form form]
-  [ifs
-    [is-word form]
+  [if [is-word form]
     []
 
-    [is-list form]
     [do
+      [assert [is-list form] list must be a list]
       [assert [not [is-empty form]] a list must not be empty]
       [let [fw [at form 0]]
         [assert [is-word fw] first element of a list must be a word]
@@ -57,9 +52,7 @@
           [let [module-name [at form 1]
                 name [at form 2]
                 t [at form 3]]
-
-              [list [quote import] [list [quote dq-string] module-name] [list [quote dq-string] name] t]
-              ]
+              [list [quote import] [list [quote dq-string] module-name] [list [quote dq-string] name] t]]
 
           [eq-word [quote defn] fw]
           [let [fname [at form 1]
@@ -71,8 +64,9 @@
                 res-type [try-get-node-type last-body]]
             [assert [is-word fname] second element of a list must be a word]
             [assert [is-list params] third element of a list must be a list]
-            [for-each body [slice form 3 [dec [size form]]]
-              [let [t [try-get-node-type body]]
+            [for i 3 [dec [size form]]
+              [let [body [at form i]
+                    t [try-get-node-type body]]
                 [push wasm-bodies [if [is-atomic-type t] [list [quote drop] [compile-form ctx 0 body]] [compile-form ctx 0 body]]]]]
             [push wasm-bodies [compile-form ctx 1 last-body]]
             [concat
@@ -81,10 +75,7 @@
               [list [type-to-result res-type]]
               wasm-bodies]]
 
-          [assert 0 sdf sdfsdf ]]]]
-
-    [do [log [quote unknown form]]
-      [unreachable]]]]
+          [assert 0 sdf sdfsdf ]]]]]]
 
 [defn push-word-chars [mut-list w]
   [for i 0 [size w]
