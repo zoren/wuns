@@ -11,12 +11,16 @@ class Word {
     return String(this.value)
   }
 }
-export const word = (s) => Object.freeze(new Word(s))
-// todo what about words representing large integers?
 export const isWord = (f) => f instanceof Word
+export const word = (s) => Object.freeze(new Word(s))
+export const wordWithMeta = (s, meta) => {
+  const w = new Word(s)
+  w[symbolMeta] = meta
+  return Object.freeze(w)
+}
 export const isForm = (f) => isWord(f) || (isList(f) && f.every(isForm))
 export const wordValue = (w) => {
-  if (w instanceof Word) return w.value
+  if (isWord(w)) return w.value
   throw new Error('not a word: ' + w + ' ' + typeof w)
 }
 
@@ -27,11 +31,6 @@ export const isList = (f) => Array.isArray(f)
 export const isClosure = (f) => typeof f === 'object' && 'funMacDesc' in f && 'closureEnv' in f
 
 const symbolMeta = Symbol.for('wuns-meta')
-export const wordWithMeta = (s, meta) => {
-  const w = new Word(s)
-  w[symbolMeta] = meta
-  return Object.freeze(w)
-}
 export const listWithMeta = (l, meta) => {
   const ll = [...l]
   ll[symbolMeta] = meta
@@ -76,11 +75,11 @@ class Atom {
 export const atom = (v) => new Atom(v)
 export const is_atom = (f) => f instanceof Atom
 export const atom_get = (a) => {
-  if (a instanceof Atom) return a.value
+  if (is_atom(a)) return a.value
   throw new Error('not an atom: ' + a)
 }
 export const atom_set = (a, v) => {
-  if (!(a instanceof Atom)) throw new Error('not an atom: ' + a)
+  if (!is_atom(a)) throw new Error('not an atom: ' + a)
   a.value = v
 }
 export const number = (arg) => {
@@ -93,9 +92,6 @@ class Var {
   constructor(name, value = null) {
     this.name = name
     this.value = value
-  }
-  isBound() {
-    return this.value !== null
   }
   bind(value) {
     this.value = value
