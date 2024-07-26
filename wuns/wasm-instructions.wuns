@@ -54,8 +54,8 @@
     [make-operation-obj [quote load8-unsigned] [quote 0x2d]
       imm-u32u32 [list i32] i32]
 
-    [make-operation-obj [quote store] [quote 0x36]
-      imm-u32u32 i32i32 empty-tuple]
+    [make-operation-obj [quote i32.store] [quote 0x36]
+      imm-memargs i32i32 empty-tuple]
     [make-operation-obj [quote store8] [quote 0x3a]
       imm-u32u32 i32i32 empty-tuple]
     [make-operation-obj [quote memory.size] [quote 0x3f]
