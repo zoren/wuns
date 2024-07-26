@@ -225,19 +225,20 @@ export const makeInterpreterContext = ({ importObject }) => {
       case 'func': {
         const [fmname, origParams, ...bodies] = args
         const n = wordValue(fmname)
-        let params = origParams
+        let params = origParams.map(wordValue)
         let restParam = null
-        if (origParams.length > 1 && wordValue(origParams.at(-2)) === '..') {
-          params = origParams.slice(0, -2)
-          restParam = wordValue(origParams.at(-1))
+        if (params.length > 1 && params.at(-2) === '..') {
+          restParam = params.at(-1)
+          params = params.slice(0, -2)
         }
+        Object.freeze(params)
         const varDescs = new Map()
         const paramDesc = { defForm: firstForm }
-        for (const p of params) varDescs.set(wordValue(p), paramDesc)
+        for (const p of params) varDescs.set(p, paramDesc)
         if (restParam) varDescs.set(restParam, paramDesc)
         const funMacDesc = {
           name: fmname,
-          params: params.map(wordValue),
+          params,
           restParam,
         }
         // for recursive calls we put it in the varDescs before we compile the bodies
@@ -246,7 +247,7 @@ export const makeInterpreterContext = ({ importObject }) => {
         // add bodies so we can call the function recursively
         funMacDesc.cbodies = compBodies(newCtx, bodies)
         Object.freeze(funMacDesc)
-        return env => createClosure(funMacDesc, env, n);
+        return (env) => createClosure(funMacDesc, env, n)
       }
     }
     return null
