@@ -15,32 +15,28 @@
             instruction [try-get-instruction fw]]
         [ifs
           [eq-word [quote if] fw]
-          [let [cond [at form 1]
-                then [at form 2]
-                else [at form 3]]
-            [list [quote if]
-              [type-to-result [try-get-node-type form]]
-              [compile-form ctx 0 cond]
-              [list [quote then] [compile-form ctx is-tail then]]
-              [list [quote else] [compile-form ctx is-tail else]]]]
+          [list [quote if]
+            [type-to-result [try-get-node-type form]]
+            [compile-form ctx 0 [at form 1]]
+            [list [quote then] [compile-form ctx is-tail [at form 2]]]
+            [list [quote else] [compile-form ctx is-tail [at form 3]]]]
 
-          instruction
-          [let [imm-parameters [getq instruction immediate-parameters]]
-            [if [eq-form imm-parameters imm-memargs]
-              [let [memargs [try-get-node-type [at form 1]]]
-                [concat
-                  [list fw [getq memargs mem]
-                    [list [quote eq-pair] [quote offset] [getq memargs offset]]
-                    [list [quote eq-pair] [quote align] [getq memargs align]]]
-                  [loop [i 2 res [mutable-list]]
-                    [if [lt i [size form]]
-                      [do
-                        [push res [compile-form ctx 0 [at form i]]]
-                        [continue i [inc i]]]
-                      res]]]]
-              form]]
-          [assert 0 not an instruction]]
-        ]]
+          [do
+            [assert instruction not an instruction]
+            [let [imm-parameters [getq instruction immediate-parameters]]
+              [if [eq-form imm-parameters imm-memargs]
+                [let [memargs [try-get-node-type [at form 1]]]
+                  [concat
+                    [list fw [getq memargs mem]
+                      [list [quote eq-pair] [quote offset] [getq memargs offset]]
+                      [list [quote eq-pair] [quote align] [getq memargs align]]]
+                    [loop [i 2 res [mutable-list]]
+                      [if [lt i [size form]]
+                        [do
+                          [push res [compile-form ctx 0 [at form i]]]
+                          [continue i [inc i]]]
+                        res]]]]
+                form]]]]]]
 
     [do [log [quote unknown form]]
       [unreachable]]]]
@@ -90,29 +86,33 @@
     [do [log [quote unknown form]]
       [unreachable]]]]
 
+[defn push-word-chars [mut-list w]
+  [for i 0 [size w]
+    [push mut-list [at-word w i]]]]
+
 [defn print-paren-recursive-form [mut-list form]
   [ifs
     [is-word form]
-    [for i 0 [size form]
-      [push mut-list [at-word form i]]]
+    [push-word-chars mut-list form]
 
     [is-list form]
     [let [s [size form]]
       [ifs
         [and [eq s 3] [eq-word [first form] [quote eq-pair]]]
-        [let [k [second form]
-              v [third form]]
-          [for i 0 [size k]
-            [push mut-list [at-word k i]]]
+        [do
+          [push-word-chars mut-list [second form]]
           [push mut-list [const 61]]
-          [for i 0 [size v]
-            [push mut-list [at-word v i]]]]
+          [push-word-chars mut-list [third form]]]
+
+        [and [eq s 2] [eq-word [first form] [quote dollar]]]
+        [do
+          [push mut-list [const 0x24]]
+          [push-word-chars mut-list [second form]]]
 
         [and [eq s 2] [eq-word [first form] [quote dq-string]]]
-        [let [sf [second form]]
+        [do
           [push mut-list [const 0x22]]
-          [for i 0 [size sf]
-            [push mut-list [at-word sf i]]]
+          [push-word-chars mut-list [second form]]
           [push mut-list [const 0x22]]]
 
         [do
