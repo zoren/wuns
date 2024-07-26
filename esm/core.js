@@ -44,10 +44,7 @@ export const meta = (form) => {
 }
 
 export const print = (ox) => {
-  const visited = new Set()
   const go = (x) => {
-    if (visited.has(x)) return '[*circular*]'
-    visited.add(x)
     if (isWord(x)) return String(x)
     if (isVar(x)) return `[var ${x.name}]`
     if (typeof x === 'number') return String(x)
