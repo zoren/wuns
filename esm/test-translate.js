@@ -60,6 +60,35 @@ for (const { expected, wunsSrc } of [
   [i32.store [memarg mem 0 offset 0 align 1] [i32.const 0] [i32.const 5]]
   [i32.load [memarg mem 0 offset 0 align 1] [i32.const 0]]]`,
   },
+  {
+    expected: 5,
+    wunsSrc: `
+[defn f []
+[if [i32.const 1] [i32.const 5] [i32.const 6]]
+]`,
+  },
+  {
+    expected: 6,
+    wunsSrc: `
+[defn f []
+[if [i32.const 0] [i32.const 5] [i32.const 6]]
+]`,
+  },
+  {
+    expected: 6n,
+    wunsSrc: `
+[defn f []
+[if [i32.const 0] [i64.const 5] [i64.const 6]]
+]`,
+  },
+  {
+    expected: 5n,
+    wunsSrc: `
+[defn f []
+[if [i32.const 1] [i64.const 5] [i64.const 6]]
+]`,
+  },
+  //   },
   // { expected: [5, 6], wunsSrc: `[defn f [] [tuple [i32.const 5] [i32.const 6]]]` },
   // { expected: [5, 6], wunsSrc: `[defn is-power-of-2 [x i32] [i32.eq [i32.const 0] [i32.bitwise-and x [i32.sub x [i32.const 1]]]]]` },
 ]) {

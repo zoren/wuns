@@ -8,7 +8,18 @@
       [assert [not [is-empty form]] a list must not be empty]
       [let [fw [at form 0]
             instruction [try-get-instruction fw]]
-        [if instruction
+        [ifs
+          [eq-word [quote if] fw]
+          [let [cond [at form 1]
+                then [at form 2]
+                else [at form 3]]
+            [list [quote if]
+              [list [quote result] [try-get-node-type form]]
+              [compile-form ctx 0 cond]
+              [list [quote then] [compile-form ctx is-tail then]]
+              [list [quote else] [compile-form ctx is-tail else]]]]
+
+          instruction
           [let [imm-parameters [getq instruction immediate-parameters]]
             [if [eq-form imm-parameters imm-memargs]
               [let [memargs [try-get-node-type [at form 1]]]
@@ -67,8 +78,6 @@
               wasm-params
               [list [list [quote result] [try-get-node-type last-body]]]
               wasm-bodies]]
-
-
 
           [assert 0 sdf sdfsdf ]]]]
 

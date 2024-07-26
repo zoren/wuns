@@ -265,8 +265,7 @@
               [report [at form i] if extra forms ignored]
               [continue i [inc i]]]]
           [if [gt n-of-args 1]
-            [let [t-ctx [try-bind-type-predicate local-ctx [second form]]
-                  tt [check-form t-ctx tail-pos [third form]]
+            [let [tt [check-form local-ctx tail-pos [third form]]
                   ft [if [eq n-of-args 2] type-empty [check-form local-ctx tail-pos [fourth form]]]]
               [push-node-type form
                 [if [eq-form tt type-any]
