@@ -35,7 +35,11 @@ export const runRepl = ({ parseEvalString }) => {
         rl.close()
         return
       }
-      parseEvalString(line)
+      try {
+        parseEvalString(line)
+      } catch (err) {
+        console.error(err)
+      }
       nextTick(prompt)
     })
   }

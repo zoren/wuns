@@ -18,11 +18,13 @@ export const wordWithMeta = (s, meta) => {
   w[symbolMeta] = meta
   return Object.freeze(w)
 }
-export const isForm = (f) => isWord(f) || (isList(f) && f.every(isForm))
 export const wordValue = (w) => {
   if (isWord(w)) return w.value
   throw new Error('not a word: ' + w + ' ' + typeof w)
 }
+export const zero = word('0')
+export const one = word('1')
+export const isForm = (f) => isWord(f) || (isList(f) && f.every(isForm))
 
 export const unit = Object.freeze([])
 export const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
@@ -110,7 +112,7 @@ export const varWithMeta = (v, meta) => {
   return v
 }
 export const isVar = (f) => f instanceof Var
-export const setMeta = (v, meta) => {
+export const set_meta = (v, meta) => {
   v[symbolMeta] = meta
   return v
 }

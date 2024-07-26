@@ -18,7 +18,8 @@ import {
   number,
   isVar,
   varWithMeta,
-  setMeta,
+  set_meta,
+  zero
 } from './core.js'
 
 export const is_word = (f) => isWord(f)
@@ -41,8 +42,7 @@ export const with_meta = (f, meta) => {
   if (isVar(f)) return varWithMeta(f, meta)
   throw new Error('with-meta expects word or list')
 }
-export { meta }
-export const set_meta = (v, meta) => setMeta(v, meta)
+export { meta, set_meta }
 
 export const size = (a) => {
   if (isWord(a)) return String(a).length
@@ -63,8 +63,7 @@ mutable_list.varargs = true
 export const mutable_list_of_size = (size) => {
   const s = number(size)
   if (s < 0) throw new Error('mutable-list-of-size expects non-negative size')
-  const zeroWord = word('0')
-  return Array.from({ length: s }, () => zeroWord)
+  return Array.from({ length: s }, () => zero)
 }
 export const is_mutable = (f) => (Array.isArray(f) && !Object.isFrozen(f)) | 0
 export const list_from_mutable = (f) => {

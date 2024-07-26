@@ -14,6 +14,7 @@ import {
   meta,
   callClosure,
   isSigned32BitInteger,
+  zero, one
 } from './core.js'
 import { instructions } from './instructions.js'
 import { parseStringToForms } from './parseTreeSitter.js'
@@ -39,10 +40,6 @@ class CompileError extends Error {
 const ctAssert = (cond, msg) => {
   if (!cond) throw new CompileError('compile assert failed: ' + msg)
 }
-
-const zero = word('0')
-
-const one = word('1')
 
 const jsToWuns = (js) => {
   if (isForm(js)) return js
