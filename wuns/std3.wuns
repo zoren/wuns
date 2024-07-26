@@ -87,12 +87,13 @@
 
 [defmacro ifs [.. clauses]
   [let [s [size clauses]]
-    [assert [not [is-zero s]] ifs requires an odd number of arguments]
-    [if [eq s 1]
-      [first clauses]
-      [list [quote if] [first clauses]
-        [second clauses]
-        [concat [quote [ifs]] [slice clauses 2 [size clauses]]]]]]]
+    [assert [is-odd s] ifs requires an odd number of arguments]
+    [loop [i [dec s] res [at clauses -1]]
+      [if [eq i 0]
+        res
+        [continue
+          i [sub i 2]
+          res [list [quote if] [at clauses [sub i 2]] [at clauses [dec i]] res]]]]]]
 
 [defmacro and [.. clauses]
   [let [s [size clauses]]
