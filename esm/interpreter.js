@@ -336,7 +336,7 @@ export const makeInterpreterContext = ({ importObject }) => {
     }
     const instWithImmediate = func(...immArgs)
     const cargs = args.slice(immArity).map((a) => wunsComp(ctx, a))
-    return (env) => jsToWuns(instWithImmediate(instContext, ...cargs.map((carg) => number(carg(env)))))
+    return (env) => jsToWuns(instWithImmediate({}, ...cargs.map((carg) => number(carg(env)))))
   }
 
   const evalLogForms = (forms) => {
