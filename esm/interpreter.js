@@ -89,20 +89,6 @@ export const makeInterpreterContext = ({ importObject }) => {
   defSetVar('var', (vn) => getVarObject(wordValue(vn)))
   defSetVar('eval', wunsEval)
 
-  const memories = []
-  const addMemory = (memory) => {
-    const index = memories.length
-    memories.push(memory)
-    return index
-  }
-  const segments = []
-  const instContext = { memories, segments }
-  defSetVar('add-data-segment-passive', (data) => {
-    const index = segments.length
-    segments.push(data)
-    return index
-  })
-
   for (const [name, f] of hostExports) defSetVar(name, f)
 
   const compBodies = (ctx, bodies) => {
@@ -245,14 +231,6 @@ export const makeInterpreterContext = ({ importObject }) => {
         ctAssert(importDecl.length > 0, `import declaration must have at least one element, got ${importDecl}`)
         const [declName, ...declArgs] = importDecl
         switch (wordValue(declName)) {
-          case 'memory': {
-            ctAssert(declArgs.length === 1, `memory declaration expects 1 argument, got ${declArgs.length}`)
-            const minSizePages = number(declArgs[0])
-            ctAssert(importValue instanceof WebAssembly.Memory, `imported value is not a memory`)
-            ctAssert(minSizePages < importValue.buffer.byteLength >> 16, `imported memory size mismatch`)
-            const memIndex = addMemory(importValue)
-            return () => memIndex
-          }
           case 'func': {
             ctAssert(declArgs.length === 2, `func declaration expects 2 arguments, got ${declArgs.length}`)
             const [params, result] = declArgs
@@ -380,7 +358,6 @@ export const makeInterpreterContext = ({ importObject }) => {
     evalLogForms,
     parseEvalString,
     parseEvalFile,
-    getMemory: (index) => memories[index],
     getVarObject,
   }
 }
