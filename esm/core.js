@@ -30,7 +30,16 @@ export const unit = Object.freeze([])
 export const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
 export const isUnit = (x) => x === unit || (Array.isArray(x) && Object.isFrozen(x) && x.length === 0)
 export const isList = (f) => Array.isArray(f)
-export const isClosure = (f) => typeof f === 'object' && 'funMacDesc' in f && 'closureEnv' in f
+class Closure {
+  constructor(funMacDesc, closureEnv) {
+    this.funMacDesc = funMacDesc
+    this.closureEnv = closureEnv
+  }
+  toString() {
+    return `[closure ${this.funMacDesc.name}]`
+  }
+}
+export const isClosure = (f) => f instanceof Closure
 
 const symbolMeta = Symbol.for('wuns-meta')
 export const listWithMeta = (l, meta) => {
@@ -115,6 +124,14 @@ export const isVar = (f) => f instanceof Var
 export const set_meta = (v, meta) => {
   v[symbolMeta] = meta
   return v
+}
+
+export const createClosure = (funMacDesc, outer, closureName) => {
+  const varValues = new Map()
+  const closureEnv = Object.freeze({ varValues, outer })
+  const closure = new Closure(funMacDesc, closureEnv)
+  varValues.set(closureName, closure)
+  return Object.freeze(closure)
 }
 
 export const callClosure = (closure, args) => {

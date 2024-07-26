@@ -16,6 +16,7 @@ import {
   isSigned32BitInteger,
   zero,
   one,
+  createClosure,
 } from './core.js'
 import { instructions } from './instructions.js'
 import { parseStringToForms } from './parseTreeSitter.js'
@@ -101,8 +102,7 @@ export const makeInterpreterContext = ({ importObject }) => {
       return result
     }
   }
-  const compSpecialForm = (ctx, form) => {
-    const [firstForm, ...args] = form
+  const compSpecialForm = (ctx, [firstForm, ...args]) => {
     if (!isWord(firstForm)) return null
     const firstWordValue = wordValue(firstForm)
     switch (firstWordValue) {
@@ -246,12 +246,7 @@ export const makeInterpreterContext = ({ importObject }) => {
         // add bodies so we can call the function recursively
         funMacDesc.cbodies = compBodies(newCtx, bodies)
         Object.freeze(funMacDesc)
-        return (env) => {
-          const varValues = new Map()
-          const closure = { funMacDesc, closureEnv: { varValues, outer: env } }
-          varValues.set(n, closure)
-          return closure
-        }
+        return env => createClosure(funMacDesc, env, n);
       }
     }
     return null
