@@ -121,10 +121,6 @@ export const varWithMeta = (v, meta) => {
   return v
 }
 export const isVar = (f) => f instanceof Var
-export const set_meta = (v, meta) => {
-  v[symbolMeta] = meta
-  return v
-}
 
 export const createClosure = (funMacDesc, outer, closureName) => {
   const varValues = new Map()

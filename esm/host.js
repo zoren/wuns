@@ -18,7 +18,6 @@ import {
   number,
   isVar,
   varWithMeta,
-  set_meta,
   zero
 } from './core.js'
 
@@ -42,7 +41,7 @@ export const with_meta = (f, meta) => {
   if (isVar(f)) return varWithMeta(f, meta)
   throw new Error('with-meta expects word or list')
 }
-export { meta, set_meta }
+export { meta }
 
 export const size = (a) => {
   if (isWord(a)) return String(a).length

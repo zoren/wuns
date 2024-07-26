@@ -3,7 +3,7 @@ const parser = new TSParser()
 
 import Wuns from 'tree-sitter-wuns'
 parser.setLanguage(Wuns)
-import { word, makeList, wordWithMeta, listWithMeta } from './core.js'
+import { makeList, wordWithMeta, listWithMeta } from './core.js'
 
 /**
  * @param {TSParser.SyntaxNode} node

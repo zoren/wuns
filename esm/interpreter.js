@@ -254,8 +254,7 @@ export const makeInterpreterContext = ({ importObject }) => {
   const wunsComp = (ctx, form) => {
     if (isWord(form)) {
       const v = wordValue(form)
-      const lvarctx = getCtxVar(ctx, v)
-      if (lvarctx) return (env) => getVarValue(env, v)
+      if (getCtxVar(ctx, v)) return (env) => getVarValue(env, v)
       const varObj = getVarObject(v)
       if (!varObj) throw new CompileError(`variable ${v} not found ${meta(form)}`)
       if (meta(varObj)['is-macro']) throw new CompileError(`can't take value of macro ${v}`)

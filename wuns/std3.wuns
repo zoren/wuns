@@ -10,12 +10,12 @@
   [func defmacro [name params .. forms]
     [list [quote let] [list]
       [list [quote def] name [concat [list [quote func] name params] forms]]
-      [list [quote set-meta] [list [quote var] [list [quote quote] name]]
+      [list [quote with-meta] [list [quote var] [list [quote quote] name]]
         [quote transient-kv-map [quote is-macro] 1]]
       [list]]]]
 
 [let []
-  [set-meta [var [quote defmacro]] [transient-kv-map [quote is-macro] 1]]
+  [with-meta [var [quote defmacro]] [transient-kv-map [quote is-macro] 1]]
   [list]]
 
 [defmacro defn [name params .. forms]
