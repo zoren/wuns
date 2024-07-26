@@ -14,7 +14,8 @@ import {
   meta,
   callClosure,
   isSigned32BitInteger,
-  zero, one
+  zero,
+  one,
 } from './core.js'
 import { instructions } from './instructions.js'
 import { parseStringToForms } from './parseTreeSitter.js'
@@ -100,36 +101,9 @@ export const makeInterpreterContext = ({ importObject }) => {
       return result
     }
   }
-  const wunsComp = (ctx, form) => {
-    if (isWord(form)) {
-      const v = wordValue(form)
-      const lvarctx = getCtxVar(ctx, v)
-      if (lvarctx) return (env) => getVarValue(env, v)
-      const varObj = getVarObject(v)
-      if (!varObj) throw new CompileError(`variable ${v} not found ${meta(form)}`)
-      if (meta(varObj)['is-macro']) throw new CompileError(`can't take value of macro ${v}`)
-      return () => {
-        rtAssert(varObj === getVarObject(v), `compile time var not same as runtime varObj !== getVarObject(v)`)
-        return varObj.getValue()
-      }
-    }
-    // maybe we should just return non lists as is?
-    ctAssert(isList(form), `cannot eval ${form} expected word or list`)
-    if (form.length === 0) return () => unit
+  const compSpecialForm = (ctx, form) => {
     const [firstForm, ...args] = form
-    const rtCallFunc = () => {
-      const cargs = args.map((a) => wunsComp(ctx, a))
-      return (f, env) => {
-        const eargs = cargs.map((carg) => carg(env))
-        if (typeof f === 'function') return jsToWuns(f(...eargs))
-        return callClosure(f, eargs)
-      }
-    }
-    if (!isWord(firstForm)) {
-      const cfunc = wunsComp(ctx, firstForm)
-      const caller = rtCallFunc()
-      return (env) => caller(cfunc(env), env)
-    }
+    if (!isWord(firstForm)) return null
     const firstWordValue = wordValue(firstForm)
     switch (firstWordValue) {
       case 'quote': {
@@ -280,6 +254,38 @@ export const makeInterpreterContext = ({ importObject }) => {
         }
       }
     }
+    return null
+  }
+  const wunsComp = (ctx, form) => {
+    if (isWord(form)) {
+      const v = wordValue(form)
+      const lvarctx = getCtxVar(ctx, v)
+      if (lvarctx) return (env) => getVarValue(env, v)
+      const varObj = getVarObject(v)
+      if (!varObj) throw new CompileError(`variable ${v} not found ${meta(form)}`)
+      if (meta(varObj)['is-macro']) throw new CompileError(`can't take value of macro ${v}`)
+      return () => {
+        rtAssert(varObj === getVarObject(v), `compile time var not same as runtime varObj !== getVarObject(v)`)
+        return varObj.getValue()
+      }
+    }
+    // maybe we should just return non lists as is?
+    ctAssert(isList(form), `cannot eval ${form} expected word or list`)
+    if (form.length === 0) return () => unit
+    const [firstForm, ...args] = form
+    if (isWord(firstForm)) {
+      const cspec = compSpecialForm(ctx, form)
+      if (cspec) return cspec
+    }
+    const rtCallFunc = () => {
+      const cargs = args.map((a) => wunsComp(ctx, a))
+      return (f, env) => {
+        const eargs = cargs.map((carg) => carg(env))
+        if (typeof f === 'function') return jsToWuns(f(...eargs))
+        return callClosure(f, eargs)
+      }
+    }
+    const firstWordValue = wordValue(firstForm)
     if (getCtxVar(ctx, firstWordValue)) {
       const caller = rtCallFunc()
       return (env) => caller(getVarValue(env, firstWordValue), env)
@@ -336,7 +342,7 @@ export const makeInterpreterContext = ({ importObject }) => {
     }
     const instWithImmediate = func(...immArgs)
     const cargs = args.slice(immArity).map((a) => wunsComp(ctx, a))
-    return (env) => jsToWuns(instWithImmediate({}, ...cargs.map((carg) => number(carg(env)))))
+    return (env) => jsToWuns(instWithImmediate(...cargs.map((carg) => number(carg(env)))))
   }
 
   const evalLogForms = (forms) => {
