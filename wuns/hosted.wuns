@@ -1,3 +1,8 @@
+[defn type-to-result [t]
+  [if [eq-form type-empty t]
+      [list [quote result]]
+      [list [quote result] t]]]
+
 [defn compile-form [ctx is-tail form]
   [ifs
     [is-word form]
@@ -14,7 +19,7 @@
                 then [at form 2]
                 else [at form 3]]
             [list [quote if]
-              [list [quote result] [try-get-node-type form]]
+              [type-to-result [try-get-node-type form]]
               [compile-form ctx 0 cond]
               [list [quote then] [compile-form ctx is-tail then]]
               [list [quote else] [compile-form ctx is-tail else]]]]
@@ -66,7 +71,8 @@
                 wasm-params [list]
                 wasm-bodies [mutable-list]
                 ctx []
-                last-body [at form -1]]
+                last-body [at form -1]
+                res-type [try-get-node-type last-body]]
             [assert [is-word fname] second element of a list must be a word]
             [assert [is-list params] third element of a list must be a list]
             [for-each body [slice form 3 [dec [size form]]]
@@ -76,7 +82,7 @@
             [concat
               [list [quote func] [list [quote export] [list [quote dq-string] fname]]]
               wasm-params
-              [list [list [quote result] [try-get-node-type last-body]]]
+              [list [type-to-result res-type]]
               wasm-bodies]]
 
           [assert 0 sdf sdfsdf ]]]]

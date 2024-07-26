@@ -1,4 +1,5 @@
 import wabtProm from 'wabt'
+import fs from 'fs'
 const wabt = await wabtProm()
 
 const mkParseWat = (s) => {
@@ -23,14 +24,20 @@ const mkParseWat = (s) => {
   //   extended_const: false,
   //   relaxed_simd: false,
   // })
-  const module = wabt.parseWat('', s, { multi_memory: true })
-  module.resolveNames()
-  module.validate()
-  const { buffer } = module.toBinary({
-    log: true,
-    write_debug_names: true,
-  })
-  return buffer
+  try {
+    const module = wabt.parseWat('', s, { multi_memory: true})
+    module.resolveNames()
+    module.validate()
+    const { buffer } = module.toBinary({
+      log: true,
+      write_debug_names: true,
+    })
+    return buffer
+  } catch (e) {
+    fs.writeFileSync('tmp.wat', s)
+    console.error(e)
+    throw e
+  }
 }
 
 import { makeInterpreterContext, apply } from './interpreter.js'
@@ -88,6 +95,23 @@ for (const { expected, wunsSrc } of [
 [if [i32.const 1] [i64.const 5] [i64.const 6]]
 ]`,
   },
+  {
+    expected: undefined,
+    wunsSrc: `
+[import env mem [memory 0]]
+[defn f []
+  [i32.store [memarg mem 0 offset 0 align 1] [i32.const 0] [i32.const 5]]]`,
+  },
+  {
+    expected: undefined,
+    wunsSrc: `
+[import env mem [memory 0]]
+[defn f []
+  [if [i32.const 0]
+    [i32.store [memarg mem 0 offset 0 align 1] [i32.const 0] [i32.const 5]]
+    [i32.store [memarg mem 0 offset 0 align 1] [i32.const 0] [i32.const 6]]]]
+  `,
+  },
   //   },
   // { expected: [5, 6], wunsSrc: `[defn f [] [tuple [i32.const 5] [i32.const 6]]]` },
   // { expected: [5, 6], wunsSrc: `[defn is-power-of-2 [x i32] [i32.eq [i32.const 0] [i32.bitwise-and x [i32.sub x [i32.const 1]]]]]` },
@@ -113,11 +137,12 @@ for (const { expected, wunsSrc } of [
   let allText = ''
   for (const form of forms) {
     const compRes = apply(compileTopForm, form)
+    // console.dir({ compRes })
     const printP = apply(printParen, compRes)
     const str = textDecoder.decode(Uint8Array.from(printP, (_, i) => +printP[i]))
     allText += str + '\n'
   }
-  // console.log({allText})
+  // console.log({ allText })
   const buf = mkParseWat(allText)
   const module = new WebAssembly.Module(buf)
   const inst = new WebAssembly.Instance(module, { env: { mem: new WebAssembly.Memory({ initial: 1 }) } })
