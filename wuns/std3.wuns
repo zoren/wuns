@@ -6,11 +6,13 @@
 [def 3 [quote 3]]
 [def 4 [quote 4]]
 
+[def quote-word [quote quote]]
+
 [def defmacro
   [func defmacro [name params .. forms]
     [list [quote let] [list]
       [list [quote def] name [concat [list [quote func] name params] forms]]
-      [list [quote with-meta] [list [quote var] [list [quote quote] name]]
+      [list [quote with-meta] [list [quote var] [list quote-word name]]
         [quote transient-kv-map [quote is-macro] 1]]
       [list]]]]
 
@@ -20,6 +22,8 @@
 
 [defmacro defn [name params .. forms]
   [list [quote def] name [concat [list [quote func] name params] forms]]]
+
+[defn mk-quote [form] [list quote-word form]]
 
 [defmacro comment [.. -] [list]]
 
@@ -44,19 +48,19 @@
 [defn last [l] [at l -1]]
 
 [defmacro do [.. forms]
-  [concat [quote [let []]] forms]]
+  [concat [quote let []] forms]]
 
 [defmacro when [cond .. forms]
   [list
     [quote if] cond
-    [concat [quote [do]] forms]
+    [concat [quote let []] forms]
     [list]]]
 
 [defmacro when-not [cond .. forms]
   [list
     [quote if] cond
     [list]
-    [concat [quote [do]] forms]]]
+    [concat [quote let []] forms]]]
 
 [defmacro if-not [cond false-form true-form]
   [list
@@ -69,19 +73,15 @@
     [loop [i 0]
       [when [lt i [size lmsg]]
         [let [e [at lmsg i]]
-          [push msg [if [is-word e] [list [quote quote] e] e]]
+          [push msg [if [is-word e] [mk-quote e] e]]
           [continue i [inc i]]]]]
     [persistent-array msg]]]
 
-[defmacro log-abort [.. lmsg]
-  [list [quote let] [list]
-    [list [quote log] [quote-list lmsg]]
-    [quote [abort]]]]
-
 [defmacro assert [cond .. lmsg]
-  [list [quote when] [list [quote not] cond]
-    [list [quote log] [quote-list lmsg]]
-    [quote [unreachable]]]]
+  [list [quote if] [list [quote not] cond]
+    [list [quote let] [list]
+      [list [quote log] [quote-list lmsg]]
+      [quote [unreachable]]]]]
 
 [defn identity [x] x]
 
@@ -111,10 +111,7 @@
 
 [defn genword []
   [let [c [atom-get word-counter]]
-    [if [is-i32 c]
-      [atom-set word-counter [inc c]]
-      [do [log [quote not int]]
-        [abort]]]
+    [atom-set word-counter [inc c]]
     [concat-words [list [quote genword] c]]]]
 
 [defmacro or [.. clauses]
@@ -127,8 +124,10 @@
           res
           [continue
             i [dec i]
-            res [let [w [genword]]
-              [list [quote let] [list w [at clauses [dec i]]] [list [quote if] w w res]]]]]]]]]
+            res
+            [let [w [genword]]
+              [list [quote let] [list w [at clauses [dec i]]]
+                [list [quote if] w w res]]]]]]]]]
 
 [defn for-func [iw start increment end forms]
   [assert [gt increment 0] for-func increment must be positive]
@@ -172,19 +171,19 @@
       [push ml
         [let [k [at entries i]]
                 [if [is-word k]
-                  [list [quote quote] k]
+                  [mk-quote k]
                   k]]]
       [push ml [at entries [inc i]]]]
     [concat [quote [persistent-kv-map]] [list ml]]]]
 
 [defmacro getq [m w]
-  [list [quote get] m [list [quote quote] w]]]
+  [list [quote get] m [mk-quote w]]]
 
 [defmacro hasq [m w]
-  [list [quote has] m [list [quote quote] w]]]
+  [list [quote has] m [mk-quote w]]]
 
 [defmacro setq [m w v]
-  [list [quote set] m [list [quote quote] w] v]]
+  [list [quote set] m [mk-quote w] v]]
 
 [defn is-empty [form]
   [eq 0 [size form]]]
