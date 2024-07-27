@@ -162,10 +162,9 @@ export const get = (m, k) => {
   throw new Error('key not found: ' + ks + ' in ' + Object.keys(m))
 }
 
-import fs from 'fs'
-import { parseStringToForms } from './parseTreeSitter.js'
+import { parseFile } from './parseTreeSitter.js'
 export const read_file = (path) => {
   const p = wordValue(path)
   if (typeof p !== 'string') throw new Error('read-file expects string')
-  return parseStringToForms(fs.readFileSync(p, 'utf8'))
+  return parseFile(p)
 }
