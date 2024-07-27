@@ -5,9 +5,11 @@
 
 [defn compile-form [ctx is-tail form]
   [if [is-word form]
-    [let [vn [get ctx form]]
-      [list [quote dollar] vn]]
-
+    [let [sig [try-get-global-sig form]]
+      [assert sig not a global]
+      [assert [hasq sig def] not a def]
+      [assert [eq-form [getq sig def] [quote constant]] not a constant def]
+      [list [quote global.get] [list [quote dollar] form]]]
     [do
       [assert [is-list form] form must be a list]
       [assert [not [is-empty form]] list must not be empty]
@@ -53,6 +55,15 @@
                 name [at form 2]
                 t [at form 3]]
               [list [quote import] [list [quote dq-string] module-name] [list [quote dq-string] name] t]]
+
+          [eq-word [quote constant] fw]
+          [let [name [at form 1]
+                value [at form 2]]
+              [list [quote global]
+                [list [quote dollar] name]
+                [list [quote export] [list [quote dq-string] name]]
+                [try-get-node-type value]
+                [compile-form [] 1 value]]]
 
           [eq-word [quote defn] fw]
           [let [fname [at form 1]

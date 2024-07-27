@@ -73,6 +73,7 @@
     [loop [i 0]
       [when [lt i [size lmsg]]
         [let [e [at lmsg i]]
+          [comment do this without push we know list length]
           [push msg [if [is-word e] [mk-quote e] e]]
           [continue i [inc i]]]]]
     [persistent-array msg]]]

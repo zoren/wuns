@@ -36,10 +36,10 @@
     [make-binary-i32 le  0x4c]
     [make-binary-i32 ge  0x4e]
 
-    [make-binary-i32 add 0x6a]
-    [make-binary-i32 sub 0x6b]
-    [make-binary-i32 mul 0x6c]
-    [make-binary-i32 div 0x6d]
+    [make-binary-i32 i32.add 0x6a]
+    [make-binary-i32 i32.sub 0x6b]
+    [make-binary-i32 i32.mul 0x6c]
+    [make-binary-i32 i32.div 0x6d]
 
     [make-binary-i32 bitwise-and 0x71]
     [make-binary-i32 bitwise-ior 0x72]

@@ -3,14 +3,14 @@
 
 [defmacro report-when [cond form .. lmsg]
   [list [quote when] cond
-    [list [quote report-error] [list [quote quote] lmsg] form]]]
+    [list [quote report-error] [mk-quote lmsg] form]]]
 
 [defmacro report-when-not [cond form .. lmsg]
   [list [quote when-not] cond
-    [list [quote report-error] [list [quote quote] lmsg] form]]]
+    [list [quote report-error] [mk-quote lmsg] form]]]
 
 [defmacro report [form .. lmsg]
-  [list [quote report-error] [list [quote quote] lmsg] form]]
+  [list [quote report-error] [mk-quote lmsg] form]]
 
 [defn is-decimal [dw]
   [let [s [size dw]]
@@ -196,26 +196,29 @@
     [loop [cur-ctx local-ctx]
       [if [eq [size cur-ctx] 1]
         [let [param-ctx [first cur-ctx]]
-          [if-not [has param-ctx form]
+          [if [has param-ctx form]
+            [get param-ctx form]
             [let [sig [try-get-global-sig form]]
-              [if [eq [size sig] 0]
-                [do
-                  [report form symbol not found]
-                  type-error]
-                [if [eq-word [first sig] [quote constant]]
-                  [second sig]
+              [if sig
+                [if [eq-word [getq sig def] [quote constant]]
+                  [push-node-type form [getq sig constant]]
                   [do
                     [report form not a constant]
                     [log [list [quote c] form [quote not a constant]]]
                     [log global-ctx]
-                    type-error]]]]
-            [get param-ctx form]]]
+                    type-error]]
+                [do
+                  [report form symbol not found]
+                  type-error]
+
+                    ]]]]
         [let
           [vars [first cur-ctx]
            outer [second cur-ctx]]
           [if [has vars form]
+            [push-node-type form [get vars form]]
             [continue cur-ctx outer]
-            [push-node-type form [get vars form]]]]]]
+            ]]]]
 
     [eq-form [size form] 0]
     [do
@@ -413,6 +416,7 @@
                       [push-node-type p pt]
                       [push param-ctx p]
                       [push param-ctx pt]]
+                    [comment todo use a preallocated array instead we know the size in advance]
                     [push mut-parameter-type-list pt]
                     [continue i [inc i]]]]]
               rest-param-element-type
