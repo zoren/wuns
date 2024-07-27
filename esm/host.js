@@ -18,7 +18,7 @@ import {
   number,
   isVar,
   varWithMeta,
-  zero
+  zero,
 } from './core.js'
 
 export const is_word = (f) => isWord(f)
@@ -31,7 +31,8 @@ export const is_fn = (f) => typeof f === 'function' || isClosure(f)
 
 export const eq_word = (a, b) => isWord(a) && isWord(b) && (a === b || wordValue(a) === wordValue(b))
 
-export const eq_list = (a, b) => isList(a) && isList(b) && (a === b || a.every((e, i) => eq_form(e, b[i])))
+export const eq_list = (a, b) =>
+  isList(a) && isList(b) && (a === b || (a.length === b.length && a.every((e, i) => eq_form(e, b[i]))))
 
 export const eq_form = (a, b) => eq_word(a, b) || eq_list(a, b)
 

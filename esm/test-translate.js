@@ -53,6 +53,8 @@ for (const { expected, wunsSrc } of [
   { expected: 5, wunsSrc: `[defn f [] [i32.const 5]]` },
   { expected: 5n, wunsSrc: `[defn f [] [i64.const 5]]` },
   { expected: 6, wunsSrc: `[defn f [] [i32.const 5] [i32.const 6]]` },
+  { expected: 5, wunsSrc: `[defn f [] [i32.add [i32.const 2] [i32.const 3]]]` },
+  { expected: 5, wunsSrc: `[defn f [] [i32.sub [i32.const 8] [i32.const 3]]]` },
   {
     expected: 0,
     wunsSrc: `

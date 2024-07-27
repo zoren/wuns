@@ -60,19 +60,18 @@
                 wasm-params [list]
                 wasm-bodies [mutable-list]
                 ctx []
-                last-body [at form -1]
-                res-type [try-get-node-type last-body]]
+                last-body [at form -1]]
             [assert [is-word fname] second element of a list must be a word]
             [assert [is-list params] third element of a list must be a list]
             [for i 3 [dec [size form]]
               [let [body [at form i]
-                    t [try-get-node-type body]]
-                [push wasm-bodies [if [is-atomic-type t] [list [quote drop] [compile-form ctx 0 body]] [compile-form ctx 0 body]]]]]
+                    cbody [compile-form ctx 0 body]]
+                [push wasm-bodies [if [is-atomic-type [try-get-node-type body]] [list [quote drop] cbody] cbody]]]]
             [push wasm-bodies [compile-form ctx 1 last-body]]
             [concat
               [list [quote func] [list [quote export] [list [quote dq-string] fname]]]
               wasm-params
-              [list [type-to-result res-type]]
+              [list [type-to-result [try-get-node-type last-body]]]
               wasm-bodies]]
 
           [assert 0 sdf sdfsdf ]]]]]]
