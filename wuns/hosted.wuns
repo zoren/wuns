@@ -6,10 +6,9 @@
 [defn compile-form [ctx is-tail form]
   [if [is-word form]
     [let [sig [try-get-global-sig form]]
-      [assert sig not a global]
-      [assert [hasq sig def] not a def]
-      [assert [eq-form [getq sig def] [quote constant]] not a constant def]
-      [list [quote global.get] [list [quote dollar] form]]]
+      [if [and sig [hasq sig def] [eq-form [getq sig def] [quote constant]]]
+        [list [quote global.get] [list [quote dollar] form]]
+        [list [quote local.get] [list [quote dollar] form]]]]
     [do
       [assert [is-list form] form must be a list]
       [assert [not [is-empty form]] list must not be empty]

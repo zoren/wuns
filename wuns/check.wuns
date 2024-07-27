@@ -197,7 +197,7 @@
       [if [eq [size cur-ctx] 1]
         [let [param-ctx [first cur-ctx]]
           [if [has param-ctx form]
-            [get param-ctx form]
+            [push-node-type form [get param-ctx form]]
             [let [sig [try-get-global-sig form]]
               [if sig
                 [if [eq-word [getq sig def] [quote constant]]
@@ -315,7 +315,7 @@
         [do
           [loop [cur-ctx local-ctx]
             [if [eq [size cur-ctx] 1]
-              [report form cont not inside loop]
+              [report form continue not inside loop]
               [if [eq-form [quote loop] [third cur-ctx]]
                 [let [loop-vars [first cur-ctx]]
                   [report-when-not
@@ -380,7 +380,7 @@
                 [do
                   [report form function expects a list of parameters]
                   []]]
-              param-ctx [mutable-list]
+              param-ctx [transient-kv-map]
               mut-parameter-type-list [mutable-list]
               n-of-param-words [size params]
               has-rest-param [and [lt 1 n-of-param-words] [eq-form [at params -2] ..]]
@@ -414,8 +414,7 @@
                     [when-not [eq-form p -]
                       [report-when [has param-ctx p] p duplicate parameter]
                       [push-node-type p pt]
-                      [push param-ctx p]
-                      [push param-ctx pt]]
+                      [set param-ctx p pt]]
                     [comment todo use a preallocated array instead we know the size in advance]
                     [push mut-parameter-type-list pt]
                     [continue i [inc i]]]]]
@@ -426,8 +425,7 @@
                   [report-when-not [is-word p] p not a word]
                   [when-not [eq-form p -]
                     [report-when [has param-ctx p] p duplicate parameter]
-                    [push param-ctx p]
-                    [push param-ctx [type-list pt]]]
+                    [set param-ctx p [type-list pt]]]
                   pt]
                 0]
               func-ctx [list param-ctx [list [kv-map]] first-form]
