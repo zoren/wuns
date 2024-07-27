@@ -1,6 +1,6 @@
 [defn type-to-result [t]
   [if [eq-form type-empty t]
-      [list [quote result]]
+      [quote [result]]
       [list [quote result] t]]]
 
 [defn compile-form [ctx is-tail form]
@@ -16,7 +16,7 @@
       [let [fw [at form 0]]
         [ifs
           [eq-word [quote if] fw]
-          [list [quote if]
+          [list fw
             [type-to-result [try-get-node-type form]]
             [compile-form ctx 0 [at form 1]]
             [list [quote then] [compile-form ctx is-tail [at form 2]]]
@@ -68,12 +68,17 @@
           [eq-word [quote defn] fw]
           [let [fname [at form 1]
                 params [at form 2]
-                wasm-params [list]
+                wasm-params [mutable-list]
                 wasm-bodies [mutable-list]
                 ctx []
                 last-body [at form -1]]
             [assert [is-word fname] second element of a list must be a word]
             [assert [is-list params] third element of a list must be a list]
+            [for-each param params
+              [push wasm-params
+                [list [quote param]
+                  [list [quote dollar] param]
+                  [try-get-node-type param]]]]
             [for i 3 [dec [size form]]
               [let [body [at form i]
                     cbody [compile-form ctx 0 body]]

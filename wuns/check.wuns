@@ -409,7 +409,7 @@
               [loop [i 0]
                 [when [lt i n-of-regular-params]
                   [let [p [at params i]
-                        pt [if anno-params [at anno-params i] [quote any]]]
+                        pt [if anno-params [at anno-params i] [quote i32]]]
                     [report-when [eq-form p ..] p .. must be at second last position]
                     [when-not [eq-form p -]
                       [report-when [has param-ctx p] p duplicate parameter]
