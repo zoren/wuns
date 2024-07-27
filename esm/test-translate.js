@@ -25,7 +25,7 @@ const mkParseWat = (s) => {
   //   relaxed_simd: false,
   // })
   try {
-    const module = wabt.parseWat('', s, { multi_memory: true})
+    const module = wabt.parseWat('', s, { multi_memory: true })
     module.resolveNames()
     module.validate()
     const { buffer } = module.toBinary({
@@ -42,13 +42,16 @@ const mkParseWat = (s) => {
 
 import { makeInterpreterContext, apply } from './interpreter.js'
 
-import { parseStringToForms } from './parseTreeSitter.js'
+import { parseStringToForms, parseFile } from './parseTreeSitter.js'
 import assert from 'node:assert'
 
 const textDecoder = new TextDecoder()
 
+const fileNames = ['std3', 'wasm-instructions', 'check', 'hosted']
+const files = fileNames.map((name) => parseFile(`../wuns/${name}.wuns`))
+
 // const compile = getVarVal('compile')
-for (const { expected, wunsSrc } of [
+for (const { expected, wunsSrc, args } of [
   // { expected: [], wunsSrc: `[defn f []]` },
   { expected: 5, wunsSrc: `[defn f [] [i32.const 5]]` },
   { expected: 5n, wunsSrc: `[defn f [] [i64.const 5]]` },
@@ -114,6 +117,36 @@ for (const { expected, wunsSrc } of [
     [i32.store [memarg mem 0 offset 0 align 1] [i32.const 0] [i32.const 6]]]]
   `,
   },
+  {
+    expected: 1,
+    wunsSrc: `
+[constant tag-word [i32.const 1]]
+[defn f [] tag-word]
+  `,
+  },
+  {
+    expected: 5,
+    wunsSrc: `[defn f [p] [i32.const 5]]`,
+    args: [0],
+  },
+  {
+    expected: 7,
+    wunsSrc: `[defn f [p] p]`,
+    args: [7],
+  },
+  {
+    expected: 7,
+    wunsSrc: `[defn f [p] [i32.add p [i32.const 1]]]`,
+    args: [6],
+  },
+  //   {
+  //     expected: 5,
+  //     wunsSrc: `
+  // [defn f []
+  //   [let [x [i32.const 5]]
+  //     x]]
+  //   `,
+  //   },
   //   },
   // { expected: [5, 6], wunsSrc: `[defn f [] [tuple [i32.const 5] [i32.const 6]]]` },
   // { expected: [5, 6], wunsSrc: `[defn is-power-of-2 [x i32] [i32.eq [i32.const 0] [i32.bitwise-and x [i32.sub x [i32.const 1]]]]]` },
@@ -121,13 +154,8 @@ for (const { expected, wunsSrc } of [
   const forms = parseStringToForms(wunsSrc)
 
   const context = makeInterpreterContext({ importObject: {} })
-  const { parseEvalFile, getVarObject } = context
-  parseEvalFile('../wuns/std3.wuns')
-  parseEvalFile('../wuns/wasm-instructions.wuns')
-  parseEvalFile('../wuns/check.wuns')
-  parseEvalFile('../wuns/hosted.wuns')
-
-  // const getVarVal = (name) => getVarObject(name).getValue()
+  const { evalLogForms, getVarObject } = context
+  for (const forms of files) evalLogForms(forms)
   const getVarVal = (name) => {
     const vo = getVarObject(name)
     if (!vo) throw new Error('getVarVal: ' + name)
@@ -149,12 +177,12 @@ for (const { expected, wunsSrc } of [
   const module = new WebAssembly.Module(buf)
   const inst = new WebAssembly.Instance(module, { env: { mem: new WebAssembly.Memory({ initial: 1 }) } })
   const { exports } = inst
-  const call = (name, ...args) => {
+  const call = (name, args) => {
     const f = exports[name]
     if (!f) throw new Error('call: ' + name)
-    if (f.length !== args.length) throw new Error('call: ' + name + ' ' + args.length)
+    if (f.length !== args.length) throw new Error('call: ' + name + ' ' + args.length + ' ' + f.length)
     return f(...args)
   }
-  const res = call('f')
+  const res = call('f', args ? args : [])
   assert.deepStrictEqual(res, expected)
 }

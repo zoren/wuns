@@ -24,7 +24,8 @@
           [let [instruction [try-get-instruction fw]]
             [assert instruction not an instruction]
             [let [imm-parameters [getq instruction immediate-parameters]]
-              [if [eq-form imm-parameters imm-memargs]
+              [ifs
+                [eq-form imm-parameters imm-memargs]
                 [let [memargs [try-get-node-type [at form 1]]]
                   [concat
                     [list fw [getq memargs mem]
@@ -36,7 +37,16 @@
                           [push res [compile-form ctx 0 [at form i]]]
                           [continue i [inc i]]]
                         res]]]]
-                form]]]]]]]]
+
+                [not [is-empty imm-parameters]]
+                form
+
+                [loop [i 1 res [mutable-list]]
+                  [if [lt i [size form]]
+                    [do
+                      [push res [compile-form ctx 0 [at form i]]]
+                      [continue i [inc i]]]
+                    [concat [list fw] res]]]]]]]]]]]
 
 [defn compile-top-form [form]
   [check-top-form form]
