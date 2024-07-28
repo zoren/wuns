@@ -29,9 +29,17 @@
                     [defn f [] [quote 5] [quote 5]]]
       import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
       expect [quote [eq-form [f] [quote 0]]]]
-
+    [kv-map
+      module [quote [import env mem [memory 0]]
+                    [defn f [] [quote 5] [quote 6]]]
+      import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
+      expect [quote [not [eq-form [f] [quote 0]]]]]
+    [kv-map
+      module [quote [import env mem [memory 0]]
+                    [defn size [] [i32.load [memarg mem 0 offset 0 align 4] [quote abc]]]]
+      import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
+      expect [quote [not [eq-form [size] [quote 3]]]]]
       ]]
-
 
 [defn test-main []
   [for-each test tests

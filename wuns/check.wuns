@@ -113,6 +113,7 @@
   [or
     [eq-form param-type type-any]
     [eq-form param-type arg-t]
+    [and [eq-word param-type type-i32] [is-pointer-type arg-t]]
     [and [eq-word param-type type-form]
       [or [is-word-type arg-t] [is-list-type arg-t]]]
     [and [is-list-type param-type] [is-list-or-mut-list-type arg-t]]
@@ -520,7 +521,7 @@
 [defn check-top-forms [forms]
   [for-each form forms
     [check-top-form form]]
-  [assert [is-empty errors] errors not empty]
+  [assert [is-empty errors] errors not empty [identity errors]]
   [let [res
         [kv-map
           errors [persistent-kv-map errors]

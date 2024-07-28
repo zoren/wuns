@@ -18,14 +18,20 @@
 
 [def tag-word 1]
 
+[defn push-i32-little-endian [mut-list val]
+  [loop [i 0 cur val]
+    [when [lt i 4]
+      [push mut-list [and cur [const 0xff]]]
+      [continue i [inc i] cur [bitwise-shift-right cur [const 8]]]]]]
+
 [defn get-or-create-word [w]
   [if [has word-map w]
     [get word-map w]
     [let [offset [size active-mem]
           ws [size w]]
       [assert [lt ws [const 120]] word must be less than 120 characters]
-      [push active-mem tag-word]
-      [push active-mem ws]
+      [push-i32-little-endian active-mem tag-word]
+      [push-i32-little-endian active-mem ws]
       [push-word-chars active-mem w]
       [set word-map w offset]
       offset]]]
@@ -233,6 +239,7 @@
   [let [mut-list [mutable-list]]
     [for-each form forms
       [print-paren-recursive-form mut-list [compile-top-form form]]]
+    [delete-all-keys node-types]
     [if [size active-mem]
       [print-paren-recursive-form mut-list [list [quote data] [quote i32.const 0] [list [quote dq-string-bytes] active-mem]]]]
     [persistent-array mut-list]]]
