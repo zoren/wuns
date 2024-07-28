@@ -58,8 +58,10 @@ export const print = (ox) => {
     if (isWord(x)) return String(x)
     if (isVar(x)) return `[var ${x.name}]`
     if (typeof x === 'number') return String(x)
+    if (typeof x === 'bigint') return String(x)
     if (Array.isArray(x)) return `[${x.map(go).join(' ')}]`
-    if (isClosure(x)) return `[closure ${x.funMacDesc.name}]`
+    if (isClosure(x)) return `[closure ${x.funMacDesc.name} arity ${x.funMacDesc.params.length}]`
+    if (typeof x === 'function') return `[fn ${x.name} arity ${x.length}]`
     if (Object.isFrozen(x))
       return `[kv-map${Object.entries(x)
         .map(([k, v]) => ` ${k} ${go(v)}`)
