@@ -155,6 +155,13 @@ for (const { expected, wunsSrc, args } of [
 [defn f [c] [if c 0 1]]`,
     args: [0],
   },
+  {
+    expected: 0,
+    wunsSrc: `
+[import env mem [memory 0]]
+[defn f [] [quote 5]]`,
+    args: [],
+  },
   //   {
   //     expected: 5,
   //     wunsSrc: `

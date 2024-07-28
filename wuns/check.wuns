@@ -90,6 +90,9 @@
         0]
       1]]]
 
+[defn is-pointer-type [t]
+  [or [eq-form t type-word] [eq-form t type-form]]]
+
 [defn check-type [t]
   [report-when-not [is-type t] t not a type]]
 
@@ -244,6 +247,7 @@
         [eq-form first-form [quote quote]]
         [do
           [comment todo check if integer or word or list]
+          [push-node-type form type-form]
           [if [eq n-of-args 1]
             [let [f [second form]]
               [ifs

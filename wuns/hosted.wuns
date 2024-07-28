@@ -1,8 +1,32 @@
 [defn type-to-result [t]
   [if [eq-form type-empty t]
       [quote [result]]
-      [list [quote result] t]]]
+      [list [quote result]
+        [if [is-pointer-type t] [quote i32] t]]]]
 
+[comment a map from word to the offset in memory]
+[def word-map [transient-kv-map]]
+
+[comment a list of the bytes that will be in the assembly data section]
+[def active-mem [mutable-list]]
+
+[defn push-word-chars [mut-list w]
+  [for i 0 [size w]
+    [push mut-list [at-word w i]]]]
+
+[def tag-word 1]
+
+[defn get-or-create-word [w]
+  [if [has word-map w]
+    [get word-map w]
+    [let [offset [size active-mem]
+          ws [size w]]
+      [assert [lt ws [const 120]] word must be less than 120 characters]
+      [push active-mem tag-word]
+      [push active-mem ws]
+      [push-word-chars active-mem w]
+      [setq word-map w offset]
+      offset]]]
 [defn compile-form [ctx is-tail form]
   [if [is-word form]
     [let [sig [try-get-global-sig form]]
@@ -20,6 +44,13 @@
             [compile-form ctx 0 [at form 1]]
             [list [quote then] [compile-form ctx is-tail [at form 2]]]
             [list [quote else] [compile-form ctx is-tail [at form 3]]]]
+
+          [eq-word [quote quote] fw]
+          [do
+            [assert [eq 2 [size form]] quote must have 2 elements]
+            [let [quoted [at form 1]]
+              [assert [is-word quoted] quoted must be a word]
+              [list [quote i32.const] [get-or-create-word quoted]]]]
 
           [let [instruction [try-get-instruction fw]]
             [assert instruction not an instruction]
@@ -101,9 +132,13 @@
 
           [assert 0 sdf sdfsdf ]]]]]]
 
-[defn push-word-chars [mut-list w]
-  [for i 0 [size w]
-    [push mut-list [at-word w i]]]]
+[defn is-printable-ascii [c]
+  [and [ge c [const 32]] [lt c [const 127]]]]
+
+[defn int-to-hex-ascii [i]
+  [if [lt i [const 10]]
+    [add i [const 48]]
+    [add [sub i [const 10]] [const 97]]]]
 
 [defn print-paren-recursive-form [mut-list form]
   [ifs
@@ -130,6 +165,20 @@
           [push-word-chars mut-list [second form]]
           [push mut-list [const 0x22]]]
 
+        [and [eq s 2] [eq-word [first form] [quote dq-string-bytes]]]
+        [do
+          [push mut-list [const 0x22]]
+          [for-each c [second form]
+            [if [is-printable-ascii c]
+              [push mut-list c]
+              [do
+                [assert [not [is-negative c]] c must be positive]
+                [assert [lt c [const 256]] c must be less than 256]
+                [push mut-list [const 0x5c]]
+                [push mut-list [int-to-hex-ascii [div c [const 16]]]]
+                [push mut-list [int-to-hex-ascii [rem c [const 16]]]]]]]
+          [push mut-list [const 0x22]]]
+
         [do
           [push mut-list [const 40]]
           [when [lt 0 s]
@@ -151,5 +200,6 @@
   [let [mut-list [mutable-list]]
     [for-each form forms
       [print-paren-recursive-form mut-list [compile-top-form form]]]
+    [if [size active-mem]
+      [print-paren-recursive-form mut-list [list [quote data] [quote i32.const 0] [list [quote dq-string-bytes] active-mem]]]]
     [persistent-array mut-list]]]
-
