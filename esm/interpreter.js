@@ -264,14 +264,10 @@ export const makeInterpreterContext = ({ importObject }) => {
         return varObj.getValue()
       }
     }
-    // maybe we should just return non lists as is?
-    ctAssert(isList(form), `cannot eval ${form} expected word or list`)
+    // return non-forms as is
+    if (!Array.isArray(form)) return () => form
     if (form.length === 0) return () => unit
     const [firstForm, ...args] = form
-    if (isWord(firstForm)) {
-      const cspec = compSpecialForm(ctx, form)
-      if (cspec) return cspec
-    }
     const rtCallFunc = () => {
       const cargs = args.map((a) => wunsComp(ctx, a))
       return (f, env) => {
