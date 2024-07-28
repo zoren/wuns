@@ -139,6 +139,22 @@ for (const { expected, wunsSrc, args } of [
     wunsSrc: `[defn f [p] [i32.add p [i32.const 1]]]`,
     args: [6],
   },
+  {
+    expected: 0,
+    wunsSrc: `
+[constant 0 [i32.const 0]]
+[constant 1 [i32.const 1]]
+[defn f [c] [if c 0 1]]`,
+    args: [6],
+  },
+  {
+    expected: 1,
+    wunsSrc: `
+[constant 0 [i32.const 0]]
+[constant 1 [i32.const 1]]
+[defn f [c] [if c 0 1]]`,
+    args: [0],
+  },
   //   {
   //     expected: 5,
   //     wunsSrc: `
@@ -162,17 +178,9 @@ for (const { expected, wunsSrc, args } of [
     return vo.getValue()
   }
 
-  const compileTopForm = getVarVal('compile-top-form')
-  const printParen = getVarVal('print-paren-form')
-  let allText = ''
-  for (const form of forms) {
-    const compRes = apply(compileTopForm, form)
-    // console.dir({ compRes })
-    const printP = apply(printParen, compRes)
-    const str = textDecoder.decode(Uint8Array.from(printP, (_, i) => +printP[i]))
-    allText += str + '\n'
-  }
-  // console.log({ allText })
+  const compToText = getVarVal('compile-top-forms-to-text')
+  const allTextByteWords = apply(compToText, forms)
+  const allText = textDecoder.decode(Uint8Array.from(allTextByteWords, (v) => +v))
   const buf = mkParseWat(allText)
   const module = new WebAssembly.Module(buf)
   const inst = new WebAssembly.Instance(module, { env: { mem: new WebAssembly.Memory({ initial: 1 }) } })

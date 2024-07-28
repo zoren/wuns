@@ -146,3 +146,10 @@
   [let [mut-list [mutable-list]]
     [print-paren-recursive-form mut-list form]
     mut-list]]
+
+[defn compile-top-forms-to-text [forms]
+  [let [mut-list [mutable-list]]
+    [for-each form forms
+      [print-paren-recursive-form mut-list [compile-top-form form]]]
+    [persistent-array mut-list]]]
+
