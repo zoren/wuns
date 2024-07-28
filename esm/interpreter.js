@@ -280,6 +280,13 @@ export const makeInterpreterContext = ({ importObject }) => {
         return callClosure(f, eargs)
       }
     }
+    if (!isWord(firstForm)) {
+      const cfunc = wunsComp(ctx, firstForm)
+      const caller = rtCallFunc()
+      return (env) => caller(cfunc(env), env)
+    }
+    const cspec = compSpecialForm(ctx, form)
+    if (cspec) return cspec
     const firstWordValue = wordValue(firstForm)
     if (getCtxVar(ctx, firstWordValue)) {
       const caller = rtCallFunc()
