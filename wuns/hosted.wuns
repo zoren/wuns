@@ -27,8 +27,39 @@
       [push active-mem tag-word]
       [push active-mem ws]
       [push-word-chars active-mem w]
-      [setq word-map w offset]
+      [set word-map w offset]
       offset]]]
+
+[comment
+[comment a map from list length to a mutable list of list offset bindings]
+[def list-map [transient-kv-map]]
+
+
+[def tag-list 3]
+
+[defn get-or-create-list [l]
+  [let [ls [size l]
+        offset [size active-mem]]
+    [if [has list-map ls]
+      [let [lists-of-length [get list-map ls]]
+        []
+      ]
+      [let [assoc-list [mutable-list]]
+        [push assoc-list l o]
+        [set list-map ls assoc-list]]]
+  ]
+  [if [has list-map w]
+    [get list-map w]
+    [let [offset [size active-mem]
+          ls [size l]]
+
+      [push active-mem tag-word]
+      [push active-mem ws]
+      [push-word-chars active-mem w]
+      [setq list-map w offset]
+      offset]]]
+]
+
 [defn compile-form [ctx is-tail form]
   [if [is-word form]
     [let [sig [try-get-global-sig form]]
@@ -82,7 +113,6 @@
                     [concat [list fw] res]]]]]]]]]]]
 
 [defn compile-top-form [form]
-  [check-top-form form]
   [if [is-word form]
     []
 
@@ -199,6 +229,7 @@
     mut-list]]
 
 [defn compile-top-forms-to-text [forms]
+  [check-top-forms forms]
   [let [mut-list [mutable-list]]
     [for-each form forms
       [print-paren-recursive-form mut-list [compile-top-form form]]]

@@ -59,12 +59,9 @@ defSetVar('text-to-wasm', (allTextByteWords) => {
   const allText = textDecoder.decode(Uint8Array.from(allTextByteWords, (v) => +v))
   return mkParseWat(allText)
 })
-defSetVar('module-from-buffer', (buf) => {
-  return new WebAssembly.Module(buf)
-})
-defSetVar('instantiate-module', (module, importObject) => {
-  return new WebAssembly.Instance(module, importObject)
-})
+defSetVar('module-from-buffer', (buf) => new WebAssembly.Module(buf))
+defSetVar('instantiate-module', (module, importObject) => new WebAssembly.Instance(module, importObject))
+defSetVar('wasm-memory', (paramObj) => new WebAssembly.Memory(paramObj))
 for (const file of files) evalLogForms(file)
 
 const getVarVal = (name) => {

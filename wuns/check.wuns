@@ -93,6 +93,11 @@
 [defn is-pointer-type [t]
   [or [eq-form t type-word] [eq-form t type-form]]]
 
+[def errors [mutable-list]]
+
+[defn report-error [msg form]
+  [push errors [kv-map message msg form form]]]
+
 [defn check-type [t]
   [report-when-not [is-type t] t not a type]]
 
@@ -134,26 +139,6 @@
     [get global-ctx name]
     0]]
 
-[def predicate-to-type
-  [kv-map
-    is-word [quote word]
-    is-i32 [quote i32]
-    is-list [quote [any]]]]
-
-[defn is-external-func [name]
-  [let [sig [try-get-global-sig name]]
-    [eq-word [getq sig def] [quote external-func]]]]
-
-[defn try-bind-type-predicate [local-ctx t-form]
-  [if [and [is-list t-form] [eq [size t-form] 2]]
-    [let [f [first t-form] a [second t-form]]
-      [if [and [is-word f] [is-word a] [is-external-func f] [has predicate-to-type f]]
-        [do
-          [log [list [quote try-bind-type-predicate] t-form f a]]
-          [list [list a [get predicate-to-type f]] local-ctx [quote type-pred]]]
-        local-ctx]]
-    local-ctx]]
-
 [def node-types [transient-kv-map]]
 
 [defn get-node-id [node]
@@ -168,8 +153,6 @@
     [if [has node-types node-id]
       [get node-types node-id]
       type-error]]]
-
-[def interpreter-context []]
 
 [def default-memargs [kv-map mem 0 offset 0 align 0]]
 
@@ -212,16 +195,11 @@
                     type-error]]
                 [do
                   [report form symbol not found]
-                  type-error]
-
-                    ]]]]
-        [let
-          [vars [first cur-ctx]
-           outer [second cur-ctx]]
+                  type-error]]]]]
+        [let [vars [first cur-ctx]]
           [if [has vars form]
             [push-node-type form [get vars form]]
-            [continue cur-ctx outer]
-            ]]]]
+            [continue cur-ctx [second cur-ctx]]]]]]
 
     [eq-form [size form] 0]
     [do
@@ -231,7 +209,7 @@
     [let [first-form [first form]
           s-form [size form]
           n-of-args [dec s-form]]
-      [assert [is-word first-form] expected a word first]
+      [assert [is-word first-form] expected a word first [identity form]]
       [ifs
         [eq-form first-form [quote tuple]]
         [let
@@ -499,13 +477,7 @@
               [report-when-not [ge n-of-args n-of-parameters] form
                 missing arguments]
               [if [eq-word sig-def [quote macro]]
-                [comment [let [expanded [context-macro-expand interpreter-context form]
-                      ex-type [check-form local-ctx tail-pos expanded]]
-                  [log [list [quote macro-form] form]]
-                  [log [list [quote expanded] expanded ]]
-                  [log [list [quote type-of-expanded] ex-type]]
-                  ex-type
-                  ]]
+                []
                 [do
                   [loop [i 1]
                     [when [lt i s-form]
@@ -541,13 +513,21 @@
   [check-form [list []] 0 form]
   ]
 
-[defn check-forms [forms]
-  [for i 0 [size forms]
-    [let [f [at forms i]]
-      [check-top-form f]
-      ]]
-  [log [list [quote node-types] node-types]]
-      ]
+[defn delete-all-keys [o]
+  [for-each k [keys o]
+    [delete-key o k]]]
+
+[defn check-top-forms [forms]
+  [for-each form forms
+    [check-top-form form]]
+  [assert [is-empty errors] errors not empty]
+  [let [res
+        [kv-map
+          errors [persistent-kv-map errors]
+          global-ctx [persistent-kv-map global-ctx]
+          node-types [persistent-kv-map node-types]]]
+      [delete-all-keys global-ctx]
+    res]]
 
 [comment
   [check-forms

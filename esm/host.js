@@ -117,10 +117,6 @@ export const log = (form) => {
   return unit
 }
 
-export const report_error = (msg, form) => {
-  console.error(msg.map(print).join(' '), print(form))
-  return unit
-}
 export { atom, is_atom, atom_get, atom_set }
 export const concat_lists = (l) => {
   if (!Array.isArray(l)) throw new Error('concat-lists expects list')
@@ -159,6 +155,12 @@ export const set = (o, k, e) => {
   if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('set expects map')
   if (Object.isFrozen(o)) throw new Error('set expects mutable object')
   o[wordValue(k)] = e
+  return unit
+}
+export const delete_key = (o, k) => {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('delete-key expects map')
+  if (Object.isFrozen(o)) throw new Error('delete expects mutable object')
+  delete o[wordValue(k)]
   return unit
 }
 export const keys = (m) => {
