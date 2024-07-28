@@ -2,9 +2,11 @@ import fs from 'node:fs'
 import * as readline from 'node:readline'
 import { stdin, nextTick, stdout } from 'node:process'
 
+import { parseStringToForms } from './parseTreeSitter.js'
+
 const historyFilePath = 'history.json'
 
-export const runRepl = ({ parseEvalString }) => {
+export const runRepl = ({ evalLogForms }) => {
   let history = []
   try {
     const histO = JSON.parse(fs.readFileSync(historyFilePath, 'utf8'))
@@ -36,7 +38,7 @@ export const runRepl = ({ parseEvalString }) => {
         return
       }
       try {
-        parseEvalString(line)
+        evalLogForms(parseStringToForms(line))
       } catch (err) {
         console.error(err)
       }

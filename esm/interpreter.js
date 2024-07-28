@@ -1,5 +1,3 @@
-import fs from 'fs'
-
 import {
   wordValue,
   isWord,
@@ -19,7 +17,7 @@ import {
   createClosure,
 } from './core.js'
 import { instructions } from './instructions.js'
-import { parseStringToForms } from './parseTreeSitter.js'
+import { parseStringToForms, parseFile } from './parseTreeSitter.js'
 
 class RuntimeError extends Error {
   constructor(message, form) {
@@ -75,10 +73,7 @@ const getCtxVar = (ctx, v) => {
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 
 export const makeInterpreterContext = ({ importObject }) => {
-  const wunsEval = (form) => {
-    const cform = wunsComp(null, form)
-    return cform(null)
-  }
+  const wunsEval = (form) => wunsComp(null, form)(null)
   const varObjects = new Map()
   const getVarObject = (name) => varObjects.get(name)
   const defSetVar = (name, value) => {
@@ -350,18 +345,14 @@ export const makeInterpreterContext = ({ importObject }) => {
     }
   }
 
-  const parseEvalString = (content) => {
-    evalLogForms(parseStringToForms(content))
-  }
-
   const parseEvalFile = (filename) => {
-    parseEvalString(fs.readFileSync(filename, 'ascii'))
+    evalLogForms(parseFile(filename))
   }
 
   return {
     evalLogForms,
-    parseEvalString,
     parseEvalFile,
     getVarObject,
+    defSetVar,
   }
 }
