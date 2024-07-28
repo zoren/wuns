@@ -1,0 +1,41 @@
+[defn wat-to-exports [wat-text import-object]
+  [let [wasm-module-buffer [text-to-wasm wat-text]
+        wasm-module [module-from-buffer wasm-module-buffer]
+        wasm-instance [instantiate-module wasm-module import-object]
+        exports [getq wasm-instance exports]]
+    exports]]
+
+[def tests
+  [list
+    [kv-map
+      module [quote [[defn f [] [i32.const 5]]]]
+      expect [quote [eq-form [f] [quote 5]]]]
+    [kv-map
+      module [quote [[defn g [] [i32.const 5] [i32.const 6]]]]
+      expect [quote [eq-form [g] [quote 6]]]]
+    [kv-map
+      module [quote [[defn h [p] p]]]
+      expect [quote [eq-form [h 1] [quote 1]]]]
+    [kv-map
+      module [quote [[defn hinc [p] [i32.add [i32.const 1] p]]]]
+      expect [quote [eq-form [hinc 1] [quote 2]]]]
+      ]]
+
+
+[defn test-main []
+  [for-each test tests
+    [let
+      [module [getq test module]
+       expect [getq test expect]
+       text [compile-top-forms-to-text module]
+       exports [wat-to-exports text [kv-map]]
+       export-names [keys exports]
+       args [mutable-list]
+       -
+       [for-each export-name export-names
+        [push args [get exports export-name]]]
+       wrap-func [list [quote func] [quote wrapper] export-names expect]
+       ]
+    [if [eval [concat [list wrap-func] args]]
+      [log [list [quote test] [quote pass]]]
+      [log [list [quote test] [quote fail] expect]]]]]]
