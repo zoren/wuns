@@ -4,7 +4,9 @@ import {
   logNode,
   treesEqual,
   nodeTake,
+  nodeTakeNew,
   nodeDropMerge,
+  nodeDropMergeNew,
   mergeNodes,
   patchNode,
   lsqb,
@@ -63,7 +65,16 @@ for (const { expected, node, index } of [
 
   { expected: root(liop()), node: root(licl()), index: 1 },
 ]) {
-  if (!treesEqual(expected, nodeTake(node, index))) throw new Error('expected trees to be equal')
+  const actual = nodeTakeNew(node, index)
+  if (!treesEqual(expected, actual)) {
+    console.log('input', { index})
+    logNode(node)
+    console.log('expected')
+    logNode(expected)
+    console.log('actual')
+    logNode(actual)
+    throw new Error('expected trees to be equal')
+  }
   nOfAsserts++
 }
 
@@ -85,7 +96,7 @@ for (const { expected, node, index } of [
 ]) {
   const merged = nodeDropMerge(node, index)
   if (!treesEqual(expected, merged)) {
-    console.log('original')
+    console.log('original', { index })
     logNode(node)
     console.log('expected')
     logNode(expected)

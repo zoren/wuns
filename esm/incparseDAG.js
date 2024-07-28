@@ -159,6 +159,57 @@ export const nodeTake = (root, initIndex) => {
   return go(root, initIndex)
 }
 
+// splits a node before not including the index returning a new node containing the split off part
+export const nodeTakeStack = (stack, root, initIndex) => {
+  if (root.type !== nodeTypeRoot) throw new Error('expected root node')
+  if (initIndex < 0) throw new Error('expected index to be non-negative')
+  let index = initIndex
+  let node = root
+  while (true) {
+    if (index <= 0) throw new Error('expected index to be non-zero')
+    const { type, length, children } = node
+    if (length <= index) {
+      stack.at(-1).push(node)
+      break
+    }
+    if (isTerminalNodeType(type)) {
+      stack.at(-1).push(createTerminal(type, index))
+      break
+    }
+    let childIndex = 0
+    for (const child of children) {
+      const { length } = child
+      if (index <= length) {
+        node = child
+        stack.push(children.slice(0, childIndex))
+        break
+      }
+      childIndex++
+      index -= length
+    }
+  }
+}
+
+const finishList = (stack) => {
+  const children = stack.pop()
+  const node = createNonTerminal(nodeTypeList, sumLengths(children), children)
+  stack.at(-1).push(node)
+}
+
+const finishAllUnclosed = (stack) => {
+  while (1 < stack.length) finishList(stack)
+}
+
+export const nodeTakeNew = (root, initIndex) => {
+  if (initIndex === 0) return emptyRoot
+  if (initIndex === root.length) return root
+  const stack = []
+  nodeTakeStack(stack, root, initIndex)
+  finishAllUnclosed(stack)
+  const rootChildren = stack.pop()
+  return createNonTerminal(nodeTypeRoot, sumLengths(rootChildren), rootChildren)
+}
+
 // drops bytes of a node merging headless lists
 export const nodeDropMerge = (root, initIndex) => {
   if (root.type !== nodeTypeRoot) throw new Error('expected root node')
@@ -185,6 +236,60 @@ export const nodeDropMerge = (root, initIndex) => {
     throw new Error('expected to find child to drop')
   }
   return go(root, initIndex)[0]
+}
+
+export const nodeDropMergeStack = (stack, root, initIndex) => {
+  if (root.type !== nodeTypeRoot) throw new Error('expected root node')
+  if (root.length === initIndex) return emptyRoot
+  let index = initIndex
+  let node = root
+  const path = []
+  while (true) {
+    const { type, length, children } = node
+    if (index <= 0) throw new Error('expected index to be non-negative')
+    if (length < index) throw new Error('expected index to be less than byte length')
+    if (isTerminalNodeType(type)) {
+      stack.at(-1).push(createTerminal(type, length - index))
+      break
+    }
+    let childIndex = 0
+    let splitChild = null
+    for (const child of children) {
+      const { length } = child
+      if (index < length) {
+        splitChild = child
+        break
+      }
+      index -= length
+      if (index === 0) break
+      childIndex++
+    }
+    const afterChildren = children.slice(childIndex + 1)
+    // const newChildren = []
+    // stack.push(newChildren)
+    // path.push({ newChildren, afterChildren: children.slice(childIndex + 1) })
+    // const newChildren = stack.pop()
+    // stack.at(-1).push(...newChildren)
+    if (splitChild === null) break
+    node = splitChild
+  }
+  console.log({ path })
+  // here we need to add all the children after the split node on the path back to the parent
+  while (path.length) {
+    const { newChildren, afterChildren } = path.pop()
+    newChildren.push(...afterChildren)
+  }
+}
+
+export const nodeDropMergeNew = (root, initIndex) => {
+  if (root.type !== nodeTypeRoot) throw new Error('expected root node')
+  if (initIndex === 0) return root
+  if (root.length === initIndex) return emptyRoot
+  const stack = []
+  nodeDropMergeStack(stack, root, initIndex)
+  finishAllUnclosed(stack)
+  const rootChildren = stack.pop()
+  return createNonTerminal(nodeTypeRoot, sumLengths(rootChildren), rootChildren)
 }
 
 export const mergeNodes = (a, b) => {
@@ -239,10 +344,6 @@ const isIllegal = (c) => !isWordChar(c) && !isSpaceOrNewline(c) && c !== 91 && c
 
 export const parseString = (text) => {
   const stack = [[]]
-  const finishList = () => {
-    const children = stack.pop()
-    stack.at(-1).push(createNonTerminal(nodeTypeList, sumLengths(children), children))
-  }
   let i = 0
   while (i < text.length) {
     const start = i
@@ -261,13 +362,13 @@ export const parseString = (text) => {
         continue
       case 93:
         stack.at(-1).push(rsqb)
-        if (1 < stack.length) finishList()
+        if (1 < stack.length) finishList(stack)
         continue
     }
     if (isWordChar(c)) pushTerm(isWordChar, nodeTypeWord)
     else pushTerm(isIllegal, nodeTypeIllegalChars)
   }
-  while (1 < stack.length) finishList()
+  finishAllUnclosed(stack)
   const rootChildren = stack.pop()
   return createNonTerminal(nodeTypeRoot, sumLengths(rootChildren), rootChildren)
 }
@@ -295,4 +396,77 @@ export const patchNode = (oldTree, changes) => {
     curOld = nodeDropMerge(curOld, relativeOffset + rangeLength)
   }
   return mergeNodes(result, curOld)
+}
+
+export const patchNodeNew = (oldTree, changes) => {
+  const stack = [oldTree]
+  let changeIndex = 0
+  const go = (offset) => {
+    if (changeIndex >= changes.length) return
+    const curChange = changes[changeIndex]
+    const { rangeOffset, rangeLength, text } = curChange
+    const rangeEnd = rangeOffset + rangeLength
+    if (rangeOffset < offset) throw new Error('expected rangeOffset to be greater than offset')
+    if (rangeOffset === offset) {
+
+    } else {
+
+    }
+  }
+  go(0)
+}
+
+const nodeTypeNewLine = ']'
+
+export const newl = Object.freeze({ type: nodeTypeNewLine, length: 1, lines: 1 })
+
+const sumLines = (children) => children.reduce((acc, node) => acc + !!node.lines, 0)
+const isSpace = (c) => c === 32
+
+export const parseVSCDocument = (document) => {
+  const root = { type: nodeTypeRoot, length: 0, lines: 0, children: [] }
+  const stack = [root]
+  const finishNonTerminal = () => {
+    const node = stack.pop()
+    node.length = sumLengths(node.children)
+    node.lines = sumLines(node.children)
+    Object.freeze(node.children)
+    Object.freeze(node)
+  }
+  for (let lineNo = 0; lineNo < document.lineCount; lineNo++) {
+    const line = document.lineAt(lineNo)
+    const lineText = line.text
+    for (let col = 0; col < lineText.length; col++) {
+      const c = lineText.charCodeAt(col)
+      if (c === 10) throw new Error('unexpected newline')
+      switch (c) {
+        case 91: {
+          const node = { type: nodeTypeList, length: 1, children: [lsqb] }
+          stack.at(-1).children.push(node)
+          stack.push(node)
+          continue
+        }
+        case 93:
+          stack.at(-1).children.push(rsqb)
+          if (1 < stack.length) finishNonTerminal()
+          continue
+      }
+      let ctokenType = nodeTypeIllegalChars
+      let pred = isIllegal
+      if (isWordChar(c)) {
+        ctokenType = nodeTypeWord
+        pred = isWordChar
+      } else if (isSpace(c)) {
+        ctokenType = nodeTypeWhitespace
+        pred = isSpace
+      }
+      let j = col + 1
+      for (; j < lineText.length && pred(lineText.charCodeAt(j)); j++);
+      stack.at(-1).children.push(createTerminal(ctokenType, j - col))
+      col = j - 1
+    }
+    stack.at(-1).children.push(newl)
+  }
+  while (0 < stack.length) finishNonTerminal()
+  return root
 }
