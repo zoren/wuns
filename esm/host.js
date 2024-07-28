@@ -88,12 +88,6 @@ export const set_array = (ar, index, e) => {
   ar[i] = e
   return unit
 }
-export const set = (o, k, e) => {
-  if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('set expects map')
-  if (Object.isFrozen(o)) throw new Error('set expects mutable object')
-  o[wordValue(k)] = e
-  return unit
-}
 export const at = (v, i) => {
   if (!isList(v)) throw new Error('at expects list, got' + typeof v + ' ' + v)
   const len = size(v)
@@ -160,6 +154,16 @@ export const get = (m, k) => {
   const ks = wordValue(k)
   if (ks in m) return m[ks]
   throw new Error('key not found: ' + ks + ' in ' + Object.keys(m))
+}
+export const set = (o, k, e) => {
+  if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('set expects map')
+  if (Object.isFrozen(o)) throw new Error('set expects mutable object')
+  o[wordValue(k)] = e
+  return unit
+}
+export const keys = (m) => {
+  if (typeof m !== 'object') throw new Error('keys expects map')
+  return makeList(...Object.keys(m).map(word))
 }
 
 import { parseFile } from './parseTreeSitter.js'
