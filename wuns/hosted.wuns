@@ -1,8 +1,10 @@
+[defn type-to-wasm [t]
+  [if [is-pointer-type t] [quote i32] t]]
+
 [defn type-to-result [t]
   [if [eq-form type-empty t]
       [quote [result]]
-      [list [quote result]
-        [if [is-pointer-type t] [quote i32] t]]]]
+      [list [quote result] [type-to-wasm t]]]]
 
 [comment a map from word to the offset in memory]
 [def word-map [transient-kv-map]]
@@ -102,7 +104,7 @@
               [list [quote global]
                 [list [quote dollar] name]
                 [list [quote export] [list [quote dq-string] name]]
-                [try-get-node-type value]
+                [type-to-wasm [try-get-node-type value]]
                 [compile-form [] 1 value]]]
 
           [eq-word [quote defn] fw]

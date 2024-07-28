@@ -140,6 +140,12 @@ for (const { expected, wunsSrc, args } of [
     args: [6],
   },
   {
+    expected: 5,
+    wunsSrc: `
+[constant a-const [i32.const 5]]
+[defn f [] a-const]`,
+  },
+  {
     expected: 0,
     wunsSrc: `
 [constant 0 [i32.const 0]]
@@ -160,7 +166,13 @@ for (const { expected, wunsSrc, args } of [
     wunsSrc: `
 [import env mem [memory 0]]
 [defn f [] [quote 5]]`,
-    args: [],
+  },
+  {
+    expected: 0,
+    wunsSrc: `
+[import env mem [memory 0]]
+[constant word [quote 5]]
+[defn f [] word]`,
   },
   //   {
   //     expected: 5,
