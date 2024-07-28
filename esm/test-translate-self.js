@@ -57,7 +57,12 @@ const context = makeInterpreterContext({ importObject: {} })
 const { evalLogForms, getVarObject, defSetVar } = context
 defSetVar('text-to-wasm', (allTextByteWords) => {
   const allText = textDecoder.decode(Uint8Array.from(allTextByteWords, (v) => +v))
-  return mkParseWat(allText)
+  try {
+    return mkParseWat(allText)
+  } catch (e) {
+    console.log('allText', allText)
+    throw e
+  }
 })
 defSetVar('module-from-buffer', (buf) => new WebAssembly.Module(buf))
 defSetVar('instantiate-module', (module, importObject) => new WebAssembly.Instance(module, importObject))

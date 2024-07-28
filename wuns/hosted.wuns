@@ -6,12 +6,6 @@
       [quote [result]]
       [list [quote result] [type-to-wasm t]]]]
 
-[comment a map from word to the offset in memory]
-[def word-map [transient-kv-map]]
-
-[comment a list of the bytes that will be in the assembly data section]
-[def active-mem [mutable-list]]
-
 [defn push-word-chars [mut-list w]
   [for i 0 [size w]
     [push mut-list [at-word w i]]]]
@@ -21,55 +15,27 @@
 [defn push-i32-little-endian [mut-list val]
   [loop [i 0 cur val]
     [when [lt i 4]
-      [push mut-list [and cur [const 0xff]]]
-      [continue i [inc i] cur [bitwise-shift-right cur [const 8]]]]]]
+      [push mut-list [bitwise-and cur [const 255]]]
+      [continue i [inc i] cur [bitwise-shift-right-unsigned cur [const 8]]]]]]
 
-[defn get-or-create-word [w]
-  [if [has word-map w]
-    [get word-map w]
-    [let [offset [size active-mem]
-          ws [size w]]
-      [assert [lt ws [const 120]] word must be less than 120 characters]
-      [push-i32-little-endian active-mem tag-word]
-      [push-i32-little-endian active-mem ws]
-      [push-word-chars active-mem w]
-      [set word-map w offset]
-      offset]]]
-
-[comment
-[comment a map from list length to a mutable list of list offset bindings]
-[def list-map [transient-kv-map]]
-
-
-[def tag-list 3]
-
-[defn get-or-create-list [l]
-  [let [ls [size l]
-        offset [size active-mem]]
-    [if [has list-map ls]
-      [let [lists-of-length [get list-map ls]]
-        []
-      ]
-      [let [assoc-list [mutable-list]]
-        [push assoc-list l o]
-        [set list-map ls assoc-list]]]
-  ]
-  [if [has list-map w]
-    [get list-map w]
-    [let [offset [size active-mem]
-          ls [size l]]
-
-      [push active-mem tag-word]
-      [push active-mem ws]
-      [push-word-chars active-mem w]
-      [setq list-map w offset]
-      offset]]]
-]
+[defn get-or-create-word [ctx w]
+  [let [word-map [getq ctx word-map]]
+    [if [has word-map w]
+      [get word-map w]
+      [let [active-mem [getq ctx active-mem]
+            offset [size active-mem]
+            ws [size w]]
+        [assert [lt ws [const 120]] word must be less than 120 characters]
+        [push-i32-little-endian active-mem tag-word]
+        [push-i32-little-endian active-mem ws]
+        [push-word-chars active-mem w]
+        [set word-map w offset]
+        offset]]]]
 
 [defn compile-form [ctx is-tail form]
   [if [is-word form]
-    [let [sig [try-get-global-sig form]]
-      [if [and sig [hasq sig def] [eq-form [getq sig def] [quote constant]]]
+    [let [gctx [getq [getq ctx check-result] global-ctx]]
+      [if [and [has gctx form] [eq-form [getq [get gctx form] def] [quote constant]]]
         [list [quote global.get] [list [quote dollar] form]]
         [list [quote local.get] [list [quote dollar] form]]]]
     [do
@@ -89,39 +55,44 @@
             [assert [eq 2 [size form]] quote must have 2 elements]
             [let [quoted [at form 1]]
               [assert [is-word quoted] quoted must be a word]
-              [list [quote i32.const] [get-or-create-word quoted]]]]
+              [list [quote i32.const] [get-or-create-word ctx quoted]]]]
 
           [let [instruction [try-get-instruction fw]]
-            [assert instruction not an instruction]
-            [let [imm-parameters [getq instruction immediate-parameters]]
-              [ifs
-                [eq-form imm-parameters imm-memargs]
-                [let [memargs [try-get-node-type [at form 1]]]
-                  [concat
-                    [list fw [getq memargs mem]
-                      [list [quote eq-pair] [quote offset] [getq memargs offset]]
-                      [list [quote eq-pair] [quote align] [getq memargs align]]]
-                    [loop [i 2 res [mutable-list]]
-                      [if [lt i [size form]]
-                        [do
-                          [push res [compile-form ctx 0 [at form i]]]
-                          [continue i [inc i]]]
-                        res]]]]
+            [if instruction
+              [let [imm-parameters [getq instruction immediate-parameters]]
+                [ifs
+                  [eq-form imm-parameters imm-memargs]
+                  [let [memargs [try-get-node-type [at form 1]]]
+                    [concat
+                      [list fw [getq memargs mem]
+                        [list [quote eq-pair] [quote offset] [getq memargs offset]]
+                        [list [quote eq-pair] [quote align] [getq memargs align]]]
+                      [loop [i 2 res [mutable-list]]
+                        [if [lt i [size form]]
+                          [do
+                            [push res [compile-form ctx 0 [at form i]]]
+                            [continue i [inc i]]]
+                          res]]]]
 
-                [not [is-empty imm-parameters]]
-                form
+                  [not [is-empty imm-parameters]]
+                  form
 
-                [loop [i 1 res [mutable-list]]
-                  [if [lt i [size form]]
-                    [do
-                      [push res [compile-form ctx 0 [at form i]]]
-                      [continue i [inc i]]]
-                    [concat [list fw] res]]]]]]]]]]]
+                  [loop [i 1 res [mutable-list]]
+                    [if [lt i [size form]]
+                      [do
+                        [push res [compile-form ctx 0 [at form i]]]
+                        [continue i [inc i]]]
+                      [concat [list fw] res]]]]]
+              [loop [i 1 res [mutable-list]]
+                [if [lt i [size form]]
+                  [do
+                    [push res [compile-form ctx 0 [at form i]]]
+                    [continue i [inc i]]]
+                  [concat [list [quote call] [list [quote dollar] fw]] res]]]]]]]]]]
 
-[defn compile-top-form [form]
+[defn compile-top-form [ctx form]
   [if [is-word form]
     []
-
     [do
       [assert [is-list form] list must be a list]
       [assert [not [is-empty form]] a list must not be empty]
@@ -141,14 +112,13 @@
                 [list [quote dollar] name]
                 [list [quote export] [list [quote dq-string] name]]
                 [type-to-wasm [try-get-node-type value]]
-                [compile-form [] 1 value]]]
+                [compile-form ctx 1 value]]]
 
           [eq-word [quote defn] fw]
           [let [fname [at form 1]
                 params [at form 2]
                 wasm-params [mutable-list]
                 wasm-bodies [mutable-list]
-                ctx []
                 last-body [at form -1]]
             [assert [is-word fname] second element of a list must be a word]
             [assert [is-list params] third element of a list must be a list]
@@ -163,7 +133,7 @@
                 [push wasm-bodies [if [is-atomic-type [try-get-node-type body]] [list [quote drop] cbody] cbody]]]]
             [push wasm-bodies [compile-form ctx 1 last-body]]
             [concat
-              [list [quote func] [list [quote export] [list [quote dq-string] fname]]]
+              [list [quote func] [list [quote dollar] fname] [list [quote export] [list [quote dq-string] fname]]]
               wasm-params
               [list [type-to-result [try-get-node-type last-body]]]
               wasm-bodies]]
@@ -235,11 +205,13 @@
     mut-list]]
 
 [defn compile-top-forms-to-text [forms]
-  [check-top-forms forms]
-  [let [mut-list [mutable-list]]
+  [let [check-result [check-top-forms forms]
+        mut-list [mutable-list]
+        active-mem [mutable-list]
+        ctx [kv-map active-mem active-mem check-result check-result word-map [transient-kv-map]]]
     [for-each form forms
-      [print-paren-recursive-form mut-list [compile-top-form form]]]
+      [print-paren-recursive-form mut-list [compile-top-form ctx form]]]
     [delete-all-keys node-types]
-    [if [size active-mem]
+    [when [size active-mem]
       [print-paren-recursive-form mut-list [list [quote data] [quote i32.const 0] [list [quote dq-string-bytes] active-mem]]]]
     [persistent-array mut-list]]]

@@ -5,40 +5,64 @@
         exports [getq wasm-instance exports]]
     exports]]
 
+[defn test-asssert-eq [a b]
+  [if [not [eq-form a b]]
+    [log [list [quote assert-eq] a b]]]
+  [eq-form a b]]
+
+[defn test-asssert-not-eq [a b]
+  [if [eq-form a b]
+    [log [list [quote assert-not-eq] a b]]]
+  [not [eq-form a b]]]
+
 [def tests
   [list
     [kv-map
       module [quote [[defn f [] [i32.const 5]]]]
-      expect [quote [eq-form [f] [quote 5]]]]
+      expect [quote [test-asssert-eq [quote 5] [f]]]]
     [kv-map
       module [quote [[defn f [] [i32.const 5] [i32.const 6]]]]
-      expect [quote [eq-form [f] [quote 6]]]]
+      expect [quote [test-asssert-eq [quote 6] [f]]]]
     [kv-map
       module [quote [[defn f [p] p]]]
-      expect [quote [eq-form [f 1] [quote 1]]]]
+      expect [quote [test-asssert-eq [quote 1] [f 1]]]]
     [kv-map
       module [quote [[defn inc [p] [i32.add [i32.const 1] p]]]]
-      expect [quote [eq-form [inc 1] [quote 2]]]]
+      expect [quote [test-asssert-eq [quote 2] [inc 1]]]]
+    [kv-map
+      module [quote [defn c [] [i32.const 5]]
+                    [defn f [] [c]]]
+      expect [quote [test-asssert-eq [quote 5] [f]]]]
     [kv-map
       module [quote [import env mem [memory 0]]
                     [defn f [] [quote 5]]]
       import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
-      expect [quote [eq-form [f] [quote 0]]]]
+      expect [quote [test-asssert-eq [quote 0] [f]]]]
     [kv-map
       module [quote [import env mem [memory 0]]
                     [defn f [] [quote 5] [quote 5]]]
       import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
-      expect [quote [eq-form [f] [quote 0]]]]
+      expect [quote [test-asssert-eq [quote 0] [f]]]]
     [kv-map
       module [quote [import env mem [memory 0]]
                     [defn f [] [quote 5] [quote 6]]]
       import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
-      expect [quote [not [eq-form [f] [quote 0]]]]]
+      expect [quote [test-asssert-not-eq [quote 0] [f]]]]
     [kv-map
       module [quote [import env mem [memory 0]]
-                    [defn size [] [i32.load [memarg mem 0 offset 0 align 4] [quote abc]]]]
+                    [defn f [] [i32.load [memarg mem 0 offset 4 align 4] [quote abc]]]]
       import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
-      expect [quote [not [eq-form [size] [quote 3]]]]]
+      expect [quote [test-asssert-eq [quote 3] [f]]]]
+    [kv-map
+      module [quote [import env mem [memory 0]]
+                    [constant w1 [quote a]]
+                    [constant w3 [quote 007]]
+                    [defn size [p] [i32.load [memarg mem 0 offset 4 align 4] p]]
+                    [defn f [] [size w1]]
+                    [defn g [] [size w3]]]
+      import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
+      expect [quote [do [test-asssert-eq [quote 1] [f]]
+                        [test-asssert-eq [quote 3] [g]]]]]
       ]]
 
 [defn test-main []
@@ -56,6 +80,5 @@
         [push args [get exports export-name]]]
        wrap-func [list [quote func] [quote wrapper] export-names expect]
        ]
-    [if [eval [concat [list wrap-func] args]]
-      [log [list [quote test] [quote pass]]]
-      [log [list [quote test] [quote fail] expect]]]]]]
+    [when-not [eval [concat [list wrap-func] args]]
+      [log [list [quote test] [quote fail] module expect]]]]]]

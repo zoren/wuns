@@ -503,12 +503,7 @@
                             [report-when-not [check-param-arg-conform rest-param-element-type arg-t] arg
                               rest parameter type mismatch]]
                           [continue i [inc i]]]]]]
-                          [getq sig results]
-                          ]
-                          ]
-                ]
-
-            ]]]]]]
+                  [push-node-type form [getq sig results]]]]]]]]]]]
 
 [defn check-top-form [form]
   [check-form [list []] 0 form]
