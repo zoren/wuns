@@ -11,6 +11,7 @@
     [push mut-list [at-word w i]]]]
 
 [def tag-word 1]
+[def tag-list 3]
 
 [defn push-i32-little-endian [mut-list val]
   [loop [i 0 cur val]
@@ -24,13 +25,42 @@
       [get word-map w]
       [let [active-mem [getq ctx active-mem]
             offset [size active-mem]
-            ws [size w]]
+            ws [size w]
+            padding [sub 3 [bitwise-and 3 ws]]]
         [assert [lt ws [const 120]] word must be less than 120 characters]
         [push-i32-little-endian active-mem tag-word]
         [push-i32-little-endian active-mem ws]
         [push-word-chars active-mem w]
+        [for i 0 padding
+          [push active-mem [const 0]]]
         [set word-map w offset]
         offset]]]]
+
+[defn get-or-create-form [ctx form]
+  [if [is-word form]
+    [get-or-create-word ctx form]
+    [let [list-map [getq ctx list-map]
+          l form
+        ls [size l]
+        ml [if [has list-map ls]
+            [get list-map ls]
+            [let [ml [mutable-list]]
+              [set list-map ls ml]
+              ml]]]
+      [loop [i 0 mls [size ml]]
+        [if [lt i mls]
+          [if [eq-form [at mls i] l]
+            [at mls [inc i]]
+            [continue i [add 2 i]]]
+          [let [active-mem [getq ctx active-mem]
+                offset [size active-mem]]
+            [push-i32-little-endian active-mem tag-list]
+            [push-i32-little-endian active-mem ls]
+            [for-each element l
+              [push-i32-little-endian active-mem [get-or-create-form ctx element]]]
+            [push ml l]
+            [push ml offset]
+            offset]]]]]]
 
 [defn compile-form [ctx is-tail form]
   [if [is-word form]
@@ -54,8 +84,7 @@
           [do
             [assert [eq 2 [size form]] quote must have 2 elements]
             [let [quoted [at form 1]]
-              [assert [is-word quoted] quoted must be a word]
-              [list [quote i32.const] [get-or-create-word ctx quoted]]]]
+              [list [quote i32.const] [get-or-create-form ctx quoted]]]]
 
           [let [instruction [try-get-instruction fw]]
             [if instruction
@@ -208,7 +237,8 @@
   [let [check-result [check-top-forms forms]
         mut-list [mutable-list]
         active-mem [mutable-list]
-        ctx [kv-map active-mem active-mem check-result check-result word-map [transient-kv-map]]]
+        ctx [kv-map active-mem active-mem check-result check-result
+                    word-map [transient-kv-map] list-map [transient-kv-map]]]
     [for-each form forms
       [print-paren-recursive-form mut-list [compile-top-form ctx form]]]
     [delete-all-keys node-types]

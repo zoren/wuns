@@ -91,7 +91,7 @@
       1]]]
 
 [defn is-pointer-type [t]
-  [or [eq-form t type-word] [eq-form t type-form]]]
+  [or [eq-form t type-word] [eq-form t type-form] [is-list-type t]]]
 
 [def errors [mutable-list]]
 
