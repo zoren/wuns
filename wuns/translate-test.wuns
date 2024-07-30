@@ -84,6 +84,30 @@
       import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
       expect [quote [do [test-asssert-eq [quote 3] [f]]
                         [test-asssert-eq [quote 3] [g]]]]]
+    [kv-map
+      module [quote [[defn f [] [let [] [i32.const 3]]]]]
+      expect [quote [do [test-asssert-eq [quote 3] [f]]]]]
+    [kv-map
+      module [quote [[defn f [] [loop [] [i32.const 3]]]]]
+      expect [quote [do [test-asssert-eq [quote 3] [f]]]]]
+    [kv-map
+      module [quote [
+[defn stupid-gauss [n]
+  [loop [i [i32.const 0] r [i32.const 0]]
+    [if [i32.le-s i n]
+      [continue r [i32.add i r] i [i32.add [i32.const 1] i]]
+      r]]]
+      ]]
+      expect [quote [do [test-asssert-eq [quote 55] [stupid-gauss [quote 10]]]]]]
+    [kv-map
+      module [quote [
+[defn stupid-gauss [n]
+  [loop [i [i32.const 0] r [i32.const 0]]
+    [if [i32.le-s i n]
+      [continue i [i32.add [i32.const 1] i] r [i32.add i r]]
+      r]]]
+      ]]
+      expect [quote [do [test-asssert-eq [quote 55] [stupid-gauss [quote 10]]]]]]
       ]]
 
 [defn test-main []

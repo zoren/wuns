@@ -20,6 +20,7 @@
 [def i32 [quote i32]]
 [def i64 [quote i64]]
 [def i32i32 [list i32 i32]]
+[def i64i64 [list i64 i64]]
 [def immediate-u32 [quote immediate-u32]]
 [def immediate-s32 [quote immediate-s32]]
 [def immediate-s64 [quote immediate-s64]]
@@ -30,6 +31,12 @@
 
 [defmacro make-binary-i32 [name opcode]
   [list [quote quote] [make-operation-obj name opcode [] i32i32 i32]]]
+
+[defmacro make-binary-i64 [name opcode]
+  [list [quote quote] [make-operation-obj name opcode [] i64i64 i64]]]
+
+[defmacro make-comp-i64 [name opcode]
+  [list [quote quote] [make-operation-obj name opcode [] i64i64 i32]]]
 
 [def instructions
   [list
@@ -46,14 +53,26 @@
     [make-binary-i32 i32.le-s 0x4c]
     [make-binary-i32 i32.ge-s 0x4e]
 
-    [make-binary-i32 i32.add 0x6a]
-    [make-binary-i32 i32.sub 0x6b]
-    [make-binary-i32 i32.mul 0x6c]
-    [make-binary-i32 i32.div 0x6d]
+    [make-comp-i64 i64.eq   0x51]
+    [make-comp-i64 i64.ne   0x52]
+    [make-comp-i64 i64.lt-s 0x53]
+    [make-comp-i64 i64.gt-s 0x55]
+    [make-comp-i64 i64.le-s 0x57]
+    [make-comp-i64 i64.ge-s 0x59]
+
+    [make-binary-i32 i32.add   0x6a]
+    [make-binary-i32 i32.sub   0x6b]
+    [make-binary-i32 i32.mul   0x6c]
+    [make-binary-i32 i32.div-s 0x6d]
 
     [make-binary-i32 i32.and 0x71]
     [make-binary-i32 i32.ior 0x72]
     [make-binary-i32 i32.xor 0x73]
+
+    [make-binary-i64 i64.add   0x7c]
+    [make-binary-i64 i64.sub   0x7d]
+    [make-binary-i64 i64.mul   0x7e]
+    [make-binary-i64 i64.div-s 0x7f]
 
     [make-binary-i32 bitwise-shift-left 0x74]
 

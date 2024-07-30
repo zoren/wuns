@@ -106,6 +106,47 @@
             [push instructions [compile-form ctx 1 [last form]]]
             [list [quote instructions] instructions]]
 
+          [eq-word [quote loop] fw]
+          [let
+            [bindings [at form 1]
+             instructions [mutable-list]
+             loop-instructions [mutable-list]]
+            [for-inc i 0 2 [size bindings]
+              [let
+                [var [at bindings i]
+                 value [at bindings [inc i]]
+                 val-type [try-get-node-type value]
+                 wasm-type [type-to-wasm val-type]]
+                [assert [not [is-tuple-type val-type]] binding expects a single type]
+                [add-local ctx var wasm-type]
+                [add-local ctx [concat-words [list [quote tmp-] var]] wasm-type]
+                [push instructions [list [quote local.set] [list [quote dollar] var] [compile-form ctx 0 value]]]]]
+            [push loop-instructions [quote loop]]
+            [push loop-instructions [type-to-result [try-get-node-type [last form]]]]
+            [for i 2 [dec [size form]]
+              [push loop-instructions [compile-form ctx 0 [at form i]]]]
+            [push loop-instructions [compile-form ctx 1 [last form]]]
+            [push instructions loop-instructions]
+            [list [quote instructions] instructions]]
+
+          [eq-word [quote continue] fw]
+          [let
+            [init-tmp [mutable-list]
+             tmp-copy [mutable-list]]
+            [for-inc i 1 2 [size form]
+              [let
+                [var [at form i]
+                 tmp-var [concat-words [list [quote tmp-] var]]
+                 value [at form [inc i]]]
+                [push init-tmp [list [quote local.set] [list [quote dollar] tmp-var] [compile-form ctx 0 value]]]
+                [push tmp-copy [list [quote local.set] [list [quote dollar] var]
+                               [list [quote local.get] [list [quote dollar] tmp-var]]]]]]
+            [list [quote instructions]
+              [concat
+                init-tmp
+                tmp-copy
+                [quote [[br 1]]]]]]
+
           [let [instruction [try-get-instruction fw]]
             [if instruction
               [let [imm-parameters [getq instruction immediate-parameters]]
@@ -272,17 +313,17 @@
     [do [log [list [quote print-paren-recursive-form unknown node] form]]
       [unreachable]]]]
 
-[defn print-paren-form [form]
-  [let [mut-list [mutable-list]]
-    [print-paren-recursive-form mut-list form]
-    mut-list]]
-
 [defn compile-top-forms-to-text [forms]
   [let [check-result [check-top-forms forms]
+        errors [getq check-result errors]
         mut-list [mutable-list]
         active-mem [mutable-list]
         ctx [kv-map active-mem active-mem check-result check-result
                     word-map [transient-kv-map] list-map [transient-kv-map] locals [transient-kv-map]]]
+    [for-each error errors
+      [log error]]
+    [when-not [is-empty errors]
+      [unreachable]]
     [for-each form forms
       [print-paren-recursive-form mut-list [compile-top-form ctx form]]
       [push mut-list [const 10]]]
