@@ -19,6 +19,7 @@ import {
   isVar,
   varWithMeta,
   zero,
+  apply
 } from './core.js'
 
 export const is_word = (f) => isWord(f)
@@ -116,6 +117,11 @@ export const log = (form) => {
   console.log(print(form))
   return unit
 }
+const textDecoder = new TextDecoder()
+export const log_byte_array = (bytes) => {
+  console.log(textDecoder.decode(bytes))
+  return unit
+}
 
 export { atom, is_atom, atom_get, atom_set }
 export const concat_lists = (l) => {
@@ -147,8 +153,11 @@ export const has = (m, k) => {
 
 export const get = (m, k) => {
   if (typeof m !== 'object') throw new Error('get expects map')
+  // todo check if naked object
+  if (isWord(m)) throw new Error('get expects map')
   const ks = wordValue(k)
   if (ks in m) return m[ks]
+  console.error('m', m, 'k', k)
   throw new Error('key not found: ' + ks + ' in ' + Object.keys(m))
 }
 export const set = (o, k, e) => {
@@ -174,3 +183,4 @@ export const read_file = (path) => {
   if (typeof p !== 'string') throw new Error('read-file expects string')
   return parseFile(p)
 }
+export const closure_to_fn = c => (...args) => apply(c, ...args)

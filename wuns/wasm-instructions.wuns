@@ -1,6 +1,16 @@
+[comment wuns does not have underscores so we convert dashes to underscores]
+[defn wasm-name-to-wat-bytes [w]
+  [loop [i 0 res [mutable-list]]
+    [if [lt i [size w]]
+      [let [c [at-word w i]]
+        [if [eq c [quote 45]] [push res [quote 95]] [push res c]]
+        [continue i [inc i]]]
+      [persistent-array res]]]]
+
 [defn make-operation-obj [name opcode immediate-parameters parameters results]
   [kv-map
     name name
+    wat-name [wasm-name-to-wat-bytes name]
     opcode opcode
     immediate-parameters immediate-parameters
     parameters parameters
@@ -29,12 +39,12 @@
     [make-operation-obj [quote i32.const] [quote 0x41] [list immediate-s32] [] i32]
     [make-operation-obj [quote i64.const] [quote 0x42] [list immediate-s64] [] i64]
 
-    [make-binary-i32 eq  0x46]
-    [make-binary-i32 ne  0x47]
-    [make-binary-i32 lt  0x48]
-    [make-binary-i32 gt  0x4a]
-    [make-binary-i32 le  0x4c]
-    [make-binary-i32 ge  0x4e]
+    [make-binary-i32 i32.eq   0x46]
+    [make-binary-i32 i32.ne   0x47]
+    [make-binary-i32 i32.lt-s 0x48]
+    [make-binary-i32 i32.gt-s 0x4a]
+    [make-binary-i32 i32.le-s 0x4c]
+    [make-binary-i32 i32.ge-s 0x4e]
 
     [make-binary-i32 i32.add 0x6a]
     [make-binary-i32 i32.sub 0x6b]
@@ -48,6 +58,8 @@
     [make-binary-i32 bitwise-shift-left 0x74]
 
     [make-operation-obj [quote i32.load] [quote 0x28]
+      imm-memargs [list i32] i32]
+    [make-operation-obj [quote i32.load8-s] [quote 0x2c]
       imm-memargs [list i32] i32]
     [make-operation-obj [quote load8-signed] [quote 0x2c]
       imm-u32u32 [list i32] i32]
@@ -63,6 +75,8 @@
     [make-operation-obj [quote memory.grow] [quote 0x40]
       [list immediate-u32] [list i32] i32]
     [make-operation-obj [quote memory.init] [quote 0xfc 0x08]
+      imm-u32u32 [list i32 i32 i32] empty-tuple]
+    [make-operation-obj [quote memory.fill] [quote 0xfc 0x0b]
       imm-u32u32 [list i32 i32 i32] empty-tuple]
     ]]
 

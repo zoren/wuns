@@ -1,23 +1,19 @@
 import {
   wordValue,
   isWord,
-  isList,
-  isForm,
   isUnit,
   unit,
   print,
   number,
-  word,
   makeVar,
   meta,
   callClosure,
   isSigned32BitInteger,
-  zero,
-  one,
   createClosure,
+  jsToWuns
 } from './core.js'
 import { instructions } from './instructions.js'
-import { parseStringToForms, parseFile } from './parseTreeSitter.js'
+import { parseFile } from './parseTreeSitter.js'
 
 class RuntimeError extends Error {
   constructor(message, form) {
@@ -41,17 +37,6 @@ const ctAssert = (cond, msg) => {
   if (!cond) throw new CompileError('compile assert failed: ' + msg)
 }
 
-const jsToWuns = (js) => {
-  if (isForm(js)) return js
-  if (typeof js === 'boolean') return js ? one : zero
-  if (typeof js === 'string') return word(js)
-  if (typeof js === 'number' || typeof js === 'bigint') return word(String(js))
-  if (js === undefined) return unit
-  return js
-}
-
-export const apply = (f, ...args) => callClosure(f, args.map(jsToWuns))
-
 const getVarValue = (env, v) => {
   while (true) {
     if (!env) throw new RuntimeError(`variable ${v} not found`)
@@ -72,7 +57,7 @@ const getCtxVar = (ctx, v) => {
 
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 
-export const makeInterpreterContext = ({ importObject }) => {
+export const makeInterpreterContext = () => {
   const wunsEval = (form) => wunsComp(null, form)(null)
   const varObjects = new Map()
   const getVarObject = (name) => varObjects.get(name)
@@ -188,35 +173,6 @@ export const makeInterpreterContext = ({ importObject }) => {
           return unit
         }
       }
-      case 'import': {
-        const [moduleName, importName, importDecl] = args
-        const mname = wordValue(moduleName)
-        const iname = wordValue(importName)
-        const importObj = importObject[mname]
-        if (!importObj) throw new CompileError(`module ${mname} not found`)
-        const importValue = importObj[iname]
-        if (!importValue) throw new CompileError(`import ${iname} not found in module ${mname}`)
-        ctAssert(isList(importDecl), `import declaration must be a list, got ${importDecl}`)
-        ctAssert(importDecl.length > 0, `import declaration must have at least one element, got ${importDecl}`)
-        const [declName, ...declArgs] = importDecl
-        switch (wordValue(declName)) {
-          case 'func': {
-            ctAssert(declArgs.length === 2, `func declaration expects 2 arguments, got ${declArgs.length}`)
-            const [params, result] = declArgs
-            ctAssert(isList(params), `func params must be a list, got ${params}`)
-            ctAssert(isList(result), `func result must be a list, got ${result}`)
-            const paramNames = params.map(wordValue)
-            const resultNames = result.map(wordValue)
-            ctAssert(typeof importValue === 'function', `imported value is not a function`)
-            return () => {
-              defSetVar(iname, importValue)
-              return unit
-            }
-          }
-          default:
-            throw new CompileError(`import declaration ${declName} not recognized`)
-        }
-      }
       case 'func': {
         const [fmname, origParams, ...bodies] = args
         const n = wordValue(fmname)
@@ -267,8 +223,13 @@ export const makeInterpreterContext = ({ importObject }) => {
       const cargs = args.map((a) => wunsComp(ctx, a))
       return (f, env) => {
         const eargs = cargs.map((carg) => carg(env))
-        if (typeof f === 'function') return jsToWuns(f(...eargs))
-        return callClosure(f, eargs)
+        try {
+          if (typeof f === 'function') return jsToWuns(f(...eargs))
+          return callClosure(f, eargs)
+        } catch (e) {
+          console.error('error in rtCallFunc', e, form)
+          throw e
+        }
       }
     }
     if (!isWord(firstForm)) {
@@ -309,6 +270,7 @@ export const makeInterpreterContext = ({ importObject }) => {
         try {
           return jsToWuns(instruction(...cargs.map((carg) => number(carg(env)))))
         } catch (error) {
+          console.error('error in instruction', meta(form))
           throw new RuntimeError(`error in instruction ${firstWordValue}: ${error.message}`, form)
         }
       }
@@ -348,11 +310,17 @@ export const makeInterpreterContext = ({ importObject }) => {
   const parseEvalFile = (filename) => {
     evalLogForms(parseFile(filename))
   }
+  const getVarVal = (name) => {
+    const vo = getVarObject(name)
+    if (!vo) throw new Error('getVarVal: ' + name)
+    return vo.getValue()
+  }
 
   return {
     evalLogForms,
     parseEvalFile,
     getVarObject,
+    getVarVal,
     defSetVar,
   }
 }

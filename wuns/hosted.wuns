@@ -19,14 +19,17 @@
       [push mut-list [bitwise-and cur [const 255]]]
       [continue i [inc i] cur [bitwise-shift-right-unsigned cur [const 8]]]]]]
 
+[def active-mem-start-offset [const 16]]
+
 [defn get-or-create-word [ctx w]
   [let [word-map [getq ctx word-map]]
     [if [has word-map w]
       [get word-map w]
       [let [active-mem [getq ctx active-mem]
-            offset [size active-mem]
+            offset [add [size active-mem] active-mem-start-offset]
             ws [size w]
-            padding [sub 3 [bitwise-and 3 ws]]]
+            padding [sub 4 [bitwise-and 3 ws]]]
+        [log [list [quote word] offset ws padding]]
         [assert [lt ws [const 120]] word must be less than 120 characters]
         [push-i32-little-endian active-mem tag-word]
         [push-i32-little-endian active-mem ws]
@@ -39,28 +42,15 @@
 [defn get-or-create-form [ctx form]
   [if [is-word form]
     [get-or-create-word ctx form]
-    [let [list-map [getq ctx list-map]
-          l form
-        ls [size l]
-        ml [if [has list-map ls]
-            [get list-map ls]
-            [let [ml [mutable-list]]
-              [set list-map ls ml]
-              ml]]]
-      [loop [i 0 mls [size ml]]
-        [if [lt i mls]
-          [if [eq-form [at mls i] l]
-            [at mls [inc i]]
-            [continue i [add 2 i]]]
-          [let [active-mem [getq ctx active-mem]
-                offset [size active-mem]]
-            [push-i32-little-endian active-mem tag-list]
-            [push-i32-little-endian active-mem ls]
-            [for-each element l
-              [push-i32-little-endian active-mem [get-or-create-form ctx element]]]
-            [push ml l]
-            [push ml offset]
-            offset]]]]]]
+    [let [active-mem [getq ctx active-mem]
+          offset [add [size active-mem] active-mem-start-offset]]
+      [push-i32-little-endian active-mem tag-list]
+      [push-i32-little-endian active-mem [size form]]
+      [for-each element form
+        [let [element-offset [get-or-create-form ctx element]]
+          [log [list [quote element-offset] element-offset]]
+          [push-i32-little-endian active-mem element-offset]]]
+      offset]]]
 
 [defn compile-form [ctx is-tail form]
   [if [is-word form]
@@ -74,17 +64,34 @@
       [let [fw [at form 0]]
         [ifs
           [eq-word [quote if] fw]
-          [list fw
-            [type-to-result [try-get-node-type form]]
-            [compile-form ctx 0 [at form 1]]
-            [list [quote then] [compile-form ctx is-tail [at form 2]]]
-            [list [quote else] [compile-form ctx is-tail [at form 3]]]]
+          [ifs
+            [eq 4 [size form]]
+            [list fw
+              [type-to-result [try-get-node-type form]]
+              [compile-form ctx 0 [at form 1]]
+              [list [quote then] [compile-form ctx is-tail [at form 2]]]
+              [list [quote else] [compile-form ctx is-tail [at form 3]]]]
+            [eq 3 [size form]]
+            [list fw
+              [type-to-result [try-get-node-type form]]
+              [compile-form ctx 0 [at form 1]]
+              [list [quote then] [compile-form ctx is-tail [at form 2]]]]
+
+            [assert 0 sdf sdfsdf ]]
 
           [eq-word [quote quote] fw]
           [do
             [assert [eq 2 [size form]] quote must have 2 elements]
-            [let [quoted [at form 1]]
-              [list [quote i32.const] [get-or-create-form ctx quoted]]]]
+            [let [quoted [at form 1]
+                  offset [get-or-create-form ctx quoted]]
+              [log [list [quote offset] offset]]
+              [list [quote i32.const] offset]]]
+
+          [eq-word [quote let] fw]
+          [do
+            [log [quote let not implemented]]
+            [unreachable]
+          ]
 
           [let [instruction [try-get-instruction fw]]
             [if instruction
@@ -93,7 +100,7 @@
                   [eq-form imm-parameters imm-memargs]
                   [let [memargs [try-get-node-type [at form 1]]]
                     [concat
-                      [list fw [getq memargs mem]
+                      [list [list [quote raw] [getq instruction wat-name]] [getq memargs mem]
                         [list [quote eq-pair] [quote offset] [getq memargs offset]]
                         [list [quote eq-pair] [quote align] [getq memargs align]]]
                       [loop [i 2 res [mutable-list]]
@@ -111,7 +118,7 @@
                       [do
                         [push res [compile-form ctx 0 [at form i]]]
                         [continue i [inc i]]]
-                      [concat [list fw] res]]]]]
+                      [concat [list [list [quote raw] [getq instruction wat-name]]] res]]]]]
               [loop [i 1 res [mutable-list]]
                 [if [lt i [size form]]
                   [do
@@ -132,7 +139,10 @@
           [let [module-name [at form 1]
                 name [at form 2]
                 t [at form 3]]
-              [list [quote import] [list [quote dq-string] module-name] [list [quote dq-string] name] t]]
+              [list [quote import] [list [quote dq-string] module-name] [list [quote dq-string] name]
+                [if [eq-word [first t] [quote memory]]
+                  t
+                  [list [quote func] [list [quote dollar] name] [concat [quote [param]] [second t]] [concat [quote [result]] [third t]]]]]]
 
           [eq-word [quote constant] fw]
           [let [name [at form 1]
@@ -216,6 +226,9 @@
                 [push mut-list [int-to-hex-ascii [rem c [const 16]]]]]]]
           [push mut-list [const 0x22]]]
 
+        [and [eq s 2] [eq-word [first form] [quote raw]]]
+        [push-all mut-list [second form]]
+
         [do
           [push mut-list [const 40]]
           [when [lt 0 s]
@@ -240,8 +253,10 @@
         ctx [kv-map active-mem active-mem check-result check-result
                     word-map [transient-kv-map] list-map [transient-kv-map]]]
     [for-each form forms
-      [print-paren-recursive-form mut-list [compile-top-form ctx form]]]
+      [print-paren-recursive-form mut-list [compile-top-form ctx form]]
+      [push mut-list [const 10]]]
     [delete-all-keys node-types]
     [when [size active-mem]
-      [print-paren-recursive-form mut-list [list [quote data] [quote i32.const 0] [list [quote dq-string-bytes] active-mem]]]]
+      [print-paren-recursive-form mut-list [list [quote data] [list [quote i32.const] active-mem-start-offset] [list [quote dq-string-bytes] active-mem]]]]
+    [print-paren-recursive-form mut-list [list [quote global] [quote dollar wuns-active-mem-top] [quote i32] [list [quote i32.const] [add [size active-mem] active-mem-start-offset]]]]
     [persistent-array mut-list]]]

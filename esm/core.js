@@ -151,3 +151,13 @@ export const callClosure = (closure, args) => {
   }
   return cbodies({ varValues, outer: closureEnv })
 }
+export const jsToWuns = (js) => {
+  if (isForm(js)) return js
+  if (typeof js === 'boolean') return js ? one : zero
+  if (typeof js === 'string') return word(js)
+  if (typeof js === 'number' || typeof js === 'bigint') return word(String(js))
+  if (js === undefined) return unit
+  return js
+}
+
+export const apply = (f, ...args) => callClosure(f, args.map(jsToWuns))

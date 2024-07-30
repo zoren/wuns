@@ -320,7 +320,19 @@
           type-any]
 
         [eq-form first-form [quote import]]
-        []
+        [let [module-name [at form 1]
+              name [at form 2]
+              t [at form 3]]
+            [ifs
+              [eq-word [first t] [quote func]]
+              [let [rs [at t 2]]
+                [add-sig name [kv-map
+                                parameters [check-type-list [at t 1]]
+                                results [if [is-empty rs] type-empty [check-type [first rs]]]
+                                def first-form]]]
+
+              []]]
+
 
         [eq-form first-form [quote export]]
         []
@@ -514,12 +526,16 @@
     [delete-key o k]]]
 
 [defn check-top-forms [forms]
+  [add-sig [quote wuns-active-mem-top] [kv-map constant type-i32 def [quote constant]]]
   [for-each form forms
     [check-top-form form]]
-  [assert [is-empty errors] errors not empty [identity errors]]
+  [when-not [is-empty errors]
+    [for-each err errors
+      [log [list [getq err message] [getq err form] [getq [meta [getq err form]] range]]]]
+    ]
   [let [res
         [kv-map
-          errors [persistent-kv-map errors]
+          errors [persistent-array errors]
           global-ctx [persistent-kv-map global-ctx]
           node-types [persistent-kv-map node-types]]]
       [delete-all-keys global-ctx]

@@ -34,61 +34,37 @@ const mkParseWat = (s) => {
     })
     return buffer
   } catch (e) {
+    console.log('allText', s)
     fs.writeFileSync('tmp.wat', s)
     console.error(e)
     throw e
   }
 }
 
-import { makeInterpreterContext, apply } from './interpreter.js'
+import { apply, number } from './core.js'
+import { makeInterpreterContext } from './interpreter.js'
 
 import { parseFile } from './parseTreeSitter.js'
 
 const textDecoder = new TextDecoder()
-
-const fileNames = ['std3', 'wasm-instructions', 'check', 'hosted', 'translate-test']
-const files = fileNames.map((name) => parseFile(`../wuns/${name}.wuns`))
-
-// const compile = getVarVal('compile')
-
-// const forms = parseStringToForms(wunsSrc)
-
-const context = makeInterpreterContext({ importObject: {} })
-const { evalLogForms, getVarObject, defSetVar } = context
-defSetVar('text-to-wasm', (allTextByteWords) => {
-  const allText = textDecoder.decode(Uint8Array.from(allTextByteWords, (v) => +v))
-  try {
-    return mkParseWat(allText)
-  } catch (e) {
-    console.log('allText', allText)
-    throw e
-  }
-})
+const wordBytesToString = (wordBytes) => textDecoder.decode(Uint8Array.from(wordBytes, (v) => +v))
+const { evalLogForms, getVarVal, defSetVar } = makeInterpreterContext()
+const textToWasm = allTextByteWords => {
+  const llText = wordBytesToString(allTextByteWords)
+  fs.writeFileSync('ll.wat', llText)
+  return mkParseWat(llText);
+}
+defSetVar('text-to-wasm', textToWasm)
 defSetVar('module-from-buffer', (buf) => new WebAssembly.Module(buf))
 defSetVar('instantiate-module', (module, importObject) => new WebAssembly.Instance(module, importObject))
 defSetVar('wasm-memory', (paramObj) => new WebAssembly.Memory(paramObj))
-for (const file of files) evalLogForms(file)
+defSetVar('byte-array', (buffer, byteOffset, length) => {
+  // console.log({ buffer, byteOffset:number(byteOffset), length: number(length) })
+  return new Uint8Array(buffer, number(byteOffset), number(length));
+})
+for (const name of ['std3', 'wasm-instructions', 'check', 'hosted', 'translate-test'])
+  evalLogForms(parseFile(`../wuns/${name}.wuns`))
 
-const getVarVal = (name) => {
-  const vo = getVarObject(name)
-  if (!vo) throw new Error('getVarVal: ' + name)
-  return vo.getValue()
-}
+apply(getVarVal('test-main'))
 
-const testMain = getVarVal('test-main')
-apply(testMain)
-// const allTextByteWords = apply(compToText, forms)
-// const allText = textDecoder.decode(Uint8Array.from(allTextByteWords, (v) => +v))
-// console.log({ allText })
-
-// const buf = mkParseWat(allText)
-// const module = new WebAssembly.Module(buf)
-// const inst = new WebAssembly.Instance(module, { env: { mem: new WebAssembly.Memory({ initial: 1 }) } })
-// const { exports } = inst
-// const call = (name, args) => {
-//   const f = exports[name]
-//   if (!f) throw new Error('call: ' + name)
-//   if (f.length !== args.length) throw new Error('call: ' + name + ' ' + args.length + ' ' + f.length)
-//   return f(...args)
-// }
-// const res = call('f', args ? args : [])
+apply(getVarVal('test-file'), parseFile(`../wuns/ll.wuns`))
