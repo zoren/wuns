@@ -37,12 +37,13 @@
       module [quote [import env mem [memory 0]]
                     [defn f [] [quote 5]]]
       import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
-      expect [quote [test-asssert-eq [quote 0] [f]]]]
+      expect [quote [test-asssert-not-eq [quote 0] [f]]]]
     [kv-map
       module [quote [import env mem [memory 0]]
-                    [defn f [] [quote 5] [quote 5]]]
+                    [defn f [] [quote 5]]
+                    [defn g [] [quote 5]]]
       import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
-      expect [quote [test-asssert-eq [quote 0] [f]]]]
+      expect [quote [test-asssert-eq [f] [g]]]]
     [kv-map
       module [quote [import env mem [memory 0]]
                     [defn f [] [quote 5] [quote 6]]]

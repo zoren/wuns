@@ -29,7 +29,6 @@
             offset [add [size active-mem] active-mem-start-offset]
             ws [size w]
             padding [sub 4 [bitwise-and 3 ws]]]
-        [log [list [quote word] offset ws padding]]
         [assert [lt ws [const 120]] word must be less than 120 characters]
         [push-i32-little-endian active-mem tag-word]
         [push-i32-little-endian active-mem ws]
@@ -48,7 +47,6 @@
       [push-i32-little-endian active-mem [size form]]
       [for-each element form
         [let [element-offset [get-or-create-form ctx element]]
-          [log [list [quote element-offset] element-offset]]
           [push-i32-little-endian active-mem element-offset]]]
       offset]]]
 
@@ -84,7 +82,6 @@
             [assert [eq 2 [size form]] quote must have 2 elements]
             [let [quoted [at form 1]
                   offset [get-or-create-form ctx quoted]]
-              [log [list [quote offset] offset]]
               [list [quote i32.const] offset]]]
 
           [eq-word [quote let] fw]

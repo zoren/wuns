@@ -51,9 +51,9 @@
     [make-binary-i32 i32.mul 0x6c]
     [make-binary-i32 i32.div 0x6d]
 
-    [make-binary-i32 bitwise-and 0x71]
-    [make-binary-i32 bitwise-ior 0x72]
-    [make-binary-i32 bitwise-xor 0x73]
+    [make-binary-i32 i32.and 0x71]
+    [make-binary-i32 i32.ior 0x72]
+    [make-binary-i32 i32.xor 0x73]
 
     [make-binary-i32 bitwise-shift-left 0x74]
 

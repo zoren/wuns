@@ -19,7 +19,7 @@ const cache = new Map()
  * @param {TSParser.Tree} oldTree
  * @returns {{tree: TSParser.Tree, forms: []}} tree
  */
-let parseDocument = null
+let parseDocumentTreeSitter = null
 
 /**
  *
@@ -30,9 +30,7 @@ const cacheFetchOrParse = (document) => {
   const { version } = document
   const cacheObj = cache.get(document)
   if (!cacheObj) {
-    const watch = makeStopWatch()
-    const { tree, forms } = parseDocument(document)
-    console.log('parse initial took', watch(), 'ms')
+    const { tree, forms } = parseDocumentTreeSitter(document)
     const obj = { version, tree, forms }
     cache.set(document, obj)
     return obj
@@ -42,8 +40,9 @@ const cacheFetchOrParse = (document) => {
     return cacheObj
   }
   // we don't expect to come here, onDidChangeTextDocument should have been called updating the tree
+  console.error('cache miss', document.uri, document.version, cacheObj.version)
   const oldTree = cacheObj.tree
-  const { tree, forms } = parseDocument(document, oldTree)
+  const { tree, forms } = parseDocumentTreeSitter(document, oldTree)
   cacheObj.tree = tree
   cacheObj.forms = forms
   cacheObj.version = version
@@ -77,7 +76,7 @@ const onDidChangeTextDocument = (e) => {
   }
   // console.log('tree edited', { version: document.version, nOfChanges: contentChanges.length })
   // const watch = makeStopWatch()
-  const { tree, forms } = parseDocument(document, oldTree)
+  const { tree, forms } = parseDocumentTreeSitter(document, oldTree)
   // console.log('parse incremental took', watch(), 'ms')
   cacheObj.tree = tree
   cacheObj.forms = forms
@@ -299,51 +298,42 @@ const makeInterpretCurrentFile = async (context) => {
 const makeCheckCurrentFileCommand = async (context) => {
   const outputChannel = window.createOutputChannel('wuns check', wunsLanguageId)
   const diag = languages.createDiagnosticCollection('wuns')
-  const { meta, print } = await import('./esm/core.js')
-  const { makeContext } = await import('./esm/interpreter.js')
+  const { meta, print, apply } = await import('./esm/core.js')
+  const { makeInterpreterContext } = await import('./esm/interpreter.js')
   const appendShow = (s) => {
     outputChannel.appendLine(s)
     outputChannel.show(true)
   }
   const wunsDir = context.extensionPath + '/wuns/'
   return async () => {
-    const diagnostics = []
-    const reportError = (msg, form) => {
-      if (!Array.isArray(msg)) throw new Error('msg is not an array')
-      const metaData = meta(form)
-      if (!metaData) throw new Error('meta is ' + metaData)
-      const [_, range] = metaData
-      if (!Array.isArray(range)) {
-        console.log('metaData', metaData)
-        console.log('form', form)
-        console.log('range', range)
-        console.error('range is not an array ' + print(form) + ' ' + print(metaData))
-        return
-      }
-      const [startLine, startCol, endLine, endCol] = range
-      const diagnostic = new Diagnostic(
-        new Range(startLine, startCol, endLine, endCol),
-        msg.map(print).join(' '),
-        DiagnosticSeverity.Error,
-      )
-      diagnostics.push(diagnostic)
-    }
-    const importObject = { check: { 'report-error': reportError } }
-    const ctx = makeContext({ wunsDir, contextName: 'check', importObject })
-    const { parseEvalFile, getExported, apply } = ctx
-
-    const checkPath = 'check.wuns'
-    parseEvalFile(checkPath)
-
+    const { parseEvalFile, getVarVal } = makeInterpreterContext()
+    for (const name of ['std3', 'wasm-instructions', 'check']) parseEvalFile(wunsDir + name + '.wuns')
     const document = getActiveTextEditorDocument()
     if (!document) return
     const { forms } = cacheFetchOrParse(document)
     outputChannel.clear()
     appendShow('checking: ' + document.fileName)
-
+    const checkTopForms = getVarVal('check-top-forms')
+    const diagnostics = []
     try {
-      const outfun = getExported(checkPath, 'check-forms')
-      apply(outfun, [forms])
+      const { errors } = apply(checkTopForms, forms)
+      for (const { message, form } of errors) {
+        if (!Array.isArray(message)) throw new Error('msg is not an array')
+        const metaData = meta(form)
+        if (!metaData) throw new Error('meta is ' + metaData)
+        const { range } = metaData
+        if (!Array.isArray(range)) {
+          console.error('range is not an array ' + print(form) + ' ' + print(metaData))
+          return
+        }
+        const [startLine, startCol, endLine, endCol] = range
+        const diagnostic = new Diagnostic(
+          new Range(startLine, startCol, endLine, endCol),
+          message.map(print).join(' '),
+          DiagnosticSeverity.Error,
+        )
+        diagnostics.push(diagnostic)
+      }
       appendShow('done checking: ' + forms.length)
     } catch (e) {
       appendShow(e.message)
@@ -389,43 +379,11 @@ const provideSelectionRanges = (document, positions) => {
   return selRanges
 }
 
-const cacheSelfParsed = new Map()
-
-let incParseModule = null
-
-const onDidChangeTextDocumentOwnParser = (e) => {
-  const { document, contentChanges, reason } = e
-  if (contentChanges.length === 0) return
-  const { languageId, uri, version } = document
-  if (languageId !== wunsLanguageId) return
-
-  const uriStr = uri.toString()
-  let docObj = cacheSelfParsed.get(uriStr)
-  const text = document.getText()
-  const { parseString, patchNode } = incParseModule
-  let tree
-  if (!docObj) {
-    const watch = makeStopWatch()
-    tree = parseString(text)
-    console.log('parseString took', watch(), 'ms')
-    docObj = { version, text, tree }
-    cacheSelfParsed.set(uriStr, docObj)
-    return
-  }
-  const watch = makeStopWatch()
-  const newTree = patchNode(docObj.tree, contentChanges)
-  console.log('patchNode took ', watch(), 'ms')
-  docObj.version = version
-  docObj.text = text
-  docObj.tree = newTree
-}
 
 /**
  * @param {vscode.ExtensionContext} context
  */
 async function activate(context) {
-  const { parse, treeToForms } = await import('./esm/parseTreeSitter.js')
-  incParseModule = await import('./esm/incparseDAG.js')
   const { meta, print, isWord } = await import('./esm/core.js')
   const go = (x) => {
     const m = meta(x)
@@ -434,7 +392,8 @@ async function activate(context) {
     if (Array.isArray(x)) return `[{${startIndex} - ${endIndex}} ${x.map(go).join(' ')}]`
     throw new Error('unexpected form: ' + print(x))
   }
-  parseDocument = (document, oldTree) => {
+  const { parse, treeToForms } = await import('./esm/parseTreeSitter.js')
+  parseDocumentTreeSitter = (document, oldTree) => {
     const watch = makeStopWatch()
     const tree = parse(document.getText(), oldTree)
     console.log('parse treesitter took', watch(), 'ms')
@@ -457,7 +416,6 @@ async function activate(context) {
     languages.registerSelectionRangeProvider(selector, { provideSelectionRanges }),
   )
   workspace.onDidChangeTextDocument(onDidChangeTextDocument)
-  workspace.onDidChangeTextDocument(onDidChangeTextDocumentOwnParser)
   console.log('Congratulations, your extension "wunslang" is now active!')
 }
 
