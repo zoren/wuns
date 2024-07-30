@@ -48,8 +48,15 @@
   [if [is-negative size] [log-abort [quote bump-alloc-size-must-be-positive]]]
   [if [i32.gt-s size [i32.const 65536]] [log-abort [quote bump-alloc-size-too-large]]]
   [if [not-is-address-aligned size] [log-abort [quote bump-alloc-size-not-aligned]]]
-
-  ]
+  [let [current-top [i32.load [memarg mem 0 offset 0 align 4] [i32.const 0]]]
+    [if [i32.eq current-top [i32.const 0]] [log-abort [quote alloc-memory-not-initialized]]]
+    [if [not-is-address-aligned current-top] [log-abort [quote bump-alloc-current-top-not-aligned]]]
+    [let [mem-size-bytes [i32.mul [memory.size 0] [i32.const 65536]]]
+      [if [i32.gt-s current-top mem-size-bytes] [log-abort [quote bump-alloc-current-top-out-of-bounds]]]
+      [let [new-top [i32.add current-top size]]
+        [if [i32.gt-s new-top mem-size-bytes] [log-abort [quote bump-alloc-out-of-memory]]]
+        [i32.store [memarg mem 0 offset 0 align 4] [i32.const 0] new-top]]]
+    current-top]]
 
 [defn main []
   [log-word [quote hello]]
@@ -58,6 +65,6 @@
   [log-word [at-list [quote [xyz afg 3dsf]] [i32.const 0]]]
   [log-word [at-list [quote [xyz afg 3dsf]] [i32.const 1]]]
   [log-word [at-list [quote [xyz afg 3dsf]] [i32.const 2]]]
+  [alloc-init]
   [alloc [i32.const 4]]
   ]
-

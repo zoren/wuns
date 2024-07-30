@@ -50,6 +50,11 @@
           [push-i32-little-endian active-mem element-offset]]]
       offset]]]
 
+[defn add-local [ctx name type]
+  [let [locals [getq ctx locals]]
+    [assert [not [has locals name]] name must not be defined]
+    [set locals name type]]]
+
 [defn compile-form [ctx is-tail form]
   [if [is-word form]
     [let [gctx [getq [getq ctx check-result] global-ctx]]
@@ -85,10 +90,21 @@
               [list [quote i32.const] offset]]]
 
           [eq-word [quote let] fw]
-          [do
-            [log [quote let not implemented]]
-            [unreachable]
-          ]
+          [let
+            [bindings [at form 1]
+             instructions [mutable-list]]
+            [for-inc i 0 2 [size bindings]
+              [let
+                [var [at bindings i]
+                 value [at bindings [inc i]]
+                 val-type [try-get-node-type value]]
+                [assert [not [is-tuple-type val-type]] binding expects a single type]
+                [add-local ctx var val-type]
+                [push instructions [list [quote local.set] [list [quote dollar] var] [compile-form ctx 0 value]]]]]
+            [for i 2 [dec [size form]]
+              [push instructions [compile-form ctx 0 [at form i]]]]
+            [push instructions [compile-form ctx 1 [last form]]]
+            [list [quote instructions] instructions]]
 
           [let [instruction [try-get-instruction fw]]
             [if instruction
@@ -154,8 +170,11 @@
           [let [fname [at form 1]
                 params [at form 2]
                 wasm-params [mutable-list]
+                wasm-locals [mutable-list]
+                locals [getq ctx locals]
                 wasm-bodies [mutable-list]
                 last-body [at form -1]]
+            [delete-all-keys locals]
             [assert [is-word fname] second element of a list must be a word]
             [assert [is-list params] third element of a list must be a list]
             [for-each param params
@@ -168,10 +187,16 @@
                     cbody [compile-form ctx 0 body]]
                 [push wasm-bodies [if [is-atomic-type [try-get-node-type body]] [list [quote drop] cbody] cbody]]]]
             [push wasm-bodies [compile-form ctx 1 last-body]]
+            [for-each local [keys locals]
+              [push wasm-locals
+                [list [quote local]
+                  [list [quote dollar] local]
+                  [get locals local]]]]
             [concat
               [list [quote func] [list [quote dollar] fname] [list [quote export] [list [quote dq-string] fname]]]
               wasm-params
               [list [type-to-result [try-get-node-type last-body]]]
+              wasm-locals
               wasm-bodies]]
 
           [assert 0 sdf sdfsdf ]]]]]]
@@ -184,6 +209,11 @@
     [add i [const 48]]
     [add [sub i [const 10]] [const 97]]]]
 
+[def ascii-double-quote [const 34]]
+[def ascii-dollar [const 36]]
+[def ascii-equal [const 61]]
+[def ascii-backslash [const 92]]
+
 [defn print-paren-recursive-form [mut-list form]
   [ifs
     [is-word form]
@@ -195,36 +225,40 @@
         [and [eq s 3] [eq-word [first form] [quote eq-pair]]]
         [do
           [push-word-chars mut-list [second form]]
-          [push mut-list [const 61]]
+          [push mut-list ascii-equal]
           [push-word-chars mut-list [third form]]]
 
         [and [eq s 2] [eq-word [first form] [quote dollar]]]
         [do
-          [push mut-list [const 0x24]]
+          [push mut-list ascii-dollar]
           [push-word-chars mut-list [second form]]]
 
         [and [eq s 2] [eq-word [first form] [quote dq-string]]]
         [do
-          [push mut-list [const 0x22]]
+          [push mut-list ascii-double-quote]
           [push-word-chars mut-list [second form]]
-          [push mut-list [const 0x22]]]
+          [push mut-list ascii-double-quote]]
 
         [and [eq s 2] [eq-word [first form] [quote dq-string-bytes]]]
         [do
-          [push mut-list [const 0x22]]
+          [push mut-list ascii-double-quote]
           [for-each c [second form]
-            [if [is-printable-ascii c]
+            [if [and [is-printable-ascii c] [not [eq c ascii-double-quote]]]
               [push mut-list c]
               [do
                 [assert [not [is-negative c]] c must be positive]
                 [assert [lt c [const 256]] c must be less than 256]
-                [push mut-list [const 0x5c]]
+                [push mut-list ascii-backslash]
                 [push mut-list [int-to-hex-ascii [div c [const 16]]]]
                 [push mut-list [int-to-hex-ascii [rem c [const 16]]]]]]]
-          [push mut-list [const 0x22]]]
+          [push mut-list ascii-double-quote]]
 
         [and [eq s 2] [eq-word [first form] [quote raw]]]
         [push-all mut-list [second form]]
+
+        [and [eq s 2] [eq-word [first form] [quote instructions]]]
+        [for-each instruction [second form]
+          [print-paren-recursive-form mut-list instruction]]
 
         [do
           [push mut-list [const 40]]
@@ -235,7 +269,7 @@
               [print-paren-recursive-form mut-list [at form i]]]]
           [push mut-list [const 41]]]]]
 
-    [do [log [list [quote unknown node] form ]]
+    [do [log [list [quote print-paren-recursive-form unknown node] form]]
       [unreachable]]]]
 
 [defn print-paren-form [form]
@@ -248,7 +282,7 @@
         mut-list [mutable-list]
         active-mem [mutable-list]
         ctx [kv-map active-mem active-mem check-result check-result
-                    word-map [transient-kv-map] list-map [transient-kv-map]]]
+                    word-map [transient-kv-map] list-map [transient-kv-map] locals [transient-kv-map]]]
     [for-each form forms
       [print-paren-recursive-form mut-list [compile-top-form ctx form]]
       [push mut-list [const 10]]]

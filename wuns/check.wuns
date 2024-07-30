@@ -266,7 +266,7 @@
           [eq-form first-form [quote let]]
           [eq-form first-form [quote loop]]]
         [let
-          [var-values [mutable-list]
+          [var-values [transient-kv-map]
            let-loop-ctx [list var-values local-ctx first-form]
            bindings [if [gt s-form 1] [second form] [do [report form expects bindings] []]]
            n-of-bindings [size bindings]]
@@ -282,8 +282,7 @@
                     [var [at bindings i]
                      value [at bindings [inc i]]
                      val-type [check-form let-loop-ctx 0 value]]
-                    [push var-values var]
-                    [push var-values val-type]
+                    [set var-values var val-type]
                     [continue i [add i 2]]]]]]]
           [loop [i 2]
             [when [lt i [dec s-form]]
@@ -468,6 +467,9 @@
                         [eq-word imm-p immediate-s32]
                         [report-when-not [is-decimal arg] arg expects a decimal]
 
+                        [eq-word imm-p immediate-u32]
+                        [report-when-not [is-decimal arg] arg expects a decimal]
+
                         [eq-word imm-p immediate-s64]
                         [report-when-not [is-decimal arg] arg expects a decimal]
 
@@ -476,7 +478,7 @@
                           [check-memargs arg]
                           ]
 
-                        [assert 0 unknown immediate parameter type]]]]
+                        [assert 0 unknown immediate parameter type [identity imm-p]]]]]
                   [for i 0 [size parameters]
                     [let [arg [at form [inc [add i [size imm-parameters]]]]
                           arg-t [check-form local-ctx 0 arg]
