@@ -42,13 +42,15 @@
   [if [is-word form]
     [get-or-create-word ctx form]
     [let [active-mem [getq ctx active-mem]
-          offset [add [size active-mem] active-mem-start-offset]]
-      [push-i32-little-endian active-mem tag-list]
-      [push-i32-little-endian active-mem [size form]]
+          tmp-offset-list [mutable-list]]
       [for-each element form
-        [let [element-offset [get-or-create-form ctx element]]
-          [push-i32-little-endian active-mem element-offset]]]
-      offset]]]
+        [push tmp-offset-list [get-or-create-form ctx element]]]
+      [let [offset [add [size active-mem] active-mem-start-offset]]
+        [push-i32-little-endian active-mem tag-list]
+        [push-i32-little-endian active-mem [size form]]
+        [for-each element-offset tmp-offset-list
+          [push-i32-little-endian active-mem element-offset]]
+        offset]]]]
 
 [defn add-local [ctx name type]
   [let [locals [getq ctx locals]]
@@ -83,11 +85,9 @@
             [assert 0 sdf sdfsdf ]]
 
           [eq-word [quote quote] fw]
-          [do
-            [assert [eq 2 [size form]] quote must have 2 elements]
-            [let [quoted [at form 1]
-                  offset [get-or-create-form ctx quoted]]
-              [list [quote i32.const] offset]]]
+          [let [quoted [if [eq 2 [size form]] [at form 1] [slice form 1 [size form]]]
+                offset [get-or-create-form ctx quoted]]
+              [list [quote i32.const] offset]]
 
           [eq-word [quote let] fw]
           [let
@@ -99,7 +99,7 @@
                  value [at bindings [inc i]]
                  val-type [try-get-node-type value]]
                 [assert [not [is-tuple-type val-type]] binding expects a single type]
-                [add-local ctx var val-type]
+                [add-local ctx var [type-to-wasm val-type]]
                 [push instructions [list [quote local.set] [list [quote dollar] var] [compile-form ctx 0 value]]]]]
             [for i 2 [dec [size form]]
               [push instructions [compile-form ctx 0 [at form i]]]]
