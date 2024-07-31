@@ -1,5 +1,4 @@
 import {
-  isClosure,
   unit,
   isWord,
   isList,
@@ -25,8 +24,6 @@ export const is_word = (f) => isWord(f)
 
 export const is_list = (f) => isList(f)
 
-export const is_fn = (f) => typeof f === 'function' || isClosure(f)
-
 export const eq_word = (a, b) => isWord(a) && isWord(b) && (a === b || wordValue(a) === wordValue(b))
 
 export const with_meta = (f, meta) => {
@@ -46,14 +43,14 @@ export const size = (a) => {
 export const list = (...args) => makeList(...args)
 list.varargs = true
 
+export const mutable_list = (...args) => args
+mutable_list.varargs = true
 export const push = (ar, e) => {
   if (!Array.isArray(ar)) throw new Error('push expects array')
   if (Object.isFrozen(ar)) throw new Error('push expects mutable array')
   ar.push(e)
   return unit
 }
-export const mutable_list = (...args) => args
-mutable_list.varargs = true
 export const mutable_list_of_size = (size) => {
   const s = number(size)
   if (s < 0) throw new Error('mutable-list-of-size expects non-negative size')
@@ -105,7 +102,7 @@ export const codepoint_to_word = (cp) => word(String.fromCodePoint(number(cp)))
 export const concat_words = (l) => word(l.map(wordValue).join(''))
 
 export { atom, is_atom, atom_get, atom_set }
-export const concat_lists = (l) => {
+const concatLists = (l) => {
   if (!Array.isArray(l)) throw new Error('concat-lists expects list')
   const result = []
   for (const e of l) {
@@ -114,7 +111,7 @@ export const concat_lists = (l) => {
   }
   return makeList(...result)
 }
-export const concat = (...lists) => concat_lists(lists)
+export const concat = (...lists) => concatLists(lists)
 concat.varargs = true
 export const transient_kv_map = (...entries) => {
   if (entries.length % 2 !== 0) throw new Error('transient-kv-map expects even number of arguments')
@@ -123,10 +120,6 @@ export const transient_kv_map = (...entries) => {
   return map
 }
 transient_kv_map.varargs = true
-export const assoc = (m, k, v) => {
-  if (typeof m !== 'object' || !Object.isFrozen(m)) throw new Error('assoc expects frozen map')
-  return Object.freeze({ ...m, [wordValue(k)]: v })
-}
 export const has = (m, k) => {
   if (typeof m !== 'object') throw new Error('has expects map')
   return wordValue(k) in m

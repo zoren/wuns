@@ -200,16 +200,17 @@ export const makeInterpreterContext = () => {
         let curCtx = ctx
         while (true) {
           if (!curCtx) throw new CompileError('recur outside of function context')
-          if (curCtx.ctxType === 'func') break
+          if (curCtx.ctxType === 'func') {
+            const { funMacDesc } = curCtx
+            const cargs = args.map((a) => wunsComp(ctx, a))
+            return (env) =>
+              callClosure(
+                createClosure(funMacDesc, env),
+                cargs.map((carg) => carg(env)),
+              )
+          }
           curCtx = curCtx.outer
         }
-        const { funMacDesc } = curCtx
-        const cargs = args.map((a) => wunsComp(ctx, a))
-        return (env) =>
-          callClosure(
-            createClosure(funMacDesc, env),
-            cargs.map((carg) => carg(env)),
-          )
       }
     }
     return null
