@@ -229,13 +229,8 @@
           [push-node-type form type-form]
           [if [eq n-of-args 1]
             [let [f [second form]]
-              [ifs
-                [is-list f]
+              [if [is-list f]
                 [type-list type-any]
-
-                [is-decimal f]
-                type-i32
-
                 type-word]]
             [type-list type-any]]]
 
@@ -332,35 +327,12 @@
 
               []]]
 
-
-        [eq-form first-form [quote export]]
-        []
-
         [eq-form first-form [quote constant]]
         [let [name [second form]
               value [third form]
               value-type [check-form local-ctx 0 value]]
           [add-sig name [kv-map constant value-type
                                 def first-form]]]
-
-        [eq-form first-form [quote external-func]]
-        [if [gt [size form] 1]
-          [let [name [second form]]
-            [if [is-word name]
-              [let [param-types
-                    [if [gt s-form 2]
-                      [check-type-list [third form]]
-                      [list]]
-                    result-type
-                    [if [gt s-form 3]
-                      [check-type [fourth form]]
-                      type-error]]
-                [add-sig name
-                  [kv-map parameters param-types
-                          result [fourth form]
-                          def first-form]]]
-              [report name external-func expects a name]]]
-          [report form external-func expects a name]]
 
         [or [eq-form first-form [quote defn]]]
         [let [params
@@ -425,30 +397,34 @@
               func-ctx [list param-ctx [list [kv-map]] first-form]
               parameter-type-list [persistent-array mut-parameter-type-list]
               locals [mutable-list]
-              -
-              [loop [i 3]
-                [when [lt i [dec [size form]]]
-                  [comment remember to check type is empty maybe even drop unused and warn instead]
-                  [check-form func-ctx 0 [at form i]]
-                  [continue i [inc i]]]]
+              sig-object
+              [transient-kv-map [quote parameters] parameter-type-list
+                                [quote results] type-any
+                                [quote def] first-form]]
+            [when rest-param-element-type
+              [setq sig-object rest-param-element-type rest-param-element-type]]
+            [if [gt s-form 1]
+              [let [name [second form]]
+                [if [is-word name]
+                  [add-sig name sig-object]
+                  [report name expected a word here]]]]
+            [loop [i 3]
+              [when [lt i [dec [size form]]]
+                [comment remember to check type is empty maybe even drop unused and warn instead]
+                [check-form func-ctx 0 [at form i]]
+                [continue i [inc i]]]]
+            [let [
               result-type
               [if [gt [size form] 3]
                 [check-form func-ctx 0 [last form]]
                 type-error]]
+              [setq sig-object results result-type]
+                ]
+[comment
             [when [size type-annotation]
               [when-not [eq-form anno-results result-type]
-                [report-error [list [quote func mismatch] result-type anno-results] [last form]]]]
-            [if [gt s-form 1]
-              [let [name [second form]]
-                [if [is-word name]
-                  [let [ml [transient-kv-map [quote parameters] parameter-type-list
-                                           [quote results] result-type
-                                           [quote def] first-form]]
-                    [when rest-param-element-type
-                      [setq ml rest-param-element-type rest-param-element-type]]
-                    [add-sig name [persistent-kv-map ml]]]
-                  [report name expected a word here]]]
-              []]]
+                [report-error [list [quote func mismatch] result-type anno-results] [last form]]]]]
+            ]
 
         [let [sig [try-get-global-sig first-form]
               sig-def [if [hasq sig def] [getq sig def] 0]]

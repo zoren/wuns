@@ -9,7 +9,8 @@
 [constant 4 [i32.const 4]]
 
 [defn inc [x] [i32.add x 1]]
-
+[defn not [c] [if c [i32.const 0] [i32.const 1]]]
+[defn is-zero [x] [i32.eq x [i32.const 0]]]
 [defn is-negative [x] [i32.lt-s x [i32.const 0]]]
 
 [defn tag [p] [i32.load [memarg mem 0 offset 0 align 4] p]]
@@ -20,7 +21,6 @@
 
 [defn is-word [f] [i32.eq [tag f] tag-word]]
 [defn is-list [f] [i32.eq [tag f] tag-list]]
-[defn not [c] [i32.eq c [i32.const 0]]]
 
 [defn log-word [w]
   [log-pointer [i32.add [i32.const 8] w] [size w]]]
@@ -109,6 +109,13 @@
     [if [i32.le-s i n]
       [continue r [i32.add i r] i [inc i]]
       r]]]
+
+[quote
+  [defn factorial-rec [n]
+    [if [i32.eq n [i32.const 0]]
+      [i32.const 1]
+      [i32.mul n [factorial-rec [i32.sub n 1]]]]]
+]
 
 [defn main []
   [log-word [quote hello]]

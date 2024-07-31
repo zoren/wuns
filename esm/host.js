@@ -24,18 +24,16 @@ import {
 
 export const is_word = (f) => isWord(f)
 
-export const is_i32 = (f) => isWord(f) && isSigned32BitInteger(Number(wordValue(f)))
-
 export const is_list = (f) => isList(f)
 
 export const is_fn = (f) => typeof f === 'function' || isClosure(f)
 
 export const eq_word = (a, b) => isWord(a) && isWord(b) && (a === b || wordValue(a) === wordValue(b))
 
-export const eq_list = (a, b) =>
+const eqList = (a, b) =>
   isList(a) && isList(b) && (a === b || (a.length === b.length && a.every((e, i) => eq_form(e, b[i]))))
 
-export const eq_form = (a, b) => eq_word(a, b) || eq_list(a, b)
+export const eq_form = (a, b) => eq_word(a, b) || eqList(a, b)
 
 export const with_meta = (f, meta) => {
   if (isWord(f)) return wordWithMeta(wordValue(f), meta)
@@ -108,20 +106,8 @@ export const slice = (v, i, j) => {
   let s = v.slice(number(i), number(j))
   return makeList(...s)
 }
-export const abort = () => {
-  throw new Error('abort')
-}
 export const codepoint_to_word = (cp) => word(String.fromCodePoint(number(cp)))
 export const concat_words = (l) => word(l.map(wordValue).join(''))
-export const log = (form) => {
-  console.log(print(form))
-  return unit
-}
-const textDecoder = new TextDecoder()
-export const log_byte_array = (bytes) => {
-  console.log(textDecoder.decode(bytes))
-  return unit
-}
 
 export { atom, is_atom, atom_get, atom_set }
 export const concat_lists = (l) => {
@@ -184,3 +170,16 @@ export const read_file = (path) => {
   return parseFile(p)
 }
 export const closure_to_fn = c => (...args) => apply(c, ...args)
+
+export const abort = () => {
+  throw new Error('abort')
+}
+export const log = (form) => {
+  console.log(print(form))
+  return unit
+}
+const textDecoder = new TextDecoder()
+export const log_byte_array = (bytes) => {
+  console.log(textDecoder.decode(bytes))
+  return unit
+}

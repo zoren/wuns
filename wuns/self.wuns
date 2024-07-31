@@ -95,7 +95,6 @@
   concat-lists
   concat-words
   eq-form
-  eq-list
   eq-word
   freeze
   get

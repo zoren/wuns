@@ -82,7 +82,7 @@
               [compile-form ctx 0 [at form 1]]
               [list [quote then] [compile-form ctx is-tail [at form 2]]]]
 
-            [assert 0 sdf sdfsdf ]]
+            [assert 0 ifs unexpected if form [size form] [identity form]]]
 
           [eq-word [quote quote] fw]
           [let [quoted [if [eq 2 [size form]] [at form 1] [slice form 1 [size form]]]
@@ -241,7 +241,10 @@
               wasm-locals
               wasm-bodies]]
 
-          [assert 0 sdf sdfsdf ]]]]]]
+          [eq-word [quote quote] fw]
+          [list]
+
+          [assert 0 compile-top-form unknown top form]]]]]]
 
 [defn is-printable-ascii [c]
   [and [ge c [const 32]] [lt c [const 127]]]]
@@ -264,6 +267,9 @@
     [is-list form]
     [let [s [size form]]
       [ifs
+        [eq s 0]
+        [do]
+        
         [and [eq s 3] [eq-word [first form] [quote eq-pair]]]
         [do
           [push-word-chars mut-list [second form]]
