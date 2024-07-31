@@ -9,7 +9,6 @@ import {
   listWithMeta,
   meta,
   print,
-  isSigned32BitInteger,
   makeList,
   atom,
   is_atom,
@@ -30,11 +29,6 @@ export const is_fn = (f) => typeof f === 'function' || isClosure(f)
 
 export const eq_word = (a, b) => isWord(a) && isWord(b) && (a === b || wordValue(a) === wordValue(b))
 
-const eqList = (a, b) =>
-  isList(a) && isList(b) && (a === b || (a.length === b.length && a.every((e, i) => eq_form(e, b[i]))))
-
-export const eq_form = (a, b) => eq_word(a, b) || eqList(a, b)
-
 export const with_meta = (f, meta) => {
   if (isWord(f)) return wordWithMeta(wordValue(f), meta)
   if (isList(f)) return listWithMeta(f, meta)
@@ -48,15 +42,16 @@ export const size = (a) => {
   if (Array.isArray(a)) return a.length
   throw new Error('size expects word or list found: ' + a + ' ' + typeof a)
 }
+
+export const list = (...args) => makeList(...args)
+list.varargs = true
+
 export const push = (ar, e) => {
   if (!Array.isArray(ar)) throw new Error('push expects array')
   if (Object.isFrozen(ar)) throw new Error('push expects mutable array')
   ar.push(e)
   return unit
 }
-export const list = (...args) => makeList(...args)
-list.varargs = true
-
 export const mutable_list = (...args) => args
 mutable_list.varargs = true
 export const mutable_list_of_size = (size) => {

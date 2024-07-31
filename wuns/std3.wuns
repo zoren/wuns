@@ -108,6 +108,18 @@
             i [dec i]
             res [list [quote if] [at clauses [dec i]] res 0]]]]]]]
 
+[defn eq-form [a b]
+  [or [eq-word a b]
+    [and [is-list a] [is-list b]
+      [let [sa [size a]]
+        [and [eq sa [size b]]
+          [loop [i 0]
+            [if [lt i sa]
+              [if [eq-form [at a i] [at b i]]
+                [continue i [inc i]]
+                0]
+              1]]]]]]]
+
 [def word-counter [atom 0]]
 
 [defn genword []
