@@ -176,6 +176,10 @@ const tokenBuilderForParseTree = () => {
           go(node.namedChild(i + 1))
         }
         break
+      case 'recur':
+        pushToken(head, keywordTokenType)
+        for (const arg of tail) go(arg)
+        break
       case 'func':
       case 'macro': {
         pushToken(head, keywordTokenType)

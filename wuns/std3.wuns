@@ -115,10 +115,12 @@
         [and [eq sa [size b]]
           [loop [i 0]
             [if [lt i sa]
-              [if [eq-form [at a i] [at b i]]
+              [if [recur [at a i] [at b i]]
                 [continue i [inc i]]
                 0]
               1]]]]]]]
+
+[log [list [quote 2] [quote 4] [eq-form [quote []] [quote 3]] [eq-form [quote []] [quote [3]]] [eq-form [quote [3]] [quote [3]]]]]
 
 [def word-counter [atom 0]]
 

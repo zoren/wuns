@@ -10,7 +10,7 @@ import {
   callClosure,
   isSigned32BitInteger,
   createClosure,
-  jsToWuns
+  jsToWuns,
 } from './core.js'
 import { instructions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
@@ -175,7 +175,6 @@ export const makeInterpreterContext = () => {
       }
       case 'func': {
         const [fmname, origParams, ...bodies] = args
-        const n = wordValue(fmname)
         let params = origParams.map(wordValue)
         let restParam = null
         if (params.length > 1 && params.at(-2) === '..') {
@@ -192,13 +191,25 @@ export const makeInterpreterContext = () => {
           params,
           restParam,
         }
-        // for recursive calls we put it in the varDescs before we compile the bodies
-        varDescs.set(n, funMacDesc)
-        const newCtx = { varDescs, outer: ctx, ctxType: wordValue(firstForm) }
-        // add bodies so we can call the function recursively
+        const newCtx = { varDescs, outer: ctx, ctxType: wordValue(firstForm), funMacDesc }
         funMacDesc.cbodies = compBodies(newCtx, bodies)
         Object.freeze(funMacDesc)
-        return (env) => createClosure(funMacDesc, env, n)
+        return (env) => createClosure(funMacDesc, env)
+      }
+      case 'recur': {
+        let curCtx = ctx
+        while (true) {
+          if (!curCtx) throw new CompileError('recur outside of function context')
+          if (curCtx.ctxType === 'func') break
+          curCtx = curCtx.outer
+        }
+        const { funMacDesc } = curCtx
+        const cargs = args.map((a) => wunsComp(ctx, a))
+        return (env) =>
+          callClosure(
+            createClosure(funMacDesc, env),
+            cargs.map((carg) => carg(env)),
+          )
       }
     }
     return null

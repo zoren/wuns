@@ -124,12 +124,9 @@ export const varWithMeta = (v, meta) => {
 }
 export const isVar = (f) => f instanceof Var
 
-export const createClosure = (funMacDesc, outer, closureName) => {
-  const varValues = new Map()
-  const closureEnv = Object.freeze({ varValues, outer })
-  const closure = new Closure(funMacDesc, closureEnv)
-  varValues.set(closureName, closure)
-  return Object.freeze(closure)
+export const createClosure = (funMacDesc, outer) => {
+  const closureEnv = Object.freeze({ varValues: new Map(), outer })
+  return Object.freeze(new Closure(funMacDesc, closureEnv))
 }
 
 export const callClosure = (closure, args) => {

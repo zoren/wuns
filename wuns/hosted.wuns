@@ -44,7 +44,7 @@
     [let [active-mem [getq ctx active-mem]
           tmp-offset-list [mutable-list]]
       [for-each element form
-        [push tmp-offset-list [get-or-create-form ctx element]]]
+        [push tmp-offset-list [recur ctx element]]]
       [let [offset [add [size active-mem] active-mem-start-offset]]
         [push-i32-little-endian active-mem tag-list]
         [push-i32-little-endian active-mem [size form]]
@@ -73,14 +73,14 @@
             [eq 4 [size form]]
             [list fw
               [type-to-result [try-get-node-type form]]
-              [compile-form ctx 0 [at form 1]]
-              [list [quote then] [compile-form ctx is-tail [at form 2]]]
-              [list [quote else] [compile-form ctx is-tail [at form 3]]]]
+              [recur ctx 0 [at form 1]]
+              [list [quote then] [recur ctx is-tail [at form 2]]]
+              [list [quote else] [recur ctx is-tail [at form 3]]]]
             [eq 3 [size form]]
             [list fw
               [type-to-result [try-get-node-type form]]
-              [compile-form ctx 0 [at form 1]]
-              [list [quote then] [compile-form ctx is-tail [at form 2]]]]
+              [recur ctx 0 [at form 1]]
+              [list [quote then] [recur ctx is-tail [at form 2]]]]
 
             [assert 0 ifs unexpected if form [size form] [identity form]]]
 
@@ -100,10 +100,10 @@
                  val-type [try-get-node-type value]]
                 [assert [not [is-tuple-type val-type]] binding expects a single type]
                 [add-local ctx var [type-to-wasm val-type]]
-                [push instructions [list [quote local.set] [list [quote dollar] var] [compile-form ctx 0 value]]]]]
+                [push instructions [list [quote local.set] [list [quote dollar] var] [recur ctx 0 value]]]]]
             [for i 2 [dec [size form]]
-              [push instructions [compile-form ctx 0 [at form i]]]]
-            [push instructions [compile-form ctx 1 [last form]]]
+              [push instructions [recur ctx 0 [at form i]]]]
+            [push instructions [recur ctx 1 [last form]]]
             [list [quote instructions] instructions]]
 
           [eq-word [quote loop] fw]
@@ -120,13 +120,13 @@
                 [assert [not [is-tuple-type val-type]] binding expects a single type]
                 [add-local ctx var wasm-type]
                 [add-local ctx [concat-words [list [quote tmp-] var]] wasm-type]
-                [push instructions [list [quote local.set] [list [quote dollar] var] [compile-form ctx 0 value]]]]]
+                [push instructions [list [quote local.set] [list [quote dollar] var] [recur ctx 0 value]]]]]
             [push loop-instructions [quote loop]]
             [push loop-instructions [list [quote dollar] [quote loop-lab]]]
             [push loop-instructions [type-to-result [try-get-node-type [last form]]]]
             [for i 2 [dec [size form]]
-              [push loop-instructions [compile-form ctx 0 [at form i]]]]
-            [push loop-instructions [compile-form ctx 1 [last form]]]
+              [push loop-instructions [recur ctx 0 [at form i]]]]
+            [push loop-instructions [recur ctx 1 [last form]]]
             [push instructions loop-instructions]
             [list [quote instructions] instructions]]
 
@@ -139,7 +139,7 @@
                 [var [at form i]
                  tmp-var [concat-words [list [quote tmp-] var]]
                  value [at form [inc i]]]
-                [push init-tmp [list [quote local.set] [list [quote dollar] tmp-var] [compile-form ctx 0 value]]]
+                [push init-tmp [list [quote local.set] [list [quote dollar] tmp-var] [recur ctx 0 value]]]
                 [push tmp-copy [list [quote local.set] [list [quote dollar] var]
                                [list [quote local.get] [list [quote dollar] tmp-var]]]]]]
             [list [quote instructions]
@@ -161,7 +161,7 @@
                       [loop [i 2 res [mutable-list]]
                         [if [lt i [size form]]
                           [do
-                            [push res [compile-form ctx 0 [at form i]]]
+                            [push res [recur ctx 0 [at form i]]]
                             [continue i [inc i]]]
                           res]]]]
 
@@ -171,13 +171,13 @@
                   [loop [i 1 res [mutable-list]]
                     [if [lt i [size form]]
                       [do
-                        [push res [compile-form ctx 0 [at form i]]]
+                        [push res [recur ctx 0 [at form i]]]
                         [continue i [inc i]]]
                       [concat [list [list [quote raw] [getq instruction wat-name]]] res]]]]]
               [loop [i 1 res [mutable-list]]
                 [if [lt i [size form]]
                   [do
-                    [push res [compile-form ctx 0 [at form i]]]
+                    [push res [recur ctx 0 [at form i]]]
                     [continue i [inc i]]]
                   [concat [list [quote call] [list [quote dollar] fw]] res]]]]]]]]]]
 
@@ -269,7 +269,7 @@
       [ifs
         [eq s 0]
         [do]
-        
+
         [and [eq s 3] [eq-word [first form] [quote eq-pair]]]
         [do
           [push-word-chars mut-list [second form]]
@@ -306,15 +306,15 @@
 
         [and [eq s 2] [eq-word [first form] [quote instructions]]]
         [for-each instruction [second form]
-          [print-paren-recursive-form mut-list instruction]]
+          [recur mut-list instruction]]
 
         [do
           [push mut-list [const 40]]
           [when [lt 0 s]
-            [print-paren-recursive-form mut-list [at form 0]]
+            [recur mut-list [at form 0]]
             [for i 1 s
               [push mut-list [const 32]]
-              [print-paren-recursive-form mut-list [at form i]]]]
+              [recur mut-list [at form i]]]]
           [push mut-list [const 41]]]]]
 
     [do [log [list [quote print-paren-recursive-form unknown node] form]]
