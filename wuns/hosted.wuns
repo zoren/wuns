@@ -122,6 +122,7 @@
                 [add-local ctx [concat-words [list [quote tmp-] var]] wasm-type]
                 [push instructions [list [quote local.set] [list [quote dollar] var] [compile-form ctx 0 value]]]]]
             [push loop-instructions [quote loop]]
+            [push loop-instructions [list [quote dollar] [quote loop-lab]]]
             [push loop-instructions [type-to-result [try-get-node-type [last form]]]]
             [for i 2 [dec [size form]]
               [push loop-instructions [compile-form ctx 0 [at form i]]]]
@@ -145,7 +146,7 @@
               [concat
                 init-tmp
                 tmp-copy
-                [quote [[br 1]]]]]]
+                [list [list [quote br] [list [quote dollar] [quote loop-lab]]]]]]]
 
           [let [instruction [try-get-instruction fw]]
             [if instruction

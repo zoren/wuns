@@ -84,6 +84,26 @@
   [if [not [i32.eq [tag l] tag-mutable-list]] [log-abort [quote set-list-not-a-mutable-list]]]
   [i32.store [memarg mem 0 offset 0 align 4] l tag-list]]
 
+[defn bytes-eq [a b s]
+  [loop [p a q b end [i32.add a s]]
+    [if [i32.eq p end]
+      [i32.const 1]
+      [if [i32.ne [i32.load8-s [memarg mem 0 offset 0 align 1] p] [i32.load8-s [memarg mem 0 offset 0 align 1] q]]
+        [i32.const 0]
+        [continue p [inc p] q [inc q]]]]]]
+
+[defn eq-word [a b]
+  [if [is-word a]
+    [if [is-word b]
+      [if [i32.eq a b]
+        1
+        [if [i32.eq [size a] [size b]]
+          [bytes-eq [i32.add [i32.const 8] a] [i32.add [i32.const 8] b] [size a]]
+          0]
+        ]
+      0]
+    0]]
+
 [defn stupid-gauss [n]
   [loop [i [i32.const 0] r [i32.const 0]]
     [if [i32.le-s i n]
@@ -104,4 +124,8 @@
     [lock-list mut-list]
     [log-word [at-list mut-list [i32.const 0]]]]
   [log-i32 [stupid-gauss [i32.const 10]]]
-  [log-i32 [stupid-gauss [i32.const 100]]]]
+  [log-i32 [stupid-gauss [i32.const 100]]]
+  [log-i32 [eq-word [quote hello] [quote hello]]]
+  [log-i32 [eq-word [quote hello] [quote hell]]]
+
+  ]
