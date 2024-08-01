@@ -66,7 +66,6 @@ export const meta = (form) => {
 export const print = (ox) => {
   const go = (x) => {
     if (isWord(x)) return String(x)
-    if (isVar(x)) return `[var ${x.name}]`
     if (typeof x === 'number') return String(x)
     if (typeof x === 'bigint') return String(x)
     if (Array.isArray(x)) return `[${x.map(go).join(' ')}]`
@@ -111,28 +110,6 @@ export const number = (arg) => {
   if (!isSigned32BitInteger(n)) throw new Error(`expected 32-bit signed integer, found: ${wv}`)
   return n
 }
-class Var {
-  constructor(name, value = null) {
-    this.name = name
-    this.value = value
-  }
-  bind(value) {
-    this.value = value
-  }
-  getValue() {
-    if (this.value === null) throw new Error('unbound variable: ' + this.name)
-    return this.value
-  }
-  toString() {
-    return this.name
-  }
-}
-export const makeVar = (name) => new Var(name)
-export const varWithMeta = (v, meta) => {
-  v[symbolMeta] = meta
-  return v
-}
-export const isVar = (f) => f instanceof Var
 
 export const callClosure = (closure, args) => {
   if (!isClosure(closure)) throw new Error('not a closure')

@@ -5,7 +5,6 @@ import {
   unit,
   print,
   number,
-  makeVar,
   meta,
   callClosure,
   isSigned32BitInteger,
@@ -56,17 +55,19 @@ const getCtxVar = (ctx, v) => {
 }
 
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
+const isMacro = (form) => meta(form)['is-macro']
 
 export const makeInterpreterContext = () => {
   const wunsEval = (form) => wunsComp(null, form)(null)
-  const varObjects = new Map()
-  const getVarObject = (name) => varObjects.get(name)
+  const defVars = new Map()
+  const getDefVarVal = (name) => {
+    if (!defVars.has(name)) throw new Error('getDefVarVal name not found: ' + name)
+    return defVars.get(name)
+  }
   const defSetVar = (name, value) => {
-    if (varObjects.has(name)) throw new RuntimeError(`redefining var ${name}`)
-    const v = makeVar(name)
-    varObjects.set(name, v)
-    v.bind(value)
-    return v
+    if (defVars.has(name)) throw new RuntimeError(`redefining var ${name}`)
+    defVars.set(name, value)
+    return null
   }
   defSetVar('eval', wunsEval)
 
@@ -218,13 +219,9 @@ export const makeInterpreterContext = () => {
     if (isWord(form)) {
       const v = wordValue(form)
       if (getCtxVar(ctx, v)) return (env) => getVarValue(env, v)
-      const varObj = getVarObject(v)
-      if (!varObj) throw new CompileError(`variable ${v} not found ${meta(form)}`)
-      if (meta(varObj)['is-macro']) throw new CompileError(`can't take value of macro ${v}`)
-      return () => {
-        rtAssert(varObj === getVarObject(v), `compile time var not same as runtime varObj !== getVarObject(v)`)
-        return varObj.getValue()
-      }
+      const defVarVal = getDefVarVal(v)
+      if (isMacro(defVarVal)) throw new CompileError(`can't take value of macro ${v}`)
+      return () => defVarVal
     }
     // return non-forms as is
     if (!Array.isArray(form)) return () => form
@@ -256,9 +253,8 @@ export const makeInterpreterContext = () => {
       const caller = rtCallFunc()
       return (env) => caller(getVarValue(env, firstWordValue), env)
     }
-    const varObj = getVarObject(firstWordValue)
-    if (varObj) {
-      const funcOrMac = varObj.getValue()
+    if (defVars.has(firstWordValue)) {
+      const funcOrMac = getDefVarVal(firstWordValue)
       // here we can check arity statically
       // todo maybe do it for closures too
       if (typeof funcOrMac === 'function' && !funcOrMac.varargs) {
@@ -266,10 +262,7 @@ export const makeInterpreterContext = () => {
         if (arity !== args.length)
           throw new CompileError(`function ${firstWordValue} expected ${arity} arguments, got ${args.length}`)
       }
-      if (meta(funcOrMac)['is-macro']) {
-        const macResult = callClosure(funcOrMac, args)
-        return wunsComp(ctx, macResult)
-      }
+      if (isMacro(funcOrMac)) return wunsComp(ctx, callClosure(funcOrMac, args))
       const caller = rtCallFunc()
       return (env) => caller(funcOrMac, env)
     }
@@ -323,17 +316,10 @@ export const makeInterpreterContext = () => {
   const parseEvalFile = (filename) => {
     evalLogForms(parseFile(filename))
   }
-  const getVarVal = (name) => {
-    const vo = getVarObject(name)
-    if (!vo) throw new Error('getVarVal: ' + name)
-    return vo.getValue()
-  }
-
   return {
     evalLogForms,
     parseEvalFile,
-    getVarObject,
-    getVarVal,
+    getVarVal: getDefVarVal,
     defSetVar,
   }
 }

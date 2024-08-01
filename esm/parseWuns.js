@@ -8,16 +8,12 @@ const importObject = {
   },
 }
 const context = makeInterpreterContext({ importObject })
-const { parseEvalFile, getVarObject } = context
+const { parseEvalFile, getVarVal } = context
 
 const textDecoder = new TextDecoder()
 
 parseEvalFile('np.wuns')
-const getVarVal = (name) => {
-  const vo = getVarObject(name)
-  if (!vo) throw new Error('getVarVal: ' + name)
-  return vo.getValue()
-}
+
 apply(getVarVal('bump-alloc-init'))
 const bumpAlloc = getVarVal('bump-alloc')
 

@@ -1,4 +1,4 @@
-import { unit, isSigned32BitInteger } from './core.js'
+import { isSigned32BitInteger } from './core.js'
 
 const instructions = {}
 

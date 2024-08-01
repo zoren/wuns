@@ -14,8 +14,6 @@ import {
   atom_get,
   atom_set,
   number,
-  isVar,
-  varWithMeta,
   zero,
   apply,
   isClosure,
@@ -31,7 +29,6 @@ export const eq_word = (a, b) => isWord(a) && isWord(b) && (a === b || wordValue
 export const with_meta = (f, meta) => {
   if (isWord(f)) return wordWithMeta(wordValue(f), meta)
   if (isList(f)) return listWithMeta(f, meta)
-  if (isVar(f)) return varWithMeta(f, meta)
   if (isClosure(f)) return closureWithMeta(f, meta)
   throw new Error('with-meta expects word or list')
 }
