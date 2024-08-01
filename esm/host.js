@@ -17,7 +17,9 @@ import {
   isVar,
   varWithMeta,
   zero,
-  apply
+  apply,
+  isClosure,
+  closureWithMeta
 } from './core.js'
 
 export const is_word = (f) => isWord(f)
@@ -30,6 +32,7 @@ export const with_meta = (f, meta) => {
   if (isWord(f)) return wordWithMeta(wordValue(f), meta)
   if (isList(f)) return listWithMeta(f, meta)
   if (isVar(f)) return varWithMeta(f, meta)
+  if (isClosure(f)) return closureWithMeta(f, meta)
   throw new Error('with-meta expects word or list')
 }
 export { meta }

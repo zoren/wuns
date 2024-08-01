@@ -68,7 +68,6 @@ export const makeInterpreterContext = () => {
     v.bind(value)
     return v
   }
-  defSetVar('var', (vn) => getVarObject(wordValue(vn)))
   defSetVar('eval', wunsEval)
 
   for (const [name, f] of hostExports) defSetVar(name, f)
@@ -229,6 +228,7 @@ export const makeInterpreterContext = () => {
     }
     // return non-forms as is
     if (!Array.isArray(form)) return () => form
+    // todo maybe change this a tuple unit not an empty list
     if (form.length === 0) return () => unit
     const [firstForm, ...args] = form
     const rtCallFunc = () => {
@@ -258,19 +258,20 @@ export const makeInterpreterContext = () => {
     }
     const varObj = getVarObject(firstWordValue)
     if (varObj) {
-      if (meta(varObj)['is-macro']) {
-        const macResult = callClosure(varObj.getValue(), args)
-        return wunsComp(ctx, macResult)
-      }
+      const funcOrMac = varObj.getValue()
       // here we can check arity statically
-      const f = varObj.getValue()
-      if (typeof f === 'function' && !f.varargs) {
-        const arity = f.length
+      // todo maybe do it for closures too
+      if (typeof funcOrMac === 'function' && !funcOrMac.varargs) {
+        const arity = funcOrMac.length
         if (arity !== args.length)
           throw new CompileError(`function ${firstWordValue} expected ${arity} arguments, got ${args.length}`)
       }
+      if (meta(funcOrMac)['is-macro']) {
+        const macResult = callClosure(funcOrMac, args)
+        return wunsComp(ctx, macResult)
+      }
       const caller = rtCallFunc()
-      return (env) => caller(varObj.getValue(), env)
+      return (env) => caller(funcOrMac, env)
     }
     const instruction = instructions[firstWordValue]
     if (!instruction) throw new CompileError(`function ${firstWordValue} not found ${print(form)}`)

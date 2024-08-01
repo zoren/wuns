@@ -40,6 +40,16 @@ class Closure {
   }
 }
 export const isClosure = (f) => f instanceof Closure
+export const createClosure = (funMacDesc, outer) => {
+  const closureEnv = Object.freeze({ varValues: new Map(), outer })
+  return Object.freeze(new Closure(funMacDesc, closureEnv))
+}
+
+export const closureWithMeta = (closure, meta) => {
+  const n = new Closure(closure.funMacDesc, closure.closureEnv)
+  n[symbolMeta] = meta
+  return Object.freeze(n)
+}
 
 const symbolMeta = Symbol.for('wuns-meta')
 export const listWithMeta = (l, meta) => {
@@ -124,13 +134,8 @@ export const varWithMeta = (v, meta) => {
 }
 export const isVar = (f) => f instanceof Var
 
-export const createClosure = (funMacDesc, outer) => {
-  const closureEnv = Object.freeze({ varValues: new Map(), outer })
-  return Object.freeze(new Closure(funMacDesc, closureEnv))
-}
-
 export const callClosure = (closure, args) => {
-  if(!isClosure(closure)) throw new Error('not a closure')
+  if (!isClosure(closure)) throw new Error('not a closure')
   const { funMacDesc, closureEnv } = closure
   const { name, params, restParam, cbodies } = funMacDesc
   const numberOfGivenArgs = args.length

@@ -9,16 +9,15 @@
 [def quote-word [quote quote]]
 
 [def defmacro
-  [func defmacro [name params .. forms]
-    [list [quote let] [list]
-      [list [quote def] name [concat [list [quote func] name params] forms]]
-      [list [quote with-meta] [list [quote var] [list quote-word name]]
-        [quote transient-kv-map [quote is-macro] 1]]
-      [list]]]]
-
-[let []
-  [with-meta [var [quote defmacro]] [transient-kv-map [quote is-macro] 1]]
-  [list]]
+  [with-meta
+    [func defmacro [name params .. forms]
+      [list [quote let] [list]
+        [list [quote def] name
+          [list [quote with-meta]
+            [concat [list [quote func] name params] forms]
+            [transient-kv-map [quote is-macro] 1]]]
+        [list]]]
+    [transient-kv-map [quote is-macro] 1]]]
 
 [defmacro defn [name params .. forms]
   [list [quote def] name [concat [list [quote func] name params] forms]]]
