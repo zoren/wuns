@@ -95,13 +95,13 @@ class Atom {
   }
 }
 export const atom = (v) => new Atom(v)
-export const is_atom = (f) => f instanceof Atom
+const isAtom = (f) => f instanceof Atom
 export const atom_get = (a) => {
-  if (is_atom(a)) return a.value
+  if (isAtom(a)) return a.value
   throw new Error('not an atom: ' + a)
 }
 export const atom_set = (a, v) => {
-  if (!is_atom(a)) throw new Error('not an atom: ' + a)
+  if (!isAtom(a)) throw new Error('not an atom: ' + a)
   a.value = v
 }
 export const number = (arg) => {
@@ -130,13 +130,5 @@ export const callClosure = (closure, args) => {
   }
   return cbodies({ varValues, outer: closureEnv })
 }
-export const jsToWuns = (js) => {
-  if (isForm(js)) return js
-  if (typeof js === 'boolean') return js ? one : zero
-  if (typeof js === 'string') return word(js)
-  if (typeof js === 'number' || typeof js === 'bigint') return word(String(js))
-  if (js === undefined) return unit
-  return js
-}
 
-export const apply = (f, ...args) => callClosure(f, args.map(jsToWuns))
+export const apply = (f, ...args) => callClosure(f, args)

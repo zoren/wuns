@@ -9,7 +9,6 @@ import {
   callClosure,
   isSigned32BitInteger,
   createClosure,
-  jsToWuns,
 } from './core.js'
 import { instructions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
@@ -65,7 +64,7 @@ export const makeInterpreterContext = () => {
     return defVars.get(name)
   }
   const defSetVar = (name, value) => {
-    if (defVars.has(name)) throw new RuntimeError(`redefining var ${name}`)
+    if (defVars.has(name)) throw new RuntimeError(`defSetVar redefining var: ${name}`)
     defVars.set(name, value)
     return null
   }
@@ -95,7 +94,8 @@ export const makeInterpreterContext = () => {
         let [cc, ct, cf] = ifArgs.map((arg) => wunsComp(ctx, arg))
         return (env) => {
           const ec = cc(env)
-          return (isWord(ec) && wordValue(ec) === '0' ? cf : ct)(env)
+          if (!isSigned32BitInteger(ec)) throw new CompileError(`if expected number, got ${ec}`)
+          return (ec === 0 ? cf : ct)(env)
         }
       }
       case 'let':
@@ -233,7 +233,7 @@ export const makeInterpreterContext = () => {
       return (f, env) => {
         const eargs = cargs.map((carg) => carg(env))
         try {
-          if (typeof f === 'function') return jsToWuns(f(...eargs))
+          if (typeof f === 'function') return f(...eargs)
           return callClosure(f, eargs)
         } catch (e) {
           console.error('error in rtCallFunc', e, form)
@@ -273,8 +273,11 @@ export const makeInterpreterContext = () => {
         throw new Error(`instruction ${firstWordValue} expected ${instruction.length} arguments, got ${args.length}`)
       const cargs = args.map((a) => wunsComp(ctx, a))
       return (env) => {
+        const eargs = cargs.map((carg) => carg(env))
+        for (const earg of eargs)
+          if (!isSigned32BitInteger(earg)) throw new RuntimeError(`expected integer, got ${earg}`)
         try {
-          return jsToWuns(instruction(...cargs.map((carg) => number(carg(env)))))
+          return instruction(...eargs)
         } catch (error) {
           console.error('error in instruction', meta(form))
           throw new RuntimeError(`error in instruction ${firstWordValue}: ${error.message}`, form)
@@ -286,6 +289,7 @@ export const makeInterpreterContext = () => {
     const arity = immArity + params.length
     if (arity !== args.length)
       throw new CompileError(`instruction ${firstWordValue} expected ${arity} arguments, got ${args.length}`)
+    // maybe we should allow number immediates to for convenience
     const immArgs = args.slice(0, immArity).map(number)
     for (let i = 0; i < immArity; i++) {
       const immArg = immArgs[i]
@@ -303,7 +307,11 @@ export const makeInterpreterContext = () => {
     }
     const instWithImmediate = func(...immArgs)
     const cargs = args.slice(immArity).map((a) => wunsComp(ctx, a))
-    return (env) => jsToWuns(instWithImmediate(...cargs.map((carg) => number(carg(env)))))
+    return (env) => {
+      const eargs = cargs.map((carg) => carg(env))
+      for (const earg of eargs) if (!isSigned32BitInteger(earg)) throw new RuntimeError(`expected integer, got ${earg}`)
+      return instWithImmediate(...eargs)
+    }
   }
 
   const evalLogForms = (forms) => {

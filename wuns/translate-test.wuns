@@ -19,20 +19,20 @@
   [list
     [kv-map
       module [quote [[defn f [] [i32.const 5]]]]
-      expect [quote [test-asssert-eq [quote 5] [f]]]]
+      expect [quote [test-asssert-eq [i32.const 5] [f]]]]
     [kv-map
       module [quote [[defn f [] [i32.const 5] [i32.const 6]]]]
-      expect [quote [test-asssert-eq [quote 6] [f]]]]
+      expect [quote [test-asssert-eq [i32.const 6] [f]]]]
     [kv-map
       module [quote [[defn f [p] p]]]
-      expect [quote [test-asssert-eq [quote 1] [f 1]]]]
+      expect [quote [test-asssert-eq [i32.const 1] [f 1]]]]
     [kv-map
       module [quote [[defn inc [p] [i32.add [i32.const 1] p]]]]
-      expect [quote [test-asssert-eq [quote 2] [inc 1]]]]
+      expect [quote [test-asssert-eq [i32.const 2] [inc 1]]]]
     [kv-map
       module [quote [defn c [] [i32.const 5]]
                     [defn f [] [c]]]
-      expect [quote [test-asssert-eq [quote 5] [f]]]]
+      expect [quote [test-asssert-eq [i32.const 5] [f]]]]
     [kv-map
       module [quote [import env mem [memory 0]]
                     [defn f [] [quote 5]]]
@@ -48,12 +48,12 @@
       module [quote [import env mem [memory 0]]
                     [defn f [] [quote 5] [quote 6]]]
       import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
-      expect [quote [test-asssert-not-eq [quote 0] [f]]]]
+      expect [quote [test-asssert-not-eq [i32.const 0] [f]]]]
     [kv-map
       module [quote [import env mem [memory 0]]
                     [defn f [] [i32.load [memarg mem 0 offset 4 align 4] [quote abc]]]]
       import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
-      expect [quote [test-asssert-eq [quote 3] [f]]]]
+      expect [quote [test-asssert-eq [i32.const 3] [f]]]]
     [kv-map
       module [quote [import env mem [memory 0]]
                     [constant w1 [quote a]]
@@ -64,16 +64,16 @@
                     [defn g [] [size w3]]
                     [defn h [] [tag w3]]]
       import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
-      expect [quote [do [test-asssert-eq [quote 1] [f]]
-                        [test-asssert-eq [quote 3] [g]]
-                        [test-asssert-eq [quote 1] [h]]]]]
+      expect [quote [do [test-asssert-eq [i32.const 1] [f]]
+                        [test-asssert-eq [i32.const 3] [g]]
+                        [test-asssert-eq [i32.const 1] [h]]]]]
     [kv-map
       module [quote [import env mem [memory 0]]
                     [constant l0 [quote []]]
                     [defn size [p] [i32.load [memarg mem 0 offset 4 align 4] p]]
                     [defn f [] [size l0]]]
       import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
-      expect [quote [do [test-asssert-eq [quote 0] [f]]]]]
+      expect [quote [do [test-asssert-eq [i32.const 0] [f]]]]]
     [kv-map
       module [quote [import env mem [memory 0]]
                     [constant l0 [quote [1 2 3]]]
@@ -82,14 +82,14 @@
                     [defn f [] [size l0]]
                     [defn g [] [tag l0]]]
       import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
-      expect [quote [do [test-asssert-eq [quote 3] [f]]
-                        [test-asssert-eq [quote 3] [g]]]]]
+      expect [quote [do [test-asssert-eq [i32.const 3] [f]]
+                        [test-asssert-eq [i32.const 3] [g]]]]]
     [kv-map
       module [quote [[defn f [] [let [] [i32.const 3]]]]]
-      expect [quote [do [test-asssert-eq [quote 3] [f]]]]]
+      expect [quote [do [test-asssert-eq [i32.const 3] [f]]]]]
     [kv-map
       module [quote [[defn f [] [loop [] [i32.const 3]]]]]
-      expect [quote [do [test-asssert-eq [quote 3] [f]]]]]
+      expect [quote [do [test-asssert-eq [i32.const 3] [f]]]]]
     [kv-map
       module [quote [
 [defn stupid-gauss [n]
@@ -98,7 +98,7 @@
       [continue r [i32.add i r] i [i32.add [i32.const 1] i]]
       r]]]
       ]]
-      expect [quote [do [test-asssert-eq [quote 55] [stupid-gauss [quote 10]]]]]]
+      expect [quote [do [test-asssert-eq [i32.const 55] [stupid-gauss [quote 10]]]]]]
     [kv-map
       module [quote [
 [defn stupid-gauss [n]
@@ -107,7 +107,7 @@
       [continue i [i32.add [i32.const 1] i] r [i32.add i r]]
       r]]]
       ]]
-      expect [quote [do [test-asssert-eq [quote 55] [stupid-gauss [quote 10]]]]]]
+      expect [quote [do [test-asssert-eq [i32.const 55] [stupid-gauss [quote 10]]]]]]
       ]]
 
 [defn test-main []

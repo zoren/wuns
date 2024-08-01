@@ -1,12 +1,10 @@
-[def -2 [quote -2]]
-[def -1 [quote -1]]
-[def 0 [quote 0]]
-[def 1 [quote 1]]
-[def 2 [quote 2]]
-[def 3 [quote 3]]
-[def 4 [quote 4]]
-
-[def quote-word [quote quote]]
+[def -2 [i32.const -2]]
+[def -1 [i32.const -1]]
+[def 0 [i32.const 0]]
+[def 1 [i32.const 1]]
+[def 2 [i32.const 2]]
+[def 3 [i32.const 3]]
+[def 4 [i32.const 4]]
 
 [def defmacro
   [with-meta
@@ -21,6 +19,8 @@
 
 [defmacro defn [name params .. forms]
   [list [quote def] name [concat [list [quote func] name params] forms]]]
+
+[def quote-word [quote quote]]
 
 [defn mk-quote [form] [list quote-word form]]
 
@@ -69,16 +69,16 @@
 
 [defn quote-list [lmsg]
   [let [msg [mutable-list [quote list]]]
-    [loop [i 0]
-      [when [lt i [size lmsg]]
+    [loop [i 0 s [size lmsg]]
+      [if [lt i s]
         [let [e [at lmsg i]]
-          [comment do this without push we know list length]
-          [push msg [if [is-word e] [mk-quote e] e]]
-          [continue i [inc i]]]]]
+          [push msg [if [is-word e] [mk-quote e] e]]]
+        [continue i [inc i]]]]
     [persistent-array msg]]]
 
 [defmacro assert [cond .. lmsg]
-  [list [quote if] [list [quote not] cond]
+  [list [quote if] cond
+    [list]
     [list [quote let] [list]
       [list [quote log] [quote-list lmsg]]
       [quote [unreachable]]]]]
@@ -107,26 +107,12 @@
             i [dec i]
             res [list [quote if] [at clauses [dec i]] res 0]]]]]]]
 
-[defn eq-form [a b]
-  [or [eq-word a b]
-    [and [is-list a] [is-list b]
-      [let [sa [size a]]
-        [and [eq sa [size b]]
-          [loop [i 0]
-            [if [lt i sa]
-              [if [recur [at a i] [at b i]]
-                [continue i [inc i]]
-                0]
-              1]]]]]]]
-
-[log [list [quote 2] [quote 4] [eq-form [quote []] [quote 3]] [eq-form [quote []] [quote [3]]] [eq-form [quote [3]] [quote [3]]]]]
-
 [def word-counter [atom 0]]
 
 [defn genword []
   [let [c [atom-get word-counter]]
     [atom-set word-counter [inc c]]
-    [concat-words [list [quote genword] c]]]]
+    [concat-words [list [quote genword] [int-to-word c]]]]]
 
 [defmacro or [.. clauses]
   [let [s [size clauses]]
@@ -143,6 +129,20 @@
               [list [quote let] [list w [at clauses [dec i]]]
                 [list [quote if] w w res]]]]]]]]]
 
+[defn eq-form [a b]
+  [or
+    [and [is-number a] [is-number b] [eq a b]]
+    [eq-word a b]
+    [and [is-list a] [is-list b]
+      [let [sa [size a]]
+        [and [eq sa [size b]]
+          [loop [i 0]
+            [if [lt i sa]
+              [if [recur [at a i] [at b i]]
+                [continue i [inc i]]
+                0]
+              1]]]]]]]
+
 [defn for-func [iw start increment end forms]
   [assert [gt increment 0] for-func increment must be positive]
   [let [ew [genword]]
@@ -151,15 +151,16 @@
       [list
         [quote loop] [list iw start]
         [list [quote if]
-          [list [quote lt] iw ew]
-          [concat [quote let []] forms [list [list [quote continue] iw [list [quote add] iw increment]]]]
+          [list [quote i32.lt] iw ew]
+          [concat [quote let []] forms
+            [list [list [quote continue] iw [list [quote i32.add] iw increment]]]]
           [list]]]]]]
 
 [defmacro for [iw start end .. forms]
-  [for-func iw start 1 end forms]]
+  [for-func iw start [i32.const 1] end forms]]
 
-[defmacro for-inc [iw start increment end .. forms]
-  [for-func iw start increment end forms]]
+[defmacro for-pair [iw start end .. forms]
+  [for-func iw start [i32.const 2] end forms]]
 
 [defmacro for-each [element-var collection .. forms]
   [assert [is-word element-var] for-each requires a word as the first argument]
@@ -171,22 +172,20 @@
       [list
         [quote loop] [list iteration-var 0]
         [list [quote if]
-          [list [quote lt] iteration-var col-size-var]
+          [list [quote i32.lt] iteration-var col-size-var]
           [concat [quote [let]]
             [list [list element-var [list [quote at] col-var iteration-var]]]
             forms
-            [list [list [quote continue] iteration-var [list [quote add] iteration-var 1]]]]
+            [list [list [quote continue] iteration-var [list [quote i32.add] iteration-var 1]]]]
           [list]]]]]]
 
 [defmacro kv-map [.. entries]
   [let [ml [mutable-list]]
     [push ml [quote transient-kv-map]]
-    [for-inc i 0 2 [size entries]
+    [for-pair i 0 [size entries]
       [push ml
         [let [k [at entries i]]
-                [if [is-word k]
-                  [mk-quote k]
-                  k]]]
+          [if [is-word k] [mk-quote k] k]]]
       [push ml [at entries [inc i]]]]
     [concat [quote [persistent-kv-map]] [list ml]]]]
 
@@ -204,7 +203,7 @@
 
 [defn push-all [mut-list list]
   [let [s-l [size list]]
-    [loop [i [quote 0]]
+    [loop [i [i32.const 0]]
       [if [lt i s-l]
         [let []
           [push mut-list [at list i]]

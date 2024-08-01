@@ -41,7 +41,7 @@ const mkParseWat = (s) => {
   }
 }
 
-import { apply, number } from './core.js'
+import { apply } from './core.js'
 import { makeInterpreterContext } from './interpreter.js'
 
 import { parseFile } from './parseTreeSitter.js'
@@ -49,10 +49,10 @@ import { parseFile } from './parseTreeSitter.js'
 const textDecoder = new TextDecoder()
 const wordBytesToString = (wordBytes) => textDecoder.decode(Uint8Array.from(wordBytes, (v) => +v))
 const { evalLogForms, getVarVal, defSetVar } = makeInterpreterContext()
-const textToWasm = allTextByteWords => {
+const textToWasm = (allTextByteWords) => {
   const llText = wordBytesToString(allTextByteWords)
   fs.writeFileSync('ll.wat', llText)
-  return mkParseWat(llText);
+  return mkParseWat(llText)
 }
 defSetVar('text-to-wasm', textToWasm)
 defSetVar('module-from-buffer', (buf) => new WebAssembly.Module(buf))
@@ -60,7 +60,7 @@ defSetVar('instantiate-module', (module, importObject) => new WebAssembly.Instan
 defSetVar('wasm-memory', (paramObj) => new WebAssembly.Memory(paramObj))
 defSetVar('byte-array', (buffer, byteOffset, length) => {
   // console.log({ buffer, byteOffset:number(byteOffset), length: number(length) })
-  return new Uint8Array(buffer, number(byteOffset), number(length));
+  return new Uint8Array(buffer, byteOffset, length)
 })
 for (const name of ['std3', 'wasm-instructions', 'check', 'hosted', 'translate-test'])
   evalLogForms(parseFile(`../wuns/${name}.wuns`))

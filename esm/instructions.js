@@ -36,7 +36,7 @@ const i32BitwiseOps = [
 ]
 for (const { name, op, alias } of i32BitwiseOps) {
   const f = Function('a', 'b', `return (a ${op} b) | 0`)
-  addI32Instruction(name, f)
+  // addI32Instruction(name, f)
   addI32Instruction(alias, f)
 }
 const u32 = 'u32'

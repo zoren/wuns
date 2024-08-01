@@ -87,13 +87,13 @@
           [eq-word [quote quote] fw]
           [let [quoted [if [eq 2 [size form]] [at form 1] [slice form 1 [size form]]]
                 offset [get-or-create-form ctx quoted]]
-              [list [quote i32.const] offset]]
+              [list [quote i32.const] [int-to-word offset]]]
 
           [eq-word [quote let] fw]
           [let
             [bindings [at form 1]
              instructions [mutable-list]]
-            [for-inc i 0 2 [size bindings]
+            [for-pair i 0 [size bindings]
               [let
                 [var [at bindings i]
                  value [at bindings [inc i]]
@@ -111,7 +111,7 @@
             [bindings [at form 1]
              instructions [mutable-list]
              loop-instructions [mutable-list]]
-            [for-inc i 0 2 [size bindings]
+            [for-pair i 0 [size bindings]
               [let
                 [var [at bindings i]
                  value [at bindings [inc i]]
@@ -134,7 +134,7 @@
           [let
             [init-tmp [mutable-list]
              tmp-copy [mutable-list]]
-            [for-inc i 1 2 [size form]
+            [for-pair i 1 [size form]
               [let
                 [var [at form i]
                  tmp-var [concat-words [list [quote tmp-] var]]
@@ -148,9 +148,10 @@
                 tmp-copy
                 [list [list [quote br] [list [quote dollar] [quote loop-lab]]]]]]]
 
-          [let [instruction [try-get-instruction fw]]
-            [if instruction
-              [let [imm-parameters [getq instruction immediate-parameters]]
+          [do
+            [if [has instructions-by-name fw]
+              [let [instruction  [get instructions-by-name fw]
+                    imm-parameters [getq instruction immediate-parameters]]
                 [ifs
                   [eq-form imm-parameters imm-memargs]
                   [let [memargs [try-get-node-type [at form 1]]]
@@ -336,6 +337,6 @@
       [push mut-list [const 10]]]
     [delete-all-keys node-types]
     [when [size active-mem]
-      [print-paren-recursive-form mut-list [list [quote data] [list [quote i32.const] active-mem-start-offset] [list [quote dq-string-bytes] active-mem]]]]
-    [print-paren-recursive-form mut-list [list [quote global] [quote dollar wuns-active-mem-top] [quote i32] [list [quote i32.const] [add [size active-mem] active-mem-start-offset]]]]
+      [print-paren-recursive-form mut-list [list [quote data] [list [quote i32.const] [int-to-word active-mem-start-offset]] [list [quote dq-string-bytes] active-mem]]]]
+    [print-paren-recursive-form mut-list [list [quote global] [quote dollar wuns-active-mem-top] [quote i32] [list [quote i32.const] [int-to-word [add [size active-mem] active-mem-start-offset]]]]]
     [persistent-array mut-list]]]

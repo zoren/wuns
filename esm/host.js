@@ -10,21 +10,21 @@ import {
   print,
   makeList,
   atom,
-  is_atom,
   atom_get,
   atom_set,
-  number,
-  zero,
   apply,
   isClosure,
-  closureWithMeta
+  closureWithMeta,
+  isSigned32BitInteger
 } from './core.js'
 
-export const is_word = (f) => isWord(f)
+export const is_word = (f) => isWord(f) | 0
 
-export const is_list = (f) => isList(f)
+export const is_number = (f) => (typeof f === 'number') | 0
 
-export const eq_word = (a, b) => isWord(a) && isWord(b) && (a === b || wordValue(a) === wordValue(b))
+export const is_list = (f) => isList(f) | 0
+
+export const eq_word = (a, b) => (isWord(a) && isWord(b) && (a === b || wordValue(a) === wordValue(b))) | 0
 
 export const with_meta = (f, meta) => {
   if (isWord(f)) return wordWithMeta(wordValue(f), meta)
@@ -51,11 +51,10 @@ export const push = (ar, e) => {
   ar.push(e)
   return unit
 }
-export const mutable_list_of_size = (size) => {
-  const s = number(size)
-  if (s < 0) throw new Error('mutable-list-of-size expects non-negative size')
-  return Array.from({ length: s }, () => zero)
-}
+// export const mutable_list_of_size = (size) => {
+//   if (size < 0) throw new Error('mutable-list-of-size expects non-negative size')
+//   return Array.from({ length: size }, () => zero)
+// }
 export const is_mutable = (f) => (Array.isArray(f) && !Object.isFrozen(f)) | 0
 export const list_from_mutable = (f) => {
   if (!Array.isArray(f)) throw new Error('list-from-mutable expects array')
@@ -71,37 +70,39 @@ export const persistent_kv_map = (o) => {
   const clone = { ...o }
   return Object.freeze(clone)
 }
-export const set_array = (ar, index, e) => {
+export const set_array = (ar, i, e) => {
   if (!Array.isArray(ar)) throw new Error('set-array expects array')
   if (Object.isFrozen(ar)) throw new Error('set-array expects mutable array')
-  const i = number(index)
+  if (!isSigned32BitInteger(i)) throw new Error('set-array expects integer index')
   if (i < 0 || i >= ar.length) throw new Error('set-array index out of bounds: ' + i + ' ' + ar.length)
   ar[i] = e
   return unit
 }
 export const at = (v, i) => {
   if (!isList(v)) throw new Error('at expects list, got' + typeof v + ' ' + v)
+  if (!isSigned32BitInteger(i)) throw new Error('at expects number: ' + i)
   const len = size(v)
-  const ni = number(i)
-  if (ni < -len || ni >= len) throw new Error('index out of bounds: ' + i + ' ' + len)
-  return v.at(ni)
+  if (i < -len || i >= len) throw new Error('index out of bounds: ' + i + ' ' + len)
+  return v.at(i)
 }
 export const at_word = (v, i) => {
   if (!isWord(v)) throw new Error('at-word expects word')
+  if (!isSigned32BitInteger(i)) throw new Error('at-word expects number: ' + i)
   const len = size(v)
-  const ni = number(i)
-  if (ni < -len || ni >= len) throw new Error('index out of bounds: ' + i + ' ' + len)
-  return String(v).at(ni).charCodeAt(0)
+  if (i < -len || i >= len) throw new Error('index out of bounds: ' + i + ' ' + len)
+  return String(v).at(i).charCodeAt(0)
 }
 export const slice = (v, i, j) => {
   if (!Array.isArray(v)) throw new Error('slice expects list')
-  let s = v.slice(number(i), number(j))
+  if (!isSigned32BitInteger(i)) throw new Error('slice expects number: ' + i)
+  if (!isSigned32BitInteger(j)) throw new Error('slice expects number: ' + j)
+  let s = v.slice(i, j)
   return makeList(...s)
 }
-export const codepoint_to_word = (cp) => word(String.fromCodePoint(number(cp)))
+// export const codepoint_to_word = (cp) => word(String.fromCodePoint(cp))
 export const concat_words = (l) => word(l.map(wordValue).join(''))
 
-export { atom, is_atom, atom_get, atom_set }
+export { atom, atom_get, atom_set }
 const concatLists = (l) => {
   if (!Array.isArray(l)) throw new Error('concat-lists expects list')
   const result = []
@@ -122,7 +123,7 @@ export const transient_kv_map = (...entries) => {
 transient_kv_map.varargs = true
 export const has = (m, k) => {
   if (typeof m !== 'object') throw new Error('has expects map')
-  return wordValue(k) in m
+  return (wordValue(k) in m) | 0
 }
 
 export const get = (m, k) => {
@@ -131,7 +132,6 @@ export const get = (m, k) => {
   if (isWord(m)) throw new Error('get expects map')
   const ks = wordValue(k)
   if (ks in m) return m[ks]
-  console.error('m', m, 'k', k)
   throw new Error('key not found: ' + ks + ' in ' + Object.keys(m))
 }
 export const set = (o, k, e) => {
@@ -157,7 +157,11 @@ export const read_file = (path) => {
   if (typeof p !== 'string') throw new Error('read-file expects string')
   return parseFile(p)
 }
-export const closure_to_fn = c => (...args) => apply(c, ...args)
+export const closure_to_fn =
+  (c) =>
+  (...args) =>
+    apply(c, ...args)
+export const int_to_word = (n) => word(n.toString())
 
 export const abort = () => {
   throw new Error('abort')

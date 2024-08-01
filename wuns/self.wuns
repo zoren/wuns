@@ -99,7 +99,6 @@
   freeze
   get
   has
-  is-atom
   is-fn
   is-i32
   is-list

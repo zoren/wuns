@@ -1,9 +1,12 @@
+[def ascii-dash [const 45]]
+[def ascii-underscore [const 95]]
+
 [comment wuns does not have underscores so we convert dashes to underscores]
 [defn wasm-name-to-wat-bytes [w]
   [loop [i 0 res [mutable-list]]
     [if [lt i [size w]]
       [let [c [at-word w i]]
-        [if [eq c [quote 45]] [push res [quote 95]] [push res c]]
+        [if [eq c ascii-dash] [push res ascii-underscore] [push res c]]
         [continue i [inc i]]]
       [persistent-array res]]]]
 
