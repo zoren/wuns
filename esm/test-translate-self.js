@@ -58,10 +58,7 @@ defSetVar('text-to-wasm', textToWasm)
 defSetVar('module-from-buffer', (buf) => new WebAssembly.Module(buf))
 defSetVar('instantiate-module', (module, importObject) => new WebAssembly.Instance(module, importObject))
 defSetVar('wasm-memory', (paramObj) => new WebAssembly.Memory(paramObj))
-defSetVar('byte-array', (buffer, byteOffset, length) => {
-  // console.log({ buffer, byteOffset:number(byteOffset), length: number(length) })
-  return new Uint8Array(buffer, byteOffset, length)
-})
+defSetVar('byte-array', (buffer, byteOffset, length) => new Uint8Array(buffer, byteOffset, length))
 for (const name of ['std3', 'wasm-instructions', 'check', 'hosted', 'translate-test'])
   evalLogForms(parseFile(`../wuns/${name}.wuns`))
 

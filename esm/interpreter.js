@@ -270,7 +270,7 @@ export const makeInterpreterContext = () => {
     if (!instruction) throw new CompileError(`function ${firstWordValue} not found ${print(form)}`)
     if (typeof instruction === 'function') {
       if (instruction.length !== args.length)
-        throw new Error(`instruction ${firstWordValue} expected ${instruction.length} arguments, got ${args.length}`)
+        throw new CompileError(`instruction ${firstWordValue} expected ${instruction.length} arguments, got ${args.length}`)
       const cargs = args.map((a) => wunsComp(ctx, a))
       return (env) => {
         const eargs = cargs.map((carg) => carg(env))

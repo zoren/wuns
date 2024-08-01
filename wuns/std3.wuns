@@ -202,10 +202,4 @@
   [eq 0 [size form]]]
 
 [defn push-all [mut-list list]
-  [let [s-l [size list]]
-    [loop [i [i32.const 0]]
-      [if [lt i s-l]
-        [let []
-          [push mut-list [at list i]]
-          [continue i [inc i]]]
-        []]]]]
+  [for-each e list [push mut-list e]]]
