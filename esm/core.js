@@ -73,6 +73,29 @@ export const callClosure = (closure, args) => {
   return cbodies({ varValues, outer: closureEnv })
 }
 
+export const callClosureStaged = (funMacDesc, numberOfGivenArgs) => {
+  const { name, params, restParam, cbodies } = funMacDesc
+  const arity = params.length
+  if (restParam === null) {
+    if (arity !== numberOfGivenArgs) throw new Error(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
+    return (outer, args) => {
+      if (args.length !== numberOfGivenArgs) throw new Error('expected ' + numberOfGivenArgs + ' arguments')
+      const varValues = new Map()
+      for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+      return cbodies({ varValues, outer })
+    }
+  }
+  if (arity > numberOfGivenArgs)
+    throw new Error(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
+  return (outer, args) => {
+    if (args.length !== numberOfGivenArgs) throw new Error('expected ' + numberOfGivenArgs + ' arguments')
+    const varValues = new Map()
+    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+    varValues.set(restParam, makeList(...args.slice(arity)))
+    return cbodies({ varValues, outer })
+  }
+}
+
 export const apply = (f, ...args) => callClosure(f, args)
 
 const symbolMeta = Symbol.for('wuns-meta')

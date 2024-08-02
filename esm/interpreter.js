@@ -7,6 +7,7 @@ import {
   number,
   meta,
   callClosure,
+  callClosureStaged,
   isSigned32BitInteger,
   createClosure,
   isClosure,
@@ -95,7 +96,7 @@ export const makeInterpreterContext = () => {
         let [cc, ct, cf] = ifArgs.map((arg) => wunsComp(ctx, arg))
         return (env) => {
           const ec = cc(env)
-          if (!isSigned32BitInteger(ec)) throw new CompileError(`if expected number, got ${ec}`)
+          if (!isSigned32BitInteger(ec)) throw new RuntimeError(`if expected number, got ${ec}`)
           return (ec === 0 ? cf : ct)(env)
         }
       }
@@ -257,10 +258,15 @@ export const makeInterpreterContext = () => {
     }
     if (defVars.has(firstWordValue)) {
       const funcOrMac = getDefVarVal(firstWordValue)
-      if (isMacro(funcOrMac)) return wunsComp(ctx, callClosure(funcOrMac, args))
+      if (isClosure(funcOrMac)) {
+        if (isMacro(funcOrMac)) return wunsComp(ctx, callClosure(funcOrMac, args))
+        const caller = callClosureStaged(funcOrMac.funMacDesc, args.length)
+        const cargs = args.map((a) => wunsComp(ctx, a))
+        return (env) => caller(env, cargs.map((carg) => carg(env)))
+      }
+      if (typeof funcOrMac !== 'function') throw new CompileError(`expected function, got ${funcOrMac}`)
       // here we can check arity statically
-      // todo maybe do it for closures too
-      if (!isClosure(funcOrMac) && !funcOrMac.varargs) {
+      if (!funcOrMac.varargs) {
         const arity = funcOrMac.length
         if (arity !== args.length)
           throw new CompileError(`function '${firstWordValue}' expected ${arity} arguments, got ${args.length}`)
