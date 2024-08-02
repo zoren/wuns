@@ -6,14 +6,14 @@
     exports]]
 
 [defn test-asssert-eq [a b]
-  [if [not [eq-form a b]]
+  [if [not [eq a b]]
     [log [list [quote assert-eq] a b]]]
-  [eq-form a b]]
+  [eq a b]]
 
 [defn test-asssert-not-eq [a b]
-  [if [eq-form a b]
+  [if [eq a b]
     [log [list [quote assert-not-eq] a b]]]
-  [not [eq-form a b]]]
+  [not [eq a b]]]
 
 [def tests
   [list
@@ -37,7 +37,7 @@
       module [quote [import env mem [memory 0]]
                     [defn f [] [quote 5]]]
       import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
-      expect [quote [test-asssert-not-eq [quote 0] [f]]]]
+      expect [quote [test-asssert-not-eq [i32.const 0] [f]]]]
     [kv-map
       module [quote [import env mem [memory 0]]
                     [defn f [] [quote 5]]

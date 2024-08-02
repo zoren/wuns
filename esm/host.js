@@ -20,8 +20,6 @@ import {
 
 export const is_word = (f) => isWord(f) | 0
 
-export const is_number = (f) => (typeof f === 'number') | 0
-
 export const is_list = (f) => isList(f) | 0
 
 export const eq_word = (a, b) => (isWord(a) && isWord(b) && (a === b || wordValue(a) === wordValue(b))) | 0

@@ -16,10 +16,10 @@ const i32binops = {
   eq: '===',
   ne: '!==',
 
-  lt: '<',
-  le: '<=',
-  gt: '>',
-  ge: '>=',
+  'lt-s': '<',
+  'le-s': '<=',
+  'gt-s': '>',
+  'ge-s': '>=',
 }
 
 for (const [name, op] of Object.entries(i32binops)) {

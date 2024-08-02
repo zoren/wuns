@@ -38,7 +38,7 @@
 
 [defn is-even [x] [not [is-odd x]]]
 
-[defn is-negative [x] [lt x 0]]
+[defn is-negative [x] [lt-s x 0]]
 
 [defn first [l] [at l 0]]
 [defn second [l] [at l 1]]
@@ -52,8 +52,7 @@
 [defmacro when [cond .. forms]
   [list
     [quote if] cond
-    [concat [quote let []] forms]
-    [list]]]
+    [concat [quote let []] forms]]]
 
 [defmacro when-not [cond .. forms]
   [list
@@ -70,7 +69,7 @@
 [defn quote-list [lmsg]
   [let [msg [mutable-list [quote list]]]
     [loop [i 0 s [size lmsg]]
-      [if [lt i s]
+      [if [lt-s i s]
         [let [e [at lmsg i]]
           [push msg [if [is-word e] [mk-quote e] e]]]
         [continue i [inc i]]]]
@@ -131,27 +130,26 @@
 
 [defn eq-form [a b]
   [or
-    [and [is-number a] [is-number b] [eq a b]]
     [eq-word a b]
     [and [is-list a] [is-list b]
       [let [sa [size a]]
         [and [eq sa [size b]]
           [loop [i 0]
-            [if [lt i sa]
+            [if [lt-s i sa]
               [if [recur [at a i] [at b i]]
                 [continue i [inc i]]
                 0]
               1]]]]]]]
 
 [defn for-func [iw start increment end forms]
-  [assert [gt increment 0] for-func increment must be positive]
+  [assert [lt-s 0 increment] for-func increment must be positive]
   [let [ew [genword]]
     [list
       [quote let] [list ew end]
       [list
         [quote loop] [list iw start]
         [list [quote if]
-          [list [quote i32.lt] iw ew]
+          [list [quote i32.lt-s] iw ew]
           [concat [quote let []] forms
             [list [list [quote continue] iw [list [quote i32.add] iw increment]]]]
           [list]]]]]]
@@ -172,12 +170,11 @@
       [list
         [quote loop] [list iteration-var 0]
         [list [quote if]
-          [list [quote i32.lt] iteration-var col-size-var]
+          [list [quote i32.lt-s] iteration-var col-size-var]
           [concat [quote [let]]
             [list [list element-var [list [quote at] col-var iteration-var]]]
             forms
-            [list [list [quote continue] iteration-var [list [quote i32.add] iteration-var 1]]]]
-          [list]]]]]]
+            [list [list [quote continue] iteration-var [list [quote i32.add] iteration-var 1]]]]]]]]]
 
 [defmacro kv-map [.. entries]
   [let [ml [mutable-list]]

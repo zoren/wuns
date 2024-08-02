@@ -168,13 +168,13 @@
       [let [s [size a]]
         [and [eq s [size b]]
           [loop [i [quote 0]]
-            [or [ge i s]
+            [or [le-s s i]
               [and [eq-form [at a i] [at b i]] [continue i [inc i]]]]]]]]]]
 
 [func assoc-list-index [ctx sym]
   [let [s [size ctx]]
     [loop [i [quote 0]]
-      [if [ge i s]
+      [if [le-s s i]
         [quote -1]
         [if [eq-word [at ctx i] sym]
           i

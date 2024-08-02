@@ -4,7 +4,7 @@
 [comment wuns does not have underscores so we convert dashes to underscores]
 [defn wasm-name-to-wat-bytes [w]
   [loop [i 0 res [mutable-list]]
-    [if [lt i [size w]]
+    [if [lt-s i [size w]]
       [let [c [at-word w i]]
         [if [eq c ascii-dash] [push res ascii-underscore] [push res c]]
         [continue i [inc i]]]

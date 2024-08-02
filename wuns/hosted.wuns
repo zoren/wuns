@@ -15,7 +15,7 @@
 
 [defn push-i32-little-endian [mut-list val]
   [loop [i 0 cur val]
-    [when [lt i 4]
+    [when [lt-s i 4]
       [push mut-list [bitwise-and cur [const 255]]]
       [continue i [inc i] cur [bitwise-shift-right-unsigned cur [const 8]]]]]]
 
@@ -29,7 +29,7 @@
             offset [add [size active-mem] active-mem-start-offset]
             ws [size w]
             padding [sub 4 [bitwise-and 3 ws]]]
-        [assert [lt ws [const 120]] word must be less than 120 characters]
+        [assert [lt-s ws [const 120]] word must be less than 120 characters]
         [push-i32-little-endian active-mem tag-word]
         [push-i32-little-endian active-mem ws]
         [push-word-chars active-mem w]
@@ -160,7 +160,7 @@
                         [list [quote eq-pair] [quote offset] [getq memargs offset]]
                         [list [quote eq-pair] [quote align] [getq memargs align]]]
                       [loop [i 2 res [mutable-list]]
-                        [if [lt i [size form]]
+                        [if [lt-s i [size form]]
                           [do
                             [push res [recur ctx 0 [at form i]]]
                             [continue i [inc i]]]
@@ -170,13 +170,13 @@
                   form
 
                   [loop [i 1 res [mutable-list]]
-                    [if [lt i [size form]]
+                    [if [lt-s i [size form]]
                       [do
                         [push res [recur ctx 0 [at form i]]]
                         [continue i [inc i]]]
                       [concat [list [list [quote raw] [getq instruction wat-name]]] res]]]]]
               [loop [i 1 res [mutable-list]]
-                [if [lt i [size form]]
+                [if [lt-s i [size form]]
                   [do
                     [push res [recur ctx 0 [at form i]]]
                     [continue i [inc i]]]
@@ -248,10 +248,10 @@
           [assert 0 compile-top-form unknown top form]]]]]]
 
 [defn is-printable-ascii [c]
-  [and [ge c [const 32]] [lt c [const 127]]]]
+  [and [le-s [const 32] c] [lt-s c [const 127]]]]
 
 [defn int-to-hex-ascii [i]
-  [if [lt i [const 10]]
+  [if [lt-s i [const 10]]
     [add i [const 48]]
     [add [sub i [const 10]] [const 97]]]]
 
@@ -296,7 +296,7 @@
               [push mut-list c]
               [do
                 [assert [not [is-negative c]] c must be positive]
-                [assert [lt c [const 256]] c must be less than 256]
+                [assert [lt-s c [const 256]] c must be less than 256]
                 [push mut-list ascii-backslash]
                 [push mut-list [int-to-hex-ascii [div c [const 16]]]]
                 [push mut-list [int-to-hex-ascii [rem c [const 16]]]]]]]
@@ -311,7 +311,7 @@
 
         [do
           [push mut-list [const 40]]
-          [when [lt 0 s]
+          [when [lt-s 0 s]
             [recur mut-list [at form 0]]
             [for i 1 s
               [push mut-list [const 32]]
