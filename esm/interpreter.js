@@ -112,19 +112,17 @@ export const makeInterpreterContext = () => {
           compBindings.push([v, wunsComp(newCtx, bindings[i + 1])])
           varDescs.set(v, varDesc)
         }
-        const cbodies = compBodies(newCtx, bodies)
-        if (firstWordValue === 'let')
-          return (env) => {
-            const varValues = new Map()
-            const inner = { varValues, outer: env }
-            for (const [varName, compVal] of compBindings) varValues.set(varName, compVal(inner))
-            return cbodies(inner)
-          }
-
-        return (env) => {
+        const mkBindEnv = (env) => {
           const varValues = new Map()
-          const inner = { varValues, outer: env, loop: true, continue: true }
+          const inner = { varValues, outer: env }
           for (const [varName, compVal] of compBindings) varValues.set(varName, compVal(inner))
+          return inner
+        }
+        const cbodies = compBodies(newCtx, bodies)
+        if (firstWordValue === 'let') return (env) => cbodies(mkBindEnv(env))
+        return (env) => {
+          const inner = mkBindEnv(env)
+          inner.continue = true
           while (inner.continue) {
             inner.continue = false
             const result = cbodies(inner)
@@ -153,7 +151,7 @@ export const makeInterpreterContext = () => {
           let enclosingLoopEnv = env
           while (true) {
             rtAssert(enclosingLoopEnv, 'continue outside of loop')
-            if (enclosingLoopEnv.loop) break
+            if ('continue' in enclosingLoopEnv) break
             enclosingLoopEnv = enclosingLoopEnv.outer
           }
           const { varValues } = enclosingLoopEnv
@@ -282,7 +280,8 @@ export const makeInterpreterContext = () => {
     if (!instruction) throw new CompileError(`function ${firstWordValue} not found ${print(form)}`)
     const { immediateParams, params, func } = instruction
     const immArity = immediateParams.length
-    if (args.length < immArity) throw new CompileError(`instruction ${firstWordValue} expected at least ${immArity} arguments`)
+    if (args.length < immArity)
+      throw new CompileError(`instruction ${firstWordValue} expected at least ${immArity} arguments`)
     // maybe we should allow number immediates to for convenience
     const immArgs = args.slice(0, immArity).map(number)
     for (let i = 0; i < immArity; i++) {
@@ -302,7 +301,9 @@ export const makeInterpreterContext = () => {
     const instWithImmediate = func(...immArgs)
     const cargs = args.slice(immArity).map((a) => wunsComp(ctx, a))
     if (cargs.length !== params.length)
-      throw new CompileError(`instruction ${firstWordValue} expected ${params.length} non-immediate arguments, got ${cargs.length}`)
+      throw new CompileError(
+        `instruction ${firstWordValue} expected ${params.length} non-immediate arguments, got ${cargs.length}`,
+      )
     return (env) => {
       const eargs = cargs.map((carg) => carg(env))
       for (const earg of eargs) if (!isSigned32BitInteger(earg)) throw new RuntimeError(`expected integer, got ${earg}`)
