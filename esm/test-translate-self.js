@@ -62,6 +62,6 @@ defSetVar('byte-array', (buffer, byteOffset, length) => new Uint8Array(buffer, b
 for (const name of ['std3', 'wasm-instructions', 'check', 'hosted', 'translate-test'])
   evalLogForms(parseFile(`../wuns/${name}.wuns`))
 
-apply(getVarVal('test-main'))
+getVarVal('test-main')()
 
-apply(getVarVal('test-file'), parseFile(`../wuns/ll.wuns`))
+getVarVal('test-file')(parseFile(`../wuns/ll.wuns`))

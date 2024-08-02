@@ -132,10 +132,10 @@
      mem [wasm-memory [kv-map initial 1]]
      import-object [kv-map env
         [kv-map mem mem
-                log-pointer [closure-to-fn [func log-pointer [x y]
-                  [log-byte-array [byte-array [getq mem buffer] x y]]]]
-                log-i32 [closure-to-fn [func log-i32 [x]
-                  [log [list [quote log-i32] x]]]]]]
+                log-pointer [func log-pointer [x y]
+                  [log-byte-array [byte-array [getq mem buffer] x y]]]
+                log-i32 [func log-i32 [x]
+                  [log [list [quote log-i32] x]]]]]
      exports [wat-to-exports text import-object]
      main [getq exports main]]
     [main]

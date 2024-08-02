@@ -320,7 +320,7 @@ const makeCheckCurrentFileCommand = async (context) => {
     const checkTopForms = getVarVal('check-top-forms')
     const diagnostics = []
     try {
-      const { errors } = apply(checkTopForms, forms)
+      const { errors } = checkTopForms(forms)
       for (const { message, form } of errors) {
         if (!Array.isArray(message)) throw new Error('msg is not an array')
         const metaData = meta(form)

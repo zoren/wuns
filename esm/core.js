@@ -30,26 +30,50 @@ export const unit = Object.freeze([])
 export const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
 export const isUnit = (x) => x === unit || (Array.isArray(x) && Object.isFrozen(x) && x.length === 0)
 export const isList = (f) => Array.isArray(f)
-class Closure {
-  constructor(funMacDesc, closureEnv) {
-    this.funMacDesc = funMacDesc
-    this.closureEnv = closureEnv
-  }
-  toString() {
-    return `[closure ${this.funMacDesc.name}]`
-  }
-}
-export const isClosure = (f) => f instanceof Closure
+
+export const isClosure = (f) => f instanceof Function && Object.isFrozen(f) && 'funMacDesc' in f && 'closureEnv' in f
 export const createClosure = (funMacDesc, outer) => {
   const closureEnv = Object.freeze({ varValues: new Map(), outer })
-  return Object.freeze(new Closure(funMacDesc, closureEnv))
+  const closureFn = (...args) => callClosure(closureFn, args)
+  closureFn['funMacDesc'] = funMacDesc
+  closureFn['closureEnv'] = closureEnv
+  Object.freeze(closureFn)
+  if (!isClosure(closureFn)) throw new Error('not a closure')
+  return closureFn
 }
 
 export const closureWithMeta = (closure, meta) => {
-  const n = new Closure(closure.funMacDesc, closure.closureEnv)
-  n[symbolMeta] = meta
-  return Object.freeze(n)
+  const { funMacDesc, closureEnv } = closure
+  const newClosureFn = (...args) => callClosure(newClosureFn, args)
+  newClosureFn['funMacDesc'] = funMacDesc
+  newClosureFn['closureEnv'] = closureEnv
+  newClosureFn[symbolMeta] = meta
+  Object.freeze(newClosureFn)
+  if (!isClosure(newClosureFn)) throw new Error('not a closure')
+  return newClosureFn
 }
+
+export const callClosure = (closure, args) => {
+  if (!isClosure(closure)) throw new Error('not a closure')
+  const { funMacDesc, closureEnv } = closure
+  const { name, params, restParam, cbodies } = funMacDesc
+  const numberOfGivenArgs = args.length
+  const arity = params.length
+  const varValues = new Map()
+
+  if (restParam === null) {
+    if (arity !== numberOfGivenArgs) throw new Error(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
+    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+  } else {
+    if (arity > numberOfGivenArgs)
+      throw new Error(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
+    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+    varValues.set(restParam, makeList(...args.slice(arity)))
+  }
+  return cbodies({ varValues, outer: closureEnv })
+}
+
+export const apply = (f, ...args) => callClosure(f, args)
 
 const symbolMeta = Symbol.for('wuns-meta')
 export const listWithMeta = (l, meta) => {
@@ -59,7 +83,8 @@ export const listWithMeta = (l, meta) => {
 }
 
 export const meta = (form) => {
-  if (typeof form === 'object' && symbolMeta in form) return form[symbolMeta]
+  const t = typeof form
+  if ((t === 'object' || t === 'function') && symbolMeta in form) return form[symbolMeta]
   return unit
 }
 
@@ -110,25 +135,3 @@ export const number = (arg) => {
   if (!isSigned32BitInteger(n)) throw new Error(`expected 32-bit signed integer, found: ${wv}`)
   return n
 }
-
-export const callClosure = (closure, args) => {
-  if (!isClosure(closure)) throw new Error('not a closure')
-  const { funMacDesc, closureEnv } = closure
-  const { name, params, restParam, cbodies } = funMacDesc
-  const numberOfGivenArgs = args.length
-  const arity = params.length
-  const varValues = new Map()
-
-  if (restParam === null) {
-    if (arity !== numberOfGivenArgs) throw new Error(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
-    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-  } else {
-    if (arity > numberOfGivenArgs)
-      throw new Error(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
-    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-    varValues.set(restParam, makeList(...args.slice(arity)))
-  }
-  return cbodies({ varValues, outer: closureEnv })
-}
-
-export const apply = (f, ...args) => callClosure(f, args)

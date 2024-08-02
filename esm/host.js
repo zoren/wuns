@@ -12,10 +12,9 @@ import {
   atom,
   atom_get,
   atom_set,
-  apply,
   isClosure,
   closureWithMeta,
-  isSigned32BitInteger
+  isSigned32BitInteger,
 } from './core.js'
 
 export const is_word = (f) => isWord(f) | 0
@@ -24,10 +23,10 @@ export const is_list = (f) => isList(f) | 0
 
 export const eq_word = (a, b) => (isWord(a) && isWord(b) && (a === b || wordValue(a) === wordValue(b))) | 0
 
-export const with_meta = (f, meta) => {
-  if (isWord(f)) return wordWithMeta(wordValue(f), meta)
-  if (isList(f)) return listWithMeta(f, meta)
-  if (isClosure(f)) return closureWithMeta(f, meta)
+export const with_meta = (f, metaData) => {
+  if (isWord(f)) return wordWithMeta(wordValue(f), metaData)
+  if (isList(f)) return listWithMeta(f, metaData)
+  if (isClosure(f)) return closureWithMeta(f, metaData)
   throw new Error('with-meta expects word or list')
 }
 export { meta }
@@ -155,10 +154,6 @@ export const read_file = (path) => {
   if (typeof p !== 'string') throw new Error('read-file expects string')
   return parseFile(p)
 }
-export const closure_to_fn =
-  (c) =>
-  (...args) =>
-    apply(c, ...args)
 export const int_to_word = (n) => word(n.toString())
 
 export const abort = () => {

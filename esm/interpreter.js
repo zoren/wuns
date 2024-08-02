@@ -9,6 +9,7 @@ import {
   callClosure,
   isSigned32BitInteger,
   createClosure,
+  isClosure,
 } from './core.js'
 import { instructions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
@@ -233,8 +234,9 @@ export const makeInterpreterContext = () => {
       return (f, env) => {
         const eargs = cargs.map((carg) => carg(env))
         try {
+          if (isClosure(f)) return callClosure(f, eargs)
           if (typeof f === 'function') return f(...eargs)
-          return callClosure(f, eargs)
+          throw new RuntimeError(`expected function, got ${f}`)
         } catch (e) {
           console.error('error in rtCallFunc', e, form)
           throw e
@@ -255,14 +257,14 @@ export const makeInterpreterContext = () => {
     }
     if (defVars.has(firstWordValue)) {
       const funcOrMac = getDefVarVal(firstWordValue)
+      if (isMacro(funcOrMac)) return wunsComp(ctx, callClosure(funcOrMac, args))
       // here we can check arity statically
       // todo maybe do it for closures too
-      if (typeof funcOrMac === 'function' && !funcOrMac.varargs) {
+      if (!isClosure(funcOrMac) && !funcOrMac.varargs) {
         const arity = funcOrMac.length
         if (arity !== args.length)
-          throw new CompileError(`function ${firstWordValue} expected ${arity} arguments, got ${args.length}`)
+          throw new CompileError(`function '${firstWordValue}' expected ${arity} arguments, got ${args.length}`)
       }
-      if (isMacro(funcOrMac)) return wunsComp(ctx, callClosure(funcOrMac, args))
       const caller = rtCallFunc()
       return (env) => caller(funcOrMac, env)
     }
@@ -270,7 +272,9 @@ export const makeInterpreterContext = () => {
     if (!instruction) throw new CompileError(`function ${firstWordValue} not found ${print(form)}`)
     if (typeof instruction === 'function') {
       if (instruction.length !== args.length)
-        throw new CompileError(`instruction ${firstWordValue} expected ${instruction.length} arguments, got ${args.length}`)
+        throw new CompileError(
+          `instruction ${firstWordValue} expected ${instruction.length} arguments, got ${args.length}`,
+        )
       const cargs = args.map((a) => wunsComp(ctx, a))
       return (env) => {
         const eargs = cargs.map((carg) => carg(env))
