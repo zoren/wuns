@@ -1,10 +1,28 @@
 import { isSigned32BitInteger } from './core.js'
 
 const instructions = {}
+const empty = Object.freeze([])
+const u32 = 'u32'
+const s32 = 's32'
+const i32 = 'i32'
 
-const addI32Instruction = (name, f) => {
-  instructions[name] = f
-  instructions['i32.' + name] = f
+const i32i32 = Object.freeze([i32, i32])
+const mkZeroImm = (func) => {
+  if (func.length !== 2) throw new Error('expected 2 params: ' + func.length)
+  return Object.freeze({
+    immediateParams: empty,
+    params: i32i32,
+    func: () => func,
+  })
+}
+const addI32InstructionObj = (name, obj) => {
+  instructions[name] = obj
+  instructions['i32.' + name] = obj
+}
+const addI32InstructionF = (name, f) => {
+  const obj = mkZeroImm(f)
+  instructions[name] = obj
+  instructions['i32.' + name] = obj
 }
 const i32binops = {
   add: '+',
@@ -23,7 +41,7 @@ const i32binops = {
 }
 
 for (const [name, op] of Object.entries(i32binops)) {
-  addI32Instruction(name, Function('a', 'b', `return (a ${op} b) | 0`))
+  addI32InstructionF(name, Function('a', 'b', `return (a ${op} b) | 0`))
 }
 
 const i32BitwiseOps = [
@@ -37,12 +55,33 @@ const i32BitwiseOps = [
 for (const { name, op, alias } of i32BitwiseOps) {
   const f = Function('a', 'b', `return (a ${op} b) | 0`)
   // addI32Instruction(name, f)
-  addI32Instruction(alias, f)
+  addI32InstructionF(alias, f)
 }
-const u32 = 'u32'
-const s32 = 's32'
-const i32 = 'i32'
 
+addI32InstructionObj('const', {
+  immediateParams: [s32],
+  params: [],
+  func: (val) => {
+    const normalised = val | 0
+    if (val !== normalised) throw new Error('invalid immediate value')
+    // return the normalized value as -0 === 0
+    return () => normalised
+  },
+})
+instructions['unreachable'] = Object.freeze({
+  immediateParams: empty,
+  params: empty,
+  func: () => () => {
+    throw new Error('unreachable')
+  },
+})
+// The target memory and source segment are given as immediates.
+// The instruction has the signature [i32 i32 i32] -> []. The parameters are, in order:
+
+// top-2: destination address
+// top-1: offset into the source segment
+// top-0: size of memory region in bytes
+// instructions['data.passive']
 const typedArrayCtorByByteSizeSigned = (byteSize, signed) => {
   switch (byteSize) {
     case 1:
@@ -56,25 +95,5 @@ const typedArrayCtorByByteSizeSigned = (byteSize, signed) => {
   }
 }
 
-addI32Instruction('const', {
-  immediateParams: [s32],
-  params: [],
-  func: (val) => {
-    const normalised = val | 0
-    if (val !== normalised) throw new Error('invalid immediate value')
-    // return the normalized value as -0 === 0
-    return () => normalised
-  },
-})
-instructions['unreachable'] = () => {
-  throw new Error('unreachable')
-}
-// The target memory and source segment are given as immediates.
-// The instruction has the signature [i32 i32 i32] -> []. The parameters are, in order:
-
-// top-2: destination address
-// top-1: offset into the source segment
-// top-0: size of memory region in bytes
-// instructions['data.passive']
 Object.freeze(instructions)
 export { instructions }

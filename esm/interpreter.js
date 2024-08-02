@@ -262,7 +262,11 @@ export const makeInterpreterContext = () => {
         if (isMacro(funcOrMac)) return wunsComp(ctx, callClosure(funcOrMac, args))
         const caller = callClosureStaged(funcOrMac.funMacDesc, args.length)
         const cargs = args.map((a) => wunsComp(ctx, a))
-        return (env) => caller(env, cargs.map((carg) => carg(env)))
+        return (env) =>
+          caller(
+            env,
+            cargs.map((carg) => carg(env)),
+          )
       }
       if (typeof funcOrMac !== 'function') throw new CompileError(`expected function, got ${funcOrMac}`)
       // here we can check arity statically
@@ -276,29 +280,9 @@ export const makeInterpreterContext = () => {
     }
     const instruction = instructions[firstWordValue]
     if (!instruction) throw new CompileError(`function ${firstWordValue} not found ${print(form)}`)
-    if (typeof instruction === 'function') {
-      if (instruction.length !== args.length)
-        throw new CompileError(
-          `instruction ${firstWordValue} expected ${instruction.length} arguments, got ${args.length}`,
-        )
-      const cargs = args.map((a) => wunsComp(ctx, a))
-      return (env) => {
-        const eargs = cargs.map((carg) => carg(env))
-        for (const earg of eargs)
-          if (!isSigned32BitInteger(earg)) throw new RuntimeError(`expected integer, got ${earg}`)
-        try {
-          return instruction(...eargs)
-        } catch (error) {
-          console.error('error in instruction', meta(form))
-          throw new RuntimeError(`error in instruction ${firstWordValue}: ${error.message}`, form)
-        }
-      }
-    }
     const { immediateParams, params, func } = instruction
     const immArity = immediateParams.length
-    const arity = immArity + params.length
-    if (arity !== args.length)
-      throw new CompileError(`instruction ${firstWordValue} expected ${arity} arguments, got ${args.length}`)
+    if (args.length < immArity) throw new CompileError(`instruction ${firstWordValue} expected at least ${immArity} arguments`)
     // maybe we should allow number immediates to for convenience
     const immArgs = args.slice(0, immArity).map(number)
     for (let i = 0; i < immArity; i++) {
@@ -317,6 +301,8 @@ export const makeInterpreterContext = () => {
     }
     const instWithImmediate = func(...immArgs)
     const cargs = args.slice(immArity).map((a) => wunsComp(ctx, a))
+    if (cargs.length !== params.length)
+      throw new CompileError(`instruction ${firstWordValue} expected ${params.length} non-immediate arguments, got ${cargs.length}`)
     return (env) => {
       const eargs = cargs.map((carg) => carg(env))
       for (const earg of eargs) if (!isSigned32BitInteger(earg)) throw new RuntimeError(`expected integer, got ${earg}`)
