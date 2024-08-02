@@ -60,8 +60,10 @@ addI32Instruction('const', {
   immediateParams: [s32],
   params: [],
   func: (val) => {
-    if (!isSigned32BitInteger(val)) throw new Error('invalid immediate value')
-    return () => val
+    const normalised = val | 0
+    if (val !== normalised) throw new Error('invalid immediate value')
+    // return the normalized value as -0 === 0
+    return () => normalised
   },
 })
 instructions['unreachable'] = () => {
