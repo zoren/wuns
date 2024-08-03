@@ -48,10 +48,10 @@ export const push = (ar, e) => {
   ar.push(e)
   return unit
 }
-// export const mutable_list_of_size = (size) => {
-//   if (size < 0) throw new Error('mutable-list-of-size expects non-negative size')
-//   return Array.from({ length: size }, () => zero)
-// }
+export const mutable_list_of_size = (size) => {
+  if (size < 0) throw new Error('mutable-list-of-size expects non-negative size')
+  return Array.from({ length: size }, () => 0)
+}
 export const is_mutable = (f) => (Array.isArray(f) && !Object.isFrozen(f)) | 0
 export const list_from_mutable = (f) => {
   if (!Array.isArray(f)) throw new Error('list-from-mutable expects array')
