@@ -36,7 +36,7 @@ export const isWunsFunction = (f) => f instanceof Function && Object.isFrozen(f)
 export const callFunctionStaged = (funMacDesc, numberOfGivenArgs) => {
   const { name, params, restParam } = funMacDesc
   const arity = params.length
-  if (restParam === null) {
+  if (!restParam) {
     if (arity !== numberOfGivenArgs) throw new Error(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
     return (args) => {
       if (args.length !== numberOfGivenArgs) throw new Error('expected ' + numberOfGivenArgs + ' arguments')

@@ -61,17 +61,14 @@ export const makeInterpreterContext = () => {
     return value
   }
   const compBodies = (ctx, bodies) => {
-    const cbodies = []
-    for (const body of bodies) cbodies.push(wunsComp(ctx, body))
+    const cbodies = bodies.map((body) => wunsComp(ctx, body))
     return (env) => {
       let result = unit
       for (const cbody of cbodies) result = cbody(env)
       return result
     }
   }
-  const compSpecialForm = (ctx, [firstForm, ...args]) => {
-    if (!isWord(firstForm)) return null
-    const firstWordValue = wordValue(firstForm)
+  const compSpecialForm = (ctx, firstWordValue, args) => {
     switch (firstWordValue) {
       case 'quote': {
         const res = args.length === 1 ? args[0] : Object.freeze(args)
@@ -79,7 +76,7 @@ export const makeInterpreterContext = () => {
       }
       case 'if': {
         const ifArgs = [...args, unit, unit, unit].slice(0, 3)
-        let [cc, ct, cf] = ifArgs.map((arg) => wunsComp(ctx, arg))
+        const [cc, ct, cf] = ifArgs.map((arg) => wunsComp(ctx, arg))
         return (env) => {
           const ec = cc(env)
           if (!isSigned32BitInteger(ec)) throw new RuntimeError(`if expected number, got ${ec}`)
@@ -91,8 +88,8 @@ export const makeInterpreterContext = () => {
         const [bindings, ...bodies] = args
         const compBindings = []
         const varDescs = new Map()
-        const newCtx = { varDescs, outer: ctx, ctxType: wordValue(firstForm) }
-        const varDesc = { defForm: firstForm }
+        const newCtx = { varDescs, outer: ctx, ctxType: firstWordValue }
+        const varDesc = { defForm: firstWordValue }
         for (let i = 0; i < bindings.length - 1; i += 2) {
           const v = wordValue(bindings[i])
           compBindings.push([v, wunsComp(newCtx, bindings[i + 1])])
@@ -166,7 +163,7 @@ export const makeInterpreterContext = () => {
         }
         Object.freeze(params)
         const varDescs = new Map()
-        const paramDesc = { defForm: firstForm }
+        const paramDesc = { defForm: firstWordValue }
         for (const p of params) varDescs.set(p, paramDesc)
         if (restParam) varDescs.set(restParam, paramDesc)
         const funMacDesc = {
@@ -174,7 +171,7 @@ export const makeInterpreterContext = () => {
           params,
           restParam,
         }
-        const newCtx = { varDescs, outer: null, ctxType: wordValue(firstForm), funMacDesc }
+        const newCtx = { varDescs, outer: null, ctxType: firstWordValue, funMacDesc }
         funMacDesc.cbodies = compBodies(newCtx, bodies)
         if (firstWordValue === 'defmacro') funMacDesc.isMacro = true
         Object.freeze(funMacDesc)
@@ -225,9 +222,9 @@ export const makeInterpreterContext = () => {
       const caller = rtCallFunc()
       return (env) => caller(cfunc(env), env)
     }
-    const cspec = compSpecialForm(ctx, form)
-    if (cspec) return cspec
     const firstWordValue = wordValue(firstForm)
+    const cspec = compSpecialForm(ctx, firstWordValue, args)
+    if (cspec) return cspec
     if (getCtxVar(ctx, firstWordValue)) {
       const caller = rtCallFunc()
       return (env) => caller(getVarValue(env, firstWordValue), env)
@@ -247,8 +244,8 @@ export const makeInterpreterContext = () => {
         throw new CompileError(
           `function '${firstWordValue}' expected ${funcOrMac.length} arguments, got ${args.length}`,
         )
-      const caller = rtCallFunc()
-      return (env) => caller(funcOrMac, env)
+      const cargs = args.map((a) => wunsComp(ctx, a))
+      return (env) => funcOrMac(...cargs.map((carg) => carg(env)))
     }
     const instruction = instructions[firstWordValue]
     if (!instruction) throw new CompileError(`function '${firstWordValue}' not found ${print(form)}`)
