@@ -58,7 +58,7 @@ export const makeInterpreterContext = () => {
   const defSetVar = (name, value) => {
     if (defVars.has(name)) throw new RuntimeError(`defSetVar redefining var: ${name}`)
     defVars.set(name, value)
-    return null
+    return value
   }
   const compBodies = (ctx, bodies) => {
     const cbodies = []
@@ -152,11 +152,7 @@ export const makeInterpreterContext = () => {
         const [varName, value] = args
         const vn = wordValue(varName)
         const compValue = wunsComp(ctx, value)
-        return (env) => {
-          const val = compValue(env)
-          defSetVar(vn, val)
-          return unit
-        }
+        return (env) => defSetVar(vn, compValue(env))
       }
       case 'defn':
       case 'defmacro': {
@@ -182,11 +178,8 @@ export const makeInterpreterContext = () => {
         funMacDesc.cbodies = compBodies(newCtx, bodies)
         if (firstWordValue === 'defmacro') funMacDesc.isMacro = true
         Object.freeze(funMacDesc)
-        return () => {
-          const f = createFunction(funMacDesc)
-          defSetVar(nameString, f)
-          return f
-        }
+        const f = createFunction(funMacDesc)
+        return () => defSetVar(nameString, f)
       }
       case 'recur': {
         let curCtx = ctx
@@ -315,6 +308,6 @@ export const evalLogForms = ({ evalForm }, forms) => {
   }
 }
 
-export const parseEvalFile = (ctx, filename) => {
-  evalLogForms(ctx, parseFile(filename))
+export const parseEvalFile = ({ evalForm }, filename) => {
+  for (const form of parseFile(filename)) evalForm(form)
 }
