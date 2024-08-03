@@ -31,69 +31,37 @@ export const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(a
 export const isUnit = (x) => x === unit || (Array.isArray(x) && Object.isFrozen(x) && x.length === 0)
 export const isList = (f) => Array.isArray(f)
 
-export const isClosure = (f) => f instanceof Function && Object.isFrozen(f) && 'funMacDesc' in f && 'closureEnv' in f
-export const createClosure = (funMacDesc, outer) => {
-  const closureEnv = Object.freeze({ varValues: new Map(), outer })
-  const closureFn = (...args) => callClosure(closureFn, args)
-  closureFn['funMacDesc'] = funMacDesc
-  closureFn['closureEnv'] = closureEnv
-  Object.freeze(closureFn)
-  if (!isClosure(closureFn)) throw new Error('not a closure')
-  return closureFn
-}
+export const isWunsFunction = (f) => f instanceof Function && Object.isFrozen(f) && 'funMacDesc' in f
 
-export const closureWithMeta = (closure, meta) => {
-  const { funMacDesc, closureEnv } = closure
-  const newClosureFn = (...args) => callClosure(newClosureFn, args)
-  newClosureFn['funMacDesc'] = funMacDesc
-  newClosureFn['closureEnv'] = closureEnv
-  newClosureFn[symbolMeta] = meta
-  Object.freeze(newClosureFn)
-  if (!isClosure(newClosureFn)) throw new Error('not a closure')
-  return newClosureFn
-}
-
-export const callClosure = (closure, args) => {
-  if (!isClosure(closure)) throw new Error('not a closure')
-  const { funMacDesc, closureEnv } = closure
-  const { name, params, restParam, cbodies } = funMacDesc
-  const numberOfGivenArgs = args.length
-  const arity = params.length
-  const varValues = new Map()
-
-  if (restParam === null) {
-    if (arity !== numberOfGivenArgs) throw new Error(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
-    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-  } else {
-    if (arity > numberOfGivenArgs)
-      throw new Error(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
-    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-    varValues.set(restParam, makeList(...args.slice(arity)))
-  }
-  return cbodies({ varValues, outer: closureEnv })
-}
-
-export const callClosureStaged = (funMacDesc, numberOfGivenArgs) => {
-  const { name, params, restParam, cbodies } = funMacDesc
+export const callFunctionStaged = (funMacDesc, numberOfGivenArgs) => {
+  const { name, params, restParam } = funMacDesc
   const arity = params.length
   if (restParam === null) {
     if (arity !== numberOfGivenArgs) throw new Error(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
-    return (outer, args) => {
+    return (args) => {
       if (args.length !== numberOfGivenArgs) throw new Error('expected ' + numberOfGivenArgs + ' arguments')
       const varValues = new Map()
       for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-      return cbodies({ varValues, outer })
+      return funMacDesc.cbodies({ varValues })
     }
   }
   if (arity > numberOfGivenArgs)
     throw new Error(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
-  return (outer, args) => {
+  return (args) => {
     if (args.length !== numberOfGivenArgs) throw new Error('expected ' + numberOfGivenArgs + ' arguments')
     const varValues = new Map()
     for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
     varValues.set(restParam, makeList(...args.slice(arity)))
-    return cbodies({ varValues, outer })
+    return funMacDesc.cbodies({ varValues })
   }
+}
+
+export const callFunction = (funMacDesc, args) => callFunctionStaged(funMacDesc, args.length)(args)
+
+export const createFunction = (funMacDesc) => {
+  const fn = (...args) => callFunction(funMacDesc, args)
+  fn['funMacDesc'] = funMacDesc
+  return Object.freeze(fn)
 }
 
 const symbolMeta = Symbol.for('wuns-meta')
@@ -115,8 +83,8 @@ export const print = (ox) => {
     if (typeof x === 'number') return String(x)
     if (typeof x === 'bigint') return String(x)
     if (Array.isArray(x)) return `[${x.map(go).join(' ')}]`
-    if (isClosure(x)) return `[closure ${x.funMacDesc.name} arity ${x.funMacDesc.params.length}]`
-    if (typeof x === 'function') return `[fn ${x.name} arity ${x.length}]`
+    if (isWunsFunction(x)) return `[fn ${x.funMacDesc.name} arity ${x.funMacDesc.params.length}]`
+    if (typeof x === 'function') return `[extern-fn ${x.name} arity ${x.length}]`
     if (Object.isFrozen(x))
       return `[kv-map${Object.entries(x)
         .map(([k, v]) => ` ${k} ${go(v)}`)
@@ -143,8 +111,8 @@ class Atom {
 export const atom = (v) => new Atom(v)
 const isAtom = (f) => f instanceof Atom
 export const atom_get = (a) => {
-  if (isAtom(a)) return a.value
-  throw new Error('not an atom: ' + a)
+  if (!isAtom(a)) throw new Error('not an atom: ' + a)
+  return a.value
 }
 export const atom_set = (a, v) => {
   if (!isAtom(a)) throw new Error('not an atom: ' + a)

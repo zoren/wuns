@@ -6,20 +6,6 @@
 [def 3 [i32.const 3]]
 [def 4 [i32.const 4]]
 
-[def defmacro
-  [with-meta
-    [func defmacro [name params .. forms]
-      [list [quote let] [list]
-        [list [quote def] name
-          [list [quote with-meta]
-            [concat [list [quote func] name params] forms]
-            [transient-kv-map [quote is-macro] 1]]]
-        [list]]]
-    [transient-kv-map [quote is-macro] 1]]]
-
-[defmacro defn [name params .. forms]
-  [list [quote def] name [concat [list [quote func] name params] forms]]]
-
 [def quote-word [quote quote]]
 
 [defn mk-quote [form] [list quote-word form]]

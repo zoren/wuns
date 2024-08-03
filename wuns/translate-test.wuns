@@ -119,24 +119,32 @@
        import-object [if [hasq test import-object] [getq test import-object] [kv-map]]
        exports [wat-to-exports text import-object]
        export-names [keys exports]
-       wrap-func [list [quote func] [quote wrapper] export-names expect]
+       wrap-func [list [quote defn] [genword] export-names expect]
        args [mutable-list]]
     [for-each export-name export-names
       [push args [get exports export-name]]]
     [when-not [eval [concat [list wrap-func] args]]
       [log [list [quote test] [quote fail] module expect]]]]]]
 
+[def mem-atom [atom 0]]
+
+[defn log-pointer [x y]
+  [log-byte-array [byte-array [getq [atom-get mem-atom] buffer] x y]]]
+
+[defn log-i32 [x]
+  [log [list [quote log-i32] x]]]
+
 [defn test-file [module]
   [let
     [text [compile-top-forms-to-text module]
      mem [wasm-memory [kv-map initial 1]]
-     import-object [kv-map env
+     import-object
+     [kv-map env
         [kv-map mem mem
-                log-pointer [func log-pointer [x y]
-                  [log-byte-array [byte-array [getq mem buffer] x y]]]
-                log-i32 [func log-i32 [x]
-                  [log [list [quote log-i32] x]]]]]
+                log-pointer log-pointer
+                log-i32 log-i32]]
      exports [wat-to-exports text import-object]
      main [getq exports main]]
+    [atom-set mem-atom mem]
     [main]
   ]]

@@ -6,11 +6,11 @@ import {
   print,
   number,
   meta,
-  callClosure,
-  callClosureStaged,
   isSigned32BitInteger,
-  createClosure,
-  isClosure,
+  createFunction,
+  callFunction,
+  callFunctionStaged,
+  isWunsFunction,
 } from './core.js'
 import { instructions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
@@ -52,10 +52,9 @@ const getCtxVar = (ctx, v) => {
 }
 
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
-const isMacro = (form) => meta(form)['is-macro']
+const isMacro = (form) => isWunsFunction(form) && form.funMacDesc.isMacro
 
 export const makeInterpreterContext = () => {
-  const wunsEval = (form) => wunsComp(null, form)(null)
   const defVars = new Map()
   const getDefVarVal = (name) => {
     if (!defVars.has(name)) throw new Error('getDefVarVal name not found: ' + name)
@@ -66,10 +65,10 @@ export const makeInterpreterContext = () => {
     defVars.set(name, value)
     return null
   }
+  const wunsEval = (form) => wunsComp(null, form)(null)
   defSetVar('eval', wunsEval)
 
   for (const [name, f] of hostExports) defSetVar(name, f)
-
   const compBodies = (ctx, bodies) => {
     const cbodies = []
     for (const body of bodies) cbodies.push(wunsComp(ctx, body))
@@ -168,8 +167,10 @@ export const makeInterpreterContext = () => {
           return unit
         }
       }
-      case 'func': {
+      case 'defn':
+      case 'defmacro': {
         const [fmname, origParams, ...bodies] = args
+        const nameString = wordValue(fmname)
         let params = origParams.map(wordValue)
         let restParam = null
         if (params.length > 1 && params.at(-2) === '..') {
@@ -186,26 +187,24 @@ export const makeInterpreterContext = () => {
           params,
           restParam,
         }
-        const newCtx = { varDescs, outer: ctx, ctxType: wordValue(firstForm), funMacDesc }
+        const newCtx = { varDescs, outer: null, ctxType: wordValue(firstForm), funMacDesc }
         funMacDesc.cbodies = compBodies(newCtx, bodies)
+        if (firstWordValue === 'defmacro') funMacDesc.isMacro = true
         Object.freeze(funMacDesc)
-        return (env) => createClosure(funMacDesc, env)
+        return () => {
+          const f = createFunction(funMacDesc)
+          defSetVar(nameString, f)
+          return f
+        }
       }
       case 'recur': {
         let curCtx = ctx
-        while (true) {
-          if (!curCtx) throw new CompileError('recur outside of function context')
-          if (curCtx.ctxType === 'func') {
-            const { funMacDesc } = curCtx
-            const cargs = args.map((a) => wunsComp(ctx, a))
-            return (env) =>
-              callClosure(
-                createClosure(funMacDesc, env),
-                cargs.map((carg) => carg(env)),
-              )
-          }
+        while (curCtx.outer) {
           curCtx = curCtx.outer
         }
+        const caller = callFunctionStaged(curCtx.funMacDesc, args.length)
+        const cargs = args.map((a) => wunsComp(ctx, a))
+        return (env) => caller(cargs.map((carg) => carg(env)))
       }
     }
     return null
@@ -228,7 +227,7 @@ export const makeInterpreterContext = () => {
       return (f, env) => {
         const eargs = cargs.map((carg) => carg(env))
         try {
-          if (isClosure(f)) return callClosure(f, eargs)
+          if (isWunsFunction(f)) return callFunction(f.funMacDesc, eargs)
           if (typeof f === 'function') return f(...eargs)
           throw new RuntimeError(`expected function, got ${f}`)
         } catch (e) {
@@ -251,18 +250,15 @@ export const makeInterpreterContext = () => {
     }
     if (defVars.has(firstWordValue)) {
       const funcOrMac = getDefVarVal(firstWordValue)
-      if (isClosure(funcOrMac)) {
-        if (isMacro(funcOrMac)) return wunsComp(ctx, callClosure(funcOrMac, args))
-        const caller = callClosureStaged(funcOrMac.funMacDesc, args.length)
+      if (isWunsFunction(funcOrMac)) {
+        const { funMacDesc } = funcOrMac
+        if (isMacro(funcOrMac)) return wunsComp(ctx, callFunction(funMacDesc, args))
+        const caller = callFunctionStaged(funMacDesc, args.length)
         const cargs = args.map((a) => wunsComp(ctx, a))
-        return (env) =>
-          caller(
-            env,
-            cargs.map((carg) => carg(env)),
-          )
+        return (env) => caller(cargs.map((carg) => carg(env)))
       }
       if (typeof funcOrMac !== 'function') throw new CompileError(`expected function, got ${funcOrMac}`)
-      // here we can check arity statically
+      // here we check arity statically
       if (!funcOrMac.varargs && funcOrMac.length !== args.length)
         throw new CompileError(
           `function '${firstWordValue}' expected ${funcOrMac.length} arguments, got ${args.length}`,
@@ -271,7 +267,7 @@ export const makeInterpreterContext = () => {
       return (env) => caller(funcOrMac, env)
     }
     const instruction = instructions[firstWordValue]
-    if (!instruction) throw new CompileError(`function ${firstWordValue} not found ${print(form)}`)
+    if (!instruction) throw new CompileError(`function '${firstWordValue}' not found ${print(form)}`)
     const { immediateParams, params, func } = instruction
     const immArity = immediateParams.length
     if (args.length < immArity)

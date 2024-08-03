@@ -12,8 +12,6 @@ import {
   atom,
   atom_get,
   atom_set,
-  isClosure,
-  closureWithMeta,
   isSigned32BitInteger,
 } from './core.js'
 
@@ -26,7 +24,6 @@ export const eq_word = (a, b) => (isWord(a) && isWord(b) && (a === b || wordValu
 export const with_meta = (f, metaData) => {
   if (isWord(f)) return wordWithMeta(wordValue(f), metaData)
   if (isList(f)) return listWithMeta(f, metaData)
-  if (isClosure(f)) return closureWithMeta(f, metaData)
   throw new Error('with-meta expects word or list')
 }
 export { meta }
