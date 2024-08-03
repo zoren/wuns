@@ -22,10 +22,6 @@ class RuntimeError extends Error {
   }
 }
 
-const rtAssert = (cond, msg) => {
-  if (!cond) throw new RuntimeError('eval assert failed: ' + msg)
-}
-
 class CompileError extends Error {
   constructor(message, form) {
     super(message)
@@ -150,7 +146,6 @@ export const makeInterpreterContext = () => {
         return (env) => {
           let enclosingLoopEnv = env
           while (true) {
-            rtAssert(enclosingLoopEnv, 'continue outside of loop')
             if ('continue' in enclosingLoopEnv) break
             enclosingLoopEnv = enclosingLoopEnv.outer
           }
@@ -268,11 +263,10 @@ export const makeInterpreterContext = () => {
       }
       if (typeof funcOrMac !== 'function') throw new CompileError(`expected function, got ${funcOrMac}`)
       // here we can check arity statically
-      if (!funcOrMac.varargs) {
-        const arity = funcOrMac.length
-        if (arity !== args.length)
-          throw new CompileError(`function '${firstWordValue}' expected ${arity} arguments, got ${args.length}`)
-      }
+      if (!funcOrMac.varargs && funcOrMac.length !== args.length)
+        throw new CompileError(
+          `function '${firstWordValue}' expected ${funcOrMac.length} arguments, got ${args.length}`,
+        )
       const caller = rtCallFunc()
       return (env) => caller(funcOrMac, env)
     }
