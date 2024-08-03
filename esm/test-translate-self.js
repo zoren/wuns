@@ -41,7 +41,6 @@ const mkParseWat = (s) => {
   }
 }
 
-import { apply } from './core.js'
 import { makeInterpreterContext } from './interpreter.js'
 
 import { parseFile } from './parseTreeSitter.js'

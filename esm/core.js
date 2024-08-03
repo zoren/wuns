@@ -96,8 +96,6 @@ export const callClosureStaged = (funMacDesc, numberOfGivenArgs) => {
   }
 }
 
-export const apply = (f, ...args) => callClosure(f, args)
-
 const symbolMeta = Symbol.for('wuns-meta')
 export const listWithMeta = (l, meta) => {
   const ll = [...l]

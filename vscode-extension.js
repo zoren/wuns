@@ -302,7 +302,7 @@ const makeInterpretCurrentFile = async (context) => {
 const makeCheckCurrentFileCommand = async (context) => {
   const outputChannel = window.createOutputChannel('wuns check', wunsLanguageId)
   const diag = languages.createDiagnosticCollection('wuns')
-  const { meta, print, apply } = await import('./esm/core.js')
+  const { meta, print } = await import('./esm/core.js')
   const { makeInterpreterContext } = await import('./esm/interpreter.js')
   const appendShow = (s) => {
     outputChannel.appendLine(s)
