@@ -41,13 +41,15 @@ const mkParseWat = (s) => {
   }
 }
 
-import { makeInterpreterContext } from './interpreter.js'
+import { makeInterpreterContext, initInterpreterEnv, evalLogForms } from './interpreter.js'
 
 import { parseFile } from './parseTreeSitter.js'
 
 const textDecoder = new TextDecoder()
 const wordBytesToString = (wordBytes) => textDecoder.decode(Uint8Array.from(wordBytes, (v) => +v))
-const { evalLogForms, getVarVal, defSetVar } = makeInterpreterContext()
+const ctx = makeInterpreterContext()
+initInterpreterEnv(ctx)
+const { getVarVal, defSetVar } = ctx
 const textToWasm = (allTextByteWords) => {
   const llText = wordBytesToString(allTextByteWords)
   fs.writeFileSync('ll.wat', llText)
@@ -59,7 +61,7 @@ defSetVar('instantiate-module', (module, importObject) => new WebAssembly.Instan
 defSetVar('wasm-memory', (paramObj) => new WebAssembly.Memory(paramObj))
 defSetVar('byte-array', (buffer, byteOffset, length) => new Uint8Array(buffer, byteOffset, length))
 for (const name of ['std3', 'wasm-instructions', 'check', 'hosted', 'translate-test'])
-  evalLogForms(parseFile(`../wuns/${name}.wuns`))
+  evalLogForms(ctx, parseFile(`../wuns/${name}.wuns`))
 
 getVarVal('test-main')()
 

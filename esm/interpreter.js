@@ -29,10 +29,6 @@ class CompileError extends Error {
   }
 }
 
-const ctAssert = (cond, msg) => {
-  if (!cond) throw new CompileError('compile assert failed: ' + msg)
-}
-
 const getVarValue = (env, v) => {
   while (true) {
     if (!env) throw new RuntimeError(`variable ${v} not found`)
@@ -51,13 +47,12 @@ const getCtxVar = (ctx, v) => {
   }
 }
 
-const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 const isMacro = (form) => isWunsFunction(form) && form.funMacDesc.isMacro
 
 export const makeInterpreterContext = () => {
   const defVars = new Map()
   const getDefVarVal = (name) => {
-    if (!defVars.has(name)) throw new Error('getDefVarVal name not found: ' + name)
+    if (!defVars.has(name)) throw new CompileError('getDefVarVal name not found: ' + name)
     return defVars.get(name)
   }
   const defSetVar = (name, value) => {
@@ -65,10 +60,6 @@ export const makeInterpreterContext = () => {
     defVars.set(name, value)
     return null
   }
-  const wunsEval = (form) => wunsComp(null, form)(null)
-  defSetVar('eval', wunsEval)
-
-  for (const [name, f] of hostExports) defSetVar(name, f)
   const compBodies = (ctx, bodies) => {
     const cbodies = []
     for (const body of bodies) cbodies.push(wunsComp(ctx, body))
@@ -134,7 +125,7 @@ export const makeInterpreterContext = () => {
         }
         let enclosingLoopCtx = ctx
         while (true) {
-          ctAssert(enclosingLoopCtx, 'continue outside of loop')
+          if (!enclosingLoopCtx) throw new CompileError('continue outside of loop')
           if (enclosingLoopCtx.ctxType === 'loop') break
           enclosingLoopCtx = enclosingLoopCtx.outer
         }
@@ -157,7 +148,7 @@ export const makeInterpreterContext = () => {
         }
       }
       case 'def': {
-        ctAssert(args.length === 2, `def expects 2 arguments, got ${args.length}`)
+        if (args.length !== 2) throw new CompileError(`def expects 2 arguments, got ${args.length}`)
         const [varName, value] = args
         const vn = wordValue(varName)
         const compValue = wunsComp(ctx, value)
@@ -300,21 +291,30 @@ export const makeInterpreterContext = () => {
       return instWithImmediate(...eargs)
     }
   }
-
-  const evalLogForms = (forms) => {
-    for (const form of forms) {
-      const v = wunsEval(form)
-      if (!isUnit(v)) console.log(print(v))
-    }
-  }
-
-  const parseEvalFile = (filename) => {
-    evalLogForms(parseFile(filename))
-  }
+  const compileForm = (form) => wunsComp(null, form)
+  const evalForm = (form) => compileForm(form)(null)
   return {
-    evalLogForms,
-    parseEvalFile,
     getVarVal: getDefVarVal,
     defSetVar,
+    compileForm,
+    evalForm,
   }
+}
+
+const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
+
+export const initInterpreterEnv = ({ defSetVar, evalForm }) => {
+  defSetVar('eval', evalForm)
+  for (const [name, f] of hostExports) defSetVar(name, f)
+}
+
+export const evalLogForms = ({ evalForm }, forms) => {
+  for (const form of forms) {
+    const v = evalForm(form)
+    if (!isUnit(v)) console.log(print(v))
+  }
+}
+
+export const parseEvalFile = (ctx, filename) => {
+  evalLogForms(ctx, parseFile(filename))
 }
