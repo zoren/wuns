@@ -22,9 +22,6 @@ export const wordValue = (w) => {
   if (isWord(w)) return w.value
   throw new Error('not a word: ' + w + ' ' + typeof w)
 }
-export const zero = word('0')
-export const one = word('1')
-export const isForm = (f) => isWord(f) || (isList(f) && f.every(isForm))
 
 export const unit = Object.freeze([])
 export const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
