@@ -1,5 +1,4 @@
 import {
-  unit,
   isWord,
   isList,
   word,
@@ -43,7 +42,6 @@ export const push = (ar, e) => {
   if (!Array.isArray(ar)) throw new Error('push expects array')
   if (Object.isFrozen(ar)) throw new Error('push expects mutable array')
   ar.push(e)
-  return unit
 }
 export const mutable_list_of_size = (size) => {
   if (size < 0) throw new Error('mutable-list-of-size expects non-negative size')
@@ -70,7 +68,6 @@ export const set_array = (ar, i, e) => {
   if (!isSigned32BitInteger(i)) throw new Error('set-array expects integer index')
   if (i < 0 || i >= ar.length) throw new Error('set-array index out of bounds: ' + i + ' ' + ar.length)
   ar[i] = e
-  return unit
 }
 export const at = (v, i) => {
   if (!isList(v)) throw new Error('at expects list, got' + typeof v + ' ' + v)
@@ -132,13 +129,11 @@ export const set = (o, k, e) => {
   if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('set expects map')
   if (Object.isFrozen(o)) throw new Error('set expects mutable object')
   o[wordValue(k)] = e
-  return unit
 }
 export const delete_key = (o, k) => {
   if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('delete-key expects map')
   if (Object.isFrozen(o)) throw new Error('delete expects mutable object')
   delete o[wordValue(k)]
-  return unit
 }
 export const keys = (m) => {
   if (typeof m !== 'object') throw new Error('keys expects map')
@@ -158,10 +153,8 @@ export const abort = () => {
 }
 export const log = (form) => {
   console.log(print(form))
-  return unit
 }
 const textDecoder = new TextDecoder()
 export const log_byte_array = (bytes) => {
   console.log(textDecoder.decode(bytes))
-  return unit
 }

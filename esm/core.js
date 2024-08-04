@@ -25,7 +25,6 @@ export const wordValue = (w) => {
 
 export const unit = Object.freeze([])
 export const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
-export const isUnit = (x) => x === unit || (Array.isArray(x) && Object.isFrozen(x) && x.length === 0)
 export const isList = (f) => Array.isArray(f)
 
 export const isWunsFunction = (f) => f instanceof Function && Object.isFrozen(f) && 'funMacDesc' in f

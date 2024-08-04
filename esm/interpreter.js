@@ -1,11 +1,9 @@
 import {
   wordValue,
   isWord,
-  isUnit,
   unit,
   print,
   number,
-  meta,
   isSigned32BitInteger,
   createFunction,
   callFunction,
@@ -47,7 +45,7 @@ const getCtxVar = (ctx, v) => {
   }
 }
 
-const isMacro = (form) => isWunsFunction(form) && form.funMacDesc.isMacro
+export const isMacro = (form) => isWunsFunction(form) && form.funMacDesc.isMacro
 
 export const makeInterpreterContext = () => {
   const defVars = new Map()
@@ -63,7 +61,7 @@ export const makeInterpreterContext = () => {
   const compBodies = (ctx, bodies) => {
     const cbodies = bodies.map((body) => wunsComp(ctx, body))
     return (env) => {
-      let result = unit
+      let result = undefined
       for (const cbody of cbodies) result = cbody(env)
       return result
     }
@@ -141,7 +139,6 @@ export const makeInterpreterContext = () => {
           const tmpVals = updateFuncs.map((f) => f(env))
           for (let i = 0; i < updateVars.length; i++) varValues.set(updateVars[i], tmpVals[i])
           enclosingLoopEnv.continue = true
-          return unit
         }
       }
       case 'def': {
@@ -301,7 +298,7 @@ export const initInterpreterEnv = ({ defSetVar, evalForm }) => {
 export const evalLogForms = ({ evalForm }, forms) => {
   for (const form of forms) {
     const v = evalForm(form)
-    if (!isUnit(v)) console.log(print(v))
+    if (v !== undefined) console.log(print(v))
   }
 }
 

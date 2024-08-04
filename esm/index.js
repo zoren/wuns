@@ -1,14 +1,14 @@
 import { runRepl } from './repl.js'
-import { makeInterpreterContext } from './interpreter.js'
+import { makeInterpreterContext,initInterpreterEnv, parseEvalFile } from './interpreter.js'
 
-const context = makeInterpreterContext({  })
-const { parseEvalFile } = context
+const context = makeInterpreterContext()
+initInterpreterEnv(context)
 
 const commandLineArgs = process.argv.slice(2)
 
 for (const arg of commandLineArgs) {
   console.log('evaluating:', arg)
-  parseEvalFile(arg)
+  parseEvalFile(context, arg)
 }
 
 runRepl(context)
