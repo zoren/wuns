@@ -290,9 +290,12 @@ export const makeInterpreterContext = () => {
 
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 
-export const initInterpreterEnv = ({ defSetVar, evalForm }) => {
+export const makeInitInterpreter = () => {
+  const ctx = makeInterpreterContext()
+  const { defSetVar, evalForm } = ctx
   defSetVar('eval', evalForm)
   for (const [name, f] of hostExports) defSetVar(name, f)
+  return ctx
 }
 
 export const evalLogForms = ({ evalForm }, forms) => {

@@ -303,20 +303,21 @@ const makeCheckCurrentFileCommand = async (context) => {
   const outputChannel = window.createOutputChannel('wuns check', wunsLanguageId)
   const diag = languages.createDiagnosticCollection('wuns')
   const { meta, print } = await import('./esm/core.js')
-  const { makeInterpreterContext } = await import('./esm/interpreter.js')
+  const { makeInitInterpreter, parseEvalFile } = await import('./esm/interpreter.js')
   const appendShow = (s) => {
     outputChannel.appendLine(s)
     outputChannel.show(true)
   }
   const wunsDir = context.extensionPath + '/wuns/'
   return async () => {
-    const { parseEvalFile, getVarVal } = makeInterpreterContext()
-    for (const name of ['std3', 'wasm-instructions', 'check']) parseEvalFile(wunsDir + name + '.wuns')
+    const context = makeInitInterpreter()
+    for (const name of ['std3', 'wasm-instructions', 'check']) parseEvalFile(context, wunsDir + name + '.wuns')
     const document = getActiveTextEditorDocument()
     if (!document) return
     const { forms } = cacheFetchOrParse(document)
     outputChannel.clear()
     appendShow('checking: ' + document.fileName)
+    const { getVarVal } = context
     const checkTopForms = getVarVal('check-top-forms')
     const diagnostics = []
     try {

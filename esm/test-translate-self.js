@@ -40,15 +40,13 @@ const mkParseWat = (s) => {
     throw e
   }
 }
-
-import { makeInterpreterContext, initInterpreterEnv, parseEvalFile } from './interpreter.js'
+import { makeInitInterpreter, parseEvalFile } from './interpreter.js'
 
 import { parseFile } from './parseTreeSitter.js'
 
 const textDecoder = new TextDecoder()
 const wordBytesToString = (wordBytes) => textDecoder.decode(Uint8Array.from(wordBytes, (v) => +v))
-const ctx = makeInterpreterContext()
-initInterpreterEnv(ctx)
+const ctx = makeInitInterpreter()
 const { getVarVal, defSetVar } = ctx
 const textToWasm = (allTextByteWords) => {
   const llText = wordBytesToString(allTextByteWords)
