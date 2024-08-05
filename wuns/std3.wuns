@@ -118,6 +118,16 @@
               [list [quote let] [list w [at clauses [dec i]]]
                 [list [quote if] w w res]]]]]]]]]
 
+[defmacro if-let [binding true-form false-form]
+  [assert [is-list binding] if-let requires a list as the first argument]
+  [assert [eq 2 [size binding]] if-let requires a list of size 2 as the first argument]
+  [let [v [first binding]
+        cond [second binding]
+        tmp-word [genword]]
+    [assert [is-word v] if-let requires a word as the first element of the first argument]
+    [list [quote let] [list tmp-word cond]
+      [list [quote if] tmp-word [list [quote let] [list v tmp-word] true-form] false-form]]]]
+
 [defn eq-form [a b]
   [or
     [eq-word a b]
