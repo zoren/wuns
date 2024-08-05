@@ -291,7 +291,7 @@
                       [let [var [at form i]
                             value [at form [inc i]]
                             val-type [recur cur-ctx 0 value]]
-                        [if-not [hasq loop-vars var]
+                        [if-not [has loop-vars var]
                           [report var loop var not found]
                           [let [type [get loop-vars var]]
                             [report-when-not [eq-form type val-type] value type mismatch]]]]]]
@@ -489,8 +489,7 @@
     [check-top-form form]]
   [when-not [is-empty errors]
     [for-each err errors
-      [log [list [getq err message] [getq err form] [getq [meta [getq err form]] range]]]]
-    ]
+      [log [list [getq err message] [getq err form] [getq [meta [getq err form]] range]]]]]
   [let [res
         [kv-map
           errors [persistent-array errors]
