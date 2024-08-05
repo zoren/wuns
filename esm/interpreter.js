@@ -9,6 +9,7 @@ import {
   callFunction,
   callFunctionStaged,
   isWunsFunction,
+  meta,
 } from './core.js'
 import { instructions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
@@ -47,10 +48,21 @@ const getCtxVar = (ctx, v) => {
 
 export const isMacro = (form) => isWunsFunction(form) && form.funMacDesc.isMacro
 
+const rangeToString = ([startLine, startCol, endLine, endCol]) => `${startLine + 1}:${startCol}`
+
+const formToLocationString = (word) => {
+  const m = meta(word)
+  return `${m['file-path']}:${rangeToString(m.range)}`
+}
+
 export const makeInterpreterContext = () => {
   const defVars = new Map()
-  const getDefVarVal = (name) => {
-    if (!defVars.has(name)) throw new CompileError('getDefVarVal name not found: ' + name)
+  const getDefVarVal = (form) => {
+    const name = wordValue(form)
+    if (!defVars.has(name)) {
+      console.error(`'${name}' not found on: ${formToLocationString(form)}`)
+      throw new CompileError('getDefVarVal name not found: ' + name)
+    }
     return defVars.get(name)
   }
   const defSetVar = (name, value) => {
@@ -191,7 +203,7 @@ export const makeInterpreterContext = () => {
     if (isWord(form)) {
       const v = wordValue(form)
       if (getCtxVar(ctx, v)) return (env) => getVarValue(env, v)
-      const defVarVal = getDefVarVal(v)
+      const defVarVal = getDefVarVal(form)
       if (isMacro(defVarVal)) throw new CompileError(`can't take value of macro ${v}`)
       return () => defVarVal
     }
@@ -227,7 +239,7 @@ export const makeInterpreterContext = () => {
       return (env) => caller(getVarValue(env, firstWordValue), env)
     }
     if (defVars.has(firstWordValue)) {
-      const funcOrMac = getDefVarVal(firstWordValue)
+      const funcOrMac = getDefVarVal(firstForm)
       if (isWunsFunction(funcOrMac)) {
         const { funMacDesc } = funcOrMac
         if (isMacro(funcOrMac)) return wunsComp(ctx, callFunction(funMacDesc, args))
@@ -280,8 +292,12 @@ export const makeInterpreterContext = () => {
   }
   const compileForm = (form) => wunsComp(null, form)
   const evalForm = (form) => compileForm(form)(null)
+  const getVarVal = (name) => {
+    if (!defVars.has(name)) throw new Error('getDefVarVal name not found: ' + name)
+    return defVars.get(name)
+  }
   return {
-    getVarVal: getDefVarVal,
+    getVarVal,
     defSetVar,
     compileForm,
     evalForm,
