@@ -49,8 +49,8 @@
 [defmacro if-not [cond false-form true-form]
   [list
     [quote if] cond
-    false-form
-    true-form]]
+    true-form
+    false-form]]
 
 [defn quote-list [lmsg]
   [let [s [size lmsg]
