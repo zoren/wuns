@@ -87,11 +87,7 @@ export const makeInterpreterContext = () => {
       case 'if': {
         const ifArgs = [...args, unit, unit, unit].slice(0, 3)
         const [cc, ct, cf] = ifArgs.map((arg) => wunsComp(ctx, arg))
-        return (env) => {
-          const ec = cc(env)
-          if (!isSigned32BitInteger(ec)) throw new RuntimeError(`if expected number, got ${ec}`)
-          return (ec === 0 ? cf : ct)(env)
-        }
+        return (env) => (cc(env) === 0 ? cf : ct)(env)
       }
       case 'let':
       case 'loop': {
