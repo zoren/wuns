@@ -44,10 +44,6 @@ export const mutable_list_of_size = (size) => {
   return Array.from({ length: size }, () => 0)
 }
 export const is_mutable = (f) => (Array.isArray(f) && !Object.isFrozen(f)) | 0
-export const list_from_mutable = (f) => {
-  if (!Array.isArray(f)) throw new Error('list-from-mutable expects array')
-  return makeList(...f)
-}
 
 export const persistent_array = (o) => {
   if (!Array.isArray(o)) throw new Error('persistent-array expects array')
