@@ -33,11 +33,7 @@ export const size = (a) => {
   throw new Error('size expects word or list found: ' + a + ' ' + typeof a)
 }
 
-export const list = (...args) => makeList(...args)
-list.varargs = true
-
-export const mutable_list = (...args) => args
-mutable_list.varargs = true
+export const mutable_list = () => []
 export const push = (ar, e) => {
   if (!Array.isArray(ar)) throw new Error('push expects array')
   if (Object.isFrozen(ar)) throw new Error('push expects mutable array')

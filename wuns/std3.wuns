@@ -8,6 +8,8 @@
 
 [def quote-word [quote quote]]
 
+[defn list [.. entries] entries]
+
 [defn mk-quote [form] [list quote-word form]]
 
 [defmacro comment [.. -] [list]]

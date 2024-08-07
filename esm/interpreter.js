@@ -48,7 +48,6 @@ const getCtxVar = (ctx, v) => {
 
 export const isMacro = (form) => isWunsFunction(form) && form.funMacDesc.isMacro
 
-
 const formToLocationString = (word) => {
   const m = meta(word)
   const { range } = m
@@ -155,7 +154,8 @@ export const makeInterpreterContext = () => {
       case 'def': {
         if (args.length !== 2) {
           console.error('error in function call', formToLocationString(firstForm))
-          throw new CompileError(`def expects 2 arguments, got ${args.length}`)}
+          throw new CompileError(`def expects 2 arguments, got ${args.length}`)
+        }
         const [varName, value] = args
         const vn = wordValue(varName)
         const compValue = wunsComp(ctx, value)
@@ -250,7 +250,7 @@ export const makeInterpreterContext = () => {
       }
       if (typeof funcOrMac !== 'function') throw new CompileError(`expected function, got ${funcOrMac}`)
       // here we check arity statically
-      if (!funcOrMac.varargs && funcOrMac.length !== args.length)
+      if (funcOrMac.length !== args.length)
         throw new CompileError(
           `function '${firstWordValue}' expected ${funcOrMac.length} arguments, got ${args.length}`,
         )
