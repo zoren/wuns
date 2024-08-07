@@ -188,15 +188,17 @@
 
 [defmacro kv-map [.. entries]
   [let [s [size entries]
-        ml [mutable-list-of-size [inc s]]]
+        ml [mutable-list-of-size [add 3 s]]
+        tmp-word [genword]]
     [assert [is-even s] kv-map requires an even number of arguments]
-    [set-array ml 0 [quote transient-kv-map]]
+    [set-array ml 0 [quote let]]
+    [set-array ml 1 [list tmp-word [quote [transient-kv-map]]]]
     [for-pair i 0 s
-      [set-array ml [inc i]
+      [set-array ml [add 2 i]
         [let [k [at entries i]]
-          [if [is-word k] [mk-quote k] k]]]
-      [set-array ml [add 2 i] [at entries [inc i]]]]
-    [list [quote persistent-kv-map] ml]]]
+          [list [quote set] tmp-word [if [is-word k] [mk-quote k] k] [at entries [inc i]]]]]]
+    [set-array ml [add 2 s] [list [quote persistent-kv-map] tmp-word]]
+    ml]]
 
 [defmacro getq [m w]
   [list [quote get] m [mk-quote w]]]

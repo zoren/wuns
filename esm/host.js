@@ -111,7 +111,6 @@ export const transient_kv_map = (...entries) => {
   for (let i = 0; i < entries.length; i += 2) map[wordValue(entries[i])] = entries[i + 1]
   return map
 }
-transient_kv_map.varargs = true
 export const has = (m, k) => {
   if (typeof m !== 'object') throw new Error('has expects map')
   return (wordValue(k) in m) | 0

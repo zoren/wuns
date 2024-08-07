@@ -641,10 +641,10 @@
               func-ctx [list param-ctx [list [kv-map]] first-form]
               parameter-type-list [persistent-array mut-parameter-type-list]
               locals [mutable-list]
-              sig-object
-              [transient-kv-map [quote parameters] parameter-type-list
-                                [quote results] type-any
-                                [quote def] first-form]]
+              sig-object [transient-kv-map]]
+            [setq sig-object parameters parameter-type-list]
+            [setq sig-object results type-any]
+            [setq sig-object def first-form]
             [when rest-param-element-type
               [setq sig-object rest-param-element-type rest-param-element-type]]
             [if [lt-s 1 s-form]
