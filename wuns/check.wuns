@@ -469,11 +469,11 @@
       [ifs
         [eq-form first-form [quote tuple]]
         [let
-          [res-types [mutable-list]]
+          [res-types [mutable-list-of-size n-of-args]]
           [report-when [eq n-of-args 1] form tuple expects zero or at least two arguments]
           [push res-types [quote tuple]]
           [for i 1 s-form
-            [push res-types [recur local-ctx 0 [at form i]]]]
+            [set-array res-types [dec i] [recur local-ctx 0 [at form i]]]]
           res-types]
 
         [eq-form first-form [quote quote]]
@@ -593,7 +593,6 @@
                   [report form function expects a list of parameters]
                   []]]
               param-ctx [transient-kv-map]
-              mut-parameter-type-list [mutable-list]
               n-of-param-words [size params]
               has-rest-param [and [lt-s 1 n-of-param-words] [eq-form [at params -2] ..]]
               n-of-regular-params [if has-rest-param [sub n-of-param-words 2] n-of-param-words]
@@ -617,6 +616,7 @@
                 [list]]
               anno-params [if [size type-annotation] [first type-annotation] 0]
               anno-results [if [size type-annotation] [second type-annotation] 0]
+              mut-parameter-type-list [mutable-list-of-size n-of-regular-params]
               -
               [for i 0 n-of-regular-params
                 [let [p [at params i]
@@ -627,7 +627,7 @@
                     [push-node-type p pt]
                     [set param-ctx p pt]]
                   [comment todo use a preallocated array instead we know the size in advance]
-                  [push mut-parameter-type-list pt]]]
+                  [set-array mut-parameter-type-list i pt]]]
               rest-param-element-type
               [if has-rest-param
                 [let [p [last params]

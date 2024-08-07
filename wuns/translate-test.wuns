@@ -120,9 +120,7 @@
        exports [wat-to-exports text import-object]
        export-names [keys exports]
        wrap-func [list [quote defn] [genword] export-names expect]
-       args [mutable-list]]
-    [for-each export-name export-names
-      [push args [get exports export-name]]]
+       args [list-map export-name export-names [get exports export-name]]]
     [when-not [eval [concat [list wrap-func] args]]
       [log [list [quote test] [quote fail] module expect]]]]]]
 

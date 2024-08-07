@@ -211,6 +211,26 @@
             forms
             [list [list [quote continue] iteration-var [list [quote i32.add] iteration-var 1]]]]]]]]]
 
+[defmacro list-map [element-var collection form]
+  [assert [is-word element-var] list-map requires a word as the first argument]
+  [let [iteration-var [genword]
+        col-var [genword]
+        col-size-var [genword]
+        new-col-var [genword]]
+    [list
+      [quote let] [list col-var collection
+                        col-size-var [list [quote size] col-var]
+                        new-col-var [list [quote mutable-list-of-size] col-size-var]]
+      [list
+        [quote loop] [list iteration-var 0]
+        [list [quote if]
+          [list [quote i32.lt-s] iteration-var col-size-var]
+          [concat [quote [let]]
+            [list [list element-var [list [quote at] col-var iteration-var]]]
+            [list [list [quote set-array] new-col-var iteration-var form]]
+            [list [list [quote continue] iteration-var [list [quote i32.add] iteration-var 1]]]]]]
+      [list [quote persistent-array] new-col-var]]]]
+
 [defmacro kv-map [.. entries]
   [let [s [size entries]
         ml [mutable-list-of-size [add 3 s]]

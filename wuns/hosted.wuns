@@ -42,15 +42,13 @@
   [if [is-word form]
     [get-or-create-word ctx form]
     [let [active-mem [getq ctx active-mem]
-          tmp-offset-list [mutable-list]]
-      [for-each element form
-        [push tmp-offset-list [recur ctx element]]]
-      [let [offset [add [size active-mem] active-mem-start-offset]]
-        [push-i32-little-endian active-mem tag-list]
-        [push-i32-little-endian active-mem [size form]]
-        [for-each element-offset tmp-offset-list
-          [push-i32-little-endian active-mem element-offset]]
-        offset]]]]
+          tmp-offset-list [list-map element form [recur ctx element]]
+          offset [add [size active-mem] active-mem-start-offset]]
+      [push-i32-little-endian active-mem tag-list]
+      [push-i32-little-endian active-mem [size form]]
+      [for-each element-offset tmp-offset-list
+        [push-i32-little-endian active-mem element-offset]]
+      offset]]]
 
 [defn add-local [ctx name type]
   [let [locals [getq ctx locals]]
@@ -132,16 +130,20 @@
 
           [eq-word [quote continue] fw]
           [let
-            [init-tmp [mutable-list]
-             tmp-copy [mutable-list]]
+            [n-of-vars [div [dec [size form]] 2]
+             init-tmp [mutable-list-of-size n-of-vars]
+             tmp-copy [mutable-list-of-size n-of-vars]]
             [for-pair i 1 [size form]
               [let
                 [var [at form i]
                  tmp-var [concat-words [quote tmp-] var]
-                 value [at form [inc i]]]
-                [push init-tmp [list [quote local.set] [list [quote dollar] tmp-var] [recur ctx 0 value]]]
-                [push tmp-copy [list [quote local.set] [list [quote dollar] var]
-                               [list [quote local.get] [list [quote dollar] tmp-var]]]]]]
+                 value [at form [inc i]]
+                 index [div [dec i] 2]]
+                [set-array init-tmp index
+                  [list [quote local.set] [list [quote dollar] tmp-var] [recur ctx 0 value]]]
+                [set-array tmp-copy index
+                  [list [quote local.set] [list [quote dollar] var]
+                    [list [quote local.get] [list [quote dollar] tmp-var]]]]]]
             [list [quote instructions]
               [concat
                 init-tmp
@@ -150,7 +152,7 @@
 
           [do
             [if [has instructions-by-name fw]
-              [let [instruction  [get instructions-by-name fw]
+              [let [instruction [get instructions-by-name fw]
                     imm-parameters [getq instruction immediate-parameters]]
                 [ifs
                   [eq-form imm-parameters imm-memargs]
@@ -212,34 +214,28 @@
           [eq-word [quote defn] fw]
           [let [fname [at form 1]
                 params [at form 2]
-                wasm-params [mutable-list]
-                wasm-locals [mutable-list]
                 locals [getq ctx locals]
                 wasm-bodies [mutable-list]
                 last-body [at form -1]]
             [delete-all-keys locals]
             [assert [is-word fname] second element of a list must be a word]
             [assert [is-list params] third element of a list must be a list]
-            [for-each param params
-              [push wasm-params
-                [list [quote param]
-                  [list [quote dollar] param]
-                  [try-get-node-type param]]]]
             [for i 3 [dec [size form]]
               [let [body [at form i]
                     cbody [compile-form ctx 0 body]]
                 [push wasm-bodies [if [is-atomic-type [try-get-node-type body]] [list [quote drop] cbody] cbody]]]]
             [push wasm-bodies [compile-form ctx 1 last-body]]
-            [for-each local [keys locals]
-              [push wasm-locals
-                [list [quote local]
-                  [list [quote dollar] local]
-                  [get locals local]]]]
             [concat
               [list [quote func] [list [quote dollar] fname] [list [quote export] [list [quote dq-string] fname]]]
-              wasm-params
+              [list-map param params
+                [list [quote param]
+                  [list [quote dollar] param]
+                  [try-get-node-type param]]]
               [list [type-to-result [try-get-node-type last-body]]]
-              wasm-locals
+              [list-map local [keys locals]
+                [list [quote local]
+                  [list [quote dollar] local]
+                  [get locals local]]]
               wasm-bodies]]
 
           [eq-word [quote quote] fw]
