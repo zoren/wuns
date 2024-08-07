@@ -151,6 +151,18 @@
     [list [quote let] [list tmp-word cond]
       [list [quote if] tmp-word [list [quote let] [list v tmp-word] true-form] false-form]]]]
 
+[defn eq-word [a b]
+  [and [is-word a] [is-word b]
+    [let [sa [size a] sb [size b]]
+      [and
+        [eq sa sb]
+        [loop [i 0]
+          [if [lt-s i sa]
+            [if [eq [at-word a i] [at-word b i]]
+              [continue i [inc i]]
+              0]
+            1]]]]]]
+
 [defn eq-form [a b]
   [or
     [eq-word a b]

@@ -18,8 +18,6 @@ export const is_word = (f) => isWord(f) | 0
 
 export const is_list = (f) => isList(f) | 0
 
-export const eq_word = (a, b) => (isWord(a) && isWord(b) && (a === b || wordValue(a) === wordValue(b))) | 0
-
 export const with_meta = (f, metaData) => {
   if (isWord(f)) return wordWithMeta(wordValue(f), metaData)
   if (isList(f)) return listWithMeta(f, metaData)
@@ -119,18 +117,8 @@ export const keys = (m) => {
   if (typeof m !== 'object') throw new Error('keys expects map')
   return makeList(...Object.keys(m).map(word))
 }
-
-import { parseFile } from './parseTreeSitter.js'
-export const read_file = (path) => {
-  const p = wordValue(path)
-  if (typeof p !== 'string') throw new Error('read-file expects string')
-  return parseFile(p)
-}
 export const int_to_word = (n) => word(n.toString())
 
-export const abort = () => {
-  throw new Error('abort')
-}
 export const log = (form) => {
   console.log(print(form))
 }
