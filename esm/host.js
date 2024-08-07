@@ -103,8 +103,6 @@ const concatLists = (l) => {
   }
   return makeList(...result)
 }
-export const concat = (...lists) => concatLists(lists)
-concat.varargs = true
 export const transient_kv_map = (...entries) => {
   if (entries.length % 2 !== 0) throw new Error('transient-kv-map expects even number of arguments')
   const map = {}

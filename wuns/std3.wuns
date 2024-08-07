@@ -32,6 +32,27 @@
 [defn fourth [l] [at l 3]]
 [defn last [l] [at l -1]]
 
+[defn concat [.. lists]
+  [let
+    [n-of-lists [size lists]
+     total-size
+      [loop [total 0 i 0]
+        [if [lt-s i n-of-lists]
+          [continue total [add total [size [at lists i]]] i [inc i]]
+          total]]
+     result [mutable-list-of-size total-size]]
+    [loop [i 0 j 0 res-index 0]
+      [if [lt-s i n-of-lists]
+        [let [cur-list [at lists i]
+              s [size cur-list]]
+          [loop [i 0 res-index res-index]
+            [if [lt-s i s]
+              [let []
+                [set-array result res-index [at cur-list i]]
+                [continue res-index [inc res-index] i [inc i]]]]]
+          [continue i [inc i] res-index [add s res-index]]]
+        [persistent-array result]]]]]
+
 [defmacro do [.. forms]
   [concat [quote let []] forms]]
 
