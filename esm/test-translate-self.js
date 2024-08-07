@@ -66,4 +66,4 @@ for (const name of ['std3', 'wasm-instructions', 'check', 'hosted', 'translate-t
 
 getVarVal('test-main')()
 
-getVarVal('test-file')(parseFile(`../wuns/ll.wuns`))
+getVarVal('test-file')(parseFile(`../wuns/self-host.wuns`))
