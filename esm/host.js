@@ -134,7 +134,3 @@ export const abort = () => {
 export const log = (form) => {
   console.log(print(form))
 }
-const textDecoder = new TextDecoder()
-export const log_byte_array = (bytes) => {
-  console.log(textDecoder.decode(bytes))
-}

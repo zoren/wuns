@@ -58,6 +58,9 @@ defSetVar('module-from-buffer', (buf) => new WebAssembly.Module(buf))
 defSetVar('instantiate-module', (module, importObject) => new WebAssembly.Instance(module, importObject))
 defSetVar('wasm-memory', (paramObj) => new WebAssembly.Memory(paramObj))
 defSetVar('byte-array', (buffer, byteOffset, length) => new Uint8Array(buffer, byteOffset, length))
+defSetVar('log-byte-array', (bytes) => {
+  console.log(textDecoder.decode(bytes))
+})
 for (const name of ['std3', 'wasm-instructions', 'check', 'hosted', 'translate-test'])
   parseEvalFile(ctx, (`../wuns/${name}.wuns`))
 
