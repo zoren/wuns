@@ -504,6 +504,11 @@
 [defn word-pointer [word]
   [add word [const 8]]]
 
+[defn word-byte [word i]
+  [assert [not [is-negative i]] word-byte i must not be negative]
+  [assert [lt i [word-size word]] word-byte i must be less than the size of the word]
+  [load8-u 0 0 8 [add word i]]]
+
 [defn validate-word [word]
   [let [s [l32-offset 4 word]]
     [when [is-negative s] [unreachable]]
@@ -555,6 +560,55 @@
       [let [ns [get-node-size node]
             s [div ns 2]
             end [add text ns]
+            words [mutable-list]]
+        [comment use a mutable list of size s instead of pushing]
+        [loop [cur text]
+          [when [lt cur end]
+            [push words [codepoint-to-word [load16-u 0 1 0 cur]]]
+            [continue cur [add 2 cur]]]]
+        [concat-words words]]
+
+      [eq tag tag-node-list]
+      [let [n-form-children [number-of-word-or-list node]
+            tl [mutable-list-of-size n-form-children]
+            n-children [get-node-number-of-children node]]
+        [loop [p text node-index 0 form-index 0]
+          [if [ge node-index n-children]
+            [list-from-mutable tl]
+            [let [child [get-node-child node node-index]
+                  s [get-node-size child]
+                  form [node-to-form p child]]
+              [if form
+                [do
+                  [set-array tl form-index form]
+                  [continue p [add p s] node-index [inc node-index] form-index [inc form-index]]]
+                [continue p [add p s] node-index [inc node-index]]]]]]]
+
+       0]]]
+
+[defn tree-to-form [text node]
+  [let [n-form-children [number-of-word-or-list node]
+        tl [mutable-list-of-size n-form-children]
+        n-children [get-node-number-of-children node]]
+    [loop [p text node-index 0 form-index 0]
+      [if [ge node-index n-children]
+        [list-from-mutable tl]
+        [let [child [get-node-child node node-index]
+              s [get-node-size child]
+              form [node-to-form p child]]
+          [if form
+            [do
+              [set-array tl form-index form]
+              [continue p [add p s] node-index [inc node-index] form-index [inc form-index]]]
+            [continue p [add p s] node-index [inc node-index]]]]]]]]
+
+[defn node-to-form-p [text node]
+  [let [tag [get-node-tag node]]
+    [ifs
+      [eq tag tag-node-word]
+      [let [ns [get-node-size node]
+            s [div ns 2]
+            end [add text ns]
             tw [alloc-tagged-word s]]
         [loop [cur text wp [word-pointer tw]]
           [when [lt cur end]
@@ -571,7 +625,7 @@
             tl
             [let [child [get-node-child node node-index]
                   s [get-node-size child]
-                  form [node-to-form p child]]
+                  form [node-to-form-p p child]]
               [if form
                 [do
                   [s32-offset 8 [add tl [mul form-index 4]] form]
@@ -580,7 +634,7 @@
 
        0]]]
 
-[defn tree-to-forms [text node]
+[defn tree-to-form-pointers [text node]
   [let [n-form-children [number-of-word-or-list node]
         gl [create-growable-list [mul 4 n-form-children]]
         n-children [get-node-number-of-children node]]
@@ -589,7 +643,7 @@
         gl
         [let [child [get-node-child node node-index]
               s [get-node-size child]
-              form [node-to-form p child]]
+              form [node-to-form-p p child]]
           [when form [push-i32 gl form]]
           [continue p [add p s] node-index [inc node-index]]]]]]]
 
@@ -622,14 +676,161 @@
     [print-recursive mut-list node]
     mut-list]]
 
-[defn compile [form]
+[defn is-dec-integer-word [w]
+  [let [s [word-size w]]
+    [loop [i [if [and [lt 1 s] [eq [const 45] [word-byte w 0]]] 1 0]]
+      [if [lt i s]
+        [if [is-between-inclusive [const 48] [word-byte w i] [const 57]]
+          [continue i [inc i]]
+          0]
+        1]]]]
+
+[defn is-empty [l] [eq [list-size l] 0]]
+
+[defn eq-word-to-word-pointer [word word-pointer]
+  [let [s [size word]
+        wp-size [word-size word-pointer]]
+    [and [eq s wp-size]
+      [loop [i 0]
+        [if [lt i s]
+          [if [eq [at-word word i] [word-byte word-pointer i]]
+            [continue i [inc i]]
+            0]
+          1]]]]]
+[comment
+[defn compile-p [form]
   [ifs
     [is-word-pointer form]
     []
 
     [is-list-pointer form]
-    [let [s []]
-      ]
+    [do
+      [assert [not [is-empty form]] a list must not be empty]
+      [let [fw [at-alloc-list form 0]]
+        [assert [is-word-pointer fw] first element of a list must be a word]
+        [ifs
+          [eq-word-to-word-pointer [quote i32.const] fw]
+          [let [w [at-alloc-list form 1]
+                res-list [alloc-tagged-list 2]]
+            [assert [is-dec-integer-word w] second element of a list must be an integer word]
+            [s32-offset 8 res-list fw]
+            [s32-offset 12 res-list w]
+            res-list]
+
+          [eq-word-to-word-pointer [quote defn] fw]
+          [let [fname [at-alloc-list form 1]
+                params [at-alloc-list form 2]
+                res-list [alloc-tagged-list 2]]
+            [assert [is-word-pointer fname] second element of a list must be a word]
+            [assert [is-list-pointer params] third element of a list must be a list]
+            [s32-offset 8 res-list fw]
+            [s32-offset 12 res-list w]
+            res-list]
+
+
+          []]]]
 
     [do [log [quote unknown form]]
       [unreachable]]]]
+]
+
+[defn compile-form [form]
+  [ifs
+    [is-word form]
+    []
+
+    [is-list form]
+    [do
+      [assert [not [is-empty form]] a list must not be empty]
+      [let [fw [at form 0]]
+        [assert [is-word fw] first element of a list must be a word]
+        [ifs
+          [or [eq-word [quote i32.const] fw] [eq-word [quote i64.const] fw]]
+          [do
+            [assert [eq [size form] 2] [identity fw] must have exactly one argument]
+            [let [w [at form 1]]
+              [assert [is-dec-integer-word w] second element of a list must be an integer word]
+              form]]
+
+          [eq-word [quote defn] fw]
+          [let [fname [at form 1]
+                params [at form 2]
+                wasm-params [list]
+                wasm-bodies [list]
+                bodies [slice form 3 [size form]]]
+            [assert [is-word fname] second element of a list must be a word]
+            [assert [is-list params] third element of a list must be a list]
+            [concat
+              [list [quote func] fw]
+              wasm-params
+              wasm-bodies
+              ]]
+
+          []]]]
+
+    [do [log [quote unknown form]]
+      [unreachable]]]]
+
+[defn print-paren-recursive-p [mut-list form]
+  [ifs
+    [is-word-pointer form]
+    [let [s [word-size form]
+          size-before [get-size mut-list]]
+      [push-n-bytes mut-list s]
+      [loop [p [add size-before [l32-offset 4 mut-list]] i 0]
+        [when [lt i s]
+          [store8 0 0 4 p [load8-u 0 0 8 [add form i]]]
+          [continue p [inc p] i [inc i]]]]]
+
+    [is-list-pointer form]
+    [let [s [list-size form]]
+      [push-i8 mut-list [const 40]]
+      [when s
+        [print-paren-recursive-p mut-list [at-alloc-list form 0]]
+        [for i 1 s
+          [push-i8 mut-list [const 32]]
+          [print-paren-recursive-p mut-list [at-alloc-list form i]]]]
+      [push-i8 mut-list [const 41]]]
+
+    [do [log [list [quote unknown node] form [l32 form]]]
+      [unreachable]]]]
+
+[defn print-paren-p [node]
+  [let [mut-list [create-growable-list [const 64]]]
+    [print-paren-recursive-p mut-list node]
+    mut-list]]
+
+[defn push-all [mut-list list]
+  [let [s-l [size list]]
+    [loop [i [quote 0]]
+      [if [lt i s-l]
+        [let []
+          [push mut-list [at list i]]
+          [continue i [inc i]]]
+        []]]]]
+
+[defn print-paren-recursive-form [mut-list form]
+  [ifs
+    [is-word form]
+    [for i 0 [size form]
+      [push mut-list [at-word form i]]]
+
+    [is-list form]
+    [let [s [size form]]
+      [push mut-list [const 40]]
+      [when [lt 0 s]
+        [print-paren-recursive-form mut-list [at form 0]]
+        [for i 1 s
+          [push mut-list [const 32]]
+          [print-paren-recursive-form mut-list [at form i]]]]
+      [for i 0 [size form]
+        [print-paren-recursive-form mut-list [at form i]]]
+      [push mut-list [const 41]]]
+
+    [do [log [list [quote unknown node] form [l32 form]]]
+      [unreachable]]]]
+
+[defn print-paren-form [form]
+  [let [mut-list [mutable-list]]
+    [print-paren-recursive-form mut-list form]
+    mut-list]]
