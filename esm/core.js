@@ -75,6 +75,7 @@ export const meta = (form) => {
 
 export const print = (ox) => {
   const go = (x) => {
+    if (x === undefined) throw new Error('undefined')
     if (isWord(x)) return String(x)
     if (typeof x === 'number') return String(x)
     if (typeof x === 'bigint') return String(x)

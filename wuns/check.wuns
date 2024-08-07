@@ -153,7 +153,9 @@
                   [for i 1 imm-index [set-array res i [at form i]]]
                   [for i imm-index s-form [set-array res i [recur global-binding-context local-ctx [at form i]]]]
                   res]
-                [report first-form symbol not found]]]]]]]]
+                [do
+                  [report first-form symbol not found]
+                  form]]]]]]]]
 
 [defn add-global-binding [global-binding-context name def-desc]
   [if [is-word name]

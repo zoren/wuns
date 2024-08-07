@@ -321,6 +321,10 @@
 
 [defn compile-top-forms-to-text [forms]
   [let [e-forms [expand-top-level-forms forms]
+        - [when [size errors]
+            [for-each error errors
+              [log error]]
+            [unreachable]]
         check-result [check-top-forms e-forms]
         errors [getq check-result errors]
         mut-list [mutable-list]
