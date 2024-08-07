@@ -1,0 +1,13 @@
+[import ./standard-library.wuns]
+
+[macro m [p]
+  [concat [quote constant x] [list p]]]
+
+[m [quote 1]]
+[macro m2 [p]
+  [constant y [quote 3]]]
+[m2 [quote 2]]
+[let
+  [u []]
+  
+]

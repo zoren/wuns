@@ -1,0 +1,263 @@
+[defn identity [x] x]
+
+[def interpreter-context []]
+
+[defn compile-form-mutable [local-ctx code form]
+  [ifs
+    [is-word form]
+    [let [vars-index
+      [loop [cur-ctx local-ctx]
+        [if-not [hasq cur-ctx outer]
+          [let [param-ctx [getq cur-ctx vars]
+                pctx [get param-ctx form]]
+            [assert [not [has param-ctx form]] not found in local ctx [identity form]]
+            pctx]
+          [let
+            [- [assert [hasq cur-ctx outer] we need a local ctx and a outer ctx if not at root]
+             vars [getq cur-ctx vars]]
+            [if [has vars form]
+              [get vars form]
+              [continue cur-ctx [getq cur-ctx outer]]]]]]]
+      [log [concat [quote type from checker] [list [try-get-node-type form]]]]
+      [push-code-byte code local.get]
+      [push-code-u32 code [second vars-index]]
+      [list [first vars-index]]]
+
+    [eq-form form []]
+    [log-abort empty form not allowed]
+
+    [let [first-form [first form]
+          args [rest form]
+          s-form [size form]]
+      [assert [is-word first-form] expected a word first]
+      [ifs
+        [eq-word first-form [quote tuple]]
+        [let
+          [res-types [mutable-list]]
+          [for i 0 [size args]
+            [comment do we actually want to concat them [i32 i32] [i32] we be surprising]
+            [push-all res-types [compile-form-mutable local-ctx code [at args i]]]]
+          [freeze res-types]]
+
+        [eq-word first-form [quote if]]
+        [let
+          [s-args [dec s-form]
+           - [assert [or [eq s-args 2] [eq s-args 3]] if expects 2 or 3 arguments]
+           ct [compile-form-mutable local-ctx code [first args]]
+           - [push-code-byte code if]
+           wtl-code [word-type-list-to-type-code [try-get-node-type form]]
+           - [push-code-byte code wtl-code]
+           - [assert [and [eq [size ct] 1] [eq [at ct 0] i32]] condition not i32]
+           tt [compile-form-mutable local-ctx code [second args]]]
+          [if [eq-form tt [list continue-type]]
+            [let []
+            ]
+            [let []
+              [if [eq s-args 3]
+                [let [- [push-code-byte code else]
+                      ft [compile-form-mutable local-ctx code [third args]]]
+                  [assert [eq-form tt ft] if branch types differ [identity tt] [identity ft]]]
+                [assert [eq s-args 2] if expects 2 or 3 arguments]]
+              [push-code-byte code end]
+              tt]]]
+
+        [or
+          [eq-word first-form [quote let]]
+          [eq-word first-form [quote loop]]]
+        [let
+          [bindings [first args]
+           var-values [mutable-list]
+           let-loop-ctx [list var-values local-ctx first-form]
+           n-of-bindings [size bindings]
+           is-loop [eq-word first-form [quote loop]]]
+          [assert [is-list bindings] expects a list of bindings]
+          [assert [is-even n-of-bindings] expects an even number of bindings]
+          [for-inc i 0 2 n-of-bindings
+            [let
+              [var [at bindings i]
+               value [at bindings [inc i]]
+               val-type [compile-form-mutable let-loop-ctx code value]]
+              [ifs
+                [eq-word [quote -] var]
+                [assert [eq [size val-type] 0] binding - expects unit type]
+
+                [is-word var]
+                [let
+                  [- [assert [not [is-tuple-type val-type]] binding expects a single type]
+                   t [word-type-to-type-code val-type]
+                   local-index [push-local code t]]
+                  [push-code-byte code local.set]
+                  [push-code-u32 code local-index]
+                  [push var-values var]
+                  [push var-values [list t local-index]]]
+
+                [let [s [size var]]
+                  [assert [is-list var] expects a word or list]
+                  [assert [is-tuple-type val-type] binding expects a tuple type]
+                  [assert [eq s [dec [size val-type]]] binding expects matching type arity]
+                  [for i 0 s
+                    [let
+                      [t [at val-type [inc i]]
+                       local-index [push-local code t]]
+                      [push-code-byte code local.set]
+                      [push-code-u32 code local-index]
+                      [push var-values [at var [dec [sub s i]]]]
+                      [push var-values [list t local-index]]]]]]]]
+          [if is-loop
+            [do
+              [push-code-byte code loop]
+              [do
+                [push-code-byte code [word-type-list-to-type-code [try-get-node-type form]]]
+                [for i 2 [dec [size form]]
+                  [compile-form-mutable let-loop-ctx code [at form i]]]
+                [let [last-body-type [compile-form-mutable let-loop-ctx code [last args]]]
+                  [push-code-byte code end]
+                  last-body-type]]]
+            [do
+              [for i 2 [dec [size form]]
+                [compile-form-mutable let-loop-ctx code [at form i]]]
+              [compile-form-mutable let-loop-ctx code [last form]]]]]
+
+        [eq-word first-form [quote continue]]
+        [let
+          [loop-ctx
+           [loop [cur-ctx local-ctx]
+             [if [eq [size cur-ctx] 1]
+               [do [log [quote continue not in a loop]]
+                   [abort]]
+               [do
+                [assert [eq [size cur-ctx] 3] we need a local ctx and a outer ctx if not at root]
+                [if [eq-word [third cur-ctx] [quote loop]]
+                  [first cur-ctx]
+                  [continue cur-ctx [second cur-ctx]]]]]]]
+          [for-inc i 1 2 s-form
+            [let
+              [local [get loop-ctx [at form i]]
+               arg-type [compile-form-mutable local-ctx code [at form [inc i]]]]
+              [comment todo check types]
+              [push-code-byte code local.set]
+              [push-code-u32 code [second local]]]]
+          [push-code-byte code br]
+          [push-code-u32 code 1]
+          [list continue-type]]
+
+        [let [instruction [get-instruction first-form]]
+          [if [ne [size instruction] 0]
+            [let [arity [getq instruction arity]
+                  immediate-parameters [getq instruction immediate-parameters]
+                  parameters [getq instruction parameters]
+                  opcode [getq instruction opcode]]
+              [assert [eq arity [size args]] instruction arity mismatch [identity first-form]]
+              [for i 0 [size parameters]
+                [comment todo also check typessssss]
+                [compile-form-mutable local-ctx code [at form [inc [add i [size immediate-parameters]]]]]]
+              [if [is-list opcode]
+                [for i 0 [size opcode]
+                  [push-code-byte code [at opcode i]]]
+                [push-code-byte code opcode]]
+              [for i 0 [size immediate-parameters]
+                  [assert [eq-word [at immediate-parameters i] immediate-u32] immediate parameter type mismatch]
+                  [comment [push-code-u32 code [context-eval interpreter-context [at form [inc i]]]]]]
+              [getq instruction results]]
+            [if-not [has global-ctx-func-sigs first-form]
+              [do [log [concat [quote unknown instruction] [list first-form]]] [abort]]
+              [let [func-sig [get global-ctx-func-sigs first-form]
+                    parameter-types [first func-sig]]
+                [assert [eq [size parameter-types] [size args]] parameter arity mismatch [list first-form [size parameter-types] [size args]]]
+                [for i 0 [size args]
+                  [comment todo also check types]
+                  [compile-form-mutable local-ctx code [at args i]]]
+                [push-code-byte code call]
+                [comment here we need the number of imported functions maybe use a temporary data structure
+                  [push-code-u32 code [div sig-index 2]]]
+                [second func-sig]]]
+            ]]]]]]
+
+[defn compile-top-level-form [form]
+  [ifs
+    [eq-word [quote wasm-func] [first form]]
+    [let [name [second form]
+          params [third form]
+          param-ctx [transient-kv-map]
+          parameter-type-list [mutable-list]
+          -
+          [for i 0 [size params]
+            [let [p [at params i]
+                  t [try-get-node-type p]
+                  type-code [word-type-to-type-code t]]
+              [log [concat [quote type from checker param] [list p [try-get-node-type p]]]]
+              [set param-ctx p [kv-map type-code type-code index i]]
+              [push parameter-type-list type-code]]]
+          func-ctx [list param-ctx]
+          parameter-type-list [freeze parameter-type-list]
+          locals [mutable-list]
+          code [mutable-list]
+          code-locals [list code locals [size params]]
+          -
+          [for i 4 [dec [size form]]
+            [comment remember to check type is empty maybe even drop unused and warn instead]
+            [compile-form-mutable func-ctx code-locals [at form i]]]
+          result-type [compile-form-mutable func-ctx code-locals [last form]]
+          type-index
+          [push-type
+            [type-function parameter-type-list result-type]]
+          import-count [size global-ctx-imports]
+          functions global-ctx-functions
+          func-index [div [size global-ctx-func-sigs] 2]]
+      [push global-ctx-func-sigs name]
+      [push global-ctx-func-sigs [list parameter-type-list result-type]]
+
+      [push functions type-index]
+      [push global-ctx-exports
+        [wasm-export name kind-function func-index]]
+      [push code end]
+      [push global-ctx-codes [code-to-bytes locals code]]
+      ]
+
+    [eq-word [quote wasm-import] [first form]]
+    [let [module-name [second form]
+          field-name [third form]
+          import-desc-syntax [fourth form]
+          fw [first import-desc-syntax]
+          import-desc
+          [ifs
+            [eq-word [quote memory] fw]
+            [ifs
+              [eq [size import-desc-syntax] 2]
+              [import-desc-mem-min [dec-word-to-i32 [second import-desc-syntax]]]
+
+              [eq [size import-desc-syntax] 3]
+              [import-desc-mem-min-max [second import-desc-syntax] [third import-desc-syntax]]
+
+              [do [log [quote mem wrong arity]] [abort]]]
+
+            [eq-word [quote func] fw]
+            [let [parameter-type-list [parse-type-list [second import-desc-syntax]]
+                  result-type [parse-type-list [third import-desc-syntax]]
+                  tf [type-function parameter-type-list result-type]
+                  type-index [push-type tf]]
+              [push global-ctx-func-sigs field-name]
+              [push global-ctx-func-sigs [list parameter-type-list result-type type-index]]
+              [import-desc-func type-index]
+              ]
+
+            [do [log [quote comp-import-desc not implemented]] [abort]]
+            ]]
+      [push global-ctx-imports
+        [wasm-import module-name field-name import-desc]]]
+
+    [eq-word [quote constant] [first form]]
+    [let [name [second form]
+          value [third form]]
+      []]
+
+    [comment todo
+      [context-eval interpreter-context form]]]]
+
+[defn compile-top-forms-to-module [forms]
+  [for i 0 [size forms]
+    [let [f [at forms i]]
+      [check-top-form f]
+      [compile-top-level-form f]]]
+  [log [list [quote node-types] node-types]]
+  [ctx-to-module]]

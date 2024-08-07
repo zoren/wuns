@@ -1,0 +1,10 @@
+[defmacro test [expected actual]
+  [list [quote if]
+    [list [quote eq-form] [list [quote quote] expected] [list [quote eval] [list [quote quote] actual]]]
+    []
+    [list [quote log] [quote list [quote hello] [quote is]]]]]
+
+[test [] [quote]]
+[test x [quote x]]
+[test [x y] [quote x y]]
+[test [x y] [quote x y z]]

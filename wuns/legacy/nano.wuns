@@ -1,0 +1,17 @@
+[]
+
+[quote]
+[quote -1]
+[quote 2]
+[quote 223234]
+[quote 34]
+[quote 12 34]
+
+[add [quote 2] [quote 4]]
+[sub [quote 2] [quote 4]]
+[add [quote 3] [sub [quote 2] [quote 4]]]
+
+[if [quote 0] [quote 2] [quote 3]]
+[if [quote 1] [quote 2] [quote 3]]
+
+[let [x [quote 2]] [add [quote 3] [quote x]]]
