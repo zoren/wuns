@@ -199,16 +199,6 @@
             forms
             [list [list [quote continue] iteration-var [list [quote i32.add] iteration-var 1]]]]]]]]]
 
-[defn kv-map-push [entries]
-  [let [ml [mutable-list]]
-    [push ml [quote transient-kv-map]]
-    [for-pair i 0 [size entries]
-      [push ml
-        [let [k [at entries i]]
-          [if [is-word k] [mk-quote k] k]]]
-      [push ml [at entries [inc i]]]]
-    [list [quote persistent-kv-map] ml]]]
-
 [defmacro kv-map [.. entries]
   [let [s [size entries]
         ml [mutable-list-of-size [add 3 s]]

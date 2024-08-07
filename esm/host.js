@@ -90,15 +90,6 @@ export const slice = (v, i, j) => {
 export const concat_words = (l) => word(l.map(wordValue).join(''))
 
 export { atom, atom_get, atom_set }
-const concatLists = (l) => {
-  if (!Array.isArray(l)) throw new Error('concat-lists expects list')
-  const result = []
-  for (const e of l) {
-    if (!Array.isArray(e)) throw new Error('concat-lists expects list of lists')
-    result.push(...e)
-  }
-  return makeList(...result)
-}
 export const transient_kv_map = (...entries) => {
   if (entries.length % 2 !== 0) throw new Error('transient-kv-map expects even number of arguments')
   const map = {}
