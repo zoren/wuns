@@ -1,6 +1,11 @@
 [def - [quote -]]
 [def .. [quote ..]]
 
+[def errors [mutable-list]]
+
+[defn report-error [msg form]
+  [push errors [kv-map message msg form form]]]
+
 [defmacro report-when [cond form .. lmsg]
   [list [quote when] cond
     [list [quote report-error] [mk-quote lmsg] form]]]
@@ -11,6 +16,265 @@
 
 [defmacro report [form .. lmsg]
   [list [quote report-error] [mk-quote lmsg] form]]
+
+[defn has-local-context [ctx var]
+  [loop [cur-ctx ctx]
+    [ifs
+      [has [getq cur-ctx vars] var]
+      1
+
+      [hasq cur-ctx outer]
+      [continue cur-ctx [getq cur-ctx outer]]
+
+      0]]]
+
+[defn get-top-context [local-ctx]
+  [loop [cur-ctx local-ctx]
+    [if [hasq cur-ctx outer]
+      [continue cur-ctx [getq cur-ctx outer]]
+      cur-ctx]]]
+
+[defn try-get-loop-vars [local-ctx]
+  [loop [cur-ctx local-ctx]
+    [ifs
+      [eq-word [quote loop] [getq cur-ctx decl-form]]
+      [getq cur-ctx vars]
+
+      [hasq cur-ctx outer]
+      [continue cur-ctx [getq cur-ctx outer]]
+
+      0]]]
+
+[defn check-signature [signature call-form]
+  [let [regular-params [getq signature params]]
+    [if [hasq signature rest-param]
+      [report-when-not [lt-s [size regular-params] [dec [size call-form]]] call-form wrong number of arguments]
+      [report-when-not [eq [size regular-params] [dec [size call-form]]] call-form wrong number of arguments]]]]
+
+[defn try-get-def [global-binding-context form]
+  [if [has global-binding-context form]
+    [get global-binding-context form]
+    0]]
+
+[defn expand-form [global-binding-context local-ctx form]
+  [ifs
+    [is-word form]
+    [do
+      [when-not [has-local-context local-ctx form]
+        [if-not [has global-binding-context form]
+          [report form symbol not found]
+          [let [def-desc [get global-binding-context form]]
+            [report-when [eq-word [quote is-macro] [getq def-desc def-form]] form macro used as value]]]]
+      form]
+
+    [not [is-list form]]
+    form
+
+    [is-empty form]
+    [do
+      [report form empty form]
+      form]
+
+    [let [first-form [first form]
+          s-form [size form]]
+        [ifs
+          [eq-word [quote quote] first-form]
+          form
+
+          [eq-word [quote if] first-form]
+          [let [res [mutable-list-of-size s-form]]
+            [set-array res 0 first-form]
+            [for i 1 s-form [set-array res i [recur global-binding-context local-ctx [at form i]]]]
+            res]
+
+          [or [eq-word [quote let] first-form] [eq-word [quote loop] first-form]]
+          [let [res [mutable-list-of-size s-form]
+                bindings [at form 1]
+                s-bindings [size bindings]
+                vars [transient-kv-map]
+                new-local-ctx [kv-map vars vars outer local-ctx decl-form first-form]
+                new-bindings [mutable-list-of-size s-bindings]]
+            [for-pair i 0 s-bindings
+              [let [var [at bindings i]
+                    value [at bindings [inc i]]]
+                [set-array new-bindings i var]
+                [set-array new-bindings [inc i] [recur global-binding-context new-local-ctx value]]
+                [if [is-word var]
+                  [do
+                    [report-when [has vars var] var already defined]
+                    [set vars var [kv-map var var]]]
+                  [report var not a word]]]]
+            [set-array res 0 first-form]
+            [set-array res 1 new-bindings]
+            [for i 2 s-form [set-array res i [recur global-binding-context new-local-ctx [at form i]]]]
+            res]
+
+          [eq-word [quote continue] first-form]
+          [let [loop-vars [try-get-loop-vars local-ctx]
+                res [mutable-list-of-size s-form]]
+            [set-array res 0 first-form]
+            [for-pair i 1 s-form
+              [let [var [at form i]]
+                [report-when-not [is-word var] var not a word]
+                [report-when-not [and loop-vars [has loop-vars var]] var loop var not found in expand]
+                [set-array res i var]
+                [set-array res [inc i] [recur global-binding-context local-ctx [at form [inc i]]]]]]
+            res]
+
+          [eq-word [quote recur] first-form]
+          [let [top-ctx [get-top-context local-ctx]
+                res [mutable-list-of-size s-form]]
+            [report-when-not [and [hasq top-ctx decl-form] [eq-word [getq top-ctx decl-form] [quote defn]]]
+              form recur not inside function]
+            [check-signature [getq top-ctx signature] form]
+            [set-array res 0 first-form]
+            [for i 1 s-form [set-array res i [recur global-binding-context local-ctx [at form i]]]]
+            res]
+
+          [if [has-local-context local-ctx first-form]
+            [let [res [mutable-list-of-size s-form]]
+              [set-array res 0 first-form]
+              [for i 1 s-form [set-array res i [recur global-binding-context local-ctx [at form i]]]]
+              res]
+            [if-let [def-desc [try-get-def global-binding-context first-form]]
+              [do
+                [check-signature [getq def-desc signature] form]
+                [assert [not [eq-word [getq def-desc def-form] [quote defmacro]]] macro not implemented yet]
+                [let [res [mutable-list-of-size s-form]]
+                  [set-array res 0 first-form]
+                  [for i 1 s-form [set-array res i [recur global-binding-context local-ctx [at form i]]]]
+                  res]]
+              [if-let [instruction [try-get-instruction first-form]]
+                [let [imm-parameters [getq instruction immediate-parameters]
+                      imm-index [inc [size imm-parameters]]
+                      res [mutable-list-of-size s-form]]
+                  [report-when-not [eq [getq instruction arity] [dec s-form]] form wrong number of arguments]
+                  [set-array res 0 first-form]
+                  [for i 1 imm-index [set-array res i [at form i]]]
+                  [for i imm-index s-form [set-array res i [recur global-binding-context local-ctx [at form i]]]]
+                  res]
+                [report first-form symbol not found]]]]]]]]
+
+[defn add-global-binding [global-binding-context name def-desc]
+  [if [is-word name]
+    [if [has global-binding-context name]
+      [report name already defined not redefined]
+      [set global-binding-context name def-desc]]
+    [report name not a word not added to global context]]]
+
+[defn expand-top-level [global-binding-context form]
+  [ifs
+    [is-word form]
+    [do
+      [if-not [has global-binding-context form]
+        [report form not found]
+        [let [def-desc [get global-binding-context form]]
+          [report-when [eq-word [quote is-macro] [getq def-desc def-form]] form macro used as value]]]
+      form]
+
+    [is-list form]
+    [if [is-empty form]
+      [do
+        [report form empty form]
+        form]
+      [let [first-form [first form]
+            s-form [size form]]
+        [ifs
+          [eq-word [quote constant] first-form]
+          [let [name [at form 1]
+                local-ctx [kv-map vars [kv-map] decl-form first-form]]
+            [add-global-binding global-binding-context name [kv-map def-form first-form]]
+            [list first-form name [expand-form global-binding-context local-ctx [at form 2]]]]
+
+          [eq-word [quote import] first-form]
+          [let [- [report-when-not [eq s-form 4] form import expects 3 arguments]
+                module-name [at form 1]
+                name [at form 2]
+                t [at form 3]
+                ff [first t]]
+              [ifs
+                [eq-word ff [quote func]]
+                [let [signature [kv-map params [second t]]]
+                  [add-global-binding global-binding-context name [kv-map def-form ff signature signature]]
+                  form]
+
+                [eq-word ff [quote memory]]
+                [do
+                  [add-global-binding global-binding-context name [kv-map def-form ff]]
+                  form]
+
+                [assert 0 bla bla]]]
+
+          [or [eq-word [quote defn] first-form] [eq-word [quote defmacro] first-form]]
+          [let [name [at form 1]
+                params [at form 2]
+                params-map [transient-kv-map]
+                n-of-params [size params]
+                signature
+                [if [and [lt-s 1 n-of-params] [eq-word [at params -2] ..]]
+                  [let [dot-dot-index [sub n-of-params 2]]
+                    [for i 0 dot-dot-index
+                      [let [param [at params i]]
+                        [set params-map param [kv-map var param]]]]
+                    [let [rest-param [last params]]
+                      [set params-map rest-param [kv-map var rest-param rest-param 1]]
+                      [kv-map params [slice params 0 dot-dot-index]
+                              rest-param rest-param]]]
+                  [do
+                    [for-each param params
+                      [set params-map param [kv-map var param]]]
+                    [kv-map params params]]]
+                  fn-local-ctx [kv-map vars params-map decl-form first-form signature signature]]
+            [add-global-binding global-binding-context name [kv-map def-form first-form signature signature]]
+            [let [res [mutable-list-of-size s-form]]
+              [set-array res 0 first-form]
+              [set-array res 1 name]
+              [set-array res 2 params]
+              [for i 3 s-form [set-array res i [expand-form global-binding-context fn-local-ctx [at form i]]]]
+              res]]
+
+          [if-let [def-desc [try-get-def global-binding-context first-form]]
+            [let [local-ctx [kv-map vars [kv-map]]]
+              [check-signature [getq def-desc signature] form]
+              [if-not [eq-word [getq def-desc def-form] [quote defmacro]]
+                [let [res [mutable-list-of-size s-form]]
+                  [set-array res 0 first-form]
+                  [for i 1 s-form [set-array res i [expand-form global-binding-context local-ctx [at form i]]]]
+                  res]
+                [assert 0 macro not implemented yet]]]
+            [report first-form symbol not found]]]]]
+
+      [assert 0 not a word or list not expanded]]]
+
+[def node-id-counter [atom [i32.const 100]]]
+
+[defn next-node-id []
+  [let [c [atom-get node-id-counter]]
+    [atom-set node-id-counter [inc c]]
+    [int-to-word c]]]
+
+[defn assign-node-ids [node]
+  [ifs
+    [is-word node]
+    [assoc-meta node [quote node-id] [next-node-id]]
+
+    [is-list node]
+    [let [s-node [size node]
+          res [mutable-list-of-size s-node]]
+      [for i 0 s-node
+        [set-array res i [recur [at node i]]]]
+      [assoc-meta res [quote node-id] [next-node-id]]]
+
+    [assert 0 not a word or list not assigned node id]]]
+
+[defn expand-top-level-forms [forms]
+  [let [res [mutable-list-of-size [size forms]]
+        global-binding-context [transient-kv-map]]
+    [add-global-binding global-binding-context [quote wuns-active-mem-top]
+      [kv-map def-form [quote constant]]]
+    [for i 0 [size forms]
+      [set-array res i [assign-node-ids [expand-top-level global-binding-context [at forms i]]]]]
+    res]]
 
 [defn is-decimal [dw]
   [let [s [size dw]]
@@ -92,11 +356,6 @@
 
 [defn is-pointer-type [t]
   [or [eq-form t type-word] [eq-form t type-form] [is-list-type t]]]
-
-[def errors [mutable-list]]
-
-[defn report-error [msg form]
-  [push errors [kv-map message msg form form]]]
 
 [defn check-type [t]
   [report-when-not [is-type t] t not a type]]

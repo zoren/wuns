@@ -322,7 +322,8 @@
       [unreachable]]]]
 
 [defn compile-top-forms-to-text [forms]
-  [let [check-result [check-top-forms forms]
+  [let [e-forms [expand-top-level-forms forms]
+        check-result [check-top-forms e-forms]
         errors [getq check-result errors]
         mut-list [mutable-list]
         active-mem [mutable-list]
@@ -332,7 +333,7 @@
       [log error]]
     [when-not [is-empty errors]
       [unreachable]]
-    [for-each form forms
+    [for-each form e-forms
       [print-paren-recursive-form mut-list [compile-top-form ctx form]]
       [push mut-list [const 10]]]
     [delete-all-keys node-types]

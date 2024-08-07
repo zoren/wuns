@@ -48,11 +48,13 @@ const getCtxVar = (ctx, v) => {
 
 export const isMacro = (form) => isWunsFunction(form) && form.funMacDesc.isMacro
 
-const rangeToString = ([startLine, startCol, endLine, endCol]) => `${startLine + 1}:${startCol}`
 
 const formToLocationString = (word) => {
   const m = meta(word)
-  return `${m['file-path']}:${rangeToString(m.range)}`
+  const { range } = m
+  if (!range) return 'unknown location'
+  const [startLine, startCol, endLine, endCol] = range
+  return `${m['file-path']}:${startLine + 1}:${startCol}`
 }
 
 export const makeInterpreterContext = () => {
@@ -78,7 +80,8 @@ export const makeInterpreterContext = () => {
       return result
     }
   }
-  const compSpecialForm = (ctx, firstWordValue, args) => {
+  const compSpecialForm = (ctx, [firstForm, ...args]) => {
+    const firstWordValue = wordValue(firstForm)
     switch (firstWordValue) {
       case 'quote': {
         const res = args.length === 1 ? args[0] : Object.freeze(args)
@@ -150,7 +153,9 @@ export const makeInterpreterContext = () => {
         }
       }
       case 'def': {
-        if (args.length !== 2) throw new CompileError(`def expects 2 arguments, got ${args.length}`)
+        if (args.length !== 2) {
+          console.error('error in function call', formToLocationString(firstForm))
+          throw new CompileError(`def expects 2 arguments, got ${args.length}`)}
         const [varName, value] = args
         const vn = wordValue(varName)
         const compValue = wunsComp(ctx, value)
@@ -228,7 +233,7 @@ export const makeInterpreterContext = () => {
       return (env) => caller(cfunc(env), env)
     }
     const firstWordValue = wordValue(firstForm)
-    const cspec = compSpecialForm(ctx, firstWordValue, args)
+    const cspec = compSpecialForm(ctx, form)
     if (cspec) return cspec
     if (getCtxVar(ctx, firstWordValue)) {
       const caller = rtCallFunc()
@@ -250,7 +255,16 @@ export const makeInterpreterContext = () => {
           `function '${firstWordValue}' expected ${funcOrMac.length} arguments, got ${args.length}`,
         )
       const cargs = args.map((a) => wunsComp(ctx, a))
-      return (env) => funcOrMac(...cargs.map((carg) => carg(env)))
+      return (env) => {
+        const eargs = cargs.map((carg) => carg(env))
+        try {
+          return funcOrMac(...eargs)
+        } catch (error) {
+          console.error('error in function call', formToLocationString(firstForm))
+          console.error('error', eargs)
+          throw error
+        }
+      }
     }
     const instruction = instructions[firstWordValue]
     if (!instruction) throw new CompileError(`function '${firstWordValue}' not found ${print(form)}`)

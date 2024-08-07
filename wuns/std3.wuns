@@ -212,3 +212,13 @@
 
 [defn push-all [mut-list list]
   [for-each e list [push mut-list e]]]
+
+[defn assoc [m k v]
+  [let [new [transient-kv-map]]
+    [for-each k [keys m]
+      [set new k [get m k]]]
+    [set new k v]
+    [persistent-kv-map new]]]
+
+[defn assoc-meta [f k v]
+  [with-meta f [assoc [meta f] k v]]]

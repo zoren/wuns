@@ -15,7 +15,7 @@ export const treeToForms = (tree, filePath) => {
     const { type, text, startPosition, endPosition, isError, startIndex, endIndex } = node
     if (isError) return null
     const range = makeList(...[startPosition.row, startPosition.column, endPosition.row, endPosition.column])
-    const metaData = { range, 'node-id': word(String(node.id)), startIndex, endIndex }
+    const metaData = { range, 'node-id': word(String(node.id)), 'start-index': startIndex, 'end-index': endIndex }
     if (filePath) metaData['file-path'] = filePath
     Object.freeze(metaData)
     switch (type) {

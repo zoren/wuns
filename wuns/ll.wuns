@@ -110,13 +110,6 @@
       [continue r [i32.add i r] i [inc i]]
       r]]]
 
-[quote
-  [defn factorial-rec [n]
-    [if [i32.eq n [i32.const 0]]
-      [i32.const 1]
-      [i32.mul n [factorial-rec [i32.sub n 1]]]]]
-]
-
 [defn main []
   [log-word [quote hello]]
   [log-word [quote world]]
