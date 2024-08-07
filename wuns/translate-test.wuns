@@ -116,7 +116,7 @@
       [module [getq test module]
        expect [getq test expect]
        text [compile-top-forms-to-text module]
-       import-object [if [hasq test import-object] [getq test import-object] [kv-map]]
+       import-object [if [hasq test import-object] [getq test import-object] empty-kv-map]
        exports [wat-to-exports text import-object]
        export-names [keys exports]
        wrap-func [list [quote defn] [genword] export-names expect]

@@ -184,7 +184,7 @@
         [ifs
           [eq-word [quote constant] first-form]
           [let [name [at form 1]
-                local-ctx [kv-map vars [kv-map] decl-form first-form]]
+                local-ctx [kv-map vars empty-kv-map decl-form first-form]]
             [add-global-binding global-binding-context name [kv-map def-form first-form]]
             [list first-form name [expand-form global-binding-context local-ctx [at form 2]]]]
 
@@ -236,7 +236,7 @@
               res]]
 
           [if-let [def-desc [try-get-def global-binding-context first-form]]
-            [let [local-ctx [kv-map vars [kv-map]]]
+            [let [local-ctx [kv-map vars empty-kv-map]]
               [check-signature [getq def-desc signature] form]
               [if-not [eq-word [getq def-desc def-form] [quote defmacro]]
                 [let [res [mutable-list-of-size s-form]]
@@ -640,7 +640,7 @@
                     [set param-ctx p [type-list pt]]]
                   pt]
                 0]
-              func-ctx [list param-ctx [list [kv-map]] first-form]
+              func-ctx [list param-ctx [list empty-kv-map] first-form]
               parameter-type-list [persistent-array mut-parameter-type-list]
               locals [mutable-list]
               sig-object [transient-kv-map]]

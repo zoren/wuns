@@ -70,7 +70,7 @@ export const listWithMeta = (l, meta) => {
 export const meta = (form) => {
   const t = typeof form
   if ((t === 'object' || t === 'function') && symbolMeta in form) return form[symbolMeta]
-  return unit
+  return 0
 }
 
 export const print = (ox) => {
