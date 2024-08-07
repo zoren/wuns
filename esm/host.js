@@ -31,6 +31,17 @@ export const size = (a) => {
   throw new Error('size expects word or list found: ' + a + ' ' + typeof a)
 }
 
+export const char_code_at = (v, i) => {
+  if (!isWord(v)) throw new Error('at-word expects word')
+  if (!isSigned32BitInteger(i)) throw new Error('at-word expects number: ' + i)
+  const len = size(v)
+  if (i < -len || i >= len) throw new Error('index out of bounds: ' + i + ' ' + len)
+  return String(v).at(i).charCodeAt(0)
+}
+// export const codepoint_to_word = (cp) => word(String.fromCodePoint(cp))
+export const concat_words = (w1, w2) => word(wordValue(w1) + wordValue(w2))
+export const int_to_word = (n) => word(n.toString())
+
 export const mutable_list = () => []
 export const push = (ar, e) => {
   if (!Array.isArray(ar)) throw new Error('push expects array')
@@ -66,13 +77,7 @@ export const at = (v, i) => {
   if (i < -len || i >= len) throw new Error('index out of bounds: ' + i + ' ' + len)
   return v.at(i)
 }
-export const at_word = (v, i) => {
-  if (!isWord(v)) throw new Error('at-word expects word')
-  if (!isSigned32BitInteger(i)) throw new Error('at-word expects number: ' + i)
-  const len = size(v)
-  if (i < -len || i >= len) throw new Error('index out of bounds: ' + i + ' ' + len)
-  return String(v).at(i).charCodeAt(0)
-}
+
 export const slice = (v, i, j) => {
   if (!Array.isArray(v)) throw new Error('slice expects list')
   if (!isSigned32BitInteger(i)) throw new Error('slice expects number: ' + i)
@@ -80,8 +85,6 @@ export const slice = (v, i, j) => {
   let s = v.slice(i, j)
   return makeList(...s)
 }
-// export const codepoint_to_word = (cp) => word(String.fromCodePoint(cp))
-export const concat_words = (w1, w2) => word(wordValue(w1) + wordValue(w2))
 
 export { atom, atom_get, atom_set }
 export const transient_kv_map = (...entries) => {
@@ -117,7 +120,6 @@ export const keys = (m) => {
   if (typeof m !== 'object') throw new Error('keys expects map')
   return makeList(...Object.keys(m).map(word))
 }
-export const int_to_word = (n) => word(n.toString())
 
 export const log = (form) => {
   console.log(print(form))

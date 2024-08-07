@@ -158,7 +158,7 @@
         [eq sa sb]
         [loop [i 0]
           [if [lt-s i sa]
-            [if [eq [at-word a i] [at-word b i]]
+            [if [eq [char-code-at a i] [char-code-at b i]]
               [continue i [inc i]]
               0]
             1]]]]]]

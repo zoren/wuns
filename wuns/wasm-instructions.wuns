@@ -7,7 +7,7 @@
         res [mutable-list-of-size sw]]
     [for i 0 sw
       [set-array res i
-        [let [c [at-word w i]] [if [eq c ascii-dash] ascii-underscore c]]]]
+        [let [c [char-code-at w i]] [if [eq c ascii-dash] ascii-underscore c]]]]
     [persistent-array res]]]
 
 [defn make-operation-obj [name opcode immediate-parameters parameters results]

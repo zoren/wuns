@@ -29,7 +29,7 @@
   [log-word w]
   [unreachable]]
 
-[defn at-word [w i]
+[defn char-code-at [w i]
   [if [not [is-word w]] [log-abort [quote not-a-word]]]
   [if [is-negative i] [log-abort [quote negative-index]]]
   [if [i32.ge-s i [size w]] [log-abort [quote index-out-of-bounds]]]

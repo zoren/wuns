@@ -8,7 +8,7 @@
 
 [defn push-word-chars [mut-list w]
   [for i 0 [size w]
-    [push mut-list [at-word w i]]]]
+    [push mut-list [char-code-at w i]]]]
 
 [def tag-word 1]
 [def tag-list 3]
