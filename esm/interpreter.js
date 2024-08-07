@@ -252,7 +252,7 @@ export const makeInterpreterContext = () => {
       // here we check arity statically
       if (funcOrMac.length !== args.length)
         throw new CompileError(
-          `function '${firstWordValue}' expected ${funcOrMac.length} arguments, got ${args.length}`,
+          `function '${firstWordValue}' expected ${funcOrMac.length} arguments, got ${args.length} in ${formToLocationString(form)}`,
         )
       const cargs = args.map((a) => wunsComp(ctx, a))
       return (env) => {

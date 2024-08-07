@@ -83,7 +83,7 @@ export const slice = (v, i, j) => {
   return makeList(...s)
 }
 // export const codepoint_to_word = (cp) => word(String.fromCodePoint(cp))
-export const concat_words = (l) => word(l.map(wordValue).join(''))
+export const concat_words = (w1, w2) => word(wordValue(w1) + wordValue(w2))
 
 export { atom, atom_get, atom_set }
 export const transient_kv_map = (...entries) => {

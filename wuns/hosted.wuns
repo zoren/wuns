@@ -119,7 +119,7 @@
                  wasm-type [type-to-wasm val-type]]
                 [assert [not [is-tuple-type val-type]] binding expects a single type]
                 [add-local ctx var wasm-type]
-                [add-local ctx [concat-words [list [quote tmp-] var]] wasm-type]
+                [add-local ctx [concat-words [quote tmp-] var] wasm-type]
                 [push instructions [list [quote local.set] [list [quote dollar] var] [recur ctx 0 value]]]]]
             [push loop-instructions [quote loop]]
             [push loop-instructions [list [quote dollar] [quote loop-lab]]]
@@ -137,7 +137,7 @@
             [for-pair i 1 [size form]
               [let
                 [var [at form i]
-                 tmp-var [concat-words [list [quote tmp-] var]]
+                 tmp-var [concat-words [quote tmp-] var]
                  value [at form [inc i]]]
                 [push init-tmp [list [quote local.set] [list [quote dollar] tmp-var] [recur ctx 0 value]]]
                 [push tmp-copy [list [quote local.set] [list [quote dollar] var]

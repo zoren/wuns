@@ -124,7 +124,7 @@
 [defn genword []
   [let [c [atom-get word-counter]]
     [atom-set word-counter [inc c]]
-    [concat-words [list [quote genword] [int-to-word c]]]]]
+    [concat-words [quote genword] [int-to-word c]]]]
 
 [defmacro or [.. clauses]
   [let [s [size clauses]]
