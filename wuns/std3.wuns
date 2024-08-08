@@ -121,6 +121,26 @@
 
 [def word-counter [atom 0]]
 
+[defn int-to-word [n]
+  [if [is-zero n]
+    [quote 0]
+    [let [l [growable-list]]
+      [if [is-negative n]
+        [do
+          [loop [i n]
+            [when i
+              [push l [char-code-to-word [i32.add [i32.const 48] [i32.sub 0 [i32.rem i [i32.const 10]]]]]]
+              [continue i [i32.div i [i32.const 10]]]]]
+          [push l [quote -]]]
+        [loop [i n]
+          [when i
+            [push l [char-code-to-word [i32.add [i32.const 48] [i32.rem i [i32.const 10]]]]]
+            [continue i [i32.div i [i32.const 10]]]]]]
+      [loop [res [first l] i 1]
+        [if [i32.lt-s i [size l]]
+          [continue res [concat-words [at l i] res] i [inc i]]
+          res]]]]]
+
 [defn genword []
   [let [c [atom-get word-counter]]
     [atom-set word-counter [inc c]]

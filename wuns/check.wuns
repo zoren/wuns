@@ -1,7 +1,7 @@
 [def - [quote -]]
 [def .. [quote ..]]
 
-[def errors [mutable-list]]
+[def errors [growable-list]]
 
 [defn report-error [msg form]
   [push errors [kv-map message msg form form]]]
@@ -642,7 +642,7 @@
                 0]
               func-ctx [list param-ctx [list empty-kv-map] first-form]
               parameter-type-list [persistent-array mut-parameter-type-list]
-              locals [mutable-list]
+              locals [growable-list]
               sig-object [transient-kv-map]]
             [setq sig-object parameters parameter-type-list]
             [setq sig-object results type-any]

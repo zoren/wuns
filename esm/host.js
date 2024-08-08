@@ -40,13 +40,12 @@ export const char_code_at = (v, i) => {
 }
 // export const codepoint_to_word = (cp) => word(String.fromCodePoint(cp))
 export const concat_words = (w1, w2) => word(wordValue(w1) + wordValue(w2))
-export const int_to_word = (n) => word(n.toString())
+export const char_code_to_word = cp => word(String.fromCodePoint(cp))
 
 const symbolListGrowable = Symbol.for('wuns-list-growable')
 const symbolListMutable = Symbol.for('wuns-list-mutable')
 const isGrowable = (l) => l[symbolListGrowable]
-const isMutable = (l) => l[symbolListMutable]
-export const mutable_list = () => {
+export const growable_list = () => {
   const l = []
   l[symbolListGrowable] = true
   return l
@@ -70,7 +69,6 @@ export const persistent_array = (o) => {
   return makeList(...o)
 }
 export const set_array = (ar, i, e) => {
-  if (!isMutable(ar)) throw new Error('set-array expects mutable list')
   if (!Array.isArray(ar)) throw new Error('set-array expects array')
   if (Object.isFrozen(ar)) throw new Error('set-array expects mutable array')
   if (!isSigned32BitInteger(i)) throw new Error('set-array expects integer index')

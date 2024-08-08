@@ -325,8 +325,8 @@
             [unreachable]]
         check-result [check-top-forms e-forms]
         errors [getq check-result errors]
-        mut-list [mutable-list]
-        active-mem [mutable-list]
+        mut-list [growable-list]
+        active-mem [growable-list]
         ctx [kv-map active-mem active-mem check-result check-result
                     word-map [transient-kv-map] list-map [transient-kv-map] locals [transient-kv-map]]]
     [for-each error errors
