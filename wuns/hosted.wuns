@@ -170,21 +170,13 @@
                             [continue i [inc i]]]
                           res]]]]
 
-                  [not [is-empty imm-parameters]]
-                  [let [res [mutable-list]]
-                    [push res [list [quote raw] [getq instruction wat-name]]]
-                    [for i 0 [size imm-parameters]
-                      [push res [at form [inc i]]]]
+                  [let [res [mutable-list-of-size [inc [getq instruction arity]]]]
+                    [set-array res 0 [list [quote raw] [getq instruction wat-name]]]
+                    [for i 1 [inc [size imm-parameters]]
+                      [set-array res i [at form i]]]
                     [for i [inc [size imm-parameters]] [size form]
-                      [push res [recur ctx 0 [at form i]]]]
-                    res]
-
-                  [loop [i 1 res [mutable-list]]
-                    [if [lt-s i [size form]]
-                      [do
-                        [push res [recur ctx 0 [at form i]]]
-                        [continue i [inc i]]]
-                      [concat [list [list [quote raw] [getq instruction wat-name]]] res]]]]]
+                      [set-array res i [recur ctx 0 [at form i]]]]
+                    res]]]
               [loop [i 1 res [mutable-list]]
                 [if [lt-s i [size form]]
                   [do
