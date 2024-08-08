@@ -52,7 +52,7 @@ export const mutable_list_of_size = (size) => {
   if (size < 0) throw new Error('mutable-list-of-size expects non-negative size')
   return Array.from({ length: size }, () => 0)
 }
-export const is_mutable = (f) => (Array.isArray(f) && !Object.isFrozen(f)) | 0
+// export const is_mutable = (f) => (Array.isArray(f) && !Object.isFrozen(f)) | 0
 
 export const persistent_array = (o) => {
   if (!Array.isArray(o)) throw new Error('persistent-array expects array')
@@ -82,26 +82,19 @@ export const slice = (v, i, j) => {
   if (!Array.isArray(v)) throw new Error('slice expects list')
   if (!isSigned32BitInteger(i)) throw new Error('slice expects number: ' + i)
   if (!isSigned32BitInteger(j)) throw new Error('slice expects number: ' + j)
-  let s = v.slice(i, j)
-  return makeList(...s)
+  return makeList(...v.slice(i, j))
 }
 
 export { atom, atom_get, atom_set }
-export const transient_kv_map = (...entries) => {
-  if (entries.length % 2 !== 0) throw new Error('transient-kv-map expects even number of arguments')
-  const map = {}
-  for (let i = 0; i < entries.length; i += 2) map[wordValue(entries[i])] = entries[i + 1]
-  return map
-}
+export const transient_kv_map = () => ({})
 export const has = (m, k) => {
   if (typeof m !== 'object') throw new Error('has expects map')
   return (wordValue(k) in m) | 0
 }
-
+// https://stackoverflow.com/a/69745650/3495920
+const isPlainObject = (value) => value?.constructor === Object
 export const get = (m, k) => {
-  if (typeof m !== 'object') throw new Error('get expects map')
-  // todo check if naked object
-  if (isWord(m)) throw new Error('get expects map')
+  if (!isPlainObject(m)) throw new Error('get expects map')
   const ks = wordValue(k)
   if (ks in m) return m[ks]
   throw new Error('key not found: ' + ks + ' in ' + Object.keys(m))
@@ -117,10 +110,23 @@ export const delete_key = (o, k) => {
   delete o[wordValue(k)]
 }
 export const keys = (m) => {
+  if (!isPlainObject(m)) throw new Error('keys expect map')
   if (typeof m !== 'object') throw new Error('keys expects map')
   return makeList(...Object.keys(m).map(word))
 }
 
 export const log = (form) => {
   console.log(print(form))
+}
+
+
+// only for js host
+export const object_get = (m, k) => {
+  const ks = wordValue(k)
+  if (ks in m) return m[ks]
+  throw new Error('key not found: ' + ks + ' in ' + Object.keys(m))
+}
+export const object_keys = (m) => {
+  if (typeof m !== 'object') throw new Error('keys expects map')
+  return makeList(...Object.keys(m).map(word))
 }

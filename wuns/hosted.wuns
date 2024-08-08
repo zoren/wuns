@@ -52,7 +52,7 @@
 
 [defn add-local [ctx name type]
   [let [locals [getq ctx locals]]
-    [assert [not [has locals name]] name must not be defined]
+    [assert [not [has locals name]] name must not be defined [identity name]]
     [set locals name type]]]
 
 [defn compile-form [ctx is-tail form]
@@ -171,7 +171,13 @@
                           res]]]]
 
                   [not [is-empty imm-parameters]]
-                  form
+                  [let [res [mutable-list]]
+                    [push res [list [quote raw] [getq instruction wat-name]]]
+                    [for i 0 [size imm-parameters]
+                      [push res [at form [inc i]]]]
+                    [for i [inc [size imm-parameters]] [size form]
+                      [push res [recur ctx 0 [at form i]]]]
+                    res]
 
                   [loop [i 1 res [mutable-list]]
                     [if [lt-s i [size form]]

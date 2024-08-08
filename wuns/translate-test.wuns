@@ -2,7 +2,7 @@
   [let [wasm-module-buffer [text-to-wasm wat-text]
         wasm-module [module-from-buffer wasm-module-buffer]
         wasm-instance [instantiate-module wasm-module import-object]
-        exports [getq wasm-instance exports]]
+        exports [object-get wasm-instance [quote exports]]]
     exports]]
 
 [defn test-asssert-eq [a b]
@@ -118,16 +118,16 @@
        text [compile-top-forms-to-text module]
        import-object [if [hasq test import-object] [getq test import-object] empty-kv-map]
        exports [wat-to-exports text import-object]
-       export-names [keys exports]
+       export-names [object-keys exports]
        wrap-func [list [quote defn] [genword] export-names expect]
-       args [list-map export-name export-names [get exports export-name]]]
+       args [list-map export-name export-names [object-get exports export-name]]]
     [when-not [eval [concat [list wrap-func] args]]
       [log [list [quote test] [quote fail] module expect]]]]]]
 
 [def mem-atom [atom 0]]
 
 [defn log-pointer [x y]
-  [log-byte-array [byte-array [getq [atom-get mem-atom] buffer] x y]]]
+  [log-byte-array [byte-array [object-get [atom-get mem-atom] [quote buffer]] x y]]]
 
 [defn log-i32 [x]
   [log [list [quote log-i32] x]]]
@@ -142,7 +142,7 @@
                 log-pointer log-pointer
                 log-i32 log-i32]]
      exports [wat-to-exports text import-object]
-     main [getq exports main]]
+     main [object-get exports [quote main]]]
     [atom-set mem-atom mem]
     [main]
   ]]
