@@ -251,8 +251,12 @@
     [add i [const 48]]
     [add [sub i [const 10]] [const 97]]]]
 
+[def ascii-line-feed [const 10]]
+[def ascii-space [const 32]]
 [def ascii-double-quote [const 34]]
 [def ascii-dollar [const 36]]
+[def ascii-left-paren [const 40]]
+[def ascii-right-paren [const 41]]
 [def ascii-equal [const 61]]
 [def ascii-backslash [const 92]]
 
@@ -306,13 +310,13 @@
           [recur mut-list instruction]]
 
         [do
-          [push mut-list [const 40]]
+          [push mut-list ascii-left-paren]
           [when [lt-s 0 s]
             [recur mut-list [at form 0]]
             [for i 1 s
-              [push mut-list [const 32]]
+              [push mut-list ascii-space]
               [recur mut-list [at form i]]]]
-          [push mut-list [const 41]]]]]
+          [push mut-list ascii-right-paren]]]]
 
     [do [log [list [quote print-paren-recursive-form unknown node] form]]
       [unreachable]]]]
@@ -335,7 +339,7 @@
       [unreachable]]
     [for-each form e-forms
       [print-paren-recursive-form mut-list [compile-top-form ctx form]]
-      [push mut-list [const 10]]]
+      [push mut-list ascii-line-feed]]
     [delete-all-keys node-types]
     [when [size active-mem]
       [print-paren-recursive-form mut-list [list [quote data] [list [quote i32.const] [int-to-word active-mem-start-offset]] [list [quote dq-string-bytes] active-mem]]]]
