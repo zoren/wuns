@@ -45,14 +45,15 @@ export const char_code_to_word = cp => word(String.fromCodePoint(cp))
 const symbolListGrowable = Symbol.for('wuns-list-growable')
 const symbolListMutable = Symbol.for('wuns-list-mutable')
 const isGrowable = (l) => l[symbolListGrowable]
+const isMutable = (l) => l[symbolListMutable]
 export const growable_list = () => {
   const l = []
   l[symbolListGrowable] = true
   return l
 }
 export const push = (ar, e) => {
-  if (!isGrowable(ar)) throw new Error('push expects growable list')
   if (!Array.isArray(ar)) throw new Error('push expects array')
+  if (!isGrowable(ar)) throw new Error('push expects growable list')
   if (Object.isFrozen(ar)) throw new Error('push expects mutable array')
   ar.push(e)
 }
@@ -62,14 +63,16 @@ export const mutable_list_of_size = (size) => {
   l[symbolListMutable] = true
   return l
 }
-// export const is_mutable = (f) => (Array.isArray(f) && !Object.isFrozen(f)) | 0
 
-export const persistent_array = (o) => {
-  if (!Array.isArray(o)) throw new Error('persistent-array expects array')
-  return makeList(...o)
+export const freeze_mutable_list = (l) => {
+  if (!Array.isArray(l)) throw new Error('freeze-mutable-list expects array')
+  if (!isMutable(l)) throw new Error('freeze-mutable-list expects mutable list')
+  delete l[symbolListMutable]
+  Object.freeze(l)
 }
 export const set_array = (ar, i, e) => {
   if (!Array.isArray(ar)) throw new Error('set-array expects array')
+  if (!isMutable(ar)) throw new Error('set-array expects mutable list')
   if (Object.isFrozen(ar)) throw new Error('set-array expects mutable array')
   if (!isSigned32BitInteger(i)) throw new Error('set-array expects integer index')
   if (i < 0 || i >= ar.length) throw new Error('set-array index out of bounds: ' + i + ' ' + ar.length)

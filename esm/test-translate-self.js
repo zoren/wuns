@@ -32,6 +32,7 @@ const mkParseWat = (s) => {
       log: true,
       write_debug_names: true,
     })
+    fs.writeFileSync('self-host.wasm', buffer)
     return buffer
   } catch (e) {
     console.log('allText', s)
@@ -40,11 +41,34 @@ const mkParseWat = (s) => {
     throw e
   }
 }
-import { makeInitInterpreter, parseEvalFile } from './interpreter.js'
+const textDecoder = new TextDecoder()
 
+import { makeInitInterpreter, parseEvalFile, hostExports } from './interpreter.js'
+if (false) {
+  const selfHostModule = new WebAssembly.Module(fs.readFileSync('self-host.wasm'))
+  // [defn log-pointer [x y]
+  //   [log-byte-array [byte-array [object-get [atom-get mem-atom] [quote buffer]] x y]]]
+  const mkEnv = () => {
+    const mem = new WebAssembly.Memory({ initial: 1 })
+    const logPointer = (x, y) => {
+      const bytes = new Uint8Array(mem.buffer, x, y)
+      console.log(textDecoder.decode(bytes))
+    }
+    const logI32 = (x) => console.log(x)
+    return { env: { mem, 'log-pointer': logPointer, 'log-i32': logI32 } }
+  }
+  const selfHostInstance = new WebAssembly.Instance(selfHostModule, mkEnv())
+  const selfHostExports = selfHostInstance.exports
+  console.log({ selfHostExports })
+  console.log(Object.keys(hostExports))
+  for (const [k, v] of hostExports) {
+    if (typeof k === 'string' && !(k in selfHostExports)) {
+      console.log('missing', k)
+    }
+  }
+}
 import { parseFile } from './parseTreeSitter.js'
 
-const textDecoder = new TextDecoder()
 const wordBytesToString = (wordBytes) => textDecoder.decode(Uint8Array.from(wordBytes, (v) => +v))
 const ctx = makeInitInterpreter()
 const { getVarVal, defSetVar } = ctx

@@ -314,7 +314,7 @@ export const makeInterpreterContext = () => {
   }
 }
 
-const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
+export const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 
 export const makeInitInterpreter = () => {
   const ctx = makeInterpreterContext()

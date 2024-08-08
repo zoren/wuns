@@ -8,7 +8,8 @@
     [for i 0 sw
       [set-array res i
         [let [c [char-code-at w i]] [if [eq c ascii-dash] ascii-underscore c]]]]
-    [persistent-array res]]]
+    [freeze-mutable-list res]
+    res]]
 
 [defn make-operation-obj [name opcode immediate-parameters parameters results]
   [kv-map

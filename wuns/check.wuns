@@ -618,7 +618,7 @@
                 [list]]
               anno-params [if [size type-annotation] [first type-annotation] 0]
               anno-results [if [size type-annotation] [second type-annotation] 0]
-              mut-parameter-type-list [mutable-list-of-size n-of-regular-params]
+              parameter-type-list [mutable-list-of-size n-of-regular-params]
               -
               [for i 0 n-of-regular-params
                 [let [p [at params i]
@@ -629,7 +629,7 @@
                     [set-node-type p pt]
                     [set param-ctx p pt]]
                   [comment todo use a preallocated array instead we know the size in advance]
-                  [set-array mut-parameter-type-list i pt]]]
+                  [set-array parameter-type-list i pt]]]
               rest-param-element-type
               [if has-rest-param
                 [let [p [last params]
@@ -641,9 +641,9 @@
                   pt]
                 0]
               func-ctx [list param-ctx [list empty-kv-map] first-form]
-              parameter-type-list [persistent-array mut-parameter-type-list]
               locals [growable-list]
               sig-object [transient-kv-map]]
+            [freeze-mutable-list parameter-type-list]
             [setq sig-object parameters parameter-type-list]
             [setq sig-object results type-any]
             [setq sig-object def first-form]
@@ -753,7 +753,7 @@
       [log [list [getq err message] [getq err form] [getq [meta [getq err form]] range]]]]]
   [let [res
         [kv-map
-          errors [persistent-array errors]
+          errors errors
           global-ctx [persistent-kv-map global-ctx]
           node-types [persistent-kv-map node-types]]]
       [delete-all-keys global-ctx]

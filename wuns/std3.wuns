@@ -52,8 +52,9 @@
               [let []
                 [set-array result res-index [at cur-list i]]
                 [continue res-index [inc res-index] i [inc i]]]]]
-          [continue i [inc i] res-index [add s res-index]]]
-        [persistent-array result]]]]]
+          [continue i [inc i] res-index [add s res-index]]]]]
+    [freeze-mutable-list result]
+    result]]
 
 [defmacro do [.. forms]
   [concat [quote let []] forms]]
@@ -83,7 +84,8 @@
       [when [lt-s i s]
         [set-array msg [inc i] [let [e [at lmsg i]] [if [is-word e] [mk-quote e] e]]]
         [continue i [inc i]]]]
-    [persistent-array msg]]]
+    [freeze-mutable-list msg]
+    msg]]
 
 [defmacro assert [cond .. lmsg]
   [list [quote if] cond
@@ -249,7 +251,8 @@
             [list [list element-var [list [quote at] col-var iteration-var]]]
             [list [list [quote set-array] new-col-var iteration-var form]]
             [list [list [quote continue] iteration-var [list [quote i32.add] iteration-var 1]]]]]]
-      [list [quote persistent-array] new-col-var]]]]
+      [list [quote freeze-mutable-list] new-col-var]
+      new-col-var]]]
 
 [defmacro kv-map [.. entries]
   [let [s [size entries]

@@ -340,4 +340,4 @@
     [when [size active-mem]
       [print-paren-recursive-form mut-list [list [quote data] [list [quote i32.const] [int-to-word active-mem-start-offset]] [list [quote dq-string-bytes] active-mem]]]]
     [print-paren-recursive-form mut-list [list [quote global] [quote dollar wuns-active-mem-top] [quote i32] [list [quote i32.const] [int-to-word [add [size active-mem] active-mem-start-offset]]]]]
-    [persistent-array mut-list]]]
+    mut-list]]
