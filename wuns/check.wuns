@@ -402,7 +402,7 @@
 [defn get-node-id [node]
   [getq [meta node] node-id]]
 
-[defn push-node-type [node type]
+[defn set-node-type [node type]
   [set node-types [get-node-id node] type]
   type]
 
@@ -432,7 +432,7 @@
                 [set tkvm k v]]
               [report v memarg expects a non-negative decimal]]]
           [report k memarg expects a word]]]]
-    [push-node-type form [persistent-kv-map tkvm]]]]
+    [set-node-type form [persistent-kv-map tkvm]]]]
 
 [defn check-form [local-ctx tail-pos form]
   [ifs
@@ -441,11 +441,11 @@
       [if [eq [size cur-ctx] 1]
         [let [param-ctx [first cur-ctx]]
           [if [has param-ctx form]
-            [push-node-type form [get param-ctx form]]
+            [set-node-type form [get param-ctx form]]
             [if [has global-ctx form]
               [let [sig [get global-ctx form]]
                 [if [eq-word [getq sig def] [quote constant]]
-                  [push-node-type form [getq sig constant]]
+                  [set-node-type form [getq sig constant]]
                   [do
                     [report form not a constant]
                     [log [list [quote c] form [quote not a constant]]]
@@ -456,7 +456,7 @@
                 type-error]]]]
         [let [vars [first cur-ctx]]
           [if [has vars form]
-            [push-node-type form [get vars form]]
+            [set-node-type form [get vars form]]
             [continue cur-ctx [second cur-ctx]]]]]]
 
     [is-empty form]
@@ -481,7 +481,7 @@
         [eq-form first-form [quote quote]]
         [do
           [comment todo check if integer or word or list]
-          [push-node-type form type-form]
+          [set-node-type form type-form]
           [if [eq n-of-args 1]
             [let [f [second form]]
               [if [is-list f]
@@ -501,7 +501,7 @@
           [if [lt-s 1 n-of-args]
             [let [tt [recur local-ctx tail-pos [third form]]
                   ft [if [eq n-of-args 2] type-empty [recur local-ctx tail-pos [fourth form]]]]
-              [push-node-type form
+              [set-node-type form
                 [if [eq-form tt type-any]
                   ft
                   [if [eq-form ft type-any]
@@ -532,7 +532,7 @@
                   [set var-values var val-type]]]]]
           [for i 2 [dec s-form]
             [recur let-loop-ctx 0 [at form i]]]
-          [push-node-type form
+          [set-node-type form
             [if [lt-s 2 s-form]
               [recur let-loop-ctx [if [eq-form first-form [quote loop]] 1 tail-pos] [last form]]
               type-empty]]]
@@ -626,7 +626,7 @@
                   [report-when [eq-form p ..] p .. must be at second last position]
                   [when-not [eq-form p -]
                     [report-when [has param-ctx p] p duplicate parameter]
-                    [push-node-type p pt]
+                    [set-node-type p pt]
                     [set param-ctx p pt]]
                   [comment todo use a preallocated array instead we know the size in advance]
                   [set-array mut-parameter-type-list i pt]]]
@@ -705,7 +705,7 @@
                           pt [at parameters i]]
                         [when-not [check-param-arg-conform pt arg-t]
                           [report-error [concat [quote parameter does not match] [list pt arg-t]] arg]]]]
-                  [push-node-type form results]]
+                  [set-node-type form results]]
                 [do
                   [log [list [quote not-found] [quote gc] global-ctx [quote v] first-form]]
                   [report form function not found]]]]
@@ -735,7 +735,7 @@
                               arg-t [recur local-ctx 0 arg]]
                           [report-when-not [check-param-arg-conform rest-param-element-type arg-t] arg
                             rest parameter type mismatch]]]]]
-                  [push-node-type form [getq sig results]]]]]]]]]]]
+                  [set-node-type form [getq sig results]]]]]]]]]]]
 
 [defn check-top-form [form]
   [check-form [list []] 0 form]]
