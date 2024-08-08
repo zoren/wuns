@@ -42,15 +42,26 @@ export const char_code_at = (v, i) => {
 export const concat_words = (w1, w2) => word(wordValue(w1) + wordValue(w2))
 export const int_to_word = (n) => word(n.toString())
 
-export const mutable_list = () => []
+const symbolListGrowable = Symbol.for('wuns-list-growable')
+const symbolListMutable = Symbol.for('wuns-list-mutable')
+const isGrowable = (l) => l[symbolListGrowable]
+const isMutable = (l) => l[symbolListMutable]
+export const mutable_list = () => {
+  const l = []
+  l[symbolListGrowable] = true
+  return l
+}
 export const push = (ar, e) => {
+  if (!isGrowable(ar)) throw new Error('push expects growable list')
   if (!Array.isArray(ar)) throw new Error('push expects array')
   if (Object.isFrozen(ar)) throw new Error('push expects mutable array')
   ar.push(e)
 }
 export const mutable_list_of_size = (size) => {
   if (size < 0) throw new Error('mutable-list-of-size expects non-negative size')
-  return Array.from({ length: size }, () => 0)
+  const l = Array.from({ length: size }, () => 0)
+  l[symbolListMutable] = true
+  return l
 }
 // export const is_mutable = (f) => (Array.isArray(f) && !Object.isFrozen(f)) | 0
 
@@ -58,12 +69,8 @@ export const persistent_array = (o) => {
   if (!Array.isArray(o)) throw new Error('persistent-array expects array')
   return makeList(...o)
 }
-export const persistent_kv_map = (o) => {
-  if (!o || typeof o !== 'object') throw new Error('persistent-object expects object')
-  const clone = { ...o }
-  return Object.freeze(clone)
-}
 export const set_array = (ar, i, e) => {
+  if (!isMutable(ar)) throw new Error('set-array expects mutable list')
   if (!Array.isArray(ar)) throw new Error('set-array expects array')
   if (Object.isFrozen(ar)) throw new Error('set-array expects mutable array')
   if (!isSigned32BitInteger(i)) throw new Error('set-array expects integer index')
@@ -114,11 +121,15 @@ export const keys = (m) => {
   if (typeof m !== 'object') throw new Error('keys expects map')
   return makeList(...Object.keys(m).map(word))
 }
+export const persistent_kv_map = (o) => {
+  if (!o || typeof o !== 'object') throw new Error('persistent-object expects object')
+  const clone = { ...o }
+  return Object.freeze(clone)
+}
 
 export const log = (form) => {
   console.log(print(form))
 }
-
 
 // only for js host
 export const object_get = (m, k) => {

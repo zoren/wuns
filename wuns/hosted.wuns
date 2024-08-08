@@ -90,7 +90,9 @@
           [eq-word [quote let] fw]
           [let
             [bindings [at form 1]
-             instructions [mutable-list]]
+             res-size [add [div [size bindings] 2] [sub [size form] 2]]
+             instructions [mutable-list-of-size res-size]
+             offset [sub [div [size bindings] 2] 2]]
             [for-pair i 0 [size bindings]
               [let
                 [var [at bindings i]
@@ -98,10 +100,10 @@
                  val-type [try-get-node-type value]]
                 [assert [not [is-tuple-type val-type]] binding expects a single type]
                 [add-local ctx var [type-to-wasm val-type]]
-                [push instructions [list [quote local.set] [list [quote dollar] var] [recur ctx 0 value]]]]]
+                [set-array instructions [div i 2] [list [quote local.set] [list [quote dollar] var] [recur ctx 0 value]]]]]
             [for i 2 [dec [size form]]
-              [push instructions [recur ctx 0 [at form i]]]]
-            [push instructions [recur ctx 1 [last form]]]
+              [set-array instructions [add i offset] [recur ctx 0 [at form i]]]]
+            [set-array instructions [dec res-size] [recur ctx 1 [last form]]]
             [list [quote instructions] instructions]]
 
           [eq-word [quote loop] fw]
@@ -213,7 +215,7 @@
           [let [fname [at form 1]
                 params [at form 2]
                 locals [getq ctx locals]
-                wasm-bodies [mutable-list]
+                wasm-bodies [mutable-list-of-size [sub [size form] 3]]
                 last-body [at form -1]]
             [delete-all-keys locals]
             [assert [is-word fname] second element of a list must be a word]
@@ -221,8 +223,8 @@
             [for i 3 [dec [size form]]
               [let [body [at form i]
                     cbody [compile-form ctx 0 body]]
-                [push wasm-bodies [if [is-atomic-type [try-get-node-type body]] [list [quote drop] cbody] cbody]]]]
-            [push wasm-bodies [compile-form ctx 1 last-body]]
+                [set-array wasm-bodies [sub i 3] [if [is-atomic-type [try-get-node-type body]] [list [quote drop] cbody] cbody]]]]
+            [set-array wasm-bodies [dec [size wasm-bodies]] [compile-form ctx 1 last-body]]
             [concat
               [list [quote func] [list [quote dollar] fname] [list [quote export] [list [quote dq-string] fname]]]
               [list-map param params
