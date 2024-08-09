@@ -21,34 +21,37 @@
 
 [def active-mem-start-offset [const 16]]
 
+[defn align-address [x] [bitwise-and [add 3 x] [bitwise-xor -1 3]]]
+
+[defn add-bytes-to-active-mem [ctx bytes]
+  [let [offset-atom [getq ctx active-mem-current-offset]
+        offset [atom-get offset-atom]
+        padded-size [align-address [size bytes]]]
+    [atom-set offset-atom [add offset padded-size]]
+    [push [getq ctx active-mems] [kv-map offset offset bytes bytes]]
+    offset]]
+
 [defn get-or-create-word [ctx w]
   [let [word-map [getq ctx word-map]]
     [if [has word-map w]
       [get word-map w]
-      [let [active-mem [getq ctx active-mem]
-            offset [add [size active-mem] active-mem-start-offset]
-            ws [size w]
-            padding [sub 4 [bitwise-and 3 ws]]]
-        [assert [lt-s ws [const 120]] word must be less than 120 characters]
-        [push-i32-little-endian active-mem tag-word]
-        [push-i32-little-endian active-mem ws]
-        [push-word-chars active-mem w]
-        [for i 0 padding
-          [push active-mem [const 0]]]
-        [set word-map w offset]
-        offset]]]]
+      [let [bytes [growable-list]]
+        [push-i32-little-endian bytes tag-word]
+        [push-i32-little-endian bytes [size w]]
+        [push-word-chars bytes w]
+        [let [offset [add-bytes-to-active-mem ctx bytes]]
+          [set word-map w offset]
+          offset]]]]]
 
 [defn get-or-create-form [ctx form]
   [if [is-word form]
     [get-or-create-word ctx form]
-    [let [active-mem [getq ctx active-mem]
-          tmp-offset-list [list-map element form [recur ctx element]]
-          offset [add [size active-mem] active-mem-start-offset]]
-      [push-i32-little-endian active-mem tag-list]
-      [push-i32-little-endian active-mem [size form]]
-      [for-each element-offset tmp-offset-list
-        [push-i32-little-endian active-mem element-offset]]
-      offset]]]
+    [let [bytes [growable-list]]
+      [push-i32-little-endian bytes tag-list]
+      [push-i32-little-endian bytes [size form]]
+      [for-each element form
+        [push-i32-little-endian bytes [recur ctx element]]]
+      [add-bytes-to-active-mem ctx bytes]]]]
 
 [defn add-local [ctx name type]
   [let [locals [getq ctx locals]]
@@ -330,8 +333,10 @@
         check-result [check-top-forms e-forms]
         errors [getq check-result errors]
         mut-list [growable-list]
-        active-mem [growable-list]
-        ctx [kv-map active-mem active-mem check-result check-result
+        active-mems [growable-list]
+        active-mem-current-offset [atom active-mem-start-offset]
+        ctx [kv-map active-mems active-mems active-mem-current-offset active-mem-current-offset
+                    check-result check-result
                     word-map [transient-kv-map] list-map [transient-kv-map] locals [transient-kv-map]]]
     [for-each error errors
       [log error]]
@@ -341,7 +346,12 @@
       [print-paren-recursive-form mut-list [compile-top-form ctx form]]
       [push mut-list ascii-line-feed]]
     [delete-all-keys node-types]
-    [when [size active-mem]
-      [print-paren-recursive-form mut-list [list [quote data] [list [quote i32.const] [int-to-word active-mem-start-offset]] [list [quote dq-string-bytes] active-mem]]]]
-    [print-paren-recursive-form mut-list [list [quote global] [quote dollar wuns-active-mem-top] [quote i32] [list [quote i32.const] [int-to-word [add [size active-mem] active-mem-start-offset]]]]]
+    [for-each active-mem active-mems
+      [print-paren-recursive-form mut-list
+        [list [quote data] [list [quote i32.const] [int-to-word [getq active-mem offset]]]
+          [list [quote dq-string-bytes] [getq active-mem bytes]]]]
+      [push mut-list ascii-line-feed]]
+    [print-paren-recursive-form mut-list
+      [list [quote global] [quote dollar wuns-active-mem-top] [quote i32]
+        [list [quote i32.const] [int-to-word [atom-get active-mem-current-offset]]]]]
     mut-list]]
