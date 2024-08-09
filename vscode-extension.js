@@ -180,12 +180,12 @@ const tokenBuilderForParseTree = () => {
         pushToken(head, keywordTokenType)
         for (const arg of tail) go(arg)
         break
-      case 'func':
-      case 'macro': {
+      case 'defn':
+      case 'defmacro': {
         pushToken(head, keywordTokenType)
         const [fmName, parameters, ...body] = tail
         if (fmName) {
-          funcEnv.set(fmName.text, { headText, isMacro: headText === 'macro' })
+          funcEnv.set(fmName.text, { headText, isMacro: headText === 'defmacro' })
           pushTokenWithModifier(fmName, headText === 'func' ? functionTokenType : macroTokenType, declarationModifier)
         }
         if (parameters && parameters.type === 'list') {
@@ -200,7 +200,7 @@ const tokenBuilderForParseTree = () => {
         for (const child of body) go(child)
         break
       }
-      case 'constant': {
+      case 'def': {
         pushToken(head, keywordTokenType)
         if (tail.length === 0) break
         const cname = tail[0]
