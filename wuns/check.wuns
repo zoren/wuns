@@ -745,6 +745,12 @@
   [for-each k [keys o]
     [delete-key o k]]]
 
+[defn kv-map-clone [m]
+  [let [res [transient-kv-map]]
+    [for-each k [keys m] [set res k [get m k]]]
+    [freeze-kv-map res]
+    res]]
+
 [defn check-top-forms [forms]
   [add-sig [quote wuns-active-mem-top] [kv-map constant type-i32 def [quote constant]]]
   [for-each form forms
@@ -755,8 +761,8 @@
   [let [res
         [kv-map
           errors errors
-          global-ctx [persistent-kv-map global-ctx]
-          node-types [persistent-kv-map node-types]]]
+          global-ctx [kv-map-clone global-ctx]
+          node-types [kv-map-clone node-types]]]
       [delete-all-keys global-ctx]
     res]]
 
