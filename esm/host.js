@@ -87,36 +87,38 @@ export const at = (v, i) => {
 }
 
 export { atom, atom_get, atom_set }
-export const transient_kv_map = () => ({})
-export const has = (m, k) => {
-  if (typeof m !== 'object') throw new Error('has expects map')
-  return (wordValue(k) in m) | 0
-}
+
 // https://stackoverflow.com/a/69745650/3495920
 const isPlainObject = (value) => value?.constructor === Object
+
+export const transient_kv_map = () => ({})
+export const has = (m, k) => {
+  if (!isPlainObject(m)) throw new Error('has expects map')
+  return (wordValue(k) in m) | 0
+}
 export const get = (m, k) => {
   if (!isPlainObject(m)) throw new Error('get expects map')
   const ks = wordValue(k)
   if (ks in m) return m[ks]
   throw new Error('key not found: ' + ks + ' in ' + Object.keys(m))
 }
+export const keys = (m) => {
+  if (!isPlainObject(m)) throw new Error('keys expect map')
+  return makeList(...Object.keys(m).map(word))
+}
 export const set = (o, k, e) => {
-  if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('set expects map')
+  if (!isPlainObject(o)) throw new Error('set expect map')
   if (Object.isFrozen(o)) throw new Error('set expects mutable object')
   o[wordValue(k)] = e
 }
 export const delete_key = (o, k) => {
-  if (!o || typeof o !== 'object' || Array.isArray(o)) throw new Error('delete-key expects map')
+  if (!isPlainObject(o)) throw new Error('delete-key expect map')
   if (Object.isFrozen(o)) throw new Error('delete expects mutable object')
   delete o[wordValue(k)]
 }
-export const keys = (m) => {
-  if (!isPlainObject(m)) throw new Error('keys expect map')
-  if (typeof m !== 'object') throw new Error('keys expects map')
-  return makeList(...Object.keys(m).map(word))
-}
 export const freeze_kv_map = (o) => {
-  if (!o || typeof o !== 'object') throw new Error('freeze-kv-map expects object')
+  if (!isPlainObject(o)) throw new Error('keys expect map')
+  if (Object.isFrozen(o)) throw new Error('freeze expects mutable object')
   Object.freeze(o)
 }
 
