@@ -115,6 +115,10 @@ export const keys = (m) => {
   if (typeof m !== 'object') throw new Error('keys expects map')
   return makeList(...Object.keys(m).map(word))
 }
+export const freeze_kv_map = (o) => {
+  if (!o || typeof o !== 'object') throw new Error('persistent-object expects object')
+  Object.freeze(o)
+}
 export const persistent_kv_map = (o) => {
   if (!o || typeof o !== 'object') throw new Error('persistent-object expects object')
   const clone = { ...o }

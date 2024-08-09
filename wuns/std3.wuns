@@ -256,7 +256,7 @@
 
 [defmacro kv-map [.. entries]
   [let [s [size entries]
-        ml [mutable-list-of-size [add 3 s]]
+        ml [mutable-list-of-size [add 4 s]]
         tmp-word [genword]]
     [assert [is-even s] kv-map requires an even number of arguments]
     [set-array ml 0 [quote let]]
@@ -265,7 +265,8 @@
       [set-array ml [add 2 i]
         [let [k [at entries i]]
           [list [quote set] tmp-word [if [is-word k] [mk-quote k] k] [at entries [inc i]]]]]]
-    [set-array ml [add 2 s] [list [quote persistent-kv-map] tmp-word]]
+    [set-array ml [add 2 s] [list [quote freeze-kv-map] tmp-word]]
+    [set-array ml [add 3 s] tmp-word]
     ml]]
 
 [defmacro getq [m w]
@@ -288,7 +289,8 @@
     [for-each k [keys m]
       [set new k [get m k]]]
     [set new k v]
-    [persistent-kv-map new]]]
+    [freeze-kv-map new]
+    new]]
 
 [def empty-kv-map [kv-map]]
 

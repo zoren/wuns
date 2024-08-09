@@ -109,7 +109,8 @@
   [let [instructions-by-name [transient-kv-map]]
     [for-each instruction-obj instructions
       [set instructions-by-name [getq instruction-obj name] instruction-obj]]
-    [persistent-kv-map instructions-by-name]]]
+    [freeze-kv-map instructions-by-name]
+    instructions-by-name]]
 
 [defn get-instruction [name]
   [get instructions-by-name name]]

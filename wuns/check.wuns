@@ -432,7 +432,8 @@
                 [set tkvm k v]]
               [report v memarg expects a non-negative decimal]]]
           [report k memarg expects a word]]]]
-    [set-node-type form [persistent-kv-map tkvm]]]]
+    [freeze-kv-map tkvm]
+    [set-node-type form tkvm]]]
 
 [defn check-form [local-ctx tail-pos form]
   [ifs
