@@ -112,6 +112,53 @@
     [i32.store8 [memarg mem 0 offset 8 align 1] w cc]
     w]]
 
+[constant tag-growable-list [i32.const 9]]
+
+[defn make-cap-buffer [capacity]
+  [let [cap-buffer [alloc [i32.mul [i32.add [i32.const 1] capacity] 4]]]
+    [i32.store [memarg mem 0 offset 0 align 4] cap-buffer capacity]
+    cap-buffer]]
+
+[defn growable-list-with-init-capacity [init-capacity]
+  [if [i32.lt-s init-capacity 1] [log-abort [quote growable-list-with-init-capacity-capacity-must-greater-than-zero]]]
+  [let [p [alloc [i32.const 12]]
+        cap-buffer [make-cap-buffer init-capacity]]
+    [i32.store [memarg mem 0 offset 0 align 4] p tag-growable-list]
+    [i32.store [memarg mem 0 offset 4 align 4] p 0]
+    [i32.store [memarg mem 0 offset 8 align 4] p cap-buffer]
+    p]]
+
+[defn growable-list []
+  [growable-list-with-init-capacity [i32.const 16]]]
+
+[defn push [g-list element]
+  [if [not [i32.eq [tag g-list] tag-growable-list]] [log-abort [quote capacity-not-a-growable-list]]]
+  [let [s [i32.load [memarg mem 0 offset 4 align 4] g-list]
+        cap-buffer [i32.load [memarg mem 0 offset 8 align 4] g-list]
+        c [i32.load [memarg mem 0 offset 0 align 4] cap-buffer]]
+    [if [i32.ge-s s c]
+      [let [new-cap-buffer [make-cap-buffer [i32.mul c 2]]]
+        [memory.copy 0 [i32.add 4 new-cap-buffer] [i32.add 4 cap-buffer] [i32.mul c 4]]
+        [i32.store [memarg mem 0 offset 8 align 4] g-list new-cap-buffer]]
+      [i32.store [memarg mem 0 offset 4 align 4] [i32.add cap-buffer [i32.mul s 4]] element]]
+    [i32.store [memarg mem 0 offset 4 align 4] g-list [i32.add s 1]]]]
+
+[constant tag-atom [i32.const 11]]
+
+[defn atom [v]
+  [let [p [alloc [i32.const 8]]]
+    [i32.store [memarg mem 0 offset 0 align 4] p tag-atom]
+    [i32.store [memarg mem 0 offset 4 align 4] p v]
+    p]]
+
+[defn atom-get [a]
+  [if [not [i32.eq [tag a] tag-atom]] [log-abort [quote atom-get-not-an-atom]]]
+  [i32.load [memarg mem 0 offset 4 align 4] a]]
+
+[defn atom-set [a v]
+  [if [not [i32.eq [tag a] tag-atom]] [log-abort [quote atom-set-not-an-atom]]]
+  [i32.store [memarg mem 0 offset 4 align 4] a v]]
+
 [defn main []
   [log-word [quote hello]]
   [log-word [quote world]]
@@ -130,4 +177,8 @@
   [log-word [concat-words [quote 123] [quote abc]]]
   [log-i32 [size [quote 123]]]
   [log-word [char-code-to-word [i32.const 49]]]
+  [let [a [atom [quote init-atom-val]]]
+    [log-word [atom-get a]]
+    [atom-set a [quote new-atom-val]]
+    [log-word [atom-get a]]]
   ]
