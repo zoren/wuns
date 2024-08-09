@@ -46,24 +46,30 @@ const textDecoder = new TextDecoder()
 import { makeInitInterpreter, parseEvalFile, hostExports } from './interpreter.js'
 if (false) {
   const selfHostModule = new WebAssembly.Module(fs.readFileSync('self-host.wasm'))
-  // [defn log-pointer [x y]
-  //   [log-byte-array [byte-array [object-get [atom-get mem-atom] [quote buffer]] x y]]]
   const mkEnv = () => {
     const mem = new WebAssembly.Memory({ initial: 1 })
-    const logPointer = (x, y) => {
-      const bytes = new Uint8Array(mem.buffer, x, y)
-      console.log(textDecoder.decode(bytes))
+    const logPointer = (offset, length) => {
+      console.log(textDecoder.decode(new Uint8Array(mem.buffer, offset, length)))
     }
     const logI32 = (x) => console.log(x)
     return { env: { mem, 'log-pointer': logPointer, 'log-i32': logI32 } }
   }
   const selfHostInstance = new WebAssembly.Instance(selfHostModule, mkEnv())
   const selfHostExports = selfHostInstance.exports
-  console.log({ selfHostExports })
-  console.log(Object.keys(hostExports))
   for (const [k, v] of hostExports) {
-    if (typeof k === 'string' && !(k in selfHostExports)) {
+    if (typeof v !== 'function') {
+      console.log('not a function', v)
+    }
+    const selfHostVal = selfHostExports[k]
+    if (!selfHostVal) {
       console.log('missing', k)
+      continue
+    }
+    if (typeof selfHostVal !== 'function') {
+      console.log('not a function', k)
+    }
+    if (selfHostVal.length !== v.length) {
+      console.log('length mismatch', k, selfHostVal.length, v.length)
     }
   }
 }
@@ -85,8 +91,23 @@ defSetVar('byte-array', (buffer, byteOffset, length) => new Uint8Array(buffer, b
 defSetVar('log-byte-array', (bytes) => {
   console.log(textDecoder.decode(bytes))
 })
+import { isMacro } from './interpreter.js'
+import { isWord, wordValue } from './core.js'
+{
+  const macroCtx = makeInitInterpreter()
+  parseEvalFile(macroCtx, `../wuns/std3.wuns`)
+  const { getVarVal } = macroCtx
+  const hostTryGetMacro = (word) => {
+    if (isWord(word)) {
+      const val = getVarVal(wordValue(word))
+      if (isMacro(val)) return val
+    }
+    return 0
+  }
+  defSetVar('host-try-get-macro', hostTryGetMacro)
+}
 for (const name of ['std3', 'wasm-instructions', 'check', 'hosted', 'translate-test'])
-  parseEvalFile(ctx, (`../wuns/${name}.wuns`))
+  parseEvalFile(ctx, `../wuns/${name}.wuns`)
 
 getVarVal('test-main')()
 

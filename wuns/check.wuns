@@ -62,7 +62,7 @@
     [do
       [when-not [has-local-context local-ctx form]
         [if-not [has global-binding-context form]
-          [report form symbol not found]
+          [report form symbol not found during expansion]
           [let [def-desc [get global-binding-context form]]
             [report-when [eq-word [quote is-macro] [getq def-desc def-form]] form macro used as value]]]]
       form]
@@ -153,9 +153,18 @@
                   [for i 1 imm-index [set-array res i [at form i]]]
                   [for i imm-index s-form [set-array res i [recur global-binding-context local-ctx [at form i]]]]
                   res]
-                [do
-                  [report first-form symbol not found]
-                  form]]]]]]]]
+                [let [macro [host-try-get-macro first-form]]
+                  [if macro
+                    [let [args [mutable-list-of-size [dec s-form]]]
+                      [for i 1 s-form [set-array args [dec i] [list [quote quote] [at form i]]]]
+                      [log [list [quote args] args]]
+                      [let [mac-res [eval [concat [list macro] args]]]
+                        [log [list [quote f] mac-res]]
+                        mac-res
+                        ]]
+                    [do
+                      [report first-form first symbol not found during expansion]
+                      form]]]]]]]]]]
 
 [defn add-global-binding [global-binding-context name def-desc]
   [if [is-word name]
@@ -267,7 +276,7 @@
         [set-array res i [recur [at node i]]]]
       [assoc-meta res [quote node-id] [next-node-id]]]
 
-    [assert 0 not a word or list not assigned node id]]]
+    [assert 0 not a word or list not assigned node id [identity node]]]]
 
 [defn expand-top-level-forms [forms]
   [let [res [mutable-list-of-size [size forms]]

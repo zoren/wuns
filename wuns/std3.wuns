@@ -112,14 +112,14 @@
 [defmacro and [.. clauses]
   [let [s [size clauses]]
     [if [is-zero s]
-      1
+      [quote i32.const 1]
       [loop [i [dec s]
              res [at clauses -1]]
         [if [eq i 0]
           res
           [continue
             i [dec i]
-            res [list [quote if] [at clauses [dec i]] res 0]]]]]]]
+            res [list [quote if] [at clauses [dec i]] res [quote i32.const 0]]]]]]]]
 
 [def word-counter [atom 0]]
 
