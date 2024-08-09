@@ -294,3 +294,16 @@
 
 [defn assoc-meta [f k v]
   [with-meta f [assoc [let[m [meta f]] [if m m empty-kv-map]] k v]]]
+
+[defn slice [l start end]
+  [assert [is-list l] slice expects list]
+  [assert [not [is-negative start]] negative start index]
+  [assert [not [is-negative end]] negative end index]
+  [let [s [sub end start]]
+    [if [lt-s s 1]
+      [list]
+      [let [ml [mutable-list-of-size s]]
+        [for i start end
+          [set-array ml [sub i start] [at l i]]]
+        [freeze-mutable-list ml]
+        ml]]]]

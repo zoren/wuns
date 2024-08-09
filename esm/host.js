@@ -86,13 +86,6 @@ export const at = (v, i) => {
   return v.at(i)
 }
 
-export const slice = (v, i, j) => {
-  if (!Array.isArray(v)) throw new Error('slice expects list')
-  if (!isSigned32BitInteger(i)) throw new Error('slice expects number: ' + i)
-  if (!isSigned32BitInteger(j)) throw new Error('slice expects number: ' + j)
-  return makeList(...v.slice(i, j))
-}
-
 export { atom, atom_get, atom_set }
 export const transient_kv_map = () => ({})
 export const has = (m, k) => {
