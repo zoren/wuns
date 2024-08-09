@@ -292,7 +292,7 @@
         [do
           [push mut-list ascii-double-quote]
           [for-each c [second form]
-            [if [and [is-printable-ascii c] [not [eq c ascii-double-quote]]]
+            [if [and [is-printable-ascii c] [not [eq c ascii-double-quote]] [not [eq c ascii-backslash]]]
               [push mut-list c]
               [do
                 [assert [not [is-negative c]] c must be positive]
