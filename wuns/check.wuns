@@ -157,11 +157,7 @@
                   [if macro
                     [let [args [mutable-list-of-size [dec s-form]]]
                       [for i 1 s-form [set-array args [dec i] [list [quote quote] [at form i]]]]
-                      [log [list [quote args] args]]
-                      [let [mac-res [eval [concat [list macro] args]]]
-                        [log [list [quote f] mac-res]]
-                        mac-res
-                        ]]
+                      [eval [concat [list macro] args]]]
                     [do
                       [report first-form first symbol not found during expansion]
                       form]]]]]]]]]]

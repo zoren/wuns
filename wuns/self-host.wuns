@@ -188,4 +188,5 @@
   [log-i32 [is-between-inclusive [i32.const 1] [i32.const 3] [i32.const 3]]]
   [log-i32 [is-between-inclusive [i32.const 1] [i32.const 4] [i32.const 3]]]
   [log-i32 [and]]
+  [log-i32 [or]]
   ]

@@ -151,7 +151,7 @@
 [defmacro or [.. clauses]
   [let [s [size clauses]]
     [if [is-zero s]
-      0
+      [quote i32.const 0]
       [loop [i [dec s]
              res [at clauses -1]]
         [if [eq i 0]
