@@ -1,16 +1,38 @@
-[defn set-i32-little-endian [mut-list val start]
-  [loop [i 0 cur val]
-    [when [lt-s i 4]
-      [set-array mut-list [add start i] [int-to-word [bitwise-and cur [const 255]]]]
-      [continue i [inc i] cur [bitwise-shift-right-unsigned cur [const 8]]]]]]
+[def tag-word [i32.const 1]]
+[def tag-list [i32.const 3]]
 
-[defmacro word-bytes [w]
+[defn word-bytes [dw w]
   [let [s [size w]
-        l [mutable-list-of-size [add [i32.const 9] s]]]
-    [set-array l 0 [quote bytes]]
-    [set-i32-little-endian l 1 1]
-    [set-i32-little-endian l s [i32.const 5]]
+        l [mutable-list-of-size [i32.const 3]]
+        byte-form [mutable-list-of-size [inc s]]]
+    [set-array l 0 dw]
+    [set-array l 1 [list [quote i32] [int-to-word tag-word] [int-to-word s]]]
+    [set-array byte-form 0 [quote i8]]
     [for i 0 s
-      [set-array l [add [i32.const 9] i] [int-to-word [char-code-at w i]]]]
-    [log [list [quote word-bytes] l]]
+      [set-array byte-form [inc i] [int-to-word [char-code-at w i]]]]
+    [set-array l 2 byte-form]
     l]]
+
+[defn form-to-bytes-fn [dw f]
+  [ifs
+    [is-word f]
+    [word-bytes dw f]
+
+    [is-list f]
+    [let [s [size f]
+          l [mutable-list-of-size [add s [i32.const 2]]]
+          data-form [mutable-list-of-size [inc s]]]
+      [set-array l 0 dw]
+      [set-array l 1 [list [quote i32] [int-to-word tag-list] [int-to-word s]]]
+      [for i 0 s
+        [set-array l [add 2 i] [recur [quote data] [at f i]]]]
+      l]
+
+    [do
+      [log [quote not-a-word-or-list]]
+      [unreachable]]]]
+
+[defmacro form-to-bytes [f]
+  [let [ff [form-to-bytes-fn [quote active-data] f]]
+  [log [list [quote ff] f ff]]
+  ff]]

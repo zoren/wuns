@@ -53,6 +53,27 @@
         [push-i32-little-endian bytes [recur ctx element]]]
       [add-bytes-to-active-mem ctx bytes]]]]
 
+[defn push-active-data [ctx bytes form]
+  [assert [is-list form] push-active-data unknown form [identity form]]
+  [assert [not [is-empty form]] push-active-data unknown form [identity form]]
+  [let [ff [first form]]
+    [ifs
+      [eq-word ff [quote i8]]
+      [for i 1 [size form]
+        [push bytes [dec-word-to-int [at form i]]]]
+
+      [eq-word ff [quote i32]]
+      [for i 1 [size form]
+        [push-i32-little-endian bytes [dec-word-to-int [at form i]]]]
+
+      [eq-word ff [quote data]]
+      [let [rbytes [growable-list]]
+        [for i 1 [size form]
+          [recur ctx rbytes [at form i]]]
+        [push-i32-little-endian bytes [add-bytes-to-active-mem ctx rbytes]]]
+
+      [assert 0 unknown active data form [identity ff]]]]]
+
 [defn add-local [ctx name type]
   [let [locals [getq ctx locals]]
     [assert [not [has locals name]] name must not be defined [identity name]]
@@ -90,11 +111,10 @@
                 offset [get-or-create-form ctx quoted]]
             [list [quote i32.const] [int-to-word offset]]]
 
-          [eq-word [quote bytes] fw]
-          [let [n-of-bytes [dec [size form]]
-                bytes [mutable-list-of-size n-of-bytes]]
+          [eq-word [quote active-data] fw]
+          [let [bytes [growable-list]]
             [for i 1 [size form]
-              [set-array bytes [dec i] [dec-word-to-int [at form i]]]]
+              [push-active-data ctx bytes [at form i]]]
             [list [quote i32.const] [int-to-word [add-bytes-to-active-mem ctx bytes]]]]
 
           [eq-word [quote let] fw]

@@ -81,7 +81,7 @@
           [eq-word [quote quote] first-form]
           form
 
-          [eq-word [quote bytes] first-form]
+          [eq-word [quote active-data] first-form]
           form
 
           [eq-word [quote if] first-form]
@@ -499,7 +499,7 @@
                 type-word]]
             [type-list type-any]]]
 
-        [eq-form first-form [quote bytes]]
+        [eq-form first-form [quote active-data]]
         [do
           [set-node-type form type-pointer]]
 
