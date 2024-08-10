@@ -143,6 +143,19 @@
           [continue res [concat-words [at l i] res] i [inc i]]
           res]]]]]
 
+[defmacro word-to-char-code [w] [char-code-at w 0]]
+
+[defn is-between-inclusive [lower c upper]
+  [and [i32.le-s lower c] [i32.le-s c upper]]]
+
+[defn dec-word-to-int [w]
+  [loop [i 0 res 0]
+    [if [lt-s i [size w]]
+      [let [cc [char-code-at w i]]
+        [assert [is-between-inclusive [word-to-char-code 0] cc [word-to-char-code 9]] dec-word-to-int expects a decimal word]
+        [continue res [i32.add [i32.mul res [i32.const 10]] [i32.sub cc [word-to-char-code 0]]] i [inc i]]]
+      res]]]
+
 [defn genword []
   [let [c [atom-get word-counter]]
     [atom-set word-counter [inc c]]

@@ -81,6 +81,9 @@
           [eq-word [quote quote] first-form]
           form
 
+          [eq-word [quote bytes] first-form]
+          form
+
           [eq-word [quote if] first-form]
           [let [res [mutable-list-of-size s-form]]
             [set-array res 0 first-form]
@@ -309,6 +312,7 @@
 [def type-form [quote form]]
 [def type-any [quote any]]
 [def type-error [quote type-error]]
+[def type-pointer [quote i32]]
 
 [defn is-word-type [t] [or [eq-form t type-word] [eq-form t type-i32]]]
 
@@ -494,6 +498,10 @@
                 [type-list type-any]
                 type-word]]
             [type-list type-any]]]
+
+        [eq-form first-form [quote bytes]]
+        [do
+          [set-node-type form type-pointer]]
 
         [eq-form first-form [quote if]]
         [do
@@ -762,7 +770,8 @@
     [check-top-form form]]
   [when-not [is-empty errors]
     [for-each err errors
-      [log [list [getq err message] [getq err form] [getq [meta [getq err form]] range]]]]]
+      [log [list [getq err message] [getq err form]
+        [let [m [meta [getq err form]]] [if [hasq m range] [getq m range]]]]]]]
   [let [res
         [kv-map
           errors errors

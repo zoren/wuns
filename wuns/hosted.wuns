@@ -88,7 +88,14 @@
           [eq-word [quote quote] fw]
           [let [quoted [if [eq 2 [size form]] [at form 1] [slice form 1 [size form]]]
                 offset [get-or-create-form ctx quoted]]
-              [list [quote i32.const] [int-to-word offset]]]
+            [list [quote i32.const] [int-to-word offset]]]
+
+          [eq-word [quote bytes] fw]
+          [let [n-of-bytes [dec [size form]]
+                bytes [mutable-list-of-size n-of-bytes]]
+            [for i 1 [size form]
+              [set-array bytes [dec i] [dec-word-to-int [at form i]]]]
+            [list [quote i32.const] [int-to-word [add-bytes-to-active-mem ctx bytes]]]]
 
           [eq-word [quote let] fw]
           [let
