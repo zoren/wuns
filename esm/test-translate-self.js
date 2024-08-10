@@ -95,7 +95,8 @@ import { isMacro } from './interpreter.js'
 import { isWord, wordValue } from './core.js'
 {
   const macroCtx = makeInitInterpreter()
-  parseEvalFile(macroCtx, `../wuns/std3.wuns`)
+  for (const name of ['std3', 'self-host-macros'])
+    parseEvalFile(macroCtx, `../wuns/${name}.wuns`)
   const { getVarVal } = macroCtx
   const hostTryGetMacro = (word) => {
     if (isWord(word)) {

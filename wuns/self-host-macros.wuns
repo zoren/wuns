@@ -1,0 +1,16 @@
+[defn set-i32-little-endian [mut-list val start]
+  [loop [i 0 cur val]
+    [when [lt-s i 4]
+      [set-array mut-list [add start i] [int-to-word [bitwise-and cur [const 255]]]]
+      [continue i [inc i] cur [bitwise-shift-right-unsigned cur [const 8]]]]]]
+
+[defmacro word-bytes [w]
+  [let [s [size w]
+        l [mutable-list-of-size [add [i32.const 9] s]]]
+    [set-array l 0 [quote bytes]]
+    [set-i32-little-endian l 1 1]
+    [set-i32-little-endian l s [i32.const 5]]
+    [for i 0 s
+      [set-array l [add [i32.const 9] i] [int-to-word [char-code-at w i]]]]
+    [log [list [quote word-bytes] l]]
+    l]]

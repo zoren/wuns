@@ -190,4 +190,6 @@
   [log-i32 [and]]
   [log-i32 [or]]
   [log-pointer [bytes 65 66 67 68] 4]
+  [log-word [word-bytes wbm]]
+  [log-word [quote qwr]]
   ]
