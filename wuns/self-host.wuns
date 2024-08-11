@@ -3,12 +3,12 @@
 [import env log-pointer [func [i32 i32] []]]
 [import env log-i32 [func [i32] []]]
 
-[constant -1 [i32.const -1]]
-[constant 0 [i32.const 0]]
-[constant 1 [i32.const 1]]
-[constant 2 [i32.const 2]]
-[constant 3 [i32.const 3]]
-[constant 4 [i32.const 4]]
+[def -1 [i32.const -1]]
+[def 0 [i32.const 0]]
+[def 1 [i32.const 1]]
+[def 2 [i32.const 2]]
+[def 3 [i32.const 3]]
+[def 4 [i32.const 4]]
 
 [defn is-between-inclusive [lower c upper]
   [and [i32.le-s lower c] [i32.le-s c upper]]]
@@ -21,8 +21,8 @@
 [defn tag [p] [i32.load [memarg mem 0 offset 0 align 4] p]]
 [defn size [p] [i32.load [memarg mem 0 offset 4 align 4] p]]
 
-[constant tag-word [i32.const 1]]
-[constant tag-list [i32.const 3]]
+[def tag-word [i32.const 1]]
+[def tag-list [i32.const 3]]
 
 [defn is-word [f] [i32.eq [tag f] tag-word]]
 [defn is-list [f] [i32.eq [tag f] tag-list]]
@@ -70,7 +70,7 @@
         [i32.store [memarg mem 0 offset 0 align 4] [i32.const 0] new-top]]]
     current-top]]
 
-[constant tag-mutable-list [i32.const 7]]
+[def tag-mutable-list [i32.const 7]]
 
 [defn mutable-list-of-size [s]
   [if [is-negative s] [log-abort [quote mutable-list-of-size-size-must-be-positive]]]
@@ -116,7 +116,7 @@
     [i32.store8 [memarg mem 0 offset 8 align 1] w cc]
     w]]
 
-[constant tag-growable-list [i32.const 9]]
+[def tag-growable-list [i32.const 9]]
 
 [defn make-cap-buffer [capacity]
   [let [cap-buffer [alloc [i32.mul [i32.add [i32.const 1] capacity] 4]]]
@@ -147,7 +147,7 @@
       [i32.store [memarg mem 0 offset 4 align 4] [i32.add cap-buffer [i32.mul s 4]] element]]
     [i32.store [memarg mem 0 offset 4 align 4] g-list [i32.add s 1]]]]
 
-[constant tag-atom [i32.const 11]]
+[def tag-atom [i32.const 11]]
 
 [defn atom [v]
   [let [p [alloc [i32.const 8]]]

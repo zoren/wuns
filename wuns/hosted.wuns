@@ -82,7 +82,7 @@
 [defn compile-form [ctx is-tail form]
   [if [is-word form]
     [let [gctx [getq [getq ctx check-result] global-ctx]]
-      [if [and [has gctx form] [eq-form [getq [get gctx form] def] [quote constant]]]
+      [if [and [has gctx form] [eq-form [getq [get gctx form] def] [quote def]]]
         [list [quote global.get] [list [quote dollar] form]]
         [list [quote local.get] [list [quote dollar] form]]]]
     [do
@@ -232,7 +232,7 @@
                   t
                   [list [quote func] [list [quote dollar] name] [concat [quote [param]] [second t]] [concat [quote [result]] [third t]]]]]]
 
-          [eq-word [quote constant] fw]
+          [eq-word [quote def] fw]
           [let [name [at form 1]
                 value [at form 2]]
               [list [quote global]
@@ -357,7 +357,7 @@
   [let [e-forms [expand-top-level-forms forms]
         - [when [size errors]
             [for-each error errors
-              [log error]]
+              [log [list [getq error message] [getq [meta [getq error form]] range]]]]
             [unreachable]]
         check-result [check-top-forms e-forms]
         errors [getq check-result errors]

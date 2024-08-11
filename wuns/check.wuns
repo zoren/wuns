@@ -190,7 +190,7 @@
       [let [first-form [first form]
             s-form [size form]]
         [ifs
-          [eq-word [quote constant] first-form]
+          [eq-word [quote def] first-form]
           [let [name [at form 1]
                 local-ctx [kv-map vars empty-kv-map decl-form first-form]]
             [add-global-binding global-binding-context name [kv-map def-form first-form]]
@@ -281,7 +281,7 @@
   [let [res [mutable-list-of-size [size forms]]
         global-binding-context [transient-kv-map]]
     [add-global-binding global-binding-context [quote wuns-active-mem-top]
-      [kv-map def-form [quote constant]]]
+      [kv-map def-form [quote def]]]
     [for i 0 [size forms]
       [set-array res i [assign-node-ids [expand-top-level global-binding-context [at forms i]]]]]
     res]]
@@ -454,11 +454,11 @@
             [set-node-type form [get param-ctx form]]
             [if [has global-ctx form]
               [let [sig [get global-ctx form]]
-                [if [eq-word [getq sig def] [quote constant]]
-                  [set-node-type form [getq sig constant]]
+                [if [eq-word [getq sig def] [quote def]]
+                  [set-node-type form [getq sig def-type]]
                   [do
-                    [report form not a constant]
-                    [log [list [quote c] form [quote not a constant]]]
+                    [report form not a def]
+                    [log [list [quote c] form [quote not a def]]]
                     [log global-ctx]
                     type-error]]]
               [do
@@ -589,11 +589,11 @@
 
               []]]
 
-        [eq-form first-form [quote constant]]
+        [eq-form first-form [quote def]]
         [let [name [second form]
               value [third form]
               value-type [recur local-ctx 0 value]]
-          [add-sig name [kv-map constant value-type
+          [add-sig name [kv-map def-type value-type
                                 def first-form]]]
 
         [or [eq-form first-form [quote defn]]]
@@ -765,7 +765,7 @@
     res]]
 
 [defn check-top-forms [forms]
-  [add-sig [quote wuns-active-mem-top] [kv-map constant type-i32 def [quote constant]]]
+  [add-sig [quote wuns-active-mem-top] [kv-map def-type type-i32 def [quote def]]]
   [for-each form forms
     [check-top-form form]]
   [when-not [is-empty errors]

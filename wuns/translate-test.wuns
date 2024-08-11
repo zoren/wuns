@@ -56,8 +56,8 @@
       expect [quote [test-asssert-eq [i32.const 3] [f]]]]
     [kv-map
       module [quote [import env mem [memory 0]]
-                    [constant w1 [quote a]]
-                    [constant w3 [quote 007]]
+                    [def w1 [quote a]]
+                    [def w3 [quote 007]]
                     [defn tag [p] [i32.load [memarg mem 0 offset 0 align 4] p]]
                     [defn size [p] [i32.load [memarg mem 0 offset 4 align 4] p]]
                     [defn f [] [size w1]]
@@ -69,14 +69,14 @@
                         [test-asssert-eq [i32.const 1] [h]]]]]
     [kv-map
       module [quote [import env mem [memory 0]]
-                    [constant l0 [quote []]]
+                    [def l0 [quote []]]
                     [defn size [p] [i32.load [memarg mem 0 offset 4 align 4] p]]
                     [defn f [] [size l0]]]
       import-object [kv-map env [kv-map mem [wasm-memory [kv-map initial 1]]]]
       expect [quote [do [test-asssert-eq [i32.const 0] [f]]]]]
     [kv-map
       module [quote [import env mem [memory 0]]
-                    [constant l0 [quote [1 2 3]]]
+                    [def l0 [quote [1 2 3]]]
                     [defn tag [p] [i32.load [memarg mem 0 offset 0 align 4] p]]
                     [defn size [p] [i32.load [memarg mem 0 offset 4 align 4] p]]
                     [defn f [] [size l0]]
