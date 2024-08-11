@@ -133,7 +133,8 @@
                 [set-array instructions [div i 2] [list [quote local.set] [list [quote dollar] var] [recur ctx 0 value]]]]]
             [for i 2 [dec [size form]]
               [set-array instructions [add i offset] [recur ctx 0 [at form i]]]]
-            [set-array instructions [dec res-size] [recur ctx 1 [last form]]]
+            [when [lt-s 2 [size form]]
+              [set-array instructions [dec res-size] [recur ctx 1 [last form]]]]
             [list [quote instructions] instructions]]
 
           [eq-word [quote loop] fw]
@@ -357,7 +358,7 @@
   [let [e-forms [expand-top-level-forms forms]
         - [when [size errors]
             [for-each error errors
-              [log [list [getq error message] [getq [meta [getq error form]] range]]]]
+              [log [list [getq error message] [try-get-range [getq error form]]]]]
             [unreachable]]
         check-result [check-top-forms e-forms]
         errors [getq check-result errors]

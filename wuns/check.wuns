@@ -444,6 +444,12 @@
     [freeze-kv-map tkvm]
     [set-node-type form tkvm]]]
 
+[defn try-get-range [form]
+  [let [m [meta form]]
+    [if [and m [hasq m range]]
+      [getq m range]
+      [list]]]]
+
 [defn check-form [local-ctx tail-pos form]
   [ifs
     [is-word form]
@@ -530,12 +536,12 @@
         [let
           [var-values [transient-kv-map]
            let-loop-ctx [list var-values local-ctx first-form]
-           bindings [if [lt-s 1 s-form] [second form] [do [report form expects bindings] []]]
+           bindings [if [lt-s 1 s-form] [second form] [do [report form expects bindings] [list]]]
            n-of-bindings [size bindings]]
           [when [lt-s 1 s-form]
             [let
               [sec [second form]
-               bindings [if [is-list sec] sec [do [report sec expects a list of bindings] []]]
+               bindings [if [is-list sec] sec [do [report sec expects a list of bindings] [list]]]
                n-of-bindings [size bindings]]
               [report-when-not [is-even n-of-bindings] [last bindings] expects an even number of bindings]
               [for-pair i 0 [dec n-of-bindings]
@@ -553,6 +559,7 @@
 
         [eq-form first-form [quote continue]]
         [do
+          [report-when-not tail-pos form continue not at tail position of loop]
           [loop [cur-ctx local-ctx]
             [if [eq [size cur-ctx] 1]
               [report form continue not inside loop]
@@ -563,14 +570,13 @@
                     form
                     continue takes a list of pairs of bindings]
                   [for-pair i 1 n-of-args
-                      [let [var [at form i]
-                            value [at form [inc i]]
-                            val-type [recur cur-ctx 0 value]]
-                        [if-not [has loop-vars var]
-                          [report var loop var not found]
-                          [let [type [get loop-vars var]]
-                            [report-when-not [eq-form type val-type] value type mismatch]]]]]]
-                [report-when-not tail-pos form continue not at tail position of loop]
+                    [let [var [at form i]
+                          value [at form [inc i]]
+                          val-type [recur cur-ctx 0 value]]
+                      [if-not [has loop-vars var]
+                        [report var loop var not found]
+                        [let [type [get loop-vars var]]
+                          [report-when-not [eq-form type val-type] value type mismatch]]]]]]
                 [continue cur-ctx [second cur-ctx]]]]]
           type-any]
 
@@ -721,7 +727,7 @@
                           [report-error [concat [quote parameter does not match] [list pt arg-t]] arg]]]]
                   [set-node-type form results]]
                 [do
-                  [log [list [quote not-found] [quote gc] global-ctx [quote v] first-form]]
+                  [log [list [quote not-found] [quote v] first-form [try-get-range first-form] [quote gc] global-ctx]]
                   [report form function not found]]]]
             [let [sig [get global-ctx first-form]
                   sig-def [getq sig def]
@@ -771,7 +777,7 @@
   [when-not [is-empty errors]
     [for-each err errors
       [log [list [getq err message] [getq err form]
-        [let [m [meta [getq err form]]] [if [hasq m range] [getq m range]]]]]]]
+        [try-get-range [getq err form]]]]]]
   [let [res
         [kv-map
           errors errors

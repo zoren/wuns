@@ -176,14 +176,14 @@
             1]]]]]]
 
 [defn test-assert-eq [expected actual]
-  [when [not [eq expected actual]]
+  [when-not [eq expected actual]
     [log-word [quote test-assert-eq-not-equal]]
     [log-i32 expected]
     [log-i32 actual]
     [unreachable]]]
 
 [defn test-assert-true [actual]
-  [when [not actual]
+  [when-not actual
     [log-word [quote test-assert-true-failed]]
     [unreachable]]]
 
@@ -193,7 +193,7 @@
     [unreachable]]]
 
 [defn test-assert-eq-word [expected actual]
-  [when [not [eq-word expected actual]]
+  [when-not [eq-word expected actual]
     [log-word [quote test-assert-eq-word-not-equal]]
     [log-word expected]
     [log-word actual]

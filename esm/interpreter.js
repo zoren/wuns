@@ -1,7 +1,6 @@
 import {
   wordValue,
   isWord,
-  unit,
   print,
   number,
   isSigned32BitInteger,
@@ -87,8 +86,11 @@ export const makeInterpreterContext = () => {
         return () => res
       }
       case 'if': {
-        const ifArgs = [...args, unit, unit, unit].slice(0, 3)
-        const [cc, ct, cf] = ifArgs.map((arg) => wunsComp(ctx, arg))
+        if (args.length < 2 || 3 < args.length) throw new CompileError('if expects 2 or 3 arguments')
+        const cc = wunsComp(ctx, args[0])
+        const ct = wunsComp(ctx, args[1])
+        if (args.length === 2) return (env) => (cc(env) === 0 ? undefined : ct(env))
+        const cf = wunsComp(ctx, args[2])
         return (env) => (cc(env) === 0 ? cf : ct)(env)
       }
       case 'let':
@@ -211,7 +213,7 @@ export const makeInterpreterContext = () => {
     // return non-forms as is
     if (!Array.isArray(form)) return () => form
     // todo maybe change this a tuple unit not an empty list
-    if (form.length === 0) return () => unit
+    if (form.length === 0) return () => undefined
     const [firstForm, ...args] = form
     const rtCallFunc = () => {
       const cargs = args.map((a) => wunsComp(ctx, a))
@@ -296,7 +298,9 @@ export const makeInterpreterContext = () => {
       )
     return (env) => {
       const eargs = cargs.map((carg) => carg(env))
-      for (const earg of eargs) if (!isSigned32BitInteger(earg)) throw new RuntimeError(`expected integer, got ${earg}`)
+      for (const earg of eargs)
+        if (!isSigned32BitInteger(earg))
+          throw new RuntimeError(`instruction ${firstWordValue} expected integer, got ${earg}`)
       return instWithImmediate(...eargs)
     }
   }

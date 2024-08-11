@@ -23,7 +23,7 @@ export const wordValue = (w) => {
   throw new Error('not a word: ' + w + ' ' + typeof w)
 }
 
-export const unit = Object.freeze([])
+const unit = Object.freeze([])
 export const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
 export const isList = (f) => Array.isArray(f)
 

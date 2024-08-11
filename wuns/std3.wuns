@@ -12,7 +12,7 @@
 
 [defn mk-quote [form] [list quote-word form]]
 
-[defmacro comment [.. -] [list]]
+[defmacro comment [.. -]]
 
 [defn inc [x] [add x 1]]
 
@@ -67,7 +67,7 @@
 [defmacro when-not [cond .. forms]
   [list
     [quote if] cond
-    [list]
+    [quote [let []]]
     [concat [quote let []] forms]]]
 
 [defmacro if-not [cond false-form true-form]
@@ -89,8 +89,8 @@
 
 [defmacro assert [cond .. lmsg]
   [list [quote if] cond
-    [list]
-    [list [quote let] [list]
+    [quote []]
+    [list [quote let] [quote []]
       [list [quote log] [quote-list lmsg]]
       [quote [unreachable]]]]]
 
@@ -222,7 +222,7 @@
           [list [quote i32.lt-s] iw ew]
           [concat [quote let []] forms
             [list [list [quote continue] iw [list [quote i32.add] iw increment]]]]
-          [list]]]]]]
+          [quote []]]]]]]
 
 [defmacro for [iw start end .. forms]
   [for-func iw start [i32.const 1] end forms]]
@@ -316,7 +316,7 @@
   [assert [not [is-negative end]] negative end index]
   [let [s [sub end start]]
     [if [lt-s s 1]
-      [list]
+      [quote []]
       [let [ml [mutable-list-of-size s]]
         [for i start end
           [set-array ml [sub i start] [at l i]]]
