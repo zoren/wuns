@@ -11,7 +11,7 @@
     [freeze-mutable-list res]
     res]]
 
-[defn make-operation-obj [name opcode immediate-parameters parameters results]
+[defn make-operation-obj-aliases [name opcode immediate-parameters parameters results aliases]
   [kv-map
     name name
     wat-name [wasm-name-to-wat-bytes name]
@@ -19,7 +19,11 @@
     immediate-parameters immediate-parameters
     parameters parameters
     arity [add [size immediate-parameters] [size parameters]]
-    results results]]
+    results results
+    aliases aliases]]
+
+[defn make-operation-obj [name opcode immediate-parameters parameters results]
+  [make-operation-obj-aliases name opcode immediate-parameters parameters results []]]
 
 [def i32 [quote i32]]
 [def i64 [quote i64]]
@@ -33,8 +37,8 @@
 [def imm-memarg [quote memarg]]
 [def imm-memargs [list imm-memarg]]
 
-[defmacro make-binary-i32 [name opcode]
-  [list [quote quote] [make-operation-obj name opcode [] i32i32 i32]]]
+[defmacro make-binary-i32 [name opcode .. aliases]
+  [list [quote quote] [make-operation-obj-aliases name opcode [] i32i32 i32 aliases]]]
 
 [defmacro make-binary-i64 [name opcode]
   [list [quote quote] [make-operation-obj name opcode [] i64i64 i64]]]
@@ -50,12 +54,12 @@
     [make-operation-obj [quote i32.const] [quote 0x41] [list immediate-s32] [] i32]
     [make-operation-obj [quote i64.const] [quote 0x42] [list immediate-s64] [] i64]
 
-    [make-binary-i32 i32.eq   0x46]
+    [make-binary-i32 i32.eq   0x46 eq]
     [make-binary-i32 i32.ne   0x47]
-    [make-binary-i32 i32.lt-s 0x48]
-    [make-binary-i32 i32.gt-s 0x4a]
-    [make-binary-i32 i32.le-s 0x4c]
-    [make-binary-i32 i32.ge-s 0x4e]
+    [make-binary-i32 i32.lt-s 0x48 lt-s]
+    [make-binary-i32 i32.gt-s 0x4a gt-s]
+    [make-binary-i32 i32.le-s 0x4c le-s]
+    [make-binary-i32 i32.ge-s 0x4e ge-s]
 
     [make-comp-i64 i64.eq   0x51]
     [make-comp-i64 i64.ne   0x52]
@@ -64,10 +68,10 @@
     [make-comp-i64 i64.le-s 0x57]
     [make-comp-i64 i64.ge-s 0x59]
 
-    [make-binary-i32 i32.add   0x6a]
-    [make-binary-i32 i32.sub   0x6b]
-    [make-binary-i32 i32.mul   0x6c]
-    [make-binary-i32 i32.div-s 0x6d]
+    [make-binary-i32 i32.add   0x6a add]
+    [make-binary-i32 i32.sub   0x6b sub]
+    [make-binary-i32 i32.mul   0x6c mul]
+    [make-binary-i32 i32.div-s 0x6d div-s]
 
     [make-binary-i32 i32.and 0x71]
     [make-binary-i32 i32.ior 0x72]
@@ -108,7 +112,10 @@
 [def instructions-by-name
   [let [instructions-by-name [transient-kv-map]]
     [for-each instruction-obj instructions
-      [set instructions-by-name [getq instruction-obj name] instruction-obj]]
+      [set instructions-by-name [getq instruction-obj name] instruction-obj]
+      [when [hasq instruction-obj aliases]
+        [for-each alias [getq instruction-obj aliases]
+          [set instructions-by-name alias instruction-obj]]]]
     [freeze-kv-map instructions-by-name]
     instructions-by-name]]
 
