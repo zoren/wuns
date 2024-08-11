@@ -3,11 +3,9 @@ import {
   isWord,
   print,
   isSigned32BitInteger,
-  createFunction,
-  callFunction,
-  callFunctionStaged,
   isWunsFunction,
   meta,
+  makeList,
 } from './core.js'
 import { instructions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
@@ -53,6 +51,31 @@ const formToLocationString = (word) => {
   const [startLine, startCol, endLine, endCol] = range
   return `${m['file-path']}:${startLine + 1}:${startCol}`
 }
+
+const callFunctionStaged = (funMacDesc, numberOfGivenArgs) => {
+  const { name, params, restParam } = funMacDesc
+  const arity = params.length
+  if (!restParam) {
+    if (arity !== numberOfGivenArgs) throw new CompileError(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
+    return (args) => {
+      if (args.length !== numberOfGivenArgs) throw new RuntimeError('expected ' + numberOfGivenArgs + ' arguments')
+      const varValues = new Map()
+      for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+      return funMacDesc.cbodies({ varValues })
+    }
+  }
+  if (arity > numberOfGivenArgs)
+    throw new CompileError(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
+  return (args) => {
+    if (args.length !== numberOfGivenArgs) throw new RuntimeError('expected ' + numberOfGivenArgs + ' arguments')
+    const varValues = new Map()
+    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+    varValues.set(restParam, makeList(...args.slice(arity)))
+    return funMacDesc.cbodies({ varValues })
+  }
+}
+
+const callFunction = (funMacDesc, args) => callFunctionStaged(funMacDesc, args.length)(args)
 
 export const makeInterpreterContext = () => {
   const defVars = new Map()
@@ -186,7 +209,9 @@ export const makeInterpreterContext = () => {
         funMacDesc.cbodies = compBodies(newCtx, bodies)
         if (firstWordValue === 'defmacro') funMacDesc.isMacro = true
         Object.freeze(funMacDesc)
-        const f = createFunction(funMacDesc)
+        const f = (...args) => callFunction(funMacDesc, args)
+        f['funMacDesc'] = funMacDesc
+        Object.freeze(f)
         return () => defSetVar(nameString, f)
       }
       case 'recur': {
@@ -277,7 +302,7 @@ export const makeInterpreterContext = () => {
     const immArgs = args.slice(0, immArity).map((arg) => {
       const wv = wordValue(arg)
       const n = Number(wv)
-      if (!isSigned32BitInteger(n)) throw new Error(`expected 32-bit signed integer, found: ${wv}`)
+      if (!isSigned32BitInteger(n)) throw new CompileError(`expected 32-bit signed integer, found: ${wv}`)
       return n
     })
     for (let i = 0; i < immArity; i++) {

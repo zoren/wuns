@@ -29,37 +29,6 @@ export const isList = (f) => Array.isArray(f)
 
 export const isWunsFunction = (f) => f instanceof Function && Object.isFrozen(f) && 'funMacDesc' in f
 
-export const callFunctionStaged = (funMacDesc, numberOfGivenArgs) => {
-  const { name, params, restParam } = funMacDesc
-  const arity = params.length
-  if (!restParam) {
-    if (arity !== numberOfGivenArgs) throw new Error(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
-    return (args) => {
-      if (args.length !== numberOfGivenArgs) throw new Error('expected ' + numberOfGivenArgs + ' arguments')
-      const varValues = new Map()
-      for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-      return funMacDesc.cbodies({ varValues })
-    }
-  }
-  if (arity > numberOfGivenArgs)
-    throw new Error(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
-  return (args) => {
-    if (args.length !== numberOfGivenArgs) throw new Error('expected ' + numberOfGivenArgs + ' arguments')
-    const varValues = new Map()
-    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-    varValues.set(restParam, makeList(...args.slice(arity)))
-    return funMacDesc.cbodies({ varValues })
-  }
-}
-
-export const callFunction = (funMacDesc, args) => callFunctionStaged(funMacDesc, args.length)(args)
-
-export const createFunction = (funMacDesc) => {
-  const fn = (...args) => callFunction(funMacDesc, args)
-  fn['funMacDesc'] = funMacDesc
-  return Object.freeze(fn)
-}
-
 const symbolMeta = Symbol.for('wuns-meta')
 export const listWithMeta = (l, meta) => {
   const ll = [...l]
