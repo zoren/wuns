@@ -33,6 +33,4 @@
       [unreachable]]]]
 
 [defmacro form-to-bytes [f]
-  [let [ff [form-to-bytes-fn [quote active-data] f]]
-  [log [list [quote ff] f ff]]
-  ff]]
+  [form-to-bytes-fn [quote active-data] f]]
