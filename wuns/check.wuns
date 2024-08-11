@@ -160,7 +160,7 @@
                   [let [mac-form [mutable-list-of-size s-form]]
                     [set-array mac-form 0 macro]
                     [for i 1 s-form [set-array mac-form i [list [quote quote] [at form i]]]]
-                    [eval mac-form]]
+                    [recur global-binding-context local-ctx [eval mac-form]]]
                   [do
                     [report first-form first symbol not found during expansion]
                     form]]]]]]]]]
