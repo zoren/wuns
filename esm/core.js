@@ -106,18 +106,4 @@ class Atom {
   }
 }
 export const atom = (v) => new Atom(v)
-const isAtom = (f) => f instanceof Atom
-export const atom_get = (a) => {
-  if (!isAtom(a)) throw new Error('not an atom: ' + a)
-  return a.value
-}
-export const atom_set = (a, v) => {
-  if (!isAtom(a)) throw new Error('not an atom: ' + a)
-  a.value = v
-}
-export const number = (arg) => {
-  const wv = wordValue(arg)
-  const n = Number(wv)
-  if (!isSigned32BitInteger(n)) throw new Error(`expected 32-bit signed integer, found: ${wv}`)
-  return n
-}
+export const isAtom = (f) => f instanceof Atom

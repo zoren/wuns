@@ -9,8 +9,7 @@ import {
   print,
   makeList,
   atom,
-  atom_get,
-  atom_set,
+  isAtom,
   isSigned32BitInteger,
 } from './core.js'
 
@@ -86,7 +85,16 @@ export const at = (v, i) => {
   return v.at(i)
 }
 
-export { atom, atom_get, atom_set }
+export { atom }
+
+export const atom_get = (a) => {
+  if (!isAtom(a)) throw new Error('not an atom: ' + a)
+  return a.value
+}
+export const atom_set = (a, v) => {
+  if (!isAtom(a)) throw new Error('not an atom: ' + a)
+  a.value = v
+}
 
 // https://stackoverflow.com/a/69745650/3495920
 const isPlainObject = (value) => value?.constructor === Object

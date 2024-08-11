@@ -2,7 +2,6 @@ import {
   wordValue,
   isWord,
   print,
-  number,
   isSigned32BitInteger,
   createFunction,
   callFunction,
@@ -275,7 +274,12 @@ export const makeInterpreterContext = () => {
     if (args.length < immArity)
       throw new CompileError(`instruction ${firstWordValue} expected at least ${immArity} arguments`)
     // maybe we should allow number immediates to for convenience
-    const immArgs = args.slice(0, immArity).map(number)
+    const immArgs = args.slice(0, immArity).map((arg) => {
+      const wv = wordValue(arg)
+      const n = Number(wv)
+      if (!isSigned32BitInteger(n)) throw new Error(`expected 32-bit signed integer, found: ${wv}`)
+      return n
+    })
     for (let i = 0; i < immArity; i++) {
       const immArg = immArgs[i]
       if (!Number.isInteger(immArg)) throw new CompileError(`invalid immediate param ${immArg}`)
