@@ -245,7 +245,8 @@
           [let [fname [at form 1]
                 params [at form 2]
                 locals [getq ctx locals]
-                wasm-bodies [mutable-list-of-size [sub [size form] 3]]
+                n-of-bodies [sub [size form] 3]
+                wasm-bodies [mutable-list-of-size n-of-bodies]
                 last-body [at form -1]]
             [delete-all-keys locals]
             [assert [is-word fname] second element of a list must be a word]
@@ -254,14 +255,15 @@
               [let [body [at form i]
                     cbody [compile-form ctx 0 body]]
                 [set-array wasm-bodies [sub i 3] [if [is-atomic-type [try-get-node-type body]] [list [quote drop] cbody] cbody]]]]
-            [set-array wasm-bodies [dec [size wasm-bodies]] [compile-form ctx 1 last-body]]
+            [when n-of-bodies
+              [set-array wasm-bodies [dec [size wasm-bodies]] [compile-form ctx 1 last-body]]]
             [concat
               [list [quote func] [list [quote dollar] fname] [list [quote export] [list [quote dq-string] fname]]]
               [list-map param params
                 [list [quote param]
                   [list [quote dollar] param]
                   [try-get-node-type param]]]
-              [list [type-to-result [try-get-node-type last-body]]]
+              [list [type-to-result [if n-of-bodies [try-get-node-type last-body] type-empty]]]
               [list-map local [keys locals]
                 [list [quote local]
                   [list [quote dollar] local]
