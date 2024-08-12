@@ -34,23 +34,25 @@ const formToLocationString = (word) => {
   return `${m['file-path']}:${startLine + 1}:${startCol}`
 }
 
-const callFunctionStaged = (funMacDesc, numberOfGivenArgs) => {
+const callFunctionStaged = (funMacDesc, numberOfGivenArgs, callForm) => {
   const { name, params, restParam } = funMacDesc
   const arity = params.length
   if (!restParam) {
     if (arity !== numberOfGivenArgs)
-      throw new CompileError(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
+      throw new CompileError(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`, callForm)
     return (args) => {
-      if (args.length !== numberOfGivenArgs) throw new RuntimeError('expected ' + numberOfGivenArgs + ' arguments')
+      if (args.length !== numberOfGivenArgs)
+        throw new RuntimeError('expected ' + numberOfGivenArgs + ' arguments', callForm)
       const varValues = new Map()
       for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
       return funMacDesc.cbodies({ varValues })
     }
   }
   if (arity > numberOfGivenArgs)
-    throw new CompileError(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`)
+    throw new CompileError(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`, callForm)
   return (args) => {
-    if (args.length !== numberOfGivenArgs) throw new RuntimeError('expected ' + numberOfGivenArgs + ' arguments')
+    if (args.length !== numberOfGivenArgs)
+      throw new RuntimeError('expected ' + numberOfGivenArgs + ' arguments', callForm)
     const varValues = new Map()
     for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
     varValues.set(restParam, makeList(...args.slice(arity)))
@@ -62,10 +64,7 @@ export const makeInterpreterContext = () => {
   const defVars = new Map()
   const getDefVarVal = (form) => {
     const name = wordValue(form)
-    if (!defVars.has(name)) {
-      console.error(`'${name}' not found on: ${formToLocationString(form)}`)
-      throw new CompileError('getDefVarVal name not found: ' + name)
-    }
+    if (!defVars.has(name)) throw new CompileError('getDefVarVal name not found: ' + name, form)
     return defVars.get(name)
   }
   const defVar = (name, value) => {
@@ -90,7 +89,7 @@ export const makeInterpreterContext = () => {
         return () => res
       }
       case 'if': {
-        if (args.length < 2 || 3 < args.length) throw new CompileError('if expects 2 or 3 arguments')
+        if (args.length < 2 || 3 < args.length) throw new CompileError('if expects 2 or 3 arguments', firstForm)
         const cc = wunsComp(ctx, args[0])
         const ct = wunsComp(ctx, args[1])
         if (args.length === 2) return (env) => (cc(env) === 0 ? undefined : ct(env))
@@ -136,13 +135,13 @@ export const makeInterpreterContext = () => {
         }
         let enclosingLoopCtx = ctx
         while (true) {
-          if (!enclosingLoopCtx) throw new CompileError('continue outside of loop')
+          if (!enclosingLoopCtx) throw new CompileError('continue outside of loop', firstForm)
           if (enclosingLoopCtx.ctxType === 'loop') break
           enclosingLoopCtx = enclosingLoopCtx.outer
         }
         for (const uv of updateVars) {
           if (!enclosingLoopCtx.varDescs.has(uv))
-            throw new CompileError(`loop variable ${uv} not found in loop context`)
+            throw new CompileError(`loop variable ${uv} not found in loop context`, firstForm)
         }
         return (env) => {
           let enclosingLoopEnv = env
@@ -158,10 +157,7 @@ export const makeInterpreterContext = () => {
         }
       }
       case 'def': {
-        if (args.length !== 2) {
-          console.error('error in function call', formToLocationString(firstForm))
-          throw new CompileError(`def expects 2 arguments, got ${args.length}`)
-        }
+        if (args.length !== 2) throw new CompileError(`def expects 2 arguments, got ${args.length}`, form)
         const [varName, value] = args
         const vn = wordValue(varName)
         const compValue = wunsComp(ctx, value)
@@ -199,8 +195,8 @@ export const makeInterpreterContext = () => {
       case 'recur': {
         let curCtx = ctx
         while (curCtx.outer) curCtx = curCtx.outer
-        if (!curCtx.funMacDesc) throw new CompileError('recur outside of function')
-        const caller = callFunctionStaged(curCtx.funMacDesc, args.length)
+        if (!curCtx.funMacDesc) throw new CompileError('recur outside of function', firstForm)
+        const caller = callFunctionStaged(curCtx.funMacDesc, args.length, firstForm)
         const cargs = args.map((a) => wunsComp(ctx, a))
         return (env) => caller(cargs.map((carg) => carg(env)))
       }
@@ -212,12 +208,12 @@ export const makeInterpreterContext = () => {
       const v = wordValue(form)
       if (hasCtxVar(ctx, v))
         return (env) => {
-          while (true) {
-            if (!env) throw new RuntimeError(`variable ${v} not found`)
-            const { varValues } = env
-            if (env && varValues.has(v)) return varValues.get(v)
-            env = env.outer
+          while (env) {
+            const { varValues, outer } = env
+            if (varValues.has(v)) return varValues.get(v)
+            env = outer
           }
+          throw new RuntimeError(`variable ${v} not found`, form)
         }
       const defVarVal = getDefVarVal(form)
       if (isMacro(defVarVal)) throw new CompileError(`can't take value of macro ${v}`)
@@ -244,16 +240,27 @@ export const makeInterpreterContext = () => {
       const funcOrMac = getDefVarVal(firstForm)
       if (isWunsFunction(funcOrMac)) {
         const { funMacDesc } = funcOrMac
-        const caller = callFunctionStaged(funMacDesc, args.length)
-        if (isMacro(funcOrMac)) return wunsComp(ctx, caller(args))
+        const caller = callFunctionStaged(funMacDesc, args.length, form)
+        if (isMacro(funcOrMac)) {
+          let macroResult
+          try {
+            macroResult = caller(args)
+          } catch (error) {
+            if (error instanceof RuntimeError)
+              throw new CompileError(`error when calling macro: ${error.message}`, form)
+            throw error
+          }
+          return wunsComp(ctx, macroResult)
+        }
         const cargs = args.map((a) => wunsComp(ctx, a))
         return (env) => caller(cargs.map((carg) => carg(env)))
       }
-      if (typeof funcOrMac !== 'function') throw new CompileError(`expected function, got ${funcOrMac}`)
+      if (typeof funcOrMac !== 'function') throw new CompileError(`expected function, got ${funcOrMac}`, form)
       // here we check arity statically
       if (funcOrMac.length !== args.length)
         throw new CompileError(
-          `function '${firstWordValue}' expected ${funcOrMac.length} arguments, got ${args.length} in ${formToLocationString(form)}`,
+          `function '${firstWordValue}' expected ${funcOrMac.length} arguments, got ${args.length}`,
+          form,
         )
       const cargs = args.map((a) => wunsComp(ctx, a))
       return (env) => {
@@ -261,14 +268,12 @@ export const makeInterpreterContext = () => {
         try {
           return funcOrMac(...eargs)
         } catch (error) {
-          console.error('error in function call', formToLocationString(firstForm))
-          console.error('error', eargs)
-          throw error
+          throw new RuntimeError(`error in function call: ${error.message}`, form)
         }
       }
     }
     const instruction = instructions[firstWordValue]
-    if (!instruction) throw new CompileError(`function '${firstWordValue}' not found ${print(form)}`)
+    if (!instruction) throw new CompileError(`function '${firstWordValue}' not found`, form)
     const { immediateParams, params, func } = instruction
     const immArity = immediateParams.length
     if (args.length < immArity)
@@ -277,18 +282,18 @@ export const makeInterpreterContext = () => {
     const immArgs = args.slice(0, immArity).map((arg) => {
       const wv = wordValue(arg)
       const n = Number(wv)
-      if (!isSigned32BitInteger(n)) throw new CompileError(`expected 32-bit signed integer, found: ${wv}`)
+      if (!isSigned32BitInteger(n)) throw new CompileError(`expected 32-bit signed integer, found: ${wv}`, arg)
       return n
     })
     for (let i = 0; i < immArity; i++) {
       const immArg = immArgs[i]
-      if (!Number.isInteger(immArg)) throw new CompileError(`invalid immediate param ${immArg}`)
+      if (!Number.isInteger(immArg)) throw new CompileError(`invalid immediate param ${immArg}`, immArg)
       switch (immediateParams[i]) {
         case 'u32':
-          if (immArg < 0 || immArg > 2 ** 32 - 1) throw new CompileError(`invalid immediate param ${immArg}`)
+          if (immArg < 0 || immArg > 2 ** 32 - 1) throw new CompileError(`invalid immediate param ${immArg}`, immArg)
           break
         case 's32':
-          if (!isSigned32BitInteger(immArg)) throw new CompileError(`invalid immediate param ${immArg}`)
+          if (!isSigned32BitInteger(immArg)) throw new CompileError(`invalid immediate param ${immArg}`, immArg)
           break
         default:
           throw new CompileError(`invalid immediate param type ${immediateParams[i]}`)
@@ -299,12 +304,13 @@ export const makeInterpreterContext = () => {
     if (cargs.length !== params.length)
       throw new CompileError(
         `instruction ${firstWordValue} expected ${params.length} non-immediate arguments, got ${cargs.length}`,
+        form,
       )
     return (env) => {
       const eargs = cargs.map((carg) => carg(env))
       for (const earg of eargs)
         if (!isSigned32BitInteger(earg))
-          throw new RuntimeError(`instruction ${firstWordValue} expected integer, got ${earg}`)
+          throw new RuntimeError(`instruction ${firstWordValue} expected integer, got ${earg}`, form)
       return instWithImmediate(...eargs)
     }
   }
