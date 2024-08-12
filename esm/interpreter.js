@@ -91,7 +91,8 @@ export const makeInterpreterContext = () => {
       return result
     }
   }
-  const compSpecialForm = (ctx, [firstForm, ...args]) => {
+  const compSpecialForm = (ctx, firstForm, args) => {
+    if (!isWord(firstForm)) return null
     const firstWordValue = wordValue(firstForm)
     switch (firstWordValue) {
       case 'quote': {
@@ -229,31 +230,18 @@ export const makeInterpreterContext = () => {
     // todo maybe change this a tuple unit not an empty list
     if (form.length === 0) return () => undefined
     const [firstForm, ...args] = form
-    const rtCallFunc = () => {
+    const cspec = compSpecialForm(ctx, firstForm, args)
+    if (cspec) return cspec
+    if (!isWord(firstForm) || hasCtxVar(ctx, wordValue(firstForm))) {
+      const cfunc = wunsComp(ctx, firstForm)
       const cargs = args.map((a) => wunsComp(ctx, a))
-      return (f, env) => {
+      return (env) => {
+        const f = cfunc(env)
         if (typeof f !== 'function') throw new RuntimeError(`expected function, got ${f}`)
-        const eargs = cargs.map((carg) => carg(env))
-        try {
-          return f(...eargs)
-        } catch (e) {
-          console.error('error in rtCallFunc', e, form)
-          throw e
-        }
+        return f(...cargs.map((carg) => carg(env)))
       }
     }
-    if (!isWord(firstForm)) {
-      const cfunc = wunsComp(ctx, firstForm)
-      const caller = rtCallFunc()
-      return (env) => caller(cfunc(env), env)
-    }
-    const cspec = compSpecialForm(ctx, form)
-    if (cspec) return cspec
     const firstWordValue = wordValue(firstForm)
-    if (hasCtxVar(ctx, firstWordValue)) {
-      const caller = rtCallFunc()
-      return (env) => caller(getVarValue(env, firstWordValue), env)
-    }
     if (defVars.has(firstWordValue)) {
       const funcOrMac = getDefVarVal(firstForm)
       if (isWunsFunction(funcOrMac)) {
