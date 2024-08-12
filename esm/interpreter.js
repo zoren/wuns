@@ -16,15 +16,6 @@ class CompileError extends Error {
   }
 }
 
-const getVarValue = (env, v) => {
-  while (true) {
-    if (!env) throw new RuntimeError(`variable ${v} not found`)
-    const { varValues } = env
-    if (env && varValues.has(v)) return varValues.get(v)
-    env = env.outer
-  }
-}
-
 const hasCtxVar = (ctx, v) => {
   while (ctx) {
     if (ctx.varDescs.has(v)) return true
@@ -219,7 +210,15 @@ export const makeInterpreterContext = () => {
   const wunsComp = (ctx, form) => {
     if (isWord(form)) {
       const v = wordValue(form)
-      if (hasCtxVar(ctx, v)) return (env) => getVarValue(env, v)
+      if (hasCtxVar(ctx, v))
+        return (env) => {
+          while (true) {
+            if (!env) throw new RuntimeError(`variable ${v} not found`)
+            const { varValues } = env
+            if (env && varValues.has(v)) return varValues.get(v)
+            env = env.outer
+          }
+        }
       const defVarVal = getDefVarVal(form)
       if (isMacro(defVarVal)) throw new CompileError(`can't take value of macro ${v}`)
       return () => defVarVal
