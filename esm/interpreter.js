@@ -1,4 +1,4 @@
-import { wordValue, isWord, print, isSigned32BitInteger, isWunsFunction, meta, makeList } from './core.js'
+import { isWord, print, isSigned32BitInteger, isWunsFunction, meta, makeList } from './core.js'
 import { instructions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
 
@@ -60,13 +60,18 @@ const callFunctionStaged = (funMacDesc, numberOfGivenArgs, callForm) => {
   }
 }
 
+const ctWordValue = (w) => {
+  if (!isWord(w)) throw new CompileError('not a word: ' + w + ' ' + typeof w, w)
+  return w.value
+}
+
+const tryGetWordValue = (w) => {
+  if (!isWord(w)) return null
+  return w.value
+}
+
 export const makeInterpreterContext = () => {
   const defVars = new Map()
-  const getDefVarVal = (form) => {
-    const name = wordValue(form)
-    if (!defVars.has(name)) throw new CompileError('getDefVarVal name not found: ' + name, form)
-    return defVars.get(name)
-  }
   const defVar = (name, value) => {
     if (defVars.has(name)) throw new RuntimeError(`defVar redefining var: ${name}`)
     defVars.set(name, value)
@@ -80,16 +85,37 @@ export const makeInterpreterContext = () => {
       return result
     }
   }
-  const compSpecialForm = (ctx, firstForm, args) => {
-    if (!isWord(firstForm)) return null
-    const firstWordValue = wordValue(firstForm)
+  const wunsComp = (ctx, form) => {
+    {
+      const varName = tryGetWordValue(form)
+      if (varName) {
+        if (hasCtxVar(ctx, varName))
+          return (env) => {
+            while (env) {
+              const { varValues, outer } = env
+              if (varValues.has(varName)) return varValues.get(varName)
+              env = outer
+            }
+            throw new RuntimeError(`variable ${varName} not found`, form)
+          }
+        if (!defVars.has(varName)) throw new CompileError('getDefVarVal wordValue not found: ' + varName, form)
+        const defVarVal = defVars.get(varName)
+        if (isMacro(defVarVal)) throw new CompileError(`can't take value of macro ${varName}`, form)
+        return () => defVarVal
+      }
+    }
+    // return non-forms as is
+    if (!Array.isArray(form)) return () => form
+    if (form.length === 0) return () => undefined
+    const [firstForm, ...args] = form
+    const firstWordValue = tryGetWordValue(firstForm)
     switch (firstWordValue) {
       case 'quote': {
         const res = args.length === 1 ? args[0] : Object.freeze(args)
         return () => res
       }
       case 'if': {
-        if (args.length < 2 || 3 < args.length) throw new CompileError('if expects 2 or 3 arguments', firstForm)
+        if (args.length < 2 || 3 < args.length) throw new CompileError('if expects 2 or 3 arguments', form)
         const cc = wunsComp(ctx, args[0])
         const ct = wunsComp(ctx, args[1])
         if (args.length === 2) return (env) => (cc(env) === 0 ? undefined : ct(env))
@@ -104,7 +130,7 @@ export const makeInterpreterContext = () => {
         const newCtx = { varDescs, outer: ctx, ctxType: firstWordValue }
         const varDesc = { defForm: firstWordValue }
         for (let i = 0; i < bindings.length - 1; i += 2) {
-          const v = wordValue(bindings[i])
+          const v = ctWordValue(bindings[i])
           compBindings.push([v, wunsComp(newCtx, bindings[i + 1])])
           varDescs.set(v, varDesc)
         }
@@ -130,18 +156,18 @@ export const makeInterpreterContext = () => {
         const updateVars = []
         const updateFuncs = []
         for (let i = 0; i < args.length; i += 2) {
-          updateVars.push(wordValue(args[i]))
+          updateVars.push(ctWordValue(args[i]))
           updateFuncs.push(wunsComp(ctx, args[i + 1]))
         }
         let enclosingLoopCtx = ctx
         while (true) {
-          if (!enclosingLoopCtx) throw new CompileError('continue outside of loop', firstForm)
+          if (!enclosingLoopCtx) throw new CompileError('continue outside of loop', form)
           if (enclosingLoopCtx.ctxType === 'loop') break
           enclosingLoopCtx = enclosingLoopCtx.outer
         }
         for (const uv of updateVars) {
           if (!enclosingLoopCtx.varDescs.has(uv))
-            throw new CompileError(`loop variable ${uv} not found in loop context`, firstForm)
+            throw new CompileError(`loop variable ${uv} not found in loop context`, form)
         }
         return (env) => {
           let enclosingLoopEnv = env
@@ -159,15 +185,15 @@ export const makeInterpreterContext = () => {
       case 'def': {
         if (args.length !== 2) throw new CompileError(`def expects 2 arguments, got ${args.length}`, form)
         const [varName, value] = args
-        const vn = wordValue(varName)
+        const vn = ctWordValue(varName)
         const compValue = wunsComp(ctx, value)
         return (env) => defVar(vn, compValue(env))
       }
       case 'defn':
       case 'defmacro': {
         const [fmname, origParams, ...bodies] = args
-        const nameString = wordValue(fmname)
-        let params = origParams.map(wordValue)
+        const nameString = ctWordValue(fmname)
+        let params = origParams.map(ctWordValue)
         let restParam = null
         if (params.length > 1 && params.at(-2) === '..') {
           restParam = params.at(-1)
@@ -195,38 +221,13 @@ export const makeInterpreterContext = () => {
       case 'recur': {
         let curCtx = ctx
         while (curCtx.outer) curCtx = curCtx.outer
-        if (!curCtx.funMacDesc) throw new CompileError('recur outside of function', firstForm)
+        if (!curCtx.funMacDesc) throw new CompileError('recur outside of function', form)
         const caller = callFunctionStaged(curCtx.funMacDesc, args.length, firstForm)
         const cargs = args.map((a) => wunsComp(ctx, a))
         return (env) => caller(cargs.map((carg) => carg(env)))
       }
     }
-    return null
-  }
-  const wunsComp = (ctx, form) => {
-    if (isWord(form)) {
-      const v = wordValue(form)
-      if (hasCtxVar(ctx, v))
-        return (env) => {
-          while (env) {
-            const { varValues, outer } = env
-            if (varValues.has(v)) return varValues.get(v)
-            env = outer
-          }
-          throw new RuntimeError(`variable ${v} not found`, form)
-        }
-      const defVarVal = getDefVarVal(form)
-      if (isMacro(defVarVal)) throw new CompileError(`can't take value of macro ${v}`)
-      return () => defVarVal
-    }
-    // return non-forms as is
-    if (!Array.isArray(form)) return () => form
-    // todo maybe change this a tuple unit not an empty list
-    if (form.length === 0) return () => undefined
-    const [firstForm, ...args] = form
-    const cspec = compSpecialForm(ctx, firstForm, args)
-    if (cspec) return cspec
-    if (!isWord(firstForm) || hasCtxVar(ctx, wordValue(firstForm))) {
+    if (!firstWordValue || hasCtxVar(ctx, firstWordValue)) {
       const cfunc = wunsComp(ctx, firstForm)
       const cargs = args.map((a) => wunsComp(ctx, a))
       return (env) => {
@@ -235,9 +236,8 @@ export const makeInterpreterContext = () => {
         return f(...cargs.map((carg) => carg(env)))
       }
     }
-    const firstWordValue = wordValue(firstForm)
     if (defVars.has(firstWordValue)) {
-      const funcOrMac = getDefVarVal(firstForm)
+      const funcOrMac = defVars.get(firstWordValue)
       if (isWunsFunction(funcOrMac)) {
         const { funMacDesc } = funcOrMac
         const caller = callFunctionStaged(funMacDesc, args.length, form)
@@ -280,7 +280,7 @@ export const makeInterpreterContext = () => {
       throw new CompileError(`instruction ${firstWordValue} expected at least ${immArity} arguments`)
     // maybe we should allow number immediates to for convenience
     const immArgs = args.slice(0, immArity).map((arg) => {
-      const wv = wordValue(arg)
+      const wv = ctWordValue(arg)
       const n = Number(wv)
       if (!isSigned32BitInteger(n)) throw new CompileError(`expected 32-bit signed integer, found: ${wv}`, arg)
       return n
