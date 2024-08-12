@@ -2,7 +2,7 @@
 [def tag-list [i32.const 3]]
 
 [defn word-bytes [dw w]
-  [let [s [size w]
+  [let [s [word-byte-size w]
         l [mutable-list-of-size [i32.const 3]]
         byte-form [mutable-list-of-size [inc s]]]
     [set-array l 0 dw]

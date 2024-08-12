@@ -27,8 +27,12 @@
 [defn is-word [f] [i32.eq [tag f] tag-word]]
 [defn is-list [f] [i32.eq [tag f] tag-list]]
 
+[defn word-byte-size [p]
+  [if [not [is-word p]] [unreachable]]
+  [i32.load [memarg mem 0 offset 4 align 4] p]]
+
 [defn log-word [w]
-  [log-pointer [i32.add [i32.const 8] w] [size w]]]
+  [log-pointer [i32.add [i32.const 8] w] [word-byte-size w]]]
 
 [defn log-abort [w]
   [log-word w]
@@ -37,7 +41,7 @@
 [defn char-code-at [w i]
   [if [not [is-word w]] [log-abort [quote not-a-word]]]
   [if [is-negative i] [log-abort [quote negative-index]]]
-  [if [i32.ge-s i [size w]] [log-abort [quote index-out-of-bounds]]]
+  [if [i32.ge-s i [word-byte-size w]] [log-abort [quote index-out-of-bounds]]]
   [i32.load8-s [memarg mem 0 offset 8 align 1] [i32.add w i]]]
 
 [defn at [l i]
@@ -105,7 +109,7 @@
 [defn word-byte-pointer [w] [i32.add w [i32.const 8]]]
 
 [defn concat-words [w1 w2]
-  [let [s1 [size w1] s2 [size w2]
+  [let [s1 [word-byte-size w1] s2 [word-byte-size w2]
         res [alloc-word [i32.add s1 s2]]]
     [memory.copy 0 [word-byte-pointer res] [word-byte-pointer w1] s1]
     [memory.copy 0 [i32.add [word-byte-pointer res] s1] [word-byte-pointer w2] s2]
@@ -165,7 +169,7 @@
 
 [defn eq-word [a b]
   [and [is-word a] [is-word b]
-    [let [sa [size a] sb [size b]]
+    [let [sa [word-byte-size a] sb [word-byte-size b]]
       [and
         [eq sa sb]
         [loop [i 0]
@@ -216,7 +220,7 @@
   [test-assert-eq [i32.const 5050] [stupid-gauss [i32.const 100]]]
   [test-assert-eq-word [quote 123abc]
     [concat-words [quote 123] [quote abc]]]
-  [test-assert-eq 3 [size [quote 123]]]
+  [test-assert-eq 3 [word-byte-size [quote 123]]]
   [test-assert-eq-word [quote 1] [char-code-to-word [i32.const 49]]]
   [let [a [atom [quote init-atom-val]]]
     [test-assert-eq-word [quote init-atom-val] [atom-get a]]
@@ -229,7 +233,7 @@
   [test-assert-false [or]]
   [log-pointer [active-data [i8 65 66 67 68]] 4]
   [test-assert-eq-word [quote asdf] [form-to-bytes asdf]]
-  [test-assert-eq [i32.const 9] [size [form-to-bytes 123123213]]]
+  [test-assert-eq [i32.const 9] [word-byte-size [form-to-bytes 123123213]]]
   [test-assert-eq 0 [size [form-to-bytes []]]]
   [test-assert-eq 3 [size [form-to-bytes [a b c]]]]
   [test-assert-eq-word [form-to-bytes a] [at [form-to-bytes [a]] 0]]

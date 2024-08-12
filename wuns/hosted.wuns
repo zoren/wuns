@@ -7,7 +7,7 @@
       [list [quote result] [type-to-wasm t]]]]
 
 [defn push-word-chars [mut-list w]
-  [for i 0 [size w]
+  [for i 0 [word-byte-size w]
     [push mut-list [char-code-at w i]]]]
 
 [def tag-word 1]
@@ -37,7 +37,7 @@
       [get word-map w]
       [let [bytes [growable-list]]
         [push-i32-little-endian bytes tag-word]
-        [push-i32-little-endian bytes [size w]]
+        [push-i32-little-endian bytes [word-byte-size w]]
         [push-word-chars bytes w]
         [let [offset [add-bytes-to-active-mem ctx bytes]]
           [set word-map w offset]

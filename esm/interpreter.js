@@ -214,7 +214,7 @@ export const makeInterpreterContext = () => {
         let curCtx = ctx
         while (curCtx.outer) curCtx = curCtx.outer
         if (!curCtx.funMacDesc) throw new CompileError('recur outside of function', form)
-        const caller = callFunctionStaged(curCtx.funMacDesc, args.length, firstForm)
+        const caller = callFunctionStaged(curCtx.funMacDesc, args.length, form)
         const cargs = args.map((a) => wunsComp(ctx, a))
         return (env) => caller(cargs.map((carg) => carg(env)))
       }
@@ -239,7 +239,7 @@ export const makeInterpreterContext = () => {
             macroResult = caller(args)
           } catch (error) {
             if (error instanceof RuntimeError)
-              throw new CompileError(`error when calling macro: ${error.message}`, form)
+              throw new CompileError(`error when calling macro '${firstWordValue}': ${error.message}`, form)
             throw error
           }
           return wunsComp(ctx, macroResult)

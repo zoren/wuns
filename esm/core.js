@@ -61,11 +61,7 @@ export const print = (ox) => {
   }
   return go(ox)
 }
-export const unword = (v) => {
-  if (isWord(v)) return wordValue(v)
-  if (isList(v)) return makeList(...v.map(unword))
-  throw new Error('quote expects word or list')
-}
+
 class Atom {
   constructor(value) {
     this.value = value

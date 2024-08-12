@@ -24,23 +24,25 @@ export const with_meta = (f, metaData) => {
 }
 export { meta }
 
-export const size = (a) => {
-  if (isWord(a)) return String(a).length
-  if (Array.isArray(a)) return a.length
-  throw new Error('size expects word or list found: ' + a + ' ' + typeof a)
+export const word_byte_size = (w) => {
+  if (isWord(w)) return wordValue(w).length
+  throw new Error('word-byte-size expects word, found: ' + w + ' ' + typeof w)
 }
 
-export const char_code_at = (v, i) => {
-  if (!isWord(v)) throw new Error('at-word expects word')
-  if (!isSigned32BitInteger(i)) throw new Error('at-word expects number: ' + i)
-  const len = size(v)
+export const char_code_at = (w, i) => {
+  if (!isWord(w)) throw new Error('char-code-at expects word')
+  if (!isSigned32BitInteger(i)) throw new Error('char-code-at expects number: ' + i)
+  const len = wordValue(w).length
   if (i < -len || i >= len) throw new Error('index out of bounds: ' + i + ' ' + len)
-  return String(v).at(i).charCodeAt(0)
+  return String(w).at(i).charCodeAt(0)
 }
-// export const codepoint_to_word = (cp) => word(String.fromCodePoint(cp))
 export const concat_words = (w1, w2) => word(wordValue(w1) + wordValue(w2))
 export const char_code_to_word = cp => word(String.fromCodePoint(cp))
 
+export const size = (a) => {
+  if (isList(a)) return a.length
+  throw new Error('size expects list, found: ' + a + ' ' + typeof a)
+}
 const symbolListGrowable = Symbol.for('wuns-list-growable')
 const symbolListMutable = Symbol.for('wuns-list-mutable')
 const isGrowable = (l) => l[symbolListGrowable]
@@ -51,7 +53,7 @@ export const growable_list = () => {
   return l
 }
 export const push = (ar, e) => {
-  if (!Array.isArray(ar)) throw new Error('push expects array')
+  if (!isList(ar)) throw new Error('push expects array')
   if (!isGrowable(ar)) throw new Error('push expects growable list')
   if (Object.isFrozen(ar)) throw new Error('push expects mutable array')
   ar.push(e)
@@ -64,13 +66,13 @@ export const mutable_list_of_size = (size) => {
 }
 
 export const freeze_mutable_list = (l) => {
-  if (!Array.isArray(l)) throw new Error('freeze-mutable-list expects array')
+  if (!isList(l)) throw new Error('freeze-mutable-list expects array')
   if (!isMutable(l)) throw new Error('freeze-mutable-list expects mutable list')
   delete l[symbolListMutable]
   Object.freeze(l)
 }
 export const set_array = (ar, i, e) => {
-  if (!Array.isArray(ar)) throw new Error('set-array expects array')
+  if (!isList(ar)) throw new Error('set-array expects array')
   if (!isMutable(ar)) throw new Error('set-array expects mutable list')
   if (Object.isFrozen(ar)) throw new Error('set-array expects mutable array')
   if (!isSigned32BitInteger(i)) throw new Error('set-array expects integer index')
@@ -80,7 +82,7 @@ export const set_array = (ar, i, e) => {
 export const at = (v, i) => {
   if (!isList(v)) throw new Error('at expects list, got' + typeof v + ' ' + v)
   if (!isSigned32BitInteger(i)) throw new Error('at expects number: ' + i)
-  const len = size(v)
+  const len = v.length
   if (i < -len || i >= len) throw new Error('index out of bounds: ' + i + ' ' + len)
   return v.at(i)
 }

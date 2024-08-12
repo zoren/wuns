@@ -150,7 +150,7 @@
 
 [defn dec-word-to-int [w]
   [loop [i 0 res 0]
-    [if [lt-s i [size w]]
+    [if [lt-s i [word-byte-size w]]
       [let [cc [char-code-at w i]]
         [assert [is-between-inclusive [word-to-char-code 0] cc [word-to-char-code 9]] dec-word-to-int expects a decimal word]
         [continue res [i32.add [i32.mul res [i32.const 10]] [i32.sub cc [word-to-char-code 0]]] i [inc i]]]
@@ -188,7 +188,7 @@
 
 [defn eq-word [a b]
   [and [is-word a] [is-word b]
-    [let [sa [size a] sb [size b]]
+    [let [sa [word-byte-size a] sb [word-byte-size b]]
       [and
         [eq sa sb]
         [loop [i 0]

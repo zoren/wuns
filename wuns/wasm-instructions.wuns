@@ -3,7 +3,7 @@
 
 [comment wuns does not have underscores so we convert dashes to underscores]
 [defn wasm-name-to-wat-bytes [w]
-  [let [sw [size w]
+  [let [sw [word-byte-size w]
         res [mutable-list-of-size sw]]
     [for i 0 sw
       [set-array res i
