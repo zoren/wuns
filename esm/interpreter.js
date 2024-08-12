@@ -1,12 +1,4 @@
-import {
-  wordValue,
-  isWord,
-  print,
-  isSigned32BitInteger,
-  isWunsFunction,
-  meta,
-  makeList,
-} from './core.js'
+import { wordValue, isWord, print, isSigned32BitInteger, isWunsFunction, meta, makeList } from './core.js'
 import { instructions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
 
@@ -33,11 +25,11 @@ const getVarValue = (env, v) => {
   }
 }
 
-const getCtxVar = (ctx, v) => {
+const hasCtxVar = (ctx, v) => {
   while (true) {
-    if (!ctx) return null
+    if (!ctx) return false
     const { varDescs } = ctx
-    if (varDescs.has(v)) return varDescs.get(v)
+    if (varDescs.has(v)) return true
     ctx = ctx.outer
   }
 }
@@ -56,7 +48,8 @@ const callFunctionStaged = (funMacDesc, numberOfGivenArgs) => {
   const { name, params, restParam } = funMacDesc
   const arity = params.length
   if (!restParam) {
-    if (arity !== numberOfGivenArgs) throw new CompileError(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
+    if (arity !== numberOfGivenArgs)
+      throw new CompileError(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`)
     return (args) => {
       if (args.length !== numberOfGivenArgs) throw new RuntimeError('expected ' + numberOfGivenArgs + ' arguments')
       const varValues = new Map()
@@ -74,8 +67,6 @@ const callFunctionStaged = (funMacDesc, numberOfGivenArgs) => {
     return funMacDesc.cbodies({ varValues })
   }
 }
-
-const callFunction = (funMacDesc, args) => callFunctionStaged(funMacDesc, args.length)(args)
 
 export const makeInterpreterContext = () => {
   const defVars = new Map()
@@ -209,16 +200,15 @@ export const makeInterpreterContext = () => {
         funMacDesc.cbodies = compBodies(newCtx, bodies)
         if (firstWordValue === 'defmacro') funMacDesc.isMacro = true
         Object.freeze(funMacDesc)
-        const f = (...args) => callFunction(funMacDesc, args)
+        const f = (...args) => callFunctionStaged(funMacDesc, args.length)(args)
         f['funMacDesc'] = funMacDesc
         Object.freeze(f)
         return () => defSetVar(nameString, f)
       }
       case 'recur': {
         let curCtx = ctx
-        while (curCtx.outer) {
-          curCtx = curCtx.outer
-        }
+        while (curCtx.outer) curCtx = curCtx.outer
+        if (!curCtx.funMacDesc) throw new CompileError('recur outside of function')
         const caller = callFunctionStaged(curCtx.funMacDesc, args.length)
         const cargs = args.map((a) => wunsComp(ctx, a))
         return (env) => caller(cargs.map((carg) => carg(env)))
@@ -229,7 +219,7 @@ export const makeInterpreterContext = () => {
   const wunsComp = (ctx, form) => {
     if (isWord(form)) {
       const v = wordValue(form)
-      if (getCtxVar(ctx, v)) return (env) => getVarValue(env, v)
+      if (hasCtxVar(ctx, v)) return (env) => getVarValue(env, v)
       const defVarVal = getDefVarVal(form)
       if (isMacro(defVarVal)) throw new CompileError(`can't take value of macro ${v}`)
       return () => defVarVal
@@ -242,11 +232,10 @@ export const makeInterpreterContext = () => {
     const rtCallFunc = () => {
       const cargs = args.map((a) => wunsComp(ctx, a))
       return (f, env) => {
+        if (typeof f !== 'function') throw new RuntimeError(`expected function, got ${f}`)
         const eargs = cargs.map((carg) => carg(env))
         try {
-          if (isWunsFunction(f)) return callFunction(f.funMacDesc, eargs)
-          if (typeof f === 'function') return f(...eargs)
-          throw new RuntimeError(`expected function, got ${f}`)
+          return f(...eargs)
         } catch (e) {
           console.error('error in rtCallFunc', e, form)
           throw e
@@ -258,10 +247,10 @@ export const makeInterpreterContext = () => {
       const caller = rtCallFunc()
       return (env) => caller(cfunc(env), env)
     }
-    const firstWordValue = wordValue(firstForm)
     const cspec = compSpecialForm(ctx, form)
     if (cspec) return cspec
-    if (getCtxVar(ctx, firstWordValue)) {
+    const firstWordValue = wordValue(firstForm)
+    if (hasCtxVar(ctx, firstWordValue)) {
       const caller = rtCallFunc()
       return (env) => caller(getVarValue(env, firstWordValue), env)
     }
@@ -269,8 +258,8 @@ export const makeInterpreterContext = () => {
       const funcOrMac = getDefVarVal(firstForm)
       if (isWunsFunction(funcOrMac)) {
         const { funMacDesc } = funcOrMac
-        if (isMacro(funcOrMac)) return wunsComp(ctx, callFunction(funMacDesc, args))
         const caller = callFunctionStaged(funMacDesc, args.length)
+        if (isMacro(funcOrMac)) return wunsComp(ctx, caller(args))
         const cargs = args.map((a) => wunsComp(ctx, a))
         return (env) => caller(cargs.map((carg) => carg(env)))
       }
