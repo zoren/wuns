@@ -26,14 +26,6 @@ const hasCtxVar = (ctx, v) => {
 
 export const isMacro = (form) => isWunsFunction(form) && form.funMacDesc.isMacro
 
-const formToLocationString = (word) => {
-  const m = meta(word)
-  const { range } = m
-  if (!range) return 'unknown location'
-  const [startLine, startCol, endLine, endCol] = range
-  return `${m['file-path']}:${startLine + 1}:${startCol}`
-}
-
 const callFunctionStaged = (funMacDesc, numberOfGivenArgs, callForm) => {
   const { name, params, restParam } = funMacDesc
   const arity = params.length
@@ -322,7 +314,37 @@ export const makeInterpreterContext = () => {
     if (defVars.has(name)) throw new Error(`cannot redefine var: ${name}`)
     defVars.set(name, value)
   }
-  const evalForm = (form) => wunsComp(null, form)(null)
+  const evalForm = (form) => {
+    const formToLocationString = (error) => {
+      const arg = error.form
+      const m = meta(arg ? arg : form)
+      const { range } = m
+      if (!range) return 'unknown location'
+      const [startLine, startCol, endLine, endCol] = range
+      const filePath = m['file-path']
+      if (!filePath) return `${startLine + 1}:${startCol}`
+      return `${filePath}:${startLine + 1}:${startCol}`
+    }
+    let cform
+    try {
+      cform = wunsComp(null, form)
+    } catch (e) {
+      if (e instanceof CompileError) {
+        console.error(`Compile error in ${formToLocationString(e)}: ${e.message}`)
+        return undefined
+      }
+      throw new Error(`unexpected non CompileError: ${e.message}`)
+    }
+    try {
+      return cform(null)
+    } catch (e) {
+      if (e instanceof RuntimeError) {
+        console.error(`Runtime error in ${formToLocationString(e)}: ${e.message}`)
+        return undefined
+      }
+      throw new Error(`unexpected non RuntimeError: ${e.message}`)
+    }
+  }
   return {
     getVarVal: externGetVarVal,
     defSetVar: externDefVar,
