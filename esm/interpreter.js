@@ -68,8 +68,8 @@ export const makeInterpreterContext = () => {
     }
     return defVars.get(name)
   }
-  const defSetVar = (name, value) => {
-    if (defVars.has(name)) throw new RuntimeError(`defSetVar redefining var: ${name}`)
+  const defVar = (name, value) => {
+    if (defVars.has(name)) throw new RuntimeError(`defVar redefining var: ${name}`)
     defVars.set(name, value)
     return value
   }
@@ -165,7 +165,7 @@ export const makeInterpreterContext = () => {
         const [varName, value] = args
         const vn = wordValue(varName)
         const compValue = wunsComp(ctx, value)
-        return (env) => defSetVar(vn, compValue(env))
+        return (env) => defVar(vn, compValue(env))
       }
       case 'defn':
       case 'defmacro': {
@@ -194,7 +194,7 @@ export const makeInterpreterContext = () => {
         const f = (...args) => callFunctionStaged(funMacDesc, args.length)(args)
         f['funMacDesc'] = funMacDesc
         Object.freeze(f)
-        return () => defSetVar(nameString, f)
+        return () => defVar(nameString, f)
       }
       case 'recur': {
         let curCtx = ctx
@@ -308,16 +308,18 @@ export const makeInterpreterContext = () => {
       return instWithImmediate(...eargs)
     }
   }
-  const compileForm = (form) => wunsComp(null, form)
-  const evalForm = (form) => compileForm(form)(null)
-  const getVarVal = (name) => {
+  const externGetVarVal = (name) => {
     if (!defVars.has(name)) throw new Error('getDefVarVal name not found: ' + name)
     return defVars.get(name)
   }
+  const externDefVar = (name, value) => {
+    if (defVars.has(name)) throw new Error(`cannot redefine var: ${name}`)
+    defVars.set(name, value)
+  }
+  const evalForm = (form) => wunsComp(null, form)(null)
   return {
-    getVarVal,
-    defSetVar,
-    compileForm,
+    getVarVal: externGetVarVal,
+    defSetVar: externDefVar,
     evalForm,
   }
 }
