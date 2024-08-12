@@ -266,14 +266,14 @@
 [defn assign-node-ids [node]
   [ifs
     [is-word node]
-    [assoc-meta node [quote node-id] [next-node-id]]
+    [with-meta node [assoc [if-let [m [meta node]] m empty-kv-map] [quote node-id] [next-node-id]]]
 
     [is-list node]
     [let [s-node [size node]
           res [mutable-list-of-size s-node]]
       [for i 0 s-node
         [set-array res i [recur [at node i]]]]
-      [assoc-meta res [quote node-id] [next-node-id]]]
+      [with-meta res [assoc [if-let [m [meta node]] m empty-kv-map] [quote node-id] [next-node-id]]]]
 
     [assert 0 not a word or list not assigned node id [identity node]]]]
 
