@@ -23,8 +23,8 @@ export const wordValue = (w) => {
   throw new Error('not a word: ' + w + ' ' + typeof w)
 }
 
-const unit = Object.freeze([])
-export const makeList = (...args) => (args.length === 0 ? unit : Object.freeze(args))
+const emptyList = Object.freeze([])
+export const makeList = (...args) => (args.length === 0 ? emptyList : Object.freeze(args))
 export const isList = (f) => Array.isArray(f)
 
 export const isWunsFunction = (f) => f instanceof Function && Object.isFrozen(f) && 'funMacDesc' in f

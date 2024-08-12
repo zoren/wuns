@@ -26,12 +26,11 @@ const getVarValue = (env, v) => {
 }
 
 const hasCtxVar = (ctx, v) => {
-  while (true) {
-    if (!ctx) return false
-    const { varDescs } = ctx
-    if (varDescs.has(v)) return true
+  while (ctx) {
+    if (ctx.varDescs.has(v)) return true
     ctx = ctx.outer
   }
+  return false
 }
 
 export const isMacro = (form) => isWunsFunction(form) && form.funMacDesc.isMacro
