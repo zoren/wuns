@@ -774,16 +774,3 @@
           node-types [kv-map-clone node-types]]]
       [delete-all-keys global-ctx]
     res]]
-
-[comment
-  [check-forms
-    [quote
-      [defn f [x y] [add x y]]
-      [defn g [x y] [sub x y]]]]
-  [check-forms [quote [defn f [x y] [add x y]] [defn g [x y] [sub x y]]]]
-
-  [check-forms
-    [quote
-      [defn f [x y] [add x y]]
-      [defn g [x y] [sub x y]]]]
-]

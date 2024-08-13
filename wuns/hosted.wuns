@@ -351,8 +351,7 @@
               [recur mut-list [at form i]]]]
           [push mut-list ascii-right-paren]]]]
 
-    [do [log [list [quote print-paren-recursive-form unknown node] form]]
-      [unreachable]]]]
+    [logq-abort print-paren-recursive-form unknown node [identity form]]]]
 
 [defn compile-top-forms-to-text [forms]
   [let [e-forms [expand-top-level-forms forms]

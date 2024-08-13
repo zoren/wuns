@@ -38,13 +38,13 @@
 [def imm-memargs [list imm-memarg]]
 
 [defmacro make-binary-i32 [name opcode .. aliases]
-  [list [quote quote] [make-operation-obj-aliases name opcode [list] i32i32 i32 aliases]]]
+  [make-operation-obj-aliases name opcode [list] i32i32 i32 aliases]]
 
 [defmacro make-binary-i64 [name opcode]
-  [list [quote quote] [make-operation-obj name opcode [list] i64i64 i64]]]
+  [make-operation-obj name opcode [list] i64i64 i64]]
 
 [defmacro make-comp-i64 [name opcode]
-  [list [quote quote] [make-operation-obj name opcode [list] i64i64 i32]]]
+  [make-operation-obj name opcode [list] i64i64 i32]]
 
 [def instructions
   [list
