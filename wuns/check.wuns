@@ -433,8 +433,8 @@
   [ifs
     [is-word form]
     [loop [cur-ctx local-ctx]
-      [if [eq [size cur-ctx] 1]
-        [let [param-ctx [first cur-ctx]]
+      [if-not [hasq cur-ctx outer]
+        [let [param-ctx [getq cur-ctx vars]]
           [if [has param-ctx form]
             [set-node-type form [get param-ctx form]]
             [if [has global-ctx form]
@@ -449,10 +449,10 @@
               [do
                 [report form symbol not found]
                 type-error]]]]
-        [let [vars [first cur-ctx]]
+        [let [vars [getq cur-ctx vars]]
           [if [has vars form]
             [set-node-type form [get vars form]]
-            [continue cur-ctx [second cur-ctx]]]]]]
+            [continue cur-ctx [getq cur-ctx outer]]]]]]
 
     [is-empty form]
     [do
@@ -514,7 +514,7 @@
           [eq-form first-form [quote loop]]]
         [let
           [var-values [transient-kv-map]
-           let-loop-ctx [list var-values local-ctx first-form]
+           let-loop-ctx [kv-map vars var-values outer local-ctx first-form first-form]
            bindings [if [lt-s 1 s-form] [second form] [do [report form expects bindings] [list]]]
            n-of-bindings [size bindings]]
           [when [lt-s 1 s-form]
@@ -540,10 +540,10 @@
         [do
           [report-when-not tail-pos form continue not at tail position of loop]
           [loop [cur-ctx local-ctx]
-            [if [eq [size cur-ctx] 1]
+            [if-not [hasq cur-ctx outer]
               [report form continue not inside loop]
-              [if [eq-form [quote loop] [third cur-ctx]]
-                [let [loop-vars [first cur-ctx]]
+              [if [eq-form [quote loop] [getq cur-ctx first-form]]
+                [let [loop-vars [getq cur-ctx vars]]
                   [report-when-not
                     [is-even n-of-args]
                     form
@@ -636,7 +636,7 @@
                     [set param-ctx p [type-list pt]]]
                   pt]
                 0]
-              func-ctx [list param-ctx [list empty-kv-map] first-form]
+              func-ctx [kv-map vars param-ctx first-form first-form]
               locals [growable-list]
               sig-object [transient-kv-map]]
             [freeze-mutable-list parameter-type-list]
@@ -751,7 +751,7 @@
                   [set-node-type form [getq sig results]]]]]]]]]]]
 
 [defn check-top-form [form]
-  [check-form [list []] 0 form]]
+  [check-form [kv-map vars [kv-map]] 0 form]]
 
 [defn delete-all-keys [o]
   [for-each k [keys o]
