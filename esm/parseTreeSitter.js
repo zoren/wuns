@@ -18,9 +18,18 @@ export const treeToForms = (tree, filePath) => {
   const nodeToOurForm = (node) => {
     const { type, text, startPosition, endPosition, isError, startIndex, endIndex } = node
     if (isError) return null
-    const range = makeList(...[startPosition.row, startPosition.column, endPosition.row, endPosition.column])
-    const metaData = { range, 'node-id': word(String(node.id)), 'start-index': startIndex, 'end-index': endIndex }
-    if (filePath) metaData['file-path'] = filePath
+    const { row, column } = startPosition
+    const range = makeList(...[row, column, endPosition.row, endPosition.column])
+    const metaData = {
+      range,
+      'tree-sitter-node-id': word(String(node.id)),
+      'start-index': startIndex,
+      'end-index': endIndex,
+    }
+    if (filePath) {
+      metaData['file-path'] = filePath
+      metaData['location'] = `${filePath}:${row}:${column}`
+    }
     Object.freeze(metaData)
     switch (type) {
       case 'word':
