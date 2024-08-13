@@ -5,8 +5,12 @@ import Wuns from 'tree-sitter-wuns'
 parser.setLanguage(Wuns)
 import { makeList, wordWithMeta, listWithMeta, word } from './core.js'
 
-export const parse = (content, oldTree) => parser.parse(content, oldTree)
-
+export const parse = (content, oldTree) => {
+  // workaround for https://github.com/tree-sitter/node-tree-sitter/issues/199
+  // without it we cannot parse strings longer than 32768 bytes
+  const bufferSize = content.length + 1
+  return parser.parse(content, oldTree, { bufferSize });
+}
 export const treeToForms = (tree, filePath) => {
   /**
    * @param {TSParser.SyntaxNode} node
