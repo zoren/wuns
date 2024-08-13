@@ -6,13 +6,14 @@
 [def 3 [i32.const 3]]
 [def 4 [i32.const 4]]
 
-[def quote-word [quote quote]]
-
 [defn list [.. entries] entries]
+
+[def quote-word [quote quote]]
 
 [defn mk-quote [form] [list quote-word form]]
 
-[defmacro comment [.. -]]
+[defmacro comment [.. -]
+  [quote let []]]
 
 [defn inc [x] [add x 1]]
 
@@ -148,7 +149,7 @@
           [continue res [concat-words [at l i] res] i [inc i]]
           res]]]]]
 
-[defmacro word-to-char-code [w] [char-code-at w 0]]
+[defmacro word-to-char-code [w] [list [quote i32.const] [int-to-word [char-code-at w 0]]]]
 
 [defn is-between-inclusive [lower c upper]
   [and [i32.le-s lower c] [i32.le-s c upper]]]
@@ -226,7 +227,7 @@
         [list [quote if]
           [list [quote i32.lt-s] iw ew]
           [concat [quote let []] forms
-            [list [list [quote continue] iw [list [quote i32.add] iw increment]]]]
+            [list [list [quote continue] iw [list [quote i32.add] iw [list [quote i32.const] [int-to-word increment]]]]]]
           [quote []]]]]]]
 
 [defmacro for [iw start end .. forms]
@@ -243,13 +244,13 @@
     [list
       [quote let] [list col-var collection col-size-var [list [quote size] col-var]]
       [list
-        [quote loop] [list iteration-var 0]
+        [quote loop] [list iteration-var [quote i32.const 0]]
         [list [quote if]
           [list [quote i32.lt-s] iteration-var col-size-var]
           [concat [quote [let]]
             [list [list element-var [list [quote at] col-var iteration-var]]]
             forms
-            [list [list [quote continue] iteration-var [list [quote i32.add] iteration-var 1]]]]]]]]]
+            [list [list [quote continue] iteration-var [list [quote i32.add] iteration-var [quote i32.const 1]]]]]]]]]]
 
 [defmacro list-map [element-var collection form]
   [assert [is-word element-var] list-map requires a word as the first argument]
@@ -262,13 +263,13 @@
                         col-size-var [list [quote size] col-var]
                         new-col-var [list [quote mutable-list-of-size] col-size-var]]
       [list
-        [quote loop] [list iteration-var 0]
+        [quote loop] [list iteration-var [quote i32.const 0]]
         [list [quote if]
           [list [quote i32.lt-s] iteration-var col-size-var]
           [concat [quote [let]]
             [list [list element-var [list [quote at] col-var iteration-var]]]
             [list [list [quote set-array] new-col-var iteration-var form]]
-            [list [list [quote continue] iteration-var [list [quote i32.add] iteration-var 1]]]]]]
+            [list [list [quote continue] iteration-var [list [quote i32.add] iteration-var [quote i32.const 1]]]]]]]
       [list [quote freeze-mutable-list] new-col-var]
       new-col-var]]]
 
