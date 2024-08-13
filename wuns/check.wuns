@@ -423,27 +423,6 @@
 
 [def default-memargs [kv-map mem 0 offset 0 align 0]]
 
-[defn check-memargs [form]
-  [report-when-not [is-list form] form expects a list]
-  [report-when-not [is-odd [size form]] form expects an odd number of elements]
-  [let [f [first form]
-        tkvm [transient-kv-map]]
-    [report-when-not [eq-word f [quote memarg]] f expects a memarg]
-    [for-pair i 1 [size form]
-      [let [k [at form i]
-            v [at form [inc i]]]
-        [if [is-word k]
-          [do
-            [report-when-not [has default-memargs k] k unknown memarg key]
-            [if [is-non-negative-decimal v]
-              [do
-                [report-when [has tkvm k] k duplicate memarg key will use last value]
-                [set tkvm k v]]
-              [report v memarg expects a non-negative decimal]]]
-          [report k memarg expects a word]]]]
-    [freeze-kv-map tkvm]
-    [set-node-type form tkvm]]]
-
 [defn try-get-range [form]
   [let [m [meta form]]
     [if [and m [hasq m range]]
@@ -714,9 +693,26 @@
                         [report-when-not [is-decimal arg] arg expects a decimal]
 
                         [eq-word imm-p imm-memarg]
-                        [let []
-                          [check-memargs arg]
-                          ]
+                        [do
+                          [report-when-not [is-list arg] arg expects a list]
+                          [report-when-not [is-odd [size arg]] arg expects an odd number of elements]
+                          [let [f [first arg]
+                                tkvm [transient-kv-map]]
+                            [report-when-not [eq-word f [quote memarg]] f expects a memarg]
+                            [for-pair i 1 [size arg]
+                              [let [k [at arg i]
+                                    v [at arg [inc i]]]
+                                [if [is-word k]
+                                  [do
+                                    [report-when-not [has default-memargs k] k unknown memarg key]
+                                    [if [is-non-negative-decimal v]
+                                      [do
+                                        [report-when [has tkvm k] k duplicate memarg key will use last value]
+                                        [set tkvm k v]]
+                                      [report v memarg expects a non-negative decimal]]]
+                                  [report k memarg expects a word]]]]
+                            [freeze-kv-map tkvm]
+                            [set-node-type arg tkvm]]]
 
                         [assert 0 unknown immediate parameter type [identity imm-p]]]]]
                   [for i 0 [size parameters]
