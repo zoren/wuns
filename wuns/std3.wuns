@@ -316,6 +316,9 @@
 
 [def empty-kv-map [kv-map]]
 
+[defn meta-assoc [val key meta-data]
+  [with-meta val [assoc [if-let [m [meta val]] m empty-kv-map] key meta-data]]]
+
 [defn slice [l start end]
   [assert [is-list l] slice expects list]
   [assert [not [is-negative start]] negative start index]

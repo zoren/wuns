@@ -8,14 +8,14 @@
 
 [defmacro report-when [cond form .. lmsg]
   [list [quote when] cond
-    [list [quote report-error] [mk-quote lmsg] form]]]
+    [list [quote report-error] [quote-list lmsg] form]]]
 
 [defmacro report-when-not [cond form .. lmsg]
   [list [quote when-not] cond
-    [list [quote report-error] [mk-quote lmsg] form]]]
+    [list [quote report-error] [quote-list lmsg] form]]]
 
 [defmacro report [form .. lmsg]
-  [list [quote report-error] [mk-quote lmsg] form]]
+  [list [quote report-error] [quote-list lmsg] form]]
 
 [defn has-local-context [ctx var]
   [loop [cur-ctx ctx]
