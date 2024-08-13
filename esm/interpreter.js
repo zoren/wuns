@@ -103,7 +103,7 @@ export const makeInterpreterContext = () => {
     const firstWordValue = tryGetWordValue(firstForm)
     switch (firstWordValue) {
       case 'quote': {
-        const res = args.length === 1 ? args[0] : Object.freeze(args)
+        const res = args.length === 1 ? args[0] : makeList(...args)
         return () => res
       }
       case 'if': {

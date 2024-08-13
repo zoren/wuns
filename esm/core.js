@@ -13,6 +13,7 @@ class Word {
 }
 export const isWord = (f) => f instanceof Word
 export const word = (s) => Object.freeze(new Word(s))
+const symbolMeta = Symbol.for('wuns-meta')
 export const wordWithMeta = (s, meta) => {
   const w = new Word(s)
   w[symbolMeta] = meta
@@ -29,7 +30,6 @@ export const isList = (f) => Array.isArray(f)
 
 export const isWunsFunction = (f) => f instanceof Function && Object.isFrozen(f) && 'funMacDesc' in f
 
-const symbolMeta = Symbol.for('wuns-meta')
 export const listWithMeta = (l, meta) => {
   const ll = [...l]
   ll[symbolMeta] = meta
