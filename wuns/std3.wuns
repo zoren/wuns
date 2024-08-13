@@ -272,19 +272,22 @@
       [list [quote freeze-mutable-list] new-col-var]
       new-col-var]]]
 
+[defn half [x] [i32.div x 2]]
+
 [defmacro kv-map [.. entries]
   [let [s [size entries]
-        ml [mutable-list-of-size [add 4 s]]
+        n-of-pairs [half s]
+        ml [mutable-list-of-size [add 4 n-of-pairs]]
         tmp-word [genword]]
     [assert [is-even s] kv-map requires an even number of arguments]
     [set-array ml 0 [quote let]]
     [set-array ml 1 [list tmp-word [quote [transient-kv-map]]]]
     [for-pair i 0 s
-      [set-array ml [add 2 i]
+      [set-array ml [add 2 [half i]]
         [let [k [at entries i]]
           [list [quote set] tmp-word [if [is-word k] [mk-quote k] k] [at entries [inc i]]]]]]
-    [set-array ml [add 2 s] [list [quote freeze-kv-map] tmp-word]]
-    [set-array ml [add 3 s] tmp-word]
+    [set-array ml [add 2 n-of-pairs] [list [quote freeze-kv-map] tmp-word]]
+    [set-array ml [add 3 n-of-pairs] tmp-word]
     ml]]
 
 [defmacro getq [m w]
