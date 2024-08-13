@@ -564,15 +564,12 @@
               module-name [at form 1]
               name [at form 2]
               t [at form 3]]
-            [ifs
-              [eq-word [first t] [quote func]]
+            [if [eq-word [first t] [quote func]]
               [let [rs [at t 2]]
                 [add-sig name [kv-map
                                 parameters [check-type-list [at t 1]]
                                 results [if [is-empty rs] type-empty [check-type [first rs]]]
-                                def first-form]]]
-
-              []]]
+                                def first-form]]]]]
 
         [eq-form first-form [quote def]]
         [let [name [second form]
