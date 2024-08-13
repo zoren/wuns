@@ -97,6 +97,11 @@
 [defmacro logq [.. lmsg]
   [list [quote log] [quote-list lmsg]]]
 
+[defmacro logq-abort [.. lmsg]
+  [list [quote let] [list]
+    [list [quote log] [quote-list lmsg]]
+    [quote [unreachable]]]]
+
 [defn identity [x] x]
 
 [defmacro ifs [.. clauses]

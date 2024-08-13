@@ -28,9 +28,7 @@
         [set-array l [add 2 i] [recur [quote data] [at f i]]]]
       l]
 
-    [do
-      [log [quote not-a-word-or-list]]
-      [unreachable]]]]
+    [logq-abort not a word or list]]]
 
 [defmacro form-to-bytes [f]
   [form-to-bytes-fn [quote active-data] f]]

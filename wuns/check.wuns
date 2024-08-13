@@ -443,8 +443,6 @@
                   [set-node-type form [getq sig def-type]]
                   [do
                     [report form not a def]
-                    [log [list [quote c] form [quote not a def]]]
-                    [log global-ctx]
                     type-error]]]
               [do
                 [report form symbol not found]
@@ -719,9 +717,7 @@
                         [when-not [check-param-arg-conform pt arg-t]
                           [report-error [concat [quote parameter does not match] [list pt arg-t]] arg]]]]
                   [set-node-type form results]]
-                [do
-                  [log [list [quote not-found] [quote v] first-form [try-get-range first-form] [quote gc] global-ctx]]
-                  [report form function not found]]]]
+                [report form function not found]]]
             [let [sig [get global-ctx first-form]
                   sig-def [getq sig def]
                   parameters [getq sig parameters]
