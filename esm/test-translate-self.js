@@ -92,11 +92,22 @@ defSetVar('log-byte-array', (bytes) => {
   console.log(textDecoder.decode(bytes))
 })
 import { isMacro } from './interpreter.js'
-import { isWord, wordValue } from './core.js'
+import { isWord, isList, wordValue, makeList, word } from './core.js'
+const formToString = (x) => {
+  if (isWord(x)) return wordValue(x)
+  if (isList(x)) return `[${x.map(formToString).join(' ')}]`
+  throw new Error('log expects word or list')
+}
+defSetVar('log', (form) => {
+  console.log(formToString(form))
+})
+
 {
   const macroCtx = makeInitInterpreter()
-  for (const name of ['std3', 'self-host-macros'])
-    parseEvalFile(macroCtx, `../wuns/${name}.wuns`)
+  macroCtx.defSetVar('log', (form) => {
+    console.log('macro contex logged:', formToString(form))
+  })
+  for (const name of ['std3', 'self-host-macros']) parseEvalFile(macroCtx, `../wuns/${name}.wuns`)
   const { getVarVal } = macroCtx
   const hostTryGetMacro = (word) => {
     if (isWord(word)) {
@@ -107,6 +118,20 @@ import { isWord, wordValue } from './core.js'
   }
   defSetVar('host-try-get-macro', hostTryGetMacro)
 }
+
+// only for js host
+const object_get = (m, k) => {
+  const ks = wordValue(k)
+  if (ks in m) return m[ks]
+  throw new Error('key not found: ' + ks + ' in ' + Object.keys(m))
+}
+defSetVar('object-get', object_get)
+const object_keys = (m) => {
+  if (typeof m !== 'object') throw new Error('keys expects map')
+  return makeList(...Object.keys(m).map(word))
+}
+defSetVar('object-keys', object_keys)
+
 for (const name of ['std3', 'wasm-instructions', 'check', 'hosted', 'translate-test'])
   parseEvalFile(ctx, `../wuns/${name}.wuns`)
 

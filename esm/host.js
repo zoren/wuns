@@ -6,7 +6,6 @@ import {
   wordWithMeta,
   listWithMeta,
   meta,
-  print,
   makeList,
   atom,
   isAtom,
@@ -130,19 +129,4 @@ export const freeze_kv_map = (o) => {
   if (!isPlainObject(o)) throw new Error('keys expect map')
   if (Object.isFrozen(o)) throw new Error('freeze expects mutable object')
   Object.freeze(o)
-}
-
-export const log = (form) => {
-  console.log(print(form))
-}
-
-// only for js host
-export const object_get = (m, k) => {
-  const ks = wordValue(k)
-  if (ks in m) return m[ks]
-  throw new Error('key not found: ' + ks + ' in ' + Object.keys(m))
-}
-export const object_keys = (m) => {
-  if (typeof m !== 'object') throw new Error('keys expects map')
-  return makeList(...Object.keys(m).map(word))
 }
