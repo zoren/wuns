@@ -64,11 +64,6 @@ const tryGetWordValue = (w) => {
 
 export const makeInterpreterContext = () => {
   const defVars = new Map()
-  const defVar = (name, value) => {
-    if (defVars.has(name)) throw new RuntimeError(`defVar redefining var: ${name}`)
-    defVars.set(name, value)
-    return value
-  }
   const compBodies = (ctx, bodies) => {
     const cbodies = bodies.map((body) => wunsComp(ctx, body))
     return (env) => {
@@ -90,7 +85,7 @@ export const makeInterpreterContext = () => {
             }
             throw new RuntimeError(`variable ${varName} not found`, form)
           }
-        if (!defVars.has(varName)) throw new CompileError('getDefVarVal wordValue not found: ' + varName, form)
+        if (!defVars.has(varName)) throw new CompileError('def not found: ' + varName, form)
         const defVarVal = defVars.get(varName)
         if (isMacro(defVarVal)) throw new CompileError(`can't take value of macro ${varName}`, form)
         return () => defVarVal
@@ -178,13 +173,18 @@ export const makeInterpreterContext = () => {
         if (args.length !== 2) throw new CompileError(`def expects 2 arguments, got ${args.length}`, form)
         const [varName, value] = args
         const vn = ctWordValue(varName)
+        if (defVars.has(vn)) throw new CompileError(`redefining var: ${vn}`)
         const compValue = wunsComp(ctx, value)
-        return (env) => defVar(vn, compValue(env))
+        return (env) => {
+          if (defVars.has(vn)) throw new RuntimeError(`redefining var: ${vn}`)
+          const value = compValue(env)
+          defVars.set(vn, value)
+          return value
+        }
       }
-      case 'defn':
-      case 'defmacro': {
+      case 'func':
+      case 'macro': {
         const [fmname, origParams, ...bodies] = args
-        const nameString = ctWordValue(fmname)
         let params = origParams.map(ctWordValue)
         let restParam = null
         if (params.length > 1 && params.at(-2) === '..') {
@@ -203,12 +203,12 @@ export const makeInterpreterContext = () => {
         }
         const newCtx = { varDescs, outer: null, ctxType: firstWordValue, funMacDesc }
         funMacDesc.cbodies = compBodies(newCtx, bodies)
-        if (firstWordValue === 'defmacro') funMacDesc.isMacro = true
+        if (firstWordValue === 'macro') funMacDesc.isMacro = true
         Object.freeze(funMacDesc)
         const f = (...args) => callFunctionStaged(funMacDesc, args.length)(args)
         f['funMacDesc'] = funMacDesc
         Object.freeze(f)
-        return () => defVar(nameString, f)
+        return () => f
       }
       case 'recur': {
         let curCtx = ctx

@@ -6,11 +6,27 @@
 [def 3 [i32.const 3]]
 [def 4 [i32.const 4]]
 
-[defn list [.. entries] entries]
+[def list [func list [.. entries] entries]]
 
-[def quote-word [quote quote]]
+[def make-func-macro-list
+  [func make-func-macro-list [func-macro name params bodies]
+    [let [res [mutable-list-of-size [add 3 [size bodies]]]]
+      [set-array res 0 func-macro]
+      [set-array res 1 name]
+      [set-array res 2 params]
+      [loop [i 0]
+        [if [lt-s i [size bodies]]
+          [let []
+            [set-array res [add 3 i] [at bodies i]]
+            [continue i [add i 1]]]]]
+      [list [quote def] name res]]]]
 
-[defn mk-quote [form] [list quote-word form]]
+[def defmacro
+  [macro defmacro [name params .. bodies]
+    [make-func-macro-list [quote macro] name params bodies]]]
+
+[defmacro defn [name params .. bodies]
+  [make-func-macro-list [quote func] name params bodies]]
 
 [defmacro comment [.. -]
   [quote let []]]
@@ -76,6 +92,10 @@
     [quote if] cond
     true-form
     false-form]]
+
+[def quote-word [quote quote]]
+
+[defn mk-quote [form] [list quote-word form]]
 
 [defn quote-list [lmsg]
   [let [s [size lmsg]
