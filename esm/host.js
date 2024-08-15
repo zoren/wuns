@@ -10,6 +10,7 @@ import {
   atom,
   isAtom,
   isSigned32BitInteger,
+  print,
 } from './core.js'
 
 export const is_word = (f) => isWord(f) | 0
@@ -130,3 +131,5 @@ export const freeze_kv_map = (o) => {
   if (Object.isFrozen(o)) throw new Error('freeze expects mutable object')
   Object.freeze(o)
 }
+
+export const log = (x) => console.log(print(x))

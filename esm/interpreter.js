@@ -62,8 +62,7 @@ const tryGetWordValue = (w) => {
   return w.value
 }
 
-export const makeInterpreterContext = () => {
-  const defVars = new Map()
+export const makeInterpreterContext = (defVars) => {
   const compBodies = (ctx, bodies) => {
     const cbodies = bodies.map((body) => compile(ctx, body))
     return (env) => {
@@ -304,39 +303,14 @@ export const makeInterpreterContext = () => {
       return instWithImmediate(...eargs)
     }
   }
-  const externGetVarVal = (name) => {
-    if (!defVars.has(name)) throw new Error('getDefVarVal name not found: ' + name)
-    return defVars.get(name)
-  }
-  const externDefVar = (name, value) => {
-    if (defVars.has(name)) throw new Error(`cannot redefine var: ${name}`)
-    defVars.set(name, value)
-  }
-  const compileTop = (form) => compile(null, form)
-  return {
-    getVarVal: externGetVarVal,
-    defSetVar: externDefVar,
-    compile: compileTop,
-  }
+  return (form) => compile(null, form)
 }
 
 export const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 
 export const getFormLocation = (subForm) => meta(subForm).location || 'unknown location'
 
-const comp = ({ compile }, form) => {
-  try {
-    return compile(form)
-  } catch (e) {
-    if (e instanceof CompileError) {
-      console.error(`compile error in ${getFormLocation(e.form || form)}: ${e.message}`)
-      return undefined
-    }
-    throw e
-  }
-}
-
-const compileForms = ({ compile }, forms) => {
+const compileForms = (compile, forms) => {
   const compiled = []
   for (const form of forms) {
     try {
@@ -364,25 +338,8 @@ export const runCform = (exp) => {
   }
 }
 
-const evalForm = (ctx, form) => {
-  const cform = comp(ctx, form)
-  try {
-    return cform(null)
-  } catch (e) {
-    if (e instanceof RuntimeError) {
-      console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
-      return undefined
-    }
-    throw new Error(`unexpected non-runtime error: ${e.message}`)
-  }
-}
-
-export const makeInitInterpreter = () => {
-  const ctx = makeInterpreterContext()
-  const { defSetVar } = ctx
-  defSetVar('eval', (form) => evalForm(ctx, form))
-  for (const [name, f] of hostExports) defSetVar(name, f)
-  return ctx
+export const addHostFunctions = (defVars) => {
+  for (const [name, f] of hostExports) defVars.set(name, f)
 }
 
 export const evalLogForms = (ctx, forms) => {
@@ -394,7 +351,7 @@ export const evalLogForms = (ctx, forms) => {
       if (v !== undefined) console.log(print(v))
     } catch (e) {
       if (e instanceof RuntimeError) {
-        console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
+        console.error(`runtime error in ${getFormLocation(e.form)}: ${e.message}`)
         return undefined
       }
       throw new Error(`unexpected non-runtime error: ${e.message}`)
@@ -402,15 +359,15 @@ export const evalLogForms = (ctx, forms) => {
   }
 }
 
-export const parseEvalFile = (ctx, filename) => {
-  const compiled = compileForms(ctx, parseFile(filename))
+export const parseEvalFile = (compile, filename) => {
+  const compiled = compileForms(compile, parseFile(filename))
   if (!compiled) return
   for (const cform of compiled) {
     try {
       return cform(null)
     } catch (e) {
       if (e instanceof RuntimeError) {
-        console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
+        console.error(`runtime error in ${getFormLocation(e.form)}: ${e.message}`)
         return undefined
       }
       throw new Error(`unexpected non-runtime error: ${e.message}`)

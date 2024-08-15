@@ -5,11 +5,11 @@ import { parseStringToForms } from './parseTreeSitter.js'
 import { evalLogForms } from './interpreter.js'
 import { makeInitInterpreter, parseEvalFile } from './interpreter.js'
 
-const context = makeInitInterpreter()
+const compile = makeInitInterpreter()
 
 const commandLineArgs = process.argv.slice(2)
 
-for (const arg of commandLineArgs) parseEvalFile(context, arg)
+for (const arg of commandLineArgs) parseEvalFile(compile, arg)
 
 const historyFilePath = 'history.json'
 
