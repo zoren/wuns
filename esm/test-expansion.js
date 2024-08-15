@@ -5,15 +5,12 @@ const { getVarVal, defSetVar } = ctx
 
 import { isWord, wordValue, print } from './core.js'
 
-defSetVar('log', (form) => {
-  console.log(print(form))
-})
 
 {
   const macroCtx = makeInitInterpreter()
-  macroCtx.defSetVar('log', (form) => {
-    console.log('macro context logged:', print(form))
-  })
+  // macroCtx.defSetVar('log', (form) => {
+  //   console.log('macro context logged:', print(form))
+  // })
   for (const name of ['std3', 'self-host-macros']) parseEvalFile(macroCtx, `../wuns/${name}.wuns`)
   const { getVarVal } = macroCtx
   const hostTryGetMacro = (word) => {

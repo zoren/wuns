@@ -65,14 +65,14 @@ const tryGetWordValue = (w) => {
 export const makeInterpreterContext = () => {
   const defVars = new Map()
   const compBodies = (ctx, bodies) => {
-    const cbodies = bodies.map((body) => wunsComp(ctx, body))
+    const cbodies = bodies.map((body) => compile(ctx, body))
     return (env) => {
       let result = undefined
       for (const cbody of cbodies) result = cbody(env)
       return result
     }
   }
-  const wunsComp = (ctx, form) => {
+  const compile = (ctx, form) => {
     {
       const varName = tryGetWordValue(form)
       if (varName) {
@@ -85,7 +85,7 @@ export const makeInterpreterContext = () => {
             }
             throw new RuntimeError(`variable ${varName} not found`, form)
           }
-        if (!defVars.has(varName)) throw new CompileError('def not found: ' + varName, form)
+        if (!defVars.has(varName)) throw new CompileError('not found: ' + varName, form)
         const defVarVal = defVars.get(varName)
         if (isMacro(defVarVal)) throw new CompileError(`can't take value of macro ${varName}`, form)
         return () => defVarVal
@@ -103,10 +103,10 @@ export const makeInterpreterContext = () => {
       }
       case 'if': {
         if (args.length < 2 || 3 < args.length) throw new CompileError('if expects 2 or 3 arguments', form)
-        const cc = wunsComp(ctx, args[0])
-        const ct = wunsComp(ctx, args[1])
+        const cc = compile(ctx, args[0])
+        const ct = compile(ctx, args[1])
         if (args.length === 2) return (env) => (cc(env) === 0 ? undefined : ct(env))
-        const cf = wunsComp(ctx, args[2])
+        const cf = compile(ctx, args[2])
         return (env) => (cc(env) === 0 ? cf : ct)(env)
       }
       case 'let':
@@ -118,7 +118,7 @@ export const makeInterpreterContext = () => {
         const varDesc = { defForm: firstWordValue }
         for (let i = 0; i < bindings.length - 1; i += 2) {
           const v = ctWordValue(bindings[i])
-          compBindings.push([v, wunsComp(newCtx, bindings[i + 1])])
+          compBindings.push([v, compile(newCtx, bindings[i + 1])])
           varDescs.set(v, varDesc)
         }
         const mkBindEnv = (env) => {
@@ -144,7 +144,7 @@ export const makeInterpreterContext = () => {
         const updateFuncs = []
         for (let i = 0; i < args.length; i += 2) {
           updateVars.push(ctWordValue(args[i]))
-          updateFuncs.push(wunsComp(ctx, args[i + 1]))
+          updateFuncs.push(compile(ctx, args[i + 1]))
         }
         let enclosingLoopCtx = ctx
         while (true) {
@@ -174,12 +174,10 @@ export const makeInterpreterContext = () => {
         const [varName, value] = args
         const vn = ctWordValue(varName)
         if (defVars.has(vn)) throw new CompileError(`redefining var: ${vn}`)
-        const compValue = wunsComp(ctx, value)
+        const compValue = compile(ctx, value)
+        defVars.set(vn, compValue(null))
         return (env) => {
-          if (defVars.has(vn)) throw new RuntimeError(`redefining var: ${vn}`)
-          const value = compValue(env)
-          defVars.set(vn, value)
-          return value
+          return undefined
         }
       }
       case 'func':
@@ -215,13 +213,13 @@ export const makeInterpreterContext = () => {
         while (curCtx.outer) curCtx = curCtx.outer
         if (!curCtx.funMacDesc) throw new CompileError('recur outside of function', form)
         const caller = callFunctionStaged(curCtx.funMacDesc, args.length, form)
-        const cargs = args.map((a) => wunsComp(ctx, a))
+        const cargs = args.map((a) => compile(ctx, a))
         return (env) => caller(cargs.map((carg) => carg(env)))
       }
     }
     if (!firstWordValue || hasCtxVar(ctx, firstWordValue)) {
-      const cfunc = wunsComp(ctx, firstForm)
-      const cargs = args.map((a) => wunsComp(ctx, a))
+      const cfunc = compile(ctx, firstForm)
+      const cargs = args.map((a) => compile(ctx, a))
       return (env) => {
         const f = cfunc(env)
         if (typeof f !== 'function') throw new RuntimeError(`expected function, got ${f}`)
@@ -242,9 +240,9 @@ export const makeInterpreterContext = () => {
               throw new CompileError(`error when calling macro '${firstWordValue}': ${error.message}`, form)
             throw error
           }
-          return wunsComp(ctx, macroResult)
+          return compile(ctx, macroResult)
         }
-        const cargs = args.map((a) => wunsComp(ctx, a))
+        const cargs = args.map((a) => compile(ctx, a))
         return (env) => caller(cargs.map((carg) => carg(env)))
       }
       if (typeof funcOrMac !== 'function') throw new CompileError(`expected function, got ${funcOrMac}`, form)
@@ -254,7 +252,7 @@ export const makeInterpreterContext = () => {
           `function '${firstWordValue}' expected ${funcOrMac.length} arguments, got ${args.length}`,
           form,
         )
-      const cargs = args.map((a) => wunsComp(ctx, a))
+      const cargs = args.map((a) => compile(ctx, a))
       return (env) => {
         const eargs = cargs.map((carg) => carg(env))
         try {
@@ -292,7 +290,7 @@ export const makeInterpreterContext = () => {
       }
     }
     const instWithImmediate = func(...immArgs)
-    const cargs = args.slice(immArity).map((a) => wunsComp(ctx, a))
+    const cargs = args.slice(immArity).map((a) => compile(ctx, a))
     if (cargs.length !== params.length)
       throw new CompileError(
         `instruction ${firstWordValue} expected ${params.length} non-immediate arguments, got ${cargs.length}`,
@@ -314,61 +312,108 @@ export const makeInterpreterContext = () => {
     if (defVars.has(name)) throw new Error(`cannot redefine var: ${name}`)
     defVars.set(name, value)
   }
-  const evalForm = (form) => {
-    const formToLocationString = (error) => {
-      const arg = error.form
-      const m = meta(arg ? arg : form)
-      const { range } = m
-      if (!range) return 'unknown location'
-      const [startLine, startCol, endLine, endCol] = range
-      const filePath = m['file-path']
-      if (!filePath) return `${startLine + 1}:${startCol}`
-      return `${filePath}:${startLine + 1}:${startCol}`
-    }
-    let cform
-    try {
-      cform = wunsComp(null, form)
-    } catch (e) {
-      if (e instanceof CompileError) {
-        console.error(`Compile error in ${formToLocationString(e)}: ${e.message}`)
-        return undefined
-      }
-      throw new Error(`unexpected non CompileError: ${e.message}`)
-    }
-    try {
-      return cform(null)
-    } catch (e) {
-      if (e instanceof RuntimeError) {
-        console.error(`Runtime error in ${formToLocationString(e)}: ${e.message}`)
-        return undefined
-      }
-      throw new Error(`unexpected non RuntimeError: ${e.message}`)
-    }
-  }
+  const compileTop = (form) => compile(null, form)
   return {
     getVarVal: externGetVarVal,
     defSetVar: externDefVar,
-    evalForm,
+    compile: compileTop,
   }
 }
 
 export const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 
+export const getFormLocation = (subForm) => meta(subForm).location || 'unknown location'
+
+const comp = ({ compile }, form) => {
+  try {
+    return compile(form)
+  } catch (e) {
+    if (e instanceof CompileError) {
+      console.error(`compile error in ${getFormLocation(e.form || form)}: ${e.message}`)
+      return undefined
+    }
+    throw e
+  }
+}
+
+const compileForms = ({ compile }, forms) => {
+  const compiled = []
+  for (const form of forms) {
+    try {
+      compiled.push(compile(form))
+    } catch (e) {
+      if (e instanceof CompileError) {
+        console.error(`compile error in ${getFormLocation(e.form || form)}: ${e.message}`)
+        return undefined
+      }
+      throw e
+    }
+  }
+  return compiled
+}
+
+export const runCform = (exp) => {
+  try {
+    return exp()
+  } catch (e) {
+    if (e instanceof RuntimeError) {
+      console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
+      return undefined
+    }
+    throw new Error(`unexpected non-runtime error: ${e.message}`)
+  }
+}
+
+const evalForm = (ctx, form) => {
+  const cform = comp(ctx, form)
+  try {
+    return cform(null)
+  } catch (e) {
+    if (e instanceof RuntimeError) {
+      console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
+      return undefined
+    }
+    throw new Error(`unexpected non-runtime error: ${e.message}`)
+  }
+}
+
 export const makeInitInterpreter = () => {
   const ctx = makeInterpreterContext()
-  const { defSetVar, evalForm } = ctx
-  defSetVar('eval', evalForm)
+  const { defSetVar } = ctx
+  defSetVar('eval', (form) => evalForm(ctx, form))
   for (const [name, f] of hostExports) defSetVar(name, f)
   return ctx
 }
 
-export const evalLogForms = ({ evalForm }, forms) => {
-  for (const form of forms) {
-    const v = evalForm(form)
-    if (v !== undefined) console.log(print(v))
+export const evalLogForms = (ctx, forms) => {
+  const compiled = compileForms(ctx, forms)
+  if (!compiled) return
+  for (const cform of compiled) {
+    try {
+      const v = cform()
+      if (v !== undefined) console.log(print(v))
+    } catch (e) {
+      if (e instanceof RuntimeError) {
+        console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
+        return undefined
+      }
+      throw new Error(`unexpected non-runtime error: ${e.message}`)
+    }
   }
 }
 
-export const parseEvalFile = ({ evalForm }, filename) => {
-  for (const form of parseFile(filename)) evalForm(form)
+export const parseEvalFile = (ctx, filename) => {
+  const compiled = compileForms(ctx, parseFile(filename))
+  if (!compiled) return
+  for (const cform of compiled) {
+    try {
+      return cform(null)
+    } catch (e) {
+      if (e instanceof RuntimeError) {
+        console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
+        return undefined
+      }
+      throw new Error(`unexpected non-runtime error: ${e.message}`)
+    }
+  }
 }
