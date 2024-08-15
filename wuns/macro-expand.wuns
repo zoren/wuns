@@ -203,9 +203,12 @@
               [for i 1 s-form [set-array res i [recur gctx local-ctx [at form i]]]]
               res]
             [if-let [def-desc [try-get-def gctx first-form]]
-              [do
+              [let [signature
+                    [if [hasq def-desc signature]
+                      [getq def-desc signature]
+                      [getq [meta [getq def-desc expanded-form]] signature]]]
                 [report-when-not
-                  [n-of-args-match-signature [getq def-desc signature] n-of-args]
+                  [n-of-args-match-signature signature n-of-args]
                   form
                   wrong number of arguments]
                 [assert [not [eq-word [getq def-desc def-form] [quote defmacro]]] macro not implemented yet]
@@ -267,7 +270,7 @@
       [getq m range]
       [list]]]]
 
-[defn test-expand-no-errors [forms]
+[defn test-expand-no-errors-fn [forms]
   [let [gctx [make-global-context]
         - [init-host-context gctx]
         res [expand-top-level-forms gctx forms]
@@ -277,25 +280,27 @@
         [try-get-range [getq err form]]]]]
     [assert [is-empty messages] unexpected error messages]]]
 
+[defmacro test-expand-no-errors [.. forms]
+  [test-expand-no-errors-fn forms]]
+
 [defn test-expand []
-  [test-expand-no-errors [quote [def -2 [i32.const -2]] [def -1 [i32.const -1]]]]
-  [test-expand-no-errors [quote [def 0 [i32.const 0]] [def list [func list [.. entries] entries]]]]
-  [test-expand-no-errors
-    [quote
-      [def 0 [i32.const 0]]
-      [def 1 [i32.const 1]]
-      [def is-empty
-        [func is-empty [form]
-          [eq [i32.const 0] [size form]]]]
+[test-expand-no-errors [def -2 [i32.const -2]] [def -1 [i32.const -1]]]
+[test-expand-no-errors [def 0 [i32.const 0]] [def list [func list [.. entries] entries]]]
+[test-expand-no-errors
+[def 0 [i32.const 0]]
+[def 1 [i32.const 1]]
+[def is-empty
+  [func is-empty [form]
+    [eq [i32.const 0] [size form]]]]
 [def concat [func concat [.. lists]
   [let
     [n-of-lists [size lists]
-     total-size
+    total-size
       [loop [total 0 i 0]
         [if [lt-s i n-of-lists]
           [continue total [add total [size [at lists i]]] i [add 1 i]]
           total]]
-     result [mutable-list-of-size total-size]]
+    result [mutable-list-of-size total-size]]
     [loop [i 0 j 0 res-index 0]
       [if [lt-s i n-of-lists]
         [let [cur-list [at lists i]
@@ -308,5 +313,10 @@
           [continue i [add 1 i] res-index [add s res-index]]]]]
     [freeze-mutable-list result]
     result]]]
-          ]]
-]
+        ]
+[test-expand-no-errors
+  [def list [func list [.. entries] entries]]
+  [def empty-list [list]]
+  [def not-list [list [i32.const 1]]]
+]]
+
