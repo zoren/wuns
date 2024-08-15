@@ -48,7 +48,7 @@ export const print = (ox) => {
     if (isWord(x)) return String(x)
     if (typeof x === 'number') return String(x)
     if (typeof x === 'bigint') return String(x)
-    if (Array.isArray(x)) return `[${x.map(go).join(' ')}]`
+    if (isList(x)) return `[${x.map(go).join(' ')}]`
     if (isWunsFunction(x)) return `[fn ${x.funMacDesc.name} arity ${x.funMacDesc.params.length}]`
     if (typeof x === 'function') return `[extern-fn ${x.name} arity ${x.length}]`
     if (Object.isFrozen(x))

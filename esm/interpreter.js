@@ -1,4 +1,4 @@
-import { isWord, print, isSigned32BitInteger, isWunsFunction, meta, makeList } from './core.js'
+import { isWord, isList, print, isSigned32BitInteger, isWunsFunction, meta, makeList } from './core.js'
 import { instructions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
 
@@ -91,7 +91,7 @@ export const makeInterpreterContext = (defVars) => {
       }
     }
     // return non-forms as is
-    if (!Array.isArray(form)) return () => form
+    if (!isList(form)) return () => form
     if (form.length === 0) return () => undefined
     const [firstForm, ...args] = form
     const firstWordValue = tryGetWordValue(firstForm)
