@@ -25,11 +25,11 @@ const hasCtxVar = (ctx, v) => {
 }
 
 const callFunctionStaged = (funMacDesc, numberOfGivenArgs, callForm) => {
-  const { name, params, restParam } = funMacDesc
+  const { nameWord, params, restParam } = funMacDesc
   const arity = params.length
   if (!restParam) {
     if (arity !== numberOfGivenArgs)
-      throw new CompileError(`${name} expected ${arity} arguments, got ${numberOfGivenArgs}`, callForm)
+      throw new CompileError(`${nameWord} expected ${arity} arguments, got ${numberOfGivenArgs}`, callForm)
     return (args) => {
       if (args.length !== numberOfGivenArgs)
         throw new RuntimeError('expected ' + numberOfGivenArgs + ' arguments', callForm)
@@ -39,7 +39,7 @@ const callFunctionStaged = (funMacDesc, numberOfGivenArgs, callForm) => {
     }
   }
   if (arity > numberOfGivenArgs)
-    throw new CompileError(`${name} expected at least ${arity} arguments, got ${numberOfGivenArgs}`, callForm)
+    throw new CompileError(`${nameWord} expected at least ${arity} arguments, got ${numberOfGivenArgs}`, callForm)
   return (args) => {
     if (args.length !== numberOfGivenArgs)
       throw new RuntimeError('expected ' + numberOfGivenArgs + ' arguments', callForm)
@@ -196,25 +196,28 @@ export const makeInterpreterContext = (defVars) => {
         for (const p of params) varDescs.set(p, paramDesc)
         if (restParam) varDescs.set(restParam, paramDesc)
         const funMacDesc = {
-          name: fmname,
+          nameWord: fmname,
           params,
           restParam,
         }
         const newCtx = { varDescs, outer: null, ctxType: firstWordValue, funMacDesc }
-        funMacDesc.cbodies = compBodies(newCtx, bodies)
-        Object.freeze(funMacDesc)
-        const f = (...args) => callFunctionStaged(funMacDesc, args.length)(args)
-        f['funMacDesc'] = funMacDesc
+        const cbodies = compBodies(newCtx, bodies)
+        const f = (...args) => callFunctionStaged(f, args.length)(args)
+        f.nameWord = fmname
+        f.params = params
+        f.restParam = restParam
+        f.cbodies = cbodies
         Object.freeze(f)
+        funMacDesc.func = f
         return () => f
       }
       case 'recur': {
         let curCtx = ctx
         while (curCtx.outer) curCtx = curCtx.outer
-        if (!curCtx.funMacDesc) throw new CompileError('recur outside of function', form)
-        const caller = callFunctionStaged(curCtx.funMacDesc, args.length, form)
+        const funMacDesc = curCtx.funMacDesc
+        if (!funMacDesc) throw new CompileError('recur outside of function', form)
         const cargs = args.map((a) => compile(ctx, a))
-        return (env) => caller(cargs.map((carg) => carg(env)))
+        return (env) => funMacDesc.func(...cargs.map((carg) => carg(env)))
       }
     }
     if (!firstWordValue || hasCtxVar(ctx, firstWordValue)) {
@@ -230,8 +233,7 @@ export const makeInterpreterContext = (defVars) => {
       const funcOrMacVar = defVars.get(firstWordValue)
       const funcOrMac = funcOrMacVar.value
       if (isWunsFunction(funcOrMac)) {
-        const { funMacDesc } = funcOrMac
-        const caller = callFunctionStaged(funMacDesc, args.length, form)
+        const caller = callFunctionStaged(funcOrMac, args.length, form)
         if (isMacroDefVar(funcOrMacVar)) {
           let macroResult
           try {

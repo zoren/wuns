@@ -32,7 +32,7 @@ const emptyList = Object.freeze([])
 export const makeList = (...args) => (args.length === 0 ? emptyList : Object.freeze(args))
 export const isList = (f) => Array.isArray(f)
 export const isForm = (f) => isWord(f) || (isList(f) && f.every(isForm))
-export const isWunsFunction = (f) => f instanceof Function && Object.isFrozen(f) && 'funMacDesc' in f
+export const isWunsFunction = (f) => f instanceof Function && Object.isFrozen(f) && 'cbodies' in f
 
 export const listWithMeta = (l, meta) => {
   const ll = [...l]
