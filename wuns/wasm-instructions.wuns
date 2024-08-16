@@ -1,4 +1,4 @@
-[def ascii-underscore [const 95]]
+[def ascii-underscore [i32.const 95]]
 
 [comment wuns does not have underscores so we convert dashes to underscores]
 [defn wasm-name-to-wat-bytes [w]

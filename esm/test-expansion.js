@@ -7,9 +7,10 @@ const compile = makeInterpreterContext(defVars)
 
 import { parseFile } from './parseTreeSitter.js'
 
-const makeClientContext = () => {
+const makeEvalContext = () => {
   const clientDefVars = new Map()
   addHostFunctions(clientDefVars)
+  setDefVar(clientDefVars, 'make-eval-context', makeEvalContext)
   const compile = makeInterpreterContext(clientDefVars)
   return {
     compile,
@@ -20,12 +21,10 @@ const makeClientContext = () => {
   }
 }
 
-setDefVar(defVars, 'make-eval-context', makeClientContext)
+setDefVar(defVars, 'make-eval-context', makeEvalContext)
 
-parseEvalFiles(compile, ['std3',
-  'wasm-instructions',
-  'macro-expand'
-].map(f => `../wuns/${f}.wuns`));
+const files = ['std3', 'wasm-instructions', 'macro-expand'].map((f) => `../wuns/${f}.wuns`)
+parseEvalFiles(compile, files)
 
 const testExpand = getDefVarValue(defVars, 'test-expand')
 
@@ -35,10 +34,6 @@ runCform(() => {
 
 const testExpandNoErrors = getDefVarValue(defVars, 'test-expand-no-errors-fn')
 
-const std3Forms = parseFile(`../wuns/std3.wuns`)
-
 runCform(() => {
-  testExpandNoErrors(std3Forms)
+  testExpandNoErrors(files.flatMap((f) => parseFile(f)))
 })
-
-// getVarVal('test-file')(parseFile(`../wuns/self-host.wuns`))

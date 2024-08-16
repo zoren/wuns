@@ -84,7 +84,9 @@
       form]
 
     [not [is-list form]]
-    [logq-abort not a form]
+    [do
+
+      form]
 
     [is-empty form]
     [do
@@ -208,9 +210,9 @@
 
                 [assert 0 expand import unexpected type]]]
 
-          [if [has-local-context local-ctx first-form]
+          [if [or [not [is-word first-form]] [has-local-context local-ctx first-form]]
             [let [res [mutable-list-of-size s-form]]
-              [set-array res 0 first-form]
+              [set-array res 0 [recur gctx local-ctx first-form]]
               [for i 1 s-form [set-array res i [recur gctx local-ctx [at form i]]]]
               res]
             [if-let [def-desc [try-get-def gctx first-form]]
@@ -289,6 +291,9 @@
     [freeze-kv-map [transient-kv-map] []]
     [keys [transient-kv-map] [[list word]]]
     [get [kv-map word] [any]]
+    [has [kv-map word] [bool]]
+
+    [make-eval-context [] [eval-context]]
   ]]
 
 [defn init-host-context [gctx]
