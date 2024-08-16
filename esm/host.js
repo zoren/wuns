@@ -5,6 +5,7 @@ import {
   wordValue,
   wordWithMeta,
   listWithMeta,
+  setMeta,
   meta,
   makeList,
   atom,
@@ -23,7 +24,10 @@ export const with_meta = (f, metaData) => {
   throw new Error('with-meta expects word or list')
 }
 export { meta }
-
+export const set_meta = (v, metaData) => {
+  if (typeof v !== 'object' || Object.isFrozen(v)) throw new Error('set-meta expects mutable object')
+  setMeta(v, metaData)
+}
 export const word_byte_size = (w) => {
   if (isWord(w)) return wordValue(w).length
   throw new Error('word-byte-size expects word, found: ' + w + ' ' + typeof w)
@@ -37,7 +41,7 @@ export const char_code_at = (w, i) => {
   return String(w).at(i).charCodeAt(0)
 }
 export const concat_words = (w1, w2) => word(wordValue(w1) + wordValue(w2))
-export const char_code_to_word = cp => word(String.fromCodePoint(cp))
+export const char_code_to_word = (cp) => word(String.fromCodePoint(cp))
 
 export const size = (a) => {
   if (isList(a)) return a.length

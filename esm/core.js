@@ -14,9 +14,13 @@ class Word {
 export const isWord = (f) => f instanceof Word
 export const word = (s) => Object.freeze(new Word(s))
 const symbolMeta = Symbol.for('wuns-meta')
+export const setMeta = (v, meta) => {
+  if (typeof v !== 'object' || Object.isFrozen(v)) throw new Error('expects mutable object')
+  v[symbolMeta] = meta
+}
 export const wordWithMeta = (s, meta) => {
   const w = new Word(s)
-  w[symbolMeta] = meta
+  setMeta(w, meta)
   return Object.freeze(w)
 }
 export const wordValue = (w) => {
@@ -32,7 +36,7 @@ export const isWunsFunction = (f) => f instanceof Function && Object.isFrozen(f)
 
 export const listWithMeta = (l, meta) => {
   const ll = [...l]
-  ll[symbolMeta] = meta
+  setMeta(ll, meta)
   return Object.freeze(ll)
 }
 
@@ -40,6 +44,33 @@ export const meta = (form) => {
   const t = typeof form
   if ((t === 'object' || t === 'function') && symbolMeta in form) return form[symbolMeta]
   return 0
+}
+
+class DefVar {
+  constructor(name, value) {
+    if (typeof name !== 'string') throw new Error('name must be string')
+    if (value === undefined) throw new Error('value must be defined')
+    this.name = name
+    this.value = value
+  }
+
+  toString() {
+    return `[var ${this.name}]`
+  }
+}
+
+export const defVar = (name, value) => new DefVar(name, value)
+
+export const getDefVar = (defVars, name) => {
+  if (!defVars.has(name)) throw new Error(`var not found: ${name}`)
+  return defVars.get(name)
+}
+
+export const getDefVarValue = (defVars, name) => getDefVar(defVars, name).value
+
+export const setDefVar = (defVars, varName, value) => {
+  if (defVars.has(varName)) throw new Error(`redefining var: ${varName}`)
+  defVars.set(varName, defVar(varName, value))
 }
 
 export const print = (ox) => {

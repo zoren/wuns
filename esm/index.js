@@ -3,13 +3,15 @@ import * as readline from 'node:readline'
 import { stdin, nextTick, stdout } from 'node:process'
 import { parseStringToForms } from './parseTreeSitter.js'
 import { evalLogForms } from './interpreter.js'
-import { makeInitInterpreter, parseEvalFile } from './interpreter.js'
+import { makeInterpreterContext, addHostFunctions, parseEvalFiles } from './interpreter.js'
 
-const compile = makeInitInterpreter()
+const defVars = new Map()
+addHostFunctions(defVars)
+const compile = makeInterpreterContext(defVars)
 
 const commandLineArgs = process.argv.slice(2)
 
-for (const arg of commandLineArgs) parseEvalFile(compile, arg)
+parseEvalFiles(compile, commandLineArgs)
 
 const historyFilePath = 'history.json'
 
@@ -44,7 +46,7 @@ const prompt = () => {
       return
     }
     try {
-      evalLogForms(context, parseStringToForms(line))
+      evalLogForms(compile, parseStringToForms(line))
     } catch (err) {
       console.error(err)
     }

@@ -1,17 +1,11 @@
-import { makeInterpreterContext, addHostFunctions, parseEvalFile, runCform, isMacro } from './interpreter.js'
+import { setDefVar, getDefVarValue } from './core.js'
+import { makeInterpreterContext, addHostFunctions, parseEvalFiles, runCform } from './interpreter.js'
 
 const defVars = new Map()
 addHostFunctions(defVars)
 const compile = makeInterpreterContext(defVars)
-const defSetVar = (name, val) => {
-  defVars.set(name, val)
-}
-const getVarVal = (name) => {
-  if (defVars.has(name)) return defVars.get(name)
-  console.log([...defVars.keys()])
-  throw new Error('var not found: ' + name)
-}
-import { isList, isWord, wordValue } from './core.js'
+
+import { parseFile } from './parseTreeSitter.js'
 
 const makeClientContext = () => {
   const clientDefVars = new Map()
@@ -19,34 +13,32 @@ const makeClientContext = () => {
   const compile = makeInterpreterContext(clientDefVars)
   return {
     compile,
-    'macro-expand': (form) => {
-      if (!isList(form)) throw new Error('macro-expand expects list')
-      if (form.length === 0) throw new Error('macro-expand expects list')
-      const [first, ...rest] = form
-      if (!isWord(first)) throw new Error('macro-expand expects list')
-      const defVarVal = clientDefVars.get(wordValue(first))
-      if (defVarVal === undefined) throw new Error('macro-expand expects defined word')
-      if (typeof defVarVal !== 'function') throw new Error('macro-expand expects function')
-      if (!isMacro(defVarVal)) throw new Error('macro-expand expects macro')
-      return defVarVal(...rest)
-    },
-    'set-def-var': (name, val) => {
-      clientDefVars.set(wordValue(name), val)
-    },
-    'def-var-val': (wname) => {
-      const name = wordValue(wname)
-      if (clientDefVars.has(name)) return clientDefVars.get(name)
-      throw new Error('var not found: ' + name)
+    apply: (fn, args) => {
+      if (typeof fn !== 'function') throw new Error('apply expects function')
+      return fn(...args)
     },
   }
 }
 
-defSetVar('make-eval-context', makeClientContext)
+setDefVar(defVars, 'make-eval-context', makeClientContext)
 
-for (const name of ['std3', 'wasm-instructions', 'macro-expand']) parseEvalFile(compile, `../wuns/${name}.wuns`)
+parseEvalFiles(compile, ['std3',
+  'wasm-instructions',
+  'macro-expand'
+].map(f => `../wuns/${f}.wuns`));
+
+const testExpand = getDefVarValue(defVars, 'test-expand')
 
 runCform(() => {
-  getVarVal('test-expand')()
+  testExpand()
+})
+
+const testExpandNoErrors = getDefVarValue(defVars, 'test-expand-no-errors-fn')
+
+const std3Forms = parseFile(`../wuns/std3.wuns`)
+
+runCform(() => {
+  testExpandNoErrors(std3Forms)
 })
 
 // getVarVal('test-file')(parseFile(`../wuns/self-host.wuns`))

@@ -19,7 +19,7 @@ const addI32InstructionObj = (name, obj) => {
   instructions[name] = obj
   instructions['i32.' + name] = obj
 }
-const addI32InstructionF = (name, f) => {
+const addI32InstructionFunc = (name, f) => {
   const obj = mkZeroImm(f)
   instructions[name] = obj
   instructions['i32.' + name] = obj
@@ -28,8 +28,8 @@ const i32binops = {
   add: '+',
   sub: '-',
   mul: '*',
-  div: '/',
-  rem: '%',
+  'div-s': '/',
+  'rem-s': '%',
 
   eq: '===',
   ne: '!==',
@@ -41,7 +41,7 @@ const i32binops = {
 }
 
 for (const [name, op] of Object.entries(i32binops)) {
-  addI32InstructionF(name, Function('a', 'b', `return (a ${op} b) | 0`))
+  addI32InstructionFunc(name, Function('a', 'b', `return (a ${op} b) | 0`))
 }
 
 const i32BitwiseOps = [
@@ -54,8 +54,8 @@ const i32BitwiseOps = [
 ]
 for (const { name, op, alias } of i32BitwiseOps) {
   const f = Function('a', 'b', `return (a ${op} b) | 0`)
-  // addI32Instruction(name, f)
-  addI32InstructionF(alias, f)
+  addI32InstructionFunc(name, f)
+  addI32InstructionFunc(alias, f)
 }
 
 addI32InstructionObj('const', {

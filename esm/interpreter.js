@@ -1,4 +1,4 @@
-import { isWord, isList, print, isSigned32BitInteger, isWunsFunction, meta, makeList } from './core.js'
+import { isWord, isList, print, isSigned32BitInteger, isWunsFunction, meta, makeList, defVar } from './core.js'
 import { instructions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
 
@@ -23,8 +23,6 @@ const hasCtxVar = (ctx, v) => {
   }
   return false
 }
-
-export const isMacro = (form) => isWunsFunction(form) && form.funMacDesc.isMacro
 
 const callFunctionStaged = (funMacDesc, numberOfGivenArgs, callForm) => {
   const { name, params, restParam } = funMacDesc
@@ -62,6 +60,11 @@ const tryGetWordValue = (w) => {
   return w.value
 }
 
+const isMacroDefVar = (defVar) => {
+  const metaData = meta(defVar)
+  return metaData && metaData['is-macro']
+}
+
 export const makeInterpreterContext = (defVars) => {
   const compBodies = (ctx, bodies) => {
     const cbodies = bodies.map((body) => compile(ctx, body))
@@ -85,8 +88,9 @@ export const makeInterpreterContext = (defVars) => {
             throw new RuntimeError(`variable ${varName} not found`, form)
           }
         if (!defVars.has(varName)) throw new CompileError('not found: ' + varName, form)
-        const defVarVal = defVars.get(varName)
-        if (isMacro(defVarVal)) throw new CompileError(`can't take value of macro ${varName}`, form)
+        const defVar = defVars.get(varName)
+        if (isMacroDefVar(defVar)) throw new CompileError(`can't take value of macro ${varName}`, form)
+        const defVarVal = defVar.value
         return () => defVarVal
       }
     }
@@ -174,13 +178,11 @@ export const makeInterpreterContext = (defVars) => {
         const vn = ctWordValue(varName)
         if (defVars.has(vn)) throw new CompileError(`redefining var: ${vn}`)
         const compValue = compile(ctx, value)
-        defVars.set(vn, compValue(null))
-        return (env) => {
-          return undefined
-        }
+        const varObj = defVar(vn, compValue(null))
+        defVars.set(vn, varObj)
+        return () => varObj
       }
-      case 'func':
-      case 'macro': {
+      case 'func': {
         const [fmname, origParams, ...bodies] = args
         let params = origParams.map(ctWordValue)
         let restParam = null
@@ -200,7 +202,6 @@ export const makeInterpreterContext = (defVars) => {
         }
         const newCtx = { varDescs, outer: null, ctxType: firstWordValue, funMacDesc }
         funMacDesc.cbodies = compBodies(newCtx, bodies)
-        if (firstWordValue === 'macro') funMacDesc.isMacro = true
         Object.freeze(funMacDesc)
         const f = (...args) => callFunctionStaged(funMacDesc, args.length)(args)
         f['funMacDesc'] = funMacDesc
@@ -226,11 +227,12 @@ export const makeInterpreterContext = (defVars) => {
       }
     }
     if (defVars.has(firstWordValue)) {
-      const funcOrMac = defVars.get(firstWordValue)
+      const funcOrMacVar = defVars.get(firstWordValue)
+      const funcOrMac = funcOrMacVar.value
       if (isWunsFunction(funcOrMac)) {
         const { funMacDesc } = funcOrMac
         const caller = callFunctionStaged(funMacDesc, args.length, form)
-        if (isMacro(funcOrMac)) {
+        if (isMacroDefVar(funcOrMacVar)) {
           let macroResult
           try {
             macroResult = caller(args)
@@ -306,8 +308,6 @@ export const makeInterpreterContext = (defVars) => {
   return (form) => compile(null, form)
 }
 
-export const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
-
 export const getFormLocation = (subForm) => meta(subForm).location || 'unknown location'
 
 const compileForms = (compile, forms) => {
@@ -338,8 +338,14 @@ export const runCform = (exp) => {
   }
 }
 
+import { wordValue, getDefVar } from './core.js'
+const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
+
 export const addHostFunctions = (defVars) => {
-  for (const [name, f] of hostExports) defVars.set(name, f)
+  const set = (varName, value) => defVars.set(varName, defVar(varName, value))
+  set('var', (name) => getDefVar(defVars, wordValue(name)))
+  set('var-get', (v) => v.value)
+  for (const [name, f] of hostExports) set(name, f)
 }
 
 export const evalLogForms = (ctx, forms) => {
@@ -359,18 +365,31 @@ export const evalLogForms = (ctx, forms) => {
   }
 }
 
-export const parseEvalFile = (compile, filename) => {
-  const compiled = compileForms(compile, parseFile(filename))
-  if (!compiled) return
-  for (const cform of compiled) {
-    try {
-      return cform(null)
-    } catch (e) {
-      if (e instanceof RuntimeError) {
-        console.error(`runtime error in ${getFormLocation(e.form)}: ${e.message}`)
-        return undefined
+export const parseEvalFiles = (compile, filenames) => {
+  for (const filename of filenames) {
+    const forms = parseFile(filename)
+    for (const form of forms) {
+      let cform
+      try {
+        cform = compile(form)
+      } catch (e) {
+        if (e instanceof CompileError) {
+          console.error(`compile error in ${getFormLocation(e.form || form)}: ${e.message}`)
+          return undefined
+        }
+        console.error(`unexpected non-compile error: ${e.message}`)
+        throw e
       }
-      throw new Error(`unexpected non-runtime error: ${e.message}`)
+      try {
+        cform(null)
+      } catch (e) {
+        if (e instanceof RuntimeError) {
+          console.error(`runtime error in ${getFormLocation(form)}: ${e.message}`)
+          return undefined
+        }
+        console.error(`unexpected non-runtime error: ${e.message}`)
+        throw e
+      }
     }
   }
 }

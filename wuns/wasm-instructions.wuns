@@ -1,4 +1,3 @@
-[def ascii-dash [const 45]]
 [def ascii-underscore [const 95]]
 
 [comment wuns does not have underscores so we convert dashes to underscores]
@@ -7,7 +6,7 @@
         res [mutable-list-of-size sw]]
     [for i 0 sw
       [set-array res i
-        [let [c [char-code-at w i]] [if [eq c ascii-dash] ascii-underscore c]]]]
+        [let [c [char-code-at w i]] [if [eq c [word-to-char-code -]] ascii-underscore c]]]]
     [freeze-mutable-list res]
     res]]
 
@@ -36,6 +35,8 @@
 [def imm-u32u32 [list immediate-u32 immediate-u32]]
 [def imm-memarg [quote memarg]]
 [def imm-memargs [list imm-memarg]]
+
+[comment consider using fexpr for the following as they return kv-maps not syntax to construct kv-map s]
 
 [defmacro make-binary-i32 [name opcode .. aliases]
   [make-operation-obj-aliases name opcode [list] i32i32 i32 aliases]]
@@ -72,6 +73,7 @@
     [make-binary-i32 i32.sub   0x6b sub]
     [make-binary-i32 i32.mul   0x6c mul]
     [make-binary-i32 i32.div-s 0x6d div-s]
+    [make-binary-i32 i32.rem-s 0x6f rem-s]
 
     [make-binary-i32 i32.and 0x71]
     [make-binary-i32 i32.ior 0x72]

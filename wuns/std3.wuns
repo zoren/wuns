@@ -31,15 +31,26 @@
     result]]]
 
 [def make-func-macro-list
-  [func make-func-macro-list [func-macro name params bodies]
-    [list [quote def] name [concat [list func-macro name params] bodies]]]]
+  [func make-func-macro-list [name params bodies]
+    [list [quote def] name [concat [list [quote func] name params] bodies]]]]
+
+[def quote-word [quote quote]]
+
+[def mk-quote [func mk-quote [form] [list quote-word form]]]
 
 [def defmacro
-  [macro defmacro [name params .. bodies]
-    [make-func-macro-list [quote macro] name params bodies]]]
+  [func defmacro [name params .. bodies]
+    [list [quote let] [list]
+      [make-func-macro-list name params bodies]
+      [list
+        [quote set-meta]
+        [list [quote var] [mk-quote name]]
+        [quote [let [m [transient-kv-map]] [set m [quote is-macro] 1] m]]]]]]
+
+[set-meta [var [quote defmacro]] [let [m [transient-kv-map]] [set m [quote is-macro] 1] m]]
 
 [defmacro defn [name params .. bodies]
-  [make-func-macro-list [quote func] name params bodies]]
+  [make-func-macro-list name params bodies]]
 
 [defmacro comment [.. -]
   [quote let []]]
@@ -52,7 +63,7 @@
 
 [defn is-zero [x] [eq x 0]]
 
-[defn is-odd [x] [bitwise-and x 1]]
+[defn is-odd [x] [i32.and x 1]]
 
 [defn is-even [x] [not [is-odd x]]]
 
@@ -84,10 +95,6 @@
     true-form
     false-form]]
 
-[def quote-word [quote quote]]
-
-[defn mk-quote [form] [list quote-word form]]
-
 [defn quote-list [lmsg]
   [let [s [size lmsg]
         msg [mutable-list-of-size [inc s]]]
@@ -101,7 +108,7 @@
 
 [defmacro assert [cond .. lmsg]
   [list [quote if] cond
-    [quote []]
+    [quote let []]
     [list [quote let] [quote []]
       [list [quote log] [quote-list lmsg]]
       [quote [unreachable]]]]]
@@ -148,13 +155,13 @@
         [do
           [loop [i n]
             [when i
-              [push l [char-code-to-word [i32.add [i32.const 48] [i32.sub 0 [i32.rem i [i32.const 10]]]]]]
-              [continue i [i32.div i [i32.const 10]]]]]
+              [push l [char-code-to-word [i32.add [i32.const 48] [i32.sub 0 [i32.rem-s i [i32.const 10]]]]]]
+              [continue i [i32.div-s i [i32.const 10]]]]]
           [push l [quote -]]]
         [loop [i n]
           [when i
-            [push l [char-code-to-word [i32.add [i32.const 48] [i32.rem i [i32.const 10]]]]]
-            [continue i [i32.div i [i32.const 10]]]]]]
+            [push l [char-code-to-word [i32.add [i32.const 48] [i32.rem-s i [i32.const 10]]]]]
+            [continue i [i32.div-s i [i32.const 10]]]]]]
       [loop [res [first l] i 1]
         [if [i32.lt-s i [size l]]
           [continue res [concat-words [at l i] res] i [inc i]]
@@ -238,8 +245,7 @@
         [list [quote if]
           [list [quote i32.lt-s] iw ew]
           [concat [quote let []] forms
-            [list [list [quote continue] iw [list [quote i32.add] iw [list [quote i32.const] [int-to-word increment]]]]]]
-          [quote []]]]]]]
+            [list [list [quote continue] iw [list [quote i32.add] iw [list [quote i32.const] [int-to-word increment]]]]]]]]]]]
 
 [defmacro for [iw start end .. forms]
   [for-func iw start [i32.const 1] end forms]]
@@ -284,7 +290,7 @@
       [list [quote freeze-mutable-list] new-col-var]
       new-col-var]]]
 
-[defn half [x] [i32.div x 2]]
+[defn half [x] [i32.div-s x 2]]
 
 [defmacro kv-map [.. entries]
   [let [s [size entries]

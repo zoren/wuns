@@ -35,12 +35,6 @@
       [le-s n-of-regular-params n-of-args]
       [eq n-of-regular-params n-of-args]]]]
 
-[defn try-get-def [gctx form]
-  [let [def-bindings [getq gctx def-bindings]]
-    [if [has def-bindings form]
-      [get def-bindings form]
-      0]]]
-
 [defn report-fn [gctx form msg]
   [push [getq gctx messages] [kv-map message msg form form]]]
 
@@ -55,6 +49,12 @@
 [defmacro report [form .. lmsg]
   [list [quote report-fn] [quote gctx] [quote-list lmsg] form]]
 
+[defn try-get-def [gctx form]
+  [let [def-bindings [getq gctx def-bindings]]
+    [if [has def-bindings form]
+      [get def-bindings form]
+      0]]]
+
 [defn add-global-binding [gctx name def-desc]
   [let [def-bindings [getq gctx def-bindings]]
     [if [is-word name]
@@ -63,13 +63,23 @@
         [set def-bindings name def-desc]]
       [report name not a word not added to global context]]]]
 
+[defn get-eval-def-var-val [gctx name]
+  [let [compile [getq [getq gctx eval-context] compile]
+        res [[compile [list [quote var-get] [list [quote var] [list [quote quote] name]]]]]]
+    res]]
+
+[defn is-macro-var [gctx name]
+  [let [compile [getq [getq gctx eval-context] compile]
+        var-meta [[compile [list [quote meta] [list [quote var] [list [quote quote] name]]]]]]
+    [and var-meta [hasq var-meta is-macro] [getq var-meta is-macro]]]]
+
 [defn expand-form [gctx local-ctx form]
   [ifs
     [is-word form]
     [do
       [when-not [has-local-context local-ctx form]
         [if-let [def-desc [try-get-def gctx form]]
-          [report-when [eq-word [quote is-macro] [getq def-desc def-form]] form macro used as value]
+          [report-when [is-macro-var gctx form] form macro used as value]
           [report form symbol not found during expansion]]]
       form]
 
@@ -114,7 +124,7 @@
                   [do
                     [report-when [has vars var] var already defined]
                     [set vars var [kv-map var var]]]
-                  [report var not a word]]]]
+                  [report var not a word let or loop]]]]
             [set-array res 0 first-form]
             [set-array res 1 new-bindings]
             [for i 2 s-form [set-array res i [recur gctx new-local-ctx [at form i]]]]
@@ -127,13 +137,13 @@
             [report-when-not loop-vars form not inside loop]
             [for-pair i 1 s-form
               [let [var [at form i]]
-                [report-when-not [is-word var] var not a word]
+                [report-when-not [is-word var] var not a word continue]
                 [report-when-not [and loop-vars [has loop-vars var]] var loop var not found in expand]
                 [set-array res i var]
                 [set-array res [inc i] [recur gctx local-ctx [at form [inc i]]]]]]
             res]
 
-          [or [eq-word [quote func] first-form] [eq-word [quote macro] first-form]]
+          [eq-word [quote func] first-form]
           [let [name [at form 1]
                 params [at form 2]
                 params-map [transient-kv-map]
@@ -163,18 +173,19 @@
           [eq-word [quote recur] first-form]
           [let [top-ctx [get-top-context local-ctx]
                 res [mutable-list-of-size s-form]]
-            [report-when-not [and [hasq top-ctx decl-form] [eq-word [getq top-ctx decl-form] [quote defn]]]
+            [report-when-not [and [hasq top-ctx decl-form] [eq-word [getq top-ctx decl-form] [quote func]]]
               form recur not inside function]
-            [when [n-of-args-match-signature [getq top-ctx signature] n-of-args]
-              [report form wrong number of arguments]]
+            [report-when-not [n-of-args-match-signature [getq top-ctx signature] n-of-args] form wrong number of arguments]
             [set-array res 0 first-form]
             [for i 1 s-form [set-array res i [recur gctx local-ctx [at form i]]]]
             res]
 
           [eq-word [quote def] first-form]
-          [let [name [at form 1]
+          [let [- [report-when-not [eq s-form 3] form def expects 2 arguments]
+                name [at form 1]
                 local-ctx [kv-map vars empty-kv-map decl-form first-form]
                 expanded-form [recur gctx local-ctx [at form 2]]]
+            [report-when-not [is-word name] name not a word def]
             [add-global-binding gctx name [kv-map def-form first-form expanded-form expanded-form]]
             [list first-form name expanded-form]]
 
@@ -211,10 +222,11 @@
                   [n-of-args-match-signature signature n-of-args]
                   form
                   wrong number of arguments]
-                [if [and [hasq def-desc expanded-form]
-                      [eq-word [first [getq def-desc expanded-form]] [quote macro]]]
-                  [let [macro-expand [getq [getq gctx eval-context] macro-expand]]
-                    [recur gctx local-ctx [macro-expand form]]]
+                [if [is-macro-var gctx first-form]
+                  [let [macro-func [get-eval-def-var-val gctx first-form]
+                        apply [getq [getq gctx eval-context] apply]
+                        mac-result-form [apply macro-func [slice form 1 s-form]]]
+                    [recur gctx local-ctx mac-result-form]]
                   [let [res [mutable-list-of-size s-form]]
                     [set-array res 0 first-form]
                     [for i 1 s-form [set-array res i [recur gctx local-ctx [at form i]]]]
@@ -243,7 +255,6 @@
 [defn expand-top-level-forms [gctx forms]
   [let [res [mutable-list-of-size [size forms]]
         compile [getq [getq gctx eval-context] compile]]
-    [add-global-binding gctx [quote wuns-active-mem-top] [kv-map def-form [quote def]]]
     [for i 0 [size forms]
       [let [e-form [expand-form gctx empty-local-context [at forms i]]]
         [[compile e-form]]
@@ -259,9 +270,29 @@
     [mutable-list-of-size [i32] [mutable-list]]
     [set-array [mutable-list i32 any] []]
     [freeze-mutable-list [mutable-list] []]
+    [meta [any] [any]]
+    [set-meta [any any] []]
+    [var [word] [var]]
+    [transient-kv-map [] [transient-kv-map]]
+    [set [transient-kv-map any any] []]
+    [log [list] []]
+    [atom [any] [atom]]
+    [atom-get [atom] [any]]
+    [atom-set [atom any] []]
+    [growable-list [] [growable-list]]
+    [push [growable-list any] []]
+    [concat-words [word word] [word]]
+    [char-code-at [word i32] [i32]]
+    [word-byte-size [word] [i32]]
+    [char-code-to-word [i32] [word]]
+    [with-meta [any any] [any]]
+    [freeze-kv-map [transient-kv-map] []]
+    [keys [transient-kv-map] [[list word]]]
+    [get [kv-map word] [any]]
   ]]
 
 [defn init-host-context [gctx]
+  [add-global-binding gctx [quote wuns-active-mem-top] [kv-map def-form [quote def]]]
   [for-each func host-func-types
     [add-global-binding gctx [first func]
       [kv-map def-form [quote def] signature [kv-map params [second func]]]]]]
@@ -325,48 +356,4 @@
   [def empty-list [list]]
   [def not-list [list [i32.const 1]]]
 ]
-
-[test-expand-no-errors
-[def 0 [i32.const 0]]
-[def 1 [i32.const 1]]
-[def 2 [i32.const 2]]
-[def 3 [i32.const 3]]
-[def 4 [i32.const 4]]
-
-[def list [func list [.. entries] entries]]
-
-[def concat [func concat [.. lists]
-  [let
-    [n-of-lists [size lists]
-     total-size
-      [loop [total 0 i 0]
-        [if [lt-s i n-of-lists]
-          [continue total [add total [size [at lists i]]] i [add 1 i]]
-          total]]
-     result [mutable-list-of-size total-size]]
-    [loop [i 0 j 0 res-index 0]
-      [if [lt-s i n-of-lists]
-        [let [cur-list [at lists i]
-              s [size cur-list]]
-          [loop [i 0 res-index res-index]
-            [if [lt-s i s]
-              [let []
-                [set-array result res-index [at cur-list i]]
-                [continue res-index [add 1 res-index] i [add 1 i]]]]]
-          [continue i [add 1 i] res-index [add s res-index]]]]]
-    [freeze-mutable-list result]
-    result]]]
-
-[def make-func-macro-list
-  [func make-func-macro-list [func-macro name params bodies]
-    [list [quote def] name [concat [list func-macro name params] bodies]]]]
-
-[def defmacro
-  [macro defmacro [name params .. bodies]
-    [make-func-macro-list [quote macro] name params bodies]]]
-
-[defmacro defn [name params .. bodies]
-  [make-func-macro-list [quote func] name params bodies]]
-
-
-]]
+]
