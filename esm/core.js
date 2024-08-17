@@ -55,7 +55,13 @@ class DefVar {
 
 export const isDefVar = (f) => f instanceof DefVar
 
-export const defVar = (name, value) => new DefVar(name, value)
+export const defVar = (name, value) => Object.freeze(new DefVar(name, value))
+
+export const defVarWithMeta = (name, value, metaData) => {
+  const newVar = new DefVar(name, value)
+  setMeta(newVar, metaData)
+  return Object.freeze(newVar)
+}
 
 export const getDefVar = (defVars, name) => {
   if (!defVars.has(name)) throw new Error(`var not found: ${name}`)
@@ -64,10 +70,14 @@ export const getDefVar = (defVars, name) => {
 
 export const getDefVarValue = (defVars, name) => getDefVar(defVars, name).value
 
-export const setDefVar = (defVars, varName, value) => {
+export const insertDefVar = (defVars, defVarObject) => {
+  if (!(defVarObject instanceof DefVar)) throw new Error('expected def var')
+  const varName = defVarObject.name
   if (defVars.has(varName)) throw new Error(`redefining var: ${varName}`)
-  defVars.set(varName, defVar(varName, value))
+  defVars.set(varName, defVarObject)
 }
+
+export const setDefVar = (defVars, varName, value) => insertDefVar(defVars, defVar(varName, value))
 
 export const meta = (form) => {
   if (!isWord(form) && !isList(form) && !isDefVar(form)) throw new Error('meta expects word or list')

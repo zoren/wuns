@@ -3,9 +3,8 @@ import {
   isList,
   word,
   wordValue,
-  wordWithMeta,
-  listWithMeta,
-  setMeta,
+  isDefVar,
+  defVarWithMeta,
   meta,
   makeList,
   atom,
@@ -14,19 +13,24 @@ import {
   print,
 } from './core.js'
 
+export const apply = (fn, args) => {
+  if (typeof fn !== 'function') throw new Error('apply expects function')
+  return fn(...args)
+}
+
 export const is_word = (f) => isWord(f) | 0
 
 export const is_list = (f) => isList(f) | 0
-
-export const with_meta = (f, metaData) => {
-  if (isWord(f)) return wordWithMeta(wordValue(f), metaData)
-  if (isList(f)) return listWithMeta(f, metaData)
-  throw new Error('with-meta expects word or list')
-}
 export { meta }
-export const set_meta = (v, metaData) => {
-  if (typeof v !== 'object' || Object.isFrozen(v)) throw new Error('set-meta expects mutable object')
-  setMeta(v, metaData)
+
+export const var_with_meta = (name, value, metaData) => defVarWithMeta(wordValue(name), value, metaData)
+export const var_meta = (v) => {
+  if (!isDefVar(v)) throw new Error('var-meta, not a defvar: ' + v)
+  return meta(v)
+}
+export const var_get = (v) => {
+  if (!isDefVar(v)) throw new Error('not a defvar: ' + v)
+  return v.value
 }
 export const word_byte_size = (w) => {
   if (isWord(w)) return wordValue(w).length

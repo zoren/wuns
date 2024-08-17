@@ -1,3 +1,55 @@
+[insert-var [var [quote list] [func list [.. entries] entries]]]
+
+[insert-var [var [quote concat] [func concat [.. lists]
+  [let
+    [n-of-lists [size lists]
+     total-size
+      [loop [total [i32.const 0] i [i32.const 0]]
+        [if [lt-s i n-of-lists]
+          [continue total [add total [size [at lists i]]] i [add [i32.const 1] i]]
+          total]]
+     result [mutable-list-of-size total-size]]
+    [loop [i [i32.const 0] j [i32.const 0] res-index [i32.const 0]]
+      [if [lt-s i n-of-lists]
+        [let [cur-list [at lists i]
+              s [size cur-list]]
+          [loop [i [i32.const 0] res-index res-index]
+            [if [lt-s i s]
+              [let []
+                [set-array result res-index [at cur-list i]]
+                [continue res-index [add [i32.const 1] res-index] i [add [i32.const 1] i]]]]]
+          [continue i [add [i32.const 1] i] res-index [add s res-index]]]]]
+    [freeze-mutable-list result]
+    result]]]]
+
+[insert-var
+  [var [quote macro-meta]
+    [let [m [transient-kv-map]]
+      [set m [quote no-eval-args] [i32.const 1]]
+      [set m [quote eval-result] [i32.const 1]]
+      [freeze-kv-map m]
+      m]]]
+
+[insert-var
+  [var-with-meta
+    [quote defmacro]
+    [func defmacro [name params .. bodies]
+      [list
+        [quote insert-var]
+        [list [quote var-with-meta]
+          [list [quote quote] name]
+          [concat [list [quote func] name params] bodies]
+          [quote
+            [let [m [transient-kv-map]]
+              [set m [quote no-eval-args] [i32.const 1]]
+              [set m [quote eval-result] [i32.const 1]]
+              [freeze-kv-map m]
+              m]]]]]
+      macro-meta]]
+
+[defmacro def [name value]
+  [list [quote insert-var] [list [quote var] [list [quote quote] name] value]]]
+
 [def -2 [i32.const -2]]
 [def -1 [i32.const -1]]
 [def 0 [i32.const 0]]
@@ -6,61 +58,12 @@
 [def 3 [i32.const 3]]
 [def 4 [i32.const 4]]
 
-[def list [func list [.. entries] entries]]
-
-[def concat [func concat [.. lists]
-  [let
-    [n-of-lists [size lists]
-     total-size
-      [loop [total 0 i 0]
-        [if [lt-s i n-of-lists]
-          [continue total [add total [size [at lists i]]] i [add 1 i]]
-          total]]
-     result [mutable-list-of-size total-size]]
-    [loop [i 0 j 0 res-index 0]
-      [if [lt-s i n-of-lists]
-        [let [cur-list [at lists i]
-              s [size cur-list]]
-          [loop [i 0 res-index res-index]
-            [if [lt-s i s]
-              [let []
-                [set-array result res-index [at cur-list i]]
-                [continue res-index [add 1 res-index] i [add 1 i]]]]]
-          [continue i [add 1 i] res-index [add s res-index]]]]]
-    [freeze-mutable-list result]
-    result]]]
-
-[def make-func-macro-list
-  [func make-func-macro-list [name params bodies]
-    [list [quote def] name [concat [list [quote func] name params] bodies]]]]
-
 [def quote-word [quote quote]]
 
 [def mk-quote [func mk-quote [form] [list quote-word form]]]
 
-[def defmacro
-  [func defmacro [name params .. bodies]
-    [list [quote let] [list]
-      [make-func-macro-list name params bodies]
-      [list
-        [quote set-meta]
-        [list [quote var] [mk-quote name]]
-        [quote
-          [let [m [transient-kv-map]]
-            [set m [quote no-eval-args] 1]
-            [set m [quote eval-result] 1]
-            [freeze-kv-map m]
-            m]]]]]]
-
-[set-meta [var [quote defmacro]]
-  [let [m [transient-kv-map]]
-    [set m [quote no-eval-args] 1]
-    [set m [quote eval-result] 1]
-    [freeze-kv-map m]
-    m]]
-
 [defmacro defn [name params .. bodies]
-  [make-func-macro-list name params bodies]]
+  [list [quote def] name [concat [list [quote func] name params] bodies]]]
 
 [defmacro comment [.. -]
   [quote let []]]
@@ -343,9 +346,6 @@
 
 [def empty-kv-map [kv-map]]
 
-[defn meta-assoc [val key meta-data]
-  [with-meta val [assoc [if-let [m [meta val]] m empty-kv-map] key meta-data]]]
-
 [defn slice [l start end]
   [assert [is-list l] slice expects list]
   [assert [not [is-negative start]] negative start index]
@@ -360,13 +360,13 @@
         ml]]]]
 
 [defmacro defexpr [name params .. bodies]
-  [list [quote let] [list]
-    [make-func-macro-list name params bodies]
-    [list
-      [quote set-meta]
-      [list [quote var] [mk-quote name]]
+  [list
+    [quote insert-var]
+    [list [quote var-with-meta]
+      [mk-quote name]
+      [concat [list [quote func] name params] bodies]
       [quote
         [let [m [transient-kv-map]]
-          [set m [quote no-eval-args] 1]
+          [set m [quote no-eval-args] [i32.const 1]]
           [freeze-kv-map m]
           m]]]]]

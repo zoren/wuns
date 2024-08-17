@@ -3,12 +3,9 @@ import * as readline from 'node:readline'
 import { stdin, nextTick, stdout } from 'node:process'
 import { parseStringToForms } from './parseTreeSitter.js'
 import { evalLogForms } from './interpreter.js'
-import { makeInterpreterContext, addHostFunctions, parseEvalFiles } from './interpreter.js'
+import { makeInitContext, parseEvalFiles } from './interpreter.js'
 
-const defVars = new Map()
-addHostFunctions(defVars)
-const compile = makeInterpreterContext(defVars)
-
+const { compile } = makeInitContext()
 const commandLineArgs = process.argv.slice(2)
 
 parseEvalFiles(compile, commandLineArgs)

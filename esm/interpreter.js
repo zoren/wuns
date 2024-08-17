@@ -1,4 +1,4 @@
-import { isWord, isList, print, isSigned32BitInteger, isWunsFunction, meta, makeList, defVar, isForm } from './core.js'
+import { isWord, isList, print, isSigned32BitInteger, isWunsFunction, meta, makeList, setDefVar, isForm } from './core.js'
 import { instructions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
 
@@ -180,16 +180,6 @@ export const makeInterpreterContext = (defVars) => {
           for (let i = 0; i < updateVars.length; i++) varValues.set(updateVars[i], tmpVals[i])
           enclosingLoopEnv.continue = true
         }
-      }
-      case 'def': {
-        if (args.length !== 2) throw new CompileError(`def expects 2 arguments, got ${args.length}`, form)
-        const [varName, value] = args
-        const vn = ctWordValue(varName)
-        if (defVars.has(vn)) throw new CompileError(`redefining var: ${vn}`)
-        const compValue = compile(ctx, value)
-        const varObj = defVar(vn, compValue(null))
-        defVars.set(vn, varObj)
-        return () => varObj
       }
       case 'func': {
         const [fmname, origParams, ...bodies] = args
@@ -380,18 +370,37 @@ export const runCform = (exp) => {
       console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
       return undefined
     }
+    if (e instanceof CompileError) {
+      console.error(`compiletime error in ${getFormLocation(e.form || form)}: ${e.message}`)
+      return undefined
+    }
     throw new Error(`unexpected non-runtime error: ${e.message}`)
   }
 }
 
-import { wordValue, getDefVar } from './core.js'
+import { wordValue, defVar, insertDefVar } from './core.js'
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 
-export const addHostFunctions = (defVars) => {
-  const set = (varName, value) => defVars.set(varName, defVar(varName, value))
-  set('var', (name) => getDefVar(defVars, wordValue(name)))
-  set('var-get', (v) => v.value)
+export const makeInitContext = () => {
+  const makeEvalContext = () => {
+    const ctx = makeInitContext()
+    const clientDefVars = ctx.defVars
+    // setDefVar(clientDefVars, 'make-eval-context', makeEvalContext)
+    return {
+      compile: ctx.compile
+    }
+  }
+  const defVars = new Map()
+  const set = (varName, value) => setDefVar(defVars, varName, value)
   for (const [name, f] of hostExports) set(name, f)
+  set('make-eval-context', makeEvalContext)
+  set('insert-var', (defVarObject) => insertDefVar(defVars, defVarObject))
+  set('get-var', (name) => defVars.get(wordValue(name)))
+  set('has-var', (name) => defVars.has(wordValue(name)) | 0)
+  // set here because var is a reserved word is js
+  set('var', (name, value) => defVar(wordValue(name), value))
+  const compile = makeInterpreterContext(defVars)
+  return { compile, defVars }
 }
 
 export const evalLogForms = (ctx, forms) => {
