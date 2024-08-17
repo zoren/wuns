@@ -1,18 +1,20 @@
-import { isWord, isList, print, isSigned32BitInteger, isWunsFunction, meta, makeList, defVar } from './core.js'
+import { isWord, isList, print, isSigned32BitInteger, isWunsFunction, meta, makeList, defVar, isForm } from './core.js'
 import { instructions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
 
 class RuntimeError extends Error {
-  constructor(message, form) {
+  constructor(message, form, innerError) {
     super(message)
     this.form = form
+    this.innerError = innerError
   }
 }
 
 class CompileError extends Error {
-  constructor(message, form) {
+  constructor(message, form, innerError) {
     super(message)
     this.form = form
+    this.innerError = innerError
   }
 }
 
@@ -60,10 +62,14 @@ const tryGetWordValue = (w) => {
   return w.value
 }
 
-const isMacroDefVar = (defVar) => {
+const hasMetaKey = (defVar, k) => {
   const metaData = meta(defVar)
-  return metaData && metaData['is-macro']
+  return metaData && metaData[k]
 }
+
+const doesNotEvalArgs = (f) => hasMetaKey(f, 'no-eval-args')
+
+const doesEvalResult = (f) => hasMetaKey(f, 'eval-result')
 
 export const makeInterpreterContext = (defVars) => {
   const compBodies = (ctx, bodies) => {
@@ -89,19 +95,21 @@ export const makeInterpreterContext = (defVars) => {
           }
         if (!defVars.has(varName)) throw new CompileError('not found: ' + varName, form)
         const defVar = defVars.get(varName)
-        if (isMacroDefVar(defVar)) throw new CompileError(`can't take value of macro ${varName}`, form)
+        if (doesNotEvalArgs(defVar) || doesEvalResult(defVar))
+          throw new CompileError(`can only take value of functions`, form)
         const defVarVal = defVar.value
         return () => defVarVal
       }
     }
-    // return non-forms as is
-    if (!isList(form)) return () => form
+    // do not allow non-forms
+    if (!isList(form)) throw new CompileError('not a form', form)
     if (form.length === 0) return () => undefined
     const [firstForm, ...args] = form
     const firstWordValue = tryGetWordValue(firstForm)
     switch (firstWordValue) {
       case 'quote': {
         const res = args.length === 1 ? args[0] : makeList(...args)
+        if (!isForm(res)) throw new CompileError('quote expects form', form)
         return () => res
       }
       case 'if': {
@@ -110,6 +118,7 @@ export const makeInterpreterContext = (defVars) => {
         const ct = compile(ctx, args[1])
         if (args.length === 2) return (env) => (cc(env) === 0 ? undefined : ct(env))
         const cf = compile(ctx, args[2])
+        // consider being more strict only allowing numbers in the condition, for now we use
         return (env) => (cc(env) === 0 ? cf : ct)(env)
       }
       case 'let':
@@ -220,6 +229,7 @@ export const makeInterpreterContext = (defVars) => {
         return (env) => funMacDesc.func(...cargs.map((carg) => carg(env)))
       }
     }
+    // direct function call or function in parameter/local variable
     if (!firstWordValue || hasCtxVar(ctx, firstWordValue)) {
       const cfunc = compile(ctx, firstForm)
       const cargs = args.map((a) => compile(ctx, a))
@@ -234,22 +244,56 @@ export const makeInterpreterContext = (defVars) => {
       const funcOrMac = funcOrMacVar.value
       if (isWunsFunction(funcOrMac)) {
         const caller = callFunctionStaged(funcOrMac, args.length, form)
-        if (isMacroDefVar(funcOrMacVar)) {
+        const noEvalArgs = doesNotEvalArgs(funcOrMacVar)
+        const evalResult = doesEvalResult(funcOrMacVar)
+        // function, eval args and don't eval result
+        if (!noEvalArgs && !evalResult) {
+          const cargs = args.map((a) => compile(ctx, a))
+          return (env) => caller(cargs.map((carg) => carg(env)))
+        }
+        // macro, don't eval args and eval result
+        if (noEvalArgs && evalResult) {
           let macroResult
           try {
             macroResult = caller(args)
-          } catch (error) {
-            if (error instanceof RuntimeError)
-              throw new CompileError(`error when calling macro '${firstWordValue}': ${error.message}`, form)
-            throw error
+          } catch (e) {
+            if (e instanceof RuntimeError)
+              throw new CompileError(`runtime error when calling macro '${firstWordValue}': ${e.message}`, form, e)
+            throw e
           }
           return compile(ctx, macroResult)
         }
-        const cargs = args.map((a) => compile(ctx, a))
-        return (env) => caller(cargs.map((carg) => carg(env)))
+        // fexpr, don' eval args and don't eval result
+        // thanks Manuel! https://x.com/msimoni/status/1824128031792787808
+        if (noEvalArgs && !evalResult) {
+          const fexprResult = caller(args)
+          return () => fexprResult
+        }
+        // manc, eval args and eval result
+        if (!noEvalArgs && evalResult) {
+          const cargs = args.map((a) => compile(ctx, a))
+          return (env) => {
+            const mancResult = caller(cargs.map((carg) => carg(env)))
+            try {
+              return compile(ctx, mancResult)
+            } catch (e) {
+              if (e instanceof CompileError)
+                throw new RuntimeError(
+                  `compiletime error when calling manc '${firstWordValue}': ${error.message}`,
+                  form,
+                  e,
+                )
+              throw e
+            }
+          }
+        }
+        throw new CompileError(
+          `unreachable, invalid function/macro/fexpr/manc combination for '${firstWordValue}'`,
+          form,
+        )
       }
       if (typeof funcOrMac !== 'function') throw new CompileError(`expected function, got ${funcOrMac}`, form)
-      // here we check arity statically
+      // here we check arity of external functions statically
       if (funcOrMac.length !== args.length)
         throw new CompileError(
           `function '${firstWordValue}' expected ${funcOrMac.length} arguments, got ${args.length}`,
@@ -260,8 +304,8 @@ export const makeInterpreterContext = (defVars) => {
         const eargs = cargs.map((carg) => carg(env))
         try {
           return funcOrMac(...eargs)
-        } catch (error) {
-          throw new RuntimeError(`error in function call: ${error.message}`, form)
+        } catch (e) {
+          throw new RuntimeError(`error in function call: ${e.message}`, form, e)
         }
       }
     }

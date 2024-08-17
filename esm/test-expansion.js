@@ -35,5 +35,5 @@ runCform(() => {
 const testExpandNoErrors = getDefVarValue(defVars, 'test-expand-no-errors-fn')
 
 runCform(() => {
-  testExpandNoErrors(files.flatMap((f) => parseFile(f)))
+  testExpandNoErrors(['std3', 'wasm-instructions', 'macro-expand'].flatMap((f) => parseFile(`../wuns/${f}.wuns`)))
 })

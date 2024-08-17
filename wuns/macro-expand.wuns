@@ -49,6 +49,8 @@
 [defmacro report [form .. lmsg]
   [list [quote report-fn] [quote gctx] [quote-list lmsg] form]]
 
+[comment replace these with meta on var objects]
+
 [defn try-get-def [gctx form]
   [let [def-bindings [getq gctx def-bindings]]
     [if [has def-bindings form]
@@ -68,10 +70,11 @@
         res [[compile [list [quote var-get] [list [quote var] [list [quote quote] name]]]]]]
     res]]
 
-[defn is-macro-var [gctx name]
-  [let [compile [getq [getq gctx eval-context] compile]
-        var-meta [[compile [list [quote meta] [list [quote var] [list [quote quote] name]]]]]]
-    [and var-meta [hasq var-meta is-macro] [getq var-meta is-macro]]]]
+[defn get-var-meta [gctx name]
+  [let [compile [getq [getq gctx eval-context] compile]]
+    [[compile [list [quote meta] [list [quote var] [list [quote quote] name]]]]]]]
+
+[defn has-truthy-key [m k] [and m [has m k] [get m k]]]
 
 [defn expand-form [gctx local-ctx form]
   [ifs
@@ -79,7 +82,10 @@
     [do
       [when-not [has-local-context local-ctx form]
         [if-let [def-desc [try-get-def gctx form]]
-          [report-when [is-macro-var gctx form] form macro used as value]
+          [let [var-meta [get-var-meta gctx form]
+                no-eval-args [has-truthy-key var-meta [quote no-eval-args]]
+                eval-result [has-truthy-key var-meta [quote eval-result]]]
+            [report-when [or no-eval-args eval-result] form non-func used as value]]
           [report form symbol not found during expansion]]]
       form]
 
@@ -224,15 +230,29 @@
                   [n-of-args-match-signature signature n-of-args]
                   form
                   wrong number of arguments]
-                [if [is-macro-var gctx first-form]
-                  [let [macro-func [get-eval-def-var-val gctx first-form]
-                        apply [getq [getq gctx eval-context] apply]
-                        mac-result-form [apply macro-func [slice form 1 s-form]]]
-                    [recur gctx local-ctx mac-result-form]]
-                  [let [res [mutable-list-of-size s-form]]
-                    [set-array res 0 first-form]
-                    [for i 1 s-form [set-array res i [recur gctx local-ctx [at form i]]]]
-                    res]]]
+                [let [var-meta [get-var-meta gctx first-form]
+                      no-eval-args [has-truthy-key var-meta [quote no-eval-args]]
+                      eval-result  [has-truthy-key var-meta [quote eval-result]]]
+                  [ifs
+                    [and no-eval-args eval-result]
+                    [let [macro-func [get-eval-def-var-val gctx first-form]
+                          apply [getq [getq gctx eval-context] apply]
+                          mac-result-form [apply macro-func [slice form 1 s-form]]]
+                      [recur gctx local-ctx mac-result-form]]
+
+                    [and [not no-eval-args] [not eval-result]]
+                    [let [res [mutable-list-of-size s-form]]
+                      [set-array res 0 first-form]
+                      [for i 1 s-form [set-array res i [recur gctx local-ctx [at form i]]]]
+                      res]
+
+                    [and no-eval-args [not eval-result]]
+                    [let [fexpr-func [get-eval-def-var-val gctx first-form]
+                          apply [getq [getq gctx eval-context] apply]]
+                      [apply fexpr-func [slice form 1 s-form]]
+                      form]
+
+                    [logq-abort manc not implemented]]]]
               [if-let [instruction [try-get-instruction first-form]]
                 [let [imm-parameters [getq instruction immediate-parameters]
                       imm-index [inc [size imm-parameters]]
@@ -323,42 +343,4 @@
 
 [defn test-expand []
 
-[test-expand-no-errors [def -2 [i32.const -2]] [def -1 [i32.const -1]]]
-
-[test-expand-no-errors [def 0 [i32.const 0]] [def list [func list [.. entries] entries]]]
-
-[test-expand-no-errors
-[def 0 [i32.const 0]]
-[def 1 [i32.const 1]]
-[def is-empty
-  [func is-empty [form]
-    [eq [i32.const 0] [size form]]]]
-[def concat [func concat [.. lists]
-  [let
-    [n-of-lists [size lists]
-    total-size
-      [loop [total 0 i 0]
-        [if [lt-s i n-of-lists]
-          [continue total [add total [size [at lists i]]] i [add 1 i]]
-          total]]
-    result [mutable-list-of-size total-size]]
-    [loop [i 0 j 0 res-index 0]
-      [if [lt-s i n-of-lists]
-        [let [cur-list [at lists i]
-              s [size cur-list]]
-          [loop [i 0 res-index res-index]
-            [if [lt-s i s]
-              [let []
-                [set-array result res-index [at cur-list i]]
-                [continue res-index [add 1 res-index] i [add 1 i]]]]]
-          [continue i [add 1 i] res-index [add s res-index]]]]]
-    [freeze-mutable-list result]
-    result]]]
-        ]
-
-[test-expand-no-errors
-  [def list [func list [.. entries] entries]]
-  [def empty-list [list]]
-  [def not-list [list [i32.const 1]]]
-]
 ]

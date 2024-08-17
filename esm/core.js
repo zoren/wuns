@@ -40,12 +40,6 @@ export const listWithMeta = (l, meta) => {
   return Object.freeze(ll)
 }
 
-export const meta = (form) => {
-  const t = typeof form
-  if ((t === 'object' || t === 'function') && symbolMeta in form) return form[symbolMeta]
-  return 0
-}
-
 class DefVar {
   constructor(name, value) {
     if (typeof name !== 'string') throw new Error('name must be string')
@@ -58,6 +52,8 @@ class DefVar {
     return `[var ${this.name}]`
   }
 }
+
+export const isDefVar = (f) => f instanceof DefVar
 
 export const defVar = (name, value) => new DefVar(name, value)
 
@@ -73,9 +69,29 @@ export const setDefVar = (defVars, varName, value) => {
   defVars.set(varName, defVar(varName, value))
 }
 
+export const meta = (form) => {
+  if (!isWord(form) && !isList(form) && !isDefVar(form)) throw new Error('meta expects word or list')
+  const t = typeof form
+  if (t === 'object' && symbolMeta in form) return form[symbolMeta]
+  return 0
+}
+
+class Atom {
+  constructor(value) {
+    this.value = value
+  }
+  toString() {
+    return print(this.value)
+  }
+}
+export const atom = (v) => new Atom(v)
+export const isAtom = (f) => f instanceof Atom
+
 export const print = (ox) => {
   const go = (x) => {
     if (x === undefined) throw new Error('undefined')
+    if (isDefVar(x)) return `[var ${x.name}]`
+    if (isAtom(x)) return `[atom ${go(x.value)}]`
     if (isWord(x)) return String(x)
     if (typeof x === 'number') return String(x)
     if (typeof x === 'bigint') return String(x)
@@ -92,14 +108,3 @@ export const print = (ox) => {
   }
   return go(ox)
 }
-
-class Atom {
-  constructor(value) {
-    this.value = value
-  }
-  toString() {
-    return print(this.value)
-  }
-}
-export const atom = (v) => new Atom(v)
-export const isAtom = (f) => f instanceof Atom

@@ -45,9 +45,19 @@
       [list
         [quote set-meta]
         [list [quote var] [mk-quote name]]
-        [quote [let [m [transient-kv-map]] [set m [quote is-macro] 1] m]]]]]]
+        [quote
+          [let [m [transient-kv-map]]
+            [set m [quote no-eval-args] 1]
+            [set m [quote eval-result] 1]
+            [freeze-kv-map m]
+            m]]]]]]
 
-[set-meta [var [quote defmacro]] [let [m [transient-kv-map]] [set m [quote is-macro] 1] m]]
+[set-meta [var [quote defmacro]]
+  [let [m [transient-kv-map]]
+    [set m [quote no-eval-args] 1]
+    [set m [quote eval-result] 1]
+    [freeze-kv-map m]
+    m]]
 
 [defmacro defn [name params .. bodies]
   [make-func-macro-list name params bodies]]
@@ -348,3 +358,15 @@
           [set-array ml [sub i start] [at l i]]]
         [freeze-mutable-list ml]
         ml]]]]
+
+[defmacro defexpr [name params .. bodies]
+  [list [quote let] [list]
+    [make-func-macro-list name params bodies]
+    [list
+      [quote set-meta]
+      [list [quote var] [mk-quote name]]
+      [quote
+        [let [m [transient-kv-map]]
+          [set m [quote no-eval-args] 1]
+          [freeze-kv-map m]
+          m]]]]]

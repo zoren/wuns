@@ -38,13 +38,13 @@
 
 [comment consider using fexpr for the following as they return kv-maps not syntax to construct kv-map s]
 
-[defmacro make-binary-i32 [name opcode .. aliases]
+[defexpr make-binary-i32 [name opcode .. aliases]
   [make-operation-obj-aliases name opcode [list] i32i32 i32 aliases]]
 
-[defmacro make-binary-i64 [name opcode]
+[defexpr make-binary-i64 [name opcode]
   [make-operation-obj name opcode [list] i64i64 i64]]
 
-[defmacro make-comp-i64 [name opcode]
+[defexpr make-comp-i64 [name opcode]
   [make-operation-obj name opcode [list] i64i64 i32]]
 
 [def instructions
