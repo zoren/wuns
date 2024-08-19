@@ -1,6 +1,6 @@
-[insert-var [var [quote list] [func list [.. entries] entries]]]
+[defunc list [.. entries] [i32.const 0] entries]
 
-[insert-var [var [quote concat] [func concat [.. lists]
+[defunc concat [.. lists] [i32.const 0]
   [let
     [n-of-lists [size lists]
      total-size
@@ -20,35 +20,25 @@
                 [continue res-index [add [i32.const 1] res-index] i [add [i32.const 1] i]]]]]
           [continue i [add [i32.const 1] i] res-index [add s res-index]]]]]
     [freeze-mutable-list result]
-    result]]]]
+    result]]
 
-[insert-var
-  [var [quote macro-meta]
-    [let [m [transient-kv-map]]
-      [set m [quote no-eval-args] [i32.const 1]]
-      [set m [quote eval-result] [i32.const 1]]
-      [freeze-kv-map m]
-      m]]]
+[def macro-meta
+  [let [m [transient-kv-map]]
+    [set m [quote no-eval-args] [i32.const 1]]
+    [set m [quote eval-result] [i32.const 1]]
+    [freeze-kv-map m]
+    m]]
 
-[insert-var
-  [var-with-meta
-    [quote defmacro]
-    [func defmacro [name params .. bodies]
-      [list
-        [quote insert-var]
-        [list [quote var-with-meta]
-          [list [quote quote] name]
-          [concat [list [quote func] name params] bodies]
-          [quote
-            [let [m [transient-kv-map]]
-              [set m [quote no-eval-args] [i32.const 1]]
-              [set m [quote eval-result] [i32.const 1]]
-              [freeze-kv-map m]
-              m]]]]]
-      macro-meta]]
-
-[defmacro def [name value]
-  [list [quote insert-var] [list [quote var] [list [quote quote] name] value]]]
+[defunc defmacro [name params .. bodies] macro-meta
+  [concat
+    [list [quote defunc] name params
+      [quote
+        [let [m [transient-kv-map]]
+          [set m [quote no-eval-args] [i32.const 1]]
+          [set m [quote eval-result] [i32.const 1]]
+          [freeze-kv-map m]
+          m]]]
+    bodies]]
 
 [def -2 [i32.const -2]]
 [def -1 [i32.const -1]]
@@ -60,10 +50,10 @@
 
 [def quote-word [quote quote]]
 
-[def mk-quote [func mk-quote [form] [list quote-word form]]]
+[defunc mk-quote [form] [i32.const 0] [list quote-word form]]
 
 [defmacro defn [name params .. bodies]
-  [list [quote def] name [concat [list [quote func] name params] bodies]]]
+  [concat [list [quote defunc] name params [quote i32.const 0]] bodies]]
 
 [defmacro comment [.. -]
   [quote let []]]
@@ -360,13 +350,11 @@
         ml]]]]
 
 [defmacro defexpr [name params .. bodies]
-  [list
-    [quote insert-var]
-    [list [quote var-with-meta]
-      [mk-quote name]
-      [concat [list [quote func] name params] bodies]
+  [concat
+    [list [quote defunc] name params
       [quote
         [let [m [transient-kv-map]]
           [set m [quote no-eval-args] [i32.const 1]]
           [freeze-kv-map m]
-          m]]]]]
+          m]]]
+    bodies]]

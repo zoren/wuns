@@ -1,4 +1,15 @@
-import { isWord, isList, print, isSigned32BitInteger, isWunsFunction, meta, makeList, setDefVar, isForm } from './core.js'
+import {
+  isWord,
+  isList,
+  print,
+  isSigned32BitInteger,
+  meta,
+  makeList,
+  isForm,
+  isDefVar,
+  defVar,
+  defVarWithMeta,
+} from './core.js'
 import { instructions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
 
@@ -26,32 +37,6 @@ const hasCtxVar = (ctx, v) => {
   return false
 }
 
-const callFunctionStaged = (funMacDesc, numberOfGivenArgs, callForm) => {
-  const { nameWord, params, restParam } = funMacDesc
-  const arity = params.length
-  if (!restParam) {
-    if (arity !== numberOfGivenArgs)
-      throw new CompileError(`${nameWord} expected ${arity} arguments, got ${numberOfGivenArgs}`, callForm)
-    return (args) => {
-      if (args.length !== numberOfGivenArgs)
-        throw new RuntimeError('expected ' + numberOfGivenArgs + ' arguments', callForm)
-      const varValues = new Map()
-      for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-      return funMacDesc.cbodies({ varValues })
-    }
-  }
-  if (arity > numberOfGivenArgs)
-    throw new CompileError(`${nameWord} expected at least ${arity} arguments, got ${numberOfGivenArgs}`, callForm)
-  return (args) => {
-    if (args.length !== numberOfGivenArgs)
-      throw new RuntimeError('expected ' + numberOfGivenArgs + ' arguments', callForm)
-    const varValues = new Map()
-    for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
-    varValues.set(restParam, makeList(...args.slice(arity)))
-    return funMacDesc.cbodies({ varValues })
-  }
-}
-
 const ctWordValue = (w) => {
   if (!isWord(w)) throw new CompileError('not a word: ' + w + ' ' + typeof w, w)
   return w.value
@@ -62,16 +47,12 @@ const tryGetWordValue = (w) => {
   return w.value
 }
 
-const hasMetaKey = (defVar, k) => {
-  const metaData = meta(defVar)
-  return metaData && metaData[k]
-}
-
-const doesNotEvalArgs = (f) => hasMetaKey(f, 'no-eval-args')
-
-const doesEvalResult = (f) => hasMetaKey(f, 'eval-result')
-
 export const makeInterpreterContext = (defVars) => {
+  const insertDefVar = (defVarObject) => {
+    const varName = defVarObject.name
+    if (defVars.has(varName)) throw new RuntimeError(`redefining var: ${varName}`)
+    defVars.set(varName, defVarObject)
+  }
   const compBodies = (ctx, bodies) => {
     const cbodies = bodies.map((body) => compile(ctx, body))
     return (env) => {
@@ -95,8 +76,6 @@ export const makeInterpreterContext = (defVars) => {
           }
         if (!defVars.has(varName)) throw new CompileError('not found: ' + varName, form)
         const defVar = defVars.get(varName)
-        if (doesNotEvalArgs(defVar) || doesEvalResult(defVar))
-          throw new CompileError(`can only take value of functions`, form)
         const defVarVal = defVar.value
         return () => defVarVal
       }
@@ -118,7 +97,7 @@ export const makeInterpreterContext = (defVars) => {
         const ct = compile(ctx, args[1])
         if (args.length === 2) return (env) => (cc(env) === 0 ? undefined : ct(env))
         const cf = compile(ctx, args[2])
-        // consider being more strict only allowing numbers in the condition, for now we use
+        // consider being more strict only allowing numbers in the condition, for now we use truthy/falsy for try-get-* functions
         return (env) => (cc(env) === 0 ? cf : ct)(env)
       }
       case 'let':
@@ -181,8 +160,9 @@ export const makeInterpreterContext = (defVars) => {
           enclosingLoopEnv.continue = true
         }
       }
-      case 'func': {
-        const [fmname, origParams, ...bodies] = args
+      case 'defunc': {
+        const [fmname, origParams, metaForm, ...bodies] = args
+        const strFuncName = ctWordValue(fmname)
         let params = origParams.map(ctWordValue)
         let restParam = null
         if (params.length > 1 && params.at(-2) === '..') {
@@ -190,25 +170,44 @@ export const makeInterpreterContext = (defVars) => {
           params = params.slice(0, -2)
         }
         Object.freeze(params)
+        const cmetaData = compile(ctx, metaForm)
         const varDescs = new Map()
         const paramDesc = { defForm: firstWordValue }
         for (const p of params) varDescs.set(p, paramDesc)
         if (restParam) varDescs.set(restParam, paramDesc)
         const funMacDesc = {
-          nameWord: fmname,
           params,
           restParam,
         }
         const newCtx = { varDescs, outer: null, ctxType: firstWordValue, funMacDesc }
         const cbodies = compBodies(newCtx, bodies)
-        const f = (...args) => callFunctionStaged(f, args.length)(args)
-        f.nameWord = fmname
-        f.params = params
-        f.restParam = restParam
-        f.cbodies = cbodies
+        const arity = params.length
+        const f = restParam
+          ? (...args) => {
+              const varValues = new Map()
+              for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+              varValues.set(restParam, makeList(...args.slice(arity)))
+              return cbodies({ varValues })
+            }
+          : (...args) => {
+              const varValues = new Map()
+              for (let i = 0; i < arity; i++) varValues.set(params[i], args[i])
+              return cbodies({ varValues })
+            }
         Object.freeze(f)
+        // for recursive calls
         funMacDesc.func = f
-        return () => f
+        Object.freeze(funMacDesc)
+        return (env) => {
+          const md = cmetaData(env)
+          const varObject = defVarWithMeta(strFuncName, f, {
+            ...md,
+            'n-of-params': params.length,
+            'has-rest-param': 1,
+          })
+          insertDefVar(varObject)
+          return f
+        }
       }
       case 'recur': {
         let curCtx = ctx
@@ -217,6 +216,18 @@ export const makeInterpreterContext = (defVars) => {
         if (!funMacDesc) throw new CompileError('recur outside of function', form)
         const cargs = args.map((a) => compile(ctx, a))
         return (env) => funMacDesc.func(...cargs.map((carg) => carg(env)))
+      }
+      case 'def': {
+        if (args.length !== 2) throw new CompileError('def expects 2 arguments', form)
+        const [varName, value] = args
+        const v = ctWordValue(varName)
+        const cvalue = compile(ctx, value)
+        return (env) => {
+          const eValue = cvalue(env)
+          const varObject = defVar(v, eValue)
+          insertDefVar(varObject)
+          return undefined
+        }
       }
     }
     // direct function call or function in parameter/local variable
@@ -231,73 +242,71 @@ export const makeInterpreterContext = (defVars) => {
     }
     if (defVars.has(firstWordValue)) {
       const funcOrMacVar = defVars.get(firstWordValue)
+      const varMeta = meta(funcOrMacVar)
+      const nOfParams = varMeta['n-of-params']
+      if (nOfParams === undefined) throw new CompileError(`expected function/macro/fexpr/manc, got variable`, form)
+      const hasRestParam = varMeta['has-rest-param']
+      if (hasRestParam) {
+        if (args.length < nOfParams)
+          throw new CompileError(
+            `function '${firstWordValue}' expected at least ${nOfParams} arguments, got ${args.length}`,
+            form,
+          )
+      } else {
+        if (args.length !== nOfParams)
+          throw new CompileError(
+            `function '${firstWordValue}' expected ${nOfParams} arguments, got ${args.length}`,
+            form,
+          )
+      }
+      const noEvalArgs = varMeta['no-eval-args']
+      const evalResult = varMeta['eval-result']
       const funcOrMac = funcOrMacVar.value
-      if (isWunsFunction(funcOrMac)) {
-        const caller = callFunctionStaged(funcOrMac, args.length, form)
-        const noEvalArgs = doesNotEvalArgs(funcOrMacVar)
-        const evalResult = doesEvalResult(funcOrMacVar)
-        // function, eval args and don't eval result
-        if (!noEvalArgs && !evalResult) {
-          const cargs = args.map((a) => compile(ctx, a))
-          return (env) => caller(cargs.map((carg) => carg(env)))
+      if (typeof funcOrMac !== 'function') throw new CompileError(`expected function, got ${funcOrMac}`, form)
+      // function, eval args and don't eval result
+      if (!noEvalArgs && !evalResult) {
+        const cargs = args.map((a) => compile(ctx, a))
+        return (env) => funcOrMac(...cargs.map((carg) => carg(env)))
+      }
+      // macro, don't eval args and eval result
+      if (noEvalArgs && evalResult) {
+        let macroResult
+        try {
+          macroResult = funcOrMac(...args)
+        } catch (e) {
+          if (e instanceof RuntimeError)
+            throw new CompileError(`runtime error when calling macro '${firstWordValue}': ${e.message}`, form, e)
+          throw e
         }
-        // macro, don't eval args and eval result
-        if (noEvalArgs && evalResult) {
-          let macroResult
+        if (!isForm(macroResult)) throw new CompileError('macro must return form', form)
+        return compile(ctx, macroResult)
+      }
+      // fexpr, don' eval args and don't eval result
+      // thanks Manuel! https://x.com/msimoni/status/1824128031792787808
+      if (noEvalArgs && !evalResult) {
+        const fexprResult = funcOrMac(...args)
+        return () => fexprResult
+      }
+      // manc, eval args and eval result
+      if (!noEvalArgs && evalResult) {
+        const cargs = args.map((a) => compile(ctx, a))
+        return (env) => {
+          const mancResult = funcOrMac(...cargs.map((carg) => carg(env)))
+          if (!isForm(mancResult)) throw new CompileError('manc must return form', form)
           try {
-            macroResult = caller(args)
+            return compile(ctx, mancResult)
           } catch (e) {
-            if (e instanceof RuntimeError)
-              throw new CompileError(`runtime error when calling macro '${firstWordValue}': ${e.message}`, form, e)
+            if (e instanceof CompileError)
+              throw new RuntimeError(
+                `compiletime error when calling manc '${firstWordValue}': ${error.message}`,
+                form,
+                e,
+              )
             throw e
           }
-          return compile(ctx, macroResult)
-        }
-        // fexpr, don' eval args and don't eval result
-        // thanks Manuel! https://x.com/msimoni/status/1824128031792787808
-        if (noEvalArgs && !evalResult) {
-          const fexprResult = caller(args)
-          return () => fexprResult
-        }
-        // manc, eval args and eval result
-        if (!noEvalArgs && evalResult) {
-          const cargs = args.map((a) => compile(ctx, a))
-          return (env) => {
-            const mancResult = caller(cargs.map((carg) => carg(env)))
-            try {
-              return compile(ctx, mancResult)
-            } catch (e) {
-              if (e instanceof CompileError)
-                throw new RuntimeError(
-                  `compiletime error when calling manc '${firstWordValue}': ${error.message}`,
-                  form,
-                  e,
-                )
-              throw e
-            }
-          }
-        }
-        throw new CompileError(
-          `unreachable, invalid function/macro/fexpr/manc combination for '${firstWordValue}'`,
-          form,
-        )
-      }
-      if (typeof funcOrMac !== 'function') throw new CompileError(`expected function, got ${funcOrMac}`, form)
-      // here we check arity of external functions statically
-      if (funcOrMac.length !== args.length)
-        throw new CompileError(
-          `function '${firstWordValue}' expected ${funcOrMac.length} arguments, got ${args.length}`,
-          form,
-        )
-      const cargs = args.map((a) => compile(ctx, a))
-      return (env) => {
-        const eargs = cargs.map((carg) => carg(env))
-        try {
-          return funcOrMac(...eargs)
-        } catch (e) {
-          throw new RuntimeError(`error in function call: ${e.message}`, form, e)
         }
       }
+      throw new CompileError(`unreachable, invalid function/macro/fexpr/manc combination for '${firstWordValue}'`, form)
     }
     const instruction = instructions[firstWordValue]
     if (!instruction) throw new CompileError(`function '${firstWordValue}' not found`, form)
@@ -344,7 +353,7 @@ export const makeInterpreterContext = (defVars) => {
   return (form) => compile(null, form)
 }
 
-export const getFormLocation = (subForm) => meta(subForm).location || 'unknown location'
+export const getFormLocation = (subForm) => (subForm ? meta(subForm).location : undefined) || 'unknown location'
 
 const compileForms = (compile, forms) => {
   const compiled = []
@@ -367,38 +376,51 @@ export const runCform = (exp) => {
     return exp()
   } catch (e) {
     if (e instanceof RuntimeError) {
-      console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
-      return undefined
-    }
-    if (e instanceof CompileError) {
-      console.error(`compiletime error in ${getFormLocation(e.form || form)}: ${e.message}`)
-      return undefined
-    }
-    throw new Error(`unexpected non-runtime error: ${e.message}`)
+      console.error(`runtime error in ${getFormLocation(e.form)}: ${e.message}`)
+    } else if (e instanceof CompileError) {
+      console.error(`compiletime error in ${getFormLocation(e.form)}: ${e.message}`)
+    } else throw e
   }
 }
 
-import { wordValue, defVar, insertDefVar } from './core.js'
+export const hostFuncs = parseFile('../wuns/host-funcs.wuns')
+const hostFuncsMap = new Map()
+for (const form of hostFuncs) {
+  if (!isList(form)) throw new Error('expected list')
+  if (form.length !== 3) throw new Error('expected list of length 3')
+  const [name, paramTypes, resultTypes] = form
+  if (!isList(paramTypes)) throw new Error('expected list')
+  if (!isList(resultTypes)) throw new Error('expected list')
+  hostFuncsMap.set(wordValue(name), { paramTypes, resultTypes })
+}
+
+import { wordValue } from './core.js'
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 
 export const makeInitContext = () => {
   const makeEvalContext = () => {
     const ctx = makeInitContext()
-    const clientDefVars = ctx.defVars
-    // setDefVar(clientDefVars, 'make-eval-context', makeEvalContext)
     return {
-      compile: ctx.compile
+      compile: ctx.compile,
     }
   }
   const defVars = new Map()
-  const set = (varName, value) => setDefVar(defVars, varName, value)
-  for (const [name, f] of hostExports) set(name, f)
-  set('make-eval-context', makeEvalContext)
-  set('insert-var', (defVarObject) => insertDefVar(defVars, defVarObject))
-  set('get-var', (name) => defVars.get(wordValue(name)))
-  set('has-var', (name) => defVars.has(wordValue(name)) | 0)
-  // set here because var is a reserved word is js
-  set('var', (name, value) => defVar(wordValue(name), value))
+
+  const insertFunc = (name, f) => {
+    const hostFunc = hostFuncsMap.get(name)
+    if (!hostFunc) throw new Error(`host function ${name} not found in host-funcs.wuns`)
+    if (defVars.has(name)) throw new Error(`redefining var: ${name}`)
+    defVars.set(name, defVarWithMeta(name, f, { 'n-of-params': hostFunc.paramTypes.length }))
+  }
+  for (const [name, f] of hostExports)
+    insertFunc(name, f)
+
+  insertFunc('make-eval-context', makeEvalContext)
+  insertFunc('try-get-var', (name) => {
+    const v = defVars.get(wordValue(name))
+    if (v) return v
+    return 0
+  })
   const compile = makeInterpreterContext(defVars)
   return { compile, defVars }
 }
@@ -430,6 +452,7 @@ export const parseEvalFiles = (compile, filenames) => {
       } catch (e) {
         if (e instanceof CompileError) {
           console.error(`compile error in ${getFormLocation(e.form || form)}: ${e.message}`)
+          console.error(e)
           return undefined
         }
         console.error(`unexpected non-compile error: ${e.message}`)

@@ -67,7 +67,7 @@
 
 [defn get-eval-def-var [gctx name]
   [let [compile [getq [getq gctx eval-context] compile]]
-    [[compile [list [quote get-var] [list [quote quote] name]]]]]]
+    [[compile [list [quote try-get-var] [list [quote quote] name]]]]]]
 
 [defn get-eval-def-var-val [gctx name]
   [var-get [get-eval-def-var gctx name]]]
@@ -190,11 +190,21 @@
             res]
 
           [eq-word [quote def] first-form]
-          [let [- [report-when-not [eq s-form 3] form def expects 2 arguments]
+          [let [- [report-when-not [eq n-of-args 2] form def expects 2 arguments]
                 name [at form 1]
                 local-ctx [kv-map vars empty-kv-map decl-form first-form]
                 expanded-form [recur gctx local-ctx [at form 2]]]
-            [report-when-not [is-word name] name not a word def]
+            [report-when-not [is-word name] name not a word]
+            [add-global-binding gctx name [kv-map def-form first-form expanded-form expanded-form]]
+            [list first-form name expanded-form]]
+
+          [eq-word [quote def-with-meta] first-form]
+          [let [- [report-when-not [eq n-of-args 3] form def expects 3 arguments]
+                name [at form 1]
+                local-ctx [kv-map vars empty-kv-map decl-form first-form]
+                expanded-form [recur gctx local-ctx [at form 2]]
+                expanded-meta [recur gctx local-ctx [at form 3]]]
+            [report-when-not [is-word name] name not a word]
             [add-global-binding gctx name [kv-map def-form first-form expanded-form expanded-form]]
             [list first-form name expanded-form]]
 
@@ -226,7 +236,7 @@
               [let [signature
                     [if [hasq def-desc signature]
                       [getq def-desc signature]
-                      [getq [meta [getq def-desc expanded-form]] signature]]]
+                      [logq-abort this is not good]]]
                 [report-when-not
                   [n-of-args-match-signature signature n-of-args]
                   form
@@ -282,44 +292,13 @@
         [set-array res i e-form]]]
     res]]
 
-[def host-func-types
-  [quote
-    [is-word [form] [bool]]
-    [is-list [form] [bool]]
-    [size [list] [i32]]
-    [at [list i32] [any]]
-    [mutable-list-of-size [i32] [mutable-list]]
-    [set-array [mutable-list i32 any] []]
-    [freeze-mutable-list [mutable-list] []]
-    [meta [any] [any]]
-    [var [word any] [var]]
-    [var-with-meta [word any kv-map] [var]]
-    [var-meta [var] [any]]
-    [insert-var [var] []]
-    [transient-kv-map [] [transient-kv-map]]
-    [set [transient-kv-map any any] []]
-    [log [list] []]
-    [atom [any] [atom]]
-    [atom-get [atom] [any]]
-    [atom-set [atom any] []]
-    [growable-list [] [growable-list]]
-    [push [growable-list any] []]
-    [concat-words [word word] [word]]
-    [char-code-at [word i32] [i32]]
-    [word-byte-size [word] [i32]]
-    [char-code-to-word [i32] [word]]
-    [freeze-kv-map [transient-kv-map] []]
-    [keys [transient-kv-map] [[list word]]]
-    [get [kv-map word] [any]]
-    [has [kv-map word] [bool]]
-    [make-eval-context [] [eval-context]]
-  ]]
-
-[defn init-host-context [gctx]
+[defn init-host-context [gctx host-func-types]
   [add-global-binding gctx [quote wuns-active-mem-top] [kv-map def-form [quote def]]]
   [for-each func host-func-types
     [add-global-binding gctx [first func]
-      [kv-map def-form [quote def] signature [kv-map params [second func]]]]]]
+      [kv-map
+        def-form [quote def]
+        signature [kv-map params [second func]]]]]]
 
 [defn try-get-range [form]
   [let [m [meta form]]
@@ -327,9 +306,9 @@
       [getq m range]
       [list]]]]
 
-[defn test-expand-no-errors-fn [forms]
+[defn test-expand-no-errors-fn [host-func-types forms]
   [let [gctx [make-global-context]
-        - [init-host-context gctx]
+        - [init-host-context gctx host-func-types]
         res [expand-top-level-forms gctx forms]
         messages [getq gctx messages]]
     [for-each err messages
@@ -337,9 +316,9 @@
         [try-get-range [getq err form]]]]]
     [assert [is-empty messages] unexpected error messages]]]
 
-[defmacro test-expand-no-errors [.. forms]
-  [test-expand-no-errors-fn forms]]
-
-[defn test-expand []
-
+[defn test-expand [host-func-types]
+  [test-expand-no-errors-fn host-func-types [quote
+  [def x [i32.const 1]]
+  [def y [i32.const 2]]
+  ]]
 ]

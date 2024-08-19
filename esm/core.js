@@ -32,7 +32,6 @@ const emptyList = Object.freeze([])
 export const makeList = (...args) => (args.length === 0 ? emptyList : Object.freeze(args))
 export const isList = (f) => Array.isArray(f)
 export const isForm = (f) => isWord(f) || (isList(f) && f.every(isForm))
-export const isWunsFunction = (f) => f instanceof Function && Object.isFrozen(f) && 'cbodies' in f
 
 export const listWithMeta = (l, meta) => {
   const ll = [...l]
@@ -70,15 +69,6 @@ export const getDefVar = (defVars, name) => {
 
 export const getDefVarValue = (defVars, name) => getDefVar(defVars, name).value
 
-export const insertDefVar = (defVars, defVarObject) => {
-  if (!(defVarObject instanceof DefVar)) throw new Error('expected def var')
-  const varName = defVarObject.name
-  if (defVars.has(varName)) throw new Error(`redefining var: ${varName}`)
-  defVars.set(varName, defVarObject)
-}
-
-export const setDefVar = (defVars, varName, value) => insertDefVar(defVars, defVar(varName, value))
-
 export const meta = (form) => {
   if (!isWord(form) && !isList(form) && !isDefVar(form)) throw new Error('meta expects word or list')
   const t = typeof form
@@ -106,8 +96,7 @@ export const print = (ox) => {
     if (typeof x === 'number') return String(x)
     if (typeof x === 'bigint') return String(x)
     if (isList(x)) return `[${x.map(go).join(' ')}]`
-    if (isWunsFunction(x)) return `[fn ${x.funMacDesc.name} arity ${x.funMacDesc.params.length}]`
-    if (typeof x === 'function') return `[extern-fn ${x.name} arity ${x.length}]`
+    if (typeof x === 'function') return `[fn ${x.name} arity ${x.length}]`
     if (Object.isFrozen(x))
       return `[kv-map${Object.entries(x)
         .map(([k, v]) => ` ${k} ${go(v)}`)
