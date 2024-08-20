@@ -19,7 +19,7 @@ import { parseFile } from './parseTreeSitter.js'
 runCform(() => {
   testExpandNoErrors(hostFuncs,[
     'std3',
-    // 'wasm-instructions',
-    //  'macro-expand'
+    'wasm-instructions',
+     'macro-expand'
     ].flatMap((f) => parseFile(`../wuns/${f}.wuns`)))
 })
