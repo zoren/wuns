@@ -198,12 +198,13 @@ export const makeInterpreterContext = (defVars) => {
         // for recursive calls
         funMacDesc.func = f
         Object.freeze(funMacDesc)
+        const hasRestParam = restParam === null ? 0 : 1
         return (env) => {
           const md = cmetaData(env)
           const varObject = defVarWithMeta(strFuncName, f, {
             ...md,
             'n-of-params': params.length,
-            'has-rest-param': 1,
+            'has-rest-param': hasRestParam,
           })
           insertDefVar(varObject)
           return f
