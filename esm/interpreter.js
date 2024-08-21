@@ -215,6 +215,8 @@ export const makeInterpreterContext = (defVars) => {
         while (curCtx.outer) curCtx = curCtx.outer
         const funMacDesc = curCtx.funMacDesc
         if (!funMacDesc) throw new CompileError('recur outside of function', form)
+        const arity = funMacDesc.params.length
+        if (arity !== args.length) throw new CompileError(`recur expects ${arity} arguments`, form)
         const cargs = args.map((a) => compile(ctx, a))
         return (env) => funMacDesc.func(...cargs.map((carg) => carg(env)))
       }
