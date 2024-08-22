@@ -89,7 +89,7 @@ export const isAtom = (f) => f instanceof Atom
 
 export const print = (ox) => {
   const go = (x) => {
-    if (x === undefined) throw new Error('undefined')
+    if (x === undefined) return '*undefined*'
     if (isDefVar(x)) return `[var ${x.name}]`
     if (isAtom(x)) return `[atom ${go(x.value)}]`
     if (isWord(x)) return String(x)

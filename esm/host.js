@@ -11,6 +11,8 @@ import {
   isAtom,
   isSigned32BitInteger,
   print,
+  wordWithMeta,
+  listWithMeta,
 } from './core.js'
 
 export const apply = (fn, args) => {
@@ -23,7 +25,9 @@ export const is_word = (f) => isWord(f) | 0
 export const is_list = (f) => isList(f) | 0
 export { meta }
 
-export const var_with_meta = (name, value, metaData) => defVarWithMeta(wordValue(name), value, metaData)
+export const word_with_meta = (w, metaData) => wordWithMeta(wordValue(w), metaData)
+export const list_with_meta = (l, metaData) => listWithMeta(l, metaData)
+
 export const var_meta = (v) => {
   if (!isDefVar(v)) throw new Error('var-meta, not a defvar: ' + v)
   return meta(v)
@@ -118,7 +122,7 @@ export const get = (m, k) => {
   if (!isPlainObject(m)) throw new Error('get expects map')
   const ks = wordValue(k)
   if (ks in m) return m[ks]
-  throw new Error('key not found: ' + ks + ' in ' + Object.keys(m))
+  throw new Error(`key not found: ${ks} in [${Object.keys(m)}]`)
 }
 export const keys = (m) => {
   if (!isPlainObject(m)) throw new Error('keys expect map')
@@ -129,6 +133,7 @@ export const set = (o, k, e) => {
   if (Object.isFrozen(o)) throw new Error('set expects mutable object')
   o[wordValue(k)] = e
 }
+// todo remove this
 export const delete_key = (o, k) => {
   if (!isPlainObject(o)) throw new Error('delete-key expect map')
   if (Object.isFrozen(o)) throw new Error('delete expects mutable object')

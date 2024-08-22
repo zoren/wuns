@@ -255,6 +255,7 @@ export const makeInterpreterContext = (defVars) => {
             `function '${firstWordValue}' expected at least ${nOfParams} arguments, got ${args.length}`,
             form,
           )
+        // we could construct the rest args list here, instead of in the function
       } else {
         if (args.length !== nOfParams)
           throw new CompileError(
@@ -269,7 +270,14 @@ export const makeInterpreterContext = (defVars) => {
       // function, eval args and don't eval result
       if (!noEvalArgs && !evalResult) {
         const cargs = args.map((a) => compile(ctx, a))
-        return (env) => funcOrMac(...cargs.map((carg) => carg(env)))
+        return (env) => {
+          const eargs = cargs.map((carg) => carg(env))
+          try {
+            return funcOrMac(...eargs)
+          } catch (e) {
+            throw new RuntimeError(`runtime error when calling function '${firstWordValue}': ${e.message}`, form, e)
+          }
+        }
       }
       // macro, don't eval args and eval result
       if (noEvalArgs && evalResult) {
@@ -350,7 +358,11 @@ export const makeInterpreterContext = (defVars) => {
       for (const earg of eargs)
         if (!isSigned32BitInteger(earg))
           throw new RuntimeError(`instruction ${firstWordValue} expected integer, got ${earg}`, form)
-      return instWithImmediate(...eargs)
+      try {
+        return instWithImmediate(...eargs)
+      } catch (e) {
+        throw new RuntimeError(`runtime error when calling instruction '${firstWordValue}': ${e.message}`, form, e)
+      }
     }
   }
   return (form) => compile(null, form)
@@ -386,37 +398,52 @@ export const runCform = (exp) => {
   }
 }
 
-export const hostFuncs = parseFile('../wuns/host-funcs.wuns')
-const hostFuncsMap = new Map()
-for (const form of hostFuncs) {
+import { wordValue } from './core.js'
+const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
+// const hostExportsMap = new Map(hostExports)
+
+export const hostFuncTypes = parseFile('../wuns/host-funcs.wuns')
+const hostFuncTypesMap = new Map()
+for (const form of hostFuncTypes) {
   if (!isList(form)) throw new Error('expected list')
   if (form.length !== 3) throw new Error('expected list of length 3')
   const [name, paramTypes, resultTypes] = form
   if (!isList(paramTypes)) throw new Error('expected list')
   if (!isList(resultTypes)) throw new Error('expected list')
-  hostFuncsMap.set(wordValue(name), { paramTypes, resultTypes })
+  const fname = wordValue(name)
+  // if (!hostExportsMap.has(fname)) throw new Error(`type definition ${fname} has no host.js export`)
+  hostFuncTypesMap.set(fname, { paramTypes, resultTypes })
 }
 
-import { wordValue } from './core.js'
-const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
+for (const [name, f] of hostExports) {
+  const hostFunc = hostFuncTypesMap.get(name)
+  if (!hostFunc) throw new Error(`host function ${name} not found in host-funcs.wuns`)
+  if (hostFunc.paramTypes.length !== f.length)
+    throw new Error(`function ${name} expected ${hostFunc.paramTypes.length} params, got ${f.length}`)
+}
 
 export const makeInitContext = () => {
   const makeEvalContext = () => {
-    const ctx = makeInitContext()
-    return {
-      compile: ctx.compile,
-    }
+    const { compile } = makeInitContext()
+    return { compile }
   }
   const defVars = new Map()
 
   const insertFunc = (name, f) => {
-    const hostFunc = hostFuncsMap.get(name)
-    if (!hostFunc) throw new Error(`host function ${name} not found in host-funcs.wuns`)
     if (defVars.has(name)) throw new Error(`redefining var: ${name}`)
-    defVars.set(name, defVarWithMeta(name, f, { 'n-of-params': hostFunc.paramTypes.length }))
+    const hostFuncType = hostFuncTypesMap.get(name)
+    const { paramTypes, resultTypes } = hostFuncType
+    const numParams = paramTypes.length
+    defVars.set(
+      name,
+      defVarWithMeta(name, f, {
+        'n-of-params': numParams,
+        'param-types': paramTypes,
+        'result-types': resultTypes,
+      }),
+    )
   }
-  for (const [name, f] of hostExports)
-    insertFunc(name, f)
+  for (const [name, f] of hostExports) insertFunc(name, f)
 
   insertFunc('make-eval-context', makeEvalContext)
   insertFunc('try-get-var', (name) => {
@@ -425,7 +452,11 @@ export const makeInitContext = () => {
     return 0
   })
   const compile = makeInterpreterContext(defVars)
-  return { compile, defVars }
+  insertFunc('eval', (form) => {
+    const cform = compile(form)
+    return cform()
+  })
+  return { compile, defVars, insertFunc }
 }
 
 export const evalLogForms = (ctx, forms) => {
@@ -456,19 +487,20 @@ export const parseEvalFiles = (compile, filenames) => {
         if (e instanceof CompileError) {
           console.error(`compile error in ${getFormLocation(e.form || form)}: ${e.message}`)
           console.error(e)
-          return undefined
+        } else {
+          console.error(`unexpected non-compile error: ${e.message}`)
         }
-        console.error(`unexpected non-compile error: ${e.message}`)
         throw e
       }
       try {
         cform(null)
       } catch (e) {
         if (e instanceof RuntimeError) {
-          console.error(`runtime error in ${getFormLocation(form)}: ${e.message}`)
-          return undefined
+          console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
+          console.error(e)
+        } else {
+          console.error(`unexpected non-runtime error: ${e.message}`)
         }
-        console.error(`unexpected non-runtime error: ${e.message}`)
         throw e
       }
     }
