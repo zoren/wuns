@@ -98,31 +98,31 @@
   [comment to do add to map inside gctx]
   type]
 
-[defn eval-var-assoc-meta [gctx var key value]
-  ]
-
-[defn get-def-type [gctx name]
-  [if-let [def-var [eval-try-get-var gctx name]]
-    [try-getq [var-meta def-var] type]
-    0]]
+[defn eval-var-assoc-meta [gctx var key value]]
 
 [defn has-rest-param [params] [and [lt-s 1 [size params]] [eq-word [at params -2] ..]]]
 
-[defn get-var-type [gctx local-ctx var-name]
+[defn try-get-var-type [gctx local-ctx var-name]
   [loop [cur-ctx local-ctx]
     [if-let [vars [try-getq cur-ctx vars]]
       [if-let [type [try-get vars var-name]]
         type
         [continue cur-ctx [getq cur-ctx outer]]]
-      [get-def-type gctx var-name]]]]
+      [if-let [def-var [eval-try-get-var gctx var-name]]
+        [try-getq [var-meta def-var] type]
+        0]]]]
 
 [defn check-form [gctx local-ctx form]
   [ifs
     [is-word form]
-    [let [type [get-var-type gctx local-ctx form]]
-      [comment we could check for this as it will make compilation difficult
-        [report-when-not [is-func-type type] form defed func used as value]]
-      [set-node-type gctx form type]]
+    [if-let [type [try-get-var-type gctx local-ctx form]]
+      [do
+        [comment we could check for this as it will make compilation difficult
+          [report-when-not [is-func-type type] form defed func used as value]]
+        [set-node-type gctx form type]]
+      [do
+        [report form not found]
+        [set-node-type gctx form type-any]]]
 
     [not [is-list form]]
     [logq-abort form expects a list [identity form]]
@@ -273,7 +273,7 @@
                 type-error]]
               [setq sig-object results result-type]]]
 
-        [if-let [type [get-var-type gctx local-ctx first-form]]
+        [if-let [type [try-get-var-type gctx local-ctx first-form]]
           [if [is-func-type type]
             [let [parameter-types [second type]
                   n-of-param-types [size parameter-types]
@@ -341,18 +341,18 @@
           [set-array res i [recur node-id-counter [at node i]]]]
         [list-with-meta res [assoc [if-let [m [meta node]] m empty-kv-map] [quote node-id] [int-to-word c]]]]]]]
 
+[defn form-with-node-ids [form] [assign-node-ids [atom [i32.const 100]] form]]
+
 [defn test [expected-type form]
   [let [gctx [make-global-context]
-        node-id-counter [atom [i32.const 100]]
-        actual-type [check-form gctx [kv-map] [assign-node-ids node-id-counter form]]
+        actual-type [check-form gctx [kv-map] [form-with-node-ids form]]
         messages [getq gctx messages]]
     [assert [is-empty messages] there are messages [identity messages]]
     [assert [eq-form expected-type actual-type] [list [quote test] form expected-type actual-type]]]]
 
 [defn test-error [expected-type expected-error form]
   [let [gctx [make-global-context]
-        node-id-counter [atom [i32.const 100]]
-        actual-type [check-form gctx [kv-map] [assign-node-ids node-id-counter form]]
+        actual-type [check-form gctx [kv-map] [form-with-node-ids form]]
         messages [getq gctx messages]]
     [assert [eq [size messages] 1] there are more than one error messages [identity messages]]
     [let [message [getq [first messages] message]]
@@ -363,6 +363,8 @@
   [list [quote test] [mk-quote expected-type] [mk-quote form]]]
 
 [defn test-check []
+  [test-error type-any [quote not found] [quote no-such-var]]
+
   [testq i32 [i32.const -2]]
   [testq i64 [i64.const -2]]
   [testq i32 [i32.add [i32.const 1] [i32.const 2]]]
