@@ -55,6 +55,8 @@
 
 [defn has-truthy-key [m k] [and m [has m k] [get m k]]]
 
+[defn has-rest-param [params] [and [lt-s 1 [size params]] [eq-word [at params -2] ..]]]
+
 [defn expand-form [gctx local-ctx form]
   [ifs
     [is-word form]
@@ -135,7 +137,7 @@
                 meta-form [at form 3]
                 params-map [transient-kv-map]
                 n-of-params [size params]
-                has-rest-param [and [lt-s 1 n-of-params] [eq-word [at params -2] ..]]
+                has-rest-param [has-rest-param params]
                 signature
                 [if has-rest-param
                   [let [dot-dot-index [sub n-of-params 2]

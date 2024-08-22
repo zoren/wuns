@@ -100,8 +100,6 @@
 
 [defn eval-var-assoc-meta [gctx var key value]]
 
-[defn has-rest-param [params] [and [lt-s 1 [size params]] [eq-word [at params -2] ..]]]
-
 [defn try-get-var-type [gctx local-ctx var-name]
   [loop [cur-ctx local-ctx]
     [if-let [vars [try-getq cur-ctx vars]]
