@@ -35,7 +35,7 @@
       [le-s n-of-regular-params n-of-args]
       [eq n-of-regular-params n-of-args]]]]
 
-[defn report-fn [gctx form msg]
+[defn report-fn [gctx msg form]
   [push [getq gctx messages] [kv-map message msg form form]]]
 
 [defmacro report-when [cond form .. lmsg]

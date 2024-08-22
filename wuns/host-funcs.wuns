@@ -5,18 +5,22 @@
 [mutable-list-of-size [i32] [mutable-list]]
 [set-array [mutable-list i32 any] []]
 [freeze-mutable-list [mutable-list] []]
+
 [meta [any] [any]]
-[var [word] [var]]
-[var-with-meta [word any kv-map] [var]]
+[word-with-meta [word kv-map] [word]]
+[list-with-meta [list kv-map] [list]]
+
 [var-meta [var] [any]]
+
 [var-get [var] [any]]
-[insert-var [var] []]
 [transient-kv-map [] [transient-kv-map]]
 [set [transient-kv-map any any] []]
 [log [list] []]
+
 [atom [any] [atom]]
 [atom-get [atom] [any]]
 [atom-set [atom any] []]
+
 [growable-list [] [growable-list]]
 [push [growable-list any] []]
 [concat-words [word word] [word]]
@@ -31,3 +35,5 @@
 [make-eval-context [] [eval-context]]
 [apply [func [list any]] [any]]
 [try-get-var [word] [[option var]]]
+
+[eval [form] [any]]
