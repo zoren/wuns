@@ -4,10 +4,11 @@
 [def type-i32 i32]
 [def type-i64 i64]
 [def type-any [quote any]]
+[def type-bottom [quote bottom]]
 [def type-error [quote type-error]]
 [def type-pointer [quote i32]]
 
-[defn is-word-type [t] [or [eq-form t type-word] [eq-form t type-i32]]]
+[defn is-word-type [t] [eq-form t type-word]]
 
 [defn type-list [element-type] [list [quote list] element-type]]
 [defn type-tuple [.. types] [concat [quote [tuple]] types]]
@@ -58,6 +59,7 @@
 
 [defn is-form-type [t]
   [or
+    [eq-form t type-form]
     [is-word-type t]
     [and [is-list-type t] [recur [second t]]]]]
 
@@ -75,24 +77,18 @@
   and then check that against the parameter type
 ]
 
-[defn max-types [t1 t2]
+[defn type-less-than [t1 t2]
   [ifs
-    [eq-form t1 type-any]
-    t2
-
     [eq-form t2 type-any]
-    t1
+    1
 
-    [eq-form t1 type-form]
-    [if [is-form-type t2] type-form type-any]
+    [and [eq-form t1 type-bottom] [not [eq-form t2 type-bottom]]]
+    1
 
     [eq-form t2 type-form]
-    [if [is-form-type t1] type-form type-any]
+    [is-form-type t1]
 
-    [eq-form t1 t2]
-    t1
-
-    type-any]]
+    0]]
 
 [defn set-node-type [gctx node type]
   [comment to do add to map inside gctx]
@@ -153,11 +149,18 @@
                   ft [if [eq n-of-args 2] type-empty [recur gctx local-ctx [fourth form]]]]
               [set-node-type gctx form
                 [ifs
-                  [eq-form tt type-any]
+                  [eq-form tt ft]
                   ft
 
-                  [eq-form ft type-any]
+                  [type-less-than tt ft]
+                  ft
+
+                  [type-less-than ft tt]
                   tt
+
+                  [and [type-less-than tt type-form] [type-less-than ft type-form]]
+                  [do
+                    type-form]
 
                   [do
                     [report-when-not [eq-form tt ft] form if branches must have same type]
@@ -212,7 +215,7 @@
                             [report-when-not [eq-form type val-type] value type mismatch]]]
                         [report var expected a loop variable here]]]]]
                 [continue cur-ctx [getq cur-ctx outer]]]]]
-          type-any]
+          type-bottom]
 
         [eq-form first-form [quote def]]
         [let [name [second form]
@@ -352,10 +355,35 @@
   [let [gctx [make-global-context]
         actual-type [check-form gctx [kv-map] [form-with-node-ids form]]
         messages [getq gctx messages]]
-    [assert [eq [size messages] 1] there are more than one error messages [identity messages]]
+    [assert [eq [size messages] 1] there is not exactly than one error message [identity messages]
+      [identity form] [identity actual-type]]
     [let [message [getq [first messages] message]]
       [assert [eq-form expected-error message] [list [quote test fail wrong message] form expected-error message]]
     [assert [eq-form expected-type actual-type] test fail unexpected type form expected [identity expected-type] actual [identity actual-type]]]]]
+
+[defn test-error-env-fn [form lenv]
+  [let [gctx [make-global-context]
+        vars [transient-kv-map]
+        - [for-pair i 0 [size lenv] [set vars [at lenv i] [at lenv [inc i]]]]
+        actual-type [check-form gctx [kv-map vars vars] [form-with-node-ids form]]
+        messages [getq gctx messages]]
+  [kv-map messages messages type actual-type]]]
+
+[defn quote-all-list [lmsg]
+  [let [s [size lmsg]
+        msg [mutable-list-of-size [inc s]]]
+    [set-array msg 0 [quote list]]
+    [loop [i 0]
+      [when [lt-s i s]
+        [set-array msg [inc i] [let [e [at lmsg i]] [mk-quote e]]]
+        [continue i [inc i]]]]
+    [freeze-mutable-list msg]
+    msg]]
+
+[defmacro test-error-env [form .. lenv]
+  [list [quote test-error-env-fn] [mk-quote form] [quote-all-list lenv]]]
+
+[test-error-env [f] f [func [] []]]
 
 [defmacro testq [expected-type form]
   [list [quote test] [mk-quote expected-type] [mk-quote form]]]
@@ -380,6 +408,7 @@
   [test-error type-empty [quote if branches must have same type] [quote [if [i32.const 1] [i32.const 2]]]]
   [testq i32 [if [i32.const 1] [i32.const 2] [i32.const 3]]]
   [testq word [if [i32.const 1] [quote a] [quote b]]]
+  [testq form [if [i32.const 1] [quote a] [quote []]]]
   [testq [tuple] [if [i32.const 1] [let []]]]
 
   [test-error type-empty [quote expects an even number of bindings] [quote [let [a]]]]
@@ -400,10 +429,10 @@
   [comment maybe we should ban redef as it complicates compilation to wasm and is not good style]
   [testq i32 [loop [a [i32.const 1] a [i32.add [i32.const 1] a]] a]]
 
-  [test-error type-any [quote continue not inside loop] [quote [continue]]]
-  [test-error type-any [quote expected a loop variable here] [quote [loop [] [continue [i32.const 1] [i32.const 1]]]]]
-  [test-error type-any [quote loop var not found] [quote [loop [i [i32.const 0]] [continue j [i64.const 1]]]]]
-  [test-error type-any [quote type mismatch] [quote [loop [i [i32.const 0]] [continue i [i64.const 1]]]]]
+  [test-error type-bottom [quote continue not inside loop] [quote [continue]]]
+  [test-error type-bottom [quote expected a loop variable here] [quote [loop [] [continue [i32.const 1] [i32.const 1]]]]]
+  [test-error type-bottom [quote loop var not found] [quote [loop [i [i32.const 0]] [continue j [i64.const 1]]]]]
+  [test-error type-bottom [quote type mismatch] [quote [loop [i [i32.const 0]] [continue i [i64.const 1]]]]]
   [testq i32
     [loop [i [i32.const 10] res [i32.const 0]]
       [if i
