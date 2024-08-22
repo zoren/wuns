@@ -39,13 +39,31 @@
           [if [recur [at t i]]
             [continue i [inc i]]
             0]
-          1]]]]]
+          1]]]
+    [and [is-list t] [eq [size t] 3]
+      [eq-word [first t] [quote func]]
+      [let [param-types [second t]]
+        [and
+          [is-list param-types]
+          [let [parsed-params [params-to-map param-types]
+                regular-params [getq parsed-params params]]
+            [and
+              [loop [i 1]
+                [if [lt-s i [size regular-params]]
+                  [if [recur [at regular-params i]]
+                    [continue i [inc i]]
+                    0]
+                  1]]
+              [if-let [rest-param [try-getq parsed-params rest-param]]
+                [recur rest-param]
+                1]]]]
+      [recur [third t]]]]]]
 
 [defn is-func-type [t]
   [and [is-list t] [eq [size t] 3]
     [eq-word [first t] [quote func]]
     [is-list [second t]]
-    [is-list [third t]]]]
+    [is-type [third t]]]]
 
 [defn is-list-or-mut-list-type [t]
   [and [is-list t] [eq [size t] 2]
@@ -62,15 +80,6 @@
     [eq-form t type-form]
     [is-word-type t]
     [and [is-list-type t] [recur [second t]]]]]
-
-[defn check-param-arg-conform [param-type arg-t]
-  [or
-    [eq-form param-type type-any]
-    [eq-form param-type arg-t]
-    [and [eq-word param-type type-form] [is-form-type arg-t]]
-    [and [is-list-type param-type] [is-list-or-mut-list-type arg-t]]
-    [and [is-list-type param-type] [is-list-type arg-t]
-      [recur [second param-type] [second arg-t]]]]]
 
 [comment
   when a varargs function is called we have to find the greatest common type of all the arguments
@@ -89,6 +98,14 @@
     [is-form-type t1]
 
     0]]
+
+[defn check-param-arg-conform [param-type arg-t]
+  [or
+    [eq-form param-type arg-t]
+    [type-less-than arg-t param-type]
+    [and [is-list-type param-type] [is-list-or-mut-list-type arg-t]]
+    [and [is-list-type param-type] [is-list-type arg-t]
+      [recur [second param-type] [second arg-t]]]]]
 
 [defn set-node-type [gctx node type]
   [comment to do add to map inside gctx]
@@ -159,8 +176,7 @@
                   tt
 
                   [and [type-less-than tt type-form] [type-less-than ft type-form]]
-                  [do
-                    type-form]
+                  type-form
 
                   [do
                     [report-when-not [eq-form tt ft] form if branches must have same type]
@@ -216,6 +232,20 @@
                         [report var expected a loop variable here]]]]]
                 [continue cur-ctx [getq cur-ctx outer]]]]]
           type-bottom]
+
+        [eq-form first-form [quote extern]]
+        [do
+          [report-when-not [eq n-of-args 3] form extern expects 3 arguments]
+          [let [module-name [second form]
+                name [third form]
+                syntax-type [fourth form]]
+            [report-when-not [is-word module-name] module-name not a word]
+            [report-when-not [is-word name] name not a word]
+            [if [is-type syntax-type]
+              syntax-type
+              [do
+                [report syntax-type not a type]
+                type-error]]]]
 
         [eq-form first-form [quote def]]
         [let [name [second form]
@@ -349,7 +379,8 @@
         actual-type [check-form gctx [kv-map] [form-with-node-ids form]]
         messages [getq gctx messages]]
     [assert [is-empty messages] there are messages [identity messages]]
-    [assert [eq-form expected-type actual-type] [list [quote test] form expected-type actual-type]]]]
+    [assert [eq-form expected-type actual-type]
+      test failed expected [identity expected-type] actual [identity actual-type]]]]
 
 [defn test-error [expected-type expected-error form]
   [let [gctx [make-global-context]
@@ -439,8 +470,18 @@
         [continue i [i32.sub i [i32.const 1]] res [i32.add res i]]
         res]]]
 
+  [test-error type-error [quote not a type] [quote [extern m ef not-a-type]]]
   [test-error type-error [quote not a function] [quote [let [a [i32.const 1]] [a]]]]
-
+  [test-error i32 [quote parameter does not match [i64 i32]]
+    [quote [let [f [extern mod mod-fun [func [i64] i32]]] [f [i32.const 1]]]]]
+  [testq i32 [let [f [extern m ef [func [] i32]]] [f]]]
+  [testq i32 [let [f [extern m ef [func [i64] i32]]] [f [i64.const 1]]]]
+  [testq i32 [let [f [extern m ef [func [i64] i32]]] [f [i64.const 1]]]]
+  [testq i32 [let [f [extern m ef [func [form] i32]]] [f [quote a]]]]
+  [testq i32 [let [f [extern m ef [func [form] i32]]] [f [quote []]]]]
+  [testq i32 [let [f [extern m ef [func [.. form] i32]]] [f]]]
+  [testq i32 [let [f [extern m ef [func [.. form] i32]]] [f [quote a]]]]
+  [testq i32 [let [f [extern m ef [func [.. form] i32]]] [f [quote a] [quote []]]]]
   ]
 
 [comment

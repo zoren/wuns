@@ -57,6 +57,11 @@
 
 [defn has-rest-param [params] [and [lt-s 1 [size params]] [eq-word [at params -2] ..]]]
 
+[defn params-to-map [params]
+  [if [and [lt-s 1 [size params]] [eq-word [at params -2] ..]]
+    [kv-map params [slice params 0 [sub [size params] 2]] rest-param [last params]]
+    [kv-map params params]]]
+
 [defn expand-form [gctx local-ctx form]
   [ifs
     [is-word form]
