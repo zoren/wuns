@@ -6,29 +6,40 @@
 [def 3  [i32.const 3]]
 [def 4  [i32.const 4]]
 
-[defunc concat [.. lists] 0
-  [let
-    [n-of-lists [size lists]
-     total-size
-      [loop [total 0 i 0]
-        [if [lt-s i n-of-lists]
-          [continue total [add total [size [at lists i]]] i [add [i32.const 1] i]]
-          total]]
-     result [mutable-list-of-size total-size]]
-    [loop [i 0 j 0 res-index 0]
-      [if [lt-s i n-of-lists]
-        [let [cur-list [at lists i]
-              s [size cur-list]]
-          [loop [i 0 res-index res-index]
-            [if [lt-s i s]
-              [let []
-                [set-array result res-index [at cur-list i]]
-                [continue res-index [add [i32.const 1] res-index] i [add [i32.const 1] i]]]]]
-          [continue i [add [i32.const 1] i] res-index [add s res-index]]]]]
-    [freeze-mutable-list result]
-    result]]
+[def size [extern host size [func [[list any]] i32]]]
+[def at [extern host at [func [[list any] i32] any]]]
+[def mutable-list-of-size [extern host mutable-list-of-size [func [i32] mutable-list]]]
+[def set-array [extern host set-array [func [[mutable-list any] i32 any] []]]]
+[def freeze-mutable-list [extern host freeze-mutable-list [func [mutable-list] []]]]
 
-[defunc list [.. entries] 0 entries]
+[def concat
+  [func concat [.. lists]
+    [let
+      [n-of-lists [size lists]
+       total-size
+        [loop [total 0 i 0]
+          [if [lt-s i n-of-lists]
+            [continue total [add total [size [at lists i]]] i [add [i32.const 1] i]]
+            total]]
+       result [mutable-list-of-size total-size]]
+      [loop [i 0 j 0 res-index 0]
+        [if [lt-s i n-of-lists]
+          [let [cur-list [at lists i]
+                s [size cur-list]]
+            [loop [i 0 res-index res-index]
+              [if [lt-s i s]
+                [let []
+                  [set-array result res-index [at cur-list i]]
+                  [continue res-index [add [i32.const 1] res-index] i [add [i32.const 1] i]]]]]
+            [continue i [add [i32.const 1] i] res-index [add s res-index]]]]]
+      [freeze-mutable-list result]
+      result]]]
+
+[def list [func list [.. entries] entries]]
+
+[def transient-kv-map [extern host transient-kv-map [func [] transient-kv-map]]]
+[def set [extern host set [func [transient-kv-map word any] []]]]
+[def freeze-kv-map [extern host freeze-kv-map [func [transient-kv-map] []]]]
 
 [def macro-meta
   [let [m [transient-kv-map]]
@@ -37,23 +48,23 @@
     [freeze-kv-map m]
     m]]
 
-[defunc defmacro [name params .. bodies] macro-meta
-  [concat
-    [list [quote defunc] name params
+[def-with-meta defmacro macro-meta
+  [func defmacro [name params .. bodies]
+    [list [quote def-with-meta] name
       [quote
         [let [m [transient-kv-map]]
           [set m [quote no-eval-args] [i32.const 1]]
           [set m [quote eval-result] [i32.const 1]]
           [freeze-kv-map m]
-          m]]]
-    bodies]]
-
-[def quote-word [quote quote]]
-
-[defunc mk-quote [form] 0 [list quote-word form]]
+          m]]
+      [concat [list [quote func] name params] bodies]]]]
 
 [defmacro defn [name params .. bodies]
-  [concat [list [quote defunc] name params [quote i32.const 0]] bodies]]
+  [list [quote def] name
+    [concat [list [quote func] name params] bodies]]]
+
+[defmacro def-extern [name type]
+  [list [quote def] name [list [quote extern] [quote host] name type]]]
 
 [defmacro comment [.. -]
   [quote let []]]
@@ -98,6 +109,12 @@
     true-form
     false-form]]
 
+[def-extern is-word [func [form] i32]]
+
+[def quote-word [quote quote]]
+
+[defn mk-quote [form] [list quote-word form]]
+
 [defn quote-list [lmsg]
   [let [s [size lmsg]
         msg [mutable-list-of-size [inc s]]]
@@ -108,6 +125,8 @@
         [continue i [inc i]]]]
     [freeze-mutable-list msg]
     msg]]
+
+[def-extern log [func [list] []]]
 
 [defmacro assert [cond .. lmsg]
   [list [quote if] cond
@@ -148,7 +167,14 @@
             i [dec i]
             res [list [quote if] [at clauses [dec i]] res [quote i32.const 0]]]]]]]]
 
+[def-extern atom [func [any] atom]]
+
 [def word-counter [atom 0]]
+
+[def-extern growable-list [func [] growable-list]]
+[def-extern push [func [growable-list any] []]]
+[def-extern char-code-to-word [func [i32] word]]
+[def-extern concat-words [func [word word] word]]
 
 [defn int-to-word [n]
   [if [is-zero n]
@@ -170,10 +196,14 @@
           [continue res [concat-words [at l i] res] i [inc i]]
           res]]]]]
 
+[def-extern char-code-at [func [word i32] i32]]
+
 [defmacro word-to-char-code [w] [list [quote i32.const] [int-to-word [char-code-at w 0]]]]
 
 [defn is-between-inclusive [lower c upper]
   [and [i32.le-s lower c] [i32.le-s c upper]]]
+
+[def-extern word-byte-size [func [word] i32]]
 
 [defn dec-word-to-int [w]
   [loop [i 0 res 0]
@@ -182,6 +212,9 @@
         [assert [is-between-inclusive [word-to-char-code 0] cc [word-to-char-code 9]] dec-word-to-int expects a decimal word]
         [continue res [i32.add [i32.mul res [i32.const 10]] [i32.sub cc [word-to-char-code 0]]] i [inc i]]]
       res]]]
+
+[def-extern atom-get [func [atom] any]]
+[def-extern atom-set [func [atom any] []]]
 
 [defn genword []
   [let [c [atom-get word-counter]]
@@ -202,6 +235,8 @@
             [let [w [genword]]
               [list [quote let] [list w [at clauses [dec i]]]
                 [list [quote if] w w res]]]]]]]]]
+
+[def-extern is-list [func [form] i32]]
 
 [defmacro if-let [binding true-form false-form]
   [assert [is-list binding] if-let requires a list as the first argument]
@@ -317,6 +352,9 @@
 [defmacro hasq [m w]
   [list [quote has] m [mk-quote w]]]
 
+[def-extern has [func [kv-map word] i32]]
+[def-extern get [func [kv-map word] any]]
+
 [defn try-get [m k]
   [if [has m k]
     [get m k]
@@ -333,6 +371,8 @@
 
 [defn push-all [mut-list list]
   [for-each e list [push mut-list e]]]
+
+[def-extern keys [func [kv-map] [list word]]]
 
 [defn assoc [m k v]
   [let [new [transient-kv-map]]
@@ -358,15 +398,13 @@
         ml]]]]
 
 [defmacro defexpr [name params .. bodies]
-  [concat
-    [list [quote defunc] name params
-      [quote
-        [let [m [transient-kv-map]]
-          [set m [quote no-eval-args] [i32.const 1]]
-          [freeze-kv-map m]
-          m]]]
-    bodies]]
-
+  [list [quote def-with-meta] name
+    [quote
+      [let [m [transient-kv-map]]
+        [set m [quote no-eval-args] [i32.const 1]]
+        [freeze-kv-map m]
+        m]]
+    [concat [list [quote func] name params] bodies]]]
 
 [def ascii-dash [i32.const 45]]
 
@@ -389,3 +427,18 @@
             [continue i [inc i]]
             0]]
         1]]]]
+
+[def-extern try-get-var [func [word] [option var]]]
+[def-extern var-get [func [var] any]]
+
+[defn get-def-var-val [name]
+  [let [v [try-get-var name]]
+    [assert v not found [identity name]]
+    [var-get v]]]
+
+[def-extern var-meta [func [var] any]]
+[def-extern apply [func [[func] [list any]] any]]
+[def-extern make-eval-context [func [] any]]
+[def-extern meta [func [form] any]]
+[def-extern word-with-meta [func [word kv-map] word]]
+[def-extern list-with-meta [func [list kv-map] list]]

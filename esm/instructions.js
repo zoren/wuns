@@ -4,6 +4,7 @@ const instructions = {}
 const empty = Object.freeze([])
 const u32 = 'u32'
 const s32 = 's32'
+const s64 = 's64'
 const i32 = 'i32'
 
 const i32i32 = Object.freeze([i32, i32])
@@ -68,6 +69,14 @@ addI32InstructionObj('const', {
     return () => normalised
   },
 })
+instructions['i64.const'] = {
+  immediateParams: [s64],
+  params: [],
+  func: (val) => {
+    const bigInt = BigInt(val)
+    return () => bigInt
+  },
+}
 instructions['unreachable'] = Object.freeze({
   immediateParams: empty,
   params: empty,

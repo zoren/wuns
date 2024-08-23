@@ -67,7 +67,10 @@ export const getDefVar = (defVars, name) => {
   return defVars.get(name)
 }
 
-export const getDefVarValue = (defVars, name) => getDefVar(defVars, name).value
+export const makeGetDefVarValue = (compile) => {
+  const getDefVarValFn = compile(word('get-def-var-val'))()
+  return (s) => getDefVarValFn(word(s))
+}
 
 export const meta = (form) => {
   if (!isWord(form) && !isList(form) && !isDefVar(form)) throw new Error('meta expects word or list')
@@ -79,9 +82,6 @@ export const meta = (form) => {
 class Atom {
   constructor(value) {
     this.value = value
-  }
-  toString() {
-    return print(this.value)
   }
 }
 export const atom = (v) => new Atom(v)
@@ -95,8 +95,9 @@ export const print = (ox) => {
     if (isWord(x)) return String(x)
     if (typeof x === 'number') return String(x)
     if (typeof x === 'bigint') return String(x)
+    if (typeof x === 'string') return `'${x}'`
     if (isList(x)) return `[${x.map(go).join(' ')}]`
-    if (typeof x === 'function') return `[fn ${x.name} arity ${x.length}]`
+    if (typeof x === 'function') return `[fn ${x.name} arity ${x.length}${x.hasRestParam ? ' rest' : ''}]`
     if (Object.isFrozen(x))
       return `[kv-map${Object.entries(x)
         .map(([k, v]) => ` ${k} ${go(v)}`)

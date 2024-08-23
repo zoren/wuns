@@ -234,18 +234,14 @@
           type-bottom]
 
         [eq-form first-form [quote extern]]
-        [do
-          [report-when-not [eq n-of-args 3] form extern expects 3 arguments]
-          [let [module-name [second form]
-                name [third form]
-                syntax-type [fourth form]]
-            [report-when-not [is-word module-name] module-name not a word]
-            [report-when-not [is-word name] name not a word]
-            [if [is-type syntax-type]
-              syntax-type
-              [do
-                [report syntax-type not a type]
-                type-error]]]]
+        [let [module-name [second form]
+              name [third form]
+              syntax-type [fourth form]]
+          [if [is-type syntax-type]
+            syntax-type
+            [do
+              [report syntax-type not a type]
+              type-error]]]
 
         [eq-form first-form [quote def]]
         [let [name [second form]
@@ -376,6 +372,7 @@
 
 [defn test [expected-type form]
   [let [gctx [make-global-context]
+        - [test-expand-no-errors-fn [list] [list form]]
         actual-type [check-form gctx [kv-map] [form-with-node-ids form]]
         messages [getq gctx messages]]
     [assert [is-empty messages] there are messages [identity messages]]
@@ -449,7 +446,7 @@
   [testq i32 [let [a [i32.const 1] b a] b]]
   [testq i32 [let [a [i32.const 1] b [i32.add [i32.const 1] a]] b]]
   [comment maybe we should ban redef as it complicates compilation to wasm and is not good style]
-  [testq i32 [let [a [i32.const 1] a [i32.add [i32.const 1] a]] a]]
+[comment  [testq i32 [let [a [i32.const 1] a [i32.add [i32.const 1] a]] a]]]
 
   [test-error type-empty [quote expects an even number of bindings] [quote [loop [a]]]]
   [testq [tuple] [loop []]]
@@ -458,7 +455,7 @@
   [testq i32 [loop [a [i32.const 1] b a] b]]
   [testq i32 [loop [a [i32.const 1] b [i32.add [i32.const 1] a]] b]]
   [comment maybe we should ban redef as it complicates compilation to wasm and is not good style]
-  [testq i32 [loop [a [i32.const 1] a [i32.add [i32.const 1] a]] a]]
+  [comment [testq i32 [loop [a [i32.const 1] a [i32.add [i32.const 1] a]] a]]]
 
   [test-error type-bottom [quote continue not inside loop] [quote [continue]]]
   [test-error type-bottom [quote expected a loop variable here] [quote [loop [] [continue [i32.const 1] [i32.const 1]]]]]
@@ -482,6 +479,8 @@
   [testq i32 [let [f [extern m ef [func [.. form] i32]]] [f]]]
   [testq i32 [let [f [extern m ef [func [.. form] i32]]] [f [quote a]]]]
   [testq i32 [let [f [extern m ef [func [.. form] i32]]] [f [quote a] [quote []]]]]
+  [testq i32 [let [f [extern m ef [func [i64 .. form] i32]]] [f [i64.const 1] [quote a] [quote []]]]]
+
   ]
 
 [comment

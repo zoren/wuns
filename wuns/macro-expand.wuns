@@ -51,7 +51,7 @@
 
 [defn eval-try-get-var [gctx name]
   [let [compile [getq [getq gctx eval-context] compile]]
-    [[compile [list [quote try-get-var] [mk-quote name]]]]]]
+    [[compile [list [quote [extern host try-get-var [func [word] [option var]]]] [mk-quote name]]]]]]
 
 [defn has-truthy-key [m k] [and m [has m k] [get m k]]]
 
@@ -177,6 +177,15 @@
             [for i 1 s-form [set-array res i [recur gctx local-ctx [at form i]]]]
             res]
 
+        [eq-form first-form [quote extern]]
+        [do
+          [report-when-not [eq n-of-args 3] form extern expects 3 arguments]
+          [let [module-name [second form]
+                name [third form]]
+            [report-when-not [is-word module-name] module-name not a word]
+            [report-when-not [is-word name] name not a word]
+            form]]
+
           [eq-word [quote def] first-form]
           [let [- [report-when-not [eq n-of-args 2] form def expects 2 arguments]
                 name [at form 1]
@@ -274,14 +283,20 @@
       [getq m range]
       [list]]]]
 
+[defn try-get-location [form]
+  [let [m [meta form]]
+    [if [and m [hasq m location]]
+      [getq m location]
+      [list]]]]
+
 [defn test-expand-no-errors-fn [host-func-types forms]
   [let [gctx [make-global-context]
         - [init-host-context gctx host-func-types]
         res [expand-top-level-forms gctx forms]
         messages [getq gctx messages]]
     [for-each err messages
-      [log [list [getq err message] [getq err form]
-        [try-get-range [getq err form]]]]]
+      [log [list err [getq err message] [getq err form]
+        [try-get-location [getq err form]]]]]
     [assert [is-empty messages] unexpected error messages]]]
 
 [defn test-expand [host-func-types]
