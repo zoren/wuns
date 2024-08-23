@@ -231,6 +231,29 @@ const makeInterpreterContext = (externalModules) => {
         const cargs = args.map((a) => compile(ctx, a))
         return (env) => curCtx.func(...cargs.map((carg) => carg(env)))
       }
+      case 'extern': {
+        if (args.length !== 3) throw new CompileError('extern expects 3 arguments', form)
+        const [moduleName, name, type] = args
+        const modName = ctWordValue(moduleName)
+        const nameStr = ctWordValue(name)
+        if (!isList(type)) throw new CompileError('extern expects list as type', form)
+        if (type.length !== 3) throw new CompileError('extern expects type of length 3', form)
+        const [funcWord, paramTypes, result] = type
+        if (ctWordValue(funcWord) !== 'func') throw new CompileError('extern expects func type', form)
+        if (!isList(paramTypes)) throw new CompileError('extern expects list as params', form)
+        const parsedParams = parseParams(paramTypes)
+        const module = externalModules[modName]
+        if (!module) throw new CompileError(`module ${modName} not found`, form)
+        const extern = module[nameStr]
+        if (!extern) throw new CompileError(`extern ${nameStr} not found in module ${modName}`, form)
+        if (typeof extern !== 'function') throw new CompileError(`extern ${nameStr} is not a function`, form)
+        // wrap so we don't change input functions
+        const nOfParams = parsedParams.params.length
+        if (nOfParams !== extern.length) throw new CompileError(`extern ${nameStr} expected ${nOfParams} params`, form)
+        const hasRestParam = !!parsedParams.restParam
+        const wrapper = createNamedFunction(nameStr, nOfParams, hasRestParam, extern)
+        return () => wrapper
+      }
       case 'try-get-var': {
         if (args.length !== 1) throw new CompileError('try-get-var expects 1 argument', form)
         const varName = ctWordValue(args[0])
@@ -264,29 +287,6 @@ const makeInterpreterContext = (externalModules) => {
           insertDefVar(defVarWithMeta(v, eValue, md))
           return undefined
         }
-      }
-      case 'extern': {
-        if (args.length !== 3) throw new CompileError('extern expects 3 arguments', form)
-        const [moduleName, name, type] = args
-        const modName = ctWordValue(moduleName)
-        const nameStr = ctWordValue(name)
-        if (!isList(type)) throw new CompileError('extern expects list as type', form)
-        if (type.length !== 3) throw new CompileError('extern expects type of length 3', form)
-        const [funcWord, paramTypes, result] = type
-        if (ctWordValue(funcWord) !== 'func') throw new CompileError('extern expects func type', form)
-        if (!isList(paramTypes)) throw new CompileError('extern expects list as params', form)
-        const parsedParams = parseParams(paramTypes)
-        const module = externalModules[modName]
-        if (!module) throw new CompileError(`module ${modName} not found`, form)
-        const extern = module[nameStr]
-        if (!extern) throw new CompileError(`extern ${nameStr} not found in module ${modName}`, form)
-        if (typeof extern !== 'function') throw new CompileError(`extern ${nameStr} is not a function`, form)
-        // wrap so we don't change input functions
-        const nOfParams = parsedParams.params.length
-        if (nOfParams !== extern.length) throw new CompileError(`extern ${nameStr} expected ${nOfParams} params`, form)
-        const hasRestParam = !!parsedParams.restParam
-        const wrapper = createNamedFunction(nameStr, nOfParams, hasRestParam, extern)
-        return () => wrapper
       }
     }
     // direct function call or function in parameter/local variable
