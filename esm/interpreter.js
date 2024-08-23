@@ -58,6 +58,13 @@ const createArityFunctionWrapper = (length, hasRestParam) => {
   return Function('body', `return function (${paramsString}) { return body(${paramsString}) }`)
 }
 
+const createNamedFunction = (strFuncName, nOfParams, hasRestParam, body) => {
+  const f = createArityFunctionWrapper(nOfParams, hasRestParam)(body)
+  setJSFunctionName(f, strFuncName)
+  if (hasRestParam) f.hasRestParam = hasRestParam
+  return Object.freeze(f)
+}
+
 const checkCallArity = (nOfParams, hasRestParam, form) => {
   if (nOfParams === undefined) throw new CompileError(`expected function/macro/fexpr/manc, got variable ${form}`, form)
   const numOfGivenArgs = form.length - 1
@@ -211,10 +218,7 @@ const makeInterpreterContext = (defVars, externalModules) => {
               for (let i = 0; i < nOfParams; i++) varValues.set(params[i], args[i])
               return cbodies({ varValues })
             }
-        const f = createArityFunctionWrapper(nOfParams, hasRestParam)(body)
-        setJSFunctionName(f, strFuncName)
-        if (hasRestParam) f.hasRestParam = hasRestParam
-        Object.freeze(f)
+        const f = createNamedFunction(strFuncName, nOfParams, hasRestParam, body)
         // for recursive calls
         newCtx.func = f
         Object.freeze(newCtx)
@@ -271,10 +275,7 @@ const makeInterpreterContext = (defVars, externalModules) => {
         // wrap so we don't change input functions
         const nOfParams = parsedParams.params.length
         const hasRestParam = !!parsedParams.restParam
-        const wrapper = createArityFunctionWrapper(nOfParams, hasRestParam)((...args) => extern(...args))
-        if (hasRestParam) wrapper.hasRestParam = hasRestParam
-        setJSFunctionName(wrapper, nameStr)
-        Object.freeze(wrapper)
+        const wrapper = createNamedFunction(nameStr, nOfParams, hasRestParam, extern)
         return () => wrapper
       }
     }
