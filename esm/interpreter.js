@@ -459,29 +459,7 @@ export const runCform = (exp) => {
   }
 }
 
-import { wordValue } from './core.js'
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
-// const hostExportsMap = new Map(hostExports)
-
-export const hostFuncTypes = parseFile('../wuns/host-funcs.wuns')
-const hostFuncTypesMap = new Map()
-for (const form of hostFuncTypes) {
-  if (!isList(form)) throw new Error('expected list')
-  if (form.length !== 3) throw new Error('expected list of length 3')
-  const [name, paramTypes, resultTypes] = form
-  if (!isList(paramTypes)) throw new Error('expected list')
-  if (!isList(resultTypes)) throw new Error('expected list')
-  const fname = wordValue(name)
-  // if (!hostExportsMap.has(fname)) throw new Error(`type definition ${fname} has no host.js export`)
-  hostFuncTypesMap.set(fname, { paramTypes, resultTypes })
-}
-
-for (const [name, f] of hostExports) {
-  const hostFunc = hostFuncTypesMap.get(name)
-  if (!hostFunc) throw new Error(`host function ${name} not found in host-funcs.wuns`)
-  if (hostFunc.paramTypes.length !== f.length)
-    throw new Error(`function ${name} expected ${hostFunc.paramTypes.length} params, got ${f.length}`)
-}
 
 const makeEvalContext = (emods) => {
   const compile = makeInterpreterContext(emods)
@@ -493,10 +471,6 @@ const createHostObject = (compile) => {
   const hostObj = {}
   const insertFunc = (name, f) => {
     if (name in hostObj) throw new Error(`redefining var: ${name}`)
-    const hostFuncType = hostFuncTypesMap.get(name)
-    const { paramTypes, resultTypes } = hostFuncType
-    if (paramTypes.length !== f.length)
-      throw new Error(`function ${name} expected ${paramTypes.length} params, got ${f.length}`)
     hostObj[name] = f
   }
   for (const [name, f] of hostExports) insertFunc(name, f)

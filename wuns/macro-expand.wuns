@@ -328,11 +328,6 @@
         [set-array res i e-form]]]
     res]]
 
-[defn init-host-context [gctx host-func-types]
-  [comment
-    [add-global-binding gctx [quote wuns-active-mem-top] [kv-map def-form [quote def]]]
-  ]]
-
 [defn try-get-range [form]
   [let [m [meta form]]
     [if [and m [hasq m range]]
@@ -345,9 +340,8 @@
       [getq m location]
       [list]]]]
 
-[defn test-expand-no-errors-fn [host-func-types forms]
+[defn test-expand-no-errors-fn [forms]
   [let [gctx [make-global-context]
-        - [init-host-context gctx host-func-types]
         res [expand-top-level-forms gctx forms]
         messages [getq gctx messages]]
     [for-each err messages
@@ -356,12 +350,7 @@
     [assert [is-empty messages] unexpected error messages]]]
 
 [defn test-expand [host-func-types]
-[quote
-    [test-expand-no-errors-fn host-func-types [quote
-  is-word
-  is-list
-  ]]]
-  [test-expand-no-errors-fn host-func-types [quote
+  [test-expand-no-errors-fn [quote
   [def x [i32.const 1]]
   [def y [i32.const 2]]
   ]]

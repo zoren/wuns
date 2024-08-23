@@ -1,5 +1,5 @@
 import { makeGetDefVarValue } from './core.js'
-import { makeInitContext, parseEvalFiles, runCform, hostFuncTypes } from './interpreter.js'
+import { makeInitContext, parseEvalFiles, runCform } from './interpreter.js'
 
 const { compile } = makeInitContext()
 
@@ -10,7 +10,7 @@ const getDefVarValue = makeGetDefVarValue(compile)
 const testExpand = getDefVarValue('test-expand')
 
 runCform(() => {
-  testExpand(hostFuncTypes)
+  testExpand()
 })
 
 const testExpandNoErrors = getDefVarValue('test-expand-no-errors-fn')
@@ -18,7 +18,6 @@ import { parseFile } from './parseTreeSitter.js'
 
 runCform(() => {
   testExpandNoErrors(
-    hostFuncTypes,
     ['std3', 'wasm-instructions', 'macro-expand'].flatMap((f) => parseFile(`../wuns/${f}.wuns`)),
   )
 })

@@ -14,14 +14,15 @@
 [defn type-tuple [.. types] [concat [quote [tuple]] types]]
 [def type-empty [type-tuple]]
 
+[def atomic-types [quote form word i32 i64 any error]]
+
 [defn is-atomic-type [t]
-  [or
-    [eq-form t type-form]
-    [eq-form t type-word]
-    [eq-form t type-i32]
-    [eq-form t type-i64]
-    [eq-form t type-any]
-    [eq-form t type-error]]]
+  [loop [i 0]
+    [if [lt-s i [size atomic-types]]
+      [if [eq-word t [at atomic-types i]]
+        1
+        [continue i [inc i]]]
+      0]]]
 
 [defn is-mutable-list-type [t] [and [is-list t] [eq [size t] 2] [eq-word [first t] [quote mutable-list]] [is-atomic-type [second t]]]]
 [defn is-tuple-type [t] [and [is-list t] [lt-s 0 [size t]] [eq-form [first t] [quote tuple]]]]
@@ -248,7 +249,7 @@
               value-type [recur gctx local-ctx [third form]]]
           [eval-var-assoc-meta gctx name [quote type] value-type]]
 
-        [or [eq-form first-form [quote defunc]]]
+        [or [eq-form first-form [quote func]]]
         [let [params [third form]
               param-ctx [transient-kv-map]
               n-of-param-words [size params]
@@ -372,7 +373,7 @@
 
 [defn test [expected-type form]
   [let [gctx [make-global-context]
-        - [test-expand-no-errors-fn [list] [list form]]
+        - [test-expand-no-errors-fn [list form]]
         actual-type [check-form gctx [kv-map] [form-with-node-ids form]]
         messages [getq gctx messages]]
     [assert [is-empty messages] there are messages [identity messages]]
