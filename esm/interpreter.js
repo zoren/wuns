@@ -464,7 +464,11 @@ for (const [name, f] of hostExports) {
 export const makeInitContext = () => {
   const makeEvalContext = () => {
     const { compile } = makeInitContext()
-    return { compile }
+    const evaluate = (form) => {
+      const cform = compile(form)
+      return cform()
+    }
+    return evaluate
   }
   const hostObj = {}
   const insertFunc = (name, f) => {
@@ -491,7 +495,7 @@ export const makeInitContext = () => {
 
   moduleMap.set('host', hostObj)
 
-  return { compile, defVars }
+  return { compile }
 }
 
 export const evalLogForms = (compile, forms) => {

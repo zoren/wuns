@@ -50,8 +50,8 @@
   [list [quote report-fn] [quote gctx] [quote-list lmsg] form]]
 
 [defn eval-try-get-var [gctx name]
-  [let [compile [getq [getq gctx eval-context] compile]]
-    [[compile [list [quote [extern host try-get-var [func [word] [option var]]]] [mk-quote name]]]]]]
+  [let [eval-context [getq gctx eval-context]]
+    [eval-context [list [quote [extern host try-get-var [func [word] [option var]]]] [mk-quote name]]]]]
 
 [defn has-truthy-key [m k] [and m [has m k] [get m k]]]
 
@@ -265,10 +265,10 @@
 
 [defn expand-top-level-forms [gctx forms]
   [let [res [mutable-list-of-size [size forms]]
-        compile [getq [getq gctx eval-context] compile]]
+        eval-context [getq gctx eval-context]]
     [for i 0 [size forms]
       [let [e-form [expand-form gctx empty-local-context [at forms i]]]
-        [[compile e-form]]
+        [eval-context e-form]
         [set-array res i e-form]]]
     res]]
 
