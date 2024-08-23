@@ -431,7 +431,7 @@
 [def-extern var-get [func [var] any]]
 [def-extern var-meta [func [var] any]]
 [def-extern apply [func [[func] [list any]] any]]
-[def-extern make-eval-context [func [] any]]
+[def-extern make-eval-context [func [[kv-map]] any]]
 [def-extern meta [func [form] any]]
 [def-extern word-with-meta [func [word kv-map] word]]
 [def-extern list-with-meta [func [list kv-map] list]]

@@ -78,7 +78,6 @@ const checkCallArity = (nOfParams, hasRestParam, form) => {
 }
 
 const makeInterpreterContext = (externalModules) => {
-  if (!externalModules) externalModules = new Map()
   const defVars = new Map()
   const insertDefVar = (defVarObject) => {
     const varName = defVarObject.name
@@ -277,13 +276,14 @@ const makeInterpreterContext = (externalModules) => {
         if (ctWordValue(funcWord) !== 'func') throw new CompileError('extern expects func type', form)
         if (!isList(paramTypes)) throw new CompileError('extern expects list as params', form)
         const parsedParams = parseParams(paramTypes)
-        const module = externalModules.get(modName)
+        const module = externalModules[modName]
         if (!module) throw new CompileError(`module ${modName} not found`, form)
         const extern = module[nameStr]
         if (!extern) throw new CompileError(`extern ${nameStr} not found in module ${modName}`, form)
         if (typeof extern !== 'function') throw new CompileError(`extern ${nameStr} is not a function`, form)
         // wrap so we don't change input functions
         const nOfParams = parsedParams.params.length
+        if (nOfParams !== extern.length) throw new CompileError(`extern ${nameStr} expected ${nOfParams} params`, form)
         const hasRestParam = !!parsedParams.restParam
         const wrapper = createNamedFunction(nameStr, nOfParams, hasRestParam, extern)
         return () => wrapper
@@ -306,8 +306,7 @@ const makeInterpreterContext = (externalModules) => {
           }
         } else {
           // non wuns functions are assumed to not have rest param
-          if (args.length !== length)
-            throw new RuntimeError(`expected ${f.length} arguments, got ${args.length}`, form)
+          if (args.length !== length) throw new RuntimeError(`expected ${f.length} arguments, got ${args.length}`, form)
         }
         return f(...cargs.map((carg) => carg(env)))
       }
@@ -472,34 +471,33 @@ for (const [name, f] of hostExports) {
     throw new Error(`function ${name} expected ${hostFunc.paramTypes.length} params, got ${f.length}`)
 }
 
-export const makeInitContext = () => {
-  const makeEvalContext = () => {
-    const { compile } = makeInitContext()
-    const evaluate = (form) => {
-      const cform = compile(form)
-      return cform()
-    }
-    return evaluate
-  }
+const makeEvalContext = (emods) => {
+  const compile = makeInterpreterContext(emods)
+  const evaluate = (form) => compile(form)()
+  return evaluate
+}
+
+const createHostObject = (compile) => {
   const hostObj = {}
   const insertFunc = (name, f) => {
     if (name in hostObj) throw new Error(`redefining var: ${name}`)
     const hostFuncType = hostFuncTypesMap.get(name)
     const { paramTypes, resultTypes } = hostFuncType
-    const numParams = paramTypes.length
+    if (paramTypes.length !== f.length)
+      throw new Error(`function ${name} expected ${paramTypes.length} params, got ${f.length}`)
     hostObj[name] = f
   }
   for (const [name, f] of hostExports) insertFunc(name, f)
   insertFunc('make-eval-context', makeEvalContext)
-  const moduleMap = new Map()
-  const compile = makeInterpreterContext(moduleMap)
-  insertFunc('eval', (form) => {
-    const cform = compile(form)
-    return cform()
-  })
+  insertFunc('eval', (form) => compile(form)())
+  return hostObj
+}
 
-  moduleMap.set('host', hostObj)
-
+export const makeInitContext = () => {
+  const externalModules = {}
+  const compile = makeInterpreterContext(externalModules)
+  const hostObj = createHostObject(compile)
+  externalModules['host'] = hostObj
   return { compile }
 }
 

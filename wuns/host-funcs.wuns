@@ -32,7 +32,7 @@
 [get [kv-map word] [any]]
 [has [kv-map word] [bool]]
 [delete-key [kv-map word] []]
-[make-eval-context [] [eval-context]]
+[make-eval-context [[kv-map]] [eval-context]]
 [apply [func [list any]] [any]]
 [try-get-var [word] [[option var]]]
 
