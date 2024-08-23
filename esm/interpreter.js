@@ -306,7 +306,7 @@ const makeInterpreterContext = (externalModules) => {
           }
         } else {
           // non wuns functions are assumed to not have rest param
-          if (args.length !== f.length)
+          if (args.length !== length)
             throw new RuntimeError(`expected ${f.length} arguments, got ${args.length}`, form)
         }
         return f(...cargs.map((carg) => carg(env)))
