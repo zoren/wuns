@@ -68,8 +68,10 @@ export const getDefVar = (defVars, name) => {
 }
 
 export const makeGetDefVarValue = (compile) => {
-  const getDefVarValFn = compile(word('get-def-var-val'))()
-  return (s) => getDefVarValFn(word(s))
+  const getDefVarValFn = (name) => compile(makeList(word('try-get-var'), word(name)))()
+  const getVarVal = compile(word('var-get'))()
+  const getDefVarVal = (name) => getVarVal(getDefVarValFn(name))
+  return getDefVarVal
 }
 
 export const meta = (form) => {

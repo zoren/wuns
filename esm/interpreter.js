@@ -77,8 +77,9 @@ const checkCallArity = (nOfParams, hasRestParam, form) => {
   }
 }
 
-const makeInterpreterContext = (defVars, externalModules) => {
+const makeInterpreterContext = (externalModules) => {
   if (!externalModules) externalModules = new Map()
+  const defVars = new Map()
   const insertDefVar = (defVarObject) => {
     const varName = defVarObject.name
     if (defVars.has(varName)) throw new RuntimeError(`redefining var: ${varName}`)
@@ -230,6 +231,15 @@ const makeInterpreterContext = (defVars, externalModules) => {
         checkCallArity(curCtx.nOfParams, curCtx.hasRestParam, form)
         const cargs = args.map((a) => compile(ctx, a))
         return (env) => curCtx.func(...cargs.map((carg) => carg(env)))
+      }
+      case 'try-get-var': {
+        if (args.length !== 1) throw new CompileError('try-get-var expects 1 argument', form)
+        const varName = ctWordValue(args[0])
+        return () => {
+          const v = defVars.get(varName)
+          if (v) return v
+          return 0
+        }
       }
       case 'def': {
         if (args.length !== 2) throw new CompileError('def expects 2 arguments', form)
@@ -481,14 +491,8 @@ export const makeInitContext = () => {
   }
   for (const [name, f] of hostExports) insertFunc(name, f)
   insertFunc('make-eval-context', makeEvalContext)
-  insertFunc('try-get-var', (name) => {
-    const v = defVars.get(wordValue(name))
-    if (v) return v
-    return 0
-  })
-  const defVars = new Map()
   const moduleMap = new Map()
-  const compile = makeInterpreterContext(defVars, moduleMap)
+  const compile = makeInterpreterContext(moduleMap)
   insertFunc('eval', (form) => {
     const cform = compile(form)
     return cform()

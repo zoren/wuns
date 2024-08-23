@@ -428,14 +428,7 @@
             0]]
         1]]]]
 
-[def-extern try-get-var [func [word] [option var]]]
 [def-extern var-get [func [var] any]]
-
-[defn get-def-var-val [name]
-  [let [v [try-get-var name]]
-    [assert v not found [identity name]]
-    [var-get v]]]
-
 [def-extern var-meta [func [var] any]]
 [def-extern apply [func [[func] [list any]] any]]
 [def-extern make-eval-context [func [] any]]

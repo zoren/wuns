@@ -51,7 +51,7 @@
 
 [defn eval-try-get-var [gctx name]
   [let [eval-context [getq gctx eval-context]]
-    [eval-context [list [quote [extern host try-get-var [func [word] [option var]]]] [mk-quote name]]]]]
+    [eval-context [list [quote try-get-var] name]]]]
 
 [defn has-truthy-key [m k] [and m [has m k] [get m k]]]
 
