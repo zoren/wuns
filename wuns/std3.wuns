@@ -346,6 +346,20 @@
     [set-array ml [add 3 n-of-pairs] tmp-word]
     ml]]
 
+[defmacro kv-map-id [.. entries]
+  [let [s [size entries]
+        ml [mutable-list-of-size [add 4 s]]
+        tmp-word [genword]]
+    [set-array ml 0 [quote let]]
+    [set-array ml 1 [list tmp-word [quote [transient-kv-map]]]]
+    [for i 0 s
+      [set-array ml [add 2 i]
+        [let [k [at entries i]]
+          [list [quote set] tmp-word [mk-quote k] k]]]]
+    [set-array ml [add 2 s] [list [quote freeze-kv-map] tmp-word]]
+    [set-array ml [add 3 s] tmp-word]
+    ml]]
+
 [defmacro getq [m w]
   [list [quote get] m [mk-quote w]]]
 

@@ -126,6 +126,7 @@
           [eq-word [quote continue] first-form]
           [let [loop-vars [try-get-loop-vars local-ctx]
                 res [mutable-list-of-size s-form]]
+            [comment todo check if we are at tail position]
             [set-array res 0 first-form]
             [report-when-not loop-vars form not inside loop]
             [for-pair i 1 s-form
@@ -136,10 +137,10 @@
                 [set-array res [inc i] [recur gctx local-ctx [at form [inc i]]]]]]
             res]
 
-          [eq-word [quote defunc] first-form]
+          [eq-word [quote func] first-form]
           [let [name [at form 1]
                 params [at form 2]
-                meta-form [at form 3]
+                - [assert [is-list params] params not a list [identity name] [identity i32]]
                 params-map [transient-kv-map]
                 n-of-params [size params]
                 has-rest-param [has-rest-param params]
@@ -154,6 +155,7 @@
                     [kv-map params [slice params 0 dot-dot-index]
                             rest-param rest-param]]
                   [do
+                    [comment todo check for extra arguments]
                     [for-each param params
                       [set params-map param [kv-map var param]]]
                     [kv-map params params]]]
@@ -164,8 +166,7 @@
               [set-array res 0 first-form]
               [set-array res 1 name]
               [set-array res 2 params]
-              [set-array res 3 [recur gctx empty-ctx meta-form]]
-              [for i 4 s-form [set-array res i [recur gctx fn-local-ctx [at form i]]]]
+              [for i 3 s-form [set-array res i [recur gctx fn-local-ctx [at form i]]]]
               res]]
 
           [eq-word [quote recur] first-form]
@@ -177,22 +178,29 @@
             [for i 1 s-form [set-array res i [recur gctx local-ctx [at form i]]]]
             res]
 
-        [eq-form first-form [quote extern]]
-        [do
-          [report-when-not [eq n-of-args 3] form extern expects 3 arguments]
-          [let [module-name [second form]
-                name [third form]]
-            [report-when-not [is-word module-name] module-name not a word]
-            [report-when-not [is-word name] name not a word]
-            form]]
+          [eq-form first-form [quote extern]]
+          [do
+            [report-when-not [eq n-of-args 3] form extern expects 3 arguments]
+            [let [module-name [second form]
+                  name [third form]]
+              [report-when-not [is-word module-name] module-name not a word]
+              [report-when-not [is-word name] name not a word]
+              form]]
 
           [eq-word [quote def] first-form]
           [let [- [report-when-not [eq n-of-args 2] form def expects 2 arguments]
                 name [at form 1]
-                local-ctx [kv-map vars empty-kv-map decl-form first-form]
-                expanded-form [recur gctx local-ctx [at form 2]]]
+                local-ctx [kv-map vars empty-kv-map decl-form first-form]]
             [report-when-not [is-word name] name not a word]
-            [list first-form name expanded-form]]
+            [list first-form name [recur gctx local-ctx [at form 2]]]]
+
+          [eq-word [quote def-with-meta] first-form]
+          [let [- [report-when-not [eq n-of-args 3] form def expects 3 arguments]
+                name [at form 1]
+                meta-form [at form 2]
+                local-ctx [kv-map vars empty-kv-map decl-form first-form]]
+            [report-when-not [is-word name] name not a word]
+            [list first-form name [recur gctx local-ctx meta-form] [recur gctx local-ctx [at form 3]]]]
 
           [eq-word [quote import] first-form]
           [let [- [report-when-not [eq s-form 4] form import expects 3 arguments]
@@ -219,10 +227,11 @@
             [if-let [def-var [eval-try-get-var gctx first-form]]
               [let []
                 [let [var-meta [var-meta def-var]
+                      var-val-meta [meta [var-get def-var]]
                       no-eval-args [has-truthy-key var-meta [quote no-eval-args]]
                       eval-result  [has-truthy-key var-meta [quote eval-result]]]
                   [report-when-not
-                    [n-of-args-match-def var-meta n-of-args]
+                    [n-of-args-match-def var-val-meta n-of-args]
                     form
                     wrong number of arguments]
                   [ifs
@@ -258,16 +267,63 @@
 
 [def empty-local-context [kv-map vars empty-kv-map]]
 
+[def host-object
+  [kv-map
+    m
+    [kv-map
+      p0 [func p0 [] 0]
+      p1 [func p1 [p] 1]
+      p2 [func p2 [p q] 2]
+      p0r [func p0r [.. r] 0]
+      p1r [func p1r [p .. r] 1]]
+    host
+    [kv-map-id
+      size
+      at
+      mutable-list-of-size
+      set-array
+      freeze-mutable-list
+
+      transient-kv-map
+      set
+      freeze-kv-map
+
+      is-word
+      log
+      atom
+      growable-list
+      push
+
+      char-code-to-word
+      concat-words
+      char-code-at
+      word-byte-size
+      atom-get
+      atom-set
+      is-list
+      has
+      get
+      keys
+      var-get
+      var-meta
+      apply
+      make-eval-context
+      meta
+      word-with-meta
+      list-with-meta
+       ]]]
+
 [defn make-global-context []
   [kv-map
     messages [growable-list]
-    eval-context [make-eval-context]]]
+    eval-context [make-eval-context host-object]]]
 
 [defn expand-top-level-forms [gctx forms]
   [let [res [mutable-list-of-size [size forms]]
         eval-context [getq gctx eval-context]]
     [for i 0 [size forms]
-      [let [e-form [expand-form gctx empty-local-context [at forms i]]]
+      [let [form [at forms i]
+            e-form [expand-form gctx empty-local-context form]]
         [eval-context e-form]
         [set-array res i e-form]]]
     res]]
@@ -300,10 +356,11 @@
     [assert [is-empty messages] unexpected error messages]]]
 
 [defn test-expand [host-func-types]
-  [test-expand-no-errors-fn host-func-types [quote
+[quote
+    [test-expand-no-errors-fn host-func-types [quote
   is-word
   is-list
-  ]]
+  ]]]
   [test-expand-no-errors-fn host-func-types [quote
   [def x [i32.const 1]]
   [def y [i32.const 2]]

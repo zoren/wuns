@@ -1,4 +1,15 @@
-import { isWord, isList, print, isSigned32BitInteger, meta, makeList, isForm, defVar, defVarWithMeta } from './core.js'
+import {
+  isWord,
+  isList,
+  print,
+  isSigned32BitInteger,
+  meta,
+  makeList,
+  isForm,
+  defVar,
+  defVarWithMeta,
+  setMeta,
+} from './core.js'
 import { instructions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
 
@@ -62,6 +73,7 @@ const createNamedFunction = (strFuncName, nOfParams, hasRestParam, body) => {
   const f = createArityFunctionWrapper(nOfParams, hasRestParam)(body)
   setJSFunctionName(f, strFuncName)
   if (hasRestParam) f.hasRestParam = hasRestParam
+  setMeta(f, { 'n-of-params': nOfParams, 'has-rest-param': +hasRestParam })
   return Object.freeze(f)
 }
 
@@ -197,7 +209,6 @@ const makeInterpreterContext = (externalModules) => {
         const parsedParams = parseParams(origParams)
         const params = parsedParams.params.map(ctWordValue)
         const restParam = parsedParams.restParam ? ctWordValue(parsedParams.restParam) : null
-        Object.freeze(params)
         const varDescs = new Map()
         const paramDesc = { defForm: firstWordValue }
         for (const p of params) varDescs.set(p, paramDesc)
@@ -327,6 +338,7 @@ const makeInterpreterContext = (externalModules) => {
           try {
             return func(...eargs)
           } catch (e) {
+            if (e instanceof RuntimeError) throw e
             throw new RuntimeError(`runtime error when calling function '${firstWordValue}': ${e.message}`, form, e)
           }
         }

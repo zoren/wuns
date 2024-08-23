@@ -14,9 +14,17 @@ class Word {
 export const isWord = (f) => f instanceof Word
 export const word = (s) => Object.freeze(new Word(s))
 const symbolMeta = Symbol.for('wuns-meta')
+export const meta = (form) => {
+  const t = typeof form
+  if ((t === 'object' || t === 'function') && symbolMeta in form) return form[symbolMeta]
+  return 0
+}
 export const setMeta = (v, meta) => {
-  if (typeof v !== 'object' || Object.isFrozen(v)) throw new Error('expects mutable object')
-  v[symbolMeta] = meta
+  const t = typeof v
+  if (!(t === 'object' || t === 'function') || Object.isFrozen(v)) throw new Error('expects mutable object '+ t)
+  if (meta === undefined) throw new Error('meta must be defined')
+  if (typeof meta !== 'object') throw new Error('meta must be object')
+  v[symbolMeta] = Object.freeze({...meta})
 }
 export const wordWithMeta = (s, meta) => {
   const w = new Word(s)
@@ -72,13 +80,6 @@ export const makeGetDefVarValue = (compile) => {
   const getVarVal = compile(word('var-get'))()
   const getDefVarVal = (name) => getVarVal(getDefVarValFn(name))
   return getDefVarVal
-}
-
-export const meta = (form) => {
-  if (!isWord(form) && !isList(form) && !isDefVar(form)) throw new Error('meta expects word or list')
-  const t = typeof form
-  if (t === 'object' && symbolMeta in form) return form[symbolMeta]
-  return 0
 }
 
 class Atom {
