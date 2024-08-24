@@ -106,10 +106,9 @@ const makeInterpreterContext = (externalModules) => {
             }
             throw new RuntimeError(`variable ${varName} not found`, form)
           }
-        if (!defVars.has(varName)) throw new CompileError('not found: ' + varName, form)
         const defVar = defVars.get(varName)
-        const defVarVal = defVar.value
-        return () => defVarVal
+        if (!defVar) throw new CompileError('not found: ' + varName, form)
+        return () => defVar.value
       }
     }
     // do not allow non-forms
@@ -308,68 +307,62 @@ const makeInterpreterContext = (externalModules) => {
         return f(...cargs.map((carg) => carg(env)))
       }
     }
-    if (defVars.has(firstWordValue)) {
-      const funcOrMacVar = defVars.get(firstWordValue)
-      const varMeta = meta(funcOrMacVar)
-      const func = funcOrMacVar.value
-      if (typeof func !== 'function') throw new CompileError(`expected function, got ${func}`, form)
-      checkCallArity(func.length, func.hasRestParam, form)
-      const noEvalArgs = varMeta['no-eval-args']
-      const evalResult = varMeta['eval-result']
-      // function, eval args and don't eval result
-      if (!noEvalArgs && !evalResult) {
-        const cargs = args.map((a) => compile(ctx, a))
-        return (env) => {
-          const eargs = cargs.map((carg) => carg(env))
-          try {
-            return func(...eargs)
-          } catch (e) {
-            // if (e instanceof RuntimeError) throw e
-            throw new RuntimeError(`runtime error when calling function '${firstWordValue}': ${e.message}`, form, e)
-          }
+    const funcOrMacVar = defVars.get(firstWordValue)
+    if (!funcOrMacVar) throw new CompileError(`function '${firstWordValue}' not found`, form)
+    const func = funcOrMacVar.value
+    if (typeof func !== 'function') throw new CompileError(`expected function, got ${func}`, form)
+    checkCallArity(func.length, func.hasRestParam, form)
+    const varMeta = meta(funcOrMacVar)
+    const noEvalArgs = varMeta['no-eval-args']
+    const evalResult = varMeta['eval-result']
+    // function, eval args and don't eval result
+    if (!noEvalArgs && !evalResult) {
+      const cargs = args.map((a) => compile(ctx, a))
+      return (env) => {
+        const eargs = cargs.map((carg) => carg(env))
+        try {
+          return func(...eargs)
+        } catch (e) {
+          // if (e instanceof RuntimeError) throw e
+          throw new RuntimeError(`runtime error when calling function '${firstWordValue}': ${e.message}`, form, e)
         }
       }
-      // macro, don't eval args and eval result
-      if (noEvalArgs && evalResult) {
-        let macroResult
+    }
+    // macro, don't eval args and eval result
+    if (noEvalArgs && evalResult) {
+      let macroResult
+      try {
+        macroResult = func(...args)
+      } catch (e) {
+        if (e instanceof RuntimeError)
+          throw new CompileError(`runtime error when calling macro '${firstWordValue}': ${e.message}`, form, e)
+        throw e
+      }
+      if (!isForm(macroResult)) throw new CompileError('macro must return form', form)
+      return compile(ctx, macroResult)
+    }
+    // fexpr, don' eval args and don't eval result
+    // thanks Manuel! https://x.com/msimoni/status/1824128031792787808
+    if (noEvalArgs && !evalResult) {
+      const fexprResult = func(...args)
+      return () => fexprResult
+    }
+    // manc, eval args and eval result
+    if (!noEvalArgs && evalResult) {
+      const cargs = args.map((a) => compile(ctx, a))
+      return (env) => {
+        const mancResult = func(...cargs.map((carg) => carg(env)))
+        if (!isForm(mancResult)) throw new CompileError('manc must return form', form)
         try {
-          macroResult = func(...args)
+          return compile(ctx, mancResult)
         } catch (e) {
-          if (e instanceof RuntimeError)
-            throw new CompileError(`runtime error when calling macro '${firstWordValue}': ${e.message}`, form, e)
+          if (e instanceof CompileError)
+            throw new RuntimeError(`compiletime error when calling manc '${firstWordValue}': ${error.message}`, form, e)
           throw e
         }
-        if (!isForm(macroResult)) throw new CompileError('macro must return form', form)
-        return compile(ctx, macroResult)
       }
-      // fexpr, don' eval args and don't eval result
-      // thanks Manuel! https://x.com/msimoni/status/1824128031792787808
-      if (noEvalArgs && !evalResult) {
-        const fexprResult = func(...args)
-        return () => fexprResult
-      }
-      // manc, eval args and eval result
-      if (!noEvalArgs && evalResult) {
-        const cargs = args.map((a) => compile(ctx, a))
-        return (env) => {
-          const mancResult = func(...cargs.map((carg) => carg(env)))
-          if (!isForm(mancResult)) throw new CompileError('manc must return form', form)
-          try {
-            return compile(ctx, mancResult)
-          } catch (e) {
-            if (e instanceof CompileError)
-              throw new RuntimeError(
-                `compiletime error when calling manc '${firstWordValue}': ${error.message}`,
-                form,
-                e,
-              )
-            throw e
-          }
-        }
-      }
-      throw new CompileError(`unreachable, invalid function/macro/fexpr/manc combination for '${firstWordValue}'`, form)
     }
-    throw new CompileError(`function '${firstWordValue}' not found`, form)
+    throw new CompileError(`unreachable, invalid function/macro/fexpr/manc combination for '${firstWordValue}'`, form)
   }
   const compileTop = (form) => {
     const compRes = compile(null, form)
@@ -410,14 +403,14 @@ const createHostObject = (compile) => {
   for (const [name, f] of hostExports) insertFunc(name, f)
   insertFunc('make-eval-context', makeEvalContext)
   insertFunc('eval', (form) => compile(form)())
+  Object.freeze(hostObj)
   return hostObj
 }
 
 export const makeInitContext = () => {
   const externalModules = {}
   const compile = makeInterpreterContext(externalModules)
-  const hostObj = createHostObject(compile)
-  externalModules['host'] = hostObj
+  externalModules['host'] = createHostObject(compile)
   externalModules['instructions'] = instructionFunctions
   return { compile }
 }
