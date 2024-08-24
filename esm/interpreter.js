@@ -66,17 +66,18 @@ const createNamedFunction = (strFuncName, nOfParams, hasRestParam, body) => {
   return Object.freeze(f)
 }
 
-const checkCallArity = (nOfParams, hasRestParam, form) => {
-  if (nOfParams === undefined) throw new CompileError(`expected function/macro/fexpr/manc, got variable ${form}`, form)
+const checkCallArity = (errorFn) => (nOfParams, hasRestParam, form) => {
+  if (nOfParams === undefined) throw new errorFn(`expected function/macro/fexpr/manc, got variable ${form}`, form)
   const numOfGivenArgs = form.length - 1
   if (hasRestParam) {
     if (numOfGivenArgs < nOfParams)
-      throw new CompileError(`expected at least ${nOfParams} arguments, got ${numOfGivenArgs}`, form)
+      throw new errorFn(`expected at least ${nOfParams} arguments, got ${numOfGivenArgs}`, form)
   } else {
-    if (numOfGivenArgs !== nOfParams)
-      throw new CompileError(`expected ${nOfParams} arguments, got ${numOfGivenArgs}`, form)
+    if (numOfGivenArgs !== nOfParams) throw new errorFn(`expected ${nOfParams} arguments, got ${numOfGivenArgs}`, form)
   }
 }
+const ctCheckCallArity = checkCallArity(CompileError)
+const rtCheckCallArity = checkCallArity(RuntimeError)
 
 const makeInterpreterContext = (externalModules) => {
   const defVars = new Map()
@@ -233,7 +234,7 @@ const makeInterpreterContext = (externalModules) => {
       case 'recur': {
         let curCtx = ctx
         while (curCtx.outer) curCtx = curCtx.outer
-        checkCallArity(curCtx.nOfParams, curCtx.hasRestParam, form)
+        ctCheckCallArity(curCtx.nOfParams, curCtx.hasRestParam, form)
         const cargs = args.map((a) => compile(ctx, a))
         return (env) => curCtx.func(...cargs.map((carg) => carg(env)))
       }
@@ -292,18 +293,7 @@ const makeInterpreterContext = (externalModules) => {
       return (env) => {
         const f = cfunc(env)
         if (typeof f !== 'function') throw new RuntimeError(`expected function, got ${f}`)
-        const { length, hasRestParam } = f
-        if (length !== undefined) {
-          if (hasRestParam) {
-            if (args.length < length)
-              throw new RuntimeError(`expected at least ${length} arguments, got ${args.length}`, form)
-          } else {
-            if (args.length !== length) throw new RuntimeError(`expected ${length} arguments, got ${args.length}`, form)
-          }
-        } else {
-          // non wuns functions are assumed to not have rest param
-          if (args.length !== length) throw new RuntimeError(`expected ${f.length} arguments, got ${args.length}`, form)
-        }
+        rtCheckCallArity(f.length, f.hasRestParam, form)
         return f(...cargs.map((carg) => carg(env)))
       }
     }
@@ -311,7 +301,7 @@ const makeInterpreterContext = (externalModules) => {
     if (!funcDefVar) throw new CompileError(`function '${firstWordValue}' not found`, form)
     const func = funcDefVar.value
     if (typeof func !== 'function') throw new CompileError(`expected function, got ${func}`, form)
-    checkCallArity(func.length, func.hasRestParam, form)
+    ctCheckCallArity(func.length, func.hasRestParam, form)
     const varMeta = meta(funcDefVar)
     const noEvalArgs = varMeta['no-eval-args']
     const evalResult = varMeta['eval-result']
