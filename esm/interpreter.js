@@ -307,12 +307,12 @@ const makeInterpreterContext = (externalModules) => {
         return f(...cargs.map((carg) => carg(env)))
       }
     }
-    const funcOrMacVar = defVars.get(firstWordValue)
-    if (!funcOrMacVar) throw new CompileError(`function '${firstWordValue}' not found`, form)
-    const func = funcOrMacVar.value
+    const funcDefVar = defVars.get(firstWordValue)
+    if (!funcDefVar) throw new CompileError(`function '${firstWordValue}' not found`, form)
+    const func = funcDefVar.value
     if (typeof func !== 'function') throw new CompileError(`expected function, got ${func}`, form)
     checkCallArity(func.length, func.hasRestParam, form)
-    const varMeta = meta(funcOrMacVar)
+    const varMeta = meta(funcDefVar)
     const noEvalArgs = varMeta['no-eval-args']
     const evalResult = varMeta['eval-result']
     // function, eval args and don't eval result
@@ -415,60 +415,44 @@ export const makeInitContext = () => {
   return { compile }
 }
 
-export const evalLogForms = (compile, forms) => {
-  const compiled = []
-  for (const form of forms) {
+const compEvalLog = (compile, form) => {
+  const cform = (() => {
     try {
-      compiled.push(compile(form))
+      return compile(form)
     } catch (e) {
       if (e instanceof CompileError) {
         console.error(`compile error in ${getFormLocation(e.form || form)}: ${e.message}`)
-        return undefined
+        console.error(e)
+      } else {
+        console.error(`unexpected non-compile error: ${e.message}`)
       }
       throw e
     }
-  }
-  for (const cform of compiled) {
-    try {
-      const v = cform()
-      if (v !== undefined) console.log(print(v))
-    } catch (e) {
-      if (e instanceof RuntimeError) {
-        console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
-        return undefined
-      }
-      throw new Error(`unexpected non-runtime error: ${e.message}`)
+  })()
+  try {
+    return cform(null)
+  } catch (e) {
+    if (e instanceof RuntimeError) {
+      console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
+      console.error(e)
+    } else {
+      console.error(`unexpected non-runtime error: ${e.message}`)
     }
+    throw e
+  }
+}
+
+export const evalLogForms = (compile, forms) => {
+  for (const form of forms) {
+    const v = compEvalLog(compile, form)
+    if (v !== undefined) console.log(print(v))
   }
 }
 
 export const parseEvalFiles = (compile, filenames) => {
   for (const filename of filenames) {
-    const forms = parseFile(filename)
-    for (const form of forms) {
-      let cform
-      try {
-        cform = compile(form)
-      } catch (e) {
-        if (e instanceof CompileError) {
-          console.error(`compile error in ${getFormLocation(e.form || form)}: ${e.message}`)
-          console.error(e)
-        } else {
-          console.error(`unexpected non-compile error: ${e.message}`)
-        }
-        throw e
-      }
-      try {
-        cform(null)
-      } catch (e) {
-        if (e instanceof RuntimeError) {
-          console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
-          console.error(e)
-        } else {
-          console.error(`unexpected non-runtime error: ${e.message}`)
-        }
-        throw e
-      }
+    for (const form of parseFile(filename)) {
+      compEvalLog(compile, form)
     }
   }
 }
