@@ -4,7 +4,6 @@ import {
   word,
   wordValue,
   isDefVar,
-  defVarWithMeta,
   meta,
   makeList,
   atom,
