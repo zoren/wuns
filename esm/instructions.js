@@ -26,8 +26,8 @@ const i32BitwiseOps = [
   { name: 'or', op: '|', alias: 'bitwise-ior' },
   { name: 'xor', op: '^', alias: 'bitwise-xor' },
   { name: 'shl', op: '<<', alias: 'bitwise-shift-left' },
-  { name: 'shr_s', op: '>>', alias: 'bitwise-shift-right' },
-  { name: 'shr_u', op: '>>>', alias: 'bitwise-shift-right-unsigned' },
+  { name: 'shr-s', op: '>>', alias: 'bitwise-shift-right' },
+  { name: 'shr-u', op: '>>>', alias: 'bitwise-shift-right-unsigned' },
 ]
 for (const { name, op, alias } of i32BitwiseOps) {
   const f = Function('a', 'b', `return (a ${op} b) | 0`)
