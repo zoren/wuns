@@ -1,15 +1,4 @@
-import {
-  isWord,
-  isList,
-  print,
-  isSigned32BitInteger,
-  meta,
-  makeList,
-  isForm,
-  defVar,
-  defVarWithMeta,
-  setMeta,
-} from './core.js'
+import { isWord, isList, print, meta, makeList, isForm, defVar, defVarWithMeta, setMeta } from './core.js'
 import { instructionFunctions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
 
@@ -286,12 +275,7 @@ const makeInterpreterContext = (externalModules) => {
         const [varName, value] = args
         const v = ctWordValue(varName)
         const cvalue = compile(ctx, value)
-        return (env) => {
-          const eValue = cvalue(env)
-          const varObject = defVar(v, eValue)
-          insertDefVar(varObject)
-          return undefined
-        }
+        return (env) => insertDefVar(defVar(v, cvalue(env)))
       }
       case 'def-with-meta': {
         if (args.length !== 3) throw new CompileError('def expects 3 arguments', form)
@@ -299,12 +283,7 @@ const makeInterpreterContext = (externalModules) => {
         const v = ctWordValue(varName)
         const cmetaData = compile(ctx, metaForm)
         const cvalue = compile(ctx, value)
-        return (env) => {
-          const md = cmetaData(env)
-          const eValue = cvalue(env)
-          insertDefVar(defVarWithMeta(v, eValue, md))
-          return undefined
-        }
+        return (env) => insertDefVar(defVarWithMeta(v, cmetaData(env), cvalue(env)))
       }
     }
     // direct function call or function in parameter/local variable

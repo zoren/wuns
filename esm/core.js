@@ -64,7 +64,7 @@ export const isDefVar = (f) => f instanceof DefVar
 
 export const defVar = (name, value) => Object.freeze(new DefVar(name, value))
 
-export const defVarWithMeta = (name, value, metaData) => {
+export const defVarWithMeta = (name, metaData, value) => {
   const newVar = new DefVar(name, value)
   setMeta(newVar, metaData)
   return Object.freeze(newVar)
