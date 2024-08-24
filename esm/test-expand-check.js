@@ -1,4 +1,4 @@
-import { makeInitContext, parseEvalFiles } from './interpreter.js'
+import { makeInitContext, parseEvalFiles, runCform } from './interpreter.js'
 import { makeGetDefVarValue } from './core.js'
 const { compile } = makeInitContext()
 
@@ -9,4 +9,6 @@ parseEvalFiles(
 
 const getDefVarVal = makeGetDefVarValue(compile)
 const testCheck = getDefVarVal('test-check')
-testCheck()
+runCform(() => {
+  testCheck()
+})

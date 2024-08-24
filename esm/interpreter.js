@@ -374,18 +374,6 @@ const makeInterpreterContext = (externalModules) => {
 
 export const getFormLocation = (subForm) => (subForm ? meta(subForm).location : undefined) || 'unknown location'
 
-export const runCform = (exp) => {
-  try {
-    return exp()
-  } catch (e) {
-    if (e instanceof RuntimeError) {
-      console.error(`runtime error in ${getFormLocation(e.form)}: ${e.message}`)
-    } else if (e instanceof CompileError) {
-      console.error(`compiletime error in ${getFormLocation(e.form)}: ${e.message}`)
-    } else throw e
-  }
-}
-
 const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
 
 const makeEvalContext = (emods) => {
@@ -408,11 +396,23 @@ const createHostObject = (compile) => {
 }
 
 export const makeInitContext = () => {
-  const externalModules = {}
+  const externalModules = { instructions: instructionFunctions }
   const compile = makeInterpreterContext(externalModules)
   externalModules['host'] = createHostObject(compile)
-  externalModules['instructions'] = instructionFunctions
+  Object.freeze(externalModules)
   return { compile }
+}
+
+export const runCform = (exp) => {
+  try {
+    return exp()
+  } catch (e) {
+    if (e instanceof RuntimeError) {
+      console.error(`runtime error in ${getFormLocation(e.form)}: ${e.message}`)
+    } else if (e instanceof CompileError) {
+      console.error(`compiletime error in ${getFormLocation(e.form)}: ${e.message}`)
+    } else throw e
+  }
 }
 
 const compEvalLog = (compile, form) => {

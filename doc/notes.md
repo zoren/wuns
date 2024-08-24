@@ -28,5 +28,6 @@ https://cohost.org/prophet/post/7083950-functional-programmi
 
 https://javascript.info/generators
 https://github.com/dubzzz/fast-check?tab=readme-ov-file
-
+Swifts error handling rationale
+https://github.com/swiftlang/swift/blob/9315673c003875158852579bd1f33480cdec5461/docs/ErrorHandlingRationale.md#fundamentals
 add a version of int-to-word that does no extra allocations
