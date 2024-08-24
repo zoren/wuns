@@ -105,4 +105,12 @@ const typedArrayCtorByByteSizeSigned = (byteSize, signed) => {
 }
 
 Object.freeze(instructions)
-export { instructions }
+
+const instructionFunctions = {}
+for (const [name, f] of Object.entries(instructions)) {
+  if (f.immediateParams.length !== 0) continue
+  instructionFunctions[name] = f.func()
+}
+Object.freeze(instructionFunctions)
+
+export { instructions, instructionFunctions }

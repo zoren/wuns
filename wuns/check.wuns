@@ -121,7 +121,9 @@
     [if-let [vars [try-getq cur-ctx vars]]
       [if-let [type [try-get vars var-name]]
         type
-        [continue cur-ctx [getq cur-ctx outer]]]
+        [if-let [outer [try-getq cur-ctx outer]]
+          [continue cur-ctx outer]
+          0]]
       [if-let [def-var [eval-try-get-var gctx var-name]]
         [try-getq [var-meta def-var] type]
         0]]]]
@@ -144,8 +146,10 @@
     [let [first-form [first form]
           s-form [size form]
           n-of-args [dec s-form]]
-      [assert [is-word first-form] expected a word first [identity form]]
       [ifs
+        [eq-form first-form [quote i32.const]]
+        [set-node-type gctx form type-i32]
+
         [eq-form first-form [quote quote]]
         [do
           [set-node-type gctx form type-form]
@@ -243,11 +247,6 @@
               [report syntax-type not a type]
               type-error]]]
 
-        [eq-form first-form [quote def]]
-        [let [name [second form]
-              value-type [recur gctx local-ctx [third form]]]
-          [eval-var-assoc-meta gctx name [quote type] value-type]]
-
         [or [eq-form first-form [quote func]]]
         [let [params [third form]
               param-ctx [transient-kv-map]
@@ -273,9 +272,7 @@
                     [set param-ctx p [type-list pt]]]
                   pt]
                 0]
-              meta-params [fourth form]
               func-ctx [kv-map vars param-ctx first-form first-form]
-              locals [growable-list]
               sig-object [transient-kv-map]]
             [comment if this is a macro we should check it returns a form]
             [freeze-mutable-list parameter-type-list]
@@ -284,23 +281,34 @@
             [setq sig-object def first-form]
             [when rest-param-element-type
               [setq sig-object rest-param-element-type rest-param-element-type]]
-            [comment
-              [when [lt-s 1 s-form]
-              [let [name [second form]]
-                [if [is-word name]
-                  [add-sig name sig-object]
-                  [report name expected a word here]]]]]
-            [for i 3 [dec [size form]]
-              [comment remember to check type is empty maybe even drop unused and warn instead]
-              [recur gctx func-ctx [at form i]]]
-            [let [
-              result-type
-              [if [lt-s 3 [size form]]
-                [recur gctx func-ctx [last form]]
-                type-error]]
-              [setq sig-object results result-type]]]
+            [when [lt-s 2 s-form]
+              [for i 3 [dec [size form]]
+                [comment remember to check type is empty maybe even drop unused and warn instead]
+                [recur gctx func-ctx [at form i]]]]
+            [let [result-type
+                  [if [lt-s 3 [size form]]
+                    [recur gctx func-ctx [last form]]
+                    type-empty]]
+              [set-node-type gctx form [list [quote func] parameter-type-list result-type]]]]
 
-        [if-let [type [try-get-var-type gctx local-ctx first-form]]
+        [or [eq-form first-form [quote recur]]]
+        [let []
+          ]
+
+        [eq-form first-form [quote def]]
+        [let [name [second form]
+              value-form [third form]
+              value-type [recur gctx local-ctx value-form]]
+          [eval-var-assoc-meta gctx name [quote type] value-type]]
+
+        [eq-form first-form [quote def-with-meta]]
+        [let [name [second form]
+              meta-form [third form]
+              value-form [fourth form]
+              value-type [recur gctx local-ctx value-form]]
+          [eval-var-assoc-meta gctx name [quote type] value-type]]
+
+        [let [type [recur gctx local-ctx first-form]]
           [if [is-func-type type]
             [let [parameter-types [second type]
                   n-of-param-types [size parameter-types]
@@ -324,37 +332,7 @@
               [set-node-type gctx form [third type]]]
             [do
               [report form not a function]
-              type-error]]
-
-          [if-let [instruction [try-get-instruction first-form]]
-            [let [imm-parameters [getq instruction immediate-parameters]
-                  parameters [getq instruction parameters]
-                  n-of-parameters [add [size imm-parameters] [size parameters]]
-                  results [getq instruction results]]
-              [report-when-not [eq n-of-args n-of-parameters] form wrong number of arguments]
-              [for i 0 [size imm-parameters]
-                [let [imm-p [at imm-parameters i]
-                      arg [at form [inc i]]]
-                  [ifs
-                    [eq-word imm-p immediate-s32]
-                    [report-when-not [is-decimal arg] arg expects a decimal]
-
-                    [eq-word imm-p immediate-u32]
-                    [report-when-not [is-decimal arg] arg expects a decimal]
-
-                    [eq-word imm-p immediate-s64]
-                    [report-when-not [is-decimal arg] arg expects a decimal]
-
-                    [assert 0 unknown immediate parameter type [identity imm-p]]]]]
-              [for i 0 [size parameters]
-                [let [arg [at form [inc [add i [size imm-parameters]]]]
-                      arg-t [recur gctx local-ctx arg]
-                      pt [at parameters i]]
-                    [when-not [check-param-arg-conform pt arg-t]
-                      [report arg parameter does not match [list pt arg-t]] arg]]]
-              [set-node-type gctx form results]]
-            [report form function not found [identity first-form]]]
-                ]]]]]
+              type-error]]]]]]]
 
 [defn assign-node-ids [node-id-counter node]
   [let [c [atom-get node-id-counter]]
@@ -420,9 +398,8 @@
   [test-error type-any [quote not found] [quote no-such-var]]
 
   [testq i32 [i32.const -2]]
-  [testq i64 [i64.const -2]]
-  [testq i32 [i32.add [i32.const 1] [i32.const 2]]]
-  [test-error i64 [quote parameter does not match [i64 i32]] [quote [i64.add [i32.const 1] [i64.const 2]]]]
+  [testq i32 [[extern instructions i32.add [func [i32 i32] i32]] [i32.const 1] [i32.const 2]]]
+  [test-error i32 [quote parameter does not match [i32 word]] [quote [[extern instructions i32.add [func [i32 i32] i32]] [i32.const 1] [quote a]]]]
 
   [testq word [quote a]]
   [testq [list form] [quote]]
@@ -430,7 +407,7 @@
   [testq [list form] [quote [a]]]
   [testq [list form] [quote two words]]
 
-  [test-error i32 [quote condition not i32] [quote [if [i64.const 1] [i32.const 2] [i32.const 3]]]]
+  [test-error i32 [quote condition not i32] [quote [if [quote not-i32] [i32.const 2] [i32.const 3]]]]
   [test-error i32 [quote if extra forms ignored] [quote [if [i32.const 1] [i32.const 2] [i32.const 3] [i32.const 4]]]]
   [test-error i32 [quote if branches must have same type] [quote [if [i32.const 1] [quote a] [i32.const 1]]]]
   [test-error type-empty [quote if branches must have same type] [quote [if [i32.const 1] [i32.const 2]]]]
@@ -444,7 +421,6 @@
   [testq [tuple] [let [a [i32.const 1]]]]
   [testq i32 [let [a [i32.const 1]] a]]
   [testq i32 [let [a [i32.const 1] b a] b]]
-  [testq i32 [let [a [i32.const 1] b [i32.add [i32.const 1] a]] b]]
   [comment maybe we should ban redef as it complicates compilation to wasm and is not good style]
 [comment  [testq i32 [let [a [i32.const 1] a [i32.add [i32.const 1] a]] a]]]
 
@@ -453,18 +429,17 @@
   [testq [tuple] [loop [a [i32.const 1]]]]
   [testq i32 [loop [a [i32.const 1]] a]]
   [testq i32 [loop [a [i32.const 1] b a] b]]
-  [testq i32 [loop [a [i32.const 1] b [i32.add [i32.const 1] a]] b]]
   [comment maybe we should ban redef as it complicates compilation to wasm and is not good style]
   [comment [testq i32 [loop [a [i32.const 1] a [i32.add [i32.const 1] a]] a]]]
 
   [test-error type-bottom [quote continue not inside loop] [quote [continue]]]
   [test-error type-bottom [quote expected a loop variable here] [quote [loop [] [continue [i32.const 1] [i32.const 1]]]]]
-  [test-error type-bottom [quote loop var not found] [quote [loop [i [i32.const 0]] [continue j [i64.const 1]]]]]
-  [test-error type-bottom [quote type mismatch] [quote [loop [i [i32.const 0]] [continue i [i64.const 1]]]]]
+  [test-error type-bottom [quote loop var not found] [quote [loop [i [i32.const 0]] [continue j [i32.const 1]]]]]
+  [test-error type-bottom [quote type mismatch] [quote [loop [i [i32.const 0]] [continue i [quote a]]]]]
   [testq i32
     [loop [i [i32.const 10] res [i32.const 0]]
       [if i
-        [continue i [i32.sub i [i32.const 1]] res [i32.add res i]]
+        [continue i [[extern instructions i32.sub [func [i32 i32] i32]] i [i32.const 1]] res [[extern instructions i32.add [func [i32 i32] i32]] res i]]
         res]]]
 
   [test-error type-error [quote not a type] [quote [extern m ef not-a-type]]]
@@ -472,15 +447,19 @@
   [test-error i32 [quote parameter does not match [i64 i32]]
     [quote [let [f [extern mod mod-fun [func [i64] i32]]] [f [i32.const 1]]]]]
   [testq i32 [let [f [extern m p0 [func [] i32]]] [f]]]
-  [testq i32 [let [f [extern m p1 [func [i64] i32]]] [f [i64.const 1]]]]
-  [testq i32 [let [f [extern m p1 [func [i64] i32]]] [f [i64.const 1]]]]
+  [testq i32 [let [f [extern m p1 [func [i32] i32]]] [f [i32.const 1]]]]
+  [testq i32 [let [f [extern m p1 [func [i32] i32]]] [f [i32.const 1]]]]
   [testq i32 [let [f [extern m p1 [func [form] i32]]] [f [quote a]]]]
   [testq i32 [let [f [extern m p1 [func [form] i32]]] [f [quote []]]]]
   [testq i32 [let [f [extern m p0r [func [.. form] i32]]] [f]]]
   [testq i32 [let [f [extern m p0r [func [.. form] i32]]] [f [quote a]]]]
   [testq i32 [let [f [extern m p0r [func [.. form] i32]]] [f [quote a] [quote []]]]]
-  [testq i32 [let [f [extern m p1r [func [i64 .. form] i32]]] [f [i64.const 1] [quote a] [quote []]]]]
+  [testq i32 [let [f [extern m p1r [func [i32 .. form] i32]]] [f [i32.const 1] [quote a] [quote []]]]]
 
+  [testq [func [] [tuple]] [func f []]]
+  [testq [func [] i32] [func f [] [i32.const 1]]]
+  [testq [func [] word] [func f [] [quote a]]]
+  [testq [func [i32] i32] [func inc [x] [[extern instructions i32.add [func [i32 i32] i32]] x x]]]
   ]
 
 [comment

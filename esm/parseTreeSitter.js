@@ -9,7 +9,7 @@ const parse = (content, oldTree) => {
   // workaround for https://github.com/tree-sitter/node-tree-sitter/issues/199
   // without it we cannot parse strings longer than 32768 bytes
   const bufferSize = content.length + 1
-  return parser.parse(content, oldTree, { bufferSize });
+  return parser.parse(content, oldTree, { bufferSize })
 }
 export const treeToForms = (tree, filePath) => {
   /**
@@ -28,7 +28,7 @@ export const treeToForms = (tree, filePath) => {
     }
     if (filePath) {
       // metaData['file-path'] = filePath
-      metaData['location'] = `${filePath}:${row+1}:${column}`
+      metaData['location'] = `${filePath}:${row + 1}:${column + 1}`
     }
     Object.freeze(metaData)
     switch (type) {

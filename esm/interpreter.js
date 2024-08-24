@@ -10,7 +10,7 @@ import {
   defVarWithMeta,
   setMeta,
 } from './core.js'
-import { instructions } from './instructions.js'
+import { instructionFunctions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
 
 class RuntimeError extends Error {
@@ -129,6 +129,13 @@ const makeInterpreterContext = (externalModules) => {
     const [firstForm, ...args] = form
     const firstWordValue = tryGetWordValue(firstForm)
     switch (firstWordValue) {
+      case 'i32.const': {
+        if (args.length !== 1) throw new CompileError('i32.const expects 1 argument', form)
+        const wv = +ctWordValue(args[0])
+        const normalized = wv | 0
+        if (wv !== normalized) throw new CompileError('expected 32-bit signed integer', form)
+        return () => normalized
+      }
       case 'quote': {
         const res = args.length === 1 ? args[0] : makeList(...args)
         if (!isForm(res)) throw new CompileError('quote expects form', form)
@@ -338,7 +345,7 @@ const makeInterpreterContext = (externalModules) => {
           try {
             return func(...eargs)
           } catch (e) {
-            if (e instanceof RuntimeError) throw e
+            // if (e instanceof RuntimeError) throw e
             throw new RuntimeError(`runtime error when calling function '${firstWordValue}': ${e.message}`, form, e)
           }
         }
@@ -383,59 +390,7 @@ const makeInterpreterContext = (externalModules) => {
       }
       throw new CompileError(`unreachable, invalid function/macro/fexpr/manc combination for '${firstWordValue}'`, form)
     }
-    const instruction = instructions[firstWordValue]
-    if (!instruction) throw new CompileError(`function '${firstWordValue}' not found`, form)
-    const { immediateParams, params, func } = instruction
-    const immArity = immediateParams.length
-    if (args.length < immArity)
-      throw new CompileError(`instruction ${firstWordValue} expected at least ${immArity} arguments`)
-    // maybe we should allow number immediates to for convenience
-    const immArgs = args.slice(0, immArity).map((arg) => {
-      const wv = ctWordValue(arg)
-      const n = Number(wv)
-      if (!isSigned32BitInteger(n)) throw new CompileError(`expected 32-bit signed integer, found: ${wv}`, arg)
-      return n
-    })
-    for (let i = 0; i < immArity; i++) {
-      const immArg = immArgs[i]
-      if (!Number.isInteger(immArg)) throw new CompileError(`invalid immediate param ${immArg}`, immArg)
-      switch (immediateParams[i]) {
-        case 'u32':
-          if (immArg < 0 || immArg > 2 ** 32 - 1) throw new CompileError(`invalid immediate param ${immArg}`, immArg)
-          break
-        case 's32':
-          if (!isSigned32BitInteger(immArg)) throw new CompileError(`invalid immediate param ${immArg}`, immArg)
-          break
-        case 's64':
-          // if (!isSigned32BitInteger(immArg)) throw new CompileError(`invalid immediate param ${immArg}`, immArg)
-          try {
-            BigInt(immArg)
-          } catch (e) {
-            throw new CompileError(`invalid immediate param ${immArg}`, immArg)
-          }
-          break
-        default:
-          throw new CompileError(`invalid immediate param type ${immediateParams[i]}`)
-      }
-    }
-    const instWithImmediate = func(...immArgs)
-    const cargs = args.slice(immArity).map((a) => compile(ctx, a))
-    if (cargs.length !== params.length)
-      throw new CompileError(
-        `instruction ${firstWordValue} expected ${params.length} non-immediate arguments, got ${cargs.length}`,
-        form,
-      )
-    return (env) => {
-      const eargs = cargs.map((carg) => carg(env))
-      for (const earg of eargs)
-        if (!isSigned32BitInteger(earg))
-          throw new RuntimeError(`instruction ${firstWordValue} expected integer, got ${earg}`, form)
-      try {
-        return instWithImmediate(...eargs)
-      } catch (e) {
-        throw new RuntimeError(`runtime error when calling instruction '${firstWordValue}': ${e.message}`, form, e)
-      }
-    }
+    throw new CompileError(`function '${firstWordValue}' not found`, form)
   }
   const compileTop = (form) => {
     const compRes = compile(null, form)
@@ -484,6 +439,7 @@ export const makeInitContext = () => {
   const compile = makeInterpreterContext(externalModules)
   const hostObj = createHostObject(compile)
   externalModules['host'] = hostObj
+  externalModules['instructions'] = instructionFunctions
   return { compile }
 }
 

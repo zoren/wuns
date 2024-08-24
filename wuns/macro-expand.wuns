@@ -178,7 +178,7 @@
             [for i 1 s-form [set-array res i [recur gctx local-ctx [at form i]]]]
             res]
 
-          [eq-form first-form [quote extern]]
+          [eq-form [quote extern] first-form]
           [do
             [report-when-not [eq n-of-args 3] form extern expects 3 arguments]
             [let [module-name [second form]
@@ -311,7 +311,20 @@
       meta
       word-with-meta
       list-with-meta
-       ]]]
+      ]
+    instructions
+    [kv-map
+      i32.add add
+      i32.sub sub
+      i32.mul mul
+      i32.lt-s lt-s
+      i32.eq [extern instructions i32.eq [func [i32 i32] i32]]
+      i32.le-s [extern instructions i32.lt-s [func [i32 i32] i32]]
+      i32.and [extern instructions i32.and [func [i32 i32] i32]]
+      i32.rem-s [extern instructions i32.rem-s [func [i32 i32] i32]]
+      i32.div-s [extern instructions i32.div-s [func [i32 i32] i32]]
+      unreachable [extern instructions unreachable [func [] [tuple]]]
+      ]]]
 
 [defn make-global-context []
   [kv-map
