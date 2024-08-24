@@ -87,8 +87,11 @@
   and then check that against the parameter type
 ]
 
-[defn type-less-than [t1 t2]
+[defn type-less-than-equal [t1 t2]
   [ifs
+    [eq-form t1 t2]
+    1
+
     [eq-form t2 type-any]
     1
 
@@ -102,8 +105,7 @@
 
 [defn check-param-arg-conform [param-type arg-t]
   [or
-    [eq-form param-type arg-t]
-    [type-less-than arg-t param-type]
+    [type-less-than-equal arg-t param-type]
     [and [is-list-type param-type] [is-list-or-mut-list-type arg-t]]
     [and [is-list-type param-type] [is-list-type arg-t]
       [recur [second param-type] [second arg-t]]]]]
@@ -167,16 +169,13 @@
                   ft [if [eq n-of-args 2] type-empty [recur gctx local-ctx [fourth form]]]]
               [set-node-type gctx form
                 [ifs
-                  [eq-form tt ft]
+                  [type-less-than-equal tt ft]
                   ft
 
-                  [type-less-than tt ft]
-                  ft
-
-                  [type-less-than ft tt]
+                  [type-less-than-equal ft tt]
                   tt
 
-                  [and [type-less-than tt type-form] [type-less-than ft type-form]]
+                  [and [type-less-than-equal tt type-form] [type-less-than-equal ft type-form]]
                   type-form
 
                   [do
