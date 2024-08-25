@@ -1,10 +1,10 @@
-[def -2 [i32.const -2]]
-[def -1 [i32.const -1]]
-[def 0  [i32.const 0]]
-[def 1  [i32.const 1]]
-[def 2  [i32.const 2]]
-[def 3  [i32.const 3]]
-[def 4  [i32.const 4]]
+[def -2 [i32 -2]]
+[def -1 [i32 -1]]
+[def 0  [i32 0]]
+[def 1  [i32 1]]
+[def 2  [i32 2]]
+[def 3  [i32 3]]
+[def 4  [i32 4]]
 
 [def size [extern host size [func [[list any]] i32]]]
 [def at [extern host at [func [[list any] i32] any]]]
@@ -22,7 +22,7 @@
        total-size
         [loop [total 0 i 0]
           [if [lt-s i n-of-lists]
-            [continue total [add total [size [at lists i]]] i [add [i32.const 1] i]]
+            [continue total [add total [size [at lists i]]] i [add 1 i]]
             total]]
        result [mutable-list-of-size total-size]]
       [loop [i 0 j 0 res-index 0]
@@ -33,8 +33,8 @@
               [if [lt-s i s]
                 [let []
                   [set-array result res-index [at cur-list i]]
-                  [continue res-index [add [i32.const 1] res-index] i [add [i32.const 1] i]]]]]
-            [continue i [add [i32.const 1] i] res-index [add s res-index]]]]]
+                  [continue res-index [add 1 res-index] i [add 1 i]]]]]
+            [continue i [add 1 i] res-index [add s res-index]]]]]
       [freeze-mutable-list result]
       result]]]
 
@@ -47,8 +47,8 @@
 [def macro-meta
   [let [m [transient-kv-map]]
     [set m [quote parameters] [quote name parameters .. bodies]]
-    [set m [quote no-eval-args] [i32.const 1]]
-    [set m [quote eval-result] [i32.const 1]]
+    [set m [quote no-eval-args] 1]
+    [set m [quote eval-result] 1]
     [freeze-kv-map m]
     m]]
 
@@ -58,10 +58,10 @@
       [quote [let [m [transient-kv-map]]]]
       [list [concat [quote set m [quote parameters]] [list [list [quote quote] parameters]]]]
       [if no-eval-args
-        [list [quote [set m [quote no-eval-args] [i32.const 1]]]]
+        [list [quote [set m [quote no-eval-args] [i32 1]]]]
         [list]]
       [if eval-result
-        [list [quote [set m [quote eval-result] [i32.const 1]]]]
+        [list [quote [set m [quote eval-result] [i32 1]]]]
         [list]]
       [quote [freeze-kv-map m] m]]]]
 
@@ -192,14 +192,14 @@
 [defmacro and [.. clauses]
   [let [s [size clauses]]
     [if [is-zero s]
-      [quote i32.const 1]
+      [quote i32 1]
       [loop [i [dec s]
              res [at clauses -1]]
         [if [eq i 0]
           res
           [continue
             i [dec i]
-            res [list [quote if] [at clauses [dec i]] res [quote i32.const 0]]]]]]]]
+            res [list [quote if] [at clauses [dec i]] res [quote i32 0]]]]]]]]
 
 [def-extern atom [func [any] atom]]
 
@@ -220,13 +220,13 @@
         [do
           [loop [i n]
             [when i
-              [push l [char-code-to-word [add [i32.const 48] [sub 0 [i32.rem-s i [i32.const 10]]]]]]
-              [continue i [i32.div-s i [i32.const 10]]]]]
+              [push l [char-code-to-word [add [i32 48] [sub 0 [i32.rem-s i [i32 10]]]]]]
+              [continue i [i32.div-s i [i32 10]]]]]
           [push l [quote -]]]
         [loop [i n]
           [when i
-            [push l [char-code-to-word [add [i32.const 48] [i32.rem-s i [i32.const 10]]]]]
-            [continue i [i32.div-s i [i32.const 10]]]]]]
+            [push l [char-code-to-word [add [i32 48] [i32.rem-s i [i32 10]]]]]
+            [continue i [i32.div-s i [i32 10]]]]]]
       [loop [res [first l] i 1]
         [if [lt-s i [size l]]
           [continue res [concat-words [at l i] res] i [inc i]]
@@ -234,7 +234,7 @@
 
 [def-extern char-code-at [func [word i32] i32]]
 
-[defmacro word-to-char-code [w] [list [quote i32.const] [int-to-word [char-code-at w 0]]]]
+[defmacro word-to-char-code [w] [list [quote i32] [int-to-word [char-code-at w 0]]]]
 
 [def-bin-i32-inst le-s]
 
@@ -248,7 +248,7 @@
     [if [lt-s i [word-byte-size w]]
       [let [cc [char-code-at w i]]
         [assert [is-between-inclusive [word-to-char-code 0] cc [word-to-char-code 9]] dec-word-to-int expects a decimal word]
-        [continue res [add [mul res [i32.const 10]] [sub cc [word-to-char-code 0]]] i [inc i]]]
+        [continue res [add [mul res [i32 10]] [sub cc [word-to-char-code 0]]] i [inc i]]]
       res]]]
 
 [def-extern atom-get [func [atom] any]]
@@ -262,7 +262,7 @@
 [defmacro or [.. clauses]
   [let [s [size clauses]]
     [if [is-zero s]
-      [quote i32.const 0]
+      [quote i32 0]
       [loop [i [dec s]
              res [at clauses -1]]
         [if [eq i 0]
@@ -321,13 +321,13 @@
         [list [quote if]
           [list [quote lt-s] iw ew]
           [concat [quote let []] forms
-            [list [list [quote continue] iw [list [quote add] iw [list [quote i32.const] [int-to-word increment]]]]]]]]]]]
+            [list [list [quote continue] iw [list [quote add] iw [list [quote i32] [int-to-word increment]]]]]]]]]]]
 
 [defmacro for [iw start end .. forms]
-  [for-func iw start [i32.const 1] end forms]]
+  [for-func iw start [i32 1] end forms]]
 
 [defmacro for-pair [iw start end .. forms]
-  [for-func iw start [i32.const 2] end forms]]
+  [for-func iw start [i32 2] end forms]]
 
 [defmacro for-each [element-var collection .. forms]
   [assert [is-word element-var] for-each requires a word as the first argument]
@@ -337,13 +337,13 @@
     [list
       [quote let] [list col-var collection col-size-var [list [quote size] col-var]]
       [list
-        [quote loop] [list iteration-var [quote i32.const 0]]
+        [quote loop] [list iteration-var [quote i32 0]]
         [list [quote if]
           [list [quote lt-s] iteration-var col-size-var]
           [concat [quote [let]]
             [list [list element-var [list [quote at] col-var iteration-var]]]
             forms
-            [list [list [quote continue] iteration-var [list [quote add] iteration-var [quote i32.const 1]]]]]]]]]]
+            [list [list [quote continue] iteration-var [list [quote add] iteration-var [quote i32 1]]]]]]]]]]
 
 [defmacro list-map [element-var collection form]
   [assert [is-word element-var] list-map requires a word as the first argument]
@@ -356,13 +356,13 @@
                         col-size-var [list [quote size] col-var]
                         new-col-var [list [quote mutable-list-of-size] col-size-var]]
       [list
-        [quote loop] [list iteration-var [quote i32.const 0]]
+        [quote loop] [list iteration-var [quote i32 0]]
         [list [quote if]
           [list [quote lt-s] iteration-var col-size-var]
           [concat [quote [let]]
             [list [list element-var [list [quote at] col-var iteration-var]]]
             [list [list [quote set-array] new-col-var iteration-var form]]
-            [list [list [quote continue] iteration-var [list [quote add] iteration-var [quote i32.const 1]]]]]]]
+            [list [list [quote continue] iteration-var [list [quote add] iteration-var [quote i32 1]]]]]]]
       [list [quote freeze-mutable-list] new-col-var]
       new-col-var]]]
 
@@ -449,14 +449,14 @@
         [freeze-mutable-list ml]
         ml]]]]
 
-[def ascii-dash [i32.const 45]]
+[def ascii-dash [i32 45]]
 
 [defn is-decimal [dw]
   [let [s [word-byte-size dw]]
     [loop [i [if [eq [char-code-at dw 0] ascii-dash] 1 0]]
       [if [lt-s i s]
         [let [c [char-code-at dw i]]
-          [if [and [le-s [i32.const 48] c] [le-s c [i32.const 57]]]
+          [if [and [le-s [i32 48] c] [le-s c [i32 57]]]
             [continue i [inc i]]
             0]]
         1]]]]
@@ -466,7 +466,7 @@
     [loop [i 0]
       [if [lt-s i s]
         [let [c [char-code-at dw i]]
-          [if [and [le-s [i32.const 48] c] [le-s c [i32.const 57]]]
+          [if [and [le-s [i32 48] c] [le-s c [i32 57]]]
             [continue i [inc i]]
             0]]
         1]]]]

@@ -1,4 +1,4 @@
-[def ascii-underscore [i32.const 95]]
+[def ascii-underscore [i32 95]]
 
 [comment wuns does not have underscores so we convert dashes to underscores]
 [defn wasm-name-to-wat-bytes [w]
@@ -52,7 +52,7 @@
     [make-operation-obj [quote unreachable] [quote 0x00] [list] [list] empty-tuple]
     [make-operation-obj [quote nop] [quote 0x01] [list] [list] empty-tuple]
 
-    [make-operation-obj [quote i32.const] [quote 0x41] [list immediate-s32] [list] i32]
+    [make-operation-obj [quote i32] [quote 0x41] [list immediate-s32] [list] i32]
     [make-operation-obj [quote i64.const] [quote 0x42] [list immediate-s64] [list] i64]
 
     [make-binary-i32 i32.eq   0x46 eq]

@@ -88,6 +88,9 @@
           s-form [size form]
           n-of-args [dec s-form]]
         [ifs
+          [eq-word [quote i32] first-form]
+          form
+
           [eq-word [quote quote] first-form]
           form
 
@@ -363,7 +366,7 @@
 
 [defn test-expand [host-func-types]
   [test-expand-no-errors-fn [quote
-  [def x [i32.const 1]]
-  [def y [i32.const 2]]
+  [def x [i32 1]]
+  [def y [i32 2]]
   ]]
 ]
