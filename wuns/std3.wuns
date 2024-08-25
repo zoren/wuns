@@ -46,25 +46,40 @@
 
 [def macro-meta
   [let [m [transient-kv-map]]
+    [set m [quote parameters] [quote name parameters .. bodies]]
     [set m [quote no-eval-args] [i32.const 1]]
     [set m [quote eval-result] [i32.const 1]]
     [freeze-kv-map m]
     m]]
 
-[def-with-meta defmacro macro-meta
-  [func defmacro [name params .. bodies]
-    [list [quote def-with-meta] name
-      [quote
-        [let [m [transient-kv-map]]
-          [set m [quote no-eval-args] [i32.const 1]]
-          [set m [quote eval-result] [i32.const 1]]
-          [freeze-kv-map m]
-          m]]
-      [concat [list [quote func] name params] bodies]]]]
+[def make-param-meta
+  [func make-param-meta [parameters no-eval-args eval-result]
+    [concat
+      [quote [let [m [transient-kv-map]]]]
+      [list [concat [quote set m [quote parameters]] [list [list [quote quote] parameters]]]]
+      [if no-eval-args
+        [list [quote [set m [quote no-eval-args] [i32.const 1]]]]
+        [list]]
+      [if eval-result
+        [list [quote [set m [quote eval-result] [i32.const 1]]]]
+        [list]]
+      [quote [freeze-kv-map m] m]]]]
 
-[defmacro defn [name params .. bodies]
-  [list [quote def] name
-    [concat [list [quote func] name params] bodies]]]
+[def-with-meta defmacro macro-meta
+  [func defmacro [name parameters .. bodies]
+    [list [quote def-with-meta] name
+      [make-param-meta parameters 1 1]
+      [concat [list [quote func] name parameters] bodies]]]]
+
+[defmacro defn [name parameters .. bodies]
+  [list [quote def-with-meta] name
+    [make-param-meta parameters 0 0]
+    [concat [list [quote func] name parameters] bodies]]]
+
+[defmacro defexpr [name parameters .. bodies]
+  [list [quote def-with-meta] name
+    [make-param-meta parameters 1 0]
+    [concat [list [quote func] name parameters] bodies]]]
 
 [defmacro def-extern [name type]
   [list [quote def] name [list [quote extern] [quote host] name type]]]
@@ -433,15 +448,6 @@
           [set-array ml [sub i start] [at l i]]]
         [freeze-mutable-list ml]
         ml]]]]
-
-[defmacro defexpr [name params .. bodies]
-  [list [quote def-with-meta] name
-    [quote
-      [let [m [transient-kv-map]]
-        [set m [quote no-eval-args] [i32.const 1]]
-        [freeze-kv-map m]
-        m]]
-    [concat [list [quote func] name params] bodies]]]
 
 [def ascii-dash [i32.const 45]]
 
