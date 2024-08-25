@@ -110,23 +110,39 @@
     [and [is-list-type param-type] [is-list-type arg-t]
       [recur [second param-type] [second arg-t]]]]]
 
+[defn make-check-global-context []
+  [kv-map
+    messages [growable-list]
+    def-var-types [transient-kv-map]]]
+
 [defn set-node-type [gctx node type]
   [comment to do add to map inside gctx]
   type]
 
-[defn eval-var-assoc-meta [gctx var key value]]
+[defn set-def-var-type [gctx var type]
+  [let [def-var-types [getq gctx def-var-types]]
+    [assert [not [has def-var-types var]] [list [quote set-def-var-type] var type]]
+    [set def-var-types var type]
+    type]]
 
-[defn try-get-var-type [gctx local-ctx var-name]
+[defn try-get-local-var-type [local-ctx var-name]
   [loop [cur-ctx local-ctx]
-    [if-let [vars [try-getq cur-ctx vars]]
-      [if-let [type [try-get vars var-name]]
+    [if cur-ctx
+      [if-let [type [try-get [getq cur-ctx vars] var-name]]
         type
         [if-let [outer [try-getq cur-ctx outer]]
-          [continue cur-ctx outer]
+          [if outer
+            [continue cur-ctx outer]
+            0]
           0]]
-      [if-let [def-var [eval-try-get-var gctx var-name]]
-        [try-getq [var-meta def-var] type]
-        0]]]]
+      0]]]
+
+[defn try-get-var-type [gctx local-ctx var-name]
+  [if-let [ltype [try-get-local-var-type local-ctx var-name]]
+    ltype
+    [try-get [getq gctx def-var-types] var-name]]]
+
+[defn min [a b] [if [lt-s a b] a b]]
 
 [defn check-form [gctx local-ctx form]
   [ifs
@@ -142,6 +158,9 @@
 
     [not [is-list form]]
     [logq-abort form expects a list [identity form]]
+
+    [is-empty form]
+    [logq-abort form expects a non-empty list [identity form]]
 
     [let [first-form [first form]
           s-form [size form]
@@ -165,9 +184,7 @@
           [when [lt-s 0 n-of-args]
             [let [c [second form]]
               [report-when-not [eq-word [recur gctx local-ctx c] i32] c condition not i32]]]
-          [for i 4 s-form
-            [recur gctx local-ctx [at form i]]
-            [report [at form i] if extra forms ignored]]
+
           [if [lt-s 1 n-of-args]
             [let [tt [recur gctx local-ctx [third form]]
                   ft [if [eq n-of-args 2] type-empty [recur gctx local-ctx [fourth form]]]]
@@ -216,7 +233,7 @@
         [eq-form first-form [quote continue]]
         [do
           [loop [cur-ctx local-ctx]
-            [if-not [hasq cur-ctx outer]
+            [if-not cur-ctx
               [report form continue not inside loop]
               [if [eq-form [quote loop] [getq cur-ctx first-form]]
                 [let [loop-vars [getq cur-ctx vars]]
@@ -229,10 +246,10 @@
                           value [at form [inc i]]
                           val-type [recur gctx cur-ctx value]]
                       [if [is-word var]
-                        [if-not [has loop-vars var]
-                          [report var loop var not found]
+                        [if [has loop-vars var]
                           [let [type [get loop-vars var]]
-                            [report-when-not [eq-form type val-type] value type mismatch]]]
+                            [report-when-not [eq-form type val-type] value type mismatch]]
+                          [report var loop var not found]]
                         [report var expected a loop variable here]]]]]
                 [continue cur-ctx [getq cur-ctx outer]]]]]
           type-bottom]
@@ -299,14 +316,14 @@
         [let [name [second form]
               value-form [third form]
               value-type [recur gctx local-ctx value-form]]
-          [eval-var-assoc-meta gctx name [quote type] value-type]]
+          [set-def-var-type gctx name value-type]]
 
         [eq-form first-form [quote def-with-meta]]
         [let [name [second form]
               meta-form [third form]
               value-form [fourth form]
               value-type [recur gctx local-ctx value-form]]
-          [eval-var-assoc-meta gctx name [quote type] value-type]]
+          [set-def-var-type gctx name value-type]]
 
         [let [type [recur gctx local-ctx first-form]]
           [if [is-func-type type]
@@ -314,21 +331,24 @@
                   n-of-param-types [size parameter-types]
                   has-rest-param [has-rest-param parameter-types]
                   n-of-regular-params [if has-rest-param [sub n-of-param-types 2] n-of-param-types]]
-              [for i 1 [inc n-of-regular-params]
-                [let [arg [at form i]
-                      arg-t [recur gctx local-ctx arg]
-                      p-index [dec i]]
-                  [when [lt-s p-index n-of-param-types]
-                    [let [pt [at parameter-types p-index]]
+              [for i 0 [min n-of-args n-of-regular-params]
+                [let [arg [at form [inc i]]
+                      arg-t [recur gctx local-ctx arg]]
+                  [when [lt-s i n-of-param-types]
+                    [let [pt [at parameter-types i]]
                       [when-not [check-param-arg-conform pt arg-t]
                         [report arg parameter does not match [list pt arg-t]]]]]]]
-              [when has-rest-param
+              [if has-rest-param
                 [let [rest-param-element-type [last parameter-types]]
+                  [report-when [lt-s n-of-args n-of-regular-params] form wrong number of arguments]
                   [for i [inc n-of-param-types] s-form
                     [let [arg [at form i]
                           arg-t [recur gctx local-ctx arg]]
                       [report-when-not [check-param-arg-conform rest-param-element-type arg-t] arg
-                        rest parameter type mismatch]]]]]
+                        rest parameter type mismatch]]]]
+                [do
+                  [report-when-not [eq n-of-param-types n-of-args] form wrong number of arguments]
+                  ]]
               [set-node-type gctx form [third type]]]
             [do
               [report form not a function]
@@ -348,32 +368,43 @@
 
 [defn form-with-node-ids [form] [assign-node-ids [atom [i32.const 100]] form]]
 
+[defn check-form-top [gctx form] [check-form gctx 0 [form-with-node-ids form]]]
+
 [defn test [expected-type form]
-  [let [gctx [make-global-context]
+  [let [gctx [make-check-global-context]
         - [test-expand-no-errors-fn [list form]]
-        actual-type [check-form gctx [kv-map] [form-with-node-ids form]]
+        actual-type [check-form-top gctx [form-with-node-ids form]]
         messages [getq gctx messages]]
     [assert [is-empty messages] there are messages [identity messages]]
     [assert [eq-form expected-type actual-type]
       test failed expected [identity expected-type] actual [identity actual-type]]]]
 
 [defn test-error [expected-type expected-error form]
-  [let [gctx [make-global-context]
-        actual-type [check-form gctx [kv-map] [form-with-node-ids form]]
+  [let [gctx [make-check-global-context]
+        actual-type [check-form-top gctx [form-with-node-ids form]]
         messages [getq gctx messages]]
-    [assert [eq [size messages] 1] there is not exactly than one error message [identity messages]
+    [assert [eq [size messages] 1] there is not exactly one error message [identity messages]
       [identity form] [identity actual-type]]
     [let [message [getq [first messages] message]]
       [assert [eq-form expected-error message] [list [quote test fail wrong message] form expected-error message]]
     [assert [eq-form expected-type actual-type] test fail unexpected type form expected [identity expected-type] actual [identity actual-type]]]]]
 
-[defn test-error-env-fn [form lenv]
-  [let [gctx [make-global-context]
-        vars [transient-kv-map]
-        - [for-pair i 0 [size lenv] [set vars [at lenv i] [at lenv [inc i]]]]
-        actual-type [check-form gctx [kv-map vars vars] [form-with-node-ids form]]
-        messages [getq gctx messages]]
-  [kv-map messages messages type actual-type]]]
+[defn check-forms [forms]
+  [assert [not [is-empty forms]] forms is empty]
+  [let [gctx [make-check-global-context]]
+    [for i 0 [dec [size forms]]
+      [check-form-top gctx [form-with-node-ids [at forms i]]]]
+    [kv-map last-type [check-form-top gctx [form-with-node-ids [last forms]]]
+            messages [getq gctx messages]]]]
+
+[defn test-forms-ok [expected-last-type forms]
+  [let [result [check-forms forms]
+        messages [getq result messages]]
+    [when-not [is-empty messages]
+      [for-each message messages
+        [logq test fail [getq message message] [getq message form]]]]
+    [assert [eq-form expected-last-type [getq result last-type]]
+      [list [quote test fail] forms expected-last-type [getq result last-type]]]]]
 
 [defn quote-all-list [lmsg]
   [let [s [size lmsg]
@@ -386,10 +417,8 @@
     [freeze-mutable-list msg]
     msg]]
 
-[defmacro test-error-env [form .. lenv]
-  [list [quote test-error-env-fn] [mk-quote form] [quote-all-list lenv]]]
-
-[test-error-env [f] f [func [] []]]
+[defmacro test-forms-okq [expected-last-type .. forms]
+  [list [quote test-forms-ok] [mk-quote expected-last-type] [quote-all-list forms]]]
 
 [defmacro testq [expected-type form]
   [list [quote test] [mk-quote expected-type] [mk-quote form]]]
@@ -408,7 +437,6 @@
   [testq [list form] [quote two words]]
 
   [test-error i32 [quote condition not i32] [quote [if [quote not-i32] [i32.const 2] [i32.const 3]]]]
-  [test-error i32 [quote if extra forms ignored] [quote [if [i32.const 1] [i32.const 2] [i32.const 3] [i32.const 4]]]]
   [test-error i32 [quote if branches must have same type] [quote [if [i32.const 1] [quote a] [i32.const 1]]]]
   [test-error type-empty [quote if branches must have same type] [quote [if [i32.const 1] [i32.const 2]]]]
   [testq i32 [if [i32.const 1] [i32.const 2] [i32.const 3]]]
@@ -422,14 +450,13 @@
   [testq i32 [let [a [i32.const 1]] a]]
   [testq i32 [let [a [i32.const 1] b a] b]]
   [comment maybe we should ban redef as it complicates compilation to wasm and is not good style]
-[comment  [testq i32 [let [a [i32.const 1] a [i32.add [i32.const 1] a]] a]]]
+  [comment [testq i32 [let [a [i32.const 1] a [i32.add [i32.const 1] a]] a]]]
 
   [test-error type-empty [quote expects an even number of bindings] [quote [loop [a]]]]
   [testq [tuple] [loop []]]
   [testq [tuple] [loop [a [i32.const 1]]]]
   [testq i32 [loop [a [i32.const 1]] a]]
   [testq i32 [loop [a [i32.const 1] b a] b]]
-  [comment maybe we should ban redef as it complicates compilation to wasm and is not good style]
   [comment [testq i32 [loop [a [i32.const 1] a [i32.add [i32.const 1] a]] a]]]
 
   [test-error type-bottom [quote continue not inside loop] [quote [continue]]]
@@ -446,6 +473,14 @@
   [test-error type-error [quote not a function] [quote [let [a [i32.const 1]] [a]]]]
   [test-error i32 [quote parameter does not match [i64 i32]]
     [quote [let [f [extern mod mod-fun [func [i64] i32]]] [f [i32.const 1]]]]]
+  [test-error i32 [quote wrong number of arguments]
+    [quote [let [f [extern mod mod-fun [func [] i32]]] [f [i32.const 1]]]]]
+  [test-error i32 [quote wrong number of arguments]
+    [quote [let [f [extern mod mod-fun [func [i32 i32] i32]]] [f [i32.const 1]]]]]
+  [test-error i32 [quote wrong number of arguments]
+    [quote [let [f [extern mod mod-fun [func [i32 .. i32] i32]]] [f]]]]
+  [test-error i32 [quote wrong number of arguments]
+    [quote [let [f [extern mod mod-fun [func [i32 i32 .. i32] i32]]] [f [i32.const 1]]]]]
   [testq i32 [let [f [extern m p0 [func [] i32]]] [f]]]
   [testq i32 [let [f [extern m p1 [func [i32] i32]]] [f [i32.const 1]]]]
   [testq i32 [let [f [extern m p1 [func [i32] i32]]] [f [i32.const 1]]]]
@@ -459,24 +494,19 @@
   [testq [func [] [tuple]] [func f []]]
   [testq [func [] i32] [func f [] [i32.const 1]]]
   [testq [func [] word] [func f [] [quote a]]]
-  [testq [func [i32] i32] [func inc [x] [[extern instructions i32.add [func [i32 i32] i32]] x x]]]
+  [testq [func [i32] i32] [func double [x] [[extern instructions i32.add [func [i32 i32] i32]] x x]]]
+
+  [test-forms-okq i32
+      [def size [extern host size [func [[list any]] i32]]]
+      [size [quote]]]
+  [test-forms-okq i32
+    [def size [extern host size [func [[list any]] i32]]]
+    [let [] [size [quote [1 2 3]]]]]
+
+
   ]
 
 [comment
-[defn check-top-forms [forms]
-  [let [messages [list]
-        global-ctx [kv-map messages messages]
-        node-id-counter [atom [i32.const 100]]]
-    [for-each form forms
-      [check-form global-ctx [kv-map vars [kv-map]] [assign-node-ids node-id-counter form]]]
-    [when-not [is-empty messages]
-      [for-each err messages
-        [log [list [getq err message] [getq err form] [try-get-range [getq err form]]]]]
-      []
-      [unreachable]]
-    [kv-map
-      errors messages
-      global-ctx global-ctx]]]
 
 [defn expand-check [host-func-types forms]
   [let [gctx [make-global-context]

@@ -98,6 +98,9 @@
           [let [res [mutable-list-of-size s-form]]
             [set-array res 0 first-form]
             [report-when [or [lt-s n-of-args 2] [lt-s 3 n-of-args]] form if expects 2 or 3 arguments]
+            [for i 4 s-form
+              [recur gctx local-ctx [at form i]]
+              [report [at form i] if extra forms ignored]]
             [for i 1 s-form [set-array res i [recur gctx local-ctx [at form i]]]]
             res]
 
@@ -230,10 +233,6 @@
                       var-val-meta [meta [var-get def-var]]
                       no-eval-args [has-truthy-key var-meta [quote no-eval-args]]
                       eval-result  [has-truthy-key var-meta [quote eval-result]]]
-                  [report-when-not
-                    [n-of-args-match-def var-val-meta n-of-args]
-                    form
-                    wrong number of arguments]
                   [ifs
                     [and no-eval-args eval-result]
                     [let [macro-func [var-get def-var]
@@ -314,13 +313,13 @@
       ]
     instructions
     [kv-map
-      i32.add add
-      i32.sub sub
-      i32.mul mul
-      i32.lt-s lt-s
-      i32.eq [extern instructions i32.eq [func [i32 i32] i32]]
-      i32.le-s [extern instructions i32.lt-s [func [i32 i32] i32]]
-      i32.and [extern instructions i32.and [func [i32 i32] i32]]
+      i32.add   [extern instructions i32.add [func [i32 i32] i32]]
+      i32.sub   [extern instructions i32.sub [func [i32 i32] i32]]
+      i32.mul   [extern instructions i32.mul [func [i32 i32] i32]]
+      i32.lt-s  [extern instructions i32.lt-s [func [i32 i32] i32]]
+      i32.eq    [extern instructions i32.eq [func [i32 i32] i32]]
+      i32.le-s  [extern instructions i32.lt-s [func [i32 i32] i32]]
+      i32.and   [extern instructions i32.and [func [i32 i32] i32]]
       i32.rem-s [extern instructions i32.rem-s [func [i32 i32] i32]]
       i32.div-s [extern instructions i32.div-s [func [i32 i32] i32]]
       unreachable [extern instructions unreachable [func [] [tuple]]]

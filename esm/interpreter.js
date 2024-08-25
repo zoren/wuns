@@ -62,7 +62,6 @@ const createNamedFunction = (strFuncName, nOfParams, hasRestParam, body) => {
   const f = createArityFunctionWrapper(nOfParams, hasRestParam)(body)
   setJSFunctionName(f, strFuncName)
   if (hasRestParam) f.hasRestParam = hasRestParam
-  setMeta(f, { 'n-of-params': nOfParams, 'has-rest-param': +hasRestParam })
   return Object.freeze(f)
 }
 
