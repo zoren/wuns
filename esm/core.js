@@ -21,10 +21,10 @@ export const meta = (form) => {
 }
 export const setMeta = (v, meta) => {
   const t = typeof v
-  if (!(t === 'object' || t === 'function') || Object.isFrozen(v)) throw new Error('expects mutable object '+ t)
+  if (!(t === 'object' || t === 'function') || Object.isFrozen(v)) throw new Error('expects mutable object ' + t)
   if (meta === undefined) throw new Error('meta must be defined')
   if (typeof meta !== 'object') throw new Error('meta must be object')
-  v[symbolMeta] = Object.freeze({...meta})
+  v[symbolMeta] = Object.freeze({ ...meta })
 }
 export const wordWithMeta = (s, meta) => {
   const w = new Word(s)
@@ -70,16 +70,9 @@ export const defVarWithMeta = (name, metaData, value) => {
   return Object.freeze(newVar)
 }
 
-export const getDefVar = (defVars, name) => {
-  if (!defVars.has(name)) throw new Error(`var not found: ${name}`)
-  return defVars.get(name)
-}
-
 export const makeGetDefVarValue = (compile) => {
   const getDefVarValFn = (name) => compile(makeList(word('try-get-var'), word(name)))()
-  const getVarVal = compile(word('var-get'))()
-  const getDefVarVal = (name) => getVarVal(getDefVarValFn(name))
-  return getDefVarVal
+  return (name) => getDefVarValFn(name).value
 }
 
 class Atom {
