@@ -63,6 +63,11 @@ export const growable_list = () => {
   l[symbolListGrowable] = true
   return l
 }
+export const clone_growable_to_frozen_list = (l) => {
+  if (!isList(l)) throw new Error('freeze-growable-list expects list')
+  if (!isGrowable(l)) throw new Error('freeze-growable-list expects growable list')
+  return makeList(...l)
+}
 export const push = (ar, e) => {
   if (!isList(ar)) throw new Error('push expects array')
   if (!isGrowable(ar)) throw new Error('push expects growable list')
@@ -99,7 +104,7 @@ export const at = (v, i) => {
 }
 
 export { atom }
-
+export const is_atom = (a) => isAtom(a)
 export const atom_get = (a) => {
   if (!isAtom(a)) throw new Error('not an atom: ' + a)
   return a.value
@@ -108,6 +113,7 @@ export const atom_set = (a, v) => {
   if (!isAtom(a)) throw new Error('not an atom: ' + a)
   a.value = v
 }
+export const is_identical = (a, b) => a === b
 
 // https://stackoverflow.com/a/69745650/3495920
 const isPlainObject = (value) => value?.constructor === Object
