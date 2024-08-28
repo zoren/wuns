@@ -19,9 +19,9 @@ export const apply = (fn, args) => {
   return fn(...args)
 }
 
-export const is_word = (f) => isWord(f) | 0
+export const is_word = (f) => isWord(f)
 
-export const is_list = (f) => isList(f) | 0
+export const is_list = (f) => isList(f)
 export { meta }
 
 export const word_with_meta = (w, metaData) => wordWithMeta(wordValue(w), metaData)
@@ -115,7 +115,7 @@ const isPlainObject = (value) => value?.constructor === Object
 export const transient_kv_map = () => ({})
 export const has = (m, k) => {
   if (!isPlainObject(m)) throw new Error('has expects map')
-  return (wordValue(k) in m) | 0
+  return wordValue(k) in m
 }
 export const get = (m, k) => {
   if (!isPlainObject(m)) throw new Error('get expects map')

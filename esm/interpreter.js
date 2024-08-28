@@ -257,7 +257,12 @@ const makeInterpreterContext = (externalModules) => {
         const nOfParams = parsedParams.params.length
         if (nOfParams !== extern.length) throw new CompileError(`extern ${nameStr} expected ${nOfParams} params`, form)
         const hasRestParam = !!parsedParams.restParam
-        const wrapper = createNamedFunction(nameStr, nOfParams, hasRestParam, extern)
+        const externBoolWrap = (...args) => {
+          const res = extern(...args)
+          if (typeof res === 'boolean') return res | 0
+          return res
+        }
+        const wrapper = createNamedFunction(nameStr, nOfParams, hasRestParam, externBoolWrap)
         return () => wrapper
       }
       case 'try-get-var': {
