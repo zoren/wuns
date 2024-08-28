@@ -118,7 +118,7 @@ const makeInterpreterContext = (externalModules) => {
     const firstWordValue = tryGetWordValue(firstForm)
     switch (firstWordValue) {
       case 'i32': {
-        if (args.length !== 1) throw new CompileError('i32.const expects 1 argument', form)
+        if (args.length !== 1) throw new CompileError('i32 expects 1 argument', form)
         const wv = +ctWordValue(args[0])
         const normalized = wv | 0
         if (wv !== normalized) throw new CompileError('expected 32-bit signed integer', form)
