@@ -12,17 +12,22 @@
 
 [defn make-infer-global-context []
   [kv-map
-    type-var-counter [atom 0]
-    messages [growable-list]]]
+    messages [growable-list]
+    def-var-types [transient-kv-map]
+    type-var-counter [atom 0]]]
 
 [defn int-to-type-var [i]
   [assert [and [lt-s -1 i] [lt-s i [i32 26]]] not a type var [identity i]]
   [char-code-to-word [add [i32 97] i]]]
 
+[defn inc-atom [atom]
+  [let [prev-val [atom-get atom]]
+    [atom-set atom [inc prev-val]]
+    prev-val]]
+
 [defn generate-fresh-type-var [gctx level]
   [let [counter [getq gctx type-var-counter]
-        new-type-var [atom-get counter]]
-    [atom-set counter [inc new-type-var]]
+        new-type-var [inc-atom counter]]
     [atom
       [kv-map
         kind [int-to-type-var new-type-var]
@@ -310,6 +315,12 @@
           [set-array subst-assoc-list i [list tv new-tv]]]]
       [copy-type subst-assoc-list type]]]]
 
+[defn specialize-type-scheme [gctx level type-scheme]
+  [assert [eq-word [first type-scheme] [quote type-scheme]] not a type scheme [identity type-scheme]]
+  [let [type-vars [second type-scheme]
+        type [third type-scheme]]
+    [specialize gctx level type-vars type]]]
+
 [defn unify-report [gctx t1 t2 .. forms]
   [let [msg [unify t1 t2]]
     [when msg
@@ -317,14 +328,25 @@
 
 [defn mk-empty-type-scheme [type] [mk-type-scheme [list] type]]
 
+[defn get-outer-context-by-form [local-ctx first-form]
+  [loop [cur-ctx local-ctx]
+    [ifs
+      [not cur-ctx]
+      0
+
+      [eq-form first-form [getq cur-ctx first-form]]
+      cur-ctx
+
+      [continue cur-ctx [getq cur-ctx outer]]]]]
+
 [defn infer-form-type [gctx level lctx form]
   [ifs
     [is-word form]
-    [let [type-scheme [try-get-var-type gctx lctx form]]
-      [assert type-scheme var not found]
-      [let [type-vars [second type-scheme]
-            type [third type-scheme]]
-        [specialize gctx level type-vars type]]]
+    [if-let [type-scheme [try-get-var-type gctx lctx form]]
+      [specialize-type-scheme gctx level type-scheme]
+      [do
+        [report form var not found]
+        [generate-fresh-type-var gctx level]]]
 
     [not [is-list form]]
     [logq-abort form expects a list [identity form]]
@@ -359,7 +381,7 @@
           [unify-report gctx then-type else-type then-branch else-branch]
           then-type]
 
-        [eq-form first-form [quote let]]
+        [or [eq-form first-form [quote let]] [eq-form first-form [quote loop]]]
         [let
           [var-values [transient-kv-map]
            let-loop-ctx [kv-map vars var-values outer lctx first-form first-form]
@@ -383,10 +405,27 @@
             [recur gctx level let-loop-ctx [last form]]
             [quote [tuple]]]]
 
+        [eq-form first-form [quote continue]]
+        [let [loop-ctx [get-outer-context-by-form lctx [quote loop]]]
+          [if-not loop-ctx
+            [report form continue outside loop]
+            [let [loop-vars [getq loop-ctx vars]]
+              [for-pair i 1 n-of-args
+                [let [var [at form i]
+                      value [at form [inc i]]
+                      val-type [recur gctx level lctx value]]
+                  [if [is-word var]
+                    [if-let [type-scheme [try-get loop-vars var]]
+                      [unify-report gctx [specialize-type-scheme gctx level type-scheme] val-type value]
+                      [report var loop var not found]]
+                    [report var expected a loop variable here]]]]]]
+          [generate-fresh-type-var gctx level]]
+
         [eq-form first-form [quote extern]]
         [let [module-name [second form]
               name [third form]
               syntax-type [fourth form]]
+          [assert 0 todo implement extern]
           [if [is-type syntax-type]
             syntax-type
             [do
@@ -565,9 +604,6 @@
 
 [def tests-run-atom [atom 0]]
 
-[defn inc-atom [atom]
-  [atom-set atom [inc [atom-get atom]]]]
-
 [defn test-errors-fn [expected-type expected-messages form]
   [let [gctx [make-infer-global-context]
         result [infer-form-type gctx 0 0 form]
@@ -603,8 +639,13 @@
 [defmacro test-ok [expected-type form]
   [list [quote test-ok-fn] [mk-quote expected-type] [mk-quote form]]]
 
+[comment variables]
+[test-errors [type-scheme [a] a] [[var not found]] no-such-var]
+
+[comment i32]
 [test-ok i32 [i32 42]]
 
+[comment quote]
 [test-ok word [quote a]]
 [test-ok [list form] [quote]]
 [test-ok [list form] [quote a b]]
@@ -612,19 +653,44 @@
 [test-ok [list form] [quote [[]]]]
 [test-ok [list form] [quote [a []]]]
 
+[comment if]
 [test-errors i32 [[not unifiable]] [if [quote ok] [i32 5] [i32 5]]]
 [test-errors i32 [[not unifiable]] [if [i32 5] [i32 5] [quote a]]]
 [test-errors word [[not unifiable]] [if [i32 5] [quote a] [i32 5]]]
 [test-ok i32 [if [i32 5] [i32 5] [i32 5]]]
 [test-ok word [if [i32 5] [quote a] [quote b]]]
-[comment
+[comment todo form subtype unification
   [test-ok [list form] [if [i32 5] [quote []] [quote [b]]]]
   [test-ok form [if [i32 5] [quote a] [quote []]]]]
-[comment
-  [test-ok [tuple] [let []]]]
+
+[comment let]
+[test-errors i32 [[var not found]] [let [x y y [i32 5]] [i32 6]]]
+[test-ok [tuple] [let []]]
 [test-ok word [let [] [quote a]]]
 [test-ok word [let [v [quote a]] v]]
+[test-ok word [let [v [quote a] u v] u]]
+[test-ok i32 [let [v [quote a] v [i32 5]] v]]
 
+[comment loop continue]
+[test-errors i32 [[var not found]] [loop [x y y [i32 5]] [i32 6]]]
+[test-ok [tuple] [loop []]]
+[test-ok word [loop [] [quote a]]]
+[test-ok word [loop [v [quote a]] v]]
+[test-ok word [loop [v [quote a] u v] u]]
+[test-ok i32 [loop [v [quote a] v [i32 5]] v]]
+
+[test-errors [type-scheme [a] a] [[continue outside loop]] [continue]]
+[test-errors [type-scheme [a] a] [[not unifiable]] [loop [i [i32 5]] [continue i [quote a]]]]
+[test-ok [type-scheme [a] a] [loop [] [continue]]]
+[test-ok [type-scheme [a] a] [loop [i [i32 5]] [continue i [i32 6]]]]
+[test-ok i32
+  [loop [i [i32 0]]
+    [if i
+      [i32 2]
+      [continue i [i32 1]]]]]
+
+
+[comment func]
 [test-ok [func [] [tuple]] [func z []]]
 [test-ok [type-scheme [a] [func [a] [tuple]]] [func z [x]]]
 [test-ok [type-scheme [a b] [func [a b] [tuple]]] [func z [x y]]]
