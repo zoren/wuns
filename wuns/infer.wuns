@@ -445,7 +445,10 @@
                     0]
                   return-type
                   [if n-of-bodies
-                    [recur gctx level-1 func-ctx [last form]]
+                    [do
+                      [for i 3 [dec s-form]
+                        [recur gctx level-1 func-ctx [at form i]]]
+                      [recur gctx level-1 func-ctx [last form]]]
                     [quote [tuple]]]]
               [unify-report gctx
                 func-type
@@ -469,18 +472,13 @@
               t-res]]]
 
         [let
-          [type-first [recur gctx level lctx first-form]
-           parameter-types [second type-first]
-           param-map [params-to-map parameter-types]
-           reg-params [getq param-map params]
-           n-of-regular-params [size reg-params]]
-          [for i 0 [min n-of-args n-of-regular-params]
-            [let [arg [at form [inc i]]
-                  arg-t [recur gctx level lctx arg]
-                  pt [at reg-params i]]
-              [when-not [check-param-arg-conform pt arg-t]
-                [report arg parameter does not match [list pt arg-t]]]]]
-              [list [quote func] parameter-types [last type-first]]]]]]]
+          [func-type [recur gctx level lctx first-form]
+           arg-types [mutable-list-of-size n-of-args]
+           t-res [generate-fresh-type-var gctx level]]
+          [for i 0 n-of-args
+                [set-array arg-types i [recur gctx level lctx [at form [inc i]]]]]
+          [unify-report gctx func-type [make-internal-func-type arg-types 0 t-res] form]
+          t-res]]]]]
 
 [defn normalize-deep [internal-type]
   [assert-internal-type internal-type]
@@ -674,6 +672,10 @@
 [test-ok word [let [v [quote a] u v] u]]
 [test-ok i32 [let [v [quote a] v [i32 5]] v]]
 
+[test-ok i32 [let [id [func id [x] x]] [id [i32 5]]]]
+[test-ok word [let [id [func id [x] x]] [id [quote a]]]]
+[test-ok word [let [id [func id [x] x]] [id [i32 5]] [id [quote a]]]]
+
 [comment loop continue]
 [test-errors i32 [[var not found]] [loop [x y y [i32 5]] [i32 6]]]
 [test-ok [tuple] [loop []]]
@@ -713,6 +715,8 @@
     [if p
       [i32 2]
       [recur [i32 1]]]]]
+
+[test-errors [type-scheme [a] a] [[not unifiable]] [[func f [i] [i [i32 5]] [i [quote a]]] [func id [x] x]]]
 
 [logq we ran [atom-get tests-run-atom] tests]
 
