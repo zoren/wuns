@@ -57,8 +57,8 @@
                   1]]
               [if-let [rest-param [try-getq parsed-params rest-param]]
                 [recur rest-param]
-                1]]]]
-      [recur [third t]]]]]]
+                1]]]
+          [recur [third t]]]]]]]
 
 [defn is-func-type [t]
   [and [is-list t] [eq [size t] 3]
@@ -141,8 +141,6 @@
   [if-let [ltype [try-get-local-var-type local-ctx var-name]]
     ltype
     [try-get [getq gctx def-var-types] var-name]]]
-
-[defn min [a b] [if [lt-s a b] a b]]
 
 [defn check-form [gctx local-ctx form]
   [ifs

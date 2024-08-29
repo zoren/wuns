@@ -59,7 +59,8 @@
 
 [defn params-to-map [params]
   [if [and [lt-s 1 [size params]] [eq-word [at params -2] ..]]
-    [kv-map params [slice params 0 [sub [size params] 2]] rest-param [last params]]
+    [kv-map params [slice params 0 [sub [size params] 2]]
+            rest-param [last params]]
     [kv-map params params]]]
 
 [defn expand-form [gctx local-ctx form]
@@ -285,6 +286,7 @@
       mutable-list-of-size
       set-array
       freeze-mutable-list
+      clone-growable-to-frozen-list
 
       transient-kv-map
       set
@@ -313,6 +315,8 @@
       meta
       word-with-meta
       list-with-meta
+      is-atom
+      is-identical
       ]
     instructions
     [kv-map

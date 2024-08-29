@@ -18,5 +18,5 @@ npm version patch --no-git-tag-version
 ```
 and then in `esm/`
 ```
-npm i ../tree-sitter-wuns/tree-sitter-wuns-1.0.4
+npm i ../tree-sitter-wuns/tree-sitter-wuns-1.0.x
 ```

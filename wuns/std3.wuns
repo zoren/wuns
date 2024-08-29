@@ -11,6 +11,7 @@
 [def mutable-list-of-size [extern host mutable-list-of-size [func [i32] mutable-list]]]
 [def set-array [extern host set-array [func [[mutable-list any] i32 any] []]]]
 [def freeze-mutable-list [extern host freeze-mutable-list [func [mutable-list] []]]]
+[def clone-growable-to-frozen-list [extern host clone-growable-to-frozen-list [func [growable-list] []]]]
 
 [def add [extern instructions i32.add [func [i32 i32] i32]]]
 [def lt-s [extern instructions i32.lt-s [func [i32 i32] i32]]]
@@ -114,6 +115,9 @@
 [defn is-even [x] [not [is-odd x]]]
 
 [defn is-negative [x] [lt-s x 0]]
+
+[defn min [a b] [if [lt-s a b] a b]]
+[defn max [a b] [if [lt-s a b] b a]]
 
 [defn first [l] [at l 0]]
 [defn second [l] [at l 1]]
@@ -478,3 +482,5 @@
 [def-extern meta [func [form] any]]
 [def-extern word-with-meta [func [word kv-map] word]]
 [def-extern list-with-meta [func [list kv-map] list]]
+[def-extern is-atom [func [any] i32]]
+[def-extern is-identical [func [any any] i32]]
