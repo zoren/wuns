@@ -191,7 +191,8 @@
   [let
     [level [type-var-level type-var]
      fvs [free-type-vars type]]
-    [assert [not [member-type-var-set fvs type-var]] type-var occurs in type [list fvs type-var [member-type-var-set fvs type-var]]]
+    [assert [not [member-type-var-set fvs type-var]] type-var occurs in type
+      [list fvs type-var [member-type-var-set fvs type-var]]]
     [prune-level level fvs]
     [set-type-var-kind-to-type type-var type]
     0]]
@@ -207,10 +208,11 @@
        0]
 
       [and [is-type-var nt1] [is-type-var nt2]]
-      [when-not [is-identical nt1 nt2]
+      [if-not [is-identical nt1 nt2]
         [if [lt-s [type-var-level nt1] [type-var-level nt2]]
           [link-var-to-type nt1 nt2]
-          [link-var-to-type nt2 nt1]]]
+          [link-var-to-type nt2 nt1]]
+        0]
 
       [is-type-var nt1]
       [link-var-to-type nt1 nt2]
@@ -218,13 +220,13 @@
       [is-type-var nt2]
       [link-var-to-type nt2 nt1]
 
-      [and [is-func-type nt1] [is-func-type nt2]]
+      [and [is-internal-func-type nt1] [is-internal-func-type nt2]]
       [let [params1 [second nt1]
             params2 [second nt2]
             opt-rest1 [third nt1]
             opt-rest2 [third nt2]
-            result1 [third nt1]
-            result2 [third nt2]]
+            result1 [fourth nt1]
+            result2 [fourth nt2]]
         [ifs
           [not [eq [size params1] [size params2]]]
           [quote different number of parameters]
@@ -421,25 +423,14 @@
                     [report var expected a loop variable here]]]]]]
           [generate-fresh-type-var gctx level]]
 
-        [eq-form first-form [quote extern]]
-        [let [module-name [second form]
-              name [third form]
-              syntax-type [fourth form]]
-          [assert 0 todo implement extern]
-          [if [is-type syntax-type]
-            syntax-type
-            [do
-              [report syntax-type not a type]
-              type-error]]]
-
         [eq-form first-form [quote func]]
         [let [level-1 [inc level]
               func-name [second form]
               params [third form]
               param-ctx [transient-kv-map]
-              func-ctx [kv-map vars param-ctx first-form first-form]
               parsed-params [params-to-map params]
               func-type [generate-fresh-type-var gctx level-1]
+              func-ctx [kv-map vars param-ctx first-form first-form func-type func-type]
               reg-params [growable-list]
               n-of-bodies [sub s-form 3]]
             [for-each param [getq parsed-params params]
@@ -464,6 +455,18 @@
                   return-type]
                 form]]
             func-type]
+
+        [eq-form first-form [quote recur]]
+        [let [func-ctx [get-outer-context-by-form lctx [quote func]]]
+          [if-not func-ctx
+            [report form recur outside func]
+            [let [func-type [getq func-ctx func-type]
+                  arg-types [mutable-list-of-size n-of-args]
+                  t-res [generate-fresh-type-var gctx level]]
+              [for i 0 n-of-args
+                [set-array arg-types i [recur gctx level lctx [at form [inc i]]]]]
+              [unify-report gctx func-type [make-internal-func-type arg-types 0 t-res] form]
+              t-res]]]
 
         [let
           [type-first [recur gctx level lctx first-form]
@@ -689,7 +692,6 @@
       [i32 2]
       [continue i [i32 1]]]]]
 
-
 [comment func]
 [test-ok [func [] [tuple]] [func z []]]
 [test-ok [type-scheme [a] [func [a] [tuple]]] [func z [x]]]
@@ -700,6 +702,17 @@
 [test-ok
   [type-scheme [a b] [func [a b] i32]]
   [func f [x y] [i32 5]]]
+
+[test-ok
+  [type-scheme [a] [func [] a]]
+  [func f [] [recur]]]
+
+[test-ok
+  [func [i32] i32]
+  [func f [p]
+    [if p
+      [i32 2]
+      [recur [i32 1]]]]]
 
 [logq we ran [atom-get tests-run-atom] tests]
 
