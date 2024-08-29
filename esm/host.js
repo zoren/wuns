@@ -96,7 +96,7 @@ export const set_array = (ar, i, e) => {
   ar[i] = e
 }
 export const at = (v, i) => {
-  if (!isList(v)) throw new Error('at expects list, got' + typeof v + ' ' + v)
+  if (!isList(v)) throw new Error('at expects list, got ' + typeof v + ' ' + v)
   if (!isSigned32BitInteger(i)) throw new Error('at expects number: ' + i)
   const len = v.length
   if (i < -len || i >= len) throw new Error('index out of bounds: ' + i + ' ' + len)
