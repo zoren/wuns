@@ -14,20 +14,17 @@
 
 [defn get-top-context [local-ctx]
   [loop [cur-ctx local-ctx]
-    [if [hasq cur-ctx outer]
-      [continue cur-ctx [getq cur-ctx outer]]
+    [if-let [outer [try-getq cur-ctx outer]]
+      [continue cur-ctx outer]
       cur-ctx]]]
 
 [defn try-get-loop-vars [local-ctx]
   [loop [cur-ctx local-ctx]
-    [ifs
-      [eq-word [quote loop] [getq cur-ctx decl-form]]
+    [if [if-let [df [try-getq cur-ctx decl-form]] [eq-word [quote loop] df] 0]
       [getq cur-ctx vars]
-
-      [hasq cur-ctx outer]
-      [continue cur-ctx [getq cur-ctx outer]]
-
-      0]]]
+      [if-let [outer [try-getq cur-ctx outer]]
+        [continue cur-ctx outer]
+        0]]]]
 
 [defn n-of-args-match-def [def-meta n-of-args]
   [let [n-of-regular-params [getq def-meta n-of-params]]
@@ -202,7 +199,7 @@
             [list first-form name [recur gctx local-ctx [at form 2]]]]
 
           [eq-word [quote def-with-meta] first-form]
-          [let [- [report-when-not [eq n-of-args 3] form def expects 3 arguments]
+          [let [- [report-when-not [eq n-of-args 3] form def-with-meta expects 3 arguments]
                 name [at form 1]
                 meta-form [at form 2]
                 local-ctx [kv-map vars empty-kv-map decl-form first-form]]
