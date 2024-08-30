@@ -112,9 +112,7 @@
   [loop [i 0]
     [if [lt-s i [size set]]
       [if [is-identical [at set i] t]
-        [do
-          [logq we found [identity t] equals [identity [at set i]] that is [is-identical [at set i] t] in [identity set]]
-          1]
+        1
         [continue i [inc i]]]
       0]]]
 
@@ -166,12 +164,15 @@
 
       [is-internal-func-type nt]
       [let [params [second nt]
+            opt-rest [third nt]
             result-type [fourth nt]]
         [union-type-var-set
-          [loop [res [list] i 0]
-            [if [lt-s i [size params]]
-              [continue res [insert-type-vars-set res [recur [at params i]]] i [inc i]]
-              res]]
+          [insert-type-vars-set
+            [loop [res [list] i 0]
+              [if [lt-s i [size params]]
+                [continue res [insert-type-vars-set res [recur [at params i]]] i [inc i]]
+                res]]
+            [if-let [rest opt-rest] [recur rest] [list]]]
           [recur result-type]]]
 
       [eq-word [first nt] [quote tuple]]
@@ -226,27 +227,23 @@
             opt-rest1 [third nt1]
             opt-rest2 [third nt2]
             result1 [fourth nt1]
-            result2 [fourth nt2]]
-        [ifs
-          [not [eq [size params1] [size params2]]]
-          [quote different number of parameters]
-
-          [not [eq [is-zero opt-rest1] [is-zero opt-rest2]]]
-          [quote different number of rest parameters]
-
-          [let
-            [params-msg
-              [loop [i 0]
-                [if [lt-s i [size params1]]
-                  [if-let [msg [recur [at params1 i] [at params2 i]]]
+            result2 [fourth nt2]
+            arity1 [size params1]
+            arity2 [size params2]
+            n-of-params [inc [max arity1 arity2]]]
+        [or
+          [loop [i 0]
+            [if [lt-s i n-of-params]
+              [if-let [p1 [if [lt-s i arity1] [at params1 i] opt-rest1]]
+                [if-let [p2 [if [lt-s i arity2] [at params2 i] opt-rest2]]
+                  [if-let [msg [recur p1 p2]]
                     msg
                     [continue i [inc i]]]
-                  0]]]
-            [if params-msg
-              params-msg
-              [if-let [rest-msg [if opt-rest1 [recur opt-rest1 opt-rest2] 0]]
-                rest-msg
-                [recur result1 result2]]]]]]
+                  0]
+                0]
+              0]]
+          [recur result1 result2]
+          [if [and [not opt-rest1] [not opt-rest2] [not [eq arity1 arity2]]] [quote insufficient number of arguments] 0]]]
 
       [quote not unifiable]]]]
 
@@ -328,6 +325,12 @@
     [when msg
       [report-fn gctx msg [first forms]]]]]
 
+[defn unify-call [gctx level func-type arg-types form]
+  [let [t-res [generate-fresh-type-var gctx level]
+        t-func [make-internal-func-type arg-types 0 t-res]]
+    [unify-report gctx func-type t-func form]
+    t-res]]
+
 [defn mk-empty-type-scheme [type] [mk-type-scheme [list] type]]
 
 [defn get-outer-context-by-form [local-ctx first-form]
@@ -379,7 +382,6 @@
               then-type [recur gctx level lctx then-branch]
               else-type [recur gctx level lctx else-branch]]
           [unify-report gctx cond-type [quote [i32]] cond]
-
           [unify-report gctx then-type else-type then-branch else-branch]
           then-type]
 
@@ -464,21 +466,17 @@
           [if-not func-ctx
             [report form recur outside func]
             [let [func-type [getq func-ctx func-type]
-                  arg-types [mutable-list-of-size n-of-args]
-                  t-res [generate-fresh-type-var gctx level]]
+                  arg-types [mutable-list-of-size n-of-args]]
               [for i 0 n-of-args
                 [set-array arg-types i [recur gctx level lctx [at form [inc i]]]]]
-              [unify-report gctx func-type [make-internal-func-type arg-types 0 t-res] form]
-              t-res]]]
+              [unify-call gctx level func-type arg-types form]]]]
 
         [let
           [func-type [recur gctx level lctx first-form]
-           arg-types [mutable-list-of-size n-of-args]
-           t-res [generate-fresh-type-var gctx level]]
+           arg-types [mutable-list-of-size n-of-args]]
           [for i 0 n-of-args
-                [set-array arg-types i [recur gctx level lctx [at form [inc i]]]]]
-          [unify-report gctx func-type [make-internal-func-type arg-types 0 t-res] form]
-          t-res]]]]]
+            [set-array arg-types i [recur gctx level lctx [at form [inc i]]]]]
+          [unify-call gctx level func-type arg-types form]]]]]]
 
 [defn normalize-deep [internal-type]
   [assert-internal-type internal-type]
@@ -575,41 +573,19 @@
         new-type-vars
         [internal-to-present-type [copy-type subst-assoc-list internal-type]]]]]]
 
-[defn replace-type-vars-present-type [subst-map present-type]
-  [ifs
-    [is-word present-type]
-    [get subst-map present-type]
-
-    [is-list present-type]
-    [let [res [mutable-list-of-size [size present-type]]]
-      [assert [not [is-empty present-type]] not a type [identity present-type]]
-      [set-array res 0 [first present-type]]
-      [for i 1 [size present-type]
-        [set-array res i [recur subst-map [at present-type i]]]]
-      [freeze-mutable-list res]
-      res]
-
-    [logq-abort f]]]
-
-[defn renumber-type-vars [type-params present-type]
-  [assert [lt-s [size type-params] [i32 26]] renumber-type-vars too many type parameters]
-  [let
-    [subst-map [transient-kv-map]
-     new-type-params [mutable-list-of-size [size type-params]]]
-    [for i 0 [size type-params]
-      [let [tv [char-code-to-word [add [i32 97] i]]]
-        [set subst-map [at type-params i] tv]
-        [set-array new-type-params i tv]]]
-    [freeze-mutable-list new-type-params]
-    [list [quote type-scheme] new-type-params [replace-type-vars-present-type subst-map present-type]]]]
-
 [def tests-run-atom [atom 0]]
 
-[defn test-errors-fn [expected-type expected-messages form]
+[defn test-infer [form]
+  [logq we are testing [identity form]]
   [let [gctx [make-infer-global-context]
-        result [infer-form-type gctx 0 0 form]
-        present-type [normalize-present-type-scheme result]
+        present-type [normalize-present-type-scheme [infer-form-type gctx 0 0 form]]
         messages [getq gctx messages]]
+    [kv-map present-type present-type messages messages]]]
+
+[defn test-errors-fn [expected-type expected-messages form]
+  [let [res [test-infer form]
+        present-type [getq res present-type]
+        messages [getq res messages]]
     [when [is-empty messages]
       [logq-abort test-failed failed there were no errors]]
     [when-not [eq [size expected-messages] [size messages]]
@@ -626,10 +602,9 @@
 
 [defn test-ok-fn [expected-type form]
   [logq we are testing [identity form]]
-  [let [gctx [make-infer-global-context]
-        result [infer-form-type gctx 0 0 form]
-        present-type [normalize-present-type-scheme result]
-        messages [getq gctx messages]]
+  [let [res [test-infer form]
+        present-type [getq res present-type]
+        messages [getq res messages]]
     [when-not [is-empty messages]
       [for-each message messages
         [log message]]
@@ -674,6 +649,7 @@
 
 [test-ok i32 [let [id [func id [x] x]] [id [i32 5]]]]
 [test-ok word [let [id [func id [x] x]] [id [quote a]]]]
+[comment let allows polymorphic functions]
 [test-ok word [let [id [func id [x] x]] [id [i32 5]] [id [quote a]]]]
 
 [comment loop continue]
@@ -695,6 +671,20 @@
       [continue i [i32 1]]]]]
 
 [comment func]
+[comment function parameters cannot be polymorphically instantiated]
+[test-errors [type-scheme [a] a] [[not unifiable]]
+  [[i32 5] [i32 6]]]
+[comment [test-errors [type-scheme [a] a] [[not unifiable]]
+  [[func f [i]
+    [i [i32 5]]
+    [i [quote a]]]
+   [func id [x] x]]]]
+[test-ok word
+  [[func f [i] [i [quote a]]] [func id [x] x]]]
+[test-errors i32 [[insufficient number of arguments]]
+  [[func one-params [p] [i32 5]]]]
+[test-errors i32 [[insufficient number of arguments]]
+  [[func zero-params [] [i32 5]] [quote extra-argument]]]
 [test-ok [func [] [tuple]] [func z []]]
 [test-ok [type-scheme [a] [func [a] [tuple]]] [func z [x]]]
 [test-ok [type-scheme [a b] [func [a b] [tuple]]] [func z [x y]]]
@@ -704,19 +694,45 @@
 [test-ok
   [type-scheme [a b] [func [a b] i32]]
   [func f [x y] [i32 5]]]
-
 [test-ok
   [type-scheme [a] [func [] a]]
   [func f [] [recur]]]
-
 [test-ok
   [func [i32] i32]
   [func f [p]
     [if p
       [i32 2]
       [recur [i32 1]]]]]
-
-[test-errors [type-scheme [a] a] [[not unifiable]] [[func f [i] [i [i32 5]] [i [quote a]]] [func id [x] x]]]
+[test-ok
+  [type-scheme [a] [func [.. a] i32]]
+  [func f [.. p] [i32 0]]]
+[test-ok
+  [type-scheme [a] [list a]]
+  [[func f [.. p] p]]]
+[test-ok
+  [list i32]
+  [[func f [.. p] p] [i32 5]]]
+[test-ok
+  [list i32]
+  [[func f [.. p] p] [i32 5] [i32 6]]]
+[test-errors
+  [type-scheme [a] a]
+  [[not unifiable]]
+  [[func f [.. p] p] [i32 5] [quote a]]]
+[test-ok
+  [type-scheme [a] [func [a] a]]
+  [func id [x] x]]
+[test-ok
+  [func [i32] i32]
+  [if [i32 5]
+    [func id-i32 [x] [if x x x]]
+    [func id [x] x]]]
+[comment
+  [test-ok
+  [type-scheme [a] [func [a] i32]]
+  [if [i32 5]
+    [func id-rest [.. ps] [i32 6]]
+    [func id-i32 [p] [i32 5]]]]]
 
 [logq we ran [atom-get tests-run-atom] tests]
 
