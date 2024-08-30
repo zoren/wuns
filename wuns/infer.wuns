@@ -575,15 +575,21 @@
 
 [def tests-run-atom [atom 0]]
 
-[defn test-infer [form]
-  [logq we are testing [identity form]]
+[defn test-infer [forms]
+  [logq we are testing [identity forms]]
   [let [gctx [make-infer-global-context]
-        present-type [normalize-present-type-scheme [infer-form-type gctx 0 0 form]]
-        messages [getq gctx messages]]
-    [kv-map present-type present-type messages messages]]]
+        present-type
+          [loop [i 0]
+            [if [lt-s i [dec [size forms]]]
+              [do
+                [infer-form-type gctx 0 0 [at forms i]]
+                [continue i [inc i]]]
+              [normalize-present-type-scheme
+                [infer-form-type gctx 0 0 [at forms i]]]]]]
+    [kv-map present-type present-type messages [getq gctx messages]]]]
 
-[defn test-errors-fn [expected-type expected-messages form]
-  [let [res [test-infer form]
+[defn test-errors-fn [expected-type expected-messages forms]
+  [let [res [test-infer forms]
         present-type [getq res present-type]
         messages [getq res messages]]
     [when [is-empty messages]
@@ -597,12 +603,11 @@
     [assert [eq-form present-type expected-type] test-failed failed expected type [identity expected-type] but found [identity present-type]]
     [inc-atom tests-run-atom]]]
 
-[defmacro test-errors [expected-type expected-messages form]
-  [list [quote test-errors-fn] [mk-quote expected-type] [mk-quote expected-messages] [mk-quote form]]]
+[defmacro test-errors [expected-type expected-messages .. forms]
+  [list [quote test-errors-fn] [mk-quote expected-type] [mk-quote expected-messages] [mk-quote forms]]]
 
-[defn test-ok-fn [expected-type form]
-  [logq we are testing [identity form]]
-  [let [res [test-infer form]
+[defn test-ok-fn [expected-type forms]
+  [let [res [test-infer forms]
         present-type [getq res present-type]
         messages [getq res messages]]
     [when-not [is-empty messages]
@@ -612,8 +617,8 @@
     [assert [eq-form present-type expected-type] test-ok failed expected type [identity expected-type] but found [identity present-type]]
     [inc-atom tests-run-atom]]]
 
-[defmacro test-ok [expected-type form]
-  [list [quote test-ok-fn] [mk-quote expected-type] [mk-quote form]]]
+[defmacro test-ok [expected-type .. forms]
+  [list [quote test-ok-fn] [mk-quote expected-type] [mk-quote forms]]]
 
 [comment variables]
 [test-errors [type-scheme [a] a] [[var not found]] no-such-var]
@@ -733,6 +738,11 @@
   [if [i32 5]
     [func id-rest [.. ps] [i32 6]]
     [func id-i32 [p] [i32 5]]]]]
+
+[test-ok
+  word
+  [i32 5]
+  [quote a]]
 
 [logq we ran [atom-get tests-run-atom] tests]
 
