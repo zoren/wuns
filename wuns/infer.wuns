@@ -367,11 +367,8 @@
         [quote [i32]]
 
         [eq-form first-form [quote quote]]
-        [if [eq n-of-args 1]
-          [let [f [second form]]
-            [if [is-list f]
-              [quote [list [form]]]
-              [quote [word]]]]
+        [if [and [eq n-of-args 1] [is-word [second form]]]
+          [quote [word]]
           [quote [list [form]]]]
 
         [eq-form first-form [quote if]]
@@ -683,14 +680,14 @@
       [continue i [i32 1]]]]]
 
 [comment func]
-[comment function parameters cannot be polymorphically instantiated]
 [test-errors [type-scheme [a] a] [[not unifiable]]
   [[i32 5] [i32 6]]]
-[comment [test-errors [type-scheme [a] a] [[not unifiable]]
+[comment function parameters cannot be polymorphically instantiated]
+[test-errors [type-scheme [a] a] [[not unifiable]]
   [[func f [i]
     [i [i32 5]]
     [i [quote a]]]
-   [func id [x] x]]]]
+   [func id [x] x]]]
 [test-ok word
   [[func f [i] [i [quote a]]] [func id [x] x]]]
 [test-errors i32 [[insufficient number of arguments]]
@@ -739,7 +736,7 @@
   [if [i32 5]
     [func id-i32 [x] [if x x x]]
     [func id [x] x]]]
-[comment
+[comment todo implement merging of rest param funcs
   [test-ok
   [type-scheme [a] [func [a] i32]]
   [if [i32 5]
@@ -766,16 +763,3 @@
   [f [quote a]]]
 
 [logq we ran [atom-get tests-run-atom] tests]
-
-[comment
-  [if has-rest-param
-    [let [rest-param-element-type [last parameter-types]]
-      [report-when [lt-s n-of-args n-of-regular-params] form wrong number of arguments]
-      [for i [inc n-of-param-types] s-form
-        [let [arg [at form i]
-              arg-t [recur gctx lctx arg]]
-          [report-when-not [check-param-arg-conform rest-param-element-type arg-t] arg
-            rest parameter type mismatch]]]]
-    [do
-      [report-when-not [eq n-of-args n-of-regular-params] form wrong number of arguments]
-      ]]]
