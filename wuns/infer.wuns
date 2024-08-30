@@ -471,6 +471,13 @@
                 [set-array arg-types i [recur gctx level lctx [at form [inc i]]]]]
               [unify-call gctx level func-type arg-types form]]]]
 
+        [eq-form first-form [quote def]]
+        [let [name [second form]
+              value-form [third form]
+              value-type [recur gctx [inc level] lctx value-form]
+              general-val-type [generalize level value-type]]
+          [set-def-var-type gctx name general-val-type]]
+
         [let
           [func-type [recur gctx level lctx first-form]
            arg-types [mutable-list-of-size n-of-args]]
@@ -743,6 +750,20 @@
   word
   [i32 5]
   [quote a]]
+[test-ok
+  word
+  [def d [quote a]]
+  d]
+[test-ok
+  i32
+  [def f [func id [x] x]]
+  [f [i32 5]]
+  [f [i32 6]]]
+[test-ok
+  word
+  [def f [func id [x] x]]
+  [f [i32 5]]
+  [f [quote a]]]
 
 [logq we ran [atom-get tests-run-atom] tests]
 
