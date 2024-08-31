@@ -6,19 +6,41 @@
 [def 3  [i32 3]]
 [def 4  [i32 4]]
 
-[def size [extern host size]]
-[def at [extern host at]]
+[def list [func list [.. entries] entries]]
+
+[def-with-meta defmacro
+  [[extern host kv-map] [quote no-eval-args] 1 [quote eval-result] 1]
+  [func defmacro [name parameters .. bodies]
+    [list [quote def-with-meta] name
+      [quote [[extern host kv-map] [quote no-eval-args] 1 [quote eval-result] 1]]
+      [[extern host concat] [list [quote func] name parameters] bodies]]]]
+
+[defmacro defn [name parameters .. bodies]
+  [list [quote def] name
+    [[extern host concat] [list [quote func] name parameters] bodies]]]
+
+[defmacro defexpr [name parameters .. bodies]
+  [list [quote def-with-meta] name
+    [quote [[extern host kv-map] [quote no-eval-args] 1]]
+    [[extern host concat] [list [quote func] name parameters] bodies]]]
+
+[def quote-word [quote quote]]
+
+[defn mk-quote [form] [list quote-word form]]
+
+[defmacro def-extern [name type]
+  [list [quote def-with-meta] name
+    [list [quote [extern host kv-map]] [mk-quote [quote type]] [mk-quote type]]
+    [list [quote extern] [quote host] name]]]
+
+[def-extern concat [type-scheme [a] [func [.. [list a]] [list a]]]]
+
+[def-extern size [type-scheme [a] [func [[list a]] i32]]]
+[def-extern at [type-scheme [a] [func [[list a] i32] a]]]
 [def mutable-list-of-size [extern host mutable-list-of-size]]
 [def set-array [extern host set-array]]
 [def freeze-mutable-list [extern host freeze-mutable-list]]
 [def clone-growable-to-frozen-list [extern host clone-growable-to-frozen-list]]
-
-[def add [extern instructions i32.add]]
-[def lt-s [extern instructions i32.lt-s]]
-
-[def concat [extern host concat]]
-
-[def list [func list [.. entries] entries]]
 
 [def transient-kv-map [extern host transient-kv-map]]
 [def set-kv-map [extern host set-kv-map]]
@@ -27,69 +49,28 @@
 [def growable-list [extern host growable-list]]
 [def push [extern host push]]
 
-[def make-param-meta
-  [func make-param-meta [.. props]
-    [concat
-      [quote [let [m [transient-kv-map]]]]
-      [loop [i 0 res [growable-list]]
-        [if [lt-s i [size props]]
-          [let []
-            [push res [list [quote set-kv-map] [quote m] [list [quote quote] [at props i]] [quote i32 1]]]
-            [continue i [add 1 i]]]
-          res]]
-      [quote [freeze-kv-map m] m]]]]
-
-[def macro-meta
-  [let [m [transient-kv-map]]
-    [set-kv-map m [quote no-eval-args] 1]
-    [set-kv-map m [quote eval-result] 1]
-    [freeze-kv-map m]
-    m]]
-
-[def-with-meta defmacro macro-meta
-  [func defmacro [name parameters .. bodies]
-    [list [quote def-with-meta] name
-      [make-param-meta [quote no-eval-args] [quote eval-result]]
-      [concat [list [quote func] name parameters] bodies]]]]
-
-[defmacro defn [name parameters .. bodies]
-  [list [quote def] name
-    [concat [list [quote func] name parameters] bodies]]]
-
-[defmacro defexpr [name parameters .. bodies]
-  [list [quote def-with-meta] name
-    [make-param-meta [quote no-eval-args]]
-    [concat [list [quote func] name parameters] bodies]]]
-
 [def list-with-meta [extern host list-with-meta]]
 [def keys [extern host keys]]
 [def get [extern host get]]
 [def meta [extern host meta]]
 
-[def quote-word [quote quote]]
-
-[defn mk-quote [form] [list quote-word form]]
-
-[defn make-type-meta [type]
-  [concat
-    [quote [let [m [transient-kv-map]]]]
-    [list [concat [quote set-kv-map m [quote type]] [list [mk-quote type]]]]
-    [quote [freeze-kv-map m] m]]]
-
-[defmacro def-extern [name type]
-  [list [quote def-with-meta] name [make-type-meta type]
-    [list [quote extern] [quote host] name]]]
-
 [defmacro comment [.. -]
   [quote let []]]
 
-[defn inc [x] [add x 1]]
-
 [def-extern concat-words [func [word word] word]]
 
-[defmacro def-bin-i32-inst [name]
-  [list [quote def] name
-    [list [quote extern] [quote instructions] [concat-words [quote i32.] name]]]]
+[defn def-instruction-fn [def-name inst-name]
+  [list [quote def] def-name
+    [list [quote extern] [quote instructions] inst-name]]]
+
+[defmacro def-instruction [def-name inst-name] [def-instruction-fn def-name inst-name]]
+
+[defmacro def-bin-i32-inst [name] [def-instruction-fn name [concat-words [quote i32.] name]]]
+
+[def-bin-i32-inst add]
+[def-bin-i32-inst lt-s]
+
+[defn inc [x] [add x 1]]
 
 [def-bin-i32-inst sub]
 [def-bin-i32-inst mul]
@@ -102,7 +83,7 @@
 
 [defn is-zero [x] [eq x 0]]
 
-[def i32.bitwise-and [extern instructions i32.and]]
+[def-instruction i32.bitwise-and i32.and]
 
 [defn is-odd [x] [i32.bitwise-and x 1]]
 
@@ -201,8 +182,8 @@
 
 [def-extern char-code-to-word [func [i32] word]]
 
-[def i32.rem-s [extern instructions i32.rem-s]]
-[def i32.div-s [extern instructions i32.div-s]]
+[def-instruction i32.rem-s i32.rem-s]
+[def-instruction i32.div-s i32.div-s]
 
 [defn int-to-word [n]
   [if [is-zero n]
