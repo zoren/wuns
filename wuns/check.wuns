@@ -111,7 +111,7 @@
       [recur [second param-type] [second arg-t]]]]]
 
 [defn make-check-global-context []
-  [kv-map
+  [kv-mapq
     messages [growable-list]
     def-var-types [transient-kv-map]]]
 
@@ -206,7 +206,7 @@
           [eq-form first-form [quote loop]]]
         [let
           [var-values [transient-kv-map]
-           let-loop-ctx [kv-map vars var-values outer local-ctx first-form first-form]
+           let-loop-ctx [kv-mapq vars var-values outer local-ctx first-form first-form]
            bindings [if [lt-s 1 s-form] [second form] [do [report form expects bindings] [list]]]
            n-of-bindings [size bindings]]
           [when [lt-s 1 s-form]
@@ -287,7 +287,7 @@
                     [set-kv-map param-ctx p [type-list pt]]]
                   pt]
                 0]
-              func-ctx [kv-map vars param-ctx first-form first-form]
+              func-ctx [kv-mapq vars param-ctx first-form first-form]
               sig-object [transient-kv-map]]
             [comment if this is a macro we should check it returns a form]
             [freeze-mutable-list parameter-type-list]
@@ -392,7 +392,7 @@
   [let [gctx [make-check-global-context]]
     [for i 0 [dec [size forms]]
       [check-form-top gctx [form-with-node-ids [at forms i]]]]
-    [kv-map last-type [check-form-top gctx [form-with-node-ids [last forms]]]
+    [kv-mapq last-type [check-form-top gctx [form-with-node-ids [last forms]]]
             messages [getq gctx messages]]]]
 
 [defn test-forms-ok [expected-last-type forms]

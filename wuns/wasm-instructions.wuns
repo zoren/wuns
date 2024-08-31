@@ -11,7 +11,7 @@
     res]]
 
 [defn make-operation-obj-aliases [name opcode immediate-parameters parameters results aliases]
-  [kv-map
+  [kv-mapq
     name name
     wat-name [wasm-name-to-wat-bytes name]
     opcode opcode

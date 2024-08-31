@@ -360,7 +360,7 @@
 
 [defn half [x] [i32.div-s x 2]]
 
-[defmacro kv-map [.. entries]
+[defmacro kv-mapq [.. entries]
   [let [s [size entries]
         n-of-pairs [half s]
         ml [mutable-list-of-size [add 4 n-of-pairs]]
@@ -423,7 +423,7 @@
     [freeze-kv-map new]
     new]]
 
-[def empty-kv-map [kv-map]]
+[def empty-kv-map [kv-mapq]]
 
 [defn slice [l start end]
   [assert [is-list l] slice expects list]

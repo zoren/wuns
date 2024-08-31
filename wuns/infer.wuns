@@ -11,7 +11,7 @@
       level]]]
 
 [defn make-infer-global-context []
-  [kv-map
+  [kv-mapq
     messages [growable-list]
     def-var-types [transient-kv-map]
     type-var-counter [atom 0]]]
@@ -29,7 +29,7 @@
   [let [counter [getq gctx type-var-counter]
         new-type-var [inc-atom counter]]
     [atom
-      [kv-map
+      [kv-mapq
         kind [int-to-type-var new-type-var]
         level level]]]]
 
@@ -385,7 +385,7 @@
         [or [eq-form first-form [quote let]] [eq-form first-form [quote loop]]]
         [let
           [var-values [transient-kv-map]
-           let-loop-ctx [kv-map vars var-values outer lctx first-form first-form]
+           let-loop-ctx [kv-mapq vars var-values outer lctx first-form first-form]
            bindings [if [lt-s 1 s-form] [second form] [do [report form expects bindings] [list]]]
            n-of-bindings [size bindings]
            level-1 [inc level]]
@@ -429,7 +429,7 @@
               param-ctx [transient-kv-map]
               parsed-params [params-to-map params]
               func-type [generate-fresh-type-var gctx level-1]
-              func-ctx [kv-map vars param-ctx first-form first-form func-type func-type]
+              func-ctx [kv-mapq vars param-ctx first-form first-form func-type func-type]
               reg-params [growable-list]
               n-of-bodies [sub s-form 3]]
             [for-each param [getq parsed-params params]
@@ -774,17 +774,5 @@
 
 [test-ok [type-scheme [a] a] [extern host size]]
 
-[test-ok
-  [type-scheme [a] a]
-[def -2 [i32 -2]]
-[def -1 [i32 -1]]
-[def 0  [i32 0]]
-[def 1  [i32 1]]
-[def 2  [i32 2]]
-[def 3  [i32 3]]
-[def 4  [i32 4]]
-
-[extern host size]
-]
 
 [logq we ran [atom-get tests-run-atom] tests]

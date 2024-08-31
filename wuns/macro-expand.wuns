@@ -56,7 +56,7 @@
 
 [defn params-to-map [params]
   [if [and [lt-s 1 [size params]] [eq-word [at params -2] ..]]
-    [kv-map params [slice params 0 [sub [size params] 2]]
+    [kv-mapq params [slice params 0 [sub [size params] 2]]
             rest-param [last params]]
     [kv-map-id params]]]
 
@@ -110,7 +110,7 @@
                 bindings [at form 1]
                 s-bindings [size bindings]
                 vars [transient-kv-map]
-                new-local-ctx [kv-map vars vars outer local-ctx decl-form first-form]
+                new-local-ctx [kv-mapq vars vars outer local-ctx decl-form first-form]
                 new-bindings [mutable-list-of-size s-bindings]]
             [for-pair i 0 s-bindings
               [let [var [at bindings i]
@@ -154,17 +154,17 @@
                         rest-param [last params]]
                     [for i 0 dot-dot-index
                       [let [param [at params i]]
-                        [set-kv-map params-map param [kv-map var param]]]]
-                    [set-kv-map params-map rest-param [kv-map var rest-param rest-param 1]]
-                    [kv-map params [slice params 0 dot-dot-index]
+                        [set-kv-map params-map param [kv-mapq var param]]]]
+                    [set-kv-map params-map rest-param [kv-mapq var rest-param rest-param 1]]
+                    [kv-mapq params [slice params 0 dot-dot-index]
                             rest-param rest-param]]
                   [do
                     [comment todo check for extra arguments]
                     [for-each param params
-                      [set-kv-map params-map param [kv-map var param]]]
+                      [set-kv-map params-map param [kv-mapq var param]]]
                     [kv-map-id params]]]
-                  empty-ctx [kv-map vars empty-kv-map decl-form first-form]
-                  fn-local-ctx [kv-map vars params-map decl-form first-form signature signature
+                  empty-ctx [kv-mapq vars empty-kv-map decl-form first-form]
+                  fn-local-ctx [kv-mapq vars params-map decl-form first-form signature signature
                                        n-of-params n-of-params has-rest-param has-rest-param]]
             [let [res [mutable-list-of-size s-form]]
               [set-array res 0 first-form]
@@ -194,7 +194,7 @@
           [eq-word [quote def] first-form]
           [let [- [report-when-not [eq n-of-args 2] form def expects 2 arguments]
                 name [at form 1]
-                local-ctx [kv-map vars empty-kv-map decl-form first-form]]
+                local-ctx [kv-mapq vars empty-kv-map decl-form first-form]]
             [report-when-not [is-word name] name not a word]
             [list first-form name [recur gctx local-ctx [at form 2]]]]
 
@@ -202,7 +202,7 @@
           [let [- [report-when-not [eq n-of-args 3] form def-with-meta expects 3 arguments]
                 name [at form 1]
                 meta-form [at form 2]
-                local-ctx [kv-map vars empty-kv-map decl-form first-form]]
+                local-ctx [kv-mapq vars empty-kv-map decl-form first-form]]
             [report-when-not [is-word name] name not a word]
             [list first-form name [recur gctx local-ctx meta-form] [recur gctx local-ctx [at form 3]]]]
 
@@ -214,7 +214,7 @@
                 ff [first t]]
               [ifs
                 [eq-word ff [quote func]]
-                [let [signature [kv-map params [second t] results [third t]]]
+                [let [signature [kv-mapq params [second t] results [third t]]]
                   form]
 
                 [eq-word ff [quote memory]]
@@ -265,14 +265,14 @@
                   [report first-form first symbol not found during expansion]
                   form]]]]]]]]
 
-[def empty-local-context [kv-map vars empty-kv-map]]
+[def empty-local-context [kv-mapq vars empty-kv-map]]
 
 [def make-eval-context [extern interpreter make-eval-context]]
 
 [def host-object
-  [kv-map
+  [kv-mapq
     m
-    [kv-map
+    [kv-mapq
       p0 [func p0 [] 0]
       p1 [func p1 [p] 1]
       p2 [func p2 [p q] 2]
@@ -318,7 +318,7 @@
       is-identical
       ]
     instructions
-    [kv-map
+    [kv-mapq
       i32.add   [extern instructions i32.add]
       i32.sub   [extern instructions i32.sub]
       i32.mul   [extern instructions i32.mul]
@@ -332,7 +332,7 @@
       ]]]
 
 [defn make-global-context []
-  [kv-map
+  [kv-mapq
     messages [growable-list]
     eval-context [make-eval-context host-object]]]
 
