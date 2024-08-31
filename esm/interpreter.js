@@ -223,10 +223,9 @@ const makeInterpreterContext = (externalModules) => {
               for (let i = 0; i < nOfParams; i++) varValues.set(params[i], args[i])
               return cbodies({ varValues })
             }
-        const jsParameterNames = [...params]
-        if (restParam) jsParameterNames.push('...' + restParam)
-        const safeJSParameterNames = jsParameterNames.map(paramStringToJS)
-        const f = createNamedFunction(strFuncName, safeJSParameterNames, params, restParam, body)
+        const jsParameterNames = params.map(paramStringToJS)
+        if (restParam) jsParameterNames.push(paramStringToJS('...' + restParam))
+        const f = createNamedFunction(strFuncName, jsParameterNames, params, restParam, body)
         // for recursive calls
         newCtx.func = f
         Object.freeze(newCtx)
@@ -350,17 +349,10 @@ const makeInterpreterContext = (externalModules) => {
 
 export const getFormLocation = (subForm) => (subForm ? meta(subForm).location : undefined) || 'unknown location'
 
-const make_eval_context = (external_modules) => {
-  const compile = makeInterpreterContext(external_modules)
-  const evaluate = (form) => compile(form)()
-  const wrappedEvaluate = wrapJSFunction('evaluate', evaluate)
-  // todo maybe return context instead of a function as it will be difficult to pass as a parameter in wasm
-  return wrappedEvaluate
-}
-
 const underscoreToDash = (s) => s.replace(/_/g, '-')
 
-const wrapJSFunction = (dashedName, importFunc) => {
+const wrapJSFunction = (importFunc) => {
+  const dashedName = underscoreToDash(importFunc.name)
   const jsParameterNames = parseFunctionParameters(importFunc)
   let wunsParameterNames = null
   let restParam = null
@@ -385,11 +377,19 @@ const wrapJSFunction = (dashedName, importFunc) => {
   return namedFunc
 }
 
+const make_eval_context = (external_modules) => {
+  const compile = makeInterpreterContext(external_modules)
+  const evaluate = (form) => compile(form)()
+  const wrappedEvaluate = wrapJSFunction(evaluate)
+  // todo maybe return context instead of a function as it will be difficult to pass as a parameter in wasm
+  return wrappedEvaluate
+}
+
 const wrapJSFunctionsToObject = (funcs) => {
   const newObject = {}
   for (const importFunc of funcs) {
-    const dashedName = underscoreToDash(importFunc.name)
-    newObject[dashedName] = wrapJSFunction(dashedName, importFunc)
+    const func = wrapJSFunction(importFunc)
+    newObject[func.name] = func
   }
   return Object.freeze(newObject)
 }
