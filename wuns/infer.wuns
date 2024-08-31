@@ -598,8 +598,9 @@
                   ft [infer-form-type gctx 0 0 e-form]]
               [if [lt-s i [dec [size forms]]]
                 [continue i [inc i]]
-                [normalize-present-type-scheme ft]]]]]
-    [kv-map present-type present-type messages [getq gctx messages]]]]
+                [normalize-present-type-scheme ft]]]]
+        messages [getq gctx messages]]
+    [kv-map-id present-type messages]]]
 
 [defn test-errors-fn [expected-type expected-messages forms]
   [let [res [test-infer forms]

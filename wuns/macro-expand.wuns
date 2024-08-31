@@ -32,8 +32,8 @@
       [le-s n-of-regular-params n-of-args]
       [eq n-of-regular-params n-of-args]]]]
 
-[defn report-fn [gctx msg form]
-  [push [getq gctx messages] [kv-map message msg form form]]]
+[defn report-fn [gctx message form]
+  [push [getq gctx messages] [kv-map-id message form]]]
 
 [defmacro report-when [cond form .. lmsg]
   [list [quote when] cond
@@ -58,7 +58,7 @@
   [if [and [lt-s 1 [size params]] [eq-word [at params -2] ..]]
     [kv-map params [slice params 0 [sub [size params] 2]]
             rest-param [last params]]
-    [kv-map params params]]]
+    [kv-map-id params]]]
 
 [defn expand-form [gctx local-ctx form]
   [ifs
@@ -120,7 +120,7 @@
                 [if [is-word var]
                   [do
                     [report-when [has vars var] var already defined]
-                    [set-kv-map vars var [kv-map var var]]]
+                    [set-kv-map vars var [kv-map-id var]]]
                   [report var not a word let or loop]]]]
             [set-array res 0 first-form]
             [set-array res 1 new-bindings]
@@ -162,7 +162,7 @@
                     [comment todo check for extra arguments]
                     [for-each param params
                       [set-kv-map params-map param [kv-map var param]]]
-                    [kv-map params params]]]
+                    [kv-map-id params]]]
                   empty-ctx [kv-map vars empty-kv-map decl-form first-form]
                   fn-local-ctx [kv-map vars params-map decl-form first-form signature signature
                                        n-of-params n-of-params has-rest-param has-rest-param]]
