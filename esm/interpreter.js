@@ -317,8 +317,7 @@ const makeInterpreterContext = (externalModules) => {
         try {
           return func(...eargs)
         } catch (e) {
-          // if (e instanceof RuntimeError) throw e
-          throw new RuntimeError(`runtime error when calling function '${firstWordValue}': ${e.message}`, form, e)
+          throw new RuntimeError(`runtime error when calling function '${firstWordValue}'`, form, e)
         }
       }
     }
@@ -428,7 +427,12 @@ const compEvalLog = (compile, form) => {
   } catch (e) {
     if (e instanceof RuntimeError) {
       console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
-      console.error(e)
+      // console.error(e)
+      let innerError = e.innerError
+      while (innerError) {
+        console.error(`inner error in ${getFormLocation(innerError.form)}: ${innerError.message}`)
+        innerError = innerError.innerError
+      }
     } else {
       console.error(`unexpected non-runtime error: ${e.message}`)
     }
