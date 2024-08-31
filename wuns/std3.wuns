@@ -22,7 +22,7 @@
 
 [defmacro def-extern [name type]
   [list [quote def-with-meta] name
-    [list [quote [extern host kv-map]] [mk-quote [quote type]] [mk-quote type]]
+    [list [quote [extern host kv-map]] [quote [quote type]] [mk-quote type]]
     [list [quote extern] [quote host] name]]]
 
 [def-extern concat [type-scheme [a] [func [.. [list a]] [list a]]]]
