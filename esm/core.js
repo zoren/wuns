@@ -37,6 +37,7 @@ export const wordValue = (w) => {
 }
 
 const emptyList = Object.freeze([])
+export const arrayToList = (array) => (array.length === 0 ? emptyList : Object.freeze(array))
 export const makeList = (...args) => (args.length === 0 ? emptyList : Object.freeze(args))
 export const isList = (f) => Array.isArray(f)
 export const isForm = (f) => isWord(f) || (isList(f) && f.every(isForm))

@@ -5,7 +5,7 @@ import {
   wordValue,
   isDefVar,
   meta,
-  makeList,
+  arrayToList,
   atom,
   isAtom,
   isSigned32BitInteger,
@@ -67,7 +67,7 @@ export const growable_list = () => {
 export const clone_growable_to_frozen_list = (growable_list) => {
   if (!isList(growable_list)) throw new Error('freeze-growable-list expects list')
   if (!isGrowable(growable_list)) throw new Error('freeze-growable-list expects growable list')
-  return makeList(...growable_list)
+  return arrayToList([...growable_list])
 }
 export const push = (growable_list, element) => {
   if (!isList(growable_list)) throw new Error('push expects array')
@@ -132,7 +132,7 @@ export const get = (kv_map, key) => {
 }
 export const keys = (kv_map) => {
   if (!isPlainObject(kv_map)) throw new Error('keys expect map')
-  return makeList(...Object.keys(kv_map).map(word))
+  return arrayToList(Object.keys(kv_map).map(word))
 }
 export const set_kv_map = (kv_map, key, value) => {
   if (!isPlainObject(kv_map)) throw new Error('set-kv-map expect map')
@@ -152,5 +152,5 @@ export const concat = (...lists) => {
     if (!isList(list)) throw new Error('concat expects list')
     l.push(...list)
   }
-  return l
+  return arrayToList(l)
 }

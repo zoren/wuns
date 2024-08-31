@@ -1,5 +1,5 @@
 import { setJSFunctionName, parseFunctionParameters, createParameterNamesWrapper } from './utils.js'
-import { isWord, isList, print, meta, makeList, isForm, defVar, defVarWithMeta } from './core.js'
+import { isWord, isList, print, meta, arrayToList, isForm, defVar, defVarWithMeta } from './core.js'
 import { instructionFunctions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
 import { isJSReservedWord } from './utils.js'
@@ -119,7 +119,7 @@ const makeInterpreterContext = (externalModules) => {
         return () => normalized
       }
       case 'quote': {
-        const res = args.length === 1 ? args[0] : makeList(...args)
+        const res = args.length === 1 ? args[0] : arrayToList(args)
         if (!isForm(res)) throw new CompileError('quote expects form', form)
         return () => res
       }
@@ -215,7 +215,7 @@ const makeInterpreterContext = (externalModules) => {
           ? (...args) => {
               const varValues = new Map()
               for (let i = 0; i < nOfParams; i++) varValues.set(params[i], args[i])
-              varValues.set(restParam, makeList(...args.slice(nOfParams)))
+              varValues.set(restParam, arrayToList(args.slice(nOfParams)))
               return cbodies({ varValues })
             }
           : (...args) => {

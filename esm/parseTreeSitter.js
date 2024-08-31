@@ -3,7 +3,7 @@ const parser = new TSParser()
 
 import Wuns from 'tree-sitter-wuns'
 parser.setLanguage(Wuns)
-import { makeList, wordWithMeta, listWithMeta, word } from './core.js'
+import { wordWithMeta, listWithMeta } from './core.js'
 
 export const parse = (content, oldTree) => {
   // workaround for https://github.com/tree-sitter/node-tree-sitter/issues/199
@@ -16,10 +16,9 @@ export const treeToForms = (tree, filePath) => {
    * @param {TSParser.SyntaxNode} node
    */
   const nodeToOurForm = (node) => {
-    const { type, text, startPosition, endPosition, isError, startIndex, endIndex } = node
+    const { type, text, startPosition, isError } = node
     if (isError) return null
     const { row, column } = startPosition
-    const range = makeList(row, column, endPosition.row, endPosition.column)
     const metaData = {
       // range,
       // 'tree-sitter-node-id': word(String(node.id)),
