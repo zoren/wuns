@@ -41,11 +41,11 @@ export const word_byte_size = (word) => {
 }
 
 export const char_code_at = (word, index) => {
-  if (!isWord(word)) throw new Error('char-code-at expects word')
+  const s = wordValue(word)
   if (!isSigned32BitInteger(index)) throw new Error('char-code-at expects number: ' + index)
-  const len = wordValue(word).length
+  const len = s.length
   if (index < -len || index >= len) throw new Error('index out of bounds: ' + index + ' ' + len)
-  return String(word).at(index).charCodeAt(0)
+  return s.at(index).charCodeAt(0)
 }
 export const concat_words = (word_1, word_2) => word(wordValue(word_1) + wordValue(word_2))
 // todo rename
@@ -120,6 +120,12 @@ export const is_identical = (value_a, value_b) => value_a === value_b
 const isPlainObject = (value) => value?.constructor === Object
 
 export const transient_kv_map = () => ({})
+export const kv_map = (...array) => {
+  if (array.length % 2 !== 0) throw new Error('kv-map expects even number of arguments')
+  const m = {}
+  for (let i = 0; i < array.length; i += 2) m[wordValue(array[i])] = array[i + 1]
+  return Object.freeze(m)
+}
 export const has = (kv_map, key) => {
   if (!isPlainObject(kv_map)) throw new Error('has expects map')
   return wordValue(key) in kv_map
@@ -139,10 +145,10 @@ export const set_kv_map = (kv_map, key, value) => {
   if (Object.isFrozen(kv_map)) throw new Error('set-kv-map expects mutable object')
   kv_map[wordValue(key)] = value
 }
-export const freeze_kv_map = (o) => {
-  if (!isPlainObject(o)) throw new Error('keys expect map')
-  if (Object.isFrozen(o)) throw new Error('freeze expects mutable object')
-  Object.freeze(o)
+export const freeze_kv_map = (kv_map) => {
+  if (!isPlainObject(kv_map)) throw new Error('keys expect map')
+  if (Object.isFrozen(kv_map)) throw new Error('freeze expects mutable object')
+  Object.freeze(kv_map)
 }
 
 export const log = (form) => console.log(print(form))
