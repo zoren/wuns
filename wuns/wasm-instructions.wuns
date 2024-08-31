@@ -114,10 +114,10 @@
 [def instructions-by-name
   [let [instructions-by-name [transient-kv-map]]
     [for-each instruction-obj instructions
-      [set instructions-by-name [getq instruction-obj name] instruction-obj]
+      [set-kv-map instructions-by-name [getq instruction-obj name] instruction-obj]
       [when [hasq instruction-obj aliases]
         [for-each alias [getq instruction-obj aliases]
-          [set instructions-by-name alias instruction-obj]]]]
+          [set-kv-map instructions-by-name alias instruction-obj]]]]
     [freeze-kv-map instructions-by-name]
     instructions-by-name]]
 

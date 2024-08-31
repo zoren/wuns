@@ -21,44 +21,44 @@
 [def list [func list [.. entries] entries]]
 
 [def transient-kv-map [extern host transient-kv-map]]
-[def set [extern host set]]
+[def set-kv-map [extern host set-kv-map]]
 [def freeze-kv-map [extern host freeze-kv-map]]
+
+[def growable-list [extern host growable-list]]
+[def push [extern host push]]
+
+[def make-param-meta
+  [func make-param-meta [.. props]
+    [concat
+      [quote [let [m [transient-kv-map]]]]
+      [loop [i 0 res [growable-list]]
+        [if [lt-s i [size props]]
+          [let []
+            [push res [list [quote set-kv-map] [quote m] [list [quote quote] [at props i]] [quote i32 1]]]
+            [continue i [add 1 i]]]
+          res]]
+      [quote [freeze-kv-map m] m]]]]
 
 [def macro-meta
   [let [m [transient-kv-map]]
-    [set m [quote parameters] [quote name parameters .. bodies]]
-    [set m [quote no-eval-args] 1]
-    [set m [quote eval-result] 1]
+    [set-kv-map m [quote no-eval-args] 1]
+    [set-kv-map m [quote eval-result] 1]
     [freeze-kv-map m]
     m]]
-
-[def make-param-meta
-  [func make-param-meta [parameters no-eval-args eval-result]
-    [concat
-      [quote [let [m [transient-kv-map]]]]
-      [list [concat [quote set m [quote parameters]] [list [list [quote quote] parameters]]]]
-      [if no-eval-args
-        [list [quote [set m [quote no-eval-args] [i32 1]]]]
-        [list]]
-      [if eval-result
-        [list [quote [set m [quote eval-result] [i32 1]]]]
-        [list]]
-      [quote [freeze-kv-map m] m]]]]
 
 [def-with-meta defmacro macro-meta
   [func defmacro [name parameters .. bodies]
     [list [quote def-with-meta] name
-      [make-param-meta parameters 1 1]
+      [make-param-meta [quote no-eval-args] [quote eval-result]]
       [concat [list [quote func] name parameters] bodies]]]]
 
 [defmacro defn [name parameters .. bodies]
-  [list [quote def-with-meta] name
-    [make-param-meta parameters 0 0]
+  [list [quote def] name
     [concat [list [quote func] name parameters] bodies]]]
 
 [defmacro defexpr [name parameters .. bodies]
   [list [quote def-with-meta] name
-    [make-param-meta parameters 1 0]
+    [make-param-meta [quote no-eval-args]]
     [concat [list [quote func] name parameters] bodies]]]
 
 [def list-with-meta [extern host list-with-meta]]
@@ -73,7 +73,7 @@
 [defn make-type-meta [type]
   [concat
     [quote [let [m [transient-kv-map]]]]
-    [list [concat [quote set m [quote type]] [list [mk-quote type]]]]
+    [list [concat [quote set-kv-map m [quote type]] [list [mk-quote type]]]]
     [quote [freeze-kv-map m] m]]]
 
 [defmacro def-extern [name type]
@@ -199,8 +199,6 @@
 
 [def word-counter [atom 0]]
 
-[def-extern growable-list [func [] growable-list]]
-[def-extern push [func [growable-list any] []]]
 [def-extern char-code-to-word [func [i32] word]]
 
 [def i32.rem-s [extern instructions i32.rem-s]]
@@ -373,7 +371,7 @@
     [for-pair i 0 s
       [set-array ml [add 2 [half i]]
         [let [k [at entries i]]
-          [list [quote set] tmp-word [if [is-word k] [mk-quote k] k] [at entries [inc i]]]]]]
+          [list [quote set-kv-map] tmp-word [if [is-word k] [mk-quote k] k] [at entries [inc i]]]]]]
     [set-array ml [add 2 n-of-pairs] [list [quote freeze-kv-map] tmp-word]]
     [set-array ml [add 3 n-of-pairs] tmp-word]
     ml]]
@@ -387,7 +385,7 @@
     [for i 0 s
       [set-array ml [add 2 i]
         [let [k [at entries i]]
-          [list [quote set] tmp-word [mk-quote k] k]]]]
+          [list [quote set-kv-map] tmp-word [mk-quote k] k]]]]
     [set-array ml [add 2 s] [list [quote freeze-kv-map] tmp-word]]
     [set-array ml [add 3 s] tmp-word]
     ml]]
@@ -409,7 +407,7 @@
   [list [quote try-get] m [mk-quote w]]]
 
 [defmacro setq [m w v]
-  [list [quote set] m [mk-quote w] v]]
+  [list [quote set-kv-map] m [mk-quote w] v]]
 
 [defn is-empty [form]
   [eq 0 [size form]]]
@@ -420,8 +418,8 @@
 [defn assoc [m k v]
   [let [new [transient-kv-map]]
     [for-each k [keys m]
-      [set new k [get m k]]]
-    [set new k v]
+      [set-kv-map new k [get m k]]]
+    [set-kv-map new k v]
     [freeze-kv-map new]
     new]]
 

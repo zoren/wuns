@@ -133,11 +133,10 @@ export const keys = (m) => {
   if (!isPlainObject(m)) throw new Error('keys expect map')
   return makeList(...Object.keys(m).map(word))
 }
-// rename to set_kv_map
-export const set = (o, k, e) => {
-  if (!isPlainObject(o)) throw new Error('set expect map')
-  if (Object.isFrozen(o)) throw new Error('set expects mutable object')
-  o[wordValue(k)] = e
+export const set_kv_map = (kv_map, key, value) => {
+  if (!isPlainObject(kv_map)) throw new Error('set expect map')
+  if (Object.isFrozen(kv_map)) throw new Error('set expects mutable object')
+  kv_map[wordValue(key)] = value
 }
 // todo remove this
 export const delete_key = (o, k) => {

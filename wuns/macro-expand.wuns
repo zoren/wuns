@@ -120,7 +120,7 @@
                 [if [is-word var]
                   [do
                     [report-when [has vars var] var already defined]
-                    [set vars var [kv-map var var]]]
+                    [set-kv-map vars var [kv-map var var]]]
                   [report var not a word let or loop]]]]
             [set-array res 0 first-form]
             [set-array res 1 new-bindings]
@@ -154,14 +154,14 @@
                         rest-param [last params]]
                     [for i 0 dot-dot-index
                       [let [param [at params i]]
-                        [set params-map param [kv-map var param]]]]
-                    [set params-map rest-param [kv-map var rest-param rest-param 1]]
+                        [set-kv-map params-map param [kv-map var param]]]]
+                    [set-kv-map params-map rest-param [kv-map var rest-param rest-param 1]]
                     [kv-map params [slice params 0 dot-dot-index]
                             rest-param rest-param]]
                   [do
                     [comment todo check for extra arguments]
                     [for-each param params
-                      [set params-map param [kv-map var param]]]
+                      [set-kv-map params-map param [kv-map var param]]]
                     [kv-map params params]]]
                   empty-ctx [kv-map vars empty-kv-map decl-form first-form]
                   fn-local-ctx [kv-map vars params-map decl-form first-form signature signature
@@ -288,7 +288,7 @@
       clone-growable-to-frozen-list
 
       transient-kv-map
-      set
+      set-kv-map
       freeze-kv-map
 
       is-word

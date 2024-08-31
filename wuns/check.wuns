@@ -122,7 +122,7 @@
 [defn set-def-var-type [gctx var type]
   [let [def-var-types [getq gctx def-var-types]]
     [assert [not [has def-var-types var]] [list [quote set-def-var-type] var type]]
-    [set def-var-types var type]
+    [set-kv-map def-var-types var type]
     type]]
 
 [defn try-get-local-var-type [local-ctx var-name]
@@ -220,7 +220,7 @@
                   [var [at bindings i]
                    value [at bindings [inc i]]
                    val-type [recur gctx let-loop-ctx value]]
-                  [set var-values var val-type]]]]]
+                  [set-kv-map var-values var val-type]]]]]
           [for i 2 [dec s-form]
             [recur gctx let-loop-ctx [at form i]]]
           [set-node-type gctx form
@@ -275,7 +275,7 @@
                       pt [quote i32]]
                   [when-not [eq-form p -]
                     [set-node-type gctx p pt]
-                    [set param-ctx p pt]]
+                    [set-kv-map param-ctx p pt]]
                   [set-array parameter-type-list i pt]]]
               rest-param-element-type
               [if has-rest-param
@@ -284,7 +284,7 @@
                   [report-when-not [is-word p] p not a word]
                   [when-not [eq-form p -]
                     [report-when [has param-ctx p] p duplicate parameter]
-                    [set param-ctx p [type-list pt]]]
+                    [set-kv-map param-ctx p [type-list pt]]]
                   pt]
                 0]
               func-ctx [kv-map vars param-ctx first-form first-form]

@@ -399,7 +399,7 @@
                    value [at bindings [inc i]]
                    val-type [recur gctx level-1 let-loop-ctx value]
                    general-val-type [generalize level val-type]]
-                  [set var-values var general-val-type]]]]]
+                  [set-kv-map var-values var general-val-type]]]]]
           [for i 2 [dec s-form]
             [recur gctx level let-loop-ctx [at form i]]]
           [if [lt-s 2 s-form]
@@ -434,12 +434,12 @@
               n-of-bodies [sub s-form 3]]
             [for-each param [getq parsed-params params]
               [let [tv [generate-fresh-type-var gctx level-1]]
-                [set param-ctx param [mk-empty-type-scheme tv]]
+                [set-kv-map param-ctx param [mk-empty-type-scheme tv]]
                 [push reg-params tv]]]
             [let [opt-rest
                   [if-let [rest-param [try-getq parsed-params rest-param]]
                     [let [tv [generate-fresh-type-var gctx level-1]]
-                      [set param-ctx rest-param [mk-empty-type-scheme [list [quote list] tv]]]
+                      [set-kv-map param-ctx rest-param [mk-empty-type-scheme [list [quote list] tv]]]
                       tv]
                     0]
                   return-type

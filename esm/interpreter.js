@@ -363,17 +363,11 @@ const wrapJSFunction = (importFunc) => {
     wunsParameterNames = [...jsParameterNames]
   }
   wunsParameterNames = wunsParameterNames.map(underscoreToDash)
-  const namedFunc = createNamedFunction(
-    dashedName,
-    jsParameterNames,
-    wunsParameterNames,
-    restParam,
-    (...args) => {
-      const res = importFunc(...args)
-      if (typeof res === 'boolean') return res | 0
-      return res
-    },
-  )
+  const namedFunc = createNamedFunction(dashedName, jsParameterNames, wunsParameterNames, restParam, (...args) => {
+    const res = importFunc(...args)
+    if (typeof res === 'boolean') return res | 0
+    return res
+  })
   return namedFunc
 }
 
