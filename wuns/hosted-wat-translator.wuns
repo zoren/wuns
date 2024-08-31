@@ -28,7 +28,7 @@
         offset [atom-get offset-atom]
         padded-size [align-address [size bytes]]]
     [atom-set offset-atom [add offset padded-size]]
-    [push [getq ctx active-mems] [kv-map offset offset bytes bytes]]
+    [push [getq ctx active-mems] [kv-map-id offset bytes]]
     offset]]
 
 [defn get-or-create-word [ctx w]
@@ -40,7 +40,7 @@
         [push-i32-little-endian bytes [word-byte-size w]]
         [push-word-chars bytes w]
         [let [offset [add-bytes-to-active-mem ctx bytes]]
-          [set word-map w offset]
+          [set-kv-map word-map w offset]
           offset]]]]]
 
 [defn get-or-create-form [ctx form]
@@ -77,7 +77,7 @@
 [defn add-local [ctx name type]
   [let [locals [getq ctx locals]]
     [assert [not [has locals name]] name must not be defined [identity name]]
-    [set locals name type]]]
+    [set-kv-map locals name type]]]
 
 [defn compile-form [ctx is-tail form]
   [if [is-word form]
@@ -120,9 +120,9 @@
           [eq-word [quote let] fw]
           [let
             [bindings [at form 1]
-             res-size [add [div [size bindings] 2] [sub [size form] 2]]
+             res-size [add [half [size bindings]] [sub [size form] 2]]
              instructions [mutable-list-of-size res-size]
-             offset [sub [div [size bindings] 2] 2]]
+             offset [sub [half [size bindings]] 2]]
             [for-pair i 0 [size bindings]
               [let
                 [var [at bindings i]
@@ -130,7 +130,7 @@
                  val-type [try-get-node-type value]]
                 [assert [not [is-tuple-type val-type]] binding expects a single type]
                 [add-local ctx var [type-to-wasm val-type]]
-                [set-array instructions [div i 2] [list [quote local.set] [list [quote dollar] var] [recur ctx 0 value]]]]]
+                [set-array instructions [half i] [list [quote local.set] [list [quote dollar] var] [recur ctx 0 value]]]]]
             [for i 2 [dec [size form]]
               [set-array instructions [add i offset] [recur ctx 0 [at form i]]]]
             [when [lt-s 2 [size form]]
@@ -140,7 +140,7 @@
           [eq-word [quote loop] fw]
           [let
             [bindings [at form 1]
-             n-of-instructions [inc [div [size bindings] 2]]
+             n-of-instructions [inc [half [size bindings]]]
              instructions [mutable-list-of-size n-of-instructions]]
             [for-pair i 0 [size bindings]
               [let
@@ -151,7 +151,7 @@
                 [assert [not [is-tuple-type val-type]] binding expects a single type]
                 [add-local ctx var wasm-type]
                 [add-local ctx [concat-words [quote tmp-] var] wasm-type]
-                [set-array instructions [div i 2] [list [quote local.set] [list [quote dollar] var] [recur ctx 0 value]]]]]
+                [set-array instructions [half i] [list [quote local.set] [list [quote dollar] var] [recur ctx 0 value]]]]]
             [let [n-of-loop-instructions [add [size form] 1]
                   loop-instructions [mutable-list-of-size n-of-loop-instructions]]
               [set-array loop-instructions 0 [quote loop]]
@@ -165,7 +165,7 @@
 
           [eq-word [quote continue] fw]
           [let
-            [n-of-vars [div [dec [size form]] 2]
+            [n-of-vars [half [dec [size form]]]
              init-tmp [mutable-list-of-size n-of-vars]
              tmp-copy [mutable-list-of-size n-of-vars]]
             [for-pair i 1 [size form]
@@ -173,7 +173,7 @@
                 [var [at form i]
                  tmp-var [concat-words [quote tmp-] var]
                  value [at form [inc i]]
-                 index [div [dec i] 2]]
+                 index [half [dec i]]]
                 [set-array init-tmp index
                   [list [quote local.set] [list [quote dollar] tmp-var] [recur ctx 0 value]]]
                 [set-array tmp-copy index
@@ -271,6 +271,10 @@
                   [get locals local]]]
               wasm-bodies]]
 
+          [eq-word [quote recur] fw]
+          [do
+            ]
+
           [eq-word [quote quote] fw]
           [list]
 
@@ -331,8 +335,8 @@
                 [assert [not [is-negative c]] c must be positive]
                 [assert [lt-s c [const 256]] c must be less than 256]
                 [push mut-list ascii-backslash]
-                [push mut-list [int-to-hex-ascii [div c [const 16]]]]
-                [push mut-list [int-to-hex-ascii [rem c [const 16]]]]]]]
+                [push mut-list [int-to-hex-ascii [i32.div-s c [const 16]]]]
+                [push mut-list [int-to-hex-ascii [i32.rem-s c [const 16]]]]]]]
           [push mut-list ascii-double-quote]]
 
         [and [eq s 2] [eq-word [first form] [quote raw]]]
@@ -353,20 +357,27 @@
 
     [logq-abort print-paren-recursive-form unknown node [identity form]]]]
 
-[defn compile-top-forms-to-text [forms]
-  [let [e-forms [expand-top-level-forms forms]
-        - [when [size errors]
-            [for-each error errors
+[defn compile-top-forms-to-text [host-func-types forms]
+  [let [gctx [make-global-context]
+        - [init-host-context gctx host-func-types]
+        e-forms [expand-top-level-forms gctx forms]
+        expand-errors [getq gctx messages]
+        - [when [size expand-errors]
+            [for-each error expand-errors
               [log [list [getq error message] [try-get-range [getq error form]]]]]
             [unreachable]]
+
         check-result [check-top-forms e-forms]
         errors [getq check-result errors]
         mut-list [growable-list]
         active-mems [growable-list]
         active-mem-current-offset [atom active-mem-start-offset]
-        ctx [kv-map active-mems active-mems active-mem-current-offset active-mem-current-offset
+        ctx [kv-mapq active-mems active-mems
+                    active-mem-current-offset active-mem-current-offset
                     check-result check-result
-                    word-map [transient-kv-map] list-map [transient-kv-map] locals [transient-kv-map]]]
+                    word-map [transient-kv-map]
+                    list-map [transient-kv-map]
+                    locals [transient-kv-map]]]
     [for-each error errors
       [log error]]
     [when-not [is-empty errors]
