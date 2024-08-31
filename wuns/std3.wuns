@@ -6,15 +6,15 @@
 [def 3  [i32 3]]
 [def 4  [i32 4]]
 
-[def size [extern host size [func [[list any]] i32]]]
-[def at [extern host at [func [[list any] i32] any]]]
-[def mutable-list-of-size [extern host mutable-list-of-size [func [i32] mutable-list]]]
-[def set-array [extern host set-array [func [[mutable-list any] i32 any] []]]]
-[def freeze-mutable-list [extern host freeze-mutable-list [func [mutable-list] []]]]
-[def clone-growable-to-frozen-list [extern host clone-growable-to-frozen-list [func [growable-list] []]]]
+[def size [extern host size]]
+[def at [extern host at]]
+[def mutable-list-of-size [extern host mutable-list-of-size]]
+[def set-array [extern host set-array]]
+[def freeze-mutable-list [extern host freeze-mutable-list]]
+[def clone-growable-to-frozen-list [extern host clone-growable-to-frozen-list]]
 
-[def add [extern instructions i32.add [func [i32 i32] i32]]]
-[def lt-s [extern instructions i32.lt-s [func [i32 i32] i32]]]
+[def add [extern instructions i32.add]]
+[def lt-s [extern instructions i32.lt-s]]
 
 [def concat
   [func concat [.. lists]
@@ -41,9 +41,9 @@
 
 [def list [func list [.. entries] entries]]
 
-[def transient-kv-map [extern host transient-kv-map [func [] transient-kv-map]]]
-[def set [extern host set [func [transient-kv-map word any] []]]]
-[def freeze-kv-map [extern host freeze-kv-map [func [transient-kv-map] []]]]
+[def transient-kv-map [extern host transient-kv-map]]
+[def set [extern host set]]
+[def freeze-kv-map [extern host freeze-kv-map]]
 
 [def macro-meta
   [let [m [transient-kv-map]]
@@ -83,7 +83,7 @@
     [concat [list [quote func] name parameters] bodies]]]
 
 [defmacro def-extern [name type]
-  [list [quote def] name [list [quote extern] [quote host] name type]]]
+  [list [quote def] name [list [quote extern] [quote host] name]]]
 
 [defmacro comment [.. -]
   [quote let []]]
@@ -95,7 +95,7 @@
 [defmacro def-bin-i32-inst [name]
   [list [quote def] name
     [list [quote extern] [quote instructions] [concat-words [quote i32.] name]
-      [quote [func [i32 i32] i32]]]]]
+      ]]]
 
 [def-bin-i32-inst sub]
 [def-bin-i32-inst mul]
@@ -108,7 +108,7 @@
 
 [defn is-zero [x] [eq x 0]]
 
-[def i32.bitwise-and [extern instructions i32.and [func [i32 i32] i32]]]
+[def i32.bitwise-and [extern instructions i32.and]]
 
 [defn is-odd [x] [i32.bitwise-and x 1]]
 
@@ -164,7 +164,7 @@
 
 [def-extern log [func [list] []]]
 
-[def unreachable [extern instructions unreachable [func [] []]]]
+[def unreachable [extern instructions unreachable]]
 
 [defmacro assert [cond .. lmsg]
   [list [quote if] cond
@@ -213,8 +213,8 @@
 [def-extern push [func [growable-list any] []]]
 [def-extern char-code-to-word [func [i32] word]]
 
-[def i32.rem-s [extern instructions i32.rem-s [func [i32 i32] i32]]]
-[def i32.div-s [extern instructions i32.div-s [func [i32 i32] i32]]]
+[def i32.rem-s [extern instructions i32.rem-s]]
+[def i32.div-s [extern instructions i32.div-s]]
 
 [defn int-to-word [n]
   [if [is-zero n]
@@ -478,7 +478,6 @@
 [def-extern var-get [func [var] any]]
 [def-extern var-meta [func [var] any]]
 [def-extern apply [func [[func] [list any]] any]]
-[def-extern make-eval-context [func [[kv-map]] any]]
 [def-extern meta [func [form] any]]
 [def-extern word-with-meta [func [word kv-map] word]]
 [def-extern list-with-meta [func [list kv-map] list]]

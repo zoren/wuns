@@ -1,6 +1,8 @@
-import { isWord, isList, print, meta, makeList, isForm, defVar, defVarWithMeta, setMeta } from './core.js'
+import { setJSFunctionName, parseFunctionParameters, createParameterNamesWrapper } from './utils.js'
+import { isWord, isList, print, meta, makeList, isForm, defVar, defVarWithMeta } from './core.js'
 import { instructionFunctions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
+import { isJSReservedWord } from './utils.js'
 
 class RuntimeError extends Error {
   constructor(message, form, innerError) {
@@ -45,36 +47,28 @@ const parseParams = (params) => {
   return { params, restParam: null }
 }
 
-const setJSFunctionName = (f, value) => {
-  Object.defineProperty(f, 'name', { value })
-}
-
-// creates a wrapping function for a number of parameters and an optional rest parameter
-// the resulting function will have the same .length property as in javascript
-const createArityFunctionWrapper = (length, hasRestParam) => {
-  const params = Array.from({ length }, (_, i) => `p${i}`)
-  if (hasRestParam) params.push('...rest')
-  const paramsString = params.join(', ')
-  return Function('body', `return function (${paramsString}) { return body(${paramsString}) }`)
-}
-
-const createNamedFunction = (strFuncName, nOfParams, hasRestParam, body) => {
-  const f = createArityFunctionWrapper(nOfParams, hasRestParam)(body)
-  setJSFunctionName(f, strFuncName)
-  if (hasRestParam) f.hasRestParam = hasRestParam
+const createNamedFunction = (name, jsParameterNames, wunsParameterNames, wunsRestParameter, body) => {
+  const f = createParameterNamesWrapper(jsParameterNames)(body)
+  setJSFunctionName(f, name)
+  f.parameters = wunsParameterNames
+  if (wunsRestParameter) f.restParam = wunsRestParameter
   return Object.freeze(f)
 }
 
-const checkCallArity = (errorFn) => (nOfParams, hasRestParam, form) => {
-  if (nOfParams === undefined) throw new errorFn(`expected function/macro/fexpr/manc, got variable ${form}`, form)
+const paramStringToJS = (p) => (isJSReservedWord(p) ? '_' : '') + p.replace(/-/g, '_')
+
+const checkCallArity = (errorFn) => (func, form) => {
+  const nOfParams = func.parameters.length
   const numOfGivenArgs = form.length - 1
-  if (hasRestParam) {
+  if (func.restParam) {
     if (numOfGivenArgs < nOfParams)
-      throw new errorFn(`expected at least ${nOfParams} arguments, got ${numOfGivenArgs}`, form)
+      throw new errorFn(`${func.name} expected at least ${nOfParams} arguments, got ${numOfGivenArgs}`, form)
   } else {
-    if (numOfGivenArgs !== nOfParams) throw new errorFn(`expected ${nOfParams} arguments, got ${numOfGivenArgs}`, form)
+    if (numOfGivenArgs !== nOfParams)
+      throw new errorFn(`${func.name} expected ${nOfParams} arguments, got ${numOfGivenArgs}`, form)
   }
 }
+
 const ctCheckCallArity = checkCallArity(CompileError)
 const rtCheckCallArity = checkCallArity(RuntimeError)
 
@@ -209,8 +203,13 @@ const makeInterpreterContext = (externalModules) => {
         for (const p of params) varDescs.set(p, paramDesc)
         if (restParam) varDescs.set(restParam, paramDesc)
         const nOfParams = params.length
-        const hasRestParam = !!parsedParams.restParam
-        const newCtx = { varDescs, outer: null, ctxType: firstWordValue, nOfParams, hasRestParam }
+        const newCtx = {
+          varDescs,
+          outer: null,
+          ctxType: firstWordValue,
+          parameters: params,
+          restParam,
+        }
         const cbodies = compBodies(newCtx, bodies)
         const body = restParam
           ? (...args) => {
@@ -224,7 +223,10 @@ const makeInterpreterContext = (externalModules) => {
               for (let i = 0; i < nOfParams; i++) varValues.set(params[i], args[i])
               return cbodies({ varValues })
             }
-        const f = createNamedFunction(strFuncName, nOfParams, hasRestParam, body)
+        const jsParameterNames = [...params]
+        if (restParam) jsParameterNames.push('...' + restParam)
+        const safeJSParameterNames = jsParameterNames.map(paramStringToJS)
+        const f = createNamedFunction(strFuncName, safeJSParameterNames, params, restParam, body)
         // for recursive calls
         newCtx.func = f
         Object.freeze(newCtx)
@@ -233,37 +235,18 @@ const makeInterpreterContext = (externalModules) => {
       case 'recur': {
         let curCtx = ctx
         while (curCtx.outer) curCtx = curCtx.outer
-        ctCheckCallArity(curCtx.nOfParams, curCtx.hasRestParam, form)
+        ctCheckCallArity(curCtx, form)
         const cargs = args.map((a) => compile(ctx, a))
         return (env) => curCtx.func(...cargs.map((carg) => carg(env)))
       }
       case 'extern': {
-        if (args.length !== 3) throw new CompileError('extern expects 3 arguments', form)
-        const [moduleName, name, type] = args
-        const modName = ctWordValue(moduleName)
-        const nameStr = ctWordValue(name)
-        if (!isList(type)) throw new CompileError('extern expects list as type', form)
-        if (type.length !== 3) throw new CompileError('extern expects type of length 3', form)
-        const [funcWord, paramTypes, result] = type
-        if (ctWordValue(funcWord) !== 'func') throw new CompileError('extern expects func type', form)
-        if (!isList(paramTypes)) throw new CompileError('extern expects list as params', form)
-        const parsedParams = parseParams(paramTypes)
-        const module = externalModules[modName]
-        if (!module) throw new CompileError(`module ${modName} not found`, form)
-        const extern = module[nameStr]
-        if (!extern) throw new CompileError(`extern ${nameStr} not found in module ${modName}`, form)
-        if (typeof extern !== 'function') throw new CompileError(`extern ${nameStr} is not a function`, form)
-        // wrap so we don't change input functions
-        const nOfParams = parsedParams.params.length
-        if (nOfParams !== extern.length) throw new CompileError(`extern ${nameStr} expected ${nOfParams} params`, form)
-        const hasRestParam = !!parsedParams.restParam
-        const externBoolWrap = (...args) => {
-          const res = extern(...args)
-          if (typeof res === 'boolean') return res | 0
-          return res
+        const names = args.map(ctWordValue)
+        let ext = externalModules
+        for (const n of names) {
+          if (!(n in ext)) throw new CompileError(`module ${names.join(' ')} not found`, form)
+          ext = ext[n]
         }
-        const wrapper = createNamedFunction(nameStr, nOfParams, hasRestParam, externBoolWrap)
-        return () => wrapper
+        return () => ext
       }
       case 'try-get-var': {
         if (args.length !== 1) throw new CompileError('try-get-var expects 1 argument', form)
@@ -297,7 +280,7 @@ const makeInterpreterContext = (externalModules) => {
       return (env) => {
         const f = cfunc(env)
         if (typeof f !== 'function') throw new RuntimeError(`expected function, got ${f}`)
-        rtCheckCallArity(f.length, f.hasRestParam, form)
+        rtCheckCallArity(f, form)
         return f(...cargs.map((carg) => carg(env)))
       }
     }
@@ -305,7 +288,7 @@ const makeInterpreterContext = (externalModules) => {
     if (!funcDefVar) throw new CompileError(`function '${firstWordValue}' not found`, form)
     const func = funcDefVar.value
     if (typeof func !== 'function') throw new CompileError(`expected function, got ${func}`, form)
-    ctCheckCallArity(func.length, func.hasRestParam, form)
+    ctCheckCallArity(func, form)
     const varMeta = meta(funcDefVar)
     const noEvalArgs = varMeta['no-eval-args']
     const evalResult = varMeta['eval-result']
@@ -367,31 +350,58 @@ const makeInterpreterContext = (externalModules) => {
 
 export const getFormLocation = (subForm) => (subForm ? meta(subForm).location : undefined) || 'unknown location'
 
-const hostExports = Object.entries(await import('./host.js')).map(([name, f]) => [name.replace(/_/g, '-'), f])
-
-const makeEvalContext = (emods) => {
-  const compile = makeInterpreterContext(emods)
+const make_eval_context = (external_modules) => {
+  const compile = makeInterpreterContext(external_modules)
   const evaluate = (form) => compile(form)()
-  return evaluate
+  const wrappedEvaluate = wrapJSFunction('evaluate', evaluate)
+  // todo maybe return context instead of a function as it will be difficult to pass as a parameter in wasm
+  return wrappedEvaluate
 }
 
-const createHostObject = (compile) => {
-  const hostObj = {}
-  const insertFunc = (name, f) => {
-    if (name in hostObj) throw new Error(`redefining var: ${name}`)
-    hostObj[name] = f
+const underscoreToDash = (s) => s.replace(/_/g, '-')
+
+const wrapJSFunction = (dashedName, importFunc) => {
+  const jsParameterNames = parseFunctionParameters(importFunc)
+  let wunsParameterNames = null
+  let restParam = null
+  if (jsParameterNames.length && jsParameterNames.at(-1).startsWith('...')) {
+    wunsParameterNames = jsParameterNames.slice(0, -1)
+    restParam = underscoreToDash(jsParameterNames.at(-1).slice(3))
+  } else {
+    wunsParameterNames = [...jsParameterNames]
   }
-  for (const [name, f] of hostExports) insertFunc(name, f)
-  insertFunc('make-eval-context', makeEvalContext)
-  insertFunc('eval', (form) => compile(form)())
-  Object.freeze(hostObj)
-  return hostObj
+  wunsParameterNames = wunsParameterNames.map(underscoreToDash)
+  const namedFunc = createNamedFunction(
+    dashedName,
+    jsParameterNames,
+    wunsParameterNames,
+    restParam,
+    (...args) => {
+      const res = importFunc(...args)
+      if (typeof res === 'boolean') return res | 0
+      return res
+    },
+  )
+  return namedFunc
 }
+
+const wrapJSFunctionsToObject = (funcs) => {
+  const newObject = {}
+  for (const importFunc of funcs) {
+    const dashedName = underscoreToDash(importFunc.name)
+    newObject[dashedName] = wrapJSFunction(dashedName, importFunc)
+  }
+  return Object.freeze(newObject)
+}
+
+const externalModules = Object.freeze({
+  instructions: wrapJSFunctionsToObject(instructionFunctions),
+  host: wrapJSFunctionsToObject(Object.values(await import('./host.js'))),
+  interpreter: wrapJSFunctionsToObject([make_eval_context]),
+})
 
 export const makeInitContext = () => {
-  const externalModules = { instructions: instructionFunctions }
   const compile = makeInterpreterContext(externalModules)
-  externalModules['host'] = createHostObject(compile)
   Object.freeze(externalModules)
   return { compile }
 }

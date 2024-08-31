@@ -24,8 +24,8 @@ export const is_word = (f) => isWord(f)
 export const is_list = (f) => isList(f)
 export { meta }
 
-export const word_with_meta = (w, metaData) => wordWithMeta(wordValue(w), metaData)
-export const list_with_meta = (l, metaData) => listWithMeta(l, metaData)
+export const word_with_meta = (w, meta_data) => wordWithMeta(wordValue(w), meta_data)
+export const list_with_meta = (l, meta_data) => listWithMeta(l, meta_data)
 
 export const var_meta = (v) => {
   if (!isDefVar(v)) throw new Error('var-meta, not a defvar: ' + v)
@@ -133,6 +133,7 @@ export const keys = (m) => {
   if (!isPlainObject(m)) throw new Error('keys expect map')
   return makeList(...Object.keys(m).map(word))
 }
+// rename to set_kv_map
 export const set = (o, k, e) => {
   if (!isPlainObject(o)) throw new Error('set expect map')
   if (Object.isFrozen(o)) throw new Error('set expects mutable object')
@@ -151,3 +152,11 @@ export const freeze_kv_map = (o) => {
 }
 
 export const log = (x) => console.log(print(x))
+export const concat = (...lists) => {
+  const l = []
+  for (const list of lists) {
+    if (!isList(list)) throw new Error('concat expects list')
+    l.push(...list)
+  }
+  return l
+}

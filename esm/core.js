@@ -93,7 +93,8 @@ export const print = (ox) => {
     if (typeof x === 'bigint') return String(x)
     if (typeof x === 'string') return `'${x}'`
     if (isList(x)) return `[${x.map(go).join(' ')}]`
-    if (typeof x === 'function') return `[fn ${x.name} arity ${x.length}${x.hasRestParam ? ' rest' : ''}]`
+    if (typeof x === 'function')
+      return `[fn ${x.name} params [${x.parameters.join(' ')}${x.restParam ? ' .. ' + x.restParam : ''}]]`
     if (Object.isFrozen(x))
       return `[kv-map${Object.entries(x)
         .map(([k, v]) => ` ${k} ${go(v)}`)

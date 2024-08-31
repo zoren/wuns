@@ -1,27 +1,22 @@
-const instructionFunctions = {}
-const addI32InstructionFunc = (name, f) => {
-  instructionFunctions['i32.' + name] = f
-}
-const i32binops = {
-  add: '+',
-  sub: '-',
-  mul: '*',
-  'div-s': '/',
-  'rem-s': '%',
+import { setJSFunctionName } from './utils.js'
 
-  eq: '===',
-  ne: '!==',
+const instructionFunctions = []
 
-  'lt-s': '<',
-  'le-s': '<=',
-  'gt-s': '>',
-  'ge-s': '>=',
-}
+const i32Instructions = [
+  { name: 'add', op: '+' },
+  { name: 'sub', op: '-', alias: 'subtract' },
+  { name: 'mul', op: '*', alias: 'multiply' },
+  { name: 'div-s', op: '/', alias: 'divide-signed' },
+  { name: 'rem-s', op: '%', alias: 'remainder-signed' },
 
-for (const [name, op] of Object.entries(i32binops))
-  addI32InstructionFunc(name, Function('a', 'b', `return (a ${op} b) | 0`))
+  { name: 'eq', op: '===', alias: 'equals' },
+  { name: 'ne', op: '!==', alias: 'not-equals' },
 
-const i32BitwiseOps = [
+  { name: 'lt-s', op: '<', alias: 'less-than-signed' },
+  { name: 'le-s', op: '<=', alias: 'less-than-or-equal-signed' },
+  { name: 'gt-s', op: '>', alias: 'greater-than-signed' },
+  { name: 'ge-s', op: '>=', alias: 'greater-than-or-equal-signed' },
+
   { name: 'and', op: '&', alias: 'bitwise-and' },
   { name: 'or', op: '|', alias: 'bitwise-ior' },
   { name: 'xor', op: '^', alias: 'bitwise-xor' },
@@ -29,16 +24,18 @@ const i32BitwiseOps = [
   { name: 'shr-s', op: '>>', alias: 'bitwise-shift-right' },
   { name: 'shr-u', op: '>>>', alias: 'bitwise-shift-right-unsigned' },
 ]
-for (const { name, op, alias } of i32BitwiseOps) {
+for (const { op, name } of i32Instructions) {
   const f = Function('a', 'b', `return (a ${op} b) | 0`)
-  addI32InstructionFunc(name, f)
-  addI32InstructionFunc(alias, f)
+  setJSFunctionName(f, `i32.${name}`)
+  Object.freeze(f)
+  instructionFunctions.push(f)
 }
 
-instructionFunctions['unreachable'] = Object.freeze(() => {
+const unreachable = () => {
   throw new Error('unreachable')
-})
-
+}
+Object.freeze(unreachable)
+instructionFunctions.push(unreachable)
 Object.freeze(instructionFunctions)
 
 export { instructionFunctions }
