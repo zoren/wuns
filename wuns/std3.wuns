@@ -16,28 +16,7 @@
 [def add [extern instructions i32.add]]
 [def lt-s [extern instructions i32.lt-s]]
 
-[def concat
-  [func concat [.. lists]
-    [let
-      [n-of-lists [size lists]
-       total-size
-        [loop [total 0 i 0]
-          [if [lt-s i n-of-lists]
-            [continue total [add total [size [at lists i]]] i [add 1 i]]
-            total]]
-       result [mutable-list-of-size total-size]]
-      [loop [i 0 j 0 res-index 0]
-        [if [lt-s i n-of-lists]
-          [let [cur-list [at lists i]
-                s [size cur-list]]
-            [loop [i 0 res-index res-index]
-              [if [lt-s i s]
-                [let []
-                  [set-array result res-index [at cur-list i]]
-                  [continue res-index [add 1 res-index] i [add 1 i]]]]]
-            [continue i [add 1 i] res-index [add s res-index]]]]]
-      [freeze-mutable-list result]
-      result]]]
+[def concat [extern host concat]]
 
 [def list [func list [.. entries] entries]]
 
@@ -82,8 +61,24 @@
     [make-param-meta parameters 1 0]
     [concat [list [quote func] name parameters] bodies]]]
 
+[def list-with-meta [extern host list-with-meta]]
+[def keys [extern host keys]]
+[def get [extern host get]]
+[def meta [extern host meta]]
+
+[def quote-word [quote quote]]
+
+[defn mk-quote [form] [list quote-word form]]
+
+[defn make-type-meta [type]
+  [concat
+    [quote [let [m [transient-kv-map]]]]
+    [list [concat [quote set m [quote type]] [list [mk-quote type]]]]
+    [quote [freeze-kv-map m] m]]]
+
 [defmacro def-extern [name type]
-  [list [quote def] name [list [quote extern] [quote host] name]]]
+  [list [quote def-with-meta] name [make-type-meta type]
+    [list [quote extern] [quote host] name]]]
 
 [defmacro comment [.. -]
   [quote let []]]
@@ -94,8 +89,7 @@
 
 [defmacro def-bin-i32-inst [name]
   [list [quote def] name
-    [list [quote extern] [quote instructions] [concat-words [quote i32.] name]
-      ]]]
+    [list [quote extern] [quote instructions] [concat-words [quote i32.] name]]]]
 
 [def-bin-i32-inst sub]
 [def-bin-i32-inst mul]
@@ -146,10 +140,6 @@
     false-form]]
 
 [def-extern is-word [func [form] i32]]
-
-[def quote-word [quote quote]]
-
-[defn mk-quote [form] [list quote-word form]]
 
 [defn quote-list [lmsg]
   [let [s [size lmsg]
@@ -409,7 +399,6 @@
   [list [quote has] m [mk-quote w]]]
 
 [def-extern has [func [kv-map word] i32]]
-[def-extern get [func [kv-map word] any]]
 
 [defn try-get [m k]
   [if [has m k]
@@ -427,8 +416,6 @@
 
 [defn push-all [mut-list list]
   [for-each e list [push mut-list e]]]
-
-[def-extern keys [func [kv-map] [list word]]]
 
 [defn assoc [m k v]
   [let [new [transient-kv-map]]
@@ -478,8 +465,6 @@
 [def-extern var-get [func [var] any]]
 [def-extern var-meta [func [var] any]]
 [def-extern apply [func [[func] [list any]] any]]
-[def-extern meta [func [form] any]]
 [def-extern word-with-meta [func [word kv-map] word]]
-[def-extern list-with-meta [func [list kv-map] list]]
 [def-extern is-atom [func [any] i32]]
 [def-extern is-identical [func [any any] i32]]
