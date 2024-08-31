@@ -368,8 +368,4 @@
     [assert [is-empty messages] unexpected error messages]]]
 
 [defn test-expand [host-func-types]
-  [test-expand-no-errors-fn [quote
-  [def x [i32 1]]
-  [def y [i32 2]]
-  ]]
-]
+  [test-expand-no-errors-fn [quote [[def x [i32 1]] [def y [i32 2]]]]]]

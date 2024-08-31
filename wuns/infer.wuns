@@ -243,9 +243,10 @@
                 0]
               0]]
           [recur result1 result2]
-          [if [and [not opt-rest1] [not opt-rest2] [not [eq arity1 arity2]]] [quote insufficient number of arguments] 0]]]
+          [if [and [not opt-rest1] [not opt-rest2] [not [eq arity1 arity2]]]
+            [quote [insufficient number of arguments]] 0]]]
 
-      [quote not unifiable]]]]
+      [quote [not unifiable]]]]]
 
 [defn mk-type-scheme [type-vars type] [list [quote type-scheme] type-vars type]]
 

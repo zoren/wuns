@@ -14,7 +14,7 @@
 [defn type-tuple [.. types] [concat [quote [tuple]] types]]
 [def type-empty [type-tuple]]
 
-[def atomic-types [quote form word i32 i64 any error]]
+[def atomic-types [quote [form word i32 i64 any error]]]
 
 [defn is-atomic-type [t]
   [loop [i 0]
@@ -384,7 +384,7 @@
     [assert [eq [size messages] 1] there is not exactly one error message [identity messages]
       [identity form] [identity actual-type]]
     [let [message [getq [first messages] message]]
-      [assert [eq-form expected-error message] [list [quote test fail wrong message] form expected-error message]]
+      [assert [eq-form expected-error message] [list [quote [test fail wrong message]] form expected-error message]]
     [assert [eq-form expected-type actual-type] test fail unexpected type form expected [identity expected-type] actual [identity actual-type]]]]]
 
 [defn check-forms [forms]

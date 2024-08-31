@@ -47,7 +47,7 @@
 [def meta [extern host meta]]
 
 [defmacro comment [.. -]
-  [quote let []]]
+  [quote [let []]]]
 
 [def-extern concat-words [func [word word] word]]
 
@@ -101,18 +101,18 @@
 [defn last [l] [at l -1]]
 
 [defmacro do [.. forms]
-  [concat [quote let []] forms]]
+  [concat [quote [let []]] forms]]
 
 [defmacro when [cond .. forms]
   [list
     [quote if] cond
-    [concat [quote let []] forms]]]
+    [concat [quote [let []]] forms]]]
 
 [defmacro when-not [cond .. forms]
   [list
     [quote if] cond
     [quote [let []]]
-    [concat [quote let []] forms]]]
+    [concat [quote [let []]] forms]]]
 
 [defmacro if-not [cond false-form true-form]
   [list
@@ -139,7 +139,7 @@
 
 [defmacro assert [cond .. lmsg]
   [list [quote if] cond
-    [quote let []]
+    [quote [let []]]
     [list [quote let] [quote []]
       [list [quote log] [quote-list lmsg]]
       [quote [unreachable]]]]]
@@ -167,14 +167,14 @@
 [defmacro and [.. clauses]
   [let [s [size clauses]]
     [if [is-zero s]
-      [quote i32 1]
+      [quote [i32 1]]
       [loop [i [dec s]
              res [at clauses -1]]
         [if [eq i 0]
           res
           [continue
             i [dec i]
-            res [list [quote if] [at clauses [dec i]] res [quote i32 0]]]]]]]]
+            res [list [quote if] [at clauses [dec i]] res [quote [i32 0]]]]]]]]]
 
 [def-extern atom [func [any] atom]]
 
@@ -235,7 +235,7 @@
 [defmacro or [.. clauses]
   [let [s [size clauses]]
     [if [is-zero s]
-      [quote i32 0]
+      [quote [i32 0]]
       [loop [i [dec s]
              res [at clauses -1]]
         [if [eq i 0]
@@ -293,7 +293,7 @@
         [quote loop] [list iw start]
         [list [quote if]
           [list [quote lt-s] iw ew]
-          [concat [quote let []] forms
+          [concat [quote [let []]] forms
             [list [list [quote continue] iw [list [quote add] iw [list [quote i32] [int-to-word increment]]]]]]]]]]]
 
 [defmacro for [iw start end .. forms]
@@ -310,13 +310,13 @@
     [list
       [quote let] [list col-var collection col-size-var [list [quote size] col-var]]
       [list
-        [quote loop] [list iteration-var [quote i32 0]]
+        [quote loop] [list iteration-var [quote [i32 0]]]
         [list [quote if]
           [list [quote lt-s] iteration-var col-size-var]
           [concat [quote [let]]
             [list [list element-var [list [quote at] col-var iteration-var]]]
             forms
-            [list [list [quote continue] iteration-var [list [quote add] iteration-var [quote i32 1]]]]]]]]]]
+            [list [list [quote continue] iteration-var [list [quote add] iteration-var [quote [i32 1]]]]]]]]]]]
 
 [defmacro list-map [element-var collection form]
   [assert [is-word element-var] list-map requires a word as the first argument]
@@ -329,13 +329,13 @@
                         col-size-var [list [quote size] col-var]
                         new-col-var [list [quote mutable-list-of-size] col-size-var]]
       [list
-        [quote loop] [list iteration-var [quote i32 0]]
+        [quote loop] [list iteration-var [quote [i32 0]]]
         [list [quote if]
           [list [quote lt-s] iteration-var col-size-var]
           [concat [quote [let]]
             [list [list element-var [list [quote at] col-var iteration-var]]]
             [list [list [quote set-array] new-col-var iteration-var form]]
-            [list [list [quote continue] iteration-var [list [quote add] iteration-var [quote i32 1]]]]]]]
+            [list [list [quote continue] iteration-var [list [quote add] iteration-var [quote [i32 1]]]]]]]]
       [list [quote freeze-mutable-list] new-col-var]
       new-col-var]]]
 
