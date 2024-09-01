@@ -12,6 +12,7 @@ export const parse = (content, oldTree) => {
   return parser.parse(content, oldTree, { bufferSize })
 }
 export const treeToForms = (tree, filePath) => {
+  const filePathPrefix = filePath ? filePath + ':' : ''
   /**
    * @param {TSParser.SyntaxNode} node
    */
@@ -19,17 +20,7 @@ export const treeToForms = (tree, filePath) => {
     const { type, text, startPosition, isError } = node
     if (isError) return null
     const { row, column } = startPosition
-    const metaData = {
-      // range,
-      // 'tree-sitter-node-id': word(String(node.id)),
-      // 'start-index': startIndex,
-      // 'end-index': endIndex,
-    }
-    if (filePath) {
-      // metaData['file-path'] = filePath
-      metaData['location'] = `${filePath}:${row + 1}:${column + 1}`
-    }
-    Object.freeze(metaData)
+    const metaData = Object.freeze({ location: `${filePathPrefix}${row + 1}:${column + 1}` })
     switch (type) {
       case 'word':
         return wordWithMeta(text, metaData)

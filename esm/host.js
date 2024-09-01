@@ -48,7 +48,7 @@ export const char_code_at = (word, index) => {
   return s.at(index).charCodeAt(0)
 }
 export const concat_words = (word_1, word_2) => word(wordValue(word_1) + wordValue(word_2))
-// todo rename
+// todo rename code_point_to_word
 export const char_code_to_word = (code_point) => word(String.fromCodePoint(code_point))
 
 export const size = (list) => {

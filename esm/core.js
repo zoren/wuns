@@ -8,7 +8,7 @@ class Word {
   }
 
   toString() {
-    return String(this.value)
+    return this.value
   }
 }
 export const isWord = (f) => f instanceof Word

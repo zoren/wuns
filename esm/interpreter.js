@@ -105,7 +105,6 @@ const makeInterpreterContext = (externalModules) => {
         return () => defVar.value
       }
     }
-    // do not allow non-forms
     if (!isList(form)) throw new CompileError('not a form', form)
     if (form.length === 0) return () => undefined
     const [firstForm, ...args] = form
