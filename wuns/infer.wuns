@@ -477,10 +477,9 @@
           [quote [tuple]]]
 
         [eq-form first-form [quote extern]]
-        [let []
+        [do
           [for i 1 s-form
             [report-when-not [is-word [at form i]] form expects words]]
-
           [generate-fresh-type-var gctx level]]
 
         [let
@@ -774,5 +773,10 @@
 
 [test-ok [type-scheme [a] a] [extern host size]]
 
+[test-ok
+  [list i32]
+  [def list [func list [.. entries] entries]]
+  [def test [list [i32 1] [i32 2]]]
+  test]
 
 [logq we ran [atom-get tests-run-atom] tests]

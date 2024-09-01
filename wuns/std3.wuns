@@ -1,10 +1,15 @@
 [def list [func list [.. entries] entries]]
 
 [def-with-meta defmacro
-  [[extern host kv-map] [quote no-eval-args] [i32 1] [quote eval-result] [i32 1]]
+  [[extern host kv-map]
+    [quote no-eval-args] [i32 1]
+    [quote eval-result] [i32 1]]
   [func defmacro [name parameters .. bodies]
     [list [quote def-with-meta] name
-      [quote [[extern host kv-map] [quote no-eval-args] [i32 1] [quote eval-result] [i32 1]]]
+      [quote
+        [[extern host kv-map]
+          [quote no-eval-args] [i32 1]
+          [quote eval-result] [i32 1]]]
       [[extern host concat] [list [quote func] name parameters] bodies]]]]
 
 [defmacro defn [name parameters .. bodies]
@@ -29,22 +34,6 @@
 
 [def-extern size [type-scheme [a] [func [[list a]] i32]]]
 [def-extern at [type-scheme [a] [func [[list a] i32] a]]]
-[def mutable-list-of-size [extern host mutable-list-of-size]]
-[def set-array [extern host set-array]]
-[def freeze-mutable-list [extern host freeze-mutable-list]]
-[def clone-growable-to-frozen-list [extern host clone-growable-to-frozen-list]]
-
-[def transient-kv-map [extern host transient-kv-map]]
-[def set-kv-map [extern host set-kv-map]]
-[def freeze-kv-map [extern host freeze-kv-map]]
-
-[def growable-list [extern host growable-list]]
-[def push [extern host push]]
-
-[def list-with-meta [extern host list-with-meta]]
-[def keys [extern host keys]]
-[def get [extern host get]]
-[def meta [extern host meta]]
 
 [defmacro comment [.. -]
   [quote [let []]]]
@@ -122,6 +111,10 @@
 
 [def-extern is-word [func [form] i32]]
 
+[def-extern mutable-list-of-size [type-scheme [a] [func [i32] [mutable-list a]]]]
+[def-extern set-array [type-scheme [a] [func [[mutable-list a] i32 a] []]]]
+[def-extern freeze-mutable-list [type-scheme [a] [func [[mutable-list a]] [tuple]]]]
+
 [defn quote-list [lmsg]
   [let [s [size lmsg]
         msg [mutable-list-of-size [inc s]]]
@@ -176,7 +169,7 @@
             i [dec i]
             res [list [quote if] [at clauses [dec i]] res [quote [i32 0]]]]]]]]]
 
-[def-extern atom [func [any] atom]]
+[def-extern atom [type-scheme [a] [func [a] [atom a]]]]
 
 [def word-counter [atom 0]]
 
@@ -184,6 +177,10 @@
 
 [def-instruction i32.rem-s i32.rem-s]
 [def-instruction i32.div-s i32.div-s]
+
+[def-extern growable-list [type-scheme [a] [func [] [growable-list a]]]]
+[def-extern clone-growable-to-frozen-list [type-scheme [a] [func [[growable-list a]] [list a]]]]
+[def-extern push [type-scheme [a] [func [[growable-list a] a] []]]]
 
 [defn int-to-word [n]
   [if [is-zero n]
@@ -224,8 +221,8 @@
         [continue res [add [mul res [i32 10]] [sub cc [word-to-char-code 0]]] i [inc i]]]
       res]]]
 
-[def-extern atom-get [func [atom] any]]
-[def-extern atom-set [func [atom any] []]]
+[def-extern atom-get [type-scheme [a] [func [[atom a]] a]]]
+[def-extern atom-set [type-scheme [a] [func [[atom a] a] [tuple]]]]
 
 [defn genword []
   [let [c [atom-get word-counter]]
@@ -341,6 +338,10 @@
 
 [defn half [x] [i32.div-s x 2]]
 
+[def-extern transient-kv-map [func [] transient-kv-map]]
+[def-extern set-kv-map [type-scheme [a] [func [transient-kv-map word a] []]]]
+[def-extern freeze-kv-map [func [transient-kv-map] []]]
+
 [defmacro kv-mapq [.. entries]
   [let [s [size entries]
         n-of-pairs [half s]
@@ -371,13 +372,15 @@
     [set-array ml [add 3 s] tmp-word]
     ml]]
 
-[defmacro getq [m w]
-  [list [quote get] m [mk-quote w]]]
+[def-extern has [func [kv-map word] i32]]
 
 [defmacro hasq [m w]
   [list [quote has] m [mk-quote w]]]
 
-[def-extern has [func [kv-map word] i32]]
+[def-extern get [type-scheme [a] [func [kv-map word] a]]]
+
+[defmacro getq [m w]
+  [list [quote get] m [mk-quote w]]]
 
 [defn try-get [m k]
   [if [has m k]
@@ -395,6 +398,8 @@
 
 [defn push-all [mut-list list]
   [for-each e list [push mut-list e]]]
+
+[def-extern keys [func [kv-map] [list word]]]
 
 [defn assoc [m k v]
   [let [new [transient-kv-map]]
@@ -441,9 +446,11 @@
             0]]
         1]]]]
 
+[def-extern meta [func [form] kv-map]]
 [def-extern var-get [func [var] any]]
 [def-extern var-meta [func [var] any]]
 [def-extern apply [func [[func] [list any]] any]]
 [def-extern word-with-meta [func [word kv-map] word]]
-[def-extern is-atom [func [any] i32]]
-[def-extern is-identical [func [any any] i32]]
+[def-extern list-with-meta [func [list kv-map] list]]
+[def-extern is-atom [type-scheme [a] [func [[atom a]] i32]]]
+[def-extern is-identical [type-scheme [a] [func [a a] i32]]]

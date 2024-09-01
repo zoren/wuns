@@ -279,57 +279,9 @@
       p0r [func p0r [.. r] 0]
       p1r [func p1r [p .. r] 1]]
     host
-    [kv-map-id
-      size
-      at
-      mutable-list-of-size
-      set-array
-      freeze-mutable-list
-      clone-growable-to-frozen-list
-
-      transient-kv-map
-      set-kv-map
-      freeze-kv-map
-
-      is-word
-      log
-      atom
-      growable-list
-      push
-
-      char-code-to-word
-      concat-words
-      char-code-at
-      word-byte-size
-      atom-get
-      atom-set
-      is-list
-      has
-      get
-      keys
-      var-get
-      var-meta
-      apply
-      make-eval-context
-      meta
-      word-with-meta
-      list-with-meta
-      is-atom
-      is-identical
-      ]
+    [extern host]
     instructions
-    [kv-mapq
-      i32.add   [extern instructions i32.add]
-      i32.sub   [extern instructions i32.sub]
-      i32.mul   [extern instructions i32.mul]
-      i32.lt-s  [extern instructions i32.lt-s]
-      i32.eq    [extern instructions i32.eq]
-      i32.le-s  [extern instructions i32.lt-s]
-      i32.and   [extern instructions i32.and]
-      i32.rem-s [extern instructions i32.rem-s]
-      i32.div-s [extern instructions i32.div-s]
-      unreachable [extern instructions unreachable]
-      ]]]
+    [extern instructions]]]
 
 [defn make-global-context []
   [kv-mapq
