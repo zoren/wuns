@@ -25,13 +25,12 @@
     [atom-set atom [inc prev-val]]
     prev-val]]
 
+[defn generate-fresh-type-var-atom [counter-atom level]
+  [let [kind [int-to-type-var [inc-atom counter-atom]]]
+    [atom [kv-map-id kind level]]]]
+
 [defn generate-fresh-type-var [gctx level]
-  [let [counter [getq gctx type-var-counter]
-        new-type-var [inc-atom counter]]
-    [atom
-      [kv-mapq
-        kind [int-to-type-var new-type-var]
-        level level]]]]
+  [generate-fresh-type-var-atom [getq gctx type-var-counter] level]]
 
 [defn is-type-var [t]
   [and [is-atom t]
@@ -562,10 +561,10 @@
 
 [defn renumber-internal-type-scheme [type-vars type]
   [let [subst-assoc-list [mutable-list-of-size [size type-vars]]
-        mock-gctx [make-infer-global-context]]
+        type-var-counter [atom 0]]
     [for i 0 [size type-vars]
       [let [tv [at type-vars i]
-            new-tv [generate-fresh-type-var mock-gctx 0]]
+            new-tv [generate-fresh-type-var-atom type-var-counter 0]]
         [set-array subst-assoc-list i [list tv new-tv]]]]
     [copy-type subst-assoc-list type]]]
 
