@@ -345,6 +345,57 @@
 
       [continue cur-ctx [getq cur-ctx outer]]]]]
 
+[defn try-get-annotated-type [gctx form]
+  [if-let [m [meta form]]
+    [try-getq m type]
+    0]]
+
+[defn try-get-def-var-annotated-type [gctx form]
+  [if [is-word form]
+    [if-let [var [eval-try-get-var gctx form]]
+      [try-get-annotated-type gctx var]
+      0]
+    0]]
+
+[comment given a type such as [func [i32 i32] i32] instantiates to a type-scheme]
+[defn instantiate-annotated-type [gctx type]
+  [ifs
+    [is-word type]
+    [ifs
+      [eq-word type [quote i32]]
+      [quote [i32]]
+
+      [eq-word type [quote word]]
+      [quote [word]]
+
+      [report type could not be instantiated not known]]
+
+    [is-list type]
+    [if [is-empty type]
+      [report type expects a non-empty list]
+      [let [first-form [first type]
+            s-form [size type]
+            n-of-args [dec s-form]]
+        [ifs
+          [not [is-word first-form]]
+          [report type expects a word [identity first-form]]
+
+          [eq-word first-form [quote func]]
+          [do
+            [report-when-not [eq n-of-args 2] type expects 2 arguments a parameter list and a return type]
+            [let [params [second type]
+                  - [report-when-not [is-list params] type expects a list]
+                  result [third type]
+                  internal-params [mutable-list-of-size [size params]]]
+              [for i 0 [size params]
+                [set-array internal-params i [recur gctx [at params i]]]]
+              [make-internal-func-type internal-params 0 [recur gctx result]]
+              ]]
+
+            [report first-form unknown type]]]]
+
+    [report type expected word or list]]]
+
 [defn infer-form-type [gctx level lctx form]
   [ifs
     [is-word form]
@@ -472,6 +523,17 @@
               value-type [recur gctx [inc level] lctx value-form]
               general-val-type [generalize level value-type]]
           [set-def-var-type gctx name general-val-type]
+          [comment todo report re-defs]
+          [quote [tuple]]]
+
+        [eq-form first-form [quote def-with-meta]]
+        [let [name [second form]
+              meta-form [third form]
+              value-form [fourth form]
+              value-type [recur gctx [inc level] lctx value-form]
+              general-val-type [generalize level value-type]]
+          [set-def-var-type gctx name general-val-type]
+          [comment todo report re-defs]
           [quote [tuple]]]
 
         [eq-form first-form [quote extern]]
@@ -485,7 +547,14 @@
            arg-types [mutable-list-of-size n-of-args]]
           [for i 0 n-of-args
             [set-array arg-types i [recur gctx level lctx [at form [inc i]]]]]
-          [unify-call gctx level func-type arg-types form]]]]]]
+          [let
+            [t-res [generate-fresh-type-var gctx level]
+             t-func [make-internal-func-type arg-types 0 t-res]]
+            [if-let [opt-annotated-type [try-get-def-var-annotated-type gctx first-form]]
+              [unify-report gctx [instantiate-annotated-type gctx opt-annotated-type] t-func form]
+              []]
+            [unify-report gctx func-type t-func form]
+            t-res]]]]]]
 
 [defn normalize-deep [internal-type]
   [assert-internal-type internal-type]
@@ -787,6 +856,9 @@
   [i32 5]
   [quote a]]
 [test-ok
+  [tuple]
+  [def d [quote a]]]
+[test-ok
   word
   [def d [quote a]]
   d]
@@ -808,5 +880,12 @@
   [def list [func list [.. entries] entries]]
   [def test [list [i32 1] [i32 2]]]
   test]
+
+[test-ok
+  i32
+  [def-with-meta my-extern-add-i32
+    [[extern host kv-map] [quote type] [quote [func [i32 i32] i32]]]
+    [extern instructions i32.add]]
+  [my-extern-add-i32 [i32 1] [i32 2]]]
 
 [logq we ran [atom-get tests-run-atom] tests]
