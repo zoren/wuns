@@ -22,7 +22,10 @@ export const meta = (form) => {
 export const setMeta = (v, meta) => {
   const t = typeof v
   if (!(t === 'object' || t === 'function') || Object.isFrozen(v)) throw new Error('expects mutable object ' + t)
-  if (meta === undefined) throw new Error('meta must be defined')
+  if (meta === undefined) {
+    delete v[symbolMeta]
+    return
+  }
   if (typeof meta !== 'object') throw new Error('meta must be object')
   v[symbolMeta] = Object.freeze({ ...meta })
 }
@@ -56,6 +59,10 @@ class DefVar {
     this.value = value
   }
 
+  setValue(value) {
+    this.value = value
+  }
+
   toString() {
     return `[var ${this.name}]`
   }
@@ -63,13 +70,7 @@ class DefVar {
 
 export const isDefVar = (f) => f instanceof DefVar
 
-export const defVar = (name, value) => Object.freeze(new DefVar(name, value))
-
-export const defVarWithMeta = (name, metaData, value) => {
-  const newVar = new DefVar(name, value)
-  setMeta(newVar, metaData)
-  return Object.freeze(newVar)
-}
+export const defVar = (name, value) => new DefVar(name, value)
 
 export const makeGetDefVarValue = (compile) => {
   const getDefVarValFn = (name) => compile(makeList(word('try-get-var'), word(name)))()
