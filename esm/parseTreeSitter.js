@@ -11,7 +11,7 @@ export const parse = (content, oldTree) => {
   const bufferSize = content.length + 1
   return parser.parse(content, oldTree, { bufferSize })
 }
-export const treeToForms = (tree, filePath) => {
+export function* treeToForms(tree, filePath) {
   const filePathPrefix = filePath ? filePath + ':' : ''
   /**
    * @param {TSParser.SyntaxNode} node
@@ -25,21 +25,20 @@ export const treeToForms = (tree, filePath) => {
       case 'word':
         return wordWithMeta(text, metaData)
       case 'list':
-        return listWithMeta(childrenToOurForm(node), metaData)
+        const l = []
+        for (const child of node.namedChildren) {
+          const form = nodeToOurForm(child)
+          if (form !== null) l.push(form)
+        }
+        return listWithMeta(l, metaData)
       default:
         throw new Error('unexpected node type: ' + type)
     }
   }
-  const childrenToOurForm = (node) => {
-    const l = []
-    for (const child of node.namedChildren) {
-      if (child.isError) continue
-      const form = nodeToOurForm(child)
-      if (form !== null) l.push(form)
-    }
-    return l
+  for (const child of tree.rootNode.namedChildren) {
+    const form = nodeToOurForm(child)
+    if (form !== null) yield form
   }
-  return childrenToOurForm(tree.rootNode)
 }
 export const parseStringToForms = (content) => treeToForms(parse(content))
 import fs from 'fs'
