@@ -523,7 +523,6 @@
               value-type [recur gctx [inc level] lctx value-form]
               general-val-type [generalize level value-type]]
           [set-def-var-type gctx name general-val-type]
-          [comment todo report re-defs]
           [quote [tuple]]]
 
         [eq-form first-form [quote def-with-meta]]
@@ -533,7 +532,6 @@
               value-type [recur gctx [inc level] lctx value-form]
               general-val-type [generalize level value-type]]
           [set-def-var-type gctx name general-val-type]
-          [comment todo report re-defs]
           [quote [tuple]]]
 
         [eq-form first-form [quote extern]]
@@ -887,5 +885,13 @@
     [[extern host kv-map] [quote type] [quote [func [i32 i32] i32]]]
     [extern instructions i32.add]]
   [my-extern-add-i32 [i32 1] [i32 2]]]
+
+[test-binding-errors [[already defined]]
+  [def d [quote a]]
+  [def d [quote b]]]
+
+[test-binding-errors [[already defined]]
+  [def d [quote a]]
+  [def-with-meta d [[extern host kv-map]] [quote b]]]
 
 [logq we ran [atom-get tests-run-atom] tests]

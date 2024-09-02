@@ -194,6 +194,7 @@
                 local-ctx [kv-mapq vars empty-kv-map decl-form first-form]
                 e-form [list first-form name [recur gctx local-ctx [at form 2]]]
                 eval-context [getq gctx eval-context]]
+            [report-when [eval-try-get-var gctx name] name already defined]
             [eval-context e-form]
             e-form]
 
@@ -205,6 +206,7 @@
                 local-ctx [kv-mapq vars empty-kv-map decl-form first-form]
                 e-form [list first-form name [recur gctx local-ctx meta-form] [recur gctx local-ctx [at form 3]]]
                 eval-context [getq gctx eval-context]]
+            [report-when [eval-try-get-var gctx name] name already defined]
             [eval-context e-form]
             e-form]
 
