@@ -20,14 +20,6 @@ class CompileError extends Error {
   }
 }
 
-const hasCtxVar = (ctx, v) => {
-  while (ctx) {
-    if (ctx.variables.has(v)) return true
-    ctx = ctx.outer
-  }
-  return false
-}
-
 const ctWordValue = (w) => {
   if (!isWord(w)) throw new CompileError('not a word: ' + w + ' ' + typeof w, w)
   return w.value
@@ -77,6 +69,18 @@ const rtCheckCallArity = (f, form) => {
   checkCallArity(RuntimeError)(f, form)
 }
 
+const getOuterContextOfPred = (ctx, pred) => {
+  while (ctx) {
+    if (pred(ctx)) return ctx
+    ctx = ctx.outer
+  }
+  return null
+}
+
+const getOuterContextWithVar = (ctx, varName) => getOuterContextOfPred(ctx, ({variables}) => variables.has(varName))
+
+const getOuterContextOfType = (ctx, type) => getOuterContextOfPred(ctx, ({ctxType}) => ctxType === type)
+
 const makeInterpreterContext = (externalModules) => {
   const defVars = new Map()
   const insertOrSetDefVar = (name, value, optMetaData) => {
@@ -101,7 +105,7 @@ const makeInterpreterContext = (externalModules) => {
     {
       const varName = tryGetWordValue(form)
       if (varName) {
-        if (hasCtxVar(ctx, varName))
+        if (getOuterContextWithVar(ctx, varName))
           return (env) => {
             while (env) {
               const { varValues, outer } = env
@@ -176,15 +180,11 @@ const makeInterpreterContext = (externalModules) => {
           updateVars.push(ctWordValue(args[i]))
           updateFuncs.push(compile(ctx, args[i + 1]))
         }
-        let enclosingLoopCtx = ctx
-        while (true) {
-          if (!enclosingLoopCtx) throw new CompileError('continue outside of loop', form)
-          if (enclosingLoopCtx.ctxType === 'loop') break
-          enclosingLoopCtx = enclosingLoopCtx.outer
-        }
+        const enclosingLoopCtx = getOuterContextOfType(ctx, 'loop')
+        if (!enclosingLoopCtx) throw new CompileError('continue outside of loop', form)
+        const { variables } = enclosingLoopCtx
         for (const uv of updateVars) {
-          if (!enclosingLoopCtx.variables.has(uv))
-            throw new CompileError(`loop variable ${uv} not found in loop context`, form)
+          if (!variables.has(uv)) throw new CompileError(`loop variable ${uv} not found in loop context`, form)
         }
         return (env) => {
           let enclosingLoopEnv = env
@@ -238,11 +238,11 @@ const makeInterpreterContext = (externalModules) => {
         return () => f
       }
       case 'recur': {
-        let curCtx = ctx
-        while (curCtx.outer) curCtx = curCtx.outer
-        ctCheckCallArity(curCtx, form)
+        let funcCtx = getOuterContextOfType(ctx, 'func')
+        if (!funcCtx) throw new CompileError('recur outside of func', form)
+        ctCheckCallArity(funcCtx, form)
         const cargs = args.map((a) => compile(ctx, a))
-        return (env) => curCtx.func(...cargs.map((carg) => carg(env)))
+        return (env) => funcCtx.func(...cargs.map((carg) => carg(env)))
       }
       case 'extern': {
         const names = args.map(ctWordValue)
@@ -279,7 +279,7 @@ const makeInterpreterContext = (externalModules) => {
       }
     }
     // direct function call or function in parameter/local variable
-    if (!firstWordValue || hasCtxVar(ctx, firstWordValue)) {
+    if (!firstWordValue || getOuterContextWithVar(ctx, firstWordValue)) {
       const cfunc = compile(ctx, firstForm)
       const cargs = args.map((a) => compile(ctx, a))
       return (env) => {
