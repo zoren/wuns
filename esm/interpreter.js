@@ -126,10 +126,9 @@ const makeInterpreterContext = (externalModules) => {
         if (args.length < 2 || 3 < args.length) throw new CompileError('if expects 2 or 3 arguments', form)
         const cc = compile(ctx, args[0])
         const ct = compile(ctx, args[1])
-        if (args.length === 2) return (env) => (cc(env) === 0 ? undefined : ct(env))
+        if (args.length === 2) return (env) => (cc(env) ? ct(env) : undefined)
         const cf = compile(ctx, args[2])
-        // consider being more strict only allowing numbers in the condition, for now we use truthy/falsy for try-get-* functions
-        return (env) => (cc(env) === 0 ? cf : ct)(env)
+        return (env) => (cc(env) ? ct : cf)(env)
       }
       case 'let':
       case 'loop': {
