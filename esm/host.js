@@ -13,15 +13,16 @@ import {
   wordWithMeta,
   listWithMeta,
 } from './core.js'
+import { isPlainObject } from './utils.js'
 
 export const apply = (fn, args) => {
   if (typeof fn !== 'function') throw new Error('apply expects function')
   return fn(...args)
 }
 
-export const is_word = (form) => isWord(form)
+export const is_word = (form) => isWord(form) | 0
 
-export const is_list = (form) => isList(form)
+export const is_list = (form) => isList(form) | 0
 export { meta }
 
 export const word_with_meta = (word, meta_data) => wordWithMeta(wordValue(word), meta_data)
@@ -105,7 +106,7 @@ export const at = (list, index) => {
 }
 
 export { atom }
-export const is_atom = (atom) => isAtom(atom)
+export const is_atom = (atom) => isAtom(atom) | 0
 export const atom_get = (atom) => {
   if (!isAtom(atom)) throw new Error('not an atom: ' + atom)
   return atom.value
@@ -114,10 +115,7 @@ export const atom_set = (atom, value) => {
   if (!isAtom(atom)) throw new Error('not an atom: ' + atom)
   atom.value = value
 }
-export const is_identical = (value_a, value_b) => value_a === value_b
-
-// https://stackoverflow.com/a/69745650/3495920
-const isPlainObject = (value) => value?.constructor === Object
+export const is_identical = (value_a, value_b) => (value_a === value_b) | 0
 
 export const transient_kv_map = () => ({})
 export const kv_map = (...array) => {
@@ -128,7 +126,7 @@ export const kv_map = (...array) => {
 }
 export const has = (kv_map, key) => {
   if (!isPlainObject(kv_map)) throw new Error('has expects map')
-  return wordValue(key) in kv_map
+  return (wordValue(key) in kv_map) | 0
 }
 export const get = (kv_map, key) => {
   if (!isPlainObject(kv_map)) throw new Error('get expects map')

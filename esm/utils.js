@@ -1,3 +1,6 @@
+// https://stackoverflow.com/a/69745650/3495920
+export const isPlainObject = (value) => value?.constructor === Object
+
 export const setJSFunctionName = (f, value) => {
   Object.defineProperty(f, 'name', { value })
 }

@@ -354,20 +354,20 @@ const wrapJSFunction = (importFunc) => {
   const dashedName = underscoreToDash(importFunc.name)
   const jsParameterNames = parseFunctionParameters(importFunc)
   let wunsParameterNames = null
-  let restParam = null
+  let wunsRestParam = null
   if (jsParameterNames.length && jsParameterNames.at(-1).startsWith('...')) {
     wunsParameterNames = jsParameterNames.slice(0, -1)
-    restParam = underscoreToDash(jsParameterNames.at(-1).slice(3))
+    wunsRestParam = underscoreToDash(jsParameterNames.at(-1).slice(3))
   } else {
     wunsParameterNames = [...jsParameterNames]
   }
-  wunsParameterNames = wunsParameterNames.map(underscoreToDash)
-  const namedFunc = createNamedFunction(dashedName, jsParameterNames, wunsParameterNames, restParam, (...args) => {
-    const res = importFunc(...args)
-    if (typeof res === 'boolean') return res | 0
-    return res
-  })
-  return namedFunc
+  return createNamedFunction(
+    dashedName,
+    jsParameterNames,
+    wunsParameterNames.map(underscoreToDash),
+    wunsRestParam,
+    importFunc,
+  )
 }
 
 const make_eval_context = (external_modules) => {

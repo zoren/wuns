@@ -106,3 +106,15 @@ export const print = (ox) => {
   }
   return go(ox)
 }
+
+import { isPlainObject } from './utils.js'
+
+export const isRuntimeValue = (v) =>
+  v === undefined ||
+  isSigned32BitInteger(v) ||
+  isWord(v) ||
+  isAtom(v) ||
+  isDefVar(v) ||
+  typeof v === 'function' ||
+  (isList(v) && v.every(isRuntimeValue)) ||
+  (isPlainObject(v) && Object.keys(v).every(isWordString) && Object.values(v).every(isRuntimeValue))
