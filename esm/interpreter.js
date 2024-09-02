@@ -22,7 +22,7 @@ class CompileError extends Error {
 
 const hasCtxVar = (ctx, v) => {
   while (ctx) {
-    if (ctx.varDescs.has(v)) return true
+    if (ctx.variables.has(v)) return true
     ctx = ctx.outer
   }
   return false
@@ -73,7 +73,7 @@ const checkCallArity =
 
 const ctCheckCallArity = checkCallArity(CompileError)
 const rtCheckCallArity = (f, form) => {
-  if (typeof f !== 'function') throw new RuntimeError(`expected function, got ${f}`)
+  if (typeof f !== 'function') throw new RuntimeError(`expected function, got ${f}`, form)
   checkCallArity(RuntimeError)(f, form)
 }
 
@@ -144,13 +144,12 @@ const makeInterpreterContext = (externalModules) => {
       case 'loop': {
         const [bindings, ...bodies] = args
         const compBindings = []
-        const varDescs = new Map()
-        const newCtx = { varDescs, outer: ctx, ctxType: firstWordValue }
-        const varDesc = { defForm: firstWordValue }
+        const variables = new Set()
+        const newCtx = { variables, outer: ctx, ctxType: firstWordValue }
         for (let i = 0; i < bindings.length - 1; i += 2) {
           const v = ctWordValue(bindings[i])
           compBindings.push([v, compile(newCtx, bindings[i + 1])])
-          varDescs.set(v, varDesc)
+          variables.add(v)
         }
         const mkBindEnv = (env) => {
           const varValues = new Map()
@@ -184,7 +183,7 @@ const makeInterpreterContext = (externalModules) => {
           enclosingLoopCtx = enclosingLoopCtx.outer
         }
         for (const uv of updateVars) {
-          if (!enclosingLoopCtx.varDescs.has(uv))
+          if (!enclosingLoopCtx.variables.has(uv))
             throw new CompileError(`loop variable ${uv} not found in loop context`, form)
         }
         return (env) => {
@@ -206,13 +205,12 @@ const makeInterpreterContext = (externalModules) => {
         const parsedParams = parseParams(origParams)
         const params = parsedParams.params.map(ctWordValue)
         const restParam = parsedParams.restParam ? ctWordValue(parsedParams.restParam) : null
-        const varDescs = new Map()
-        const paramDesc = { defForm: firstWordValue }
-        for (const p of params) varDescs.set(p, paramDesc)
-        if (restParam) varDescs.set(restParam, paramDesc)
+        const variables = new Set()
+        for (const p of params) variables.add(p)
+        if (restParam) variables.add(restParam)
         const nOfParams = params.length
         const newCtx = {
-          varDescs,
+          variables,
           outer: null,
           ctxType: firstWordValue,
           parameters: params,
