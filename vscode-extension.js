@@ -389,14 +389,6 @@ const provideSelectionRanges = (document, positions) => {
  * @param {vscode.ExtensionContext} context
  */
 async function activate(context) {
-  const { meta, print, isWord } = await import('./esm/core.js')
-  const go = (x) => {
-    const m = meta(x)
-    const { startIndex, endIndex } = m
-    if (isWord(x)) return `{${startIndex} - ${endIndex}}` + String(x)
-    if (Array.isArray(x)) return `[{${startIndex} - ${endIndex}} ${x.map(go).join(' ')}]`
-    throw new Error('unexpected form: ' + print(x))
-  }
   const { parse, treeToForms } = await import('./esm/parseTreeSitter.js')
   parseDocumentTreeSitter = (document, oldTree) => {
     const watch = makeStopWatch()
