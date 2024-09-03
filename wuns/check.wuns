@@ -367,21 +367,3 @@
 [defn form-with-node-ids [form] [assign-node-ids [atom [i32 100]] form]]
 
 [defn check-form-top [gctx form] [check-form gctx 0 [form-with-node-ids form]]]
-
-[defn test-error [expected-type expected-error form]
-  [let [gctx [make-check-global-context]
-        actual-type [check-form-top gctx [form-with-node-ids form]]
-        messages [getq gctx messages]]
-    [assert [eq [size messages] 1] there is not exactly one error message [identity messages]
-      [identity form] [identity actual-type]]
-    [let [message [getq [first messages] message]]
-      [assert [eq-form expected-error message] [list [quote [test fail wrong message]] form expected-error message]]
-    [assert [eq-form expected-type actual-type] test fail unexpected type form expected [identity expected-type] actual [identity actual-type]]]]]
-
-[defn check-forms [forms]
-  [assert [not [is-empty forms]] forms is empty]
-  [let [gctx [make-check-global-context]]
-    [for i 0 [dec [size forms]]
-      [check-form-top gctx [form-with-node-ids [at forms i]]]]
-    [kv-mapq last-type [check-form-top gctx [form-with-node-ids [last forms]]]
-            messages [getq gctx messages]]]]

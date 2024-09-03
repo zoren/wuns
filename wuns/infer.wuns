@@ -21,11 +21,6 @@
   [assert [and [lt-s -1 i] [lt-s i [i32 26]]] not a type var [identity i]]
   [char-code-to-word [add [i32 97] i]]]
 
-[defn inc-atom [atom]
-  [let [prev-val [atom-get atom]]
-    [atom-set atom [inc prev-val]]
-    prev-val]]
-
 [defn generate-fresh-type-var-atom [counter-atom level]
   [let [kind [int-to-type-var [inc-atom counter-atom]]]
     [atom [kv-map-id kind level]]]]
@@ -141,6 +136,8 @@
     [eq-word [quote func] [first t]]
     ]]
 
+[comment let rest params be a list of types where multiple types means the var args repeat the type indefinitely
+  [.. i32 word] would match [] [[i32 1] [quote a]] [[i32 1] [quote a] [i32 2] [quote b]] etc but only of even length]
 [defn make-internal-func-type [params opt-rest result]
   [assert [is-list params] not a list [identity params]]
   [for-each param params

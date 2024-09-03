@@ -41,7 +41,8 @@
 [def-extern concat-words [func [word word] word]]
 
 [defn def-instruction-fn [def-name inst-name]
-  [list [quote def] def-name
+  [list [quote def-with-meta] def-name
+    [quote [[extern host kv-map] [quote type] [quote [func [i32 i32] i32]]]]
     [list [quote extern] [quote instructions] inst-name]]]
 
 [defmacro def-instruction [def-name inst-name] [def-instruction-fn def-name inst-name]]
@@ -157,6 +158,8 @@
           i [sub i 2]
           res [list [quote if] [at clauses [sub i 2]] [at clauses [dec i]] res]]]]]]
 
+[comment and relies on there only being one falsy value [i32 0]
+        it will not return any other falsy value as or returns the first truthy argument]
 [defmacro and [.. clauses]
   [let [s [size clauses]]
     [if [is-zero s]
@@ -224,10 +227,13 @@
 [def-extern atom-get [type-scheme [a] [func [[atom a]] a]]]
 [def-extern atom-set [type-scheme [a] [func [[atom a] a] [tuple]]]]
 
+[defn inc-atom [atom]
+  [let [prev-val [atom-get atom]]
+    [atom-set atom [inc prev-val]]
+    prev-val]]
+
 [defn genword []
-  [let [c [atom-get word-counter]]
-    [atom-set word-counter [inc c]]
-    [concat-words [quote genword] [int-to-word c]]]]
+  [concat-words [quote genword] [int-to-word [inc-atom word-counter]]]]
 
 [defmacro or [.. clauses]
   [let [s [size clauses]]
