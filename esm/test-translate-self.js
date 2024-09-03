@@ -43,7 +43,7 @@ const mkParseWat = (s) => {
 }
 const textDecoder = new TextDecoder()
 
-import { makeInitInterpreter, parseEvalFile, hostExports } from './interpreter.js'
+import { hostFuncTypes, makeInitContext, parseEvalFiles } from './interpreter.js'
 if (false) {
   const selfHostModule = new WebAssembly.Module(fs.readFileSync('self-host.wasm'))
   const mkEnv = () => {
@@ -74,50 +74,62 @@ if (false) {
   }
 }
 import { parseFile } from './parseTreeSitter.js'
-
 const wordBytesToString = (wordBytes) => textDecoder.decode(Uint8Array.from(wordBytes, (v) => +v))
-const ctx = makeInitInterpreter()
-const { getVarVal, defSetVar } = ctx
+const ctx = makeInitContext()
+const { compile, defVars } = ctx
 const textToWasm = (allTextByteWords) => {
   const llText = wordBytesToString(allTextByteWords)
   fs.writeFileSync('ll.wat', llText)
   return mkParseWat(llText)
 }
-defSetVar('text-to-wasm', textToWasm)
-defSetVar('module-from-buffer', (buf) => new WebAssembly.Module(buf))
-defSetVar('instantiate-module', (module, importObject) => new WebAssembly.Instance(module, importObject))
-defSetVar('wasm-memory', (paramObj) => new WebAssembly.Memory(paramObj))
-defSetVar('byte-array', (buffer, byteOffset, length) => new Uint8Array(buffer, byteOffset, length))
-defSetVar('log-byte-array', (bytes) => {
+// const insertFunc = (name, f) => {
+//   defVars.set(name, defVarWithMeta(name, f, { 'n-of-params': f.length }))
+// }
+insertFunc('text-to-wasm', textToWasm)
+insertFunc('module-from-buffer', (buf) => new WebAssembly.Module(buf))
+insertFunc('instantiate-module', (module, importObject) => new WebAssembly.Instance(module, importObject))
+insertFunc('wasm-memory', (paramObj) => new WebAssembly.Memory(paramObj))
+insertFunc('byte-array', (buffer, byteOffset, length) => new Uint8Array(buffer, byteOffset, length))
+insertFunc('log-byte-array', (bytes) => {
   console.log(textDecoder.decode(bytes))
 })
-import { isMacro } from './interpreter.js'
-import { isWord, isList, wordValue, makeList, word } from './core.js'
-const formToString = (x) => {
-  if (isWord(x)) return wordValue(x)
-  if (isList(x)) return `[${x.map(formToString).join(' ')}]`
-  throw new Error('log expects word or list')
-}
-defSetVar('log', (form) => {
-  console.log(formToString(form))
-})
+import { isWord, isList, wordValue, makeList, word, print } from './core.js'
+// const formToString = (x) => {
+//   if (isWord(x)) return wordValue(x)
+//   if (isList(x)) return `[${x.map(formToString).join(' ')}]`
+//   throw new Error('log expects word or list')
+// }
+// defSetVar('log', (form) => {
+//   console.log(print(form))
+// })
 
-{
-  const macroCtx = makeInitInterpreter()
-  macroCtx.defSetVar('log', (form) => {
-    console.log('macro contex logged:', formToString(form))
-  })
-  for (const name of ['std3', 'self-host-macros']) parseEvalFile(macroCtx, `../wuns/${name}.wuns`)
-  const { getVarVal } = macroCtx
-  const hostTryGetMacro = (word) => {
-    if (isWord(word)) {
-      const val = getVarVal(wordValue(word))
-      if (isMacro(val)) return val
-    }
-    return 0
-  }
-  defSetVar('host-try-get-macro', hostTryGetMacro)
-}
+// {
+//   const macroCtx = makeInitInterpreter()
+//   macroCtx.defSetVar('log', (form) => {
+//     console.log('macro context logged:', print(form))
+//   })
+//   for (const name of ['std3', 'self-host-macros']) parseEvalFiles(macroCtx, `../wuns/${name}.wuns`)
+//   const { getVarVal } = macroCtx
+//   const hostTryGetMacro = (word) => {
+//     if (isWord(word)) {
+//       const n = wordValue(word)
+//       const val = getVarVal(n)
+//       // const metaData = meta(val)
+//       if (n === 'defnt') {
+//         console.log('defnt found', args)
+//         return (...args) => {
+//           console.log('defnt called', args)
+//           return val(...args)
+//         }
+//       }
+//       // console.log('hostTryGetMacro', wordValue(word), metaData, metaData['self-macro'])
+//       // if (isMacro(val) || metaData['self-macro'])
+//       return val
+//     }
+//     return 0
+//   }
+//   defSetVar('host-try-get-macro', hostTryGetMacro)
+// }
 
 // only for js host
 const object_get = (m, k) => {
@@ -125,16 +137,20 @@ const object_get = (m, k) => {
   if (ks in m) return m[ks]
   throw new Error('key not found: ' + ks + ' in ' + Object.keys(m))
 }
-defSetVar('object-get', object_get)
+insertFunc('object-get', object_get)
 const object_keys = (m) => {
   if (typeof m !== 'object') throw new Error('keys expects map')
-  return makeList(...Object.keys(m).map(word))
+  return arrayToList(Object.keys(m).map(word))
 }
-defSetVar('object-keys', object_keys)
+insertFunc('object-keys', object_keys)
 
-for (const name of ['std3', 'wasm-instructions', 'check', 'hosted', 'translate-test'])
-  parseEvalFile(ctx, `../wuns/${name}.wuns`)
-
-getVarVal('test-main')()
+parseEvalFiles(
+  compile,
+  ['std3', 'wasm-instructions', 'macro-expand', 'check', 'hosted', 'translate-test'].map(
+    (name) => `../wuns/${name}.wuns`,
+  ),
+)
+const getVarVal = (name) => defVars.get(name).value
+getVarVal('test-main')(hostFuncTypes)
 
 getVarVal('test-file')(parseFile(`../wuns/self-host.wuns`))

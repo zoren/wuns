@@ -30,5 +30,24 @@
 
     [logq-abort not a word or list]]]
 
-[defmacro form-to-bytes [f]
+[defmacro defselfmacro [name params .. bodies]
+  [list [quote def] name
+    [list [quote meta-assoc]
+      [concat [list [quote func] name params] bodies]
+      [mk-quote [quote self-macro]] 1]]]
+
+[defselfmacro form-to-bytes [f]
   [form-to-bytes-fn [quote active-data] f]]
+
+[defn defnt-fn [name return-type type-params .. bodies]
+  [log [list [quote defnt] name return-type type-params]]
+  [assert [is-word name] name must be a word]
+  [assert [is-list type-params] params must be a list]
+  [let [params [mutable-list-of-size [half [size type-params]]]
+        - [for-pair i 0 [size type-params]
+            [set-array params [half i] [meta-assoc [at type-params i] [quote type] [at type-params [inc i]]]]]
+        t-params [with-meta params [assoc [meta type-params] [quote type] return-type]]]
+    [make-func-macro-list [quote func] name t-params bodies]]]
+
+[defmacro defnt [name return-type type-params .. bodies]
+  [make-func-macro-list [quote func] name type-params bodies]]

@@ -99,6 +99,8 @@
       [continue r [i32.add i r] i [inc i]]
       r]]]
 
+[comment for sharing among words with different meta let us change word so they have pointers to a byte array instead of directly storing the bytes]
+
 [defn alloc-word [n-bytes]
   [if [is-negative n-bytes] [log-abort [quote alloc-word-size-must-be-positive]]]
   [let [p [alloc [i32.add [align-address n-bytes] [i32.const 8]]]]
