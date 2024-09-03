@@ -87,15 +87,16 @@ export const isAtom = (f) => f instanceof Atom
 
 export const print = (ox) => {
   const go = (x) => {
+    if (isWord(x)) return String(x)
+    if (isList(x)) return `[${x.map(go).join(' ')}]`
     if (x === undefined) return '*undefined*'
     if (isDefVar(x)) return `[var ${x.name}]`
     if (isAtom(x)) return `[atom ${go(x.value)}]`
-    if (isWord(x)) return String(x)
-    if (typeof x === 'number') return String(x)
-    if (typeof x === 'bigint') return String(x)
-    if (typeof x === 'string') return `'${x}'`
-    if (isList(x)) return `[${x.map(go).join(' ')}]`
-    if (typeof x === 'function')
+    const t = typeof x
+  // todo allow t === 'boolean' too
+    if (t === 'number' || t === 'bigint') return String(x)
+    if (t === 'string') return `'${x}'`
+    if (t === 'function')
       return `[fn ${x.name} params [${x.parameters.join(' ')}${x.restParam ? ' .. ' + x.restParam : ''}]]`
     if (Object.isFrozen(x))
       return `[kv-map${Object.entries(x)

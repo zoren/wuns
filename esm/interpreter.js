@@ -1,5 +1,5 @@
 import { setJSFunctionName, parseFunctionParameters, createParameterNamesWrapper } from './utils.js'
-import { isWord, isList, print, meta, arrayToList, isForm, defVar, setMeta } from './core.js'
+import { isWord, isList, print, meta, arrayToList, isForm, defVar, setMeta, isRuntimeValue } from './core.js'
 import { instructionFunctions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
 import { isJSReservedWord } from './utils.js'
@@ -303,7 +303,9 @@ const makeInterpreterContext = (externalModules) => {
         rtCheckCallArity(rtFunc, form)
         const eargs = cargs.map((carg) => carg(env))
         try {
-          return rtFunc(...eargs)
+          const res = rtFunc(...eargs)
+          if (!isRuntimeValue(res)) throw new RuntimeError(`expected runtime value, got ${res}`, form)
+          return res
         } catch (e) {
           throw new RuntimeError(`runtime error when calling function '${firstWordValue}'`, form, e)
         }
