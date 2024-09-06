@@ -403,20 +403,20 @@
       [eq-word type [quote form]]
       type-form
 
-      [report type could not be instantiated - not known]]
+      [logq-abort type could not be instantiated - not known]]
 
     [not [is-list type]]
-    [report type expected word or list]
+    [logq-abort type expected word or list]
 
     [let [elements [form-to-list type]
           first-form [first elements]
           s-form [size elements]
           n-of-args [dec s-form]]
       [if [eq s-form 0]
-        [report type expects a non-empty list]
+        [logq-abort type expects a non-empty list]
         [ifs
           [not [is-word first-form]]
-          [report type expects a word [identity first-form]]
+          [logq-abort type expects a word [identity first-form]]
 
           [eq-word first-form [quote func]]
           [do
@@ -430,10 +430,13 @@
                 [let [param [at params-list i]]
                   [assert [not [eq-word param ..]] rest parameters not implemented yet]
                   [set-array internal-params i [recur gctx param]]]]
-              [type-func-no-rest internal-params [recur gctx result]]
-              ]]
+              [type-func-no-rest internal-params [recur gctx result]]]]
 
-            [report first-form unknown type]]]]]]
+          [let [type-args [mutable-list-of-size n-of-args]]
+            [check-type-arity gctx first-form n-of-args]
+            [for i 0 n-of-args
+              [set-array type-args i [recur gctx [at elements [inc i]]]]]
+            [make-type first-form type-args]]]]]]]
 
 [defn infer-form-type [gctx level lctx form]
   [ifs
@@ -610,8 +613,8 @@
           [let
             [t-res [generate-fresh-type-var gctx level]
              t-func [type-func-no-rest arg-types t-res]]
-            [if-let [opt-annotated-type [try-get-def-var-annotated-type gctx first-form]]
-              [unify-report gctx [instantiate-annotated-type gctx opt-annotated-type] t-func form]
+            [if-let [annotated-type [try-get-def-var-annotated-type gctx first-form]]
+              [unify-report gctx [instantiate-annotated-type gctx annotated-type] t-func form]
               []]
             [unify-report gctx func-type t-func form]
             t-res]]]]]]

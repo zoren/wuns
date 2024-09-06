@@ -1,6 +1,10 @@
 [def list [func list [.. entries] entries]]
-[def form-word [extern host form-word]]
-[def form-list-list [extern host form-list]]
+[def-with-meta form-word
+  [[extern host kv-map] [word type] [quote [func [word] form]]]
+  [extern host form-word]]
+[def-with-meta form-list-list
+  [[extern host kv-map] [word type] [quote [func [[list form]] form]]]
+  [extern host form-list]]
 [def form-list [func form-list [.. elements] [form-list-list elements]]]
 
 [def-with-meta defmacro
@@ -375,6 +379,8 @@
 [def-extern set-kv-map [type-scheme [a] [func [transient-kv-map word a] []]]]
 [def-extern freeze-kv-map [func [transient-kv-map] []]]
 
+[defn mk-word [w] [form-list [quote word] w]]
+
 [defmacro kv-mapq [.. entries]
   [let [s [size entries]
         n-of-pairs [half s]
@@ -387,7 +393,7 @@
       [set-array ml [add 2 [half i]]
         [let [k [at entries i]]
           [form-list [quote set-kv-map] tmp-word
-            [if [is-word k] [form-list [quote word] k] k]
+            [if [is-word k] [mk-word k] k]
             [at entries [inc i]]]]]]
     [set-array ml [add 2 n-of-pairs] [form-list [quote freeze-kv-map] tmp-word]]
     [set-array ml [add 3 n-of-pairs] tmp-word]
@@ -403,7 +409,7 @@
     [for i 0 s
       [set-array ml [add 2 i]
         [let [k [at entries i]]
-          [form-list [quote set-kv-map] tmp-word [form-list [quote word] k] k]]]]
+          [form-list [quote set-kv-map] tmp-word [mk-word k] k]]]]
     [set-array ml [add 2 s] [form-list [quote freeze-kv-map] tmp-word]]
     [set-array ml [add 3 s] tmp-word]
     [freeze-mutable-list ml]
@@ -412,12 +418,12 @@
 [def-extern has [func [kv-map word] i32]]
 
 [defmacro hasq [m w]
-  [form-list [quote has] m [form-list [quote word] w]]]
+  [form-list [quote has] m [mk-word w]]]
 
 [def-extern get [type-scheme [a] [func [kv-map word] a]]]
 
 [defmacro getq [m w]
-  [form-list [quote get] m [form-list [quote word] w]]]
+  [form-list [quote get] m [mk-word w]]]
 
 [defn try-get [m k]
   [if [has m k]
@@ -425,10 +431,7 @@
     0]]
 
 [defmacro try-getq [m w]
-  [form-list [quote try-get] m [form-list [quote word] w]]]
-
-[defmacro setq [m w v]
-  [form-list [quote set-kv-map] m [mk-quote w] v]]
+  [form-list [quote try-get] m [mk-word w]]]
 
 [defn is-empty [form]
   [eq 0 [size form]]]
