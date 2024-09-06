@@ -442,10 +442,9 @@
       [specialize-type-scheme gctx level type-scheme]
       [generate-fresh-type-var gctx level]]
 
-    [let [form-list [form-to-list form]
-          sub-forms [form-to-list form]
-          s-form [size form-list]
-          first-form [first form-list]
+    [let [sub-forms [form-to-list form]
+          s-form [size sub-forms]
+          first-form [first sub-forms]
           n-of-args [dec s-form]]
       [ifs
         [eq-form first-form [quote i32]]
@@ -454,16 +453,16 @@
         [eq-form first-form [quote word]]
         [do
           [report-when-not [eq n-of-args 1] form expects 1 argument]
-          [report-when-not [is-word [second form-list]] form expects a word]
+          [report-when-not [is-word [second sub-forms]] form expects a word]
           type-word]
 
         [eq-form first-form [quote quote]]
         type-form
 
         [eq-form first-form [quote if]]
-        [let [cond [second form-list]
-              then-branch [third form-list]
-              else-branch [fourth form-list]
+        [let [cond [second sub-forms]
+              then-branch [third sub-forms]
+              else-branch [fourth sub-forms]
               cond-type [recur gctx level lctx cond]
               then-type [recur gctx level lctx then-branch]
               else-type [recur gctx level lctx else-branch]]
@@ -475,7 +474,7 @@
         [let
           [var-values [transient-kv-map]
            let-loop-ctx [kv-mapq vars var-values outer lctx first-form first-form]
-           bindings [if [lt-s 1 s-form] [form-to-list [second form-list]] [do [report form expects bindings] [list]]]
+           bindings [if [lt-s 1 s-form] [form-to-list [second sub-forms]] [do [report form expects bindings] [list]]]
            n-of-bindings [size bindings]
            level-1 [inc level]]
           [when [eq-word first-form [quote let]]
@@ -492,9 +491,9 @@
                    general-val-type [generalize level val-type]]
                   [set-kv-map var-values var general-val-type]]]]]
           [for i 2 [dec s-form]
-            [recur gctx level let-loop-ctx [at form-list i]]]
+            [recur gctx level let-loop-ctx [at sub-forms i]]]
           [if [lt-s 2 s-form]
-            [recur gctx level let-loop-ctx [last form-list]]
+            [recur gctx level let-loop-ctx [last sub-forms]]
             type-empty-tuple]]
 
         [eq-form first-form [quote continue]]
@@ -502,8 +501,8 @@
           [if loop-ctx
             [let [loop-vars [getq loop-ctx vars]]
               [for-pair i 1 n-of-args
-                [let [var [at form-list i]
-                      value [at form-list [inc i]]
+                [let [var [at sub-forms i]
+                      value [at sub-forms [inc i]]
                       val-type [recur gctx level lctx value]]
                   [if [is-word var]
                     [if-let [type-scheme [try-get loop-vars [form-to-word var]]]
@@ -514,8 +513,8 @@
 
         [eq-form first-form [quote func]]
         [let [level-1 [inc level]
-              func-name [second form-list]
-              params-form [third form-list]
+              func-name [second sub-forms]
+              params-form [third sub-forms]
               params [form-to-list params-form]
               param-ctx [transient-kv-map]
               parsed-params [params-to-map params]
@@ -539,8 +538,8 @@
                   [if n-of-bodies
                     [do
                       [for i 3 [dec s-form]
-                        [recur gctx level-1 func-ctx [at form-list i]]]
-                      [recur gctx level-1 func-ctx [last form-list]]]
+                        [recur gctx level-1 func-ctx [at sub-forms i]]]
+                      [recur gctx level-1 func-ctx [last sub-forms]]]
                     type-empty-tuple]]
               [unify-report gctx
                 func-type
@@ -558,7 +557,7 @@
             [let [func-type [getq func-ctx func-type]
                   arg-types [mutable-list-of-size n-of-args]]
               [for i 0 n-of-args
-                [set-array arg-types i [recur gctx level lctx [at form-list [inc i]]]]]
+                [set-array arg-types i [recur gctx level lctx [at sub-forms [inc i]]]]]
               [unify-call gctx level func-type arg-types form]]]]
 
         [eq-form first-form [quote def]]
@@ -607,7 +606,7 @@
           [func-type [recur gctx level lctx first-form]
            arg-types [mutable-list-of-size n-of-args]]
           [for i 0 n-of-args
-            [set-array arg-types i [recur gctx level lctx [at form-list [inc i]]]]]
+            [set-array arg-types i [recur gctx level lctx [at sub-forms [inc i]]]]]
           [let
             [t-res [generate-fresh-type-var gctx level]
              t-func [type-func-no-rest arg-types t-res]]
