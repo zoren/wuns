@@ -26,7 +26,7 @@ export const setMeta = (v, meta) => {
     delete v[symbolMeta]
     return
   }
-  if (typeof meta !== 'object') throw new Error('meta must be object')
+  if (!isPlainObject(meta)) throw new Error('meta must be object')
   v[symbolMeta] = Object.freeze({ ...meta })
 }
 export const wordWithMeta = (s, meta) => {
@@ -43,12 +43,71 @@ const emptyList = Object.freeze([])
 export const arrayToList = (array) => (array.length === 0 ? emptyList : Object.freeze(array))
 export const makeList = (...args) => (args.length === 0 ? emptyList : Object.freeze(args))
 export const isList = (f) => Array.isArray(f)
-export const isForm = (f) => isWord(f) || (isList(f) && f.every(isForm))
 
 export const listWithMeta = (l, meta) => {
   const ll = [...l]
   setMeta(ll, meta)
   return Object.freeze(ll)
+}
+
+class Form {}
+
+export const isForm = (f) => f instanceof Form
+
+class FormWord extends Form {
+  #word
+  constructor(word) {
+    super()
+    if (!isWord(word)) throw new Error('expected word')
+    this.#word = word
+  }
+
+  get word() {
+    return this.#word
+  }
+
+  toString() {
+    return this.#word.toString()
+  }
+}
+
+export const formWord = (word, metaData) => {
+  const o = new FormWord(word)
+  setMeta(o, metaData)
+  return Object.freeze(o)
+}
+
+export const isFormWord = (f) => f instanceof FormWord
+
+export const tryGetFormWord = (f) => (isFormWord(f) ? f.word : null)
+
+class FormList extends Form {
+  #list
+  constructor(list) {
+    super()
+    if (!isList(list)) throw new Error('expected list')
+    for (const f of list) if (!isForm(f)) throw new Error('expected form')
+    const clone = [...list]
+    this.#list = Object.freeze(clone)
+  }
+
+  get list() {
+    return this.#list
+  }
+}
+
+export const formList = (list, metaData) => {
+  const o = new FormList(list)
+  setMeta(o, metaData)
+  return Object.freeze(o)
+}
+export const isFormList = (f) => f instanceof FormList
+export const tryGetFormList = (f) => (isFormList(f) ? f.list : null)
+
+export const isFormDeep = (f) => {
+  if (isFormWord(f)) return true
+  const l = tryGetFormList(f)
+  return l !== null && l.every(isFormDeep)
 }
 
 class DefVar {
@@ -89,11 +148,13 @@ export const print = (ox) => {
   const go = (x) => {
     if (isWord(x)) return String(x)
     if (isList(x)) return `[${x.map(go).join(' ')}]`
+    if (isFormWord(x)) return print(x.word)
+    if (isFormList(x)) return print(x.list)
     if (x === undefined) return '*undefined*'
     if (isDefVar(x)) return `[var ${x.name}]`
     if (isAtom(x)) return `[atom ${go(x.value)}]`
     const t = typeof x
-  // todo allow t === 'boolean' too
+    // todo allow t === 'boolean' too
     if (t === 'number' || t === 'bigint') return String(x)
     if (t === 'string') return `'${x}'`
     if (t === 'function')

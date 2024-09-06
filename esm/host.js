@@ -12,6 +12,12 @@ import {
   print,
   wordWithMeta,
   listWithMeta,
+  formWord,
+  isFormWord,
+  formList,
+  isFormList,
+  tryGetFormWord,
+  tryGetFormList,
 } from './core.js'
 import { isPlainObject } from './utils.js'
 
@@ -20,9 +26,42 @@ export const apply = (fn, args) => {
   return fn(...args)
 }
 
-export const is_word = (form) => isWord(form) | 0
+// [func [word] form]
+export const form_word = (w) => {
+  if (!isWord(w)) throw new Error('form-word expects word')
+  return formWord(w)
+}
 
-export const is_list = (form) => isList(form) | 0
+// [func [list [form]] form]
+export const form_list = (l) => {
+  if (!isList(l)) throw new Error('form-list expects list')
+  return formList(l)
+}
+
+export const form_to_word = (f) => {
+  const w = tryGetFormWord(f)
+  if (!w) throw new Error('form-to-word expects form-word')
+  return w
+}
+export const try_get_form_word = (f) => {
+  const w = tryGetFormWord(f)
+  return w ? w : 0
+}
+export const form_to_list = (f) => {
+  const l = tryGetFormList(f)
+  if (!l) {
+    console.error('form-to-list expects form-list, got', f)
+    throw new Error('form-to-list expects form-list')}
+  return l
+}
+export const try_get_form_list = (f) => {
+  const l = tryGetFormList(f)
+  return l ? l : 0
+}
+
+export const is_word = (form) => isFormWord(form) | 0
+
+export const is_list = (form) => isFormList(form) | 0
 export { meta }
 
 export const word_with_meta = (word, meta_data) => wordWithMeta(wordValue(word), meta_data)
@@ -66,8 +105,8 @@ export const growable_list = () => {
   return l
 }
 export const clone_growable_to_frozen_list = (growable_list) => {
-  if (!isList(growable_list)) throw new Error('freeze-growable-list expects list')
-  if (!isGrowable(growable_list)) throw new Error('freeze-growable-list expects growable list')
+  if (!isList(growable_list)) throw new Error('clone-growable-to-frozen-list expects list')
+  if (!isGrowable(growable_list)) throw new Error('clone-growable-to-frozen-list expects growable list')
   return arrayToList([...growable_list])
 }
 export const push = (growable_list, element) => {
@@ -150,11 +189,14 @@ export const freeze_kv_map = (kv_map) => {
 }
 
 export const log = (form) => console.log(print(form))
-export const concat = (...lists) => {
+export const concat_lists = (lists) => {
   const l = []
   for (const list of lists) {
     if (!isList(list)) throw new Error('concat expects list')
     l.push(...list)
   }
   return arrayToList(l)
+}
+export const concat = (...lists) => {
+  return concat_lists(lists)
 }

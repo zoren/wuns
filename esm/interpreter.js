@@ -1,5 +1,15 @@
 import { setJSFunctionName, parseFunctionParameters, createParameterNamesWrapper } from './utils.js'
-import { isWord, isList, print, meta, arrayToList, isForm, defVar, setMeta, isRuntimeValue } from './core.js'
+import {
+  isFormWord,
+  print,
+  meta,
+  arrayToList,
+  isFormDeep,
+  defVar,
+  setMeta,
+  tryGetFormWord,
+  tryGetFormList,
+} from './core.js'
 import { instructionFunctions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
 import { isJSReservedWord } from './utils.js'
@@ -20,18 +30,20 @@ class CompileError extends Error {
   }
 }
 
-const ctWordValue = (w) => {
-  if (!isWord(w)) throw new CompileError('not a word: ' + w + ' ' + typeof w, w)
+const ctWordValue = (f) => {
+  const w = tryGetFormWord(f)
+  if (!w) throw new CompileError('not a word: ' + w + ' ' + typeof w, w)
   return w.value
 }
 
-const tryGetWordValue = (w) => {
-  if (!isWord(w)) return null
+const tryGetFormWordValue = (f) => {
+  const w = tryGetFormWord(f)
+  if (!w) return null
   return w.value
 }
 
 const parseParams = (params) => {
-  if (params.length > 1 && tryGetWordValue(params.at(-2)) === '..') {
+  if (params.length > 1 && tryGetFormWordValue(params.at(-2)) === '..') {
     const restParam = params.at(-1)
     params = params.slice(0, -2)
     return { params, restParam }
@@ -53,7 +65,9 @@ const checkCallArity =
   (errorFn) =>
   ({ name, parameters, restParam }, form) => {
     const nOfParams = parameters.length
-    const numOfGivenArgs = form.length - 1
+    const formList = tryGetFormList(form)
+    if (!formList) throw new errorFn('not a form', form)
+    const numOfGivenArgs = formList.length - 1
     if (restParam) {
       if (numOfGivenArgs < nOfParams)
         throw new errorFn(`${name} expected at least ${nOfParams} arguments, got ${numOfGivenArgs}`, form)
@@ -77,9 +91,9 @@ const getOuterContextOfPred = (ctx, pred) => {
   return null
 }
 
-const getOuterContextWithVar = (ctx, varName) => getOuterContextOfPred(ctx, ({variables}) => variables.has(varName))
+const getOuterContextWithVar = (ctx, varName) => getOuterContextOfPred(ctx, ({ variables }) => variables.has(varName))
 
-const getOuterContextOfType = (ctx, type) => getOuterContextOfPred(ctx, ({ctxType}) => ctxType === type)
+const getOuterContextOfType = (ctx, type) => getOuterContextOfPred(ctx, ({ ctxType }) => ctxType === type)
 
 const makeInterpreterContext = (externalModules) => {
   const defVars = new Map()
@@ -103,7 +117,7 @@ const makeInterpreterContext = (externalModules) => {
   }
   const compile = (ctx, form) => {
     {
-      const varName = tryGetWordValue(form)
+      const varName = tryGetFormWordValue(form)
       if (varName) {
         if (getOuterContextWithVar(ctx, varName))
           return (env) => {
@@ -119,10 +133,11 @@ const makeInterpreterContext = (externalModules) => {
         return () => defVar.value
       }
     }
-    if (!isList(form)) throw new CompileError('not a form', form)
-    if (form.length === 0) return () => undefined
-    const [firstForm, ...args] = form
-    const firstWordValue = tryGetWordValue(firstForm)
+    const formList = tryGetFormList(form)
+    if (!formList) throw new CompileError('not a form', form)
+    if (formList.length === 0) return () => undefined
+    const [firstForm, ...args] = formList
+    const firstWordValue = tryGetFormWordValue(firstForm)
     switch (firstWordValue) {
       case 'i32': {
         if (args.length !== 1) throw new CompileError('i32 expects 1 argument', form)
@@ -131,9 +146,15 @@ const makeInterpreterContext = (externalModules) => {
         if (wv !== normalized) throw new CompileError('expected 32-bit signed integer', form)
         return () => normalized
       }
+      case 'word': {
+        if (args.length !== 1) throw new CompileError('word expects 1 argument', form)
+        const w = tryGetFormWord(args[0])
+        if (!w) throw new CompileError('word expects word', form)
+        return () => w
+      }
       case 'quote': {
         const res = args.length === 1 ? args[0] : arrayToList(args)
-        if (!isForm(res)) throw new CompileError('quote expects form', form)
+        if (!isFormDeep(res)) throw new CompileError('quote expects form', form)
         return () => res
       }
       case 'if': {
@@ -146,7 +167,9 @@ const makeInterpreterContext = (externalModules) => {
       }
       case 'let':
       case 'loop': {
-        const [bindings, ...bodies] = args
+        const [bindingsForm, ...bodies] = args
+        const bindings = tryGetFormList(bindingsForm)
+        if (!bindings) throw new CompileError('let/loop expects bindings list', form)
         const compBindings = []
         const variables = new Set()
         const newCtx = { variables, outer: ctx, ctxType: firstWordValue }
@@ -200,9 +223,10 @@ const makeInterpreterContext = (externalModules) => {
         }
       }
       case 'func': {
-        const [fmname, origParams, ...bodies] = args
+        const [fmname, origParamsForm, ...bodies] = args
         const strFuncName = ctWordValue(fmname)
-        const parsedParams = parseParams(origParams)
+        const origParamsList = tryGetFormList(origParamsForm)
+        const parsedParams = parseParams(origParamsList)
         const params = parsedParams.params.map(ctWordValue)
         const restParam = parsedParams.restParam ? ctWordValue(parsedParams.restParam) : null
         const variables = new Set()
@@ -270,7 +294,7 @@ const makeInterpreterContext = (externalModules) => {
         return (env) => insertOrSetDefVar(v, cvalue(env))
       }
       case 'def-with-meta': {
-        if (args.length !== 3) throw new CompileError('def expects 3 arguments', form)
+        if (args.length !== 3) throw new CompileError('def-with-meta expects 3 arguments', form)
         const [varName, metaForm, value] = args
         const v = ctWordValue(varName)
         const cmetaData = compile(ctx, metaForm)
@@ -293,61 +317,78 @@ const makeInterpreterContext = (externalModules) => {
     const compileTimeFunc = funcDefVar.value
     ctCheckCallArity(compileTimeFunc, form)
     const varMeta = meta(funcDefVar)
-    const noEvalArgs = varMeta['no-eval-args']
-    const evalResult = varMeta['eval-result']
-    // function, eval args and don't eval result
-    if (!noEvalArgs && !evalResult) {
-      const cargs = args.map((a) => compile(ctx, a))
-      return (env) => {
-        const rtFunc = funcDefVar.value
-        rtCheckCallArity(rtFunc, form)
-        const eargs = cargs.map((carg) => carg(env))
-        try {
-          const res = rtFunc(...eargs)
-          if (!isRuntimeValue(res)) throw new RuntimeError(`expected runtime value, got ${res}`, form)
-          return res
-        } catch (e) {
-          throw new RuntimeError(`runtime error when calling function '${firstWordValue}'`, form, e)
+    const funcKindVal = varMeta['function-kind']
+    const funcKind = funcKindVal ? funcKindVal.value : null
+    switch (funcKind) {
+      case 'function':
+      case null: {
+        const cargs = args.map((a) => compile(ctx, a))
+        return (env) => {
+          const rtFunc = funcDefVar.value
+          rtCheckCallArity(rtFunc, form)
+          const eargs = cargs.map((carg) => carg(env))
+          try {
+            const res = rtFunc(...eargs)
+            // if (!isRuntimeValue(res)) throw new RuntimeError(`expected runtime value, got ${res}`, form)
+            return res
+          } catch (e) {
+            throw new RuntimeError(`runtime error when calling function '${firstWordValue}'`, form, e)
+          }
         }
       }
-    }
-    // macro, don't eval args and eval result
-    if (noEvalArgs && evalResult) {
-      let macroResult
-      try {
-        macroResult = compileTimeFunc(...args)
-      } catch (e) {
-        if (e instanceof RuntimeError)
-          throw new CompileError(`runtime error when calling macro '${firstWordValue}': ${e.message}`, form, e)
-        throw e
-      }
-      if (!isForm(macroResult)) throw new CompileError('macro must return form', form)
-      return compile(ctx, macroResult)
-    }
-    // fexpr, don' eval args and don't eval result
-    // thanks Manuel! https://x.com/msimoni/status/1824128031792787808
-    if (noEvalArgs && !evalResult) {
-      const fexprResult = compileTimeFunc(...args)
-      return () => fexprResult
-    }
-    // manc, eval args and eval result
-    if (!noEvalArgs && evalResult) {
-      const rtFunc = funcDefVar.value
-      rtCheckCallArity(rtFunc, form)
-      const cargs = args.map((a) => compile(ctx, a))
-      return (env) => {
-        const mancResult = rtFunc(...cargs.map((carg) => carg(env)))
-        if (!isForm(mancResult)) throw new CompileError('manc must return form', form)
+      case 'macro': {
+        // don't eval args and eval result
+        let macroResult
         try {
-          return compile(ctx, mancResult)
+          macroResult = compileTimeFunc(...args)
         } catch (e) {
-          if (e instanceof CompileError)
-            throw new RuntimeError(`compiletime error when calling manc '${firstWordValue}': ${error.message}`, form, e)
+          if (e instanceof RuntimeError)
+            throw new CompileError(`runtime error when calling macro '${firstWordValue}': ${e.message}`, form, e)
           throw e
         }
+        const go = (f) => {
+          if (isFormWord(f)) return
+          const l = tryGetFormList(f)
+          if (!l) {
+            console.log('not a form list', f)
+            throw new CompileError('expected list', f)
+          }
+          for (const e of l) go(e)
+        }
+        go(macroResult)
+        // if (!isTaggedForm(macroResult)) throw new CompileError('macro must return form', form)
+        return compile(ctx, macroResult)
       }
+      case 'fexpr': {
+        // don' eval args and don't eval result
+        // thanks Manuel! https://x.com/msimoni/status/1824128031792787808
+        const fexprResult = compileTimeFunc(...args)
+        return () => fexprResult
+      }
+      case 'manc': {
+        // manc, eval args and eval result
+        const rtFunc = funcDefVar.value
+        rtCheckCallArity(rtFunc, form)
+        const cargs = args.map((a) => compile(ctx, a))
+        return (env) => {
+          const mancResult = rtFunc(...cargs.map((carg) => carg(env)))
+          if (!isFormDeep(mancResult)) throw new CompileError('manc must return form', form)
+          try {
+            return compile(ctx, mancResult)
+          } catch (e) {
+            if (e instanceof CompileError)
+              throw new RuntimeError(
+                `compiletime error when calling manc '${firstWordValue}': ${error.message}`,
+                form,
+                e,
+              )
+            throw e
+          }
+        }
+      }
+      default:
+        throw new CompileError(`unreachable, invalid function kind '${funcKind}' for '${firstWordValue}'`, form)
     }
-    throw new CompileError(`unreachable, invalid function/macro/fexpr/manc combination for '${firstWordValue}'`, form)
   }
   const compileTop = (form) => {
     const compRes = compile(null, form)
@@ -432,6 +473,11 @@ const compEvalLog = (compile, form) => {
         console.error(e)
       } else {
         console.error(`unexpected non-compile error: ${e.message}`)
+        let innerError = e.innerError
+        while (innerError) {
+          console.error(`inner error in ${getFormLocation(innerError.form)}: ${innerError.message}`)
+          innerError = innerError.innerError
+        }
       }
       throw e
     }

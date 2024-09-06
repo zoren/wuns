@@ -36,19 +36,19 @@
   [push [getq gctx messages] [kv-map-id message form]]]
 
 [defmacro report-when [cond form .. lmsg]
-  [list [quote when] cond
-    [list [quote report-fn] [quote gctx] [quote-list lmsg] form]]]
+  [form-list [quote when] cond
+    [form-list [quote report-fn] [quote gctx] [quote-list lmsg] form]]]
 
 [defmacro report-when-not [cond form .. lmsg]
-  [list [quote when-not] cond
-    [list [quote report-fn] [quote gctx] [quote-list lmsg] form]]]
+  [form-list [quote when-not] cond
+    [form-list [quote report-fn] [quote gctx] [quote-list lmsg] form]]]
 
 [defmacro report [form .. lmsg]
-  [list [quote report-fn] [quote gctx] [quote-list lmsg] form]]
+  [form-list [quote report-fn] [quote gctx] [quote-list lmsg] form]]
 
 [defn eval-try-get-var [gctx name]
   [let [eval-context [getq gctx eval-context]]
-    [eval-context [list [quote try-get-var] name]]]]
+    [eval-context [form-list [quote try-get-var] name]]]]
 
 [defn has-truthy-key [m k] [and m [has m k] [get m k]]]
 
@@ -57,14 +57,15 @@
 [defn params-to-map [params]
   [if [and [lt-s 1 [size params]] [eq-word [at params -2] ..]]
     [kv-mapq params [slice params 0 [sub [size params] 2]]
-            rest-param [last params]]
-    [kv-map-id params]]]
+             rest-param [last params]]
+    [kv-mapq params params]]]
 
 [defn expand-form [gctx local-ctx form]
+  [assert [or [is-word form] [is-list form]] form not a word or list]
   [ifs
     [is-word form]
-    [do
-      [when-not [has-local-context local-ctx form]
+    [let [var-word [form-to-word form]]
+      [when-not [has-local-context local-ctx var-word]
         [if-let [def-var [eval-try-get-var gctx form]]
           [let [m [var-meta def-var]
                 params [has-truthy-key m [quote params]]]
@@ -73,26 +74,20 @@
       form]
 
     [not [is-list form]]
-    [do
+    [logq-abort was neither a word nor a list]
 
-      form]
-
-    [is-empty form]
-    [do
-      [report form empty list]
-      form]
-
-    [let [first-form [first form]
-          s-form [size form]
+    [let [sub-forms [form-to-list form]
+          s-form [size sub-forms]
+          first-form [first sub-forms]
           n-of-args [dec s-form]]
         [ifs
           [eq-word [quote i32] first-form]
           form
 
-          [eq-word [quote quote] first-form]
+          [eq-word [quote word] first-form]
           form
 
-          [eq-word [quote active-data] first-form]
+          [eq-word [quote quote] first-form]
           form
 
           [eq-word [quote if] first-form]
@@ -102,12 +97,12 @@
             [for i 4 s-form
               [recur gctx local-ctx [at form i]]
               [report [at form i] if extra forms ignored]]
-            [for i 1 s-form [set-array res i [recur gctx local-ctx [at form i]]]]
-            res]
+            [for i 1 s-form [set-array res i [recur gctx local-ctx [at sub-forms i]]]]
+            [form-list-list res]]
 
           [or [eq-word [quote let] first-form] [eq-word [quote loop] first-form]]
           [let [res [mutable-list-of-size s-form]
-                bindings [at form 1]
+                bindings [form-to-list [second sub-forms]]
                 s-bindings [size bindings]
                 vars [transient-kv-map]
                 new-local-ctx [kv-mapq vars vars outer local-ctx decl-form first-form]
@@ -118,14 +113,14 @@
                 [set-array new-bindings i var]
                 [set-array new-bindings [inc i] [recur gctx new-local-ctx value]]
                 [if [is-word var]
-                  [do
-                    [report-when [has vars var] var already defined]
-                    [set-kv-map vars var [kv-map-id var]]]
+                  [let [var-word [form-to-word var]]
+                    [report-when [has vars var-word] var already defined]
+                    [set-kv-map vars var-word [kv-mapq var var-word]]]
                   [report var not a word let or loop]]]]
             [set-array res 0 first-form]
-            [set-array res 1 new-bindings]
-            [for i 2 s-form [set-array res i [recur gctx new-local-ctx [at form i]]]]
-            res]
+            [set-array res 1 [form-list-list new-bindings]]
+            [for i 2 s-form [set-array res i [recur gctx new-local-ctx [at sub-forms i]]]]
+            [form-list-list res]]
 
           [eq-word [quote continue] first-form]
           [let [loop-vars [try-get-loop-vars local-ctx]
@@ -134,34 +129,39 @@
             [set-array res 0 first-form]
             [report-when-not loop-vars form continue outside loop]
             [for-pair i 1 s-form
-              [let [var [at form i]]
-                [report-when-not [is-word var] var not a word continue]
-                [report-when-not [and loop-vars [has loop-vars var]] var loop var not found in expand]
-                [set-array res i var]
-                [set-array res [inc i] [recur gctx local-ctx [at form [inc i]]]]]]
-            res]
+              [let
+                [var-form [at sub-forms i]]
+                [if [is-word var-form]
+                  [let [var [form-to-word var-form]]
+                    [report-when-not [and loop-vars [has loop-vars var]] var loop var not found in expand]
+                    [set-array res i var-form]
+                    [set-array res [inc i] [recur gctx local-ctx [at sub-forms [inc i]]]]]
+                  [report var-form not a word continue]]]]
+            [form-list-list res]]
 
           [eq-word [quote func] first-form]
-          [let [name [at form 1]
-                params [at form 2]
-                - [assert [is-list params] params not a list [identity name] [identity i32]]
+          [let [name [second sub-forms]
+                params-form [third sub-forms]
+                - [assert [is-list params-form] params not a list [identity name] [identity i32]]
+                params [form-to-list params-form]
                 params-map [transient-kv-map]
                 n-of-params [size params]
                 has-rest-param [has-rest-param params]
                 signature
                 [if has-rest-param
                   [let [dot-dot-index [sub n-of-params 2]
-                        rest-param [last params]]
+                        rest-param [last params]
+                        rest-param-word [form-to-word rest-param]]
                     [for i 0 dot-dot-index
                       [let [param [at params i]]
-                        [set-kv-map params-map param [kv-mapq var param]]]]
-                    [set-kv-map params-map rest-param [kv-mapq var rest-param rest-param 1]]
+                        [set-kv-map params-map [form-to-word param] [kv-mapq var param]]]]
+                    [set-kv-map params-map rest-param-word [kv-mapq var rest-param rest-param-word 1]]
                     [kv-mapq params [slice params 0 dot-dot-index]
-                            rest-param rest-param]]
+                             rest-param rest-param]]
                   [do
                     [comment todo check for extra arguments]
                     [for-each param params
-                      [set-kv-map params-map param [kv-mapq var param]]]
+                      [set-kv-map params-map [form-to-word param] [kv-mapq var param]]]
                     [kv-map-id params]]]
                   empty-ctx [kv-mapq vars empty-kv-map decl-form first-form]
                   fn-local-ctx [kv-mapq vars params-map decl-form first-form signature signature
@@ -169,9 +169,9 @@
             [let [res [mutable-list-of-size s-form]]
               [set-array res 0 first-form]
               [set-array res 1 name]
-              [set-array res 2 params]
-              [for i 3 s-form [set-array res i [recur gctx fn-local-ctx [at form i]]]]
-              res]]
+              [set-array res 2 params-form]
+              [for i 3 s-form [set-array res i [recur gctx fn-local-ctx [at sub-forms i]]]]
+              [form-list-list res]]]
 
           [eq-word [quote recur] first-form]
           [let [top-ctx [get-top-context local-ctx]
@@ -179,20 +179,22 @@
             [report-when-not [and [hasq top-ctx n-of-params]] form recur not inside function]
             [report-when-not [n-of-args-match-def top-ctx n-of-args] form wrong number of arguments]
             [set-array res 0 first-form]
-            [for i 1 s-form [set-array res i [recur gctx local-ctx [at form i]]]]
-            res]
+            [for i 1 s-form [set-array res i [recur gctx local-ctx [at sub-forms i]]]]
+            [form-list-list res]]
 
           [eq-form [quote extern] first-form]
           [do
-            [for i 1 s-form [report-when-not [is-word [at form i]] [at form i] not a word]]
+            [for i 1 s-form
+              [let [f [at sub-forms i]]
+                [report-when-not [is-word f] f not a word]]]
             form]
 
           [eq-word [quote def] first-form]
           [let [- [report-when-not [eq n-of-args 2] form def expects 2 arguments]
-                name [at form 1]
+                name [second sub-forms]
                 - [report-when-not [is-word name] name not a word]
                 local-ctx [kv-mapq vars empty-kv-map decl-form first-form]
-                e-form [list first-form name [recur gctx local-ctx [at form 2]]]
+                e-form [form-list first-form name [recur gctx local-ctx [third sub-forms]]]
                 eval-context [getq gctx eval-context]]
             [report-when [eval-try-get-var gctx name] name already defined]
             [eval-context e-form]
@@ -200,11 +202,11 @@
 
           [eq-word [quote def-with-meta] first-form]
           [let [- [report-when-not [eq n-of-args 3] form def-with-meta expects 3 arguments]
-                name [at form 1]
+                name [second sub-forms]
                 - [report-when-not [is-word name] name not a word]
-                meta-form [at form 2]
+                meta-form [third sub-forms]
                 local-ctx [kv-mapq vars empty-kv-map decl-form first-form]
-                e-form [list first-form name [recur gctx local-ctx meta-form] [recur gctx local-ctx [at form 3]]]
+                e-form [form-list first-form name [recur gctx local-ctx meta-form] [recur gctx local-ctx [at sub-forms 3]]]
                 eval-context [getq gctx eval-context]]
             [report-when [eval-try-get-var gctx name] name already defined]
             [eval-context e-form]
@@ -227,35 +229,34 @@
 
                 [assert 0 expand import unexpected type]]]
 
-          [if [or [not [is-word first-form]] [has-local-context local-ctx first-form]]
+          [if [or [not [is-word first-form]] [has-local-context local-ctx [form-to-word first-form]]]
             [let [res [mutable-list-of-size s-form]]
               [set-array res 0 [recur gctx local-ctx first-form]]
-              [for i 1 s-form [set-array res i [recur gctx local-ctx [at form i]]]]
-              res]
+              [for i 1 s-form [set-array res i [recur gctx local-ctx [at sub-forms i]]]]
+              [form-list-list res]]
             [if-let [def-var [eval-try-get-var gctx first-form]]
-              [let []
-                [let [var-meta [var-meta def-var]
-                      var-val-meta [meta [var-get def-var]]
-                      no-eval-args [has-truthy-key var-meta [quote no-eval-args]]
-                      eval-result  [has-truthy-key var-meta [quote eval-result]]]
-                  [ifs
-                    [and no-eval-args eval-result]
-                    [let [macro-func [var-get def-var]
-                          mac-result-form [apply macro-func [slice form 1 s-form]]]
-                      [recur gctx local-ctx mac-result-form]]
+              [let [var-meta [var-meta def-var]
+                    function-kind [and var-meta [try-getq var-meta function-kind]]]
+                [when function-kind
+                  [logq function-kind [identity first-form] [identity function-kind]]]
+                [ifs
+                  [eq-word [quote macro] function-kind]
+                  [let [macro-func [var-get def-var]
+                        mac-result-form [apply macro-func [slice form 1 s-form]]]
+                    [recur gctx local-ctx mac-result-form]]
 
-                    [and [not no-eval-args] [not eval-result]]
-                    [let [res [mutable-list-of-size s-form]]
-                      [set-array res 0 first-form]
-                      [for i 1 s-form [set-array res i [recur gctx local-ctx [at form i]]]]
-                      res]
+                  [or [not function-kind] [eq-word [quote function] function-kind]]
+                  [let [res [mutable-list-of-size s-form]]
+                    [set-array res 0 first-form]
+                    [for i 1 s-form [set-array res i [recur gctx local-ctx [at sub-forms i]]]]
+                    [form-list-list res]]
 
-                    [and no-eval-args [not eval-result]]
-                    [let [fexpr-func [var-get def-var]]
-                      [apply fexpr-func [slice form 1 s-form]]
-                      form]
+                  [eq-word [quote fexpr] function-kind]
+                  [let [fexpr-func [var-get def-var]]
+                    [apply fexpr-func [slice form 1 s-form]]
+                    form]
 
-                    [logq-abort manc not implemented]]]]
+                  [logq-abort manc not implemented]]]
               [if-let [instruction [try-get-instruction first-form]]
                 [let [imm-parameters [getq instruction immediate-parameters]
                       imm-index [inc [size imm-parameters]]
@@ -266,7 +267,7 @@
                   [for i imm-index s-form [set-array res i [recur gctx local-ctx [at form i]]]]
                   res]
                 [do
-                  [report first-form first symbol not found during expansion]
+                  [report first-form first symbol not found during expansion [identity form]]
                   form]]]]]]]]
 
 [def empty-local-context [kv-mapq vars empty-kv-map]]

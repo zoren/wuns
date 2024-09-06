@@ -4,29 +4,8 @@
   we will have type variables containing an atom potentially referencing a linked type
   and a binding level for unification of type variables letting the lowest level be the most general]
 
-[defn binding-level [lctx]
-  [loop [level 0 cur-ctx lctx]
-    [if lctx
-      [continue level [inc level] cur-ctx [getq cur-ctx outer]]
-      level]]]
-
-[defn make-infer-global-context []
-  [kv-mapq
-    messages [growable-list]
-    eval-context [make-eval-context host-object]
-    def-var-types [transient-kv-map]
-    type-var-counter [atom 0]]]
-
-[defn int-to-type-var [i]
-  [assert [and [lt-s -1 i] [lt-s i [i32 26]]] not a type var [identity i]]
-  [char-code-to-word [add [i32 97] i]]]
-
-[defn generate-fresh-type-var-atom [counter-atom level]
-  [let [kind [int-to-type-var [inc-atom counter-atom]]]
-    [atom [kv-map-id kind level]]]]
-
-[defn generate-fresh-type-var [gctx level]
-  [generate-fresh-type-var-atom [getq gctx type-var-counter] level]]
+[defn make-type-var [kind level]
+  [atom [kv-map-id kind level]]]
 
 [defn is-type-var [t]
   [and [is-atom t]
@@ -43,67 +22,107 @@
 [defn set-type-var-kind [type-var kind]
   [assert [is-type-var type-var] not a type var [identity type-var]]
   [let [av [atom-get type-var]]
-    [atom-set type-var [assoc av [quote kind] kind]]]]
+    [atom-set type-var [assoc av [word kind] kind]]]]
 
 [defn set-type-var-level [type-var level]
   [assert [is-type-var type-var] not a type var [identity type-var]]
   [let [av [atom-get type-var]]
-    [atom-set type-var [assoc av [quote level] level]]]]
+    [atom-set type-var [assoc av [word level] level]]]]
 
-[defn assert-internal-type [t]
-  [when-not [is-type-var t]
-    [assert [is-list t] not a type [identity t]]
-    [assert [not [is-empty t]] not a type [identity t]]
-    [let [ff [first t]
-          n-of-args [dec [size t]]]
-      [assert [is-word ff] not a type expected word first [identity t]]
-      [ifs
-        [eq-word [first t] [quote tuple]]
-        [for i 1 [size t]
-          [recur [at t i]]
-          [continue i [inc i]]]
 
-        [eq n-of-args 0]
-        [assert
-          [or [eq-word ff [quote i32]] [eq-word ff [quote word]] [eq-word ff [quote form]]]
-          unknown atomic type [identity t]]
+[defn is-type [t]
+  [and [not [is-type-var t]] [eq-word [getq t tag] [quote type]]]]
 
-        [eq-word ff [quote list]]
-        [do
-          [assert [eq n-of-args 1] list expects one argument [identity t]]
-          [recur [second t]]]
+[defn make-type [type-name type-args]
+  [for-each arg type-args
+    [assert [or [is-type-var arg] [is-type arg]] make-type not a type [identity arg]]]
+  [kv-mapq
+    tag [quote type]
+    type-name type-name
+    type-args type-args]]
 
-        [eq-word [first t] [quote func]]
-        [let [params [second t]
-              opt-rest [third t]
-              result [fourth t]]
-          [assert [is-list params] not a list [identity params]]
-          [for-each param params
-            [recur param]]
-          [if opt-rest
-            [recur opt-rest]
-            0]
-          [recur result]]
+[def type-i32 [make-type [quote i32] [list]]]
+[def type-word [make-type [quote word] [list]]]
+[def type-form [make-type [quote form] [list]]]
+[defn type-list [elem-type] [make-type [quote list] [list elem-type]]]
+[def type-empty-tuple [make-type [quote tuple] [list]]]
+[defn type-tuple [elem-types]
+  [if [size elem-types]
+    [make-type [quote tuple] elem-types]
+    type-empty-tuple]]
+[defn type-func-no-rest [params result]
+  [kv-mapq
+    tag [quote type]
+    type-name [quote func]
+    params params
+    result result]]
 
-        [logq-abort assert-internal-type t not a type [identity t]]]]]]
+[defn type-func [params opt-rest-param result]
+  [if-let [rest-param opt-rest-param]
+    [kv-mapq
+      tag [quote type]
+      type-name [quote func]
+      params params
+      rest-param rest-param
+      result result]
+    [type-func-no-rest params result]]]
+
+[defn is-internal-func-type [t]
+  [and [is-type t] [eq-word [getq t type-name] [quote func]]]]
+
+[defn make-infer-global-context []
+  [kv-mapq
+    messages [growable-list]
+    eval-context [make-eval-context host-object]
+    def-var-types [transient-kv-map]
+    type-var-counter [atom 0]]]
+
+[defn int-to-type-var [i]
+  [assert [and [lt-s -1 i] [lt-s i [i32 26]]] not a type var [identity i]]
+  [form-word [char-code-to-word [add [i32 97] i]]]]
+
+[defn generate-fresh-type-var-atom [counter-atom level]
+  [make-type-var [int-to-type-var [inc-atom counter-atom]] level]]
+
+[defn generate-fresh-type-var [gctx level]
+  [generate-fresh-type-var-atom [getq gctx type-var-counter] level]]
+
+
+[defn check-type-arity [gctx type-name n-of-given-type-args]
+  [ifs
+    [eq-word type-name [quote tuple]]
+    [report-when [eq n-of-given-type-args 1] type-name tuple type expects zero or multiple arguments]
+
+    [or
+      [eq-word type-name [quote i32]]
+      [eq-word type-name [quote word]]
+      [eq-word type-name [quote form]]]
+    [report-when [eq n-of-given-type-args 0] type-name atomic type expects no arguments]
+
+    [eq-word type-name [quote list]]
+    [report-when-not [eq n-of-given-type-args 1] type-name list type expects one argument]
+
+    [eq-word type-name [quote func]]
+    [report-when-not [eq n-of-given-type-args 3]
+      type-name func type expects a parameter list a rest parameter list and a return type]
+
+    [logq-abort check-builtin-type-arity type-name not a known builtin type]]]
 
 [defn set-type-var-kind-to-type [type-var type]
-  [assert-internal-type type]
   [set-type-var-kind type-var type]]
 
+[comment normalize a type make type variable point directly to the linked type - if any]
 [defn normalize-type [t0]
   [if [is-type-var t0]
     [let [kind [type-var-kind t0]]
       [if [is-word kind]
         t0
-        [let [t1 kind
-              t2 [recur t1]]
-          [comment find operation in union-find]
+        [let [t2 [recur kind]]
           [set-type-var-kind-to-type t0 t2]
           t2]]]
     t0]]
 
-[defn member-type-var-set [set t]
+[defn member-type-var-list [set t]
   [loop [i 0]
     [if [lt-s i [size set]]
       [if [is-identical [at set i] t]
@@ -111,106 +130,54 @@
         [continue i [inc i]]]
       0]]]
 
-[defn insert-type-vars-set [set new-vars]
-  [if [is-empty new-vars]
-    set
-    [let [vars-to-add [growable-list]]
-      [for-each var new-vars
-        [when-not [member-type-var-set set var]
-          [push vars-to-add var]]]
-      [concat set vars-to-add]]]]
+[defn free-type-vars-growable [set t]
+  [let [nt [normalize-type t]]
+    [if
+      [is-type-var nt]
+      [when-not [member-type-var-list set nt]
+        [push set nt]]
 
-[defn union-type-var-set [s1 s2]
-  [if [lt-s [size s2] [size s1]]
-    [insert-type-vars-set s1 s2]
-    [insert-type-vars-set s2 s1]]]
-
-[comment
-  [defn is-atomic-type [t] [or [eq-form t [quote [i32]]] [eq-form t [quote [word]]]]]
-  [defn is-func-type [t] [and [is-list t] [eq-word [quote func] [first t]]]]
-]
-
-[defn is-internal-func-type [t]
-  [comment an internal func type has a list of params an optional rest param and a result type]
-  [and [is-list t] [eq [size t] 4]
-    [eq-word [quote func] [first t]]
-    ]]
-
-[comment let rest params be a list of types where multiple types means the var args repeat the type indefinitely
-  [.. i32 word] would match [] [[i32 1] [quote a]] [[i32 1] [quote a] [i32 2] [quote b]] etc but only of even length]
-[defn make-internal-func-type [params opt-rest result]
-  [assert [is-list params] not a list [identity params]]
-  [for-each param params
-    [assert-internal-type param]]
-  [when opt-rest
-    [assert-internal-type opt-rest]]
-  [assert-internal-type result]
-  [list [quote func] params opt-rest result]]
+      [if [eq-word [getq nt type-name] [quote func]]
+        [let [params [getq nt params]
+              result [getq nt result]]
+            [for-each param params [recur set param]]
+            [if-let [rest-param [try-getq nt rest-param]]
+              [recur set rest-param]
+              [do]]
+            [recur set result]]
+        [for-each arg [getq nt type-args]
+          [recur set arg]]]]]]
 
 [defn free-type-vars [t]
-  [let [nt [normalize-type t]]
-    [ifs
-      [is-type-var nt]
-      [list nt]
-
-      [is-atomic-type [first nt]]
-      [list]
-
-      [eq-word [first nt] [quote list]]
-      [recur [second nt]]
-
-      [is-internal-func-type nt]
-      [let [params [second nt]
-            opt-rest [third nt]
-            result-type [fourth nt]]
-        [union-type-var-set
-          [insert-type-vars-set
-            [loop [res [list] i 0]
-              [if [lt-s i [size params]]
-                [continue res [insert-type-vars-set res [recur [at params i]]] i [inc i]]
-                res]]
-            [if-let [rest opt-rest] [recur rest] [list]]]
-          [recur result-type]]]
-
-      [eq-word [first nt] [quote tuple]]
-      [loop [res [list] i 1]
-        [if [lt-s i [size nt]]
-          [continue res [insert-type-vars-set res [recur [at nt i]]] i [inc i]]
-          res]]
-
-      [logq-abort free-type-vars t not a type [identity t]]]]]
+  [let [set [growable-list]]
+    [free-type-vars-growable set t]
+    [clone-growable-to-frozen-list set]]]
 
 [defn prune-level [max-level tvs]
   [for-each tv tvs
     [set-type-var-level tv [min [type-var-level tv] max-level]]]]
 
 [defn link-var-to-type [type-var type]
-  [assert-internal-type type]
   [let
     [level [type-var-level type-var]
      fvs [free-type-vars type]]
-    [assert [not [member-type-var-set fvs type-var]] type-var occurs in type
-      [list fvs type-var [member-type-var-set fvs type-var]]]
+    [assert [not [member-type-var-list fvs type-var]] type-var occurs in type
+      [list fvs type-var [member-type-var-list fvs type-var]]]
     [prune-level level fvs]
-    [set-type-var-kind-to-type type-var type]
-    0]]
+    [set-type-var-kind-to-type type-var type]]]
 
-[defn unify [t1 t2]
-  [assert-internal-type t1]
-  [assert-internal-type t2]
+[defn push-unify-error [errors msg]
+  [push errors msg]]
+
+[defn unify [errors t1 t2]
   [let [nt1 [normalize-type t1]
         nt2 [normalize-type t2]]
     [ifs
-      [and [eq-form nt1 nt2] [is-atomic-type [first nt1]]]
-      [do
-       0]
-
       [and [is-type-var nt1] [is-type-var nt2]]
-      [if-not [is-identical nt1 nt2]
+      [when-not [is-identical nt1 nt2]
         [if [lt-s [type-var-level nt1] [type-var-level nt2]]
           [link-var-to-type nt1 nt2]
-          [link-var-to-type nt2 nt1]]
-        0]
+          [link-var-to-type nt2 nt1]]]
 
       [is-type-var nt1]
       [link-var-to-type nt1 nt2]
@@ -218,11 +185,80 @@
       [is-type-var nt2]
       [link-var-to-type nt2 nt1]
 
+      [and [is-type nt1] [is-type nt2]]
+      [let [type-name1 [getq nt1 type-name]
+            type-name2 [getq nt2 type-name]]
+        [ifs
+          [not [eq-word type-name1 type-name2]]
+          [push-unify-error errors [quote [not unifiable - different types]]]
+
+          [if [eq-word [quote func] type-name1]
+            [let [params1 [getq nt1 params]
+                  params2 [getq nt2 params]
+                  arity1 [size params1]
+                  arity2 [size params2]
+                  opt-rest-param1 [try-getq nt1 rest-param]
+                  opt-rest-param2 [try-getq nt2 rest-param]
+                  result1 [getq nt1 result]
+                  result2 [getq nt2 result]]
+              [ifs
+                [and [not opt-rest-param1] [not opt-rest-param2]]
+                [if
+                  [not [eq arity1 arity2]]
+                  [push-unify-error errors [quote [not unifiable - different number of parameters]]]
+
+                  [for i 0 arity1
+                    [recur errors [at params1 i] [at params2 i]]]]
+
+                [and opt-rest-param1 [not opt-rest-param2]]
+                [if
+                  [lt-s arity2 arity1]
+                  [push-unify-error errors [quote [not unifiable - insufficient number of parameters]]]
+
+                  [do
+                    [for i 0 arity1
+                      [recur errors [at params1 i] [at params2 i]]]
+                    [for i arity1 arity2
+                      [recur errors opt-rest-param1 [at params2 i]]]]]
+
+                [logq-abort func unification not implemented]]
+              [recur errors result1 result2]]
+
+            [let [type-args1 [getq nt1 type-args]
+                  type-args2 [getq nt2 type-args]
+                  arity1 [size type-args1]]
+              [if [not [eq arity1 [size type-args2]]]
+                [push-unify-error errors [quote [not unifiable - different number of type arguments]]]
+                [loop [i 0]
+                  [if [lt-s i arity1]
+                    [if-let [msg [recur errors [at type-args1 i] [at type-args2 i]]]
+                      msg
+                      [continue i [inc i]]]
+                    0]]]]]]]
+
+      [logq-abort unify arguments not a type nor type variables [identity nt1] [identity nt2]]]]]
+
+[defn unify-report [gctx t1 t2 .. forms]
+  [let [errors [growable-list]
+        form [first forms]]
+    [unify errors t1 t2]
+    [for-each error [clone-growable-to-frozen-list errors]
+      [report-fn gctx error form]]]]
+
+[defn unify-call [gctx level func-type arg-types form]
+  [let [t-res [generate-fresh-type-var gctx level]
+        t-func [type-func-no-rest arg-types t-res]]
+    [unify-report gctx func-type t-func form]
+    t-res]]
+
+
+[comment
+
       [and [is-internal-func-type nt1] [is-internal-func-type nt2]]
-      [let [params1 [second nt1]
-            params2 [second nt2]
-            opt-rest1 [third nt1]
-            opt-rest2 [third nt2]
+      [let [params1 [getq nt1 params]
+            params2 [getq nt2 params]
+            rest-params1 [getq nt1 rest-params]
+            rest-params2 [getq nt2 rest-params]
             result1 [fourth nt1]
             result2 [fourth nt2]
             arity1 [size params1]
@@ -231,8 +267,8 @@
         [or
           [loop [i 0]
             [if [lt-s i n-of-params]
-              [if-let [p1 [if [lt-s i arity1] [at params1 i] opt-rest1]]
-                [if-let [p2 [if [lt-s i arity2] [at params2 i] opt-rest2]]
+              [if-let [p1 [if [lt-s i arity1] [at params1 i] rest-params1]]
+                [if-let [p2 [if [lt-s i arity2] [at params2 i] rest-params2]]
                   [if-let [msg [recur p1 p2]]
                     msg
                     [continue i [inc i]]]
@@ -240,10 +276,9 @@
                 0]
               0]]
           [recur result1 result2]
-          [if [and [not opt-rest1] [not opt-rest2] [not [eq arity1 arity2]]]
+          [if [and [not [size rest-params1]] [not [size rest-params2]] [not [eq arity1 arity2]]]
             [quote [insufficient number of arguments]] 0]]]
-
-      [quote [not unifiable]]]]]
+]
 
 [defn mk-type-scheme [type-vars type] [list [quote type-scheme] type-vars type]]
 
@@ -273,34 +308,22 @@
           t
           [recur subst-map kind]]]]
 
-    [and [is-list t] [lt-s 0 [size t]] [eq-word [quote tuple] [first t]]]
-    [let [res [mutable-list-of-size [size t]]]
-      [set-array res 0 [quote tuple]]
-      [for i 1 [size t]
-        [set-array res i [recur subst-map [at t i]]]]
-      [freeze-mutable-list res]
-      res]
-
-    [and [is-list t] [eq [size t] 1] [is-atomic-type [first t]]]
-    t
-
-    [and [is-list t] [eq [size t] 2]]
-    [list [quote list] [recur subst-map [second t]]]
-
-    [is-internal-func-type t]
-    [make-internal-func-type
-      [let [params [second t]
-            cparams [mutable-list-of-size [size params]]]
-        [for i 0 [size params]
-          [set-array cparams i [recur subst-map [at params i]]]]
-        [freeze-mutable-list cparams]
-        cparams]
-      [if-let [rest [third t]]
-        [recur subst-map rest]
-        0]
-      [recur subst-map [fourth t]]]
-
-    [logq-abort copy-type t not a type [identity t]]]]
+    [let [type-name [getq t type-name]]
+      [if [eq-word type-name [quote func]]
+        [let [params [getq t params]
+              result [getq t result]
+              cparams [mutable-list-of-size [size params]]
+              crest-param [if-let [rest-param [try-getq t rest-param]] [recur subst-map rest-param] 0]]
+          [for i 0 [size params]
+            [set-array cparams i [recur subst-map [at params i]]]]
+          [freeze-mutable-list cparams]
+          [type-func cparams crest-param [recur subst-map result]]]
+        [let [type-args [getq t type-args]
+            cargs [mutable-list-of-size [size type-args]]]
+        [for i 0 [size type-args]
+          [set-array cargs i [recur subst-map [at type-args i]]]]
+        [freeze-mutable-list cargs]
+        [make-type type-name cargs]]]]]]
 
 [defn specialize [gctx level type-vars type]
   [if [is-empty type-vars]
@@ -317,17 +340,6 @@
   [let [type-vars [second type-scheme]
         type [third type-scheme]]
     [specialize gctx level type-vars type]]]
-
-[defn unify-report [gctx t1 t2 .. forms]
-  [let [msg [unify t1 t2]]
-    [when msg
-      [report-fn gctx msg [first forms]]]]]
-
-[defn unify-call [gctx level func-type arg-types form]
-  [let [t-res [generate-fresh-type-var gctx level]
-        t-func [make-internal-func-type arg-types 0 t-res]]
-    [unify-report gctx func-type t-func form]
-    t-res]]
 
 [defn mk-empty-type-scheme [type] [mk-type-scheme [list] type]]
 
@@ -360,19 +372,25 @@
     [is-word type]
     [ifs
       [eq-word type [quote i32]]
-      [quote [i32]]
+      type-i32
 
       [eq-word type [quote word]]
-      [quote [word]]
+      type-word
 
-      [report type could not be instantiated not known]]
+      [eq-word type [quote form]]
+      type-form
 
-    [is-list type]
-    [if [is-empty type]
-      [report type expects a non-empty list]
-      [let [first-form [first type]
-            s-form [size type]
-            n-of-args [dec s-form]]
+      [report type could not be instantiated - not known]]
+
+    [not [is-list type]]
+    [report type expected word or list]
+
+    [let [elements [form-to-list type]
+          first-form [first elements]
+          s-form [size elements]
+          n-of-args [dec s-form]]
+      [if [eq s-form 0]
+        [report type expects a non-empty list]
         [ifs
           [not [is-word first-form]]
           [report type expects a word [identity first-form]]
@@ -380,52 +398,53 @@
           [eq-word first-form [quote func]]
           [do
             [report-when-not [eq n-of-args 2] type expects 2 arguments a parameter list and a return type]
-            [let [params [second type]
+            [let [params [second elements]
                   - [report-when-not [is-list params] type expects a list]
-                  result [third type]
-                  internal-params [mutable-list-of-size [size params]]]
-              [for i 0 [size params]
-                [set-array internal-params i [recur gctx [at params i]]]]
-              [make-internal-func-type internal-params 0 [recur gctx result]]
+                  params-list [form-to-list params]
+                  result [third elements]
+                  internal-params [mutable-list-of-size [size params-list]]]
+              [for i 0 [size params-list]
+                [let [param [at params-list i]]
+                  [assert [not [eq-word param ..]] rest parameters not implemented yet]
+                  [set-array internal-params i [recur gctx param]]]]
+              [type-func-no-rest internal-params [recur gctx result]]
               ]]
 
-            [report first-form unknown type]]]]
-
-    [report type expected word or list]]]
+            [report first-form unknown type]]]]]]
 
 [defn infer-form-type [gctx level lctx form]
   [ifs
     [is-word form]
-    [if-let [type-scheme [try-get-var-type gctx lctx form]]
+    [if-let [type-scheme [try-get-var-type gctx lctx [form-to-word form]]]
       [specialize-type-scheme gctx level type-scheme]
       [generate-fresh-type-var gctx level]]
 
-    [not [is-list form]]
-    [logq-abort form expects a list [identity form]]
-
-    [is-empty form]
-    [logq-abort form expects a non-empty list [identity form]]
-
-    [let [first-form [first form]
-          s-form [size form]
+    [let [form-list [form-to-list form]
+          sub-forms [form-to-list form]
+          s-form [size form-list]
+          first-form [first form-list]
           n-of-args [dec s-form]]
       [ifs
         [eq-form first-form [quote i32]]
-        [quote [i32]]
+        type-i32
+
+        [eq-form first-form [quote word]]
+        [do
+          [report-when-not [eq n-of-args 1] form expects 1 argument]
+          [report-when-not [is-word [second form-list]] form expects a word]
+          type-word]
 
         [eq-form first-form [quote quote]]
-        [if [and [eq n-of-args 1] [is-word [second form]]]
-          [quote [word]]
-          [quote [list [form]]]]
+        type-form
 
         [eq-form first-form [quote if]]
-        [let [cond [second form]
-              then-branch [third form]
-              else-branch [fourth form]
+        [let [cond [second form-list]
+              then-branch [third form-list]
+              else-branch [fourth form-list]
               cond-type [recur gctx level lctx cond]
               then-type [recur gctx level lctx then-branch]
               else-type [recur gctx level lctx else-branch]]
-          [unify-report gctx cond-type [quote [i32]] cond]
+          [unify-report gctx cond-type type-i32 cond]
           [unify-report gctx then-type else-type then-branch else-branch]
           then-type]
 
@@ -433,36 +452,38 @@
         [let
           [var-values [transient-kv-map]
            let-loop-ctx [kv-mapq vars var-values outer lctx first-form first-form]
-           bindings [if [lt-s 1 s-form] [second form] [do [report form expects bindings] [list]]]
+           bindings [if [lt-s 1 s-form] [form-to-list [second form-list]] [do [report form expects bindings] [list]]]
            n-of-bindings [size bindings]
            level-1 [inc level]]
+          [when [eq-word first-form [quote let]]
+            [comment [logq we are in a let form [meta form]]]
+            ]
           [when [lt-s 1 s-form]
             [let
-              [bindings [second form]
-               n-of-bindings [size bindings]]
+              [n-of-bindings [size bindings]]
               [for-pair i 0 [dec n-of-bindings]
                 [let
-                  [var [at bindings i]
+                  [var [form-to-word [at bindings i]]
                    value [at bindings [inc i]]
                    val-type [recur gctx level-1 let-loop-ctx value]
                    general-val-type [generalize level val-type]]
                   [set-kv-map var-values var general-val-type]]]]]
           [for i 2 [dec s-form]
-            [recur gctx level let-loop-ctx [at form i]]]
+            [recur gctx level let-loop-ctx [at form-list i]]]
           [if [lt-s 2 s-form]
-            [recur gctx level let-loop-ctx [last form]]
-            [quote [tuple]]]]
+            [recur gctx level let-loop-ctx [last form-list]]
+            type-empty-tuple]]
 
         [eq-form first-form [quote continue]]
         [let [loop-ctx [get-outer-context-by-form lctx [quote loop]]]
           [if loop-ctx
             [let [loop-vars [getq loop-ctx vars]]
               [for-pair i 1 n-of-args
-                [let [var [at form i]
-                      value [at form [inc i]]
+                [let [var [at form-list i]
+                      value [at form-list [inc i]]
                       val-type [recur gctx level lctx value]]
                   [if [is-word var]
-                    [if-let [type-scheme [try-get loop-vars var]]
+                    [if-let [type-scheme [try-get loop-vars [form-to-word var]]]
                       [unify-report gctx [specialize-type-scheme gctx level type-scheme] val-type value]
                       []]
                     [report var expected a loop variable here]]]]]]
@@ -470,36 +491,39 @@
 
         [eq-form first-form [quote func]]
         [let [level-1 [inc level]
-              func-name [second form]
-              params [third form]
+              func-name [second form-list]
+              params-form [third form-list]
+              params [form-to-list params-form]
               param-ctx [transient-kv-map]
               parsed-params [params-to-map params]
+              reg-params-parsed [getq parsed-params params]
               func-type [generate-fresh-type-var gctx level-1]
               func-ctx [kv-mapq vars param-ctx first-form first-form func-type func-type]
               reg-params [growable-list]
               n-of-bodies [sub s-form 3]]
-            [for-each param [getq parsed-params params]
+            [for-each param reg-params-parsed
               [let [tv [generate-fresh-type-var gctx level-1]]
-                [set-kv-map param-ctx param [mk-empty-type-scheme tv]]
+                [set-kv-map param-ctx [form-to-word param] [mk-empty-type-scheme tv]]
                 [push reg-params tv]]]
-            [let [opt-rest
+            [let [opt-rest-param
                   [if-let [rest-param [try-getq parsed-params rest-param]]
                     [let [tv [generate-fresh-type-var gctx level-1]]
-                      [set-kv-map param-ctx rest-param [mk-empty-type-scheme [list [quote list] tv]]]
+                      [set-kv-map param-ctx [form-to-word rest-param]
+                        [mk-empty-type-scheme [type-list tv]]]
                       tv]
                     0]
                   return-type
                   [if n-of-bodies
                     [do
                       [for i 3 [dec s-form]
-                        [recur gctx level-1 func-ctx [at form i]]]
-                      [recur gctx level-1 func-ctx [last form]]]
-                    [quote [tuple]]]]
+                        [recur gctx level-1 func-ctx [at form-list i]]]
+                      [recur gctx level-1 func-ctx [last form-list]]]
+                    type-empty-tuple]]
               [unify-report gctx
                 func-type
-                [make-internal-func-type
-                  reg-params
-                  opt-rest
+                [type-func
+                  [clone-growable-to-frozen-list reg-params]
+                  opt-rest-param
                   return-type]
                 form]]
             func-type]
@@ -511,40 +535,59 @@
             [let [func-type [getq func-ctx func-type]
                   arg-types [mutable-list-of-size n-of-args]]
               [for i 0 n-of-args
-                [set-array arg-types i [recur gctx level lctx [at form [inc i]]]]]
+                [set-array arg-types i [recur gctx level lctx [at form-list [inc i]]]]]
               [unify-call gctx level func-type arg-types form]]]]
 
         [eq-form first-form [quote def]]
-        [let [name [second form]
-              value-form [third form]
+        [let [name [second sub-forms]
+              value-form [third sub-forms]
               value-type [recur gctx [inc level] lctx value-form]
               general-val-type [generalize level value-type]]
-          [set-def-var-type gctx name general-val-type]
-          [quote [tuple]]]
+          [set-def-var-type gctx [form-to-word name] general-val-type]
+          type-empty-tuple]
 
         [eq-form first-form [quote def-with-meta]]
-        [let [name [second form]
-              meta-form [third form]
-              value-form [fourth form]
+        [let [name [second sub-forms]
+              meta-form [third sub-forms]
+              value-form [fourth sub-forms]
               value-type [recur gctx [inc level] lctx value-form]
-              general-val-type [generalize level value-type]]
-          [set-def-var-type gctx name general-val-type]
-          [quote [tuple]]]
+              general-val-type [generalize level value-type]
+              def-var [eval-try-get-var gctx name]
+              var-meta [var-meta def-var]
+              function-kind [and var-meta [try-getq var-meta function-kind]]]
+          [assert def-var the form should be expanded by now [identity name]]
+          [ifs
+            [or [not function-kind] [eq-word function-kind [quote function]]]
+            []
+
+            [eq-word function-kind [quote macro]]
+            []
+
+            [eq-word function-kind [quote fexpr]]
+            []
+
+            [eq-word function-kind [quote manc]]
+            [logq-abort manc not implemented]
+
+            [logq-abort unknown function-kind [identity function-kind]]]
+
+          [set-def-var-type gctx [form-to-word name] general-val-type]
+          type-empty-tuple]
 
         [eq-form first-form [quote extern]]
         [do
           [for i 1 s-form
-            [report-when-not [is-word [at form i]] form expects words]]
+            [report-when-not [is-word [at sub-forms i]] form expects words]]
           [generate-fresh-type-var gctx level]]
 
         [let
           [func-type [recur gctx level lctx first-form]
            arg-types [mutable-list-of-size n-of-args]]
           [for i 0 n-of-args
-            [set-array arg-types i [recur gctx level lctx [at form [inc i]]]]]
+            [set-array arg-types i [recur gctx level lctx [at form-list [inc i]]]]]
           [let
             [t-res [generate-fresh-type-var gctx level]
-             t-func [make-internal-func-type arg-types 0 t-res]]
+             t-func [type-func-no-rest arg-types t-res]]
             [if-let [opt-annotated-type [try-get-def-var-annotated-type gctx first-form]]
               [unify-report gctx [instantiate-annotated-type gctx opt-annotated-type] t-func form]
               []]
@@ -552,31 +595,22 @@
             t-res]]]]]]
 
 [defn normalize-deep [internal-type]
-  [assert-internal-type internal-type]
   [let [nt [normalize-type internal-type]]
     [if [is-type-var nt]
       [assert [is-word [type-var-kind nt]] normalize-deep expected a non-linked type var]
-      [let [ff [first nt]
-            n-of-args [dec [size nt]]]
-        [ifs
-          [eq-word ff [quote tuple]]
-          [for i 1 [size nt] [recur [at nt i]]]
+      [if [eq-word [getq nt type-name] [quote func]]
+        [do
+          [for-each p [getq nt params] [recur p]]
+          [if-let [rp [try-getq nt rest-param]]
+            [recur rp]
+            [do]]
+          [recur [getq nt result]]]
+        [for-each type-arg [getq nt type-args]
+          [recur type-arg]]]]]]
 
-          [eq n-of-args 0]
-          [do]
-
-          [eq-word ff [quote list]]
-          [recur [second nt]]
-
-          [eq-word ff [quote func]]
-          [let [params [second nt]
-                opt-rest [third nt]
-                result [fourth nt]]
-              [for-each param params [recur param]]
-              [when opt-rest [recur opt-rest]]
-              [recur result]]
-
-          [logq-abort normalize-deep nt not a type [identity nt]]]]]]]
+[defn untuple [t]
+  [assert [eq-word [getq t type-name] [quote tuple]] not a tuple [identity t]]
+  [getq t type-args]]
 
 [comment given an internal type returns a presentable type]
 [defn internal-to-present-type [internal-type]
@@ -586,39 +620,34 @@
         [assert [is-word kind] not a type var [identity nt]]
         kind]
       [do
-        [assert [is-list nt] not a type [identity nt]]
-        [assert [not [is-empty nt]] not a type [identity nt]]
-        [assert [is-word [first nt]] not a type [identity nt]]
-        [let [ff [first nt]
-              n-of-args [dec [size nt]]]
-          [ifs
-            [eq-word ff [quote tuple]]
-            [let [res [growable-list]]
-              [push res [quote tuple]]
-              [for i 1 [size nt]
-                [push res [recur [at nt i]]]]
-              [clone-growable-to-frozen-list res]]
-
-            [eq n-of-args 0]
-            ff
-
-            [eq-word ff [quote list]]
-            [list [quote list] [recur [second nt]]]
-
-            [eq-word ff [quote func]]
-            [let [params [second nt]
-                  opt-rest [third nt]
-                  result [fourth nt]
-                  present-params [mutable-list-of-size [if opt-rest [add 2 [size params]] [size params]]]]
-                [for i 0 [size params]
+        [let [type-name [getq nt type-name]]
+          [if
+            [eq-word type-name [quote func]]
+            [let [params [getq nt params]
+                  n-params [size params]
+                  opt-rest-param [try-getq nt rest-param]
+                  result [getq nt result]
+                  n-present-params [if opt-rest-param [add n-params 2] n-params]
+                  present-params [mutable-list-of-size n-present-params]]
+                [for i 0 n-params
                   [set-array present-params i [recur [at params i]]]]
-                [when opt-rest
-                  [set-array present-params [sub [size present-params] 2] ..]
-                  [set-array present-params [dec [size present-params]] [recur opt-rest]]]
+                [when opt-rest-param
+                  [set-array present-params n-params ..]
+                  [set-array present-params [inc n-params] [recur opt-rest-param]]]
                 [freeze-mutable-list present-params]
-                [list [quote func] present-params [recur result]]]
+                [form-list [quote func] [form-list-list present-params] [recur result]]]
 
-            [logq-abort normalize-present-type nt not a type [identity nt]]]]]]]]
+            [let [type-args [getq nt type-args]
+                  n-of-args [size type-args]
+                  present-type [mutable-list-of-size [inc n-of-args]]]
+              [if n-of-args
+                [do
+                  [set-array present-type 0 type-name]
+                  [for i 0 n-of-args
+                    [set-array present-type [inc i] [recur [at type-args i]]]]
+                  [freeze-mutable-list present-type]
+                  [form-list-list present-type]]
+                [if [eq-word type-name [quote tuple]] [quote unit] type-name]]]]]]]]]
 
 [defn renumber-internal-type-scheme [type-vars type]
   [let [subst-assoc-list [mutable-list-of-size [size type-vars]]
@@ -642,253 +671,6 @@
         [set-array new-type-vars i [internal-to-present-type new-tv]]]]
     [if [is-empty new-type-vars]
       [internal-to-present-type [copy-type subst-assoc-list internal-type]]
-      [list [quote type-scheme]
-        new-type-vars
+      [form-list [quote type-scheme]
+        [form-list-list new-type-vars]
         [internal-to-present-type [copy-type subst-assoc-list internal-type]]]]]]
-
-[def tests-run-atom [atom 0]]
-
-[defn test-infer [forms]
-  [logq we are testing [identity forms]]
-  [let [gctx [make-infer-global-context]
-        eval-context [getq gctx eval-context]
-        messages [getq gctx messages]]
-  [loop [i 0]
-    [let [form [at forms i]
-          e-form [expand-form gctx empty-local-context form]
-          expand-messages [clone-growable-to-frozen-list messages]]
-      [if-not [is-empty expand-messages]
-        [kv-map-id expand-messages]
-        [let [ft [infer-form-type gctx 0 0 e-form]]
-          [if [lt-s i [dec [size forms]]]
-            [continue i [inc i]]
-            [kv-mapq present-type [normalize-present-type-scheme ft] messages messages]]]]]]]]
-
-[defn test-binding-errors-fn [expected-messages forms]
-  [let [res [test-infer forms]
-        messages [try-getq res expand-messages]]
-    [when [is-empty messages]
-      [logq-abort test-failed failed there were no errors]]
-    [when-not [eq [size expected-messages] [size messages]]
-      [for-each message messages
-        [log message]]
-      [logq-abort test-failed failed expected [size expected-messages] messages but found [size messages]]]
-    [for i 0 [size messages]
-      [let [expected-message [at expected-messages i]
-            message [getq [at messages i] message]]
-        [assert [eq-form expected-message message] test-failed failed expected message [identity expected-message] but found [identity message]]]]
-    [inc-atom tests-run-atom]]]
-
-[defmacro test-binding-errors [expected-messages .. forms]
-  [list [quote test-binding-errors-fn] [mk-quote expected-messages] [mk-quote forms]]]
-
-[defn test-errors-fn [expected-type expected-messages forms]
-  [let [res [test-infer forms]
-        present-type [getq res present-type]
-        messages [getq res messages]]
-    [when [is-empty messages]
-      [logq-abort test-failed failed there were no errors]]
-    [when-not [eq [size expected-messages] [size messages]]
-      [for-each message messages
-        [log message]]
-      [logq-abort test-failed failed expected [size expected-messages] messages but found [size messages]]]
-    [for i 0 [size messages]
-      [let [expected-message [at expected-messages i]
-            message [getq [at messages i] message]]
-        [assert [eq-form expected-message message] test-failed failed expected message [identity expected-message] but found [identity message]]]]
-    [assert [eq-form present-type expected-type] test-failed failed expected type [identity expected-type] but found [identity present-type]]
-    [inc-atom tests-run-atom]]]
-
-[defmacro test-errors [expected-type expected-messages .. forms]
-  [list [quote test-errors-fn] [mk-quote expected-type] [mk-quote expected-messages] [mk-quote forms]]]
-
-[defn test-ok-fn [expected-type forms]
-  [let [res [test-infer forms]]
-    [if-let [expand-messages [try-getq res expand-messages]]
-      [do
-        [for-each message expand-messages [log message]]
-        [logq-abort test-ok failed there were binding errors during expansion]]
-      [let [messages [getq res messages]
-            present-type [getq res present-type]]
-        [when-not [is-empty messages]
-          [for-each message messages
-            [log message]]
-          [logq-abort test-ok failed there were errors]]
-        [assert [eq-form present-type expected-type] test-ok failed expected type [identity expected-type] but found [identity present-type]]
-        [inc-atom tests-run-atom]]]]]
-
-[defmacro test-ok [expected-type .. forms]
-  [list [quote test-ok-fn] [mk-quote expected-type] [mk-quote forms]]]
-
-[comment variables]
-[test-binding-errors [[var not found]] no-such-var]
-
-[comment i32]
-[test-ok i32 [i32 42]]
-
-[comment quote]
-[test-ok word [quote a]]
-[test-ok [list form] [quote]]
-[test-ok [list form] [quote a b]]
-[test-ok [list form] [quote []]]
-[test-ok [list form] [quote [[]]]]
-[test-ok [list form] [quote [a []]]]
-
-[comment if]
-[test-errors i32 [[not unifiable]] [if [quote ok] [i32 5] [i32 5]]]
-[test-errors i32 [[not unifiable]] [if [i32 5] [i32 5] [quote a]]]
-[test-errors word [[not unifiable]] [if [i32 5] [quote a] [i32 5]]]
-[test-ok i32 [if [i32 5] [i32 5] [i32 5]]]
-[test-ok word [if [i32 5] [quote a] [quote b]]]
-[comment todo form subtype unification
-  [test-ok [list form] [if [i32 5] [quote []] [quote [b]]]]
-  [test-ok form [if [i32 5] [quote a] [quote []]]]]
-
-[comment let]
-[test-binding-errors [[var not found]] [let [x y y [i32 5]] [i32 6]]]
-[test-ok [tuple] [let []]]
-[test-ok word [let [] [quote a]]]
-[test-ok word [let [v [quote a]] v]]
-[test-ok word [let [v [quote a] u v] u]]
-[comment disable as it is slightly more difficult to compile
-  [test-ok i32 [let [v [quote a] v [i32 5]] v]]
-  [test-ok i32 [let [id [func id [x] x]] [id [i32 5]]]]
-  [test-ok word [let [id [func id [x] x]] [id [quote a]]]]
-]
-
-[comment let allows polymorphic functions]
-[test-ok word [let [id [func id [x] x]] [id [i32 5]] [id [quote a]]]]
-[test-errors
-  i32
-  [[not unifiable]]
-  [if [let []] [i32 5] [i32 6]]]
-
-[comment loop continue]
-[test-binding-errors [[var not found]] [loop [x y y [i32 5]] [i32 6]]]
-[test-ok [tuple] [loop []]]
-[test-ok word [loop [] [quote a]]]
-[comment disable as it is slightly more difficult to compile
-  [test-ok word [loop [v [quote a]] v]]
-  [test-ok word [loop [v [quote a] u v] u]]
-  [test-ok i32 [loop [v [quote a] v [i32 5]] v]]]
-
-[test-binding-errors [[continue outside loop]] [continue]]
-[test-errors [type-scheme [a] a] [[not unifiable]] [loop [i [i32 5]] [continue i [quote a]]]]
-[test-ok [type-scheme [a] a] [loop [] [continue]]]
-[test-ok [type-scheme [a] a] [loop [i [i32 5]] [continue i [i32 6]]]]
-[test-ok i32
-  [loop [i [i32 0]]
-    [if i
-      [i32 2]
-      [continue i [i32 1]]]]]
-
-[comment func]
-[test-errors [type-scheme [a] a] [[not unifiable]]
-  [[i32 5] [i32 6]]]
-[comment function parameters cannot be polymorphically instantiated]
-[test-errors [type-scheme [a] a] [[not unifiable]]
-  [[func f [i]
-    [i [i32 5]]
-    [i [quote a]]]
-   [func id [x] x]]]
-[test-ok word
-  [[func f [i] [i [quote a]]] [func id [x] x]]]
-[test-errors i32 [[insufficient number of arguments]]
-  [[func one-params [p] [i32 5]]]]
-[test-errors i32 [[insufficient number of arguments]]
-  [[func zero-params [] [i32 5]] [quote extra-argument]]]
-[test-ok [func [] [tuple]] [func z []]]
-[test-ok [type-scheme [a] [func [a] [tuple]]] [func z [x]]]
-[test-ok [type-scheme [a b] [func [a b] [tuple]]] [func z [x y]]]
-[test-ok
-  [type-scheme [a] [func [.. a] [list a]]]
-  [func list [.. entries] entries]]
-[test-ok
-  [type-scheme [a b] [func [a b] i32]]
-  [func f [x y] [i32 5]]]
-[test-ok
-  [type-scheme [a] [func [] a]]
-  [func f [] [recur]]]
-[test-ok
-  [func [i32] i32]
-  [func f [p]
-    [if p
-      [i32 2]
-      [recur [i32 1]]]]]
-[test-ok
-  [type-scheme [a] [func [.. a] i32]]
-  [func f [.. p] [i32 0]]]
-[test-ok
-  [type-scheme [a] [list a]]
-  [[func f [.. p] p]]]
-[test-ok
-  [list i32]
-  [[func f [.. p] p] [i32 5]]]
-[test-ok
-  [list i32]
-  [[func f [.. p] p] [i32 5] [i32 6]]]
-[test-errors
-  [type-scheme [a] a]
-  [[not unifiable]]
-  [[func f [.. p] p] [i32 5] [quote a]]]
-[test-ok
-  [type-scheme [a] [func [a] a]]
-  [func id [x] x]]
-[test-ok
-  [func [i32] i32]
-  [if [i32 5]
-    [func id-i32 [x] [if x x x]]
-    [func id [x] x]]]
-[comment todo implement merging of rest param funcs
-  [test-ok
-    [type-scheme [a] [func [a] i32]]
-    [if [i32 5]
-      [func id-rest [.. ps] [i32 6]]
-      [func id-i32 [p] [i32 5]]]]]
-
-[test-ok
-  word
-  [i32 5]
-  [quote a]]
-[test-ok
-  [tuple]
-  [def d [quote a]]]
-[test-ok
-  word
-  [def d [quote a]]
-  d]
-[test-ok
-  i32
-  [def f [func id [x] x]]
-  [f [i32 5]]
-  [f [i32 6]]]
-[test-ok
-  word
-  [def f [func id [x] x]]
-  [f [i32 5]]
-  [f [quote a]]]
-
-[test-ok [type-scheme [a] a] [extern host size]]
-
-[test-ok
-  [list i32]
-  [def list [func list [.. entries] entries]]
-  [def test [list [i32 1] [i32 2]]]
-  test]
-
-[test-ok
-  i32
-  [def-with-meta my-extern-add-i32
-    [[extern host kv-map] [quote type] [quote [func [i32 i32] i32]]]
-    [extern instructions i32.add]]
-  [my-extern-add-i32 [i32 1] [i32 2]]]
-
-[test-binding-errors [[already defined]]
-  [def d [quote a]]
-  [def d [quote b]]]
-
-[test-binding-errors [[already defined]]
-  [def d [quote a]]
-  [def-with-meta d [[extern host kv-map]] [quote b]]]
-
-[logq we ran [atom-get tests-run-atom] tests]

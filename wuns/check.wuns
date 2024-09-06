@@ -11,8 +11,7 @@
 [defn is-word-type [t] [eq-form t type-word]]
 
 [defn type-list [element-type] [list [quote list] element-type]]
-[defn type-tuple [.. types] [concat [quote [tuple]] types]]
-[def type-empty [type-tuple]]
+[def type-empty [quote [tuple]]]
 
 [def atomic-types [quote [form word i32 i64 any error]]]
 

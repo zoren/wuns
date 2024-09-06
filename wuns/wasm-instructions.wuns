@@ -12,8 +12,8 @@
 
 [defn make-operation-obj-aliases [name opcode immediate-parameters parameters results aliases]
   [kv-mapq
-    name name
-    wat-name [wasm-name-to-wat-bytes name]
+    name [form-to-word name]
+    wat-name [wasm-name-to-wat-bytes [form-to-word name]]
     opcode opcode
     immediate-parameters immediate-parameters
     parameters parameters
@@ -117,7 +117,7 @@
       [set-kv-map instructions-by-name [getq instruction-obj name] instruction-obj]
       [when [hasq instruction-obj aliases]
         [for-each alias [getq instruction-obj aliases]
-          [set-kv-map instructions-by-name alias instruction-obj]]]]
+          [set-kv-map instructions-by-name [form-to-word alias] instruction-obj]]]]
     [freeze-kv-map instructions-by-name]
     instructions-by-name]]
 

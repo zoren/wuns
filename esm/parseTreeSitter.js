@@ -3,7 +3,7 @@ const parser = new TSParser()
 
 import Wuns from 'tree-sitter-wuns'
 parser.setLanguage(Wuns)
-import { wordWithMeta, listWithMeta } from './core.js'
+import { word, formWord, formList } from './core.js'
 
 export const parse = (content, oldTree) => {
   // workaround for https://github.com/tree-sitter/node-tree-sitter/issues/199
@@ -23,14 +23,16 @@ export function* treeToForms(tree, filePath) {
     const metaData = Object.freeze({ location: `${filePathPrefix}${row + 1}:${column + 1}` })
     switch (type) {
       case 'word':
-        return wordWithMeta(text, metaData)
+        // todo should word also have metadata?
+        return formWord(word(text), metaData)
       case 'list':
         const l = []
         for (const child of node.namedChildren) {
           const form = nodeToOurForm(child)
           if (form !== null) l.push(form)
         }
-        return listWithMeta(l, metaData)
+        Object.freeze(l)
+        return formList(l, metaData)
       default:
         throw new Error('unexpected node type: ' + type)
     }
