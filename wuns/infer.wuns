@@ -7,6 +7,13 @@
 [defn make-type-var [kind level]
   [atom [kv-map-id kind level]]]
 
+[defn int-to-type-var [i]
+  [assert [and [lt-s -1 i] [lt-s i [i32 26]]] not a type var [identity i]]
+  [form-word [char-code-to-word [add [i32 97] i]]]]
+
+[defn generate-fresh-type-var-atom [counter-atom level]
+  [make-type-var [int-to-type-var [inc-atom counter-atom]] level]]
+
 [defn is-type-var [t]
   [and [is-atom t]
     [let [v [atom-get t]] [and [hasq v kind] [hasq v level]]]]]
@@ -28,7 +35,6 @@
   [assert [is-type-var type-var] not a type var [identity type-var]]
   [let [av [atom-get type-var]]
     [atom-set type-var [assoc av [word level] level]]]]
-
 
 [defn is-type [t]
   [and [not [is-type-var t]] [eq-word [getq t tag] [quote type]]]]
@@ -77,12 +83,29 @@
     def-var-types [transient-kv-map]
     type-var-counter [atom 0]]]
 
-[defn int-to-type-var [i]
-  [assert [and [lt-s -1 i] [lt-s i [i32 26]]] not a type var [identity i]]
-  [form-word [char-code-to-word [add [i32 97] i]]]]
 
-[defn generate-fresh-type-var-atom [counter-atom level]
-  [make-type-var [int-to-type-var [inc-atom counter-atom]] level]]
+[defn set-def-var-type [gctx var type]
+  [let [def-var-types [getq gctx def-var-types]]
+    [assert [not [has def-var-types var]] [list [quote set-def-var-type] var type]]
+    [set-kv-map def-var-types var type]
+    type]]
+
+[defn try-get-local-var-type [local-ctx var-name]
+  [loop [cur-ctx local-ctx]
+    [if cur-ctx
+      [if-let [type [try-get [getq cur-ctx vars] var-name]]
+        type
+        [if-let [outer [try-getq cur-ctx outer]]
+          [if outer
+            [continue cur-ctx outer]
+            0]
+          0]]
+      0]]]
+
+[defn try-get-var-type [gctx local-ctx var-name]
+  [if-let [ltype [try-get-local-var-type local-ctx var-name]]
+    ltype
+    [try-get [getq gctx def-var-types] var-name]]]
 
 [defn generate-fresh-type-var [gctx level]
   [generate-fresh-type-var-atom [getq gctx type-var-counter] level]]
