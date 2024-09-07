@@ -1,37 +1,34 @@
 [def list [func list [.. entries] entries]]
 [def-with-meta form-word
-  [[extern host kv-map] [word type] [quote [func [word] form]]]
+  [quote [type [func [word] form]]]
   [extern host form-word]]
 [def-with-meta form-list-list
-  [[extern host kv-map] [word type] [quote [func [[list form]] form]]]
+  [quote [type [func [[list form]] form]]]
   [extern host form-list]]
 [def form-list [func form-list [.. elements] [form-list-list elements]]]
 
 [def-with-meta defmacro
-  [[extern host kv-map]
-    [word function-kind] [word macro]]
+  [quote [function-kind macro]]
   [func defmacro [name parameters .. bodies]
     [form-list
       [quote def-with-meta]
       name
-      [quote
-        [[extern host kv-map]
-          [word function-kind] [word macro]]]
+      [quote [quote [function-kind macro]]]
       [form-list-list
         [[extern host concat] [list [quote func] name parameters] bodies]]]]]
 
-[def quote-word [quote quote]]
-
 [defmacro def-extern [name type]
   [form-list [quote def-with-meta] name
-    [form-list [quote [extern host kv-map]] [quote [word type]] [form-list quote-word type]]
+    [form-list [quote quote]
+      [form-list
+        [quote type] [form-list [quote quote] type]]]
     [form-list [quote extern] [quote host] name]]]
-
-[def-extern concat [type-scheme [a] [func [.. [form-list a]] [form-list a]]]]
-[def-extern concat-lists [type-scheme [a] [func [[list [form-list a]]] [form-list a]]]]
 
 [def-extern is-word [func [form] i32]]
 [def-extern is-list [func [form] i32]]
+
+[def-extern concat [type-scheme [a] [func [.. [list a]] [list a]]]]
+[def-extern concat-lists [type-scheme [a] [func [[list [list a]]] [list a]]]]
 
 [defmacro defn [name parameters .. bodies]
   [form-list [quote def] name
@@ -40,13 +37,11 @@
 [defn form-concat [.. list-forms]
   [form-list-list [concat-lists list-forms]]]
 
-[defn mk-quote [form] [form-list quote-word form]]
+[defn mk-quote [form] [form-list [quote quote] form]]
 
 [defmacro defexpr [name parameters .. bodies]
   [form-list [quote def-with-meta] name
-    [quote
-      [[extern host kv-map]
-        [word function-kind] [word fexpr]]]
+    [quote [quote [function-kind fexpr]]]
     [form-concat [list [quote func] name parameters] bodies]]]]
 
 [def-extern size [type-scheme [a] [func [[list a]] i32]]]
@@ -61,7 +56,7 @@
   [form-list
     [quote def-with-meta]
     def-name
-    [quote [[extern host kv-map] [word type] [quote [func [i32 i32] i32]]]]
+    [quote [quote [type [func [i32 i32] i32]]]]
     [form-list [quote extern] [quote instructions] inst-name]]]
 
 [defmacro def-instruction [def-name inst-name] [def-instruction-fn def-name inst-name]]
@@ -493,3 +488,13 @@
 [def-extern list-with-meta [func [form-list kv-map] list]]
 [def-extern is-atom [type-scheme [a] [func [[atom a]] i32]]]
 [def-extern is-identical [type-scheme [a] [func [a a] i32]]]
+
+[defn try-get-assoc-list [list key]
+  [let [s [size list]]
+    [assert [is-even s] try-get-assoc-list requires an even length list]
+    [loop [i 0]
+      [if [lt-s i s]
+        [if [eq-word key [at list i]]
+          [at list [inc i]]
+          [continue i [add 2 i]]]
+        0]]]]

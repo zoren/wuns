@@ -26,8 +26,7 @@ export const setMeta = (v, meta) => {
     delete v[symbolMeta]
     return
   }
-  if (!isPlainObject(meta)) throw new Error('meta must be object')
-  v[symbolMeta] = Object.freeze({ ...meta })
+  v[symbolMeta] = meta
 }
 export const wordWithMeta = (s, meta) => {
   const w = new Word(s)
@@ -94,6 +93,17 @@ class FormList extends Form {
   get list() {
     return this.#list
   }
+}
+
+export const formEquals = (a, b) => {
+  if (a === b) return true
+  if (isFormWord(a) && isFormWord(b)) return a.word.value === b.word.value
+  if (!isFormList(a) || !isFormList(b)) return false
+  const la = a.list
+  const lb = b.list
+  if (la.length !== lb.length) return false
+  for (let i = 0; i < la.length; i++) if (!formEquals(la[i], lb[i])) return false
+  return true
 }
 
 export const formList = (list, metaData) => {

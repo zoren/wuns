@@ -9,6 +9,9 @@ import {
   setMeta,
   tryGetFormWord,
   tryGetFormList,
+  word,
+  formWord,
+  formEquals
 } from './core.js'
 import { instructionFunctions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
@@ -94,6 +97,13 @@ const getOuterContextOfPred = (ctx, pred) => {
 const getOuterContextWithVar = (ctx, varName) => getOuterContextOfPred(ctx, ({ variables }) => variables.has(varName))
 
 const getOuterContextOfType = (ctx, type) => getOuterContextOfPred(ctx, ({ ctxType }) => ctxType === type)
+
+const tryGetAssocList = (assocList, key) => {
+  for (let i = 0; i < assocList.length; i += 2) {
+    if (formEquals(assocList[i], key)) return assocList[i + 1]
+  }
+  return null
+}
 
 const makeInterpreterContext = (externalModules) => {
   const defVars = new Map()
@@ -317,8 +327,10 @@ const makeInterpreterContext = (externalModules) => {
     const compileTimeFunc = funcDefVar.value
     ctCheckCallArity(compileTimeFunc, form)
     const varMeta = meta(funcDefVar)
-    const funcKindVal = varMeta['function-kind']
-    const funcKind = funcKindVal ? funcKindVal.value : null
+    const metaList = tryGetFormList(varMeta)
+    const funcKindVal = metaList ? tryGetAssocList(metaList, formWord(word('function-kind'))) : null
+    const funcKindWord = tryGetFormWord(funcKindVal)
+    const funcKind = funcKindWord ? funcKindWord.value : null
     switch (funcKind) {
       case 'function':
       case null: {

@@ -7,9 +7,15 @@
 [defn make-type-var [kind level]
   [atom [kv-map-id kind level]]]
 
+[defn int-to-type-var-name [i]
+  [if [lt-s i [i32 26]]
+    [char-code-to-word [add [i32 97] i]]
+    [concat-words
+      [recur [i32.div-s i [i32 26]]]
+      [char-code-to-word [add [i32 97] [i32.rem-s i [i32 26]]]]]]]
+
 [defn int-to-type-var [i]
-  [assert [and [lt-s -1 i] [lt-s i [i32 26]]] not a type var [identity i]]
-  [form-word [char-code-to-word [add [i32 97] i]]]]
+  [form-word [int-to-type-var-name i]]]
 
 [defn generate-fresh-type-var-atom [counter-atom level]
   [make-type-var [int-to-type-var [inc-atom counter-atom]] level]]
@@ -377,15 +383,10 @@
 
       [continue cur-ctx [getq cur-ctx outer]]]]]
 
-[defn try-get-annotated-type [gctx form]
-  [if-let [m [meta form]]
-    [try-getq m type]
-    0]]
-
 [defn try-get-def-var-annotated-type [gctx form]
   [if [is-word form]
     [if-let [var [eval-try-get-var gctx form]]
-      [try-get-annotated-type gctx var]
+      [try-get-meta-assoc var [quote type]]
       0]
     0]]
 
@@ -578,8 +579,7 @@
               value-type [recur gctx [inc level] lctx value-form]
               general-val-type [generalize level value-type]
               def-var [eval-try-get-var gctx name]
-              var-meta [var-meta def-var]
-              function-kind [and var-meta [try-getq var-meta function-kind]]]
+              function-kind [try-get-meta-assoc def-var [quote function-kind]]]
           [assert def-var the form should be expanded by now [identity name]]
           [ifs
             [or [not function-kind] [eq-word function-kind [quote function]]]

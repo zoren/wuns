@@ -255,7 +255,7 @@
 [test-ok
   i32
   [def-with-meta my-extern-add-i32
-    [[extern host kv-map] [word type] [quote [func [i32 i32] i32]]]
+    [quote [type [func [i32 i32] i32]]]
     [extern instructions i32.add]]
   [my-extern-add-i32 [i32 1] [i32 2]]]
 
@@ -270,7 +270,7 @@
 [test-ok
   i32
   [def-with-meta my-extern-add-i32
-    [[extern host kv-map] [word type] [quote [func [i32 i32] i32]]]
+    [quote [type [func [i32 i32] i32]]]
     [extern instructions i32.add]]
   [my-extern-add-i32 [i32 1] [i32 2]]]
 [comment
@@ -281,9 +281,7 @@
       [quote function-kind] [quote macro]]
     [func defmacro [name parameters .. bodies]
       [list [quote def-with-meta] name
-        [quote
-          [[extern host kv-map]
-            [quote function-kind] [quote macro]]]
+        [quote [function-kind macro]]
         [[extern host concat] [list [quote func] name parameters] bodies]]]]
 
   [my-extern-add-i32 [i32 1] [i32 2]]]
@@ -300,9 +298,43 @@
 [test-ok
   [func [.. form] form]
   [def-with-meta form-list-list
-    [[extern host kv-map] [word type] [quote [func [[list form]] form]]]
+    [quote [type [func [[list form]] form]]]
     [extern host form-list]]
   [def form-list [func form-list [.. elements] [form-list-list elements]]]
   form-list]
+
+[test-ok
+  unit
+[def list [func list [.. entries] entries]]
+[def-with-meta form-word
+  [quote [type [func [word] form]]]
+  [extern host form-word]]
+[def-with-meta form-list-list
+  [quote [type [func [[list form]] form]]]
+  [extern host form-list]]
+[def form-list [func form-list [.. elements] [form-list-list elements]]]
+
+[def-with-meta defmacro
+  [quote [function-kind macro]]
+  [func defmacro [name parameters .. bodies]
+    [form-list
+      [quote def-with-meta]
+      name
+      [quote [quote [function-kind macro]]]
+      [form-list-list
+        [[extern host concat] [list [quote func] name parameters] bodies]]]]]
+
+[defmacro def-extern [name type]
+  [form-list [quote def-with-meta] name
+    [form-list [quote quote]
+      [form-list
+        [quote type] [form-list [quote quote] type]]]
+    [form-list [quote extern] [quote host] name]]]
+
+[def-extern is-word [func [form] i32]]
+[def-extern is-list [func [form] i32]]
+
+]
+
 
 [logq we ran [atom-get tests-run-atom] tests]

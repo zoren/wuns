@@ -60,6 +60,10 @@
              rest-param [last params]]
     [kv-mapq params params]]]
 
+[defn try-get-meta-assoc [form key]
+  [let [m [meta form]]
+    [and m [is-list m] [try-get-assoc-list [form-to-list m] key]]]]
+
 [defn expand-form [gctx local-ctx form]
   [assert [or [is-word form] [is-list form]] form not a word or list]
   [ifs
@@ -235,14 +239,13 @@
               [for i 1 s-form [set-array res i [recur gctx local-ctx [at sub-forms i]]]]
               [form-list-list res]]
             [if-let [def-var [eval-try-get-var gctx first-form]]
-              [let [var-meta [var-meta def-var]
-                    function-kind [and var-meta [try-getq var-meta function-kind]]]
+              [let [function-kind [try-get-meta-assoc def-var [quote function-kind]]]
                 [when function-kind
                   [logq function-kind [identity first-form] [identity function-kind]]]
                 [ifs
                   [eq-word [quote macro] function-kind]
                   [let [macro-func [var-get def-var]
-                        mac-result-form [apply macro-func [slice form 1 s-form]]]
+                        mac-result-form [apply macro-func [slice sub-forms 1 s-form]]]
                     [recur gctx local-ctx mac-result-form]]
 
                   [or [not function-kind] [eq-word [quote function] function-kind]]
