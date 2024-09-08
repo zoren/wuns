@@ -497,3 +497,28 @@
           [at list [inc i]]
           [continue i [add 2 i]]]
         0]]]]
+
+[defmacro macro-map [l elem-word f]
+  [assert [is-word elem-word] macro-map-f requires a word as the second argument]
+  [let [list-w [genword]
+        size-w [genword]
+        res-w [genword]
+        i-w [genword]]
+    [form-list [quote let]
+      [form-list
+        list-w l
+        size-w [form-list [quote size] list-w]
+        res-w [form-list [quote mutable-list-of-size] size-w]]
+      [form-list [quote loop]
+        [form-list i-w [quote [i32 0]]]
+        [form-list [quote if]
+          [form-list [quote lt-s] i-w size-w]
+          [form-concat
+            [list [quote let] [quote []]]
+            [list [form-list [quote set-array] res-w i-w
+              [form-list [quote let]
+                [form-list elem-word [form-list [quote at] list-w i-w]]
+                f]]]
+            [list [form-list [quote continue] i-w [form-list [quote add] i-w [quote [i32 1]]]]]]]]
+      [form-list [quote freeze-mutable-list] res-w]
+      res-w]]]
