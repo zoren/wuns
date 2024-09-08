@@ -146,7 +146,7 @@
           [eq-word [quote func] first-form]
           [let [name [second sub-forms]
                 params-form [third sub-forms]
-                - [assert [is-list params-form] params not a list [identity name] [identity i32]]
+                - [assert [is-list params-form] params not a list [identity name]]
                 params [form-to-list params-form]
                 params-map [transient-kv-map]
                 n-of-params [size params]
@@ -240,8 +240,6 @@
               [form-list-list res]]
             [if-let [def-var [eval-try-get-var gctx first-form]]
               [let [function-kind [try-get-meta-assoc def-var [quote function-kind]]]
-                [when function-kind
-                  [logq function-kind [identity first-form] [identity function-kind]]]
                 [ifs
                   [eq-word [quote macro] function-kind]
                   [let [macro-func [var-get def-var]
@@ -260,18 +258,9 @@
                     form]
 
                   [logq-abort manc not implemented]]]
-              [if-let [instruction [try-get-instruction first-form]]
-                [let [imm-parameters [getq instruction immediate-parameters]
-                      imm-index [inc [size imm-parameters]]
-                      res [mutable-list-of-size s-form]]
-                  [report-when-not [eq [getq instruction arity] n-of-args] form wrong number of instruction arguments]
-                  [set-array res 0 first-form]
-                  [for i 1 imm-index [set-array res i [at form i]]]
-                  [for i imm-index s-form [set-array res i [recur gctx local-ctx [at form i]]]]
-                  res]
-                [do
-                  [report first-form first symbol not found during expansion [identity form]]
-                  form]]]]]]]]
+              [do
+                [report first-form first symbol not found during expansion [identity form]]
+                form]]]]]]]
 
 [def empty-local-context [kv-mapq vars empty-kv-map]]
 

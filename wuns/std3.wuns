@@ -20,8 +20,7 @@
 [defmacro def-extern [name type]
   [form-list [quote def-with-meta] name
     [form-list [quote quote]
-      [form-list
-        [quote type] [form-list [quote quote] type]]]
+      [form-list [quote type] type]]
     [form-list [quote extern] [quote host] name]]]
 
 [def-extern is-word [func [form] i32]]
@@ -42,7 +41,7 @@
 [defmacro defexpr [name parameters .. bodies]
   [form-list [quote def-with-meta] name
     [quote [quote [function-kind fexpr]]]
-    [form-concat [list [quote func] name parameters] bodies]]]]
+    [form-concat [list [quote func] name parameters] bodies]]]
 
 [def-extern size [type-scheme [a] [func [[list a]] i32]]]
 [def-extern at [type-scheme [a] [func [[list a] i32] a]]]

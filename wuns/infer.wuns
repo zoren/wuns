@@ -135,7 +135,7 @@
     [report-when-not [eq n-of-given-type-args 3]
       type-name func type expects a parameter list a rest parameter list and a return type]
 
-    [logq-abort check-builtin-type-arity type-name not a known builtin type]]]
+    [logq-abort check-builtin-type-arity type-name not a known builtin type [identity type-name]]]]
 
 [defn set-type-var-kind-to-type [type-var type]
   [set-type-var-kind type-var type]]
@@ -391,7 +391,7 @@
     0]]
 
 [comment given a type such as [func [i32 i32] i32] instantiates to a type-scheme]
-[defn instantiate-annotated-type [gctx type]
+[defn instantiate-annotated-type [gctx type-var-env type]
   [ifs
     [is-word type]
     [ifs
@@ -404,7 +404,10 @@
       [eq-word type [quote form]]
       type-form
 
-      [logq-abort type could not be instantiated - not known]]
+      [let [w [form-to-word type]]
+        [if-let [t [try-get type-var-env w]]
+          t
+          [logq-abort type could not be instantiated - not known - [identity type] [identity type-var-env]]]]]
 
     [not [is-list type]]
     [logq-abort type expected word or list]
@@ -426,17 +429,37 @@
                   - [report-when-not [is-list params] type expects a list]
                   params-list [form-to-list params]
                   result [third elements]
-                  internal-params [mutable-list-of-size [size params-list]]]
-              [for i 0 [size params-list]
-                [let [param [at params-list i]]
-                  [assert [not [eq-word param ..]] rest parameters not implemented yet]
-                  [set-array internal-params i [recur gctx param]]]]
-              [type-func-no-rest internal-params [recur gctx result]]]]
+                  params-map [params-to-map params-list]
+                  reg-params [getq params-map params]
+                  internal-params [mutable-list-of-size [size reg-params]]]
+              [for i 0 [size reg-params]
+                [let [param [at reg-params i]]
+                  [report-when [eq-word param ..] param .. in wrong place]
+                  [set-array internal-params i [recur gctx type-var-env param]]]]
+              [type-func
+                internal-params
+                [if-let [rest-param [try-getq params-map rest-param]]
+                  [recur gctx type-var-env rest-param]
+                  0]
+                [recur gctx type-var-env result]]]]
+
+          [eq-word first-form [quote type-scheme]]
+          [do
+            [report-when type-var-env type cannot have a type-scheme inside a type-scheme]
+            [report-when-not [eq n-of-args 2] type type-scheme expects 2 arguments]
+            [let [type-vars [second elements]
+                  type [third elements]
+                  type-var-env [transient-kv-map]]
+              [report-when-not [is-list type-vars] type type-vars expects a list]
+              [for-each tv [form-to-list type-vars]
+                [report-when-not [is-word tv] type-vars expects a word]
+                [set-kv-map type-var-env [form-to-word tv] [generate-fresh-type-var gctx 0]]]
+              [recur gctx type-var-env type]]]
 
           [let [type-args [mutable-list-of-size n-of-args]]
             [check-type-arity gctx first-form n-of-args]
             [for i 0 n-of-args
-              [set-array type-args i [recur gctx [at elements [inc i]]]]]
+              [set-array type-args i [recur gctx type-var-env [at elements [inc i]]]]]
             [make-type first-form type-args]]]]]]]
 
 [defn infer-form-type [gctx level lctx form]
@@ -614,7 +637,7 @@
             [t-res [generate-fresh-type-var gctx level]
              t-func [type-func-no-rest arg-types t-res]]
             [if-let [annotated-type [try-get-def-var-annotated-type gctx first-form]]
-              [unify-report gctx [instantiate-annotated-type gctx annotated-type] t-func form]
+              [unify-report gctx [instantiate-annotated-type gctx 0 annotated-type] t-func form]
               []]
             [unify-report gctx func-type t-func form]
             t-res]]]]]]
