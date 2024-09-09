@@ -3,13 +3,10 @@
 
 [defn has-local-context [ctx var]
   [loop [cur-ctx ctx]
-    [ifs
-      [has [getq cur-ctx vars] var]
-      1
-
-      [hasq cur-ctx outer]
-      [continue cur-ctx [getq cur-ctx outer]]
-
+    [if cur-ctx
+      [if [has [getq cur-ctx vars] var]
+        1
+        [continue cur-ctx [try-getq cur-ctx outer]]]
       0]]]
 
 [defn get-top-context [local-ctx]
@@ -20,11 +17,11 @@
 
 [defn try-get-loop-vars [local-ctx]
   [loop [cur-ctx local-ctx]
-    [if [if-let [df [try-getq cur-ctx decl-form]] [eq-word [quote loop] df] 0]
-      [getq cur-ctx vars]
-      [if-let [outer [try-getq cur-ctx outer]]
-        [continue cur-ctx outer]
-        0]]]]
+    [if cur-ctx
+      [if [if-let [df [try-getq cur-ctx decl-form]] [eq-word [quote loop] df] 0]
+        [getq cur-ctx vars]
+        [continue cur-ctx [try-getq cur-ctx outer]]]
+      0]]]
 
 [defn n-of-args-match-def [def-meta n-of-args]
   [let [n-of-regular-params [getq def-meta n-of-params]]
@@ -270,23 +267,12 @@
                 [report first-form first symbol not found during expansion [identity form]]
                 form]]]]]]]
 
-[def empty-local-context [kv-mapq vars empty-kv-map]]
+[def empty-local-context 0]
 
 [def make-eval-context [extern interpreter make-eval-context]]
 
 [def host-object
-  [kv-mapq
-    m
-    [kv-mapq
-      p0 [func p0 [] 0]
-      p1 [func p1 [p] 1]
-      p2 [func p2 [p q] 2]
-      p0r [func p0r [.. r] 0]
-      p1r [func p1r [p .. r] 1]]
-    host
-    [extern host]
-    instructions
-    [extern instructions]]]
+  [extern]]
 
 [defn make-global-context []
   [kv-mapq

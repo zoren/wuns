@@ -101,11 +101,7 @@
     [if cur-ctx
       [if-let [type [try-get [getq cur-ctx vars] var-name]]
         type
-        [if-let [outer [try-getq cur-ctx outer]]
-          [if outer
-            [continue cur-ctx outer]
-            0]
-          0]]
+        [continue cur-ctx [try-getq cur-ctx outer]]]
       0]]]
 
 [defn try-get-var-type [gctx local-ctx var-name]
