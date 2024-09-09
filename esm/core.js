@@ -76,6 +76,8 @@ export const formWord = (word, metaData) => {
   return Object.freeze(o)
 }
 
+const formWordFromString = (s) => formWord(word(s))
+
 export const isFormWord = (f) => f instanceof FormWord
 
 export const tryGetFormWord = (f) => (isFormWord(f) ? f.word : null)
@@ -85,7 +87,10 @@ class FormList extends Form {
   constructor(list) {
     super()
     if (!isList(list)) throw new Error('expected list')
-    for (const f of list) if (!isForm(f)) throw new Error('expected form')
+    for (const f of list)
+      if (!isForm(f)) {
+        throw new Error('expected form')
+      }
     const clone = [...list]
     this.#list = Object.freeze(clone)
   }
@@ -111,6 +116,7 @@ export const formList = (list, metaData) => {
   setMeta(o, metaData)
   return Object.freeze(o)
 }
+const formListArgs = (...args) => formList(args)
 export const isFormList = (f) => f instanceof FormList
 export const tryGetFormList = (f) => (isFormList(f) ? f.list : null)
 
@@ -142,7 +148,7 @@ export const isDefVar = (f) => f instanceof DefVar
 export const defVar = (name, value) => new DefVar(name, value)
 
 export const makeGetDefVarValue = (compile) => {
-  const getDefVarValFn = (name) => compile(makeList(word('try-get-var'), word(name)))()
+  const getDefVarValFn = (name) => compile(formListArgs(formWordFromString('try-get-var'), formWordFromString(name)))()
   return (name) => getDefVarValFn(name).value
 }
 

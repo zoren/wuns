@@ -102,6 +102,7 @@
               [recur gctx local-ctx [at form i]]
               [report [at form i] if extra forms ignored]]
             [for i 1 s-form [set-array res i [recur gctx local-ctx [at sub-forms i]]]]
+            [freeze-mutable-list res]
             [form-list-list res]]
 
           [or [eq-word [quote let] first-form] [eq-word [quote loop] first-form]]
@@ -121,9 +122,11 @@
                     [report-when [has vars var-word] var already defined]
                     [set-kv-map vars var-word [kv-mapq var var-word]]]
                   [report var not a word let or loop]]]]
+            [freeze-mutable-list new-bindings]
             [set-array res 0 first-form]
             [set-array res 1 [form-list-list new-bindings]]
             [for i 2 s-form [set-array res i [recur gctx new-local-ctx [at sub-forms i]]]]
+            [freeze-mutable-list res]
             [form-list-list res]]
 
           [eq-word [quote continue] first-form]
@@ -141,6 +144,7 @@
                     [set-array res i var-form]
                     [set-array res [inc i] [recur gctx local-ctx [at sub-forms [inc i]]]]]
                   [report var-form not a word continue]]]]
+            [freeze-mutable-list res]
             [form-list-list res]]
 
           [eq-word [quote func] first-form]
@@ -175,6 +179,7 @@
               [set-array res 1 name]
               [set-array res 2 params-form]
               [for i 3 s-form [set-array res i [recur gctx fn-local-ctx [at sub-forms i]]]]
+              [freeze-mutable-list res]
               [form-list-list res]]]
 
           [eq-word [quote recur] first-form]
@@ -184,6 +189,7 @@
             [report-when-not [n-of-args-match-def top-ctx n-of-args] form wrong number of arguments]
             [set-array res 0 first-form]
             [for i 1 s-form [set-array res i [recur gctx local-ctx [at sub-forms i]]]]
+            [freeze-mutable-list res]
             [form-list-list res]]
 
           [eq-form [quote extern] first-form]
@@ -237,6 +243,7 @@
             [let [res [mutable-list-of-size s-form]]
               [set-array res 0 [recur gctx local-ctx first-form]]
               [for i 1 s-form [set-array res i [recur gctx local-ctx [at sub-forms i]]]]
+              [freeze-mutable-list res]
               [form-list-list res]]
             [if-let [def-var [eval-try-get-var gctx first-form]]
               [let [function-kind [try-get-meta-assoc def-var [quote function-kind]]]
@@ -250,6 +257,7 @@
                   [let [res [mutable-list-of-size s-form]]
                     [set-array res 0 first-form]
                     [for i 1 s-form [set-array res i [recur gctx local-ctx [at sub-forms i]]]]
+                    [freeze-mutable-list res]
                     [form-list-list res]]
 
                   [eq-word [quote fexpr] function-kind]

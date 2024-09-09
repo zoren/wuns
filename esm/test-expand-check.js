@@ -1,53 +1,17 @@
 import { parseFile } from './parseTreeSitter.js'
 import { makeGetDefVarValue } from './core.js'
 import { makeInitContext, parseEvalFiles, runCform } from './interpreter.js'
-{
-  const { compile } = makeInitContext()
 
-  const files = ['std3', 'wasm-instructions', 'macro-expand'].map((f) => `../wuns/${f}.wuns`)
-  parseEvalFiles(compile, files)
-  const getDefVarValue = makeGetDefVarValue(compile)
+const { compile } = makeInitContext()
 
-  const testExpand = getDefVarValue('test-expand')
+const wunsFiles = ['std3', 'macro-expand', 'infer', 'test'].map((name) => `../wuns/${name}.wuns`)
+parseEvalFiles(compile, wunsFiles)
 
-  runCform(() => {
-    testExpand()
-  })
+const getDefVarVal = makeGetDefVarValue(compile)
+const testInfer = getDefVarVal('test-infer')
+const std3 = [...parseFile('../wuns/std3.wuns')]
 
-  const testExpandNoErrors = getDefVarValue('test-expand-no-errors-fn')
-
-  runCform(() => {
-    testExpandNoErrors(
-      ['std3', 'wasm-instructions', 'macro-expand', 'check'].flatMap((f) => parseFile(`../wuns/${f}.wuns`)),
-    )
-  })
-}
-{
-  const { compile } = makeInitContext()
-
-  parseEvalFiles(
-    compile,
-    ['std3', 'wasm-instructions', 'macro-expand', 'check'].map((name) => `../wuns/${name}.wuns`),
-  )
-
-  const getDefVarVal = makeGetDefVarValue(compile)
-  const testCheck = getDefVarVal('test-check')
-  runCform(() => {
-    testCheck()
-  })
-}
-
-{
-  const { compile } = makeInitContext()
-
-  parseEvalFiles(
-    compile,
-    ['std3', 'wasm-instructions', 'macro-expand', 'check', 'infer'].map((name) => `../wuns/${name}.wuns`),
-  )
-
-  const getDefVarVal = makeGetDefVarValue(compile)
-  const testCheck = getDefVarVal('test-check')
-  runCform(() => {
-    testCheck()
-  })
-}
+runCform(() => {
+  const res = testInfer(std3)
+  console.log({ res })
+})

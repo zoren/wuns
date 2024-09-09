@@ -35,6 +35,8 @@ export const form_word = (w) => {
 // [func [list [form]] form]
 export const form_list = (l) => {
   if (!isList(l)) throw new Error('form-list expects list')
+  if (isMutable(l)) throw new Error('form-list expects immutable list')
+  if (isGrowable(l)) throw new Error('form-list expects frozen list')
   return formList(l)
 }
 
