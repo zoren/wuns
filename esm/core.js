@@ -87,12 +87,9 @@ class FormList extends Form {
   constructor(list) {
     super()
     if (!isList(list)) throw new Error('expected list')
-    for (const f of list)
-      if (!isForm(f)) {
-        throw new Error('expected form')
-      }
-    const clone = [...list]
-    this.#list = Object.freeze(clone)
+    if (!Object.isFrozen(list)) throw new Error('expected frozen list')
+    for (const f of list) if (!isForm(f)) throw new Error('expected form')
+    this.#list = list
   }
 
   get list() {
