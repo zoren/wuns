@@ -155,7 +155,7 @@ export const atom_get = (atom) => {
 }
 export const atom_set = (atom, value) => {
   if (!isAtom(atom)) throw new Error('not an atom: ' + atom)
-  atom.value = value
+  atom.setValue(value)
 }
 export const is_identical = (value_a, value_b) => (value_a === value_b) | 0
 

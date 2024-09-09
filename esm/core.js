@@ -127,19 +127,29 @@ export const isFormDeep = (f) => {
 }
 
 class DefVar {
+  #name
+  #value
   constructor(name, value) {
     if (typeof name !== 'string') throw new Error('name must be string')
     if (value === undefined) throw new Error('value must be defined')
-    this.name = name
-    this.value = value
+    this.#name = name
+    this.#value = value
+  }
+
+  get name() {
+    return this.#name
+  }
+
+  get value() {
+    return this.#value
   }
 
   setValue(value) {
-    this.value = value
+    this.#value = value
   }
 
   toString() {
-    return `[var ${this.name}]`
+    return `[var ${this.#name}]`
   }
 }
 
@@ -153,8 +163,15 @@ export const makeGetDefVarValue = (compile) => {
 }
 
 class Atom {
+  #value
   constructor(value) {
-    this.value = value
+    this.#value = value
+  }
+  get value() {
+    return this.#value
+  }
+  setValue(value) {
+    this.#value = value
   }
 }
 export const atom = (v) => new Atom(v)
