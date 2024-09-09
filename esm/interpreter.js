@@ -1,16 +1,5 @@
 import { setJSFunctionName, parseFunctionParameters, createParameterNamesWrapper } from './utils.js'
-import {
-  print,
-  meta,
-  setMeta,
-  defVar,
-  arrayToList,
-  tryGetFormWord,
-  tryGetFormList,
-  formWordFromString,
-  formWord,
-  formEquals,
-} from './core.js'
+import { print, meta, setMeta, defVar, arrayToList, formWordFromString, formEquals } from './core.js'
 import { instructionFunctions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
 import { isJSReservedWord } from './utils.js'
@@ -31,27 +20,6 @@ class CompileError extends Error {
   }
 }
 
-const ctWordValue = (f) => {
-  const w = tryGetFormWord(f)
-  if (!w) throw new CompileError('not a word: ' + w + ' ' + typeof w, w)
-  return w.value
-}
-
-const tryGetFormWordValue = (f) => {
-  const w = tryGetFormWord(f)
-  if (!w) return null
-  return w.value
-}
-
-const parseParams = (params) => {
-  if (params.length > 1 && tryGetFormWordValue(params.at(-2)) === '..') {
-    const restParam = params.at(-1)
-    params = params.slice(0, -2)
-    return { params, restParam }
-  }
-  return { params, restParam: null }
-}
-
 const createNamedFunction = (name, jsParameterNames, wunsParameterNames, wunsRestParameter, body) => {
   const f = createParameterNamesWrapper(jsParameterNames)(body)
   setJSFunctionName(f, name)
@@ -61,28 +29,6 @@ const createNamedFunction = (name, jsParameterNames, wunsParameterNames, wunsRes
 }
 
 const paramStringToJS = (p) => (isJSReservedWord(p) ? '_' : '') + p.replace(/-/g, '_')
-
-const checkCallArity =
-  (errorFn) =>
-  ({ name, parameters, restParam }, form) => {
-    const nOfParams = parameters.length
-    const formList = tryGetFormList(form)
-    if (!formList) throw new errorFn('not a form', form)
-    const numOfGivenArgs = formList.length - 1
-    if (restParam) {
-      if (numOfGivenArgs < nOfParams)
-        throw new errorFn(`${name} expected at least ${nOfParams} arguments, got ${numOfGivenArgs}`, form)
-    } else {
-      if (numOfGivenArgs !== nOfParams)
-        throw new errorFn(`${name} expected ${nOfParams} arguments, got ${numOfGivenArgs}`, form)
-    }
-  }
-
-const ctCheckCallArity = checkCallArity(CompileError)
-const rtCheckCallArity = (f, form) => {
-  if (typeof f !== 'function') throw new RuntimeError(`expected function, got ${f}`, form)
-  checkCallArity(RuntimeError)(f, form)
-}
 
 const getOuterContextOfPred = (ctx, pred) => {
   while (ctx) {
@@ -106,6 +52,60 @@ const tryGetAssocList = (assocList, key) => {
 const functionKind = formWordFromString('function-kind')
 
 const makeInterpreterContext = (externalModules) => {
+  const hostModule = externalModules.host
+  if (!hostModule) throw new Error('host module not found')
+  const getHostValue = (name) => {
+    const v = hostModule[name]
+    if (!v) throw new Error(`host value not found: ${name}`)
+    return v
+  }
+  const tryGetFormWord = getHostValue('try-get-form-word')
+
+  const ctWordValue = (f) => {
+    const w = tryGetFormWord(f)
+    if (!w) throw new CompileError('not a word: ' + w + ' ' + typeof w, w)
+    return w.value
+  }
+
+  const tryGetFormWordValue = (f) => {
+    const w = tryGetFormWord(f)
+    if (!w) return null
+    return w.value
+  }
+
+  const parseParams = (params) => {
+    if (params.length > 1 && tryGetFormWordValue(params.at(-2)) === '..') {
+      const restParam = params.at(-1)
+      params = params.slice(0, -2)
+      return { params, restParam }
+    }
+    return { params, restParam: null }
+  }
+
+  const tryGetFormList = getHostValue('try-get-form-list')
+
+  const checkCallArity =
+    (errorFn) =>
+    ({ name, parameters, restParam }, form) => {
+      const nOfParams = parameters.length
+      const formList = tryGetFormList(form)
+      if (!formList) throw new errorFn('not a form', form)
+      const numOfGivenArgs = formList.length - 1
+      if (restParam) {
+        if (numOfGivenArgs < nOfParams)
+          throw new errorFn(`${name} expected at least ${nOfParams} arguments, got ${numOfGivenArgs}`, form)
+      } else {
+        if (numOfGivenArgs !== nOfParams)
+          throw new errorFn(`${name} expected ${nOfParams} arguments, got ${numOfGivenArgs}`, form)
+      }
+    }
+
+  const ctCheckCallArity = checkCallArity(CompileError)
+  const rtCheckCallArity = (f, form) => {
+    if (typeof f !== 'function') throw new RuntimeError(`expected function, got ${f}`, form)
+    checkCallArity(RuntimeError)(f, form)
+  }
+
   const defVars = new Map()
   const insertOrSetDefVar = (name, value, optMetaData) => {
     let defVarObject = defVars.get(name)
