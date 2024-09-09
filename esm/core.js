@@ -97,6 +97,13 @@ class FormList extends Form {
   }
 }
 
+export const formList = (list, metaData) => {
+  const o = new FormList(list)
+  setMeta(o, metaData)
+  return Object.freeze(o)
+}
+const formListArgs = (...args) => formList(Object.freeze(args))
+
 export const formEquals = (a, b) => {
   if (a === b) return true
   if (isFormWord(a) && isFormWord(b)) return a.word.value === b.word.value
@@ -108,12 +115,6 @@ export const formEquals = (a, b) => {
   return true
 }
 
-export const formList = (list, metaData) => {
-  const o = new FormList(list)
-  setMeta(o, metaData)
-  return Object.freeze(o)
-}
-const formListArgs = (...args) => formList(args)
 export const isFormList = (f) => f instanceof FormList
 export const tryGetFormList = (f) => (isFormList(f) ? f.list : null)
 

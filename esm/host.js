@@ -51,9 +51,7 @@ export const try_get_form_word = (f) => {
 }
 export const form_to_list = (f) => {
   const l = tryGetFormList(f)
-  if (!l) {
-    console.error('form-to-list expects form-list, got', f)
-    throw new Error('form-to-list expects form-list')}
+  if (!l) throw new Error('form-to-list expects form-list')
   return l
 }
 export const try_get_form_list = (f) => {
@@ -127,7 +125,8 @@ export const mutable_list_of_size = (size) => {
 export const freeze_mutable_list = (mutable_list) => {
   if (!isList(mutable_list)) throw new Error('freeze-mutable-list expects array')
   if (!isMutable(mutable_list)) throw new Error('freeze-mutable-list expects mutable list')
-  for (const v of mutable_list) if (v === undefined) throw new Error('freeze-mutable-list expects all elements to be set')
+  for (const v of mutable_list)
+    if (v === undefined) throw new Error('freeze-mutable-list expects all elements to be set')
   delete mutable_list[symbolListMutable]
   Object.freeze(mutable_list)
 }
