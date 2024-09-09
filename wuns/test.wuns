@@ -31,17 +31,6 @@
         [assert [eq-form expected-message [form-list-list message]] binding errors test failed failed expected message [identity expected-message] but found [identity message]]]]
     [inc-atom tests-run-atom]]]
 
-[defn quote-all-list [lmsg]
-  [let [s [size lmsg]
-        msg [mutable-list-of-size [inc s]]]
-    [set-array msg 0 [quote list]]
-    [loop [i 0]
-      [when [lt-s i s]
-        [set-array msg [inc i] [let [e [at lmsg i]] e]]
-        [continue i [inc i]]]]
-    [freeze-mutable-list msg]
-    [form-list-list msg]]]
-
 [defexpr test-binding-errors [expected-messages .. forms]
   [test-binding-errors-fn [form-to-list expected-messages] forms]]
 
