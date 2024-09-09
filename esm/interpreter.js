@@ -1,16 +1,15 @@
 import { setJSFunctionName, parseFunctionParameters, createParameterNamesWrapper } from './utils.js'
 import {
-  isFormWord,
   print,
   meta,
-  arrayToList,
-  defVar,
   setMeta,
+  defVar,
+  arrayToList,
   tryGetFormWord,
   tryGetFormList,
-  word,
+  formWordFromString,
   formWord,
-  formEquals
+  formEquals,
 } from './core.js'
 import { instructionFunctions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
@@ -103,6 +102,8 @@ const tryGetAssocList = (assocList, key) => {
   }
   return null
 }
+
+const functionKind = formWordFromString('function-kind')
 
 const makeInterpreterContext = (externalModules) => {
   const defVars = new Map()
@@ -326,9 +327,8 @@ const makeInterpreterContext = (externalModules) => {
     ctCheckCallArity(compileTimeFunc, form)
     const varMeta = meta(funcDefVar)
     const metaList = tryGetFormList(varMeta)
-    const funcKindVal = metaList ? tryGetAssocList(metaList, formWord(word('function-kind'))) : null
-    const funcKindWord = tryGetFormWord(funcKindVal)
-    const funcKind = funcKindWord ? funcKindWord.value : null
+    const funcKindVal = metaList ? tryGetAssocList(metaList, functionKind) : null
+    const funcKind = tryGetFormWordValue(funcKindVal)
     switch (funcKind) {
       case 'function':
       case null: {
@@ -356,16 +356,13 @@ const makeInterpreterContext = (externalModules) => {
             throw new CompileError(`runtime error when calling macro '${firstWordValue}': ${e.message}`, form, e)
           throw e
         }
-        const go = (f) => {
-          if (isFormWord(f)) return
+        const ctAssertIsForm = (f) => {
+          if (tryGetFormWord(f)) return
           const l = tryGetFormList(f)
-          if (!l) {
-            console.log('not a form list', f)
-            throw new CompileError('expected list', f)
-          }
-          for (const e of l) go(e)
+          if (!l) throw new CompileError('expected list', f)
+          for (const e of l) ctAssertIsForm(e)
         }
-        go(macroResult)
+        ctAssertIsForm(macroResult)
         // if (!isTaggedForm(macroResult)) throw new CompileError('macro must return form', form)
         return compile(ctx, macroResult)
       }

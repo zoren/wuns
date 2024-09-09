@@ -76,7 +76,7 @@ export const formWord = (word, metaData) => {
   return Object.freeze(o)
 }
 
-const formWordFromString = (s) => formWord(word(s))
+export const formWordFromString = (s) => formWord(word(s))
 
 export const isFormWord = (f) => f instanceof FormWord
 
@@ -104,19 +104,20 @@ export const formList = (list, metaData) => {
 }
 const formListArgs = (...args) => formList(Object.freeze(args))
 
+export const isFormList = (f) => f instanceof FormList
+
+export const tryGetFormList = (f) => (isFormList(f) ? f.list : null)
+
 export const formEquals = (a, b) => {
   if (a === b) return true
-  if (isFormWord(a) && isFormWord(b)) return a.word.value === b.word.value
-  if (!isFormList(a) || !isFormList(b)) return false
-  const la = a.list
-  const lb = b.list
+  const wa = tryGetFormWord(a), wb = tryGetFormWord(b)
+  if (wa && wb) return wa.value === wb.value
+  const la = tryGetFormList(a), lb = tryGetFormList(b)
+  if (!la || !lb) return false
   if (la.length !== lb.length) return false
   for (let i = 0; i < la.length; i++) if (!formEquals(la[i], lb[i])) return false
   return true
 }
-
-export const isFormList = (f) => f instanceof FormList
-export const tryGetFormList = (f) => (isFormList(f) ? f.list : null)
 
 class DefVar {
   #name
@@ -194,15 +195,3 @@ export const print = (ox) => {
   }
   return go(ox)
 }
-
-import { isPlainObject } from './utils.js'
-
-export const isRuntimeValue = (v) =>
-  v === undefined ||
-  isSigned32BitInteger(v) ||
-  isWord(v) ||
-  isAtom(v) ||
-  isDefVar(v) ||
-  typeof v === 'function' ||
-  (isList(v) && v.every(isRuntimeValue)) ||
-  (isPlainObject(v) && Object.keys(v).every(isWordString) && Object.values(v).every(isRuntimeValue))
