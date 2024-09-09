@@ -269,7 +269,7 @@ export const getErrors = (tree) => {
   return errors
 }
 
-import { wordWithMeta, listWithMeta } from './core.js'
+import { wordWithMeta, listWithMeta } from '../core.js'
 
 export function preorderTreesGeneratorFromCursor(tree, bytes) {
   const cursor = newTreeCursor(tree)

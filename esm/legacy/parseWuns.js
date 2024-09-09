@@ -1,5 +1,5 @@
-import { wordValue } from './core.js'
-import { makeInterpreterContext, apply } from './interpreter.js'
+import { wordValue } from '../core.js'
+import { makeInterpreterContext, apply } from '../interpreter.js'
 
 const memory = new WebAssembly.Memory({ initial: 1 })
 const importObject = {
