@@ -199,6 +199,4 @@ export const concat_lists = (lists) => {
   }
   return arrayToList(l)
 }
-export const concat = (...lists) => {
-  return concat_lists(lists)
-}
+export const concat = (...lists) => concat_lists(lists)

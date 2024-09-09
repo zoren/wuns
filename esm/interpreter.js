@@ -1,5 +1,5 @@
 import { setJSFunctionName, parseFunctionParameters, createParameterNamesWrapper } from './utils.js'
-import { print, meta, setMeta, defVar, arrayToList, formWordFromString, formEquals } from './core.js'
+import { print, setMeta, defVar, arrayToList, meta } from './core.js'
 import { instructionFunctions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
 import { isJSReservedWord } from './utils.js'
@@ -41,15 +41,6 @@ const getOuterContextOfPred = (ctx, pred) => {
 const getOuterContextWithVar = (ctx, varName) => getOuterContextOfPred(ctx, ({ variables }) => variables.has(varName))
 
 const getOuterContextOfType = (ctx, type) => getOuterContextOfPred(ctx, ({ ctxType }) => ctxType === type)
-
-const tryGetAssocList = (assocList, key) => {
-  for (let i = 0; i < assocList.length; i += 2) {
-    if (formEquals(assocList[i], key)) return assocList[i + 1]
-  }
-  return null
-}
-
-const functionKind = formWordFromString('function-kind')
 
 const makeInterpreterContext = (externalModules) => {
   const hostModule = externalModules.host
@@ -104,6 +95,12 @@ const makeInterpreterContext = (externalModules) => {
   const rtCheckCallArity = (f, form) => {
     if (typeof f !== 'function') throw new RuntimeError(`expected function, got ${f}`, form)
     checkCallArity(RuntimeError)(f, form)
+  }
+  const meta = getHostValue('meta')
+  const tryGetAssocList = (assocList, keyString) => {
+    for (let i = 0; i < assocList.length - 1; i += 2)
+      if (tryGetFormWordValue(assocList[i]) === keyString) return assocList[i + 1]
+    return null
   }
 
   const defVars = new Map()
@@ -163,7 +160,8 @@ const makeInterpreterContext = (externalModules) => {
         return () => w
       }
       case 'quote': {
-        const res = args.length === 1 ? args[0] : arrayToList(args)
+        if (args.length !== 1) throw new CompileError('quote expects 1 argument', form)
+        const res = args[0]
         return () => res
       }
       case 'if': {
@@ -327,7 +325,7 @@ const makeInterpreterContext = (externalModules) => {
     ctCheckCallArity(compileTimeFunc, form)
     const varMeta = meta(funcDefVar)
     const metaList = tryGetFormList(varMeta)
-    const funcKindVal = metaList ? tryGetAssocList(metaList, functionKind) : null
+    const funcKindVal = metaList ? tryGetAssocList(metaList, 'function-kind') : null
     const funcKind = tryGetFormWordValue(funcKindVal)
     switch (funcKind) {
       case 'function':
@@ -384,8 +382,6 @@ const makeInterpreterContext = (externalModules) => {
   return compileTop
 }
 
-export const getFormLocation = (subForm) => (subForm ? meta(subForm).location : undefined) || 'unknown location'
-
 const underscoreToDash = (s) => s.replace(/_/g, '-')
 
 const wrapJSFunction = (importFunc) => {
@@ -436,6 +432,8 @@ export const makeInitContext = () => {
   Object.freeze(externalModules)
   return { compile }
 }
+
+const getFormLocation = (subForm) => (subForm ? meta(subForm).location : undefined) || 'unknown location'
 
 export const runCform = (exp) => {
   try {
