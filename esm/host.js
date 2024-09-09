@@ -117,7 +117,7 @@ export const push = (growable_list, element) => {
 }
 export const mutable_list_of_size = (size) => {
   if (size < 0) throw new Error('mutable-list-of-size expects non-negative size')
-  const l = Array.from({ length: size }, () => 0)
+  const l = Array.from({ length: size }, () => undefined)
   l[symbolListMutable] = true
   return l
 }
@@ -125,6 +125,7 @@ export const mutable_list_of_size = (size) => {
 export const freeze_mutable_list = (mutable_list) => {
   if (!isList(mutable_list)) throw new Error('freeze-mutable-list expects array')
   if (!isMutable(mutable_list)) throw new Error('freeze-mutable-list expects mutable list')
+  for (const v of mutable_list) if (v === undefined) throw new Error('freeze-mutable-list expects all elements to be set')
   delete mutable_list[symbolListMutable]
   Object.freeze(mutable_list)
 }
