@@ -98,11 +98,10 @@
 
 [defn try-get-local-var-type [local-ctx var-name]
   [loop [cur-ctx local-ctx]
-    [if cur-ctx
-      [if-let [type [try-get [getq cur-ctx vars] var-name]]
-        type
-        [continue cur-ctx [try-getq cur-ctx outer]]]
-      0]]]
+    [and cur-ctx
+      [or
+        [try-get [getq cur-ctx vars] var-name]
+        [continue cur-ctx [try-getq cur-ctx outer]]]]]]
 
 [defn try-get-var-type [gctx local-ctx var-name]
   [if-let [ltype [try-get-local-var-type local-ctx var-name]]

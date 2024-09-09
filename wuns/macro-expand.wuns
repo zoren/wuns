@@ -3,11 +3,11 @@
 
 [defn has-local-context [ctx var]
   [loop [cur-ctx ctx]
-    [if cur-ctx
-      [if [has [getq cur-ctx vars] var]
-        1
-        [continue cur-ctx [try-getq cur-ctx outer]]]
-      0]]]
+    [if [not cur-ctx]
+      0
+      [or
+        [has [getq cur-ctx vars] var]
+        [continue cur-ctx [try-getq cur-ctx outer]]]]]]
 
 [defn get-top-context [local-ctx]
   [loop [cur-ctx local-ctx]
