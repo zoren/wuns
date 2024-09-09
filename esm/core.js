@@ -40,7 +40,7 @@ export const wordValue = (w) => {
 
 const emptyList = Object.freeze([])
 export const arrayToList = (array) => (array.length === 0 ? emptyList : Object.freeze(array))
-export const makeList = (...args) => (args.length === 0 ? emptyList : Object.freeze(args))
+export const makeList = (...args) => arrayToList(args)
 export const isList = (f) => Array.isArray(f)
 
 export const listWithMeta = (l, meta) => {
@@ -117,12 +117,6 @@ export const formEquals = (a, b) => {
 
 export const isFormList = (f) => f instanceof FormList
 export const tryGetFormList = (f) => (isFormList(f) ? f.list : null)
-
-export const isFormDeep = (f) => {
-  if (isFormWord(f)) return true
-  const l = tryGetFormList(f)
-  return l !== null && l.every(isFormDeep)
-}
 
 class DefVar {
   #name

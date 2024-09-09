@@ -4,7 +4,6 @@ import {
   print,
   meta,
   arrayToList,
-  isFormDeep,
   defVar,
   setMeta,
   tryGetFormWord,
@@ -164,7 +163,6 @@ const makeInterpreterContext = (externalModules) => {
       }
       case 'quote': {
         const res = args.length === 1 ? args[0] : arrayToList(args)
-        if (!isFormDeep(res)) throw new CompileError('quote expects form', form)
         return () => res
       }
       case 'if': {
@@ -376,27 +374,6 @@ const makeInterpreterContext = (externalModules) => {
         // thanks Manuel! https://x.com/msimoni/status/1824128031792787808
         const fexprResult = compileTimeFunc(...args)
         return () => fexprResult
-      }
-      case 'manc': {
-        // manc, eval args and eval result
-        const rtFunc = funcDefVar.value
-        rtCheckCallArity(rtFunc, form)
-        const cargs = args.map((a) => compile(ctx, a))
-        return (env) => {
-          const mancResult = rtFunc(...cargs.map((carg) => carg(env)))
-          if (!isFormDeep(mancResult)) throw new CompileError('manc must return form', form)
-          try {
-            return compile(ctx, mancResult)
-          } catch (e) {
-            if (e instanceof CompileError)
-              throw new RuntimeError(
-                `compiletime error when calling manc '${firstWordValue}': ${error.message}`,
-                form,
-                e,
-              )
-            throw e
-          }
-        }
       }
       default:
         throw new CompileError(`unreachable, invalid function kind '${funcKind}' for '${firstWordValue}'`, form)
