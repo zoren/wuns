@@ -288,10 +288,10 @@ const makeInterpreterContext = (externalModules) => {
         return (env) => funcCtx.func(...cargs.map((carg) => carg(env)))
       }
       case 'extern': {
-        const names = args.map(ctWordValue)
         let ext = externalModules
-        for (const n of names) {
-          if (!(n in ext)) throw new CompileError(`module ${names.join(' ')} not found`, form)
+        for (const a of args) {
+          const n = ctWordValue(a)
+          if (!(n in ext)) throw new CompileError(`extern ${n} not found`, a)
           ext = ext[n]
         }
         return () => ext
