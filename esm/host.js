@@ -154,12 +154,6 @@ export const atom_set = (atom, value) => {
 export const is_identical = (value_a, value_b) => (value_a === value_b) | 0
 
 export const transient_kv_map = () => ({})
-export const kv_map = (...array) => {
-  if (array.length % 2 !== 0) throw new Error('kv-map expects even number of arguments')
-  const m = {}
-  for (let i = 0; i < array.length; i += 2) m[wordValue(array[i])] = array[i + 1]
-  return Object.freeze(m)
-}
 export const has = (kv_map, key) => {
   if (!isPlainObject(kv_map)) throw new Error('has expects map')
   return (wordValue(key) in kv_map) | 0
