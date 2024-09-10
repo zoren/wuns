@@ -20,6 +20,7 @@ export const meta = (form) => {
   return 0
 }
 export const setMeta = (v, meta) => {
+  if (!isForm(v) && !isDefVar(v)) throw new Error('setMeta expects form or defvar')
   const t = typeof v
   if (!(t === 'object' || t === 'function') || Object.isFrozen(v)) throw new Error('expects mutable object ' + t)
   if (meta === undefined) {
@@ -37,12 +38,6 @@ const emptyList = Object.freeze([])
 export const arrayToList = (array) => (array.length === 0 ? emptyList : Object.freeze(array))
 export const makeList = (...args) => arrayToList(args)
 export const isList = (f) => Array.isArray(f)
-
-export const listWithMeta = (l, meta) => {
-  const ll = [...l]
-  setMeta(ll, meta)
-  return Object.freeze(ll)
-}
 
 class Form {}
 

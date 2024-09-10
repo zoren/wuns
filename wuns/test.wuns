@@ -275,14 +275,6 @@
 
   [my-extern-add-i32 [i32 1] [i32 2]]]
 ]
-[comment can we add meta to a list and then use it as a type]
-[comment
-[test-ok
-  form
-  [[extern host list-with-meta]
-    [quote [let []]]
-    [[extern host kv-map]]]]
-]
 
 [test-ok
   [func [.. form] form]

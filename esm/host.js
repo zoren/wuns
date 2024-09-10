@@ -10,7 +10,6 @@ import {
   isAtom,
   isSigned32BitInteger,
   print,
-  listWithMeta,
   formWord,
   isFormWord,
   formList,
@@ -62,8 +61,6 @@ export const is_word = (form) => isFormWord(form) | 0
 
 export const is_list = (form) => isFormList(form) | 0
 export { meta }
-
-export const list_with_meta = (list, meta_data) => listWithMeta(list, meta_data)
 
 export const var_meta = (v) => {
   if (!isDefVar(v)) throw new Error('var-meta, not a defvar: ' + v)
