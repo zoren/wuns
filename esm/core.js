@@ -2,17 +2,26 @@ export const isSigned32BitInteger = (n) => (n | 0) === n
 const wordRegex = /^[a-z0-9.=/-]+$/
 export const isWordString = (s) => typeof s === 'string' && s.length > 0 && wordRegex.test(s)
 class Word {
+  #value
   constructor(value) {
     if (!isWordString(value)) throw new Error('invalid word: "' + value + '" ' + typeof value)
-    this.value = value
+    this.#value = value
   }
 
   toString() {
-    return this.value
+    return this.#value
+  }
+
+  get string() {
+    return this.#value
   }
 }
 export const isWord = (f) => f instanceof Word
-export const word = (s) => Object.freeze(new Word(s))
+export const stringToWord = (s) => Object.freeze(new Word(s))
+export const wordValue = (w) => {
+  if (isWord(w)) return w.string
+  throw new Error('not a word: ' + w + ' ' + typeof w)
+}
 const symbolMeta = Symbol.for('wuns-meta')
 export const meta = (form) => {
   const t = typeof form
@@ -28,10 +37,6 @@ export const setMeta = (v, meta) => {
     return
   }
   v[symbolMeta] = meta
-}
-export const wordValue = (w) => {
-  if (isWord(w)) return w.value
-  throw new Error('not a word: ' + w + ' ' + typeof w)
 }
 
 const emptyList = Object.freeze([])
@@ -66,8 +71,6 @@ export const formWord = (word, metaData) => {
   return Object.freeze(o)
 }
 
-export const formWordFromString = (s) => formWord(word(s))
-
 export const isFormWord = (f) => f instanceof FormWord
 
 export const tryGetFormWord = (f) => (isFormWord(f) ? f.word : null)
@@ -92,7 +95,6 @@ export const formList = (list, metaData) => {
   setMeta(o, metaData)
   return Object.freeze(o)
 }
-const formListArgs = (...args) => formList(Object.freeze(args))
 
 export const isFormList = (f) => f instanceof FormList
 
@@ -128,11 +130,6 @@ class DefVar {
 export const isDefVar = (f) => f instanceof DefVar
 
 export const defVar = (name, value) => new DefVar(name, value)
-
-export const makeGetDefVarValue = (compile) => {
-  const getDefVarValFn = (name) => compile(formListArgs(formWordFromString('try-get-var'), formWordFromString(name)))()
-  return (name) => getDefVarValFn(name).value
-}
 
 class Atom {
   #value

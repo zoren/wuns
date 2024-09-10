@@ -93,7 +93,7 @@ insertFunc('byte-array', (buffer, byteOffset, length) => new Uint8Array(buffer, 
 insertFunc('log-byte-array', (bytes) => {
   console.log(textDecoder.decode(bytes))
 })
-import { isWord, isList, wordValue, makeList, word, print } from './core.js'
+import { isWord, isList, wordValue, makeList, stringToWord, print } from './core.js'
 // const formToString = (x) => {
 //   if (isWord(x)) return wordValue(x)
 //   if (isList(x)) return `[${x.map(formToString).join(' ')}]`
@@ -140,7 +140,7 @@ const object_get = (m, k) => {
 insertFunc('object-get', object_get)
 const object_keys = (m) => {
   if (typeof m !== 'object') throw new Error('keys expects map')
-  return arrayToList(Object.keys(m).map(word))
+  return arrayToList(Object.keys(m).map(stringToWord))
 }
 insertFunc('object-keys', object_keys)
 

@@ -384,17 +384,20 @@ const provideSelectionRanges = (document, positions) => {
   return selRanges
 }
 
-
 /**
  * @param {vscode.ExtensionContext} context
  */
 async function activate(context) {
-  const { parse, treeToForms } = await import('./esm/parseTreeSitter.js')
+  const { jsHost } = await import('./esm/interpreter.js')
+  const { parse, treeToFormsHost } = await import('./esm/parseTreeSitter.js')
   parseDocumentTreeSitter = (document, oldTree) => {
     const watch = makeStopWatch()
     const tree = parse(document.getText(), oldTree)
     console.log('parse treesitter took', watch(), 'ms')
-    return { tree, forms: treeToForms(tree) }
+    const watch2 = makeStopWatch()
+    const forms = treeToFormsHost(jsHost, tree)
+    console.log('tree to forms took', watch2(), 'ms')
+    return { tree, forms }
   }
   console.log('starting wuns lang extension: ' + context.extensionPath)
   const interpretCurrentFile = await makeInterpretCurrentFile(context)

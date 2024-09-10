@@ -1,7 +1,6 @@
 import { setJSFunctionName, parseFunctionParameters, createParameterNamesWrapper } from './utils.js'
 import { setMeta, defVar } from './core.js'
 import { instructionFunctions } from './instructions.js'
-import { parseFile } from './parseTreeSitter.js'
 import { isJSReservedWord } from './utils.js'
 
 class RuntimeError extends Error {
@@ -51,17 +50,17 @@ const makeInterpreterContext = (externalModules) => {
     return v
   }
   const tryGetFormWord = getHostValue('try-get-form-word')
-
+  const wordValue = getHostValue('wordValue')
   const ctWordValue = (f) => {
     const w = tryGetFormWord(f)
     if (!w) throw new CompileError('not a word: ' + w + ' ' + typeof w, w)
-    return w.value
+    return wordValue(w)
   }
 
   const tryGetFormWordValue = (f) => {
     const w = tryGetFormWord(f)
     if (!w) return null
-    return w.value
+    return wordValue(w)
   }
 
   const parseParams = (params) => {
@@ -435,18 +434,6 @@ const wrapJSFunctionsToObject = (funcs) => {
   return Object.freeze(newObject)
 }
 
-const externalModules = Object.freeze({
-  instructions: wrapJSFunctionsToObject(instructionFunctions),
-  host: wrapJSFunctionsToObject(Object.values(await import('./host.js'))),
-  interpreter: wrapJSFunctionsToObject([make_eval_context]),
-})
-
-export const makeInitContext = () => {
-  const compile = makeInterpreterContext(externalModules)
-  Object.freeze(externalModules)
-  return { compile }
-}
-
 import { print, meta } from './core.js'
 
 const getFormLocation = (subForm) => (subForm ? meta(subForm).location : undefined) || 'unknown location'
@@ -500,17 +487,43 @@ const compEvalLog = (compile, form) => {
   }
 }
 
-export const evalLogForms = (compile, forms) => {
-  for (const form of forms) {
-    const v = compEvalLog(compile, form)
-    if (v !== undefined) console.log(print(v))
+import { parseFileHost, parseStringToFormsHost, parseStringToFirstFormsHost } from './parseTreeSitter.js'
+
+export const makeInitContext = (host) => {
+  const externalModules = Object.freeze({
+    instructions: wrapJSFunctionsToObject(instructionFunctions),
+    host,
+    interpreter: wrapJSFunctionsToObject([make_eval_context]),
+  })
+  const compile = makeInterpreterContext(externalModules)
+  const evaluate = (form) => compile(form)()
+  const parseStringToForms = (s) => parseStringToFormsHost(host, s)
+  const parseFile = (filename) => parseFileHost(host, filename)
+  const parseFirstForm = (s) => parseStringToFirstFormsHost(host, s)
+  const hostListFuncForm = parseFirstForm('[func list [.. entries] entries]')
+  const hostListFunc = compile(hostListFuncForm)(null)
+  const parseFileToList = (filename) => hostListFunc(...parseFile(filename))
+  return {
+    compile,
+    evaluate,
+    evalLogForms: (forms) => {
+      for (const form of forms) {
+        const v = compEvalLog(compile, form)
+        if (v !== undefined) console.log(print(v))
+      }
+    },
+    parseFile,
+    parseFileToList,
+    parseFirstForm,
+    parseStringToForms,
+    parseEvalFiles: (filenames) => {
+      for (const filename of filenames) {
+        for (const form of parseFile(filename)) {
+          compEvalLog(compile, form)
+        }
+      }
+    },
   }
 }
 
-export const parseEvalFiles = (compile, filenames) => {
-  for (const filename of filenames) {
-    for (const form of parseFile(filename)) {
-      compEvalLog(compile, form)
-    }
-  }
-}
+export const jsHost = wrapJSFunctionsToObject(Object.values(await import('./host.js')))

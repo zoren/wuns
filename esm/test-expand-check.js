@@ -1,15 +1,17 @@
-import { parseFile } from './parseTreeSitter.js'
-import { makeGetDefVarValue } from './core.js'
-import { makeInitContext, parseEvalFiles, runCform } from './interpreter.js'
+import { makeInitContext, runCform, jsHost } from './interpreter.js'
 
-const { compile } = makeInitContext()
+const { parseEvalFiles, parseFileToList, parseFirstForm, evaluate } = makeInitContext(jsHost)
 
 const wunsFiles = ['std3', 'macro-expand', 'infer', 'test'].map((name) => `../wuns/${name}.wuns`)
-parseEvalFiles(compile, wunsFiles)
 
-const getDefVarVal = makeGetDefVarValue(compile)
-const testInfer = getDefVarVal('test-infer')
-const std3 = [...parseFile('../wuns/std3.wuns')]
+parseEvalFiles(wunsFiles)
+
+// do type inference on the standard library
+const std3 = parseFileToList('../wuns/std3.wuns')
+
+const formWord = parseFirstForm('test-infer')
+
+const testInfer = evaluate(formWord)
 
 runCform(() => {
   const res = testInfer(std3)

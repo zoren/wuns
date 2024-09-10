@@ -1,7 +1,6 @@
 import {
   isWord,
   isList,
-  word,
   wordValue,
   isDefVar,
   meta,
@@ -18,6 +17,9 @@ import {
   tryGetFormList,
 } from './core.js'
 import { isPlainObject } from './utils.js'
+
+import { stringToWord } from './core.js'
+export { stringToWord, wordValue }
 
 export const apply = (fn, args) => {
   if (typeof fn !== 'function') throw new Error('apply expects function')
@@ -82,9 +84,9 @@ export const char_code_at = (word, index) => {
   if (index < -len || index >= len) throw new Error('index out of bounds: ' + index + ' ' + len)
   return s.at(index).charCodeAt(0)
 }
-export const concat_words = (word_1, word_2) => word(wordValue(word_1) + wordValue(word_2))
+export const concat_words = (word_1, word_2) => stringToWord(wordValue(word_1) + wordValue(word_2))
 // todo rename code_point_to_word
-export const char_code_to_word = (code_point) => word(String.fromCodePoint(code_point))
+export const char_code_to_word = (code_point) => stringToWord(String.fromCodePoint(code_point))
 
 export const size = (list) => {
   if (isList(list)) return list.length
@@ -164,9 +166,10 @@ export const get = (kv_map, key) => {
   if (ks in kv_map) return kv_map[ks]
   throw new Error(`key not found: ${ks} in [${Object.keys(kv_map)}]`)
 }
+// todo this is only used in assoc, for cloning, maybe consider refactoring, key ordering maybe become an issue as programs will rely on it
 export const keys = (kv_map) => {
   if (!isPlainObject(kv_map)) throw new Error('keys expect map')
-  return arrayToList(Object.keys(kv_map).map(word))
+  return arrayToList(Object.keys(kv_map).map(stringToWord))
 }
 export const set_kv_map = (kv_map, key, value) => {
   if (!isPlainObject(kv_map)) throw new Error('set-kv-map expect map')
