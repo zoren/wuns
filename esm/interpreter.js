@@ -1,5 +1,5 @@
 import { setJSFunctionName, parseFunctionParameters, createParameterNamesWrapper } from './utils.js'
-import { print, setMeta, defVar, arrayToList, meta } from './core.js'
+import { setMeta, defVar } from './core.js'
 import { instructionFunctions } from './instructions.js'
 import { parseFile } from './parseTreeSitter.js'
 import { isJSReservedWord } from './utils.js'
@@ -101,6 +101,18 @@ const makeInterpreterContext = (externalModules) => {
     for (let i = 0; i < assocList.length - 1; i += 2)
       if (tryGetFormWordValue(assocList[i]) === keyString) return assocList[i + 1]
     return null
+  }
+  const mutableListOfSize = getHostValue('mutable-list-of-size'),
+    setArray = getHostValue('set-array'),
+    freezeMutableList = getHostValue('freeze-mutable-list')
+  const emptyList = mutableListOfSize(0)
+  freezeMutableList(emptyList)
+  const mkList = (l) => {
+    if (l.length === 0) return emptyList
+    const ml = mutableListOfSize(l.length)
+    for (let i = 0; i < l.length; i++) setArray(ml, i, l[i])
+    freezeMutableList(ml)
+    return ml
   }
 
   const defVars = new Map()
@@ -252,7 +264,7 @@ const makeInterpreterContext = (externalModules) => {
           ? (...args) => {
               const varValues = new Map()
               for (let i = 0; i < nOfParams; i++) varValues.set(params[i], args[i])
-              varValues.set(restParam, arrayToList(args.slice(nOfParams)))
+              varValues.set(restParam, mkList(args.slice(nOfParams)))
               return cbodies({ varValues })
             }
           : (...args) => {
@@ -432,6 +444,8 @@ export const makeInitContext = () => {
   Object.freeze(externalModules)
   return { compile }
 }
+
+import { print, meta } from './core.js'
 
 const getFormLocation = (subForm) => (subForm ? meta(subForm).location : undefined) || 'unknown location'
 
