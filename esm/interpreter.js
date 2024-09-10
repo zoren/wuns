@@ -43,27 +43,28 @@ const getOuterContextWithVar = (ctx, varName) => getOuterContextOfPred(ctx, ({ v
 
 const getOuterContextOfType = (ctx, type) => getOuterContextOfPred(ctx, ({ ctxType }) => ctxType === type)
 
-const makeInterpreterContext = (externalModules) => {
-  const hostModule = externalModules.host
-  if (!hostModule) throw new Error('host module not found')
+const makeInterpreterContext = ({ externalModules, converters }) => {
+  const { host } = externalModules
+  if (!host) throw new Error('host module not found')
   const getHostValue = (name) => {
-    const v = hostModule[name]
+    const v = host[name]
     if (!v) throw new Error(`host value not found: ${name}`)
     return v
   }
-  const tryGetFormWord = getHostValue('try-get-form-word')
-  const wordValue = getHostValue('wordValue')
 
+  const { wordValue, stringToWord } = converters
+
+  const tryGetFormWord = getHostValue('try-get-form-word')
   const tryGetFormList = getHostValue('try-get-form-list')
+
   const meta = getHostValue('meta')
 
   const formWord = getHostValue('form-word')
   const formList = getHostValue('form-list')
+
   const transientKVMap = getHostValue('transient-kv-map')
   const setKVMap = getHostValue('set-kv-map')
   const freezeKVMap = getHostValue('freeze-kv-map')
-  // stringToWord is a lifting function it takes a string(not a wuns value) and returns a word
-  const stringToWord = getHostValue('stringToWord')
 
   const ctWordValue = (f) => {
     const w = tryGetFormWord(f)
@@ -406,25 +407,25 @@ const makeInterpreterContext = (externalModules) => {
   const evaluate = (form) => compileTop(form)()
 
   function* treeToFormsHost(tree, filePath) {
-    const filePathWord = filePath ? stringToWord(filePath) : null
-    const filePathKey = stringToWord('file-path')
-    const rowWord = stringToWord('row')
-    const columnWord = stringToWord('column')
+    // const filePathWord = filePath ? stringToWord(filePath) : null
+    // const filePathKey = stringToWord('file-path')
+    // const rowWord = stringToWord('row')
+    // const columnWord = stringToWord('column')
     /**
      * @param {TSParser.SyntaxNode} node
      */
     const nodeToForm = (node) => {
       const { type, text, startPosition, isError, namedChildCount } = node
       if (isError) throw new Error('unexpected error node')
-      const { row, column } = startPosition
-      const metaData = transientKVMap()
-      if (filePathWord) setKVMap(metaData, filePathKey, filePathWord)
-      setKVMap(metaData, rowWord, row + 1)
-      setKVMap(metaData, columnWord, column + 1)
-      freezeKVMap(metaData)
+      // const { row, column } = startPosition
+      // const metaData = transientKVMap()
+      // if (filePathWord) setKVMap(metaData, filePathKey, filePathWord)
+      // setKVMap(metaData, rowWord, row + 1)
+      // setKVMap(metaData, columnWord, column + 1)
+      // freezeKVMap(metaData)
       switch (type) {
         case 'word':
-          return formWord(stringToWord(text), metaData)
+          return formWord(stringToWord(text))
         case 'list':
           let l
           if (namedChildCount) {
@@ -434,7 +435,7 @@ const makeInterpreterContext = (externalModules) => {
           } else {
             l = emptyList
           }
-          return formList(l, metaData)
+          return formList(l)
         default:
           throw new Error('unexpected node type: ' + type)
       }
@@ -470,22 +471,6 @@ const wrapJSFunction = (importFunc) => {
     wunsRestParam,
     importFunc,
   )
-}
-
-const make_eval_context = (external_modules) => {
-  const { evaluate } = makeInterpreterContext(external_modules)
-  const wrappedEvaluate = wrapJSFunction(evaluate)
-  // todo maybe return context instead of a function as it will be difficult to pass as a parameter in wasm
-  return wrappedEvaluate
-}
-
-const wrapJSFunctionsToObject = (funcs) => {
-  const newObject = {}
-  for (const importFunc of funcs) {
-    const func = wrapJSFunction(importFunc)
-    newObject[func.name] = func
-  }
-  return Object.freeze(newObject)
 }
 
 import { print, meta } from './core.js'
@@ -541,14 +526,34 @@ const compEvalLog = (compile, form) => {
   }
 }
 
-export const makeInitContext = (host) => {
+const wrapJSFunctionsToObject = (funcs) => {
+  const newObject = {}
+  for (const importFunc of funcs) {
+    const func = wrapJSFunction(importFunc)
+    newObject[func.name] = func
+  }
+  return Object.freeze(newObject)
+}
+
+const instructions = wrapJSFunctionsToObject(instructionFunctions)
+
+export const makeInitContext = ({ host, converters }) => {
+  const make_eval_context = (external_modules) => {
+    const { evaluate } = makeInterpreterContext({ externalModules: external_modules, converters })
+    const wrappedEvaluate = wrapJSFunction(evaluate)
+    // todo maybe return context instead of a function as it will be difficult to pass as a parameter in wasm
+    return wrappedEvaluate
+  }
+
   const externalModules = Object.freeze({
-    instructions: wrapJSFunctionsToObject(instructionFunctions),
+    instructions,
     host,
     interpreter: wrapJSFunctionsToObject([make_eval_context]),
   })
-  const { compile, evaluate, parseStringToForms, parseFile, parseStringToFirstForm } =
-    makeInterpreterContext(externalModules)
+  const { compile, evaluate, parseStringToForms, parseFile, parseStringToFirstForm } = makeInterpreterContext({
+    externalModules,
+    converters,
+  })
   const hostListFuncForm = parseStringToFirstForm('[func list [.. entries] entries]')
   const hostListFunc = evaluate(hostListFuncForm)
   const parseFileToList = (filename) => hostListFunc(...parseFile(filename))
@@ -573,4 +578,9 @@ export const makeInitContext = (host) => {
   }
 }
 
-export const jsHost = wrapJSFunctionsToObject(Object.values(await import('./host.js')))
+import { wordValue, stringToWord } from './core.js'
+
+export const jsHost = {
+  host: wrapJSFunctionsToObject(Object.values(await import('./host.js'))),
+  converters: { wordValue, stringToWord },
+}
