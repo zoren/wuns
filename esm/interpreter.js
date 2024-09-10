@@ -53,6 +53,18 @@ const makeInterpreterContext = (externalModules) => {
   }
   const tryGetFormWord = getHostValue('try-get-form-word')
   const wordValue = getHostValue('wordValue')
+
+  const tryGetFormList = getHostValue('try-get-form-list')
+  const meta = getHostValue('meta')
+
+  const formWord = getHostValue('form-word')
+  const formList = getHostValue('form-list')
+  const transientKVMap = getHostValue('transient-kv-map')
+  const setKVMap = getHostValue('set-kv-map')
+  const freezeKVMap = getHostValue('freeze-kv-map')
+  // stringToWord is a lifting function it takes a string(not a wuns value) and returns a word
+  const stringToWord = getHostValue('stringToWord')
+
   const ctWordValue = (f) => {
     const w = tryGetFormWord(f)
     if (!w) throw new CompileError('not a word: ' + w + ' ' + typeof w, w)
@@ -73,8 +85,6 @@ const makeInterpreterContext = (externalModules) => {
     }
     return { params, restParam: null }
   }
-
-  const tryGetFormList = getHostValue('try-get-form-list')
 
   const checkCallArity =
     (errorFn) =>
@@ -97,7 +107,6 @@ const makeInterpreterContext = (externalModules) => {
     if (typeof f !== 'function') throw new RuntimeError(`expected function, got ${f}`, form)
     checkCallArity(RuntimeError)(f, form)
   }
-  const meta = getHostValue('meta')
   const tryGetAssocList = (assocList, keyString) => {
     for (let i = 0; i < assocList.length - 1; i += 2)
       if (tryGetFormWordValue(assocList[i]) === keyString) return assocList[i + 1]
@@ -391,21 +400,16 @@ const makeInterpreterContext = (externalModules) => {
   }
   const compileTop = (form) => {
     const compRes = compile(null, form)
-    const evaluate = () => compRes(null)
-    return evaluate
+    const evaluateCompileResult = () => compRes(null)
+    return evaluateCompileResult
   }
   const evaluate = (form) => compileTop(form)()
 
-  const formWord = getHostValue('form-word'),
-    formList = getHostValue('form-list')
-  const transientKVMap = getHostValue('transient-kv-map')
-  const setKVMap = getHostValue('set-kv-map')
-  const freezeKVMap = getHostValue('freeze-kv-map')
-  // stringToWord is a lifting function it takes a string(not a wuns value) and returns a word
-  const stringToWord = getHostValue('stringToWord')
-
   function* treeToFormsHost(tree, filePath) {
     const filePathWord = filePath ? stringToWord(filePath) : null
+    const filePathKey = stringToWord('file-path')
+    const rowWord = stringToWord('row')
+    const columnWord = stringToWord('column')
     /**
      * @param {TSParser.SyntaxNode} node
      */
@@ -414,9 +418,9 @@ const makeInterpreterContext = (externalModules) => {
       if (isError) throw new Error('unexpected error node')
       const { row, column } = startPosition
       const metaData = transientKVMap()
-      if (filePathWord) setKVMap(metaData, stringToWord('file-path'), filePathWord)
-      setKVMap(metaData, stringToWord('row'), row + 1)
-      setKVMap(metaData, stringToWord('column'), column + 1)
+      if (filePathWord) setKVMap(metaData, filePathKey, filePathWord)
+      setKVMap(metaData, rowWord, row + 1)
+      setKVMap(metaData, columnWord, column + 1)
       freezeKVMap(metaData)
       switch (type) {
         case 'word':
@@ -549,18 +553,16 @@ export const makeInitContext = (host) => {
   const hostListFunc = evaluate(hostListFuncForm)
   const parseFileToList = (filename) => hostListFunc(...parseFile(filename))
   return {
-    // compile,
     evaluate,
+    parseFileToList,
+    parseStringToFirstForm,
+    parseStringToForms,
     evalLogForms: (forms) => {
       for (const form of forms) {
         const v = compEvalLog(compile, form)
         if (v !== undefined) console.log(print(v))
       }
     },
-    parseFile,
-    parseFileToList,
-    parseStringToFirstForm,
-    parseStringToForms,
     parseEvalFiles: (filenames) => {
       for (const filename of filenames) {
         for (const form of parseFile(filename)) {
