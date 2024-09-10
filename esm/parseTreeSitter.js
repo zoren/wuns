@@ -23,7 +23,6 @@ export function* treeToForms(tree, filePath) {
     const metaData = Object.freeze({ location: `${filePathPrefix}${row + 1}:${column + 1}` })
     switch (type) {
       case 'word':
-        // todo should word also have metadata?
         return formWord(word(text), metaData)
       case 'list':
         const l = []

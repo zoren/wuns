@@ -10,7 +10,6 @@ import {
   isAtom,
   isSigned32BitInteger,
   print,
-  wordWithMeta,
   listWithMeta,
   formWord,
   isFormWord,
@@ -64,7 +63,6 @@ export const is_word = (form) => isFormWord(form) | 0
 export const is_list = (form) => isFormList(form) | 0
 export { meta }
 
-export const word_with_meta = (word, meta_data) => wordWithMeta(wordValue(word), meta_data)
 export const list_with_meta = (list, meta_data) => listWithMeta(list, meta_data)
 
 export const var_meta = (v) => {

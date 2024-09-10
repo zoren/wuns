@@ -28,11 +28,6 @@ export const setMeta = (v, meta) => {
   }
   v[symbolMeta] = meta
 }
-export const wordWithMeta = (s, meta) => {
-  const w = new Word(s)
-  setMeta(w, meta)
-  return Object.freeze(w)
-}
 export const wordValue = (w) => {
   if (isWord(w)) return w.value
   throw new Error('not a word: ' + w + ' ' + typeof w)

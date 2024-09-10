@@ -483,7 +483,6 @@
 [def-extern var-get [func [var] any]]
 [def-extern var-meta [func [var] any]]
 [def-extern apply [func [[func] [form-list any]] any]]
-[def-extern word-with-meta [func [word kv-map] word]]
 [def-extern list-with-meta [func [form-list kv-map] list]]
 [def-extern is-atom [type-scheme [a] [func [[atom a]] i32]]]
 [def-extern is-identical [type-scheme [a] [func [a a] i32]]]
