@@ -1,27 +1,14 @@
 export const isSigned32BitInteger = (n) => (n | 0) === n
 
 const wordRegex = /^[a-z0-9.=/-]+$/
-const isWordString = (s) => typeof s === 'string' && s.length > 0 && wordRegex.test(s)
-class Word {
-  #value
-  constructor(value) {
-    if (!isWordString(value)) throw new Error('invalid word: "' + value + '" ' + typeof value)
-    this.#value = value
-  }
-
-  toString() {
-    return this.#value
-  }
-
-  get string() {
-    return this.#value
-  }
+export const isWord = (s) => typeof s === 'string' && s.length > 0 && wordRegex.test(s)
+export const stringToWord = (s) => {
+  if (!isWord(s)) throw new Error('invalid word: "' + s + '" ' + typeof s)
+  return (s)
 }
-export const isWord = (f) => f instanceof Word
-export const stringToWord = (s) => Object.freeze(new Word(s))
 export const wordValue = (w) => {
-  if (isWord(w)) return w.string
-  throw new Error('not a word: ' + w + ' ' + typeof w)
+  if (!isWord(w)) throw new Error('not a word: ' + w + ' ' + typeof w)
+  return w
 }
 
 const emptyList = Object.freeze([])
