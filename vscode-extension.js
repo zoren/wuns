@@ -265,39 +265,39 @@ const pointToPosition = ({ row, column }) => new Position(row, column)
 const rangeFromNode = ({ startPosition, endPosition }) =>
   new Range(pointToPosition(startPosition), pointToPosition(endPosition))
 
-const makeInterpretCurrentFile = async (context) => {
-  const outputChannel = window.createOutputChannel('wuns output', wunsLanguageId)
-  // outputChannel.show(true)
-  const appendShow = (s) => {
-    outputChannel.appendLine(s)
-    outputChannel.show(true)
-  }
-  const { meta, print } = await import('./esm/core.js')
-  const { makeContext } = await import('./esm/interpreter.js')
-  const wunsDir = context.extensionPath + '/wuns/'
-  return () => {
-    const importObject = {
-      check: {
-        'report-error': (msg, form) => {
-          console.log('report-error', print(msg), print(meta(form)))
-        },
-      },
-    }
-    const ctx = makeContext({ wunsDir, contextName: 'interpret', importObject })
-    const { evalLogForms } = ctx
+// const makeInterpretCurrentFile = async (context) => {
+//   const outputChannel = window.createOutputChannel('wuns output', wunsLanguageId)
+//   // outputChannel.show(true)
+//   const appendShow = (s) => {
+//     outputChannel.appendLine(s)
+//     outputChannel.show(true)
+//   }
+//   const { meta, print } = await import('./esm/core.js')
+//   const { makeContext } = await import('./esm/interpreter.js')
+//   const wunsDir = context.extensionPath + '/wuns/'
+//   return () => {
+//     const importObject = {
+//       check: {
+//         'report-error': (msg, form) => {
+//           console.log('report-error', print(msg), print(meta(form)))
+//         },
+//       },
+//     }
+//     const ctx = makeContext({ wunsDir, contextName: 'interpret', importObject })
+//     const { evalLogForms } = ctx
 
-    const document = getActiveTextEditorDocument()
-    const { forms } = cacheFetchOrParse(document)
-    outputChannel.clear()
-    appendShow('interpreting: ' + document.fileName)
-    try {
-      evalLogForms(forms, document.fileName)
-      appendShow('done interpreting')
-    } catch (e) {
-      appendShow(e.message)
-    }
-  }
-}
+//     const document = getActiveTextEditorDocument()
+//     const { forms } = cacheFetchOrParse(document)
+//     outputChannel.clear()
+//     appendShow('interpreting: ' + document.fileName)
+//     try {
+//       evalLogForms(forms, document.fileName)
+//       appendShow('done interpreting')
+//     } catch (e) {
+//       appendShow(e.message)
+//     }
+//   }
+// }
 
 const makeCheckCurrentFileCommand = async (context) => {
   const outputChannel = window.createOutputChannel('wuns check', wunsLanguageId)
@@ -400,8 +400,8 @@ async function activate(context) {
     return { tree, forms }
   }
   console.log('starting wuns lang extension: ' + context.extensionPath)
-  const interpretCurrentFile = await makeInterpretCurrentFile(context)
-  context.subscriptions.push(commands.registerCommand('wunslang.interpret', interpretCurrentFile))
+  // const interpretCurrentFile = await makeInterpretCurrentFile(context)
+  // context.subscriptions.push(commands.registerCommand('wunslang.interpret', interpretCurrentFile))
   context.subscriptions.push(commands.registerCommand('wunslang.check', await makeCheckCurrentFileCommand(context)))
 
   const selector = { language: 'wuns', scheme: 'file' }

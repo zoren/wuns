@@ -1,6 +1,7 @@
 export const isSigned32BitInteger = (n) => (n | 0) === n
+
 const wordRegex = /^[a-z0-9.=/-]+$/
-export const isWordString = (s) => typeof s === 'string' && s.length > 0 && wordRegex.test(s)
+const isWordString = (s) => typeof s === 'string' && s.length > 0 && wordRegex.test(s)
 class Word {
   #value
   constructor(value) {
@@ -21,22 +22,6 @@ export const stringToWord = (s) => Object.freeze(new Word(s))
 export const wordValue = (w) => {
   if (isWord(w)) return w.string
   throw new Error('not a word: ' + w + ' ' + typeof w)
-}
-const symbolMeta = Symbol.for('wuns-meta')
-export const meta = (form) => {
-  const t = typeof form
-  if ((t === 'object' || t === 'function') && symbolMeta in form) return form[symbolMeta]
-  return 0
-}
-export const setMeta = (v, meta) => {
-  if (!isForm(v) && !isDefVar(v)) throw new Error('setMeta expects form or defvar')
-  const t = typeof v
-  if (!(t === 'object' || t === 'function') || Object.isFrozen(v)) throw new Error('expects mutable object ' + t)
-  if (meta === undefined) {
-    delete v[symbolMeta]
-    return
-  }
-  v[symbolMeta] = meta
 }
 
 const emptyList = Object.freeze([])
@@ -130,6 +115,24 @@ class DefVar {
 export const isDefVar = (f) => f instanceof DefVar
 
 export const defVar = (name, value) => new DefVar(name, value)
+
+const symbolMeta = Symbol.for('wuns-meta')
+export const meta = (v) => {
+  if (!isForm(v) && !isDefVar(v)) throw new Error('meta expects form or defvar')
+  const t = typeof v
+  if ((t === 'object' || t === 'function') && symbolMeta in v) return v[symbolMeta]
+  return 0
+}
+export const setMeta = (v, meta) => {
+  if (!isForm(v) && !isDefVar(v)) throw new Error('setMeta expects form or defvar')
+  const t = typeof v
+  if (!(t === 'object' || t === 'function') || Object.isFrozen(v)) throw new Error('expects mutable object ' + t)
+  if (meta === undefined) {
+    delete v[symbolMeta]
+    return
+  }
+  v[symbolMeta] = meta
+}
 
 class Atom {
   #value
