@@ -98,17 +98,6 @@ export const isFormList = (f) => f instanceof FormList
 
 export const tryGetFormList = (f) => (isFormList(f) ? f.list : null)
 
-export const formEquals = (a, b) => {
-  if (a === b) return true
-  const wa = tryGetFormWord(a), wb = tryGetFormWord(b)
-  if (wa && wb) return wa.value === wb.value
-  const la = tryGetFormList(a), lb = tryGetFormList(b)
-  if (!la || !lb) return false
-  if (la.length !== lb.length) return false
-  for (let i = 0; i < la.length; i++) if (!formEquals(la[i], lb[i])) return false
-  return true
-}
-
 class DefVar {
   #name
   #value
