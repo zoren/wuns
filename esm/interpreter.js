@@ -1,7 +1,9 @@
+import fs from 'fs'
 import { setJSFunctionName, parseFunctionParameters, createParameterNamesWrapper } from './utils.js'
 import { setMeta, defVar } from './core.js'
 import { instructionFunctions } from './instructions.js'
 import { isJSReservedWord } from './utils.js'
+import { parse } from './parseTreeSitter.js'
 
 class RuntimeError extends Error {
   constructor(message, form, innerError) {
@@ -392,7 +394,56 @@ const makeInterpreterContext = (externalModules) => {
     const evaluate = () => compRes(null)
     return evaluate
   }
-  return compileTop
+  const evaluate = (form) => compileTop(form)()
+
+  const formWord = getHostValue('form-word'),
+    formList = getHostValue('form-list')
+  const transientKVMap = getHostValue('transient-kv-map')
+  const setKVMap = getHostValue('set-kv-map')
+  const freezeKVMap = getHostValue('freeze-kv-map')
+  // stringToWord is a lifting function it takes a string(not a wuns value) and returns a word
+  const stringToWord = getHostValue('stringToWord')
+
+  function* treeToFormsHost(tree, filePath) {
+    const filePathWord = filePath ? stringToWord(filePath) : null
+    /**
+     * @param {TSParser.SyntaxNode} node
+     */
+    const nodeToForm = (node) => {
+      const { type, text, startPosition, isError, namedChildCount } = node
+      if (isError) throw new Error('unexpected error node')
+      const { row, column } = startPosition
+      const metaData = transientKVMap()
+      if (filePathWord) setKVMap(metaData, stringToWord('file-path'), filePathWord)
+      setKVMap(metaData, stringToWord('row'), row + 1)
+      setKVMap(metaData, stringToWord('column'), column + 1)
+      freezeKVMap(metaData)
+      switch (type) {
+        case 'word':
+          return formWord(stringToWord(text), metaData)
+        case 'list':
+          let l
+          if (namedChildCount) {
+            l = mutableListOfSize(namedChildCount)
+            for (let i = 0; i < namedChildCount; i++) setArray(l, i, nodeToForm(node.namedChild(i)))
+            freezeMutableList(l)
+          } else {
+            l = emptyList
+          }
+          return formList(l, metaData)
+        default:
+          throw new Error('unexpected node type: ' + type)
+      }
+    }
+    for (const child of tree.rootNode.namedChildren) yield nodeToForm(child)
+  }
+  const parseStringToForms = (content) => treeToFormsHost(parse(content))
+  const parseStringToFirstForm = (content) => {
+    for (const form of treeToFormsHost(parse(content))) return form
+    throw new Error('no forms found')
+  }
+  const parseFile = (filename) => treeToFormsHost(parse(fs.readFileSync(filename, 'ascii')), filename)
+  return { compile: compileTop, evaluate, parseStringToForms, parseFile, parseStringToFirstForm }
 }
 
 const underscoreToDash = (s) => s.replace(/_/g, '-')
@@ -418,8 +469,7 @@ const wrapJSFunction = (importFunc) => {
 }
 
 const make_eval_context = (external_modules) => {
-  const compile = makeInterpreterContext(external_modules)
-  const evaluate = (form) => compile(form)()
+  const { evaluate } = makeInterpreterContext(external_modules)
   const wrappedEvaluate = wrapJSFunction(evaluate)
   // todo maybe return context instead of a function as it will be difficult to pass as a parameter in wasm
   return wrappedEvaluate
@@ -487,24 +537,19 @@ const compEvalLog = (compile, form) => {
   }
 }
 
-import { parseFileHost, parseStringToFormsHost, parseStringToFirstFormsHost } from './parseTreeSitter.js'
-
 export const makeInitContext = (host) => {
   const externalModules = Object.freeze({
     instructions: wrapJSFunctionsToObject(instructionFunctions),
     host,
     interpreter: wrapJSFunctionsToObject([make_eval_context]),
   })
-  const compile = makeInterpreterContext(externalModules)
-  const evaluate = (form) => compile(form)()
-  const parseStringToForms = (s) => parseStringToFormsHost(host, s)
-  const parseFile = (filename) => parseFileHost(host, filename)
-  const parseFirstForm = (s) => parseStringToFirstFormsHost(host, s)
-  const hostListFuncForm = parseFirstForm('[func list [.. entries] entries]')
-  const hostListFunc = compile(hostListFuncForm)(null)
+  const { compile, evaluate, parseStringToForms, parseFile, parseStringToFirstForm } =
+    makeInterpreterContext(externalModules)
+  const hostListFuncForm = parseStringToFirstForm('[func list [.. entries] entries]')
+  const hostListFunc = evaluate(hostListFuncForm)
   const parseFileToList = (filename) => hostListFunc(...parseFile(filename))
   return {
-    compile,
+    // compile,
     evaluate,
     evalLogForms: (forms) => {
       for (const form of forms) {
@@ -514,7 +559,7 @@ export const makeInitContext = (host) => {
     },
     parseFile,
     parseFileToList,
-    parseFirstForm,
+    parseStringToFirstForm,
     parseStringToForms,
     parseEvalFiles: (filenames) => {
       for (const filename of filenames) {
