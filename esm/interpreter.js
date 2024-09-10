@@ -107,13 +107,6 @@ const makeInterpreterContext = (externalModules) => {
     freezeMutableList = getHostValue('freeze-mutable-list')
   const emptyList = mutableListOfSize(0)
   freezeMutableList(emptyList)
-  const mkList = (l) => {
-    if (l.length === 0) return emptyList
-    const ml = mutableListOfSize(l.length)
-    for (let i = 0; i < l.length; i++) setArray(ml, i, l[i])
-    freezeMutableList(ml)
-    return ml
-  }
 
   const defVars = new Map()
   const insertOrSetDefVar = (name, value, optMetaData) => {
@@ -264,7 +257,16 @@ const makeInterpreterContext = (externalModules) => {
           ? (...args) => {
               const varValues = new Map()
               for (let i = 0; i < nOfParams; i++) varValues.set(params[i], args[i])
-              varValues.set(restParam, mkList(args.slice(nOfParams)))
+              let restArgs
+              if (args.length === nOfParams) {
+                restArgs = emptyList
+              } else {
+                const n = args.length - nOfParams
+                restArgs = mutableListOfSize(n)
+                for (let i = 0; i < n; i++) setArray(restArgs, i, args[i + nOfParams])
+                freezeMutableList(restArgs)
+              }
+              varValues.set(restParam, restArgs)
               return cbodies({ varValues })
             }
           : (...args) => {
