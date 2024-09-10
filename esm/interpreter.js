@@ -62,9 +62,9 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
   const formWord = getHostValue('form-word')
   const formList = getHostValue('form-list')
 
-  const transientKVMap = getHostValue('transient-kv-map')
-  const setKVMap = getHostValue('set-kv-map')
-  const freezeKVMap = getHostValue('freeze-kv-map')
+  // const transientKVMap = getHostValue('transient-kv-map')
+  // const setKVMap = getHostValue('set-kv-map')
+  // const freezeKVMap = getHostValue('freeze-kv-map')
 
   const ctWordValue = (f) => {
     const w = tryGetFormWord(f)
@@ -490,6 +490,14 @@ export const runCform = (exp) => {
 }
 
 const compEvalLog = (compile, form) => {
+  const logInnerErrors = (e) => {
+    let currentError = e.innerError
+    while (currentError) {
+      const { form, message } = currentError
+      console.error(`inner error in ${getFormLocation(form)}: ${message}`)
+      currentError = currentError.innerError
+    }
+  }
   const cform = (() => {
     try {
       return compile(form)
@@ -499,12 +507,8 @@ const compEvalLog = (compile, form) => {
         console.error(e)
       } else {
         console.error(`unexpected non-compile error: ${e.message}`)
-        let innerError = e.innerError
-        while (innerError) {
-          console.error(`inner error in ${getFormLocation(innerError.form)}: ${innerError.message}`)
-          innerError = innerError.innerError
-        }
       }
+      logInnerErrors(e)
       throw e
     }
   })()
@@ -513,15 +517,10 @@ const compEvalLog = (compile, form) => {
   } catch (e) {
     if (e instanceof RuntimeError) {
       console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
-      // console.error(e)
-      let innerError = e.innerError
-      while (innerError) {
-        console.error(`inner error in ${getFormLocation(innerError.form)}: ${innerError.message}`)
-        innerError = innerError.innerError
-      }
     } else {
       console.error(`unexpected non-runtime error: ${e.message}`)
     }
+    logInnerErrors(e)
     throw e
   }
 }
@@ -557,24 +556,26 @@ export const makeInitContext = ({ host, converters }) => {
   const hostListFuncForm = parseStringToFirstForm('[func list [.. entries] entries]')
   const hostListFunc = evaluate(hostListFuncForm)
   const parseFileToList = (filename) => hostListFunc(...parseFile(filename))
+  const evalLogForms = (forms) => {
+    for (const form of forms) {
+      const v = compEvalLog(compile, form)
+      if (v !== undefined) console.log(print(v))
+    }
+  }
+  const parseEvalFiles = (filenames) => {
+    for (const filename of filenames) {
+      for (const form of parseFile(filename)) {
+        compEvalLog(compile, form)
+      }
+    }
+  }
   return {
     evaluate,
     parseFileToList,
     parseStringToFirstForm,
     parseStringToForms,
-    evalLogForms: (forms) => {
-      for (const form of forms) {
-        const v = compEvalLog(compile, form)
-        if (v !== undefined) console.log(print(v))
-      }
-    },
-    parseEvalFiles: (filenames) => {
-      for (const filename of filenames) {
-        for (const form of parseFile(filename)) {
-          compEvalLog(compile, form)
-        }
-      }
-    },
+    evalLogForms,
+    parseEvalFiles,
   }
 }
 
