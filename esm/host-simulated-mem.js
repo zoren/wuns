@@ -1,4 +1,3 @@
-import { isWord } from './core.js'
 import { wrapJSFunctionName } from './utils.js'
 
 export const makeHost = () => {
@@ -10,35 +9,40 @@ export const makeHost = () => {
   }
   const get = (addr) => {
     if (typeof addr !== 'number') throw new Error('address not a number')
+    if (!Number.isInteger(addr)) throw new Error('not an integer')
     if (addr === 0) throw new Error('getting 0 pointer')
     if (addr < 0) throw new Error('out of bounds')
-    if (!Number.isInteger(addr)) throw new Error('not an integer')
     if (simulatedMemory.length <= addr) throw new Error('out of bounds')
     return simulatedMemory[addr]
   }
   const stringToAddr = new Map()
   const stringToWord = (s) => {
-    const addr = stringToAddr.get(s)
-    if (addr) return addr
-    if (!isWord(s)) throw new Error('invalid word: "' + s + '" ' + typeof s)
-    const wordAddr = alloc(s)
-    stringToAddr.set(s, wordAddr)
-    return wordAddr
+    if (stringToAddr.has(s)) return stringToAddr.get(s)
+    const addr = alloc(s)
+    stringToAddr.set(s, addr)
+    return addr
   }
-  const converters = { stringToWord, wordValue: get }
+  const numberToAddr = new Map()
+  const numberToPointer = (n) => {
+    if (numberToAddr.has(n)) return numberToAddr.get(n)
+    const addr = alloc(n)
+    numberToAddr.set(n, addr)
+    return addr
+  }
+  const converters = { stringToWord, wordValue: get, numberToPointer, pointerValue: get }
   const hostDef = {
     'mutable-list-of-size': (size) => {
       const array = new Array(size)
       return alloc(Object.freeze({ type: 'mutable-list', array }))
     },
-    'set-array': (arrayAddr, index, value) => {
-      const obj = get(arrayAddr)
+    'set-array': (mutable_list, index, value) => {
+      const obj = get(mutable_list)
       if (obj.type !== 'mutable-list') throw new Error('set-array expects mutable-list')
       const { array } = obj
       array[index] = value
     },
-    'freeze-mutable-list': (arrayAddr) => {
-      const obj = get(arrayAddr)
+    'freeze-mutable-list': (mutable_list) => {
+      const obj = get(mutable_list)
       if (obj.type !== 'mutable-list') throw new Error('freeze-mutable-list expects mutable-list')
       const { array } = obj
       for (const v of array) if (v === undefined) throw new Error('freeze-mutable-list expects all elements to be set')
@@ -50,13 +54,13 @@ export const makeHost = () => {
       const array = []
       return alloc(Object.freeze({ type: 'growable-list', array }))
     },
-    push: (l, v) => {
-      const lArray = get(l)
+    push: (growable_list, element) => {
+      const lArray = get(growable_list)
       if (lArray.type !== 'growable-list') throw new Error('push expects growable-list')
-      lArray.array.push(v)
+      lArray.array.push(element)
     },
-    'clone-growable-to-frozen-list': (l) => {
-      const lArray = get(l)
+    'clone-growable-to-frozen-list': (growable_list) => {
+      const lArray = get(growable_list)
       if (lArray.type !== 'growable-list') throw new Error('clone-growable-list-to-frozen-list expects growable-list')
       return alloc(Object.freeze({ type: 'list', array: [...lArray.array] }))
     },
@@ -87,10 +91,10 @@ export const makeHost = () => {
       if (lArray.type !== 'list') throw new Error('size expects list')
       return lArray.array.length
     },
-    at: (l, i) => {
-      const lArray = get(l)
+    at: (list, index) => {
+      const lArray = get(list)
       if (lArray.type !== 'list') throw new Error('at expects list')
-      return lArray.array.at(i)
+      return lArray.array.at(index)
     },
 
     'char-code-at': (word, index) => {
@@ -107,9 +111,9 @@ export const makeHost = () => {
       if (typeof bString !== 'string') throw new Error('concat-words expects word')
       return stringToWord(aString + bString)
     },
-    'char-code-to-word': (cc) => {
-      if (!Number.isInteger(cc)) throw new Error('char-code-to-word expects integer')
-      return stringToWord(String.fromCharCode(cc))
+    'char-code-to-word': (code_point) => {
+      if (!Number.isInteger(code_point)) throw new Error('char-code-to-word expects integer')
+      return stringToWord(String.fromCharCode(code_point))
     },
     'word-byte-size': (w) => {
       const s = get(w)
