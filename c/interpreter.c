@@ -27,43 +27,19 @@ typedef struct
   struct rtval* bodies;
 } rt_closure_t;
 
-// typedef struct
-// {
-//   const char *word;
-//   struct rtval form;
-// } Binding;
-
-// typedef struct
-// {
-//   int len;
-//   const Binding *bindings;
-// } Bindings;
-
-// typedef struct
-// {
-//   const char *word;
-//   struct rtval *val;
-// } ContinueBinding;
-
-// typedef struct
-// {
-//   int len;
-//   const ContinueBinding *bindings;
-// } ContinueBindings;
-
 typedef enum
 {
-  rtval_word = 1,
-  rtval_list = 2,
-  // rtval_continue_special = 4,
-  rtval_builtin = 8,
-  // rtval_closure = 4,
-  // rtval_atom = 5,
+  rtval_i32 = 1,
+  rtval_word = 2,
+  rtval_list = 3,
+  rtval_form_word = 4,
+  rtval_form_list = 5,
+  rtval_builtin = 6,
 } rtval_tag;
 
 void assert_valid_tag(rtval_tag tag)
 {
-  assert(tag >= 1 && tag <= 6  && "tag must be word or list");
+  assert(tag >= 1 && tag <= 6 && "tag must be word or list");
 }
 
 typedef struct rtval
@@ -71,6 +47,7 @@ typedef struct rtval
   rtval_tag tag;
   union
   {
+    int32_t i32;
     word_t* word;
     rtlist_t* list;
     // rt_closure_t closure;
@@ -138,9 +115,9 @@ rtval_t* word_from_string(const char *s)
   return val;
 }
 
-rtval_t* zero;
-rtval_t* one;
-rtval_t* two;
+rtval_t zero;
+rtval_t one;
+rtval_t two;
 
 rtval_t* unit;
 
@@ -149,7 +126,6 @@ rtval_t* unit;
 // const rtval_t two = {.tag = rtval_word, .word = {.len = 1, .chars = "2"}};
 // const rtlist_t rt_unit = {.len = 0, .elements = NULL};
 // const rtval_t unit = {.tag = rtval_list, .list = rt_unit};
-
 
 bool streq(const char *a, const char *b)
 {
@@ -173,6 +149,10 @@ rtval_t* form_from_node(const char *file_content, TSNode node)
     new_word->chars = new_chars;
     rtval_t *val = alloc_val(rtval_word);
     val->word = new_word;
+    rtval_t* form_word = alloc_val(rtval_form_word);
+    form_word->metadata = val;
+    form_word->word = new_word;
+    return form_word;
     return val;
     // return word_from_string(new_word);
   }
@@ -232,26 +212,15 @@ bool is_list(rtval_t* a)
   return a->tag == rtval_list;
 }
 
-int word_to_int(word_t* a)
+int rtval_to_int(rtval_t a)
 {
-  char *endptr;
-  long int a_val = strtol(a->chars, &endptr, 10);
-  assert(*endptr == '\0' && "word_to_int requires a decimal word");
-  assert(a_val <= INT_MAX && a_val >= INT_MIN && "word_to_int overflow");
-  return a_val;
+  assert(a.tag == rtval_i32 && "form_to_int requires an integer value");
+  return a.i32;
 }
 
-int rtval_to_int(rtval_t* a)
+rtval_t rtval_from_int(int32_t n)
 {
-  assert(a->tag == rtval_word && "form_to_int requires a word");
-  return word_to_int(a->word);
-}
-
-rtval_t* rtval_from_int(int n)
-{
-  char *result = malloc(12);
-  sprintf(result, "%d", n);
-  return word_from_string(result);
+  return (rtval_t){.tag = rtval_i32, .i32 = n};
 }
 
 // rtval_t rtval_from_word(word_t word)
@@ -260,7 +229,7 @@ rtval_t* rtval_from_int(int n)
 // }
 
 #define BUILTIN_TWO_DECIMAL_OP(name, op)            \
-  rtval_t* name(rtval_t* a, rtval_t* b)                   \
+  rtval_t name(rtval_t a, rtval_t b)                   \
   {                                                 \
     const int r = rtval_to_int(a) op rtval_to_int(b); \
     return rtval_from_int(r);                        \
@@ -283,7 +252,7 @@ int bit_shift_right_signed(int v, int shift)
   return (result | (~0 << (sizeof(int) * CHAR_BIT - shift)));
 }
 
-rtval_t* bi_bit_shift_right_signed(rtval_t* a, rtval_t* b)
+rtval_t bi_bit_shift_right_signed(rtval_t a, rtval_t b)
 {
   return rtval_from_int(bit_shift_right_signed(rtval_to_int(a), rtval_to_int(b)));
 }
@@ -295,7 +264,7 @@ rtval_t* bi_bit_shift_right_signed(rtval_t* a, rtval_t* b)
 // }
 
 #define BUILTIN_TWO_DECIMAL_CMP(name, op)                 \
-  rtval_t* name(rtval_t* a, rtval_t* b)                         \
+  rtval_t name(rtval_t a, rtval_t b)                         \
   {                                                       \
     return rtval_to_int(a) op rtval_to_int(b) ? one : zero; \
   }
@@ -306,17 +275,17 @@ BUILTIN_TWO_DECIMAL_CMP(bi_le, <=)
 BUILTIN_TWO_DECIMAL_CMP(bi_ge, >=)
 BUILTIN_TWO_DECIMAL_CMP(bi_gt, >)
 
-rtval_t* bi_is_word(rtval_t* a)
+rtval_t bi_is_word(rtval_t* a)
 {
   return is_word(a) ? one : zero;
 }
 
-rtval_t* bi_is_list(rtval_t* a)
+rtval_t bi_is_list(rtval_t* a)
 {
   return is_list(a) ? one : zero;
 }
 
-rtval_t* bi_size(rtval_t* a)
+rtval_t bi_size(rtval_t* a)
 {
   if (is_word(a))
     return rtval_from_int(a->word->len);
@@ -329,11 +298,11 @@ bool is_word_char(char c)
 {
   switch (c)
   {
-  case 'a' ... 'z':
-  case '0' ... '9':
   case '-':
   case '.':
-  case '=':
+  case '/':
+  case '0' ... '9':
+  case 'a' ... 'z':
     return true;
   default:
     return false;
@@ -365,10 +334,11 @@ rtval_t* bi_log(rtval_t* a)
   return unit;
 }
 
-rtval_t* bi_abort()
+rtval_t bi_abort()
 {
   puts("wuns abort");
   exit(1);
+  return unit;
 }
 
 rtval_t* bi_at(rtval_t* a, rtval_t* b)
@@ -456,11 +426,11 @@ typedef struct
   const int parameters;
   union
   {
-    rtval_t* (*func0)();
-    rtval_t* (*func1)(rtval_t*);
-    rtval_t* (*func2)(rtval_t*, rtval_t*);
-    rtval_t* (*func3)(rtval_t*, rtval_t*, rtval_t*);
-    rtval_t* (*funcvar)(size_t, rtval_t* *);
+    rtval_t (*func0)();
+    rtval_t (*func1)(rtval_t);
+    rtval_t (*func2)(rtval_t, rtval_t);
+    rtval_t (*func3)(rtval_t, rtval_t, rtval_t);
+    rtval_t (*funcvar)(size_t, rtval_t *);
   };
 } built_in_func_t;
 
