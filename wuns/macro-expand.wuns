@@ -64,6 +64,8 @@
   [let [m [meta form]]
     [and m [is-list m] [try-get-assoc-list [form-to-list m] key]]]]
 
+[def-extern apply [func [[func] [form-list any]] any]]
+
 [defn expand-form [gctx local-ctx form]
   [assert [or [is-word form] [is-list form]] form not a word or list]
   [ifs
@@ -73,6 +75,7 @@
         [if-let [def-var [eval-try-get-var gctx form]]
           [let [m [var-meta def-var]
                 params [has-truthy-key m [quote params]]]
+            [comment is this right]
             [report-when params form defed func used as value]]
           [report form var not found]]]
       form]

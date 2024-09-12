@@ -23,15 +23,13 @@
       [form-list [quote type] type]]
     [form-list [quote extern] [quote host] name]]]
 
-[def-extern is-word [func [form] i32]]
-[def-extern is-list [func [form] i32]]
-
 [def-extern concat [type-scheme [a] [func [.. [list a]] [list a]]]]
-[def-extern concat-lists [type-scheme [a] [func [[list [list a]]] [list a]]]]
 
 [defmacro defn [name parameters .. bodies]
   [form-list [quote def] name
     [form-list-list [concat [list [quote func] name parameters] bodies]]]]
+
+[def-extern concat-lists [type-scheme [a] [func [[list [list a]]] [list a]]]]
 
 [defn form-concat [.. list-forms]
   [form-list-list [concat-lists list-forms]]]
@@ -44,6 +42,7 @@
     [form-concat [list [quote func] name parameters] bodies]]]
 
 [def-extern size [type-scheme [a] [func [[list a]] i32]]]
+
 [def-extern at [type-scheme [a] [func [[list a] i32] a]]]
 
 [defmacro comment [.. -]
@@ -60,7 +59,12 @@
 
 [defmacro def-instruction [def-name inst-name] [def-instruction-fn def-name inst-name]]
 
-[def-extern form-to-word [func [form] word]]
+[def-extern try-get-form-word [func [form] [option word]]]
+[def unreachable [extern instructions unreachable]]
+
+[defn form-to-word [form]
+  [let [w [try-get-form-word form]]
+    [if w w [unreachable]]]]
 
 [defmacro def-bin-i32-inst [name] [def-instruction-fn name [form-word [concat-words [word i32.] [form-to-word name]]]]]
 
@@ -85,6 +89,9 @@
 [defn not [c] [if c 0 1]]
 
 [def-bin-i32-inst eq]
+
+[defn is-empty [form]
+  [eq 0 [size form]]]
 
 [defn is-zero [x] [eq x 0]]
 
@@ -129,6 +136,8 @@
 [def-extern set-array [type-scheme [a] [func [[mutable-list a] i32 a] []]]]
 [def-extern freeze-mutable-list [type-scheme [a] [func [[mutable-list a]] [tuple]]]]
 
+[defn is-word [form] [if [try-get-form-word form] 1 0]]
+
 [defn quote-list [lmsg]
   [let [s [size lmsg]
         msg [mutable-list-of-size [inc s]]]
@@ -137,12 +146,9 @@
       [when [lt-s i s]
         [set-array msg [inc i] [let [e [at lmsg i]] [if [is-word e] [mk-quote e] e]]]
         [continue i [inc i]]]]
-    [freeze-mutable-list msg]
-    [form-list-list msg]]]
+    [form-list-list [freeze-mutable-list msg]]]]
 
 [def-extern log [func [list] []]]
-
-[def unreachable [extern instructions unreachable]]
 
 [defmacro assert [cond .. lmsg]
   [form-list [quote if] cond
@@ -195,34 +201,35 @@
 [def-instruction i32.div-s i32.div-s]
 
 [def-extern growable-list [type-scheme [a] [func [] [growable-list a]]]]
-[def-extern clone-growable-to-frozen-list [type-scheme [a] [func [[growable-list a]] [form-list a]]]]
 [def-extern push [type-scheme [a] [func [[growable-list a] a] []]]]
+[def-extern clone-growable-to-frozen-list [type-scheme [a] [func [[growable-list a]] [list a]]]]
 
 [defn int-to-word [n]
   [if [is-zero n]
     [word 0]
-    [let [l [growable-list]]
+    [let [gl [growable-list]]
       [if [is-negative n]
         [do
           [loop [i n]
             [when i
-              [push l [char-code-to-word [add [i32 48] [sub 0 [i32.rem-s i [i32 10]]]]]]
+              [push gl [char-code-to-word [add [i32 48] [sub 0 [i32.rem-s i [i32 10]]]]]]
               [continue i [i32.div-s i [i32 10]]]]]
-          [push l [word -]]]
+          [push gl [word -]]]
         [loop [i n]
           [when i
-            [push l [char-code-to-word [add [i32 48] [i32.rem-s i [i32 10]]]]]
+            [push gl [char-code-to-word [add [i32 48] [i32.rem-s i [i32 10]]]]]
             [continue i [i32.div-s i [i32 10]]]]]]
-      [loop [res [first l] i 1]
+      [loop [l [clone-growable-to-frozen-list gl]
+             res [first l]
+             i 1]
         [if [lt-s i [size l]]
           [continue res [concat-words [at l i] res] i [inc i]]
           res]]]]]
 
-[def-extern char-code-at [func [word i32] i32]]
-[comment todo make a general i32 to form func]
-
 [defn i32-to-form [i]
   [form-list [quote i32] [form-word [int-to-word i]]]]
+
+[def-extern char-code-at [func [word i32] i32]]
 
 [defmacro word-to-char-code [w]
   [i32-to-form [char-code-at [form-to-word w] 0]]]
@@ -268,7 +275,13 @@
               [form-list [quote let] [form-list w [at clauses [dec i]]]
                 [form-list [quote if] w w res]]]]]]]]]
 
-[def-extern form-to-list [func [form] [list form]]]
+[def-extern try-get-form-list [func [form] [option [list form]]]]
+
+[defn form-to-list [form]
+  [let [l [try-get-form-list form]]
+    [if l l [unreachable]]]]
+
+[defn is-list [form] [if [try-get-form-list form] 1 0]]
 
 [defmacro if-let [binding-form true-form false-form]
   [assert [is-list binding-form] if-let requires a list as the first argument]
@@ -391,8 +404,7 @@
             [at entries [inc i]]]]]]
     [set-array ml [add 2 n-of-pairs] [form-list [quote freeze-kv-map] tmp-word]]
     [set-array ml [add 3 n-of-pairs] tmp-word]
-    [freeze-mutable-list ml]
-    [form-list-list ml]]]
+    [form-list-list [freeze-mutable-list ml]]]]
 
 [defmacro kv-map-id [.. entries]
   [let [s [size entries]
@@ -426,9 +438,6 @@
 
 [defmacro try-getq [m w]
   [form-list [quote try-get] m [mk-word w]]]
-
-[defn is-empty [form]
-  [eq 0 [size form]]]
 
 [defn push-all [mut-list list]
   [for-each e list [push mut-list e]]]
@@ -482,8 +491,10 @@
 [def-extern meta [func [form] kv-map]]
 [def-extern var-get [func [var] any]]
 [def-extern var-meta [func [var] any]]
-[def-extern apply [func [[func] [form-list any]] any]]
 [def-extern is-atom [type-scheme [a] [func [[atom a]] i32]]]
+[comment
+  maybe we should be able to specify in the type-scheme that a is of pointer type
+  we do not want to be able to compare functions with it]
 [def-extern is-identical [type-scheme [a] [func [a a] i32]]]
 
 [defn try-get-assoc-list [list key]

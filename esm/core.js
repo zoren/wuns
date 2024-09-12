@@ -43,9 +43,7 @@ export const formWord = (word, metaData) => {
   return Object.freeze(o)
 }
 
-export const isFormWord = (f) => f instanceof FormWord
-
-export const tryGetFormWord = (f) => (isFormWord(f) ? f.word : null)
+export const tryGetFormWord = (f) => (f instanceof FormWord ? f.word : null)
 
 class FormList extends Form {
   #list
@@ -53,7 +51,7 @@ class FormList extends Form {
     super()
     if (!isList(list)) throw new Error('expected list')
     if (!Object.isFrozen(list)) throw new Error('expected frozen list')
-    for (const f of list) if (!isForm(f)) throw new Error('expected form')
+    for (const f of list) if (!isForm(f)) throw new Error('expected all elements to be forms')
     this.#list = list
   }
 
@@ -68,9 +66,7 @@ export const formList = (list, metaData) => {
   return Object.freeze(o)
 }
 
-export const isFormList = (f) => f instanceof FormList
-
-export const tryGetFormList = (f) => (isFormList(f) ? f.list : null)
+export const tryGetFormList = (f) => (f instanceof FormList ? f.list : null)
 
 class DefVar {
   #name
@@ -140,8 +136,10 @@ export const print = (ox) => {
   const go = (x) => {
     if (isWord(x)) return String(x)
     if (isList(x)) return `[${x.map(go).join(' ')}]`
-    if (isFormWord(x)) return print(x.word)
-    if (isFormList(x)) return print(x.list)
+    const word = tryGetFormWord(x)
+    if (word) return print(word)
+    const list = tryGetFormList(x)
+    if (list) return print(list)
     if (x === undefined) return '*undefined*'
     if (isDefVar(x)) return `[var ${x.name}]`
     if (isAtom(x)) return `[atom ${go(x.value)}]`

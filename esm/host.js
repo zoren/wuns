@@ -10,11 +10,11 @@ import {
   isSigned32BitInteger,
   print,
   formWord,
-  isFormWord,
   formList,
-  isFormList,
   tryGetFormWord,
   tryGetFormList,
+  setMeta,
+  defVar,
 } from './core.js'
 import { isPlainObject } from './utils.js'
 
@@ -31,7 +31,10 @@ export const form_word = (w) => {
   if (!isWord(w)) throw new Error('form-word expects word')
   return formWord(w)
 }
-
+export const form_word_with_meta = (w, meta_data) => {
+  if (!isWord(w)) throw new Error('form-word-with-meta expects word')
+  return formWord(w, meta_data)
+}
 // [func [list [form]] form]
 export const form_list = (l) => {
   if (!isList(l)) throw new Error('form-list expects list')
@@ -39,39 +42,45 @@ export const form_list = (l) => {
   if (isGrowable(l)) throw new Error('form-list expects frozen list')
   return formList(l)
 }
-
-export const form_to_word = (f) => {
-  const w = tryGetFormWord(f)
-  if (!w) throw new Error('form-to-word expects form-word')
-  return w
+export const form_list_with_meta = (l, meta_data) => {
+  if (!isList(l)) throw new Error('form-list-with-meta expects list')
+  if (isMutable(l)) throw new Error('form-list-with-meta expects immutable list')
+  if (isGrowable(l)) throw new Error('form-list-with-meta expects frozen list')
+  return formList(l, meta_data)
 }
+
 export const try_get_form_word = (f) => {
   const w = tryGetFormWord(f)
   return w ? w : 0
 }
-export const form_to_list = (f) => {
-  const l = tryGetFormList(f)
-  if (!l) throw new Error('form-to-list expects form-list')
-  return l
-}
+
 export const try_get_form_list = (f) => {
   const l = tryGetFormList(f)
   return l ? l : 0
 }
 
-export const is_word = (form) => isFormWord(form) | 0
-
-export const is_list = (form) => isFormList(form) | 0
 export { meta }
 
 export const var_meta = (v) => {
   if (!isDefVar(v)) throw new Error('var-meta, not a defvar: ' + v)
   return meta(v)
 }
+export const set_var_value_meta = (v, value, meta_data) => {
+  if (!isDefVar(v)) throw new Error('not a defvar: ' + v)
+  v.setValue(value)
+  setMeta(v, meta_data)
+}
+export const def_var_with_meta = (name, value, meta_data) => {
+  if (!isWord(name)) throw new Error('def-var-with-meta expects word')
+  const v = defVar(name, value)
+  setMeta(v, meta_data)
+  return v
+}
 export const var_get = (v) => {
   if (!isDefVar(v)) throw new Error('not a defvar: ' + v)
   return v.value
 }
+
 export const word_byte_size = (word) => {
   if (isWord(word)) return wordValue(word).length
   throw new Error('word-byte-size expects word, found: ' + word + ' ' + typeof word)
@@ -125,7 +134,8 @@ export const freeze_mutable_list = (mutable_list) => {
   for (const v of mutable_list)
     if (v === undefined) throw new Error('freeze-mutable-list expects all elements to be set')
   delete mutable_list[symbolListMutable]
-  Object.freeze(mutable_list)
+  const immutableList = Object.freeze(mutable_list)
+  return immutableList
 }
 export const set_array = (ar, index, element) => {
   if (!isList(ar)) throw new Error('set-array expects array')
@@ -183,12 +193,17 @@ export const freeze_kv_map = (kv_map) => {
 }
 
 export const log = (form) => console.log(print(form))
+const isFrozenList = (l) => isList(l) && Object.isFrozen(l) && !isGrowable(l) && !isMutable(l)
 export const concat_lists = (lists) => {
   const l = []
   for (const list of lists) {
-    if (!isList(list)) throw new Error('concat expects list')
+    if (!isFrozenList(list)) throw new Error('concat expects list')
     l.push(...list)
   }
   return arrayToList(l)
 }
-export const concat = (l1, l2) => arrayToList([...l1, ...l2])
+export const concat = (l1, l2) => {
+  if (!isFrozenList(l1)) throw new Error('concat expects frozen list')
+  if (!isFrozenList(l2)) throw new Error('concat expects frozen list')
+  return arrayToList([...l1, ...l2]);
+}

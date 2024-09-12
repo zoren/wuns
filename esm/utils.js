@@ -86,3 +86,34 @@ export const isJSReservedWord = (word) => {
     'yield',
   ].includes(word)
 }
+
+export const createNamedFunction = (name, jsParameterNames, wunsParameterNames, wunsRestParameter, body) => {
+  const f = createParameterNamesWrapper(jsParameterNames)(body)
+  setJSFunctionName(f, name)
+  f.parameters = wunsParameterNames
+  if (wunsRestParameter) f.restParam = wunsRestParameter
+  return Object.freeze(f)
+}
+
+const underscoreToDash = (s) => s.replace(/_/g, '-')
+
+export const wrapJSFunctionName = (dashedName, importFunc) => {
+  const jsParameterNames = parseFunctionParameters(importFunc)
+  let wunsParameterNames = null
+  let wunsRestParam = null
+  if (jsParameterNames.length && jsParameterNames.at(-1).startsWith('...')) {
+    wunsParameterNames = jsParameterNames.slice(0, -1)
+    wunsRestParam = underscoreToDash(jsParameterNames.at(-1).slice(3))
+  } else {
+    wunsParameterNames = [...jsParameterNames]
+  }
+  return createNamedFunction(
+    dashedName,
+    jsParameterNames,
+    wunsParameterNames.map(underscoreToDash),
+    wunsRestParam,
+    importFunc,
+  )
+}
+
+export const wrapJSFunction = (importFunc) => wrapJSFunctionName(underscoreToDash(importFunc.name), importFunc)

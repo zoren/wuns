@@ -1,8 +1,5 @@
 import fs from 'fs'
-import { setJSFunctionName, parseFunctionParameters, createParameterNamesWrapper } from './utils.js'
-import { setMeta, defVar } from './core.js'
-import { instructionFunctions } from './instructions.js'
-import { isJSReservedWord } from './utils.js'
+import { isJSReservedWord, createNamedFunction, wrapJSFunction } from './utils.js'
 import { parse } from './parseTreeSitter.js'
 
 class RuntimeError extends Error {
@@ -19,14 +16,6 @@ class CompileError extends Error {
     this.form = form
     this.innerError = innerError
   }
-}
-
-const createNamedFunction = (name, jsParameterNames, wunsParameterNames, wunsRestParameter, body) => {
-  const f = createParameterNamesWrapper(jsParameterNames)(body)
-  setJSFunctionName(f, name)
-  f.parameters = wunsParameterNames
-  if (wunsRestParameter) f.restParam = wunsRestParameter
-  return Object.freeze(f)
 }
 
 const paramStringToJS = (p) => (isJSReservedWord(p) ? '_' : '') + p.replace(/-/g, '_')
@@ -57,15 +46,22 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
   const tryGetFormWord = getHostValue('try-get-form-word')
   const tryGetFormList = getHostValue('try-get-form-list')
 
-  const meta = getHostValue('meta')
+  const varMeta = getHostValue('var-meta')
 
   const formWord = getHostValue('form-word')
+  const formWordWithMeta = getHostValue('form-word-with-meta')
   const formList = getHostValue('form-list')
+  const formListWithMeta = getHostValue('form-list-with-meta')
 
-  // const transientKVMap = getHostValue('transient-kv-map')
-  // const setKVMap = getHostValue('set-kv-map')
-  // const freezeKVMap = getHostValue('freeze-kv-map')
+  const defVarWithMeta = getHostValue('def-var-with-meta')
+  const setVarValueMeta = getHostValue('set-var-value-meta')
+  const varGet = getHostValue('var-get')
 
+  const ctWord = (f) => {
+    const w = tryGetFormWord(f)
+    if (!w) throw new CompileError('not a word: ' + w + ' ' + typeof w, w)
+    return w
+  }
   const ctWordValue = (f) => {
     const w = tryGetFormWord(f)
     if (!w) throw new CompileError('not a word: ' + w + ' ' + typeof w, w)
@@ -116,19 +112,25 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
   const mutableListOfSize = getHostValue('mutable-list-of-size'),
     setArray = getHostValue('set-array'),
     freezeMutableList = getHostValue('freeze-mutable-list')
-  const emptyList = mutableListOfSize(0)
-  freezeMutableList(emptyList)
+  let emptyList = mutableListOfSize(0)
+  emptyList = freezeMutableList(emptyList)
+  const arrayToHostList = (array) => {
+    const l = mutableListOfSize(array.length)
+    for (let i = 0; i < array.length; i++) setArray(l, i, array[i])
+    return freezeMutableList(l)
+  }
 
   const defVars = new Map()
-  const insertOrSetDefVar = (name, value, optMetaData) => {
-    let defVarObject = defVars.get(name)
-    if (defVarObject) {
-      defVarObject.setValue(value)
-    } else {
-      defVarObject = defVar(name, value)
-      defVars.set(name, defVarObject)
+  const insertOrSetDefVar = (nameWord, value, optMetaData) => {
+    const nameString = wordValue(nameWord)
+    const defVarObject = defVars.get(nameString)
+    if (!defVarObject) {
+      defVars.set(nameString, defVarWithMeta(nameWord, value, optMetaData))
+      return
     }
-    setMeta(defVarObject, optMetaData)
+    console.warn('warning - redefining variable', nameWord)
+    // redefing a variable, this can break earlier definitions
+    setVarValueMeta(defVarObject, value, optMetaData)
   }
   const compBodies = (ctx, bodies) => {
     const cbodies = bodies.map((body) => compile(ctx, body))
@@ -153,38 +155,39 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
           }
         const defVar = defVars.get(varName)
         if (!defVar) throw new CompileError('not found: ' + varName, form)
-        return () => defVar.value
+        return () => varGet(defVar)
       }
     }
     const formList = tryGetFormList(form)
-    if (!formList) throw new CompileError('not a form', form)
+    if (!formList) throw new CompileError('not a form')
     if (formList.length === 0) return () => undefined
     const [firstForm, ...args] = formList
     const firstWordValue = tryGetFormWordValue(firstForm)
+    const nOfArgs = args.length
     switch (firstWordValue) {
       case 'i32': {
-        if (args.length !== 1) throw new CompileError('i32 expects 1 argument', form)
+        if (nOfArgs !== 1) throw new CompileError('i32 expects 1 argument', form)
         const wv = +ctWordValue(args[0])
         const normalized = wv | 0
         if (wv !== normalized) throw new CompileError('expected 32-bit signed integer', form)
         return () => normalized
       }
       case 'word': {
-        if (args.length !== 1) throw new CompileError('word expects 1 argument', form)
+        if (nOfArgs !== 1) throw new CompileError('word expects 1 argument', form)
         const w = tryGetFormWord(args[0])
         if (!w) throw new CompileError('word expects word', form)
         return () => w
       }
       case 'quote': {
-        if (args.length !== 1) throw new CompileError('quote expects 1 argument', form)
+        if (nOfArgs !== 1) throw new CompileError('quote expects 1 argument', form)
         const res = args[0]
         return () => res
       }
       case 'if': {
-        if (args.length < 2 || 3 < args.length) throw new CompileError('if expects 2 or 3 arguments', form)
+        if (nOfArgs < 2 || 3 < nOfArgs) throw new CompileError('if expects 2 or 3 arguments', form)
         const cc = compile(ctx, args[0])
         const ct = compile(ctx, args[1])
-        if (args.length === 2) return (env) => (cc(env) ? ct(env) : undefined)
+        if (nOfArgs === 2) return (env) => (cc(env) ? ct(env) : undefined)
         const cf = compile(ctx, args[2])
         return (env) => (cc(env) ? ct : cf)(env)
       }
@@ -222,7 +225,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
       case 'continue': {
         const updateVars = []
         const updateFuncs = []
-        for (let i = 0; i < args.length; i += 2) {
+        for (let i = 0; i < nOfArgs; i += 2) {
           updateVars.push(ctWordValue(args[i]))
           updateFuncs.push(compile(ctx, args[i + 1]))
         }
@@ -265,24 +268,24 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         }
         const cbodies = compBodies(newCtx, bodies)
         const body = restParam
-          ? (...args) => {
+          ? (...funcArgs) => {
               const varValues = new Map()
-              for (let i = 0; i < nOfParams; i++) varValues.set(params[i], args[i])
+              for (let i = 0; i < nOfParams; i++) varValues.set(params[i], funcArgs[i])
               let restArgs
-              if (args.length === nOfParams) {
+              if (funcArgs.length === nOfParams) {
                 restArgs = emptyList
               } else {
-                const n = args.length - nOfParams
-                restArgs = mutableListOfSize(n)
-                for (let i = 0; i < n; i++) setArray(restArgs, i, args[i + nOfParams])
-                freezeMutableList(restArgs)
+                const n = funcArgs.length - nOfParams
+                const mutRestArgs = mutableListOfSize(n)
+                for (let i = 0; i < n; i++) setArray(mutRestArgs, i, funcArgs[i + nOfParams])
+                restArgs = freezeMutableList(mutRestArgs)
               }
               varValues.set(restParam, restArgs)
               return cbodies({ varValues })
             }
-          : (...args) => {
+          : (...funcArgs) => {
               const varValues = new Map()
-              for (let i = 0; i < nOfParams; i++) varValues.set(params[i], args[i])
+              for (let i = 0; i < nOfParams; i++) varValues.set(params[i], funcArgs[i])
               return cbodies({ varValues })
             }
         const jsParameterNames = params.map(paramStringToJS)
@@ -310,7 +313,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         return () => ext
       }
       case 'try-get-var': {
-        if (args.length !== 1) throw new CompileError('try-get-var expects 1 argument', form)
+        if (nOfArgs !== 1) throw new CompileError('try-get-var expects 1 argument', form)
         const varName = ctWordValue(args[0])
         return () => {
           const v = defVars.get(varName)
@@ -319,16 +322,16 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         }
       }
       case 'def': {
-        if (args.length !== 2) throw new CompileError('def expects 2 arguments', form)
+        if (nOfArgs !== 2) throw new CompileError('def expects 2 arguments', form)
         const [varName, value] = args
-        const v = ctWordValue(varName)
+        const v = ctWord(varName)
         const cvalue = compile(ctx, value)
         return (env) => insertOrSetDefVar(v, cvalue(env))
       }
       case 'def-with-meta': {
-        if (args.length !== 3) throw new CompileError('def-with-meta expects 3 arguments', form)
+        if (nOfArgs !== 3) throw new CompileError('def-with-meta expects 3 arguments', form)
         const [varName, metaForm, value] = args
-        const v = ctWordValue(varName)
+        const v = ctWord(varName)
         const cmetaData = compile(ctx, metaForm)
         const cvalue = compile(ctx, value)
         return (env) => insertOrSetDefVar(v, cvalue(env), cmetaData(env))
@@ -341,23 +344,27 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
       return (env) => {
         const f = cfunc(env)
         rtCheckCallArity(f, form)
-        return f(...cargs.map((carg) => carg(env)))
+        try {
+          return f(...cargs.map((carg) => carg(env)))
+        } catch (e) {
+          throw new RuntimeError(`runtime error when calling function '${firstForm}'`, form, e)
+        }
       }
     }
     const funcDefVar = defVars.get(firstWordValue)
     if (!funcDefVar) throw new CompileError(`function '${firstWordValue}' not found`, form)
-    const compileTimeFunc = funcDefVar.value
+    const compileTimeFunc = varGet(funcDefVar)
     ctCheckCallArity(compileTimeFunc, form)
-    const varMeta = meta(funcDefVar)
-    const metaList = tryGetFormList(varMeta)
+    const varMetaData = varMeta(funcDefVar)
+    const metaList = varMetaData ? tryGetFormList(varMetaData) : null
     const funcKindVal = metaList ? tryGetAssocList(metaList, 'function-kind') : null
-    const funcKind = tryGetFormWordValue(funcKindVal)
+    const funcKind = funcKindVal ? tryGetFormWordValue(funcKindVal) : null
     switch (funcKind) {
       case 'function':
       case null: {
         const cargs = args.map((a) => compile(ctx, a))
         return (env) => {
-          const rtFunc = funcDefVar.value
+          const rtFunc = varGet(funcDefVar)
           rtCheckCallArity(rtFunc, form)
           const eargs = cargs.map((carg) => carg(env))
           try {
@@ -396,7 +403,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         return () => fexprResult
       }
       default:
-        throw new CompileError(`unreachable, invalid function kind '${funcKind}' for '${firstWordValue}'`, form)
+        throw new CompileError(`invalid function kind '${funcKind}' for '${firstWordValue}'`, form)
     }
   }
   const compileTop = (form) => {
@@ -407,35 +414,29 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
   const evaluate = (form) => compileTop(form)()
 
   function* treeToFormsHost(tree, filePath) {
-    // const filePathWord = filePath ? stringToWord(filePath) : null
-    // const filePathKey = stringToWord('file-path')
-    // const rowWord = stringToWord('row')
-    // const columnWord = stringToWord('column')
+    const filePathWord = filePath ? formWord(stringToWord(filePath)) : null
     /**
      * @param {TSParser.SyntaxNode} node
      */
     const nodeToForm = (node) => {
       const { type, text, startPosition, isError, namedChildCount } = node
       if (isError) throw new Error('unexpected error node')
-      // const { row, column } = startPosition
-      // const metaData = transientKVMap()
-      // if (filePathWord) setKVMap(metaData, filePathKey, filePathWord)
-      // setKVMap(metaData, rowWord, row + 1)
-      // setKVMap(metaData, columnWord, column + 1)
-      // freezeKVMap(metaData)
+      const { row, column } = startPosition
+      const metaDataArray = filePathWord
+        ? [filePathWord, formWord(stringToWord(String(row + 1))), formWord(stringToWord(String(column + 1)))]
+        : [formWord(stringToWord(String(row + 1))), formWord(stringToWord(String(column + 1)))]
+      const metaData = formList(arrayToHostList(metaDataArray))
       switch (type) {
         case 'word':
-          return formWord(stringToWord(text))
+          return formWordWithMeta(stringToWord(text), metaData)
         case 'list':
           let l
           if (namedChildCount) {
-            l = mutableListOfSize(namedChildCount)
-            for (let i = 0; i < namedChildCount; i++) setArray(l, i, nodeToForm(node.namedChild(i)))
-            freezeMutableList(l)
+            l = arrayToHostList(node.namedChildren.map(nodeToForm))
           } else {
             l = emptyList
           }
-          return formList(l)
+          return formListWithMeta(l, metaData)
         default:
           throw new Error('unexpected node type: ' + type)
       }
@@ -451,33 +452,8 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
   return { compile: compileTop, evaluate, parseStringToForms, parseFile, parseStringToFirstForm }
 }
 
-const underscoreToDash = (s) => s.replace(/_/g, '-')
-
-const wrapJSFunction = (importFunc) => {
-  const dashedName = underscoreToDash(importFunc.name)
-  const jsParameterNames = parseFunctionParameters(importFunc)
-  let wunsParameterNames = null
-  let wunsRestParam = null
-  if (jsParameterNames.length && jsParameterNames.at(-1).startsWith('...')) {
-    wunsParameterNames = jsParameterNames.slice(0, -1)
-    wunsRestParam = underscoreToDash(jsParameterNames.at(-1).slice(3))
-  } else {
-    wunsParameterNames = [...jsParameterNames]
-  }
-  return createNamedFunction(
-    dashedName,
-    jsParameterNames,
-    wunsParameterNames.map(underscoreToDash),
-    wunsRestParam,
-    importFunc,
-  )
-}
-
-import { print, meta } from './core.js'
-
-const getFormLocation = (subForm) => (subForm ? meta(subForm).location : undefined) || 'unknown location'
-
 export const runCform = (exp) => {
+  const getFormLocation = (subForm) => meta(subForm)
   try {
     return exp()
   } catch (e) {
@@ -489,42 +465,6 @@ export const runCform = (exp) => {
   }
 }
 
-const compEvalLog = (compile, form) => {
-  const logInnerErrors = (e) => {
-    let currentError = e.innerError
-    while (currentError) {
-      const { form, message } = currentError
-      console.error(`inner error in ${getFormLocation(form)}: ${message}`)
-      currentError = currentError.innerError
-    }
-  }
-  const cform = (() => {
-    try {
-      return compile(form)
-    } catch (e) {
-      if (e instanceof CompileError) {
-        console.error(`compile error in ${getFormLocation(e.form || form)}: ${e.message}`)
-        console.error(e)
-      } else {
-        console.error(`unexpected non-compile error: ${e.message}`)
-      }
-      logInnerErrors(e)
-      throw e
-    }
-  })()
-  try {
-    return cform(null)
-  } catch (e) {
-    if (e instanceof RuntimeError) {
-      console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
-    } else {
-      console.error(`unexpected non-runtime error: ${e.message}`)
-    }
-    logInnerErrors(e)
-    throw e
-  }
-}
-
 const wrapJSFunctionsToObject = (funcs) => {
   const newObject = {}
   for (const importFunc of funcs) {
@@ -533,6 +473,8 @@ const wrapJSFunctionsToObject = (funcs) => {
   }
   return Object.freeze(newObject)
 }
+
+import { instructionFunctions } from './instructions.js'
 
 const instructions = wrapJSFunctionsToObject(instructionFunctions)
 
@@ -556,16 +498,59 @@ export const makeInitContext = ({ host, converters }) => {
   const hostListFuncForm = parseStringToFirstForm('[func list [.. entries] entries]')
   const hostListFunc = evaluate(hostListFuncForm)
   const parseFileToList = (filename) => hostListFunc(...parseFile(filename))
+  const meta = host.meta
+  const wunsLog = host.log
+  const getFormLocation = (subForm) => {
+    if (subForm) {
+      wunsLog(meta(subForm))
+    } else console.log('no meta')
+  }
+
+  const logInnerErrors = (e) => {
+    let currentError = e.innerError
+    while (currentError) {
+      const { form, message } = currentError
+      console.error(`inner error in ${getFormLocation(form)}: ${message}`)
+      currentError = currentError.innerError
+    }
+  }
+  const compEvalLog = (form) => {
+    const cform = (() => {
+      try {
+        return compile(form)
+      } catch (e) {
+        if (e instanceof CompileError) {
+          console.error(`compile error in ${getFormLocation(e.form || form)}: ${e.message}`)
+          console.error(e)
+        } else {
+          console.error(`unexpected non-compile error: ${e.message}`)
+        }
+        logInnerErrors(e)
+        throw e
+      }
+    })()
+    try {
+      return cform(null)
+    } catch (e) {
+      if (e instanceof RuntimeError) {
+        console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
+      } else {
+        console.error(`unexpected non-runtime error: ${e.message}`)
+      }
+      logInnerErrors(e)
+      throw e
+    }
+  }
   const evalLogForms = (forms) => {
     for (const form of forms) {
-      const v = compEvalLog(compile, form)
-      if (v !== undefined) console.log(print(v))
+      const v = compEvalLog(form)
+      if (v !== undefined) wunsLog(v)
     }
   }
   const parseEvalFiles = (filenames) => {
     for (const filename of filenames) {
       for (const form of parseFile(filename)) {
-        compEvalLog(compile, form)
+        compEvalLog(form)
       }
     }
   }
