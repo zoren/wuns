@@ -1,5 +1,5 @@
 import fs from 'fs'
-import { isJSReservedWord, createNamedFunction, wrapJSFunction } from './utils.js'
+import { isJSReservedWord, createNamedFunction, wrapJSFunction, wrapJSFunctionsToObject } from './utils.js'
 import { parse } from './parseTreeSitter.js'
 
 class RuntimeError extends Error {
@@ -486,15 +486,6 @@ export const runCform = (exp) => {
   }
 }
 
-const wrapJSFunctionsToObject = (funcs) => {
-  const newObject = {}
-  for (const importFunc of funcs) {
-    const func = wrapJSFunction(importFunc)
-    newObject[func.name] = func
-  }
-  return Object.freeze(newObject)
-}
-
 import { instructionFunctions } from './instructions.js'
 
 const instructions = wrapJSFunctionsToObject(instructionFunctions)
@@ -583,11 +574,4 @@ export const makeInitContext = ({ host, converters }) => {
     evalLogForms,
     parseEvalFiles,
   }
-}
-
-import { wordValue, stringToWord } from './core.js'
-
-export const jsHost = {
-  host: wrapJSFunctionsToObject(Object.values(await import('./host.js'))),
-  converters: { wordValue, stringToWord },
 }

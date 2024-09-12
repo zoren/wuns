@@ -7,7 +7,6 @@ export const stringToWord = (s) => {
   return s
 }
 export const wordValue = (w) => {
-  if (!isWord(w)) throw new Error('not a word: ' + w + ' ' + typeof w)
   return w
 }
 

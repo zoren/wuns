@@ -117,3 +117,12 @@ export const wrapJSFunctionName = (dashedName, importFunc) => {
 }
 
 export const wrapJSFunction = (importFunc) => wrapJSFunctionName(underscoreToDash(importFunc.name), importFunc)
+
+export const wrapJSFunctionsToObject = (funcs) => {
+  const newObject = {}
+  for (const importFunc of funcs) {
+    const func = wrapJSFunction(importFunc)
+    newObject[func.name] = func
+  }
+  return Object.freeze(newObject)
+}

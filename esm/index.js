@@ -1,9 +1,14 @@
 import fs from 'node:fs'
 import * as readline from 'node:readline'
 import { stdin, nextTick, stdout } from 'node:process'
-import { jsHost, makeInitContext } from './interpreter.js'
+import { makeHost } from './host-simulated-mem.js'
+import { jsHost } from './host-js.js'
+import { makeInitContext } from './interpreter.js'
 
-const { parseEvalFiles, parseStringToForms, evalLogForms } = makeInitContext(jsHost)
+const host = jsHost
+// const host = makeHost()
+
+const { parseEvalFiles, parseStringToForms, evalLogForms } = makeInitContext(host)
 const commandLineArgs = process.argv.slice(2)
 
 parseEvalFiles(commandLineArgs)
