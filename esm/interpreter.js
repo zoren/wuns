@@ -438,9 +438,9 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
     return evaluateCompileResult
   }
   const evaluate = (form) => compileTop(form)()
-
+  const stringToForm = (s) => formWord(stringToWord(String(s)))
   function* treeToFormsHost(tree, filePath) {
-    const filePathWord = filePath ? formWord(stringToWord(filePath)) : null
+    const filePathWord = filePath ? stringToForm(filePath) : null
     /**
      * @param {TSParser.SyntaxNode} node
      */
@@ -448,9 +448,8 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
       const { type, text, startPosition, isError, namedChildCount } = node
       if (isError) throw new Error('unexpected error node')
       const { row, column } = startPosition
-      const metaDataArray = filePathWord
-        ? [filePathWord, formWord(stringToWord(String(row + 1))), formWord(stringToWord(String(column + 1)))]
-        : [formWord(stringToWord(String(row + 1))), formWord(stringToWord(String(column + 1)))]
+      const metaDataArray = filePathWord ? [filePathWord] : []
+      metaDataArray.push(stringToForm(row + 1), stringToForm(stringToForm(column + 1)))
       const metaData = formList(arrayToHostList(metaDataArray))
       switch (type) {
         case 'word':
