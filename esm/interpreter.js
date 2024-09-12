@@ -144,8 +144,8 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
     {
       const varName = tryGetFormWordValue(form)
       if (varName) {
-        if (getOuterContextWithVar(ctx, varName))
-          return (env) => {
+        if (getOuterContextWithVar(ctx, varName)) {
+          const evalGetLocalVarValue = (env) => {
             while (env) {
               const { varValues, outer } = env
               if (varValues.has(varName)) return varValues.get(varName)
@@ -153,14 +153,20 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
             }
             throw new RuntimeError(`variable ${varName} not found`, form)
           }
+          return evalGetLocalVarValue
+        }
         const defVar = defVars.get(varName)
         if (!defVar) throw new CompileError('not found: ' + varName, form)
-        return () => varGet(defVar)
+        const evalGetDefVarValue = () => varGet(defVar)
+        return evalGetDefVarValue
       }
     }
     const formList = tryGetFormList(form)
     if (!formList) throw new CompileError('not a form')
-    if (formList.length === 0) return () => undefined
+    if (formList.length === 0) {
+      const evalEmptyForm = () => undefined
+      return evalEmptyForm
+    }
     const [firstForm, ...args] = formList
     const firstWordValue = tryGetFormWordValue(firstForm)
     const nOfArgs = args.length
@@ -170,26 +176,33 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         const wv = +ctWordValue(args[0])
         const normalized = wv | 0
         if (wv !== normalized) throw new CompileError('expected 32-bit signed integer', form)
-        return () => normalized
+        const evalI32 = () => normalized
+        return evalI32
       }
       case 'word': {
         if (nOfArgs !== 1) throw new CompileError('word expects 1 argument', form)
         const w = tryGetFormWord(args[0])
         if (!w) throw new CompileError('word expects word', form)
-        return () => w
+        const evalWord = () => w
+        return evalWord
       }
       case 'quote': {
         if (nOfArgs !== 1) throw new CompileError('quote expects 1 argument', form)
         const res = args[0]
-        return () => res
+        const evalQuote = () => res
+        return evalQuote
       }
       case 'if': {
         if (nOfArgs < 2 || 3 < nOfArgs) throw new CompileError('if expects 2 or 3 arguments', form)
         const cc = compile(ctx, args[0])
         const ct = compile(ctx, args[1])
-        if (nOfArgs === 2) return (env) => (cc(env) ? ct(env) : undefined)
+        if (nOfArgs === 2) {
+          const evalIf2 = (env) => (cc(env) ? ct(env) : undefined)
+          return evalIf2
+        }
         const cf = compile(ctx, args[2])
-        return (env) => (cc(env) ? ct : cf)(env)
+        const evalIf3 = (env) => (cc(env) ? ct : cf)(env)
+        return evalIf3
       }
       case 'let':
       case 'loop': {
@@ -211,8 +224,11 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
           return inner
         }
         const cbodies = compBodies(newCtx, bodies)
-        if (firstWordValue === 'let') return (env) => cbodies(mkBindEnv(env))
-        return (env) => {
+        if (firstWordValue === 'let') {
+          const evalLet = (env) => cbodies(mkBindEnv(env))
+          return evalLet
+        }
+        const evalLoop = (env) => {
           const inner = mkBindEnv(env)
           inner.continue = true
           while (inner.continue) {
@@ -221,6 +237,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
             if (!inner.continue) return result
           }
         }
+        return evalLoop
       }
       case 'continue': {
         const updateVars = []
@@ -235,7 +252,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         for (const uv of updateVars) {
           if (!variables.has(uv)) throw new CompileError(`loop variable ${uv} not found in loop context`, form)
         }
-        return (env) => {
+        const evalContinue = (env) => {
           let enclosingLoopEnv = env
           while (true) {
             if ('continue' in enclosingLoopEnv) break
@@ -247,6 +264,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
           for (let i = 0; i < updateVars.length; i++) varValues.set(updateVars[i], tmpVals[i])
           enclosingLoopEnv.continue = true
         }
+        return evalContinue
       }
       case 'func': {
         const [fmname, origParamsForm, ...bodies] = args
@@ -294,14 +312,16 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         // for recursive calls
         newCtx.func = f
         Object.freeze(newCtx)
-        return () => f
+        const evalFunc = () => f
+        return evalFunc
       }
       case 'recur': {
         let funcCtx = getOuterContextOfType(ctx, 'func')
         if (!funcCtx) throw new CompileError('recur outside of func', form)
         ctCheckCallArity(funcCtx, form)
         const cargs = args.map((a) => compile(ctx, a))
-        return (env) => funcCtx.func(...cargs.map((carg) => carg(env)))
+        const evalRecur = (env) => funcCtx.func(...cargs.map((carg) => carg(env)))
+        return evalRecur
       }
       case 'extern': {
         let ext = externalModules
@@ -310,23 +330,25 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
           if (!(n in ext)) throw new CompileError(`extern ${n} not found`, a)
           ext = ext[n]
         }
-        return () => ext
+        const evalExtern = () => ext
+        return evalExtern
       }
       case 'try-get-var': {
         if (nOfArgs !== 1) throw new CompileError('try-get-var expects 1 argument', form)
         const varName = ctWordValue(args[0])
-        return () => {
+        const evalTryGetVar = () => {
           const v = defVars.get(varName)
-          if (v) return v
-          return 0
+          return v ? v : 0
         }
+        return evalTryGetVar
       }
       case 'def': {
         if (nOfArgs !== 2) throw new CompileError('def expects 2 arguments', form)
         const [varName, value] = args
         const v = ctWord(varName)
         const cvalue = compile(ctx, value)
-        return (env) => insertOrSetDefVar(v, cvalue(env))
+        const evalDefine = (env) => insertOrSetDefVar(v, cvalue(env))
+        return evalDefine
       }
       case 'def-with-meta': {
         if (nOfArgs !== 3) throw new CompileError('def-with-meta expects 3 arguments', form)
@@ -334,14 +356,15 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         const v = ctWord(varName)
         const cmetaData = compile(ctx, metaForm)
         const cvalue = compile(ctx, value)
-        return (env) => insertOrSetDefVar(v, cvalue(env), cmetaData(env))
+        const evalDefineWithMeta = (env) => insertOrSetDefVar(v, cvalue(env), cmetaData(env))
+        return evalDefineWithMeta
       }
     }
     // direct function call or function in parameter/local variable
     if (!firstWordValue || getOuterContextWithVar(ctx, firstWordValue)) {
       const cfunc = compile(ctx, firstForm)
       const cargs = args.map((a) => compile(ctx, a))
-      return (env) => {
+      const evalDirectOrLocalFunctionCall = (env) => {
         const f = cfunc(env)
         rtCheckCallArity(f, form)
         try {
@@ -350,6 +373,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
           throw new RuntimeError(`runtime error when calling function '${firstForm}'`, form, e)
         }
       }
+      return evalDirectOrLocalFunctionCall
     }
     const funcDefVar = defVars.get(firstWordValue)
     if (!funcDefVar) throw new CompileError(`function '${firstWordValue}' not found`, form)
@@ -363,7 +387,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
       case 'function':
       case null: {
         const cargs = args.map((a) => compile(ctx, a))
-        return (env) => {
+        const evalFunctionCall = (env) => {
           const rtFunc = varGet(funcDefVar)
           rtCheckCallArity(rtFunc, form)
           const eargs = cargs.map((carg) => carg(env))
@@ -375,6 +399,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
             throw new RuntimeError(`runtime error when calling function '${firstWordValue}'`, form, e)
           }
         }
+        return evalFunctionCall
       }
       case 'macro': {
         // don't eval args and eval result
@@ -400,7 +425,8 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         // don' eval args and don't eval result
         // thanks Manuel! https://x.com/msimoni/status/1824128031792787808
         const fexprResult = compileTimeFunc(...args)
-        return () => fexprResult
+        const evalFexpr = () => fexprResult
+        return evalFexpr
       }
       default:
         throw new CompileError(`invalid function kind '${funcKind}' for '${firstWordValue}'`, form)
@@ -430,12 +456,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         case 'word':
           return formWordWithMeta(stringToWord(text), metaData)
         case 'list':
-          let l
-          if (namedChildCount) {
-            l = arrayToHostList(node.namedChildren.map(nodeToForm))
-          } else {
-            l = emptyList
-          }
+          const l = namedChildCount ? arrayToHostList(node.namedChildren.map(nodeToForm)) : emptyList
           return formListWithMeta(l, metaData)
         default:
           throw new Error('unexpected node type: ' + type)

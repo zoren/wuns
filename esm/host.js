@@ -15,11 +15,9 @@ import {
   tryGetFormList,
   setMeta,
   defVar,
+  stringToWord,
 } from './core.js'
 import { isPlainObject } from './utils.js'
-
-import { stringToWord } from './core.js'
-export { stringToWord, wordValue }
 
 export const apply = (fn, args) => {
   if (typeof fn !== 'function') throw new Error('apply expects function')
@@ -137,13 +135,13 @@ export const freeze_mutable_list = (mutable_list) => {
   const immutableList = Object.freeze(mutable_list)
   return immutableList
 }
-export const set_array = (ar, index, element) => {
-  if (!isList(ar)) throw new Error('set-array expects array')
-  if (!isMutable(ar)) throw new Error('set-array expects mutable list')
-  if (Object.isFrozen(ar)) throw new Error('set-array expects mutable array')
+export const set_array = (mutable_list, index, element) => {
+  if (!isList(mutable_list)) throw new Error('set-array expects array')
+  if (!isMutable(mutable_list)) throw new Error('set-array expects mutable list')
+  if (Object.isFrozen(mutable_list)) throw new Error('set-array expects mutable array')
   if (!isSigned32BitInteger(index)) throw new Error('set-array expects integer index')
-  if (index < 0 || index >= ar.length) throw new Error('set-array index out of bounds: ' + index + ' ' + ar.length)
-  ar[index] = element
+  if (index < 0 || index >= mutable_list.length) throw new Error('set-array index out of bounds: ' + index + ' ' + mutable_list.length)
+  mutable_list[index] = element
 }
 export const at = (list, index) => {
   if (!isList(list)) throw new Error('at expects list, got ' + typeof list + ' ' + list)

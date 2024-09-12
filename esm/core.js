@@ -12,7 +12,7 @@ export const wordValue = (w) => {
 }
 
 const emptyList = Object.freeze([])
-export const arrayToList = (array) => (array.length === 0 ? emptyList : Object.freeze(array))
+export const arrayToList = (array) => (array.length === 0 ? emptyList : Object.freeze([...array]))
 export const makeList = (...args) => arrayToList(args)
 export const isList = (f) => Array.isArray(f)
 
