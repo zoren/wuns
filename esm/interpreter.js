@@ -439,7 +439,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
   }
   const evaluate = (form) => compileTop(form)()
   const stringToForm = (s) => formWord(stringToWord(String(s)))
-  function* treeToFormsHost(tree, filePath) {
+  function* parseToFormsHost(content, filePath) {
     const filePathWord = filePath ? stringToForm(filePath) : null
     /**
      * @param {TSParser.SyntaxNode} node
@@ -461,14 +461,14 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
           throw new Error('unexpected node type: ' + type)
       }
     }
-    for (const child of tree.rootNode.namedChildren) yield nodeToForm(child)
+    for (const child of parse(content).rootNode.namedChildren) yield nodeToForm(child)
   }
-  const parseStringToForms = (content) => treeToFormsHost(parse(content))
+  const parseStringToForms = (content) => parseToFormsHost(content)
   const parseStringToFirstForm = (content) => {
-    for (const form of treeToFormsHost(parse(content))) return form
+    for (const form of parseToFormsHost(content)) return form
     throw new Error('no forms found')
   }
-  const parseFile = (filename) => treeToFormsHost(parse(fs.readFileSync(filename, 'ascii')), filename)
+  const parseFile = (filename) => parseToFormsHost(fs.readFileSync(filename, 'ascii'), filename)
   return { compile: compileTop, evaluate, parseStringToForms, parseFile, parseStringToFirstForm }
 }
 
