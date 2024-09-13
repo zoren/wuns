@@ -108,7 +108,6 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
   }
 
   const wunsUnit = undefined
-  const makeEnv = (outer) => {}
   const evaluateObject = (obj) => {
     switch (obj.op) {
       case 'constant': {
@@ -116,11 +115,9 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         return () => value
       }
       case 'local-var-get': {
-        const { varName, varContextObj } = obj
+        const { varContextObj } = obj
         const { index } = varContextObj
-        return (env) => {
-          return env[index]
-        }
+        return (env) => env[index]
       }
       case 'if': {
         const { condition, then, else: elseBranch } = obj
@@ -131,23 +128,47 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
       }
       case 'let': {
         const { compBindings, cbodies } = obj
-        const evalBindings = compBindings.map(([varObj, compValue]) => [varObj, evaluateObject(compValue)])
-
+        const evalBindings = compBindings.map(([varObj, compValue]) => [varObj.index, evaluateObject(compValue)])
         const evalBodies = cbodies.map(evaluateObject)
         return (env) => {
-          for (const [varObj, evalValue] of evalBindings) {
-            env[varObj.index] = evalValue(env)
-          }
+          for (const [varIndex, evalValue] of evalBindings) env[varIndex] = evalValue(env)
           let result = wunsUnit
-          for (const evalBody of evalBodies) {
-            result = evalBody(env)
-          }
+          for (const evalBody of evalBodies) result = evalBody(env)
           return result
         }
       }
       case 'loop': {
+        const { compBindings, cbodies } = obj
+        const evalBindings = compBindings.map(([varObj, compValue]) => [varObj.index, evaluateObject(compValue)])
+        const evalBodies = cbodies.map(evaluateObject)
+
+        const { continueVarObj } = obj
+        const continueVarIndex = continueVarObj.index
+        return (env) => {
+          for (const [varIndex, evalValue] of evalBindings) env[varIndex] = evalValue(env)
+          env[continueVarIndex] = 1
+          let result = wunsUnit
+          while (env[continueVarIndex]) {
+            env[continueVarIndex] = 0
+            for (const evalBody of evalBodies) result = evalBody(env)
+          }
+          return result
+
+        }
       }
       case 'continue': {
+        const { enclosingLoopCtx, updateBindings } = obj
+        const { continueVarObj } = enclosingLoopCtx
+        const continueVarIndex = continueVarObj.index
+        const evalUpdateBindings = updateBindings.map(([varObj, compValue]) => [
+          varObj.index,
+          evaluateObject(compValue),
+        ])
+        return (env) => {
+          for (const [varIndex, evalValue] of evalUpdateBindings) env[varIndex] = evalValue(env)
+          env[continueVarIndex] = 1
+          return wunsUnit
+        }
       }
       case 'call': {
         const { func, args } = obj
@@ -171,15 +192,6 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
   let localVarCount = 0
   const newContext = (ctxType, outer) => {
     return { variables: new Map(), outer, ctxType }
-  }
-  const setContextVar = (ctx, varName) => {
-    const { variables } = ctx
-    const varObj = {
-      varName,
-      index: localVarCount++,
-    }
-    variables.set(varName, varObj)
-    return varObj
   }
   const compileObject = (ctx, form) => {
     {
@@ -251,22 +263,22 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         const cbodies = bodies.map((body) => compileObject(newCtx, body))
         if (firstWordValue === 'let') return { op: 'let', compBindings, cbodies }
         newCtx.cbodies = cbodies
-        return { op: 'loop', compBindings, cbodies }
+        const continueVarObj = { index: localVarCount++ }
+        newCtx.continueVarObj = continueVarObj
+        return { op: 'loop', continueVarObj, compBindings, cbodies }
       }
       case 'continue': {
-        const updateVars = []
-        const updateFuncs = []
-        for (let i = 0; i < nOfArgs; i += 2) {
-          updateVars.push(ctWordValue(args[i]))
-          updateFuncs.push(compileObject(ctx, args[i + 1]))
-        }
         const enclosingLoopCtx = getOuterContextOfType(ctx, 'loop')
         if (!enclosingLoopCtx) throw new CompileError('continue outside of loop', form)
         const { variables } = enclosingLoopCtx
-        for (const uv of updateVars) {
-          if (!variables.has(uv)) throw new CompileError(`loop variable ${uv} not found in loop context`, form)
+        const updateBindings = []
+        for (let i = 0; i < nOfArgs; i += 2) {
+          const uv = ctWordValue(args[i])
+          const varObj = variables.get(uv)
+          if (!varObj) throw new CompileError(`loop variable ${uv} not found in loop context`, form)
+          updateBindings.push([varObj, compileObject(ctx, args[i + 1])])
         }
-        return { op: 'continue', enclosingLoopCtx, updateVars, updateFuncs }
+        return { op: 'continue', enclosingLoopCtx, updateBindings }
       }
       case 'func': {
         const [fmname, origParamsForm, ...bodies] = args
