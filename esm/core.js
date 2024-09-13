@@ -145,8 +145,7 @@ export const print = (ox) => {
     // todo allow t === 'boolean' too
     if (t === 'number' || t === 'bigint') return String(x)
     if (t === 'string') return isWord(x) ? x : `'${x}'`
-    if (t === 'function')
-      return `[fn ${x.name} params [${x.parameters.join(' ')}${x.restParam ? ' .. ' + x.restParam : ''}]]`
+    if (t === 'function') return `[fn ${x.name}]`
     if (Object.isFrozen(x))
       return `[kv-map${Object.entries(x)
         .map(([k, v]) => ` ${k} ${go(v)}`)

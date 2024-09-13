@@ -78,24 +78,6 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
     return { params, restParam: null }
   }
 
-  const checkCallArity =
-    (errorFn) =>
-    ({ name, parameters, restParam }, form) => {
-      const nOfParams = parameters.length
-      const formList = tryGetFormList(form)
-      if (!formList) throw new errorFn('not a form', form)
-      const numOfGivenArgs = formList.length - 1
-      if (restParam) {
-        if (numOfGivenArgs < nOfParams)
-          throw new errorFn(`${name} expected at least ${nOfParams} arguments, got ${numOfGivenArgs}`, form)
-      } else {
-        if (numOfGivenArgs !== nOfParams)
-          throw new errorFn(`${name} expected ${nOfParams} arguments, got ${numOfGivenArgs}`, form)
-      }
-    }
-
-  const ctCheckCallArity = checkCallArity(CompileError)
-
   const mutableListOfSize = getHostValue('mutable-list-of-size'),
     setArray = getHostValue('set-array'),
     freezeMutableList = getHostValue('freeze-mutable-list')
@@ -153,7 +135,6 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
             for (const evalBody of evalBodies) result = evalBody(env)
           }
           return result
-
         }
       }
       case 'continue': {
@@ -183,6 +164,10 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
       case 'func': {
       }
       case 'recur': {
+        const { funcCtx, args } = obj
+        const { func } = funcCtx
+        const evalArgs = args.map((a) => evaluateObject(a))
+        return (env) => func(...evalArgs.map((ea) => ea(env)))
       }
       default:
         throw new Error('unknown op: ' + obj.op)
@@ -190,6 +175,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
   }
   const opConstant = (value) => ({ op: 'constant', value })
   let localVarCount = 0
+  const makeVar = () => ({ index: localVarCount++ })
   const newContext = (ctxType, outer) => {
     return { variables: new Map(), outer, ctxType }
   }
@@ -253,17 +239,14 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         const { variables } = newCtx
         for (let i = 0; i < bindings.length - 1; i += 2) {
           const varName = ctWordValue(bindings[i])
-          const varContextObj = {
-            varName,
-            index: localVarCount++,
-          }
+          const varContextObj = makeVar()
           compBindings.push([varContextObj, compileObject(newCtx, bindings[i + 1])])
           variables.set(varName, varContextObj)
         }
         const cbodies = bodies.map((body) => compileObject(newCtx, body))
         if (firstWordValue === 'let') return { op: 'let', compBindings, cbodies }
         newCtx.cbodies = cbodies
-        const continueVarObj = { index: localVarCount++ }
+        const continueVarObj = makeVar()
         newCtx.continueVarObj = continueVarObj
         return { op: 'loop', continueVarObj, compBindings, cbodies }
       }
@@ -286,28 +269,49 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         const parsedParams = parseParams(origParamsList)
         const params = parsedParams.params.map(ctWordValue)
         const restParam = parsedParams.restParam ? ctWordValue(parsedParams.restParam) : null
-        const variables = new Map()
-        for (const p of params) variables.set(p)
-        if (restParam) variables.set(restParam)
-        const newCtx = {
-          variables,
-          outer: null,
-          ctxType: firstWordValue,
-          parameters: params,
-          restParam,
-        }
+        const nOfParams = params.length
+        const newCtx = newContext(firstWordValue)
+        newCtx.nOfParams = nOfParams
+        newCtx.hasRestParam = !!restParam
+        const { variables } = newCtx
+        localVarCount = 0
+        for (const p of params) variables.set(p, makeVar())
+        if (restParam) variables.set(restParam, makeVar())
         const cbodies = bodies.map((body) => compileObject(newCtx, body))
+        const numberOfParamsLocalVars = localVarCount
+
+        const func = restParam
+          ? (...funcArgs) => {
+              const env = new Array(numberOfParamsLocalVars)
+              for (let i = 0; i < nOfParams; i++) env[i] = funcArgs[i]
+              env[nOfParams] = funcArgs.slice(nOfParams)
+              let result = wunsUnit
+              for (const ebody of ebodies) result = ebody(env)
+              return result
+            }
+          : (...funcArgs) => {
+              const env = new Array(numberOfParamsLocalVars)
+              for (let i = 0; i < nOfParams; i++) env[i] = funcArgs[i]
+              let result = wunsUnit
+              for (const ebody of ebodies) result = ebody(env)
+              return result
+            }
         // for recursive calls
-        newCtx.cbodies = cbodies
+        newCtx.func = func
+        const ebodies = cbodies.map(evaluateObject)
         Object.freeze(newCtx)
-        return opConstant(newCtx)
+        return opConstant(func)
       }
       case 'recur': {
         let funcCtx = getOuterContextOfType(ctx, 'func')
         if (!funcCtx) throw new CompileError('recur outside of func', form)
-        ctCheckCallArity(funcCtx, form)
-        const cargs = args.map((a) => compile(ctx, a))
-        return { op: 'recur', funcCtx, cargs }
+        if (funcCtx.hasRestParam) {
+          if (nOfArgs < funcCtx.nOfParams) throw new CompileError('recur arity mismatch', form)
+        } else {
+          if (nOfArgs !== funcCtx.nOfParams) throw new CompileError('recur arity mismatch', form)
+        }
+        const cargs = args.map((a) => compileObject(ctx, a))
+        return { op: 'recur', funcCtx, args: cargs }
       }
     }
     // direct function call or function in parameter/local variable
