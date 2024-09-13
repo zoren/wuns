@@ -105,15 +105,19 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         const { condition, then, else: elseBranch } = obj
         return evaluateObject(env, condition) ? evaluateObject(env, then) : evaluateObject(env, elseBranch)
       }
-      case 'let': {
-        const { compBindings, cbodies } = obj
-        for (const [varObj, compValue] of compBindings) env[varObj.index] = evaluateObject(env, compValue)
+      case 'do': {
+        const { cforms } = obj
         let result = wunsUnit
-        for (const cbody of cbodies) result = evaluateObject(env, cbody)
+        for (const e of cforms) result = evaluateObject(env, e)
         return result
       }
+      case 'let': {
+        const { compBindings, body } = obj
+        for (const [varObj, compValue] of compBindings) env[varObj.index] = evaluateObject(env, compValue)
+        return evaluateObject(env, body)
+      }
       case 'loop': {
-        const { compBindings, cbodies } = obj
+        const { compBindings, body } = obj
         for (const [varObj, compValue] of compBindings) env[varObj.index] = evaluateObject(env, compValue)
         const { continueVarObj } = obj
         for (const [varObj, compValue] of compBindings) env[varObj.index] = evaluateObject(env, compValue)
@@ -122,7 +126,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         let result = wunsUnit
         while (env[continueVarIndex]) {
           env[continueVarIndex] = 0
-          for (const cbody of cbodies) result = evaluateObject(env, cbody)
+          result = evaluateObject(env, body)
         }
         return result
       }
@@ -141,18 +145,15 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         return f(...evalArgs)
       }
       case 'func': {
-        const { mkEnv, cbody } = obj
+        const { mkEnv, body } = obj
         const f = (...funcArgs) => {
           const newEnv = mkEnv(funcArgs)
-          return evaluateObject(newEnv, cbody)
+          return evaluateObject(newEnv, body)
         }
         return f
       }
       case 'recur': {
         const { funcCtx, args } = obj
-        if (!funcCtx) {
-          console.log(obj)
-          throw new Error('recur outside of func')}
         const evalArgs = args.map((a) => evaluateObject(env, a))
         const { mkEnv, cbody } = funcCtx
         const newEnv = mkEnv(evalArgs)
@@ -248,11 +249,12 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
           variables.set(varName, varContextObj)
         }
         const cbodies = bodies.map((body) => compileObject(newCtx, body))
-        if (firstWordValue === 'let') return { op: 'let', compBindings, cbodies }
+        const body = { op: 'do', cforms: cbodies }
+        if (firstWordValue === 'let') return { op: 'let', compBindings, body }
         newCtx.cbodies = cbodies
         const continueVarObj = makeVar()
         newCtx.continueVarObj = continueVarObj
-        return { op: 'loop', continueVarObj, compBindings, cbodies }
+        return { op: 'loop', continueVarObj, compBindings, body }
       }
       case 'continue': {
         const enclosingLoopCtx = getOuterContextOfType(ctx, 'loop')
@@ -285,10 +287,8 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         if (restParam) variables.set(restParam, makeVar())
         const cbodies = bodies.map((body) => compileObject(newCtx, body))
         const numberOfParamsLocalVars = localVarCount
-        const opObj = { op: 'func', nOfParams, hasRestParam, numberOfParamsLocalVars }
-        const mkEnv = makeCallEnvMaker(opObj)
-        opObj.mkEnv = mkEnv
-        opObj.cbody = cbodies[0]
+        const mkEnv = makeCallEnvMaker({ nOfParams, hasRestParam, numberOfParamsLocalVars })
+        const opObj = { op: 'func', mkEnv, body: { op: 'do', cforms: cbodies } }
         // for recursive calls
         newCtx.mkEnv = mkEnv
         newCtx.cbody = cbodies[0]
