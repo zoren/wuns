@@ -1,0 +1,25 @@
+[[extern host log] [quote asdf]]
+
+[let [add [extern instructions i32.add]
+      lt [extern instructions i32.lt-s]
+      eq [extern instructions i32.eq]
+      log [extern host log]
+      n [i32 10]]
+  [log
+    [loop [i [i32 0]
+           r [i32 0]]
+        [if [lt r [i32 0]]
+          [i32 -1]
+          [if [eq i n]
+            r
+            [continue
+              i [add [i32 1] i]
+              r [add r [add [i32 1] i]]]]]]]]
+
+[[extern host log]
+  [[func recursive-gauss [n]
+    [if [[extern instructions i32.eq] n [i32 0]]
+      [i32 0]
+      [[extern instructions i32.add] n
+        [recur [[extern instructions i32.sub] n [i32 1]]]]]]
+  [i32 100]]]

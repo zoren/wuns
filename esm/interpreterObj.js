@@ -91,76 +91,91 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
 
   const wunsUnit = undefined
   const evaluateObject = (env, obj) => {
-    switch (obj.op) {
-      case 'constant': {
-        const { value } = obj
-        return value
-      }
-      case 'local-var-get': {
-        const { varContextObj } = obj
-        const { index } = varContextObj
-        return env[index]
-      }
-      case 'if': {
-        const { condition, then, else: elseBranch } = obj
-        return evaluateObject(env, condition) ? evaluateObject(env, then) : evaluateObject(env, elseBranch)
-      }
-      case 'do': {
-        const { cforms } = obj
-        let result = wunsUnit
-        for (const e of cforms) result = evaluateObject(env, e)
-        return result
-      }
-      case 'let': {
-        const { compBindings, body } = obj
-        for (const [varObj, compValue] of compBindings) env[varObj.index] = evaluateObject(env, compValue)
-        return evaluateObject(env, body)
-      }
-      case 'loop': {
-        const { compBindings, body } = obj
-        for (const [varObj, compValue] of compBindings) env[varObj.index] = evaluateObject(env, compValue)
-        const { continueVarObj } = obj
-        for (const [varObj, compValue] of compBindings) env[varObj.index] = evaluateObject(env, compValue)
-        const continueVarIndex = continueVarObj.index
-        env[continueVarIndex] = 1
-        let result = wunsUnit
-        while (env[continueVarIndex]) {
-          env[continueVarIndex] = 0
-          result = evaluateObject(env, body)
+    while (true) {
+      switch (obj.op) {
+        case 'constant': {
+          const { value } = obj
+          return value
         }
-        return result
-      }
-      case 'continue': {
-        const { enclosingLoopCtx, updateBindings } = obj
-        const { continueVarObj } = enclosingLoopCtx
-        const continueVarIndex = continueVarObj.index
-        for (const [varObj, compValue] of updateBindings) env[varObj.index] = evaluateObject(env, compValue)
-        env[continueVarIndex] = 1
-        return wunsUnit
-      }
-      case 'call': {
-        const { func, args } = obj
-        const f = evaluateObject(env, func)
-        const evalArgs = args.map((a) => evaluateObject(env, a))
-        return f(...evalArgs)
-      }
-      case 'func': {
-        const { mkEnv, body } = obj
-        const f = (...funcArgs) => {
-          const newEnv = mkEnv(funcArgs)
-          return evaluateObject(newEnv, body)
+        case 'local-var-get': {
+          const { varContextObj } = obj
+          const { index } = varContextObj
+          return env[index]
         }
-        return f
+        case 'if': {
+          const { condition, then, else: elseBranch } = obj
+          obj = evaluateObject(env, condition) ? then : elseBranch
+          continue
+        }
+        case 'do': {
+          const { cforms } = obj
+          for (const e of cforms.slice(0, -1)) evaluateObject(env, e)
+          obj = cforms.at(-1)
+          continue
+        }
+        case 'let': {
+          const { compBindings, body } = obj
+          for (const [varObj, compValue] of compBindings) env[varObj.index] = evaluateObject(env, compValue)
+          obj = body
+          continue
+        }
+        case 'loop': {
+          const { compBindings, body } = obj
+          for (const [varObj, compValue] of compBindings) env[varObj.index] = evaluateObject(env, compValue)
+          const { continueVarObj } = obj
+          for (const [varObj, compValue] of compBindings) env[varObj.index] = evaluateObject(env, compValue)
+          const continueVarIndex = continueVarObj.index
+          env[continueVarIndex] = 1
+          // todo can this be made tail recursive??
+          let result = wunsUnit
+          while (env[continueVarIndex]) {
+            env[continueVarIndex] = 0
+            result = evaluateObject(env, body)
+          }
+          return result
+        }
+        case 'continue': {
+          const { enclosingLoopCtx, updateBindings } = obj
+          const { continueVarObj } = enclosingLoopCtx
+          const continueVarIndex = continueVarObj.index
+          for (const [varObj, compValue] of updateBindings) env[varObj.index] = evaluateObject(env, compValue)
+          env[continueVarIndex] = 1
+          return wunsUnit
+        }
+        case 'func': {
+          const { mkEnv, body } = obj
+          const f = (...funcArgs) => {
+            const newEnv = mkEnv(funcArgs)
+            return evaluateObject(newEnv, body)
+          }
+          return f
+        }
+        case 'call': {
+          const { func, args } = obj
+          if (func.op === 'func') {
+            const { mkEnv, body } = func
+            const evalArgs = args.map((a) => evaluateObject(env, a))
+            const newEnv = mkEnv(evalArgs)
+            obj = body
+            env = newEnv
+            continue
+          }
+          const f = evaluateObject(env, func)
+          const evalArgs = args.map((a) => evaluateObject(env, a))
+          return f(...evalArgs)
+        }
+        case 'recur': {
+          const { funcCtx, args } = obj
+          const evalArgs = args.map((a) => evaluateObject(env, a))
+          const { mkEnv, cbody } = funcCtx
+          const newEnv = mkEnv(evalArgs)
+          obj = cbody
+          env = newEnv
+          continue
+        }
+        default:
+          throw new Error('unknown op: ' + obj.op)
       }
-      case 'recur': {
-        const { funcCtx, args } = obj
-        const evalArgs = args.map((a) => evaluateObject(env, a))
-        const { mkEnv, cbody } = funcCtx
-        const newEnv = mkEnv(evalArgs)
-        return evaluateObject(newEnv, cbody)
-      }
-      default:
-        throw new Error('unknown op: ' + obj.op)
     }
   }
   const makeCallEnvMaker = (obj) => {
