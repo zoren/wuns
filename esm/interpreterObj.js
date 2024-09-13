@@ -90,87 +90,91 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
   }
 
   const wunsUnit = undefined
-  const evaluateObject = (obj) => {
+  const evaluateObject = (env, obj) => {
     switch (obj.op) {
       case 'constant': {
         const { value } = obj
-        return () => value
+        return value
       }
       case 'local-var-get': {
         const { varContextObj } = obj
         const { index } = varContextObj
-        return (env) => env[index]
+        return env[index]
       }
       case 'if': {
         const { condition, then, else: elseBranch } = obj
-        const evalCondition = evaluateObject(condition)
-        const evalThen = evaluateObject(then)
-        const evalElse = evaluateObject(elseBranch)
-        return (env) => (evalCondition(env) ? evalThen : evalElse)(env)
+        return evaluateObject(env, condition) ? evaluateObject(env, then) : evaluateObject(env, elseBranch)
       }
       case 'let': {
         const { compBindings, cbodies } = obj
-        const evalBindings = compBindings.map(([varObj, compValue]) => [varObj.index, evaluateObject(compValue)])
-        const evalBodies = cbodies.map(evaluateObject)
-        return (env) => {
-          for (const [varIndex, evalValue] of evalBindings) env[varIndex] = evalValue(env)
-          let result = wunsUnit
-          for (const evalBody of evalBodies) result = evalBody(env)
-          return result
-        }
+        for (const [varObj, compValue] of compBindings) env[varObj.index] = evaluateObject(env, compValue)
+        let result = wunsUnit
+        for (const cbody of cbodies) result = evaluateObject(env, cbody)
+        return result
       }
       case 'loop': {
         const { compBindings, cbodies } = obj
-        const evalBindings = compBindings.map(([varObj, compValue]) => [varObj.index, evaluateObject(compValue)])
-        const evalBodies = cbodies.map(evaluateObject)
-
+        for (const [varObj, compValue] of compBindings) env[varObj.index] = evaluateObject(env, compValue)
         const { continueVarObj } = obj
+        for (const [varObj, compValue] of compBindings) env[varObj.index] = evaluateObject(env, compValue)
         const continueVarIndex = continueVarObj.index
-        return (env) => {
-          for (const [varIndex, evalValue] of evalBindings) env[varIndex] = evalValue(env)
-          env[continueVarIndex] = 1
-          let result = wunsUnit
-          while (env[continueVarIndex]) {
-            env[continueVarIndex] = 0
-            for (const evalBody of evalBodies) result = evalBody(env)
-          }
-          return result
+        env[continueVarIndex] = 1
+        let result = wunsUnit
+        while (env[continueVarIndex]) {
+          env[continueVarIndex] = 0
+          for (const cbody of cbodies) result = evaluateObject(env, cbody)
         }
+        return result
       }
       case 'continue': {
         const { enclosingLoopCtx, updateBindings } = obj
         const { continueVarObj } = enclosingLoopCtx
         const continueVarIndex = continueVarObj.index
-        const evalUpdateBindings = updateBindings.map(([varObj, compValue]) => [
-          varObj.index,
-          evaluateObject(compValue),
-        ])
-        return (env) => {
-          for (const [varIndex, evalValue] of evalUpdateBindings) env[varIndex] = evalValue(env)
-          env[continueVarIndex] = 1
-          return wunsUnit
-        }
+        for (const [varObj, compValue] of updateBindings) env[varObj.index] = evaluateObject(env, compValue)
+        env[continueVarIndex] = 1
+        return wunsUnit
       }
       case 'call': {
         const { func, args } = obj
-        const evalFunc = evaluateObject(func)
-        const evalArgs = args.map((a) => evaluateObject(a))
-        return (env) => {
-          const f = evalFunc(env)
-          const a = evalArgs.map((ea) => ea(env))
-          return f(...a)
-        }
+        const f = evaluateObject(env, func)
+        const evalArgs = args.map((a) => evaluateObject(env, a))
+        return f(...evalArgs)
       }
       case 'func': {
+        const { mkEnv, cbody } = obj
+        const f = (...funcArgs) => {
+          const newEnv = mkEnv(funcArgs)
+          return evaluateObject(newEnv, cbody)
+        }
+        return f
       }
       case 'recur': {
         const { funcCtx, args } = obj
-        const { func } = funcCtx
-        const evalArgs = args.map((a) => evaluateObject(a))
-        return (env) => func(...evalArgs.map((ea) => ea(env)))
+        if (!funcCtx) {
+          console.log(obj)
+          throw new Error('recur outside of func')}
+        const evalArgs = args.map((a) => evaluateObject(env, a))
+        const { mkEnv, cbody } = funcCtx
+        const newEnv = mkEnv(evalArgs)
+        return evaluateObject(newEnv, cbody)
       }
       default:
         throw new Error('unknown op: ' + obj.op)
+    }
+  }
+  const makeCallEnvMaker = (obj) => {
+    const { nOfParams, hasRestParam, numberOfParamsLocalVars } = obj
+    if (!hasRestParam)
+      return (funcArgs) => {
+        const env = new Array(numberOfParamsLocalVars)
+        for (let i = 0; i < nOfParams; i++) env[i] = funcArgs[i]
+        return env
+      }
+    return (funcArgs) => {
+      const env = new Array(numberOfParamsLocalVars)
+      for (let i = 0; i < nOfParams; i++) env[i] = funcArgs[i]
+      env[nOfParams] = funcArgs.slice(nOfParams)
+      return env
     }
   }
   const opConstant = (value) => ({ op: 'constant', value })
@@ -265,42 +269,31 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
       }
       case 'func': {
         const [fmname, origParamsForm, ...bodies] = args
+        if (bodies.length !== 1) throw new CompileError('func expects 3 arguments', form)
         const origParamsList = tryGetFormList(origParamsForm)
         const parsedParams = parseParams(origParamsList)
         const params = parsedParams.params.map(ctWordValue)
         const restParam = parsedParams.restParam ? ctWordValue(parsedParams.restParam) : null
         const nOfParams = params.length
         const newCtx = newContext(firstWordValue)
+        const hasRestParam = !!restParam
         newCtx.nOfParams = nOfParams
-        newCtx.hasRestParam = !!restParam
+        newCtx.hasRestParam = hasRestParam
         const { variables } = newCtx
         localVarCount = 0
         for (const p of params) variables.set(p, makeVar())
         if (restParam) variables.set(restParam, makeVar())
         const cbodies = bodies.map((body) => compileObject(newCtx, body))
         const numberOfParamsLocalVars = localVarCount
-
-        const func = restParam
-          ? (...funcArgs) => {
-              const env = new Array(numberOfParamsLocalVars)
-              for (let i = 0; i < nOfParams; i++) env[i] = funcArgs[i]
-              env[nOfParams] = funcArgs.slice(nOfParams)
-              let result = wunsUnit
-              for (const ebody of ebodies) result = ebody(env)
-              return result
-            }
-          : (...funcArgs) => {
-              const env = new Array(numberOfParamsLocalVars)
-              for (let i = 0; i < nOfParams; i++) env[i] = funcArgs[i]
-              let result = wunsUnit
-              for (const ebody of ebodies) result = ebody(env)
-              return result
-            }
+        const opObj = { op: 'func', nOfParams, hasRestParam, numberOfParamsLocalVars }
+        const mkEnv = makeCallEnvMaker(opObj)
+        opObj.mkEnv = mkEnv
+        opObj.cbody = cbodies[0]
         // for recursive calls
-        newCtx.func = func
-        const ebodies = cbodies.map(evaluateObject)
+        newCtx.mkEnv = mkEnv
+        newCtx.cbody = cbodies[0]
         Object.freeze(newCtx)
-        return opConstant(func)
+        return opObj
       }
       case 'recur': {
         let funcCtx = getOuterContextOfType(ctx, 'func')
@@ -318,6 +311,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
     if (!firstWordValue || getOuterContextWithVar(ctx, firstWordValue)) {
       const cfunc = compileObject(ctx, firstForm)
       const cargs = args.map((a) => compileObject(ctx, a))
+      // todo check if an external or wuns function
       return { op: 'call', func: cfunc, args: cargs }
     }
     throw new CompileError(`function '${firstWordValue}' not found`, form)
@@ -326,11 +320,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
     localVarCount = 0
     const opObj = compileObject(null, form)
     const numberOfLocalVars = localVarCount
-    const evaluateCompileResult = evaluateObject(opObj)
-    return () => {
-      const env = new Array(numberOfLocalVars)
-      return evaluateCompileResult(env)
-    }
+    return () => evaluateObject(new Array(numberOfLocalVars), opObj)
   }
   const evaluate = (form) => compileTop(form)()
   const stringToForm = (s) => formWord(stringToWord(String(s)))
@@ -436,7 +426,7 @@ export const makeInitContext = ({ host, converters }) => {
       }
     })()
     try {
-      return cform([])
+      return cform()
     } catch (e) {
       if (e instanceof RuntimeError) {
         console.error(`runtime error in ${getFormLocation(e.form || form)}: ${e.message}`)
