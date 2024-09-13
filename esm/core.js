@@ -133,19 +133,18 @@ export const isAtom = (f) => f instanceof Atom
 
 export const print = (ox) => {
   const go = (x) => {
-    if (isWord(x)) return String(x)
+    if (x === undefined) return '*undefined*'
     if (isList(x)) return `[${x.map(go).join(' ')}]`
     const word = tryGetFormWord(x)
-    if (word) return print(word)
+    if (word) return go(word)
     const list = tryGetFormList(x)
-    if (list) return print(list)
-    if (x === undefined) return '*undefined*'
+    if (list) return go(list)
     if (isDefVar(x)) return `[var ${x.name}]`
     if (isAtom(x)) return `[atom ${go(x.value)}]`
     const t = typeof x
     // todo allow t === 'boolean' too
     if (t === 'number' || t === 'bigint') return String(x)
-    if (t === 'string') return `'${x}'`
+    if (t === 'string') return isWord(x) ? x : `'${x}'`
     if (t === 'function')
       return `[fn ${x.name} params [${x.parameters.join(' ')}${x.restParam ? ' .. ' + x.restParam : ''}]]`
     if (Object.isFrozen(x))

@@ -140,7 +140,8 @@ export const set_array = (mutable_list, index, element) => {
   if (!isMutable(mutable_list)) throw new Error('set-array expects mutable list')
   if (Object.isFrozen(mutable_list)) throw new Error('set-array expects mutable array')
   if (!isSigned32BitInteger(index)) throw new Error('set-array expects integer index')
-  if (index < 0 || index >= mutable_list.length) throw new Error('set-array index out of bounds: ' + index + ' ' + mutable_list.length)
+  if (index < 0 || index >= mutable_list.length)
+    throw new Error('set-array index out of bounds: ' + index + ' ' + mutable_list.length)
   mutable_list[index] = element
 }
 export const at = (list, index) => {
@@ -190,7 +191,9 @@ export const freeze_kv_map = (kv_map) => {
   Object.freeze(kv_map)
 }
 
-export const log = (form) => console.log(print(form))
+export const log = (form) => {
+  if (form !== undefined) console.log(print(form))
+}
 const isFrozenList = (l) => isList(l) && Object.isFrozen(l) && !isGrowable(l) && !isMutable(l)
 export const concat_lists = (lists) => {
   const l = []
@@ -203,5 +206,5 @@ export const concat_lists = (lists) => {
 export const concat = (l1, l2) => {
   if (!isFrozenList(l1)) throw new Error('concat expects frozen list')
   if (!isFrozenList(l2)) throw new Error('concat expects frozen list')
-  return arrayToList([...l1, ...l2]);
+  return arrayToList([...l1, ...l2])
 }

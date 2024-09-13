@@ -46,8 +46,6 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
   const tryGetFormWord = getHostValue('try-get-form-word')
   const tryGetFormList = getHostValue('try-get-form-list')
 
-  const varMeta = getHostValue('var-meta')
-
   const formWord = getHostValue('form-word')
   const formWordWithMeta = getHostValue('form-word-with-meta')
   const formList = getHostValue('form-list')
@@ -56,6 +54,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
   const defVarWithMeta = getHostValue('def-var-with-meta')
   const setVarValueMeta = getHostValue('set-var-value-meta')
   const varGet = getHostValue('var-get')
+  const varMeta = getHostValue('var-meta')
 
   const ctWord = (f) => {
     const w = tryGetFormWord(f)
@@ -132,10 +131,11 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
     // redefing a variable, this can break earlier definitions
     setVarValueMeta(defVarObject, value, optMetaData)
   }
+  const wunsUnit = undefined
   const compBodies = (ctx, bodies) => {
     const cbodies = bodies.map((body) => compile(ctx, body))
     return (env) => {
-      let result = undefined
+      let result = wunsUnit
       for (const cbody of cbodies) result = cbody(env)
       return result
     }
@@ -164,7 +164,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
     const formList = tryGetFormList(form)
     if (!formList) throw new CompileError('not a form')
     if (formList.length === 0) {
-      const evalEmptyForm = () => undefined
+      const evalEmptyForm = () => wunsUnit
       return evalEmptyForm
     }
     const [firstForm, ...args] = formList
@@ -197,7 +197,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         const cc = compile(ctx, args[0])
         const ct = compile(ctx, args[1])
         if (nOfArgs === 2) {
-          const evalIf2 = (env) => (cc(env) ? ct(env) : undefined)
+          const evalIf2 = (env) => (cc(env) ? ct(env) : wunsUnit)
           return evalIf2
         }
         const cf = compile(ctx, args[2])
@@ -468,7 +468,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
     for (const form of parseToFormsHost(content)) return form
     throw new Error('no forms found')
   }
-  const parseFile = (filename) => parseToFormsHost(fs.readFileSync(filename, 'ascii'), filename)
+  const parseFile = (filePath) => parseToFormsHost(fs.readFileSync(filePath, 'ascii'), filePath)
   return { compile: compileTop, evaluate, parseStringToForms, parseFile, parseStringToFirstForm }
 }
 
@@ -555,7 +555,7 @@ export const makeInitContext = ({ host, converters }) => {
   const evalLogForms = (forms) => {
     for (const form of forms) {
       const v = compEvalLog(form)
-      if (v !== undefined) wunsLog(v)
+      wunsLog(v)
     }
   }
   const parseEvalFiles = (filenames) => {
