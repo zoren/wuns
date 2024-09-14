@@ -138,7 +138,8 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
           const { enclosingLoopCtx, updateBindings } = obj
           const { continueVarObj } = enclosingLoopCtx
           const continueVarIndex = continueVarObj.index
-          for (const [varObj, compValue] of updateBindings) env[varObj.index] = evaluateObject(env, compValue)
+          for (const [_varObj, tmpVarObj, compValue] of updateBindings) env[tmpVarObj.index] = evaluateObject(env, compValue)
+          for (const [varObj, tmpVarObj, _compValue] of updateBindings) env[varObj.index] = env[tmpVarObj.index]
           env[continueVarIndex] = 1
           return wunsUnit
         }
@@ -280,7 +281,8 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
           const uv = ctWordValue(args[i])
           const varObj = variables.get(uv)
           if (!varObj) throw new CompileError(`loop variable ${uv} not found in loop context`, form)
-          updateBindings.push([varObj, compileObject(ctx, args[i + 1])])
+          const tmpVar = makeVar()
+          updateBindings.push([varObj, tmpVar, compileObject(ctx, args[i + 1])])
         }
         return { op: 'continue', enclosingLoopCtx, updateBindings }
       }
