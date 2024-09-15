@@ -14,23 +14,39 @@ const setEnv = (env, varName, value) => {
   env.set(varName, value)
 }
 
+class Closure {
+  constructor(env, name, parameters, body) {
+    this.env = env
+    this.name = name
+    this.parameters = parameters
+    this.body = body
+  }
+}
+
+const makeClosure = (env, name, parameters, body) => Object.freeze(new Closure(env, name, parameters, body))
+
 const print = (value) => {
   if (typeof value === 'string') return value
-  if (typeof value === 'number') return `[int ${value}]`
-  if (typeof value === 'function') return '[func]'
+  if (typeof value === 'number') return `[i32 ${value}]`
   if (Array.isArray(value)) return `[list ${value.map(print).join(' ')}]`
+  if (typeof value === 'function') return '[func]'
+  if (value instanceof Closure) return `[closure ${value.name} ${value.parameters.join(' ')}]`
 }
+
+const list = (...args) => Object.freeze(args)
 
 const directEval = (env, form) => {
   while (true) {
     if (typeof form === 'string') return lookupEnv(env, form)
-    if (!Array.isArray(form) || form.length === 0) {throw new Error('unexpected form: ' + print(form))}
+    if (!Array.isArray(form) || form.length === 0) {
+      throw new Error('unexpected form: ' + print(form))
+    }
     const [first] = form
     switch (first) {
-      case 'int':
+      case 'i32':
         return +form[1] | 0
       case 'func':
-        return { type: 'closure', env, params: form[1], body: form[2] }
+        return makeClosure(env, ...form.slice(1))
 
       case 'if':
         form = form[directEval(env, form[1]) ? 2 : 3]
@@ -51,21 +67,21 @@ const directEval = (env, form) => {
     }
     const func = directEval(env, first)
     if (typeof func === 'function') return func(...form.slice(1).map((arg) => directEval(env, arg)))
-    if (func.type !== 'closure') throw new Error('not a function: ' + print(func))
-    const { params, body, env: funcEnv } = func
-    const newEnv = makeEnv(funcEnv)
-    params.forEach((param, i) => {
+    if (!(func instanceof Closure)) throw new Error('not a function: ' + print(first))
+    const newEnv = makeEnv(func.env)
+    func.parameters.forEach((param, i) => {
       setEnv(newEnv, param, directEval(env, form[i + 1]))
     })
     env = newEnv
-    form = body
+    form = func.body
     continue
   }
 }
 
 import { parse } from './parseTreeSitter.js'
 
-function* parseToForms(content) {
+function* parseToForms(content, metaPrefix) {
+  const makeMeta = metaPrefix ? (...args) => list(metaPrefix, ...args) : list
   /**
    * @param {TSParser.SyntaxNode} node
    */
@@ -77,6 +93,8 @@ function* parseToForms(content) {
         return node.text
       case 'list': {
         const l = node.namedChildren.map(nodeToForm)
+        const { row, column } = node.startPosition
+        l.meta = makeMeta(row + 1, column + 1)
         return Object.freeze(l)
       }
       default:
@@ -88,13 +106,26 @@ function* parseToForms(content) {
 
 import { startRepl } from './repl-util.js'
 
-const env = makeEnv()
+const size = (list) => list.length
 const std = {
-  list: (...args) => Object.freeze(args),
-  size: (list) => list.length,
-
+  list,
+  size,
+  add: (a, b) => a + b,
+  sub: (a, b) => a - b,
+  lt: (a, b) => a < b,
+  log: console.log,
 }
+
+const env = makeEnv()
 for (const [name, value] of Object.entries(std)) setEnv(env, name, value)
+
+import fs from 'node:fs'
+
+for (const filePath of process.argv.slice(2)) {
+  const content = fs.readFileSync(filePath, 'ascii')
+  const forms = parseToForms(content, filePath)
+  for (const form of forms) directEval(env, form)
+}
 
 startRepl('mini-lisp-history.json', 'mini-lisp> ', (line) => {
   try {

@@ -1,0 +1,13 @@
+[let
+  [rec
+    [func go [rec n res]
+      [if [lt n [i32 1]]
+        res
+        [rec rec [sub n [i32 1]] [add res n]]]]
+   gauss [func gauss [n] [rec rec n [i32 0]]]]
+  [do
+    [log [i32 10] [gauss [i32 10]]]
+    [log [i32 100] [gauss [i32 100]]]
+    [log [i32 1000] [gauss [i32 1000]]]
+    [log [i32 10000] [gauss [i32 10000]]]
+    [log [i32 65535] [gauss [i32 65535]]]]]
