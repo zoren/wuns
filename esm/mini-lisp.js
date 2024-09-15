@@ -1,6 +1,10 @@
 const makeEnv = (outer) => {
   const env = new Map()
-  env.outer = outer
+  if (outer) {
+    env.outer = outer
+    const { invocation } = outer
+    if (invocation) env.invocation = invocation
+  }
   return env
 }
 const lookupEnv = (env, varName) => {
@@ -24,6 +28,13 @@ class Closure {
 }
 
 const makeClosure = (env, name, parameters, body) => Object.freeze(new Closure(env, name, parameters, body))
+const makeClosureEnv = (closure, args) => {
+  const { env, parameters } = closure
+  const paramEnv = makeEnv(env)
+  parameters.forEach((param, i) => setEnv(paramEnv, param, args[i]))
+  paramEnv.invocation = { closure, paramEnv }
+  return paramEnv
+}
 
 const print = (value) => {
   if (typeof value === 'string') return value
@@ -64,16 +75,22 @@ const directEval = (env, form) => {
         form = form[2]
         continue
       }
+      case 'recur': {
+        const eargs = form.slice(1).map((arg) => directEval(env, arg))
+        const { closure, paramEnv } = env.invocation
+        const { parameters, body } = closure
+        parameters.forEach((param, i) => setEnv(paramEnv, param, eargs[i]))
+        form = body
+        continue
+      }
     }
     const func = directEval(env, first)
-    if (typeof func === 'function') return func(...form.slice(1).map((arg) => directEval(env, arg)))
+    const eargs = form.slice(1).map((arg) => directEval(env, arg))
+    if (typeof func === 'function') return func(...eargs)
     if (!(func instanceof Closure)) throw new Error('not a function: ' + print(first))
-    const newEnv = makeEnv(func.env)
-    func.parameters.forEach((param, i) => {
-      setEnv(newEnv, param, directEval(env, form[i + 1]))
-    })
-    env = newEnv
-    form = func.body
+    const closure = func
+    env = makeClosureEnv(closure, eargs)
+    form = closure.body
     continue
   }
 }
@@ -115,7 +132,6 @@ const std = {
   lt: (a, b) => a < b,
   log: console.log,
   'performance-now': () => performance.now(),
-
 }
 
 const env = makeEnv()

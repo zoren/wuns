@@ -2,17 +2,16 @@
   [0 [i32 0]
    1 [i32 1]
    trec
-    [func go [trec n res]
+    [func go [n res]
       [if [lt n 1]
         res
-        [trec trec [sub n 1] [add res n]]]]
-   tail-gauss [func tail-gauss [n] [trec trec n 0]]
-   plain-rec
-    [func go [prec n]
+        [recur [sub n 1] [add res n]]]]
+   tail-gauss [func tail-gauss [n] [trec n 0]]
+   recursive-gauss
+    [func go [n]
       [if [lt n 1]
         0
-        [add n [prec prec [sub n 1]]]]]
-    recursive-gauss [func recursive-gauss [n] [plain-rec plain-rec n]]
+        [add n [recur [sub n 1]]]]]
     time-f [func time-f [f n]
       [let
         [start [performance-now]
