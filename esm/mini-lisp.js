@@ -1,16 +1,3 @@
-// a most basic lisp
-// - variables
-// - functions
-// - calls / potentially tail calls
-
-// - literal
-// - if
-// - do
-// - let
-// - recur / potentially tail recur
-
-// envs are maps from variable names to values
-// forms are arrays of forms or strings, numbers, booleans or null
 const makeEnv = (outer) => {
   const env = new Map()
   env.outer = outer
@@ -21,15 +8,23 @@ const lookupEnv = (env, varName) => {
     if (env.has(varName)) return env.get(varName)
     env = env.outer
   }
+  throw new Error('undefined variable: ' + varName)
 }
 const setEnv = (env, varName, value) => {
   env.set(varName, value)
 }
 
+const print = (value) => {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number') return `[int ${value}]`
+  if (typeof value === 'function') return '[func]'
+  if (Array.isArray(value)) return `[list ${value.map(print).join(' ')}]`
+}
+
 const directEval = (env, form) => {
   while (true) {
     if (typeof form === 'string') return lookupEnv(env, form)
-    if (!Array.isArray(form) || form.length === 0) throw new Error('unexpected form: ' + form)
+    if (!Array.isArray(form) || form.length === 0) {throw new Error('unexpected form: ' + print(form))}
     const [first] = form
     switch (first) {
       case 'int':
@@ -55,13 +50,13 @@ const directEval = (env, form) => {
       }
     }
     const func = directEval(env, first)
-    if (func.type !== 'closure') {
-      const eargs = Array.from({ length: form.length - 1 }, (_, i) => directEval(env, form[i + 1]))
-      return func(...eargs)
-    }
+    if (typeof func === 'function') return func(...form.slice(1).map((arg) => directEval(env, arg)))
+    if (func.type !== 'closure') throw new Error('not a function: ' + print(func))
     const { params, body, env: funcEnv } = func
     const newEnv = makeEnv(funcEnv)
-    for (let i = 0; i < params.length; i++) setEnv(newEnv, params[i], directEval(env, form[i + 1]))
+    params.forEach((param, i) => {
+      setEnv(newEnv, param, directEval(env, form[i + 1]))
+    })
     env = newEnv
     form = body
     continue
@@ -70,8 +65,7 @@ const directEval = (env, form) => {
 
 import { parse } from './parseTreeSitter.js'
 
-function* parseToForms(content, filePath) {
-  const mkMeta = filePath ? (row, column) => [filePath, row, column] : (row, column) => [row, column]
+function* parseToForms(content) {
   /**
    * @param {TSParser.SyntaxNode} node
    */
@@ -82,10 +76,7 @@ function* parseToForms(content, filePath) {
       case 'word':
         return node.text
       case 'list': {
-        const { startPosition, namedChildren } = node
-        const { row, column } = startPosition
-        const l = namedChildren.map(nodeToForm)
-        l.metaData = Object.freeze(mkMeta(row + 1, column + 1))
+        const l = node.namedChildren.map(nodeToForm)
         return Object.freeze(l)
       }
       default:
@@ -98,12 +89,18 @@ function* parseToForms(content, filePath) {
 import { startRepl } from './repl-util.js'
 
 const env = makeEnv()
+const std = {
+  list: (...args) => Object.freeze(args),
+  size: (list) => list.length,
+
+}
+for (const [name, value] of Object.entries(std)) setEnv(env, name, value)
 
 startRepl('mini-lisp-history.json', 'mini-lisp> ', (line) => {
   try {
     let result
     for (const form of parseToForms(line)) result = directEval(env, form)
-    console.log(result)
+    console.log(print(result))
   } catch (err) {
     console.error(err)
   }
