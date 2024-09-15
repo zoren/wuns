@@ -114,6 +114,8 @@ const std = {
   sub: (a, b) => a - b,
   lt: (a, b) => a < b,
   log: console.log,
+  'performance-now': () => performance.now(),
+
 }
 
 const env = makeEnv()
