@@ -49,9 +49,7 @@ const list = (...args) => Object.freeze(args)
 const directEval = (env, form) => {
   while (true) {
     if (typeof form === 'string') return lookupEnv(env, form)
-    if (!Array.isArray(form) || form.length === 0) {
-      throw new Error('unexpected form: ' + print(form))
-    }
+    if (!Array.isArray(form) || form.length === 0) throw new Error('unexpected form: ' + print(form))
     const [first] = form
     switch (first) {
       case 'i32':
@@ -63,6 +61,7 @@ const directEval = (env, form) => {
         form = form[directEval(env, form[1]) ? 2 : 3]
         continue
       case 'do':
+        if (form.length === 1) return
         for (let i = 1; i < form.length - 1; i++) directEval(env, form[i])
         form = form.at(-1)
         continue
@@ -84,14 +83,16 @@ const directEval = (env, form) => {
         continue
       }
     }
-    const func = directEval(env, first)
-    const eargs = form.slice(1).map((arg) => directEval(env, arg))
-    if (typeof func === 'function') return func(...eargs)
-    if (!(func instanceof Closure)) throw new Error('not a function: ' + print(first))
-    const closure = func
-    env = makeClosureEnv(closure, eargs)
-    form = closure.body
-    continue
+    {
+      const func = directEval(env, first)
+      const eargs = form.slice(1).map((arg) => directEval(env, arg))
+      if (typeof func === 'function') return func(...eargs)
+      if (!(func instanceof Closure)) throw new Error('not a function: ' + print(first))
+      const closure = func
+      env = makeClosureEnv(closure, eargs)
+      form = closure.body
+      continue
+    }
   }
 }
 
@@ -121,12 +122,12 @@ function* parseToForms(content, metaPrefix) {
   for (const child of parse(content).rootNode.namedChildren) yield nodeToForm(child)
 }
 
-import { startRepl } from './repl-util.js'
-
 const size = (list) => list.length
 const std = {
   list,
   size,
+  at: (list, i) => list.at(i),
+
   add: (a, b) => a + b,
   sub: (a, b) => a - b,
   lt: (a, b) => a < b,
@@ -139,18 +140,24 @@ for (const [name, value] of Object.entries(std)) setEnv(env, name, value)
 
 import fs from 'node:fs'
 
-for (const filePath of process.argv.slice(2)) {
+const commandLineArgs = process.argv.slice(2)
+const endsWithDashFlag = commandLineArgs.at(-1) === '-'
+const files = endsWithDashFlag ? commandLineArgs.slice(0, -1) : commandLineArgs
+for (const filePath of files) {
   const content = fs.readFileSync(filePath, 'ascii')
   const forms = parseToForms(content, filePath)
   for (const form of forms) directEval(env, form)
 }
+import { startRepl } from './repl-util.js'
 
-startRepl('mini-lisp-history.json', 'mini-lisp> ', (line) => {
-  try {
-    let result
-    for (const form of parseToForms(line)) result = directEval(env, form)
-    console.log(print(result))
-  } catch (err) {
-    console.error(err)
-  }
-})
+if (!endsWithDashFlag) {
+  startRepl('mini-lisp-history.json', 'mini-lisp> ', (line) => {
+    try {
+      let result
+      for (const form of parseToForms(line)) result = directEval(env, form)
+      console.log(print(result))
+    } catch (err) {
+      console.error(err)
+    }
+  })
+}

@@ -3,34 +3,36 @@
    1 [i32 1]
    trec
     [func go [n res]
-      [if [lt n 1]
-        res
-        [recur [sub n 1] [add res n]]]]
+      [if n
+        [recur [sub n 1] [add res n]]
+        res]]
    tail-gauss [func tail-gauss [n] [trec n 0]]
    recursive-gauss
     [func go [n]
-      [if [lt n 1]
-        0
-        [add n [recur [sub n 1]]]]]
+      [if n
+        [add n [recur [sub n 1]]]
+        0]]
     time-f [func time-f [f n]
       [let
         [start [performance-now]
          res [f n]
          end [performance-now]]
-        [log n res [sub end start]]]]]
-
-  [do
-    [log [i32 10] [tail-gauss [i32 10]]]
-    [log [i32 100] [tail-gauss [i32 100]]]
-    [log [i32 1000] [tail-gauss [i32 1000]]]
-    [log [i32 10000] [tail-gauss [i32 10000]]]
-    [log [i32 65535] [tail-gauss [i32 65535]]]
-
-    [log [i32 1337]]
-
-    [log [i32 10] [recursive-gauss [i32 10]]]
-
-    [time-f tail-gauss [i32 4000]]
-    [time-f recursive-gauss [i32 4000]]
-
-    ]]
+        [log n res [sub end start]]]]
+    for-each
+    [func for-each [f l]
+      [let [n [size l]]
+        [[func go [i]
+          [if [lt i n]
+            [do
+              [f [at l i]]
+              [recur [add i 1]]]
+            [do]]] 0]]]
+    ns [list
+        [i32 10]
+        [i32 100]
+        [i32 1000]
+        [i32 10000]
+        [i32 65535]]
+    ]
+  [for-each [func do [n] [time-f tail-gauss n]] ns]
+    ]
