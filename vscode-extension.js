@@ -96,6 +96,7 @@ const macroTokenType = tokenTypesMap.get('macro')
 const parameterTokenType = tokenTypesMap.get('parameter')
 const stringTokenType = tokenTypesMap.get('string')
 const typeTokenType = tokenTypesMap.get('type')
+const tokenTypeNumber = tokenTypesMap.get('number')
 
 // from https://github.com/microsoft/vscode-extension-samples/blob/main/semantic-tokens-sample/src/extension.ts#L54
 const encodeTokenModifiers = (...strTokenModifiers) => {
@@ -139,16 +140,27 @@ const tokenBuilderForParseTree = () => {
     if (head.type !== 'word') return
     const headText = head.text
     switch (headText) {
-      case 'quote': {
+      case 'i32':
         pushToken(head, keywordTokenType)
-        const goQ = (node) => {
-          if (node.type === 'word') pushToken(node, stringTokenType)
-          else node.namedChildren.forEach(goQ)
-        }
-        for (const child of tail) goQ(child)
+        if (tail.length === 0) return
+        pushToken(tail[0], tokenTypeNumber)
         break
-      }
+      case 'quote':
+        pushToken(head, keywordTokenType)
+        for (const child of tail) {
+          const goQ = (node) => {
+            if (node.type === 'word') pushToken(node, stringTokenType)
+            else node.namedChildren.forEach(goQ)
+          }
+          goQ(child)
+        }
+        break
+
       case 'if':
+        pushToken(head, keywordTokenType)
+        for (const child of tail) go(child)
+        break
+      case 'do':
         pushToken(head, keywordTokenType)
         for (const child of tail) go(child)
         break
