@@ -7,13 +7,6 @@ const makeEnv = (outer) => {
   }
   return env
 }
-const lookupEnv = (env, varName) => {
-  while (env) {
-    if (env.has(varName)) return env.get(varName)
-    env = env.outer
-  }
-  throw new Error('undefined variable: ' + varName)
-}
 const setEnv = (env, varName, value) => {
   env.set(varName, value)
 }
@@ -48,59 +41,68 @@ const setParameters = (parameters, paramEnv, eargs) => {
   parameters.forEach((param, i) => setEnv(paramEnv, param, eargs[i]))
 }
 
-const directEval = (env, form) => {
-  while (true) {
-    if (typeof form === 'string') return lookupEnv(env, form)
-    if (!Array.isArray(form) || form.length === 0) throw new Error('unexpected form: ' + print(form))
-    const [first] = form
-    switch (first) {
-      case 'i32':
-        return +form[1] | 0
-      case 'word':
-        return form[1]
-      case 'func':
-        return makeClosure(env, ...form.slice(1))
+const evaluate = (defEnv, form) => {
+  const go = (env, form) => {
+    while (true) {
+      if (typeof form === 'string') {
+        while (env) {
+          if (env.has(form)) return env.get(form)
+          env = env.outer
+        }
+        if (!defEnv.has(form)) throw new Error('undefined variable: ' + form)
+        return defEnv.get(form)
+      }
+      if (!Array.isArray(form) || form.length === 0) throw new Error('unexpected form: ' + print(form))
+      const [first] = form
+      switch (first) {
+        case 'i32':
+          return +form[1] | 0
+        case 'word':
+          return form[1]
+        case 'func':
+          return makeClosure(env, ...form.slice(1))
 
-      case 'if':
-        form = form[directEval(env, form[1]) ? 2 : 3]
-        continue
-      case 'do':
-        if (form.length === 1) return
-        for (let i = 1; i < form.length - 1; i++) directEval(env, form[i])
-        form = form.at(-1)
-        continue
-      case 'let': {
-        const bindings = form[1]
-        const newEnv = makeEnv(env)
-        for (let i = 0; i < bindings.length - 1; i += 2)
-          setEnv(newEnv, bindings[i], directEval(newEnv, bindings[i + 1]))
-        env = newEnv
-        form = form[2]
+        case 'if':
+          form = form[go(env, form[1]) ? 2 : 3]
+          continue
+        case 'do':
+          if (form.length === 1) return
+          for (let i = 1; i < form.length - 1; i++) go(env, form[i])
+          form = form.at(-1)
+          continue
+        case 'let': {
+          const bindings = form[1]
+          const newEnv = makeEnv(env)
+          for (let i = 0; i < bindings.length - 1; i += 2) setEnv(newEnv, bindings[i], go(newEnv, bindings[i + 1]))
+          env = newEnv
+          form = form[2]
+          continue
+        }
+        case 'recur': {
+          const eargs = form.slice(1).map((arg) => go(env, arg))
+          const { closure, paramEnv } = env.invocation
+          const { parameters, body } = closure
+          setParameters(parameters, paramEnv, eargs)
+          form = body
+          continue
+        }
+      }
+      {
+        const func = go(env, first)
+        const eargs = form.slice(1).map((arg) => go(env, arg))
+        if (typeof func === 'function') return func(...eargs)
+        if (!(func instanceof Closure)) throw new Error('not a function: ' + print(first))
+        const closure = func
+        const paramEnv = makeEnv(closure.env)
+        setParameters(closure.parameters, paramEnv, eargs)
+        paramEnv.invocation = { closure, paramEnv }
+        env = paramEnv
+        form = closure.body
         continue
       }
-      case 'recur': {
-        const eargs = form.slice(1).map((arg) => directEval(env, arg))
-        const { closure, paramEnv } = env.invocation
-        const { parameters, body } = closure
-        setParameters(parameters, paramEnv, eargs)
-        form = body
-        continue
-      }
-    }
-    {
-      const func = directEval(env, first)
-      const eargs = form.slice(1).map((arg) => directEval(env, arg))
-      if (typeof func === 'function') return func(...eargs)
-      if (!(func instanceof Closure)) throw new Error('not a function: ' + print(first))
-      const closure = func
-      const paramEnv = makeEnv(closure.env)
-      setParameters(closure.parameters, paramEnv, eargs)
-      paramEnv.invocation = { closure, paramEnv }
-      env = paramEnv
-      form = closure.body
-      continue
     }
   }
+  return go(makeEnv(), form)
 }
 
 import { parse } from './parseTreeSitter.js'
@@ -142,8 +144,8 @@ const std = {
   'performance-now': () => performance.now(),
 }
 
-const env = makeEnv()
-for (const [name, value] of Object.entries(std)) setEnv(env, name, value)
+const defEnv = new Map()
+for (const [name, value] of Object.entries(std)) defEnv.set(name, value)
 
 import fs from 'node:fs'
 
@@ -153,7 +155,7 @@ const files = endsWithDashFlag ? commandLineArgs.slice(0, -1) : commandLineArgs
 for (const filePath of files) {
   const content = fs.readFileSync(filePath, 'ascii')
   const forms = parseToForms(content, filePath)
-  for (const form of forms) directEval(env, form)
+  for (const form of forms) evaluate(defEnv, form)
 }
 import { startRepl } from './repl-util.js'
 
@@ -161,7 +163,7 @@ if (!endsWithDashFlag) {
   startRepl('mini-lisp-history.json', 'mini-lisp> ', (line) => {
     try {
       let result
-      for (const form of parseToForms(line)) result = directEval(env, form)
+      for (const form of parseToForms(line)) result = evaluate(defEnv, form)
       console.log(print(result))
     } catch (err) {
       console.error(err)
