@@ -125,7 +125,6 @@ const tokenBuilderForParseTree = () => {
   const pushToken = (node, tokenType) => {
     pushTokenWithModifier(node, tokenType, 0)
   }
-  const funcEnv = new Map()
   /**
    * @param {TSParser.SyntaxNode} node
    */
@@ -137,7 +136,7 @@ const tokenBuilderForParseTree = () => {
     }
     if (namedChildCount === 0) return
     const [head, ...tail] = node.namedChildren
-    if (head.type !== 'word') return
+    if (head.type !== 'word') return go(head)
     const headText = head.text
     switch (headText) {
       case 'i32':
@@ -187,26 +186,6 @@ const tokenBuilderForParseTree = () => {
         pushToken(head, keywordTokenType)
         for (const arg of tail) go(arg)
         break
-      case 'defn':
-      case 'defmacro': {
-        pushToken(head, keywordTokenType)
-        const [fmName, parameters, ...body] = tail
-        if (fmName) {
-          funcEnv.set(fmName.text, { headText, isMacro: headText === 'defmacro' })
-          pushTokenWithModifier(fmName, headText === 'func' ? functionTokenType : macroTokenType, declarationModifier)
-        }
-        if (parameters && parameters.type === 'list') {
-          let pi = 0
-          const dotdotIndex = parameters.namedChildCount - 2
-          for (const parameter of parameters.namedChildren) {
-            if (pi++ === dotdotIndex && parameter.text === '..') {
-              pushToken(parameter, keywordTokenType)
-            } else pushTokenWithModifier(parameter, parameterTokenType, declarationModifier)
-          }
-        }
-        for (const child of body) go(child)
-        break
-      }
       case 'def': {
         pushToken(head, keywordTokenType)
         if (tail.length === 0) break
@@ -215,29 +194,13 @@ const tokenBuilderForParseTree = () => {
         for (let i = 2; i < node.namedChildCount; i++) go(node.namedChildren[i])
         break
       }
-      case 'external': {
+      case 'extern':
         pushToken(head, keywordTokenType)
-        // todo update this
-        if (tail.length === 0) break
-        const cname = tail[0]
-        if (cname.type === 'word') pushToken(cname, functionTokenType, declarationModifier)
-        if (tail.length === 1) break
-        const params = tail[1]
-        if (params.type === 'list')
-          for (const param of params.namedChildren) pushToken(param, typeTokenType, declarationModifier)
-        if (tail.length === 2) break
-        const results = tail[2]
-        if (results.type === 'list')
-          for (const result of results.namedChildren) pushToken(result, typeTokenType, declarationModifier)
-        // for (let i = 2; i < node.namedChildCount; i++) go(node.namedChildren[i])
+        for (const child of tail) if (child.type === 'word') pushToken(child, declarationModifier)
         break
-      }
       default:
-        {
-          const func = funcEnv.get(headText)
-          pushToken(head, func && func.isMacro ? macroTokenType : functionTokenType)
-          for (const arg of tail) go(arg)
-        }
+        pushToken(head, functionTokenType)
+        for (const arg of tail) go(arg)
         break
     }
   }
