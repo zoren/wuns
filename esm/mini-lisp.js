@@ -28,13 +28,6 @@ class Closure {
 }
 
 const makeClosure = (env, name, parameters, body) => Object.freeze(new Closure(env, name, parameters, body))
-const makeClosureEnv = (closure, args) => {
-  const { env, parameters } = closure
-  const paramEnv = makeEnv(env)
-  parameters.forEach((param, i) => setEnv(paramEnv, param, args[i]))
-  paramEnv.invocation = { closure, paramEnv }
-  return paramEnv
-}
 
 const print = (value) => {
   if (typeof value === 'string') return value
@@ -46,6 +39,15 @@ const print = (value) => {
 
 const list = (...args) => Object.freeze(args)
 
+const setParameters = (parameters, paramEnv, eargs) => {
+  if (parameters.length > 1 && parameters.at(-2) === '..') {
+    const restParam = parameters.at(-1)
+    parameters = parameters.slice(0, -2)
+    setEnv(paramEnv, restParam, list(...eargs.slice(parameters.length)))
+  }
+  parameters.forEach((param, i) => setEnv(paramEnv, param, eargs[i]))
+}
+
 const directEval = (env, form) => {
   while (true) {
     if (typeof form === 'string') return lookupEnv(env, form)
@@ -54,6 +56,8 @@ const directEval = (env, form) => {
     switch (first) {
       case 'i32':
         return +form[1] | 0
+      case 'word':
+        return form[1]
       case 'func':
         return makeClosure(env, ...form.slice(1))
 
@@ -78,7 +82,7 @@ const directEval = (env, form) => {
         const eargs = form.slice(1).map((arg) => directEval(env, arg))
         const { closure, paramEnv } = env.invocation
         const { parameters, body } = closure
-        parameters.forEach((param, i) => setEnv(paramEnv, param, eargs[i]))
+        setParameters(parameters, paramEnv, eargs)
         form = body
         continue
       }
@@ -89,7 +93,10 @@ const directEval = (env, form) => {
       if (typeof func === 'function') return func(...eargs)
       if (!(func instanceof Closure)) throw new Error('not a function: ' + print(first))
       const closure = func
-      env = makeClosureEnv(closure, eargs)
+      const paramEnv = makeEnv(closure.env)
+      setParameters(closure.parameters, paramEnv, eargs)
+      paramEnv.invocation = { closure, paramEnv }
+      env = paramEnv
       form = closure.body
       continue
     }

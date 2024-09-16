@@ -36,3 +36,11 @@
     ]
   [for-each [func do [n] [time-f tail-gauss n]] ns]
     ]
+
+[let [va [func va [x y .. r]
+  [list x y r]]]
+  [do
+    [log [va [i32 1] [i32 2]]]
+    [log [va [i32 1] [i32 2] [i32 3]]]
+    [log [va [i32 1] [i32 2] [i32 3] [i32 4]]]]
+  ]
