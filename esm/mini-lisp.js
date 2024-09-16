@@ -7,6 +7,14 @@ const makeEnv = (outer) => {
   }
   return env
 }
+const hasLocal = (env, varName) => {
+  let curEnv = env
+  while (curEnv) {
+    if (curEnv.has(varName)) return true
+    curEnv = curEnv.outer
+  }
+  return false
+}
 const setEnv = (env, varName, value) => {
   env.set(varName, value)
 }
@@ -21,7 +29,13 @@ class Closure {
 }
 
 const makeClosure = (env, name, parameters, body) => Object.freeze(new Closure(env, name, parameters, body))
+const symbolMeta = Symbol.for('wuns-meta')
 
+const cloneClosureWithMeta = ({ env, name, parameters, body }, meta) => {
+  const clone = new Closure(env, name, parameters, body)
+  clone[symbolMeta] = meta
+  return Object.freeze(clone)
+}
 const print = (value) => {
   if (typeof value === 'string') return value
   if (typeof value === 'number') return `[i32 ${value}]`
@@ -41,13 +55,16 @@ const setParameters = (parameters, paramEnv, eargs) => {
   parameters.forEach((param, i) => setEnv(paramEnv, param, eargs[i]))
 }
 
+const getMeta = (form) => form[symbolMeta]
+
 const evaluate = (defEnv, form) => {
   const go = (env, form) => {
     while (true) {
       if (typeof form === 'string') {
-        while (env) {
-          if (env.has(form)) return env.get(form)
-          env = env.outer
+        let curEnv = env
+        while (curEnv) {
+          if (curEnv.has(form)) return curEnv.get(form)
+          curEnv = curEnv.outer
         }
         if (!defEnv.has(form)) throw new Error('undefined variable: ' + form)
         return defEnv.get(form)
@@ -86,6 +103,23 @@ const evaluate = (defEnv, form) => {
           form = body
           continue
         }
+        case 'def': {
+          const [, name, value] = form
+          defEnv.set(name, go(env, value))
+          return
+        }
+      }
+      if (typeof first === 'string' && !hasLocal(env, first)) {
+        const defFunc = defEnv.get(first)
+        const metaData = getMeta(defFunc)
+        if (metaData && metaData === 'macro' && defFunc instanceof Closure) {
+          const args = form.slice(1)
+          const paramEnv = makeEnv(defFunc.env)
+          setParameters(defFunc.parameters, paramEnv, args)
+          paramEnv.invocation = { closure: defFunc, paramEnv }
+          form = go(paramEnv, defFunc.body)
+          continue
+        }
       }
       {
         const func = go(env, first)
@@ -121,7 +155,7 @@ function* parseToForms(content, metaPrefix) {
       case 'list': {
         const l = node.namedChildren.map(nodeToForm)
         const { row, column } = node.startPosition
-        l.meta = makeMeta(row + 1, column + 1)
+        l[symbolMeta] = makeMeta(row + 1, column + 1)
         return Object.freeze(l)
       }
       default:
@@ -132,6 +166,17 @@ function* parseToForms(content, metaPrefix) {
 }
 
 const size = (list) => list.length
+
+const with_meta = (object, meta) => {
+  if (object instanceof Closure) return cloneClosureWithMeta(object, meta)
+  if (Array.isArray(object)) {
+    const copy = object.slice()
+    copy[symbolMeta] = meta
+    return Object.freeze(copy)
+  }
+  throw new Error('with-meta expects closure or list')
+}
+
 const std = {
   list,
   size,
@@ -142,6 +187,8 @@ const std = {
   lt: (a, b) => a < b,
   log: console.log,
   'performance-now': () => performance.now(),
+  'with-meta': with_meta,
+  meta: getMeta,
 }
 
 const defEnv = new Map()
