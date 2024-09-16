@@ -1,3 +1,13 @@
+[def add [extern add]]
+[def sub [extern sub]]
+[def lt [extern lt]]
+[def size [extern size]]
+[def at [extern at]]
+[def performance-now [extern performance-now]]
+[def log [extern log]]
+[def with-meta [extern with-meta]]
+[def list [func list [.. entries] entries]]
+
 [let
   [0 [i32 0]
    1 [i32 1]
@@ -44,7 +54,6 @@
     [log [va [i32 1] [i32 2] [i32 3]]]
     [log [va [i32 1] [i32 2] [i32 3] [i32 4]]]]
   ]
-[def list [func list [.. entries] entries]]
 [def defmacro
   [with-meta
     [func defmacro [name params body]

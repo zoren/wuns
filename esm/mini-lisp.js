@@ -64,7 +64,8 @@ const makeParamEnv = (defFunc, args) => {
 
 const getMeta = (form) => form[symbolMeta]
 
-const makeEvaluator = (defEnv) => {
+const makeEvaluator = (externObj) => {
+  const defEnv = new Map()
   const go = (env, form) => {
     while (true) {
       if (typeof form === 'string') {
@@ -85,6 +86,14 @@ const makeEvaluator = (defEnv) => {
           return form[1]
         case 'func':
           return makeClosure(env, ...form.slice(1))
+        case 'extern': {
+          let ext = externObj
+          for (let i = 1; i < form.length; i++) {
+            ext = ext[form[i]]
+            if (ext === undefined) throw new Error('undefined extern: ' + form.slice(1, i + 1).join(' '))
+          }
+          return ext
+        }
 
         case 'if':
           form = form[go(env, form[1]) ? 2 : 3]
@@ -180,8 +189,7 @@ const with_meta = (object, meta) => {
   throw new Error('with-meta expects closure or list')
 }
 
-const std = {
-  list,
+const externs = {
   size,
   at: (list, i) => list.at(i),
 
@@ -194,15 +202,12 @@ const std = {
   meta: getMeta,
 }
 
-const defEnv = new Map()
-for (const [name, value] of Object.entries(std)) defEnv.set(name, value)
-
 import fs from 'node:fs'
 
 const commandLineArgs = process.argv.slice(2)
 const endsWithDashFlag = commandLineArgs.at(-1) === '-'
 const files = endsWithDashFlag ? commandLineArgs.slice(0, -1) : commandLineArgs
-const evaluate = makeEvaluator(defEnv)
+const evaluate = makeEvaluator(externs)
 for (const filePath of files) {
   const content = fs.readFileSync(filePath, 'ascii')
   const forms = parseToForms(content, filePath)
