@@ -44,3 +44,15 @@
     [log [va [i32 1] [i32 2] [i32 3]]]
     [log [va [i32 1] [i32 2] [i32 3] [i32 4]]]]
   ]
+[def list [func list [.. entries] entries]]
+[def defmacro
+  [with-meta
+    [func defmacro [name params body]
+      [list [word def] name
+        [list [word with-meta] [list [word func] name params body]
+          [list [word word] [word macro]]]]]
+    [word macro]]]
+[defmacro defn [name params body]
+  [list [word def] name [list [word func] name params body]]]
+
+[defmacro if-not [c t f] [list [word if] c f t]]

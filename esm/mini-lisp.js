@@ -39,7 +39,7 @@ const cloneClosureWithMeta = ({ env, name, parameters, body }, meta) => {
 const print = (value) => {
   if (typeof value === 'string') return value
   if (typeof value === 'number') return `[i32 ${value}]`
-  if (Array.isArray(value)) return `[list ${value.map(print).join(' ')}]`
+  if (Array.isArray(value)) return `[${value.map(print).join(' ')}]`
   if (typeof value === 'function') return '[func]'
   if (value instanceof Closure) return `[closure ${value.name} ${value.parameters.join(' ')}]`
 }
@@ -53,6 +53,13 @@ const setParameters = (parameters, paramEnv, eargs) => {
     setEnv(paramEnv, restParam, list(...eargs.slice(parameters.length)))
   }
   parameters.forEach((param, i) => setEnv(paramEnv, param, eargs[i]))
+}
+
+const makeParamEnv = (defFunc, args) => {
+  const paramEnv = makeEnv(defFunc.env)
+  setParameters(defFunc.parameters, paramEnv, args)
+  paramEnv.invocation = { closure: defFunc, paramEnv }
+  return paramEnv
 }
 
 const getMeta = (form) => form[symbolMeta]
@@ -109,29 +116,25 @@ const evaluate = (defEnv, form) => {
           return
         }
       }
+      const args = form.slice(1)
       if (typeof first === 'string' && !hasLocal(env, first)) {
         const defFunc = defEnv.get(first)
-        const metaData = getMeta(defFunc)
-        if (metaData && metaData === 'macro' && defFunc instanceof Closure) {
-          const args = form.slice(1)
-          const paramEnv = makeEnv(defFunc.env)
-          setParameters(defFunc.parameters, paramEnv, args)
-          paramEnv.invocation = { closure: defFunc, paramEnv }
-          form = go(paramEnv, defFunc.body)
-          continue
+        if (defFunc instanceof Closure) {
+          const funcKind = getMeta(defFunc)
+          if (funcKind === 'fexpr') return go(makeParamEnv(defFunc, args), defFunc.body)
+          if (funcKind === 'macro') {
+            form = go(makeParamEnv(defFunc, args), defFunc.body)
+            continue
+          }
         }
       }
       {
         const func = go(env, first)
-        const eargs = form.slice(1).map((arg) => go(env, arg))
+        const eargs = args.map((arg) => go(env, arg))
         if (typeof func === 'function') return func(...eargs)
         if (!(func instanceof Closure)) throw new Error('not a function: ' + print(first))
-        const closure = func
-        const paramEnv = makeEnv(closure.env)
-        setParameters(closure.parameters, paramEnv, eargs)
-        paramEnv.invocation = { closure, paramEnv }
-        env = paramEnv
-        form = closure.body
+        env = makeParamEnv(func, eargs)
+        form = func.body
         continue
       }
     }
