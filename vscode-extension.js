@@ -141,8 +141,11 @@ const tokenBuilderForParseTree = () => {
     switch (headText) {
       case 'i32':
         pushToken(head, keywordTokenType)
-        if (tail.length === 0) return
-        pushToken(tail[0], tokenTypeNumber)
+        if (tail.length) pushToken(tail[0], tokenTypeNumber)
+        break
+      case 'word':
+        pushToken(head, keywordTokenType)
+        if (tail.length) pushToken(tail[0], stringTokenType)
         break
       case 'quote':
         pushToken(head, keywordTokenType)
