@@ -17,7 +17,7 @@ const cache = new Map()
 /**
  * @param {vscode.TextDocument} document
  * @param {TSParser.Tree} oldTree
- * @returns {{tree: TSParser.Tree, forms: []}} tree
+ * @returns {{tree: TSParser.Tree}} cache
  */
 let parseDocumentTreeSitter = null
 
@@ -30,21 +30,18 @@ const cacheFetchOrParse = (document) => {
   const { version } = document
   const cacheObj = cache.get(document)
   if (!cacheObj) {
-    const { tree, forms } = parseDocumentTreeSitter(document)
-    const obj = { version, tree, forms }
+    const { tree } = parseDocumentTreeSitter(document)
+    const obj = { version, tree }
     cache.set(document, obj)
     return obj
   }
-  if (cacheObj.version === version) {
-    // console.log('cache hit', document.uri, document.version)
-    return cacheObj
-  }
+  if (cacheObj.version === version) return cacheObj
+
   // we don't expect to come here, onDidChangeTextDocument should have been called updating the tree
   console.error('cache miss', document.uri, document.version, cacheObj.version)
   const oldTree = cacheObj.tree
-  const { tree, forms } = parseDocumentTreeSitter(document, oldTree)
+  const { tree } = parseDocumentTreeSitter(document, oldTree)
   cacheObj.tree = tree
-  cacheObj.forms = forms
   cacheObj.version = version
   return cacheObj
 }
@@ -54,7 +51,7 @@ const wunsLanguageId = 'wuns'
 /**
  * @param {vscode.TextDocumentChangeEvent} document
  */
-const onDidChangeTextDocument = (e) => {
+const onDidChangeTextDocumentReparseChanges = (e) => {
   const { document, contentChanges, reason } = e
   const { languageId, uri, version } = document
   if (languageId !== wunsLanguageId) return
@@ -74,12 +71,10 @@ const onDidChangeTextDocument = (e) => {
     }
     oldTree.edit(tsEdit)
   }
-  // console.log('tree edited', { version: document.version, nOfChanges: contentChanges.length })
-  // const watch = makeStopWatch()
-  const { tree, forms } = parseDocumentTreeSitter(document, oldTree)
-  // console.log('parse incremental took', watch(), 'ms')
+
+  const { tree } = parseDocumentTreeSitter(document, oldTree)
+
   cacheObj.tree = tree
-  cacheObj.forms = forms
   cacheObj.version = version
 }
 
@@ -249,104 +244,12 @@ const provideDocumentSemanticTokens = (document) => {
   return semtoks
 }
 
-const { commands, window, languages, workspace } = vscode
-
-/**
- * @returns {vscode.TextDocument}
- */
-const getActiveTextEditorDocument = () => {
-  const { activeTextEditor } = window
-  if (!activeTextEditor) return null
-  return activeTextEditor.document
-}
+const { languages, workspace } = vscode
 
 const pointToPosition = ({ row, column }) => new Position(row, column)
 
 const rangeFromNode = ({ startPosition, endPosition }) =>
   new Range(pointToPosition(startPosition), pointToPosition(endPosition))
-
-// const makeInterpretCurrentFile = async (context) => {
-//   const outputChannel = window.createOutputChannel('wuns output', wunsLanguageId)
-//   // outputChannel.show(true)
-//   const appendShow = (s) => {
-//     outputChannel.appendLine(s)
-//     outputChannel.show(true)
-//   }
-//   const { meta, print } = await import('./esm/core.js')
-//   const { makeContext } = await import('./esm/interpreter.js')
-//   const wunsDir = context.extensionPath + '/wuns/'
-//   return () => {
-//     const importObject = {
-//       check: {
-//         'report-error': (msg, form) => {
-//           console.log('report-error', print(msg), print(meta(form)))
-//         },
-//       },
-//     }
-//     const ctx = makeContext({ wunsDir, contextName: 'interpret', importObject })
-//     const { evalLogForms } = ctx
-
-//     const document = getActiveTextEditorDocument()
-//     const { forms } = cacheFetchOrParse(document)
-//     outputChannel.clear()
-//     appendShow('interpreting: ' + document.fileName)
-//     try {
-//       evalLogForms(forms, document.fileName)
-//       appendShow('done interpreting')
-//     } catch (e) {
-//       appendShow(e.message)
-//     }
-//   }
-// }
-
-const makeCheckCurrentFileCommand = async (context) => {
-  const outputChannel = window.createOutputChannel('wuns check', wunsLanguageId)
-  const diag = languages.createDiagnosticCollection('wuns')
-  const { meta, print } = await import('./esm/core.js')
-  const { makeInitInterpreter, parseEvalFile } = await import('./esm/interpreter.js')
-  const appendShow = (s) => {
-    outputChannel.appendLine(s)
-    outputChannel.show(true)
-  }
-  const wunsDir = context.extensionPath + '/wuns/'
-  return async () => {
-    const context = makeInitInterpreter()
-    for (const name of ['std3', 'wasm-instructions', 'check']) parseEvalFile(context, wunsDir + name + '.wuns')
-    const document = getActiveTextEditorDocument()
-    if (!document) return
-    const { forms } = cacheFetchOrParse(document)
-    outputChannel.clear()
-    appendShow('checking: ' + document.fileName)
-    const { getVarVal } = context
-    const checkTopForms = getVarVal('check-top-forms')
-    const diagnostics = []
-    try {
-      const { errors } = checkTopForms(forms)
-      for (const { message, form } of errors) {
-        if (!Array.isArray(message)) throw new Error('msg is not an array')
-        const metaData = meta(form)
-        if (!metaData) throw new Error('meta is ' + metaData)
-        const { range } = metaData
-        if (!Array.isArray(range)) {
-          console.error('range is not an array ' + print(form) + ' ' + print(metaData))
-          return
-        }
-        const [startLine, startCol, endLine, endCol] = range
-        const diagnostic = new Diagnostic(
-          new Range(startLine, startCol, endLine, endCol),
-          message.map(print).join(' '),
-          DiagnosticSeverity.Error,
-        )
-        diagnostics.push(diagnostic)
-      }
-      appendShow('done checking: ' + forms.length)
-    } catch (e) {
-      appendShow(e.message)
-      console.error('error evaluating checker', e)
-    }
-    diag.set(document.uri, diagnostics)
-  }
-}
 
 /**
  *
@@ -357,7 +260,7 @@ const makeCheckCurrentFileCommand = async (context) => {
 const provideSelectionRanges = (document, positions) => {
   const { tree } = cacheFetchOrParse(document)
   const topLevelNodes = tree.rootNode.children
-  // todo make selection aware of special forms such as let, where one wan't to select bindings before entire binding form
+  // todo make selection aware of special forms such as let, where one wants to select bindings(pairs) before entire binding form
   const tryFindRange = (pos) => {
     const go = (node, parentSelectionRange) => {
       const range = rangeFromNode(node)
@@ -388,21 +291,14 @@ const provideSelectionRanges = (document, positions) => {
  * @param {vscode.ExtensionContext} context
  */
 async function activate(context) {
-  const { jsHost } = await import('./esm/interpreter.js')
-  const { parse, treeToFormsHost } = await import('./esm/parseTreeSitter.js')
+  const { parse } = await import('./esm/parseTreeSitter.js')
   parseDocumentTreeSitter = (document, oldTree) => {
     const watch = makeStopWatch()
     const tree = parse(document.getText(), oldTree)
     console.log('parse treesitter took', watch(), 'ms')
-    const watch2 = makeStopWatch()
-    const forms = treeToFormsHost(jsHost, tree)
-    console.log('tree to forms took', watch2(), 'ms')
-    return { tree, forms }
+    return { tree }
   }
   console.log('starting wuns lang extension: ' + context.extensionPath)
-  // const interpretCurrentFile = await makeInterpretCurrentFile(context)
-  // context.subscriptions.push(commands.registerCommand('wunslang.interpret', interpretCurrentFile))
-  context.subscriptions.push(commands.registerCommand('wunslang.check', await makeCheckCurrentFileCommand(context)))
 
   const selector = { language: 'wuns', scheme: 'file' }
   context.subscriptions.push(
@@ -415,7 +311,7 @@ async function activate(context) {
     ),
     languages.registerSelectionRangeProvider(selector, { provideSelectionRanges }),
   )
-  workspace.onDidChangeTextDocument(onDidChangeTextDocument)
+  workspace.onDidChangeTextDocument(onDidChangeTextDocumentReparseChanges)
   console.log('Congratulations, your extension "wunslang" is now active!')
 }
 
