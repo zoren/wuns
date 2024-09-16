@@ -64,7 +64,7 @@ const makeParamEnv = (defFunc, args) => {
 
 const getMeta = (form) => form[symbolMeta]
 
-const evaluate = (defEnv, form) => {
+const makeEvaluator = (defEnv) => {
   const go = (env, form) => {
     while (true) {
       if (typeof form === 'string') {
@@ -139,7 +139,7 @@ const evaluate = (defEnv, form) => {
       }
     }
   }
-  return go(makeEnv(), form)
+  return (form) => go(makeEnv(), form)
 }
 
 import { parse } from './parseTreeSitter.js'
@@ -202,10 +202,11 @@ import fs from 'node:fs'
 const commandLineArgs = process.argv.slice(2)
 const endsWithDashFlag = commandLineArgs.at(-1) === '-'
 const files = endsWithDashFlag ? commandLineArgs.slice(0, -1) : commandLineArgs
+const evaluate = makeEvaluator(defEnv)
 for (const filePath of files) {
   const content = fs.readFileSync(filePath, 'ascii')
   const forms = parseToForms(content, filePath)
-  for (const form of forms) evaluate(defEnv, form)
+  for (const form of forms) evaluate(form)
 }
 import { startRepl } from './repl-util.js'
 
@@ -213,7 +214,7 @@ if (!endsWithDashFlag) {
   startRepl('mini-lisp-history.json', 'mini-lisp> ', (line) => {
     try {
       let result
-      for (const form of parseToForms(line)) result = evaluate(defEnv, form)
+      for (const form of parseToForms(line)) result = evaluate(form)
       console.log(print(result))
     } catch (err) {
       console.error(err)
