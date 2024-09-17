@@ -53,6 +53,14 @@
         [push-i32-little-endian bytes [recur ctx element]]]
       [add-bytes-to-active-mem ctx bytes]]]]
 
+[defn dec-word-to-int [w]
+  [loop [i 0 res 0]
+    [if [lt-s i [word-byte-size w]]
+      [let [cc [char-code-at w i]]
+        [assert [is-between-inclusive [word-to-char-code 0] cc [word-to-char-code 9]] dec-word-to-int expects a decimal word]
+        [continue res [add [mul res [i32 10]] [sub cc [word-to-char-code 0]]] i [inc i]]]
+      res]]]
+
 [defn push-active-data [ctx bytes form]
   [assert [is-list form] push-active-data unknown form [identity form]]
   [assert [not [is-empty form]] push-active-data unknown form [identity form]]

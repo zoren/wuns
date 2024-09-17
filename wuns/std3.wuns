@@ -220,14 +220,6 @@
 
 [def-extern word-byte-size [func [word] i32]]
 
-[defn dec-word-to-int [w]
-  [loop [i 0 res 0]
-    [if [lt-s i [word-byte-size w]]
-      [let [cc [char-code-at w i]]
-        [assert [is-between-inclusive [word-to-char-code 0] cc [word-to-char-code 9]] dec-word-to-int expects a decimal word]
-        [continue res [add [mul res [i32 10]] [sub cc [word-to-char-code 0]]] i [inc i]]]
-      res]]]
-
 [def-extern atom-get [type-scheme [a] [func [[atom a]] a]]]
 [def-extern atom-set [type-scheme [a] [func [[atom a] a] [tuple]]]]
 
