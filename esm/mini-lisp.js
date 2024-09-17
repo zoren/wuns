@@ -48,7 +48,10 @@ const assertFormDeep = (form) => {
   list.forEach(assertFormDeep)
 }
 
+const langUndefined = Symbol('undefined')
+
 const print = (value) => {
+  if (value === langUndefined) return '[]'
   if (typeof value === 'string') return `[word ${value}]`
   if (typeof value === 'number') return `[i32 ${value}]`
   if (isForm(value)) return `[quote ${printForm(value)}]`
@@ -76,18 +79,6 @@ const makeParamEnv = (defFunc, args) => {
   return paramEnv
 }
 
-const getFormWord = (form) => {
-  const word = tryGetFormWord(form)
-  if (!word) throw new Error('expected word: ' + form)
-  return word
-}
-
-const getFormList = (form) => {
-  const list = tryGetFormList(form)
-  if (!list) throw new Error('expected list: ' + form)
-  return list
-}
-
 import { meta } from './core.js'
 
 class EvalError extends Error {
@@ -97,9 +88,22 @@ class EvalError extends Error {
   }
 }
 
+const getFormWord = (form) => {
+  const word = tryGetFormWord(form)
+  if (word) return word
+  throw new EvalError('expected word', form)
+}
+
+const getFormList = (form) => {
+  const list = tryGetFormList(form)
+  if (list) return list
+  throw new EvalError('expected list', form)
+}
+
 const makeEvaluator = (externObj) => {
   const defEnv = new Map()
   const go = (env, form) => {
+    const evalError = (message) => new EvalError(message, form)
     while (true) {
       const word = tryGetFormWord(form)
       if (word) {
@@ -108,13 +112,14 @@ const makeEvaluator = (externObj) => {
           if (curEnv.has(word)) return curEnv.get(word)
           curEnv = curEnv.outer
         }
-        if (!defEnv.has(word)) throw new EvalError('undefined variable: ' + word, form)
+        if (!defEnv.has(word)) throw evalError('undefined variable: ' + word)
         return defEnv.get(word)
       }
       const list = getFormList(form)
+      if (list.length === 0) throw evalError('empty list')
       const [firstForm] = list
       const assertNumArgs = (num) => {
-        if (list.length - 1 !== num) throw new EvalError('expected ' + num + ' arguments', form)
+        if (list.length - 1 !== num) throw evalError('expected ' + num + ' arguments')
       }
       const firstWord = tryGetFormWord(firstForm)
       switch (firstWord) {
@@ -140,7 +145,7 @@ const makeEvaluator = (externObj) => {
           for (let i = 1; i < list.length; i++) {
             const prop = getFormWord(list[i])
             const extProp = ext[prop]
-            if (extProp === undefined) throw new Error('undefined extern: ' + prop + ' in ' + ext)
+            if (extProp === undefined) throw evalError('undefined extern: ' + prop + ' in ' + ext)
             ext = extProp
           }
           return ext
@@ -158,14 +163,14 @@ const makeEvaluator = (externObj) => {
           form = list[go(env, list[1]) ? 2 : 3]
           continue
         case 'do':
-          if (list.length === 1) return
+          if (list.length === 1) return langUndefined
           for (let i = 1; i < list.length - 1; i++) go(env, list[i])
           form = list.at(-1)
           continue
         case 'let': {
           assertNumArgs(2)
           const bindings = getFormList(list[1])
-          if (bindings.length % 2 !== 0) throw new Error('odd number of bindings')
+          if (bindings.length % 2 !== 0) throw evalError('odd number of bindings')
           const newEnv = makeEnv(env)
           for (let i = 0; i < bindings.length - 1; i += 2)
             setEnv(newEnv, getFormWord(bindings[i]), go(newEnv, bindings[i + 1]))
@@ -196,8 +201,8 @@ const makeEvaluator = (externObj) => {
         const func = go(env, firstForm)
         const eargs = args.map((arg) => go(env, arg))
         if (typeof func === 'function') return func(...eargs)
-        if (!(func instanceof Closure)) throw new Error('not a function: ' + firstForm)
-        if (func.isMacro) throw new Error('macro not allowed here: ' + firstForm)
+        if (!(func instanceof Closure)) throw evalError('not a function')
+        if (func.isMacro) throw evalError('macro not allowed here')
         env = makeParamEnv(func, eargs)
         form = func.body
         continue
