@@ -58,12 +58,6 @@ const makeParamEnv = (defFunc, args) => {
 
 import { tryGetFormWord, tryGetFormList, setMeta, meta } from './core.js'
 
-const cloneClosureWithMeta = ({ env, name, parameters, body }, meta) => {
-  const clone = new Closure(env, name, parameters, body)
-  setMeta(clone, meta)
-  return Object.freeze(clone)
-}
-
 const makeEvaluator = (externObj) => {
   const defEnv = new Map()
   const go = (env, form) => {
@@ -159,14 +153,20 @@ const makeEvaluator = (externObj) => {
         const func = go(env, firstForm)
         const eargs = args.map((arg) => go(env, arg))
         if (typeof func === 'function') return func(...eargs)
-        if (!(func instanceof Closure)) throw new Error('not a function: ' + print(firstForm))
+        if (!(func instanceof Closure)) throw new Error('not a function: ' + firstForm)
         env = makeParamEnv(func, eargs)
         form = func.body
         continue
       }
     }
   }
-  return (form) => go(makeEnv(), form)
+  return (form) => {
+    try {
+      return go(makeEnv(), form)
+    } catch (e) {
+      console.error(e, meta(form))
+    }
+  }
 }
 
 import { formWord, formList } from './core.js'
@@ -195,30 +195,35 @@ function* parseToForms(content, metaPrefix) {
   for (const child of parse(content).rootNode.namedChildren) yield nodeToForm(child)
 }
 
-const with_meta = (object, meta) => {
-  if (object instanceof Closure) return cloneClosureWithMeta(object, meta)
-  if (Array.isArray(object)) {
-    const copy = object.slice()
-    copy[symbolMeta] = meta
-    return Object.freeze(copy)
-  }
-  throw new Error('with-meta expects closure or list')
-}
-
 import { jsHost } from './host-js.js'
 const { host } = jsHost
+
+import { instructionFunctions } from './instructions.js'
+import { wrapJSFunctionsToObject } from './utils.js'
+
+const instructions = wrapJSFunctionsToObject(instructionFunctions)
+
 const externs = {
   host,
-  global,
+  instructions,
   size: (list) => list.length,
   at: (list, i) => list.at(i),
 
-  add: (a, b) => a + b,
-  sub: (a, b) => a - b,
-  lt: (a, b) => a < b,
   log: console.log,
   'performance-now': () => performance.now(),
-  'with-meta': with_meta,
+  'closure-with-meta': (closure, meta) => {
+    if (!(closure instanceof Closure)) throw new Error('closure-with-meta expects closure')
+    const { env, name, parameters, body } = closure
+    const clone = new Closure(env, name, parameters, body)
+    setMeta(clone, meta)
+    return Object.freeze(clone)
+  },
+  'extern-with-meta': (ext, meta) => {
+    if (typeof ext !== 'function') throw new Error('extern-with-meta expects function')
+    const clone = (...args) => ext(...args)
+    setMeta(clone, meta)
+    return Object.freeze(clone)
+  },
 }
 
 import fs from 'node:fs'

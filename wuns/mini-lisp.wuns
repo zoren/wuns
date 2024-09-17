@@ -1,15 +1,15 @@
 [def list [func list [.. entries] entries]]
 
-[def add [extern add]]
-[def sub [extern sub]]
-[def lt [extern lt]]
+[def add [extern instructions i32.add]]
+[def sub [extern instructions i32.sub]]
+[def lt [extern instructions i32.lt-s]]
 
 [def size [extern size]]
 [def at [extern at]]
 
 [def performance-now [extern performance-now]]
 [def log [extern log]]
-[def with-meta [extern with-meta]]
+[def closure-with-meta [extern closure-with-meta]]
 
 [let
   [0 [i32 0]
@@ -62,10 +62,10 @@
 [def flist [func flist [.. elements] [form-list elements]]]
 
 [def defmacro
-  [with-meta
+  [closure-with-meta
     [func defmacro [name params body]
       [flist [quote def] name
-        [flist [quote with-meta]
+        [flist [quote closure-with-meta]
           [flist [quote func] name params body]
           [quote [quote [function-kind macro]]]]]]
     [quote [function-kind macro]]]]

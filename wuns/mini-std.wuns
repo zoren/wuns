@@ -1,0 +1,174 @@
+[def list [func list [.. entries] entries]]
+[def extern-with-meta [extern extern-with-meta]]
+[def form-word
+  [extern-with-meta
+    [extern host form-word]
+    [quote [type [func [word] form]]]]]
+[def form-list
+  [extern-with-meta
+    [extern host form-list]
+    [quote [type [func [[list form]] form]]]]]
+[def flist [func form-list [.. elements] [form-list elements]]]
+[def closure-with-meta [extern closure-with-meta]]
+
+[def defmacro
+  [closure-with-meta
+    [func defmacro [name params body]
+      [flist [quote def] name
+        [flist [quote closure-with-meta]
+          [flist [quote func] name params body]
+          [quote [quote [function-kind macro]]]]]]
+    [quote [function-kind macro]]]]
+
+[defmacro def-extern [name type]
+  [flist [quote def] name
+    [flist [quote extern] [quote host] name]
+    [flist [quote quote] [flist [quote type] type]]]]
+
+[def-extern concat [type-scheme [a] [func [.. [list a]] [list a]]]]
+
+[defmacro defn [name params body]
+  [flist [quote def] name [flist [quote func] name params body]]]
+
+[defmacro if-not [c t f] [list [word if] c f t]]
+
+[def-extern concat-lists [type-scheme [a] [func [[list [list a]]] [list a]]]]
+
+[defn form-concat [.. list-forms]
+  [form-list [concat-lists list-forms]]]
+
+[defn mk-quote [form] [flist [quote quote] form]]
+
+[defmacro defexpr [name parameters .. bodies]
+  [flist [quote def] name
+    [closure-with-meta
+      [form-concat [list [quote func] name parameters] bodies]
+      [quote [quote [function-kind fexpr]]]]]]
+
+[def-extern size [type-scheme [a] [func [[list a]] i32]]]
+
+[def-extern at [type-scheme [a] [func [[list a] i32] a]]]
+
+[defmacro comment [.. -]
+  [quote [do]]]
+
+[def-extern concat-words [func [word word] word]]
+
+[defn def-instruction-fn [def-name inst-name]
+  [flist
+    [quote def]
+    def-name
+    [flist [quote extern-with-meta]
+      [flist [quote extern] [quote instructions] inst-name]
+      [quote [quote [type [func [i32 i32] i32]]]]]]]
+
+[defmacro def-instruction [def-name inst-name] [def-instruction-fn def-name inst-name]]
+
+[def-extern try-get-form-word [func [form] [option word]]]
+[def unreachable [extern instructions unreachable]]
+
+[defn form-to-word [form]
+  [let [w [try-get-form-word form]]
+    [if w w [unreachable]]]]
+
+[defmacro def-bin-i32-inst [name] [def-instruction-fn name [form-word [concat-words [word i32.] [form-to-word name]]]]]
+
+[def-bin-i32-inst add]
+[def-bin-i32-inst lt-s]
+
+[def -2 [i32 -2]]
+[def -1 [i32 -1]]
+[def 0  [i32 0]]
+[def 1  [i32 1]]
+[def 2  [i32 2]]
+[def 3  [i32 3]]
+[def 4  [i32 4]]
+
+[defn inc [x] [add x 1]]
+
+[def-bin-i32-inst sub]
+[def-bin-i32-inst mul]
+
+[defn dec [x] [sub x 1]]
+
+[defn not [c] [if c 0 1]]
+
+[def-bin-i32-inst eq]
+
+[defn is-empty [form]
+  [eq 0 [size form]]]
+
+[defn is-zero [x] [eq x 0]]
+
+[def-instruction i32.bitwise-and i32.and]
+
+[defn is-odd [x] [i32.bitwise-and x 1]]
+
+[defn is-even [x] [not [is-odd x]]]
+
+[defn is-negative [x] [lt-s x 0]]
+
+[defn min [a b] [if [lt-s a b] a b]]
+[defn max [a b] [if [lt-s a b] b a]]
+
+[defn first [l] [at l 0]]
+[defn second [l] [at l 1]]
+[defn third [l] [at l 2]]
+[defn fourth [l] [at l 3]]
+[defn last [l] [at l -1]]
+
+[defmacro when [cond .. forms]
+  [flist
+    [quote if] cond
+    [form-concat [list [quote do]] forms]
+    [quote [do]]]]
+
+[defmacro when-not [cond .. forms]
+  [flist
+    [quote if] cond
+    [quote [do]]
+    [form-concat [list [quote do]] forms]]]
+
+[defmacro if-not [cond false-form true-form]
+  [flist
+    [quote if] cond
+    true-form
+    false-form]]
+
+[def-extern mutable-list-of-size [type-scheme [a] [func [i32] [mutable-list a]]]]
+[def-extern set-array [type-scheme [a] [func [[mutable-list a] i32 a] []]]]
+[def-extern freeze-mutable-list [type-scheme [a] [func [[mutable-list a]] [tuple]]]]
+
+[defn is-word [form] [if [try-get-form-word form] 1 0]]
+[def-extern log [func [list] []]]
+
+[defn quote-list [lmsg]
+  [let [s [size lmsg]
+        msg [mutable-list-of-size [inc s]]]
+    [do
+      [set-array msg 0 [quote list]]
+    [[func loop [i]
+      [when [lt-s i s]
+          [set-array msg [inc i]
+          [let [e [at lmsg i]]
+            [if [is-word e] [mk-quote e] e]]]
+          [recur [inc i]]]]
+      0]
+    [form-list [freeze-mutable-list msg]]]]]
+
+[defmacro assert [cond .. lmsg]
+  [flist [quote if] cond
+    [quote []]
+    [flist [quote do]
+      [flist [quote log] [quote-list lmsg]]
+      [quote [unreachable]]]]]
+
+[defmacro logq [.. lmsg]
+  [flist [quote log] [quote-list lmsg]]]
+
+[defmacro logq-abort [.. lmsg]
+  [flist [quote do]
+    [flist [quote log] [quote-list lmsg]]
+    [quote [unreachable]]]]
+
+[defn identity [x] x]

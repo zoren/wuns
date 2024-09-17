@@ -19,8 +19,7 @@
 
 [defmacro def-extern [name type]
   [form-list [quote def-with-meta] name
-    [form-list [quote quote]
-      [form-list [quote type] type]]
+    [form-list [quote quote] [form-list [quote type] type]]
     [form-list [quote extern] [quote host] name]]]
 
 [def-extern concat [type-scheme [a] [func [.. [list a]] [list a]]]]
