@@ -345,3 +345,28 @@
                   [list [flist [quote recur] [flist [quote add] iteration-var [quote [i32 1]]]]]]]]
             [quote [do]]]]
         [quote [i32 0]]]]]]
+
+[defmacro list-map [element-var collection form]
+  [assert [is-word element-var] list-map requires a word as the first argument]
+  [let [iteration-var [genword]
+        col-var [genword]
+        col-size-var [genword]
+        new-col-var [genword]]
+    [flist
+      [quote let] [flist col-var collection
+                        col-size-var [flist [quote size] col-var]
+                        new-col-var [flist [quote mutable-list-of-size] col-size-var]]
+      [flist [quote do]
+        [flist
+          [flist
+            [quote func] [quote loop] [flist iteration-var]
+            [flist [quote if]
+              [flist [quote lt-s] iteration-var col-size-var]
+              [flist [quote let]
+                [flist element-var [flist [quote at] col-var iteration-var]]
+                [flist [quote do]
+                  [flist [quote set-array] new-col-var iteration-var form]
+                  [flist [quote recur] [flist [quote add] iteration-var [quote [i32 1]]]]]]
+              [quote [do]]]]
+          [quote [i32 0]]]
+        [flist [quote freeze-mutable-list] new-col-var]]]]]
