@@ -228,8 +228,11 @@
     [atom-set atom [inc prev-val]]
     prev-val]]
 
+[defn genword-prefix [prefix]
+  [form-word [concat-words prefix [int-to-word [inc-atom word-counter]]]]]
+
 [defn genword []
-  [form-word [concat-words [word genword] [int-to-word [inc-atom word-counter]]]]]
+  [genword-prefix [word genword]]]
 
 [defmacro or [.. clauses]
   [let [s [size clauses]]
@@ -242,7 +245,7 @@
           [continue
             i [dec i]
             res
-            [let [w [genword]]
+            [let [w [genword-prefix [word or]]]
               [form-list [quote let] [form-list w [at clauses [dec i]]]
                 [form-list [quote if] w w res]]]]]]]]]
 
@@ -260,7 +263,7 @@
         - [assert [eq 2 [size binding]] if-let bindings should have exactly two elements]
         v [first binding]
         cond [second binding]
-        tmp-word [genword]]
+        tmp-word [genword-prefix [word if-let]]]
     [assert [is-word v] if-let requires a word as the first element of the first argument]
     [form-list [quote let] [form-list tmp-word cond]
       [form-list [quote if] tmp-word [form-list [quote let] [form-list v tmp-word] true-form] false-form]]]]
@@ -295,7 +298,7 @@
 
 [defn for-func [iw start increment end forms]
   [assert [lt-s 0 increment] for-func increment must be positive]
-  [let [ew [genword]]
+  [let [ew [genword-prefix [word for-fanden]]]
     [form-list
       [quote let] [form-list ew end]
       [form-list
