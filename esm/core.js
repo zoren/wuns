@@ -100,13 +100,13 @@ export const defVar = (name, value) => new DefVar(name, value)
 
 const symbolMeta = Symbol.for('wuns-meta')
 export const meta = (v) => {
-  if (!isForm(v) && !isDefVar(v)) throw new Error('meta expects form or defvar')
+  // if (!isForm(v) && !isDefVar(v)) throw new Error('meta expects form or defvar')
   const t = typeof v
   if ((t === 'object' || t === 'function') && symbolMeta in v) return v[symbolMeta]
   return 0
 }
 export const setMeta = (v, meta) => {
-  if (!isForm(v) && !isDefVar(v)) throw new Error('setMeta expects form or defvar')
+  // if (!isForm(v) && !isDefVar(v)) throw new Error('setMeta expects form or defvar')
   const t = typeof v
   if (!(t === 'object' || t === 'function') || Object.isFrozen(v)) throw new Error('expects mutable object ' + t)
   if (meta === undefined) {

@@ -65,9 +65,10 @@
   [with-meta
     [func defmacro [name params body]
       [flist [quote def] name
-        [flist [quote with-meta] [flist [quote func] name params body]
-          [flist [quote quote] [quote macro]]]]]
-    [word macro]]]
+        [flist [quote with-meta]
+          [flist [quote func] name params body]
+          [quote [quote [function-kind macro]]]]]]
+    [quote [function-kind macro]]]]
 
 [defmacro defn [name params body]
   [flist [quote def] name [flist [quote func] name params body]]]

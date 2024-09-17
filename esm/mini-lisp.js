@@ -29,13 +29,7 @@ class Closure {
 }
 
 const makeClosure = (env, name, parameters, body) => Object.freeze(new Closure(env, name, parameters, body))
-const symbolMeta = Symbol.for('wuns-meta')
 
-const cloneClosureWithMeta = ({ env, name, parameters, body }, meta) => {
-  const clone = new Closure(env, name, parameters, body)
-  clone[symbolMeta] = meta
-  return Object.freeze(clone)
-}
 const print = (value) => {
   if (typeof value === 'string') return value
   if (typeof value === 'number') return `[i32 ${value}]`
@@ -62,8 +56,13 @@ const makeParamEnv = (defFunc, args) => {
   return paramEnv
 }
 
-const getMeta = (form) => form[symbolMeta]
-import { tryGetFormWord, tryGetFormList } from './core.js'
+import { tryGetFormWord, tryGetFormList, setMeta, meta } from './core.js'
+
+const cloneClosureWithMeta = ({ env, name, parameters, body }, meta) => {
+  const clone = new Closure(env, name, parameters, body)
+  setMeta(clone, meta)
+  return Object.freeze(clone)
+}
 
 const makeEvaluator = (externObj) => {
   const defEnv = new Map()
@@ -109,7 +108,7 @@ const makeEvaluator = (externObj) => {
           defEnv.set(tryGetFormWord(list[1]), value)
           return value
         }
-        
+
         case 'if':
           form = list[go(env, list[1]) ? 2 : 3]
           continue
@@ -140,7 +139,15 @@ const makeEvaluator = (externObj) => {
       if (firstWord && !hasLocal(env, firstWord)) {
         const defFunc = defEnv.get(firstWord)
         if (defFunc instanceof Closure) {
-          const funcKind = getMeta(defFunc)
+          const metaData = meta(defFunc)
+          const tryGetAssocList = (assocList, keyString) => {
+            for (let i = 0; i < assocList.length - 1; i += 2)
+              if (tryGetFormWord(assocList[i]) === keyString) return assocList[i + 1]
+            return null
+          }
+          const metaDataList = tryGetFormList(metaData)
+          const funcKindForm = metaDataList && tryGetAssocList(metaDataList, 'function-kind')
+          const funcKind = funcKindForm && tryGetFormWord(funcKindForm)
           if (funcKind === 'fexpr') return go(makeParamEnv(defFunc, args), defFunc.body)
           if (funcKind === 'macro') {
             form = go(makeParamEnv(defFunc, args), defFunc.body)
@@ -188,8 +195,6 @@ function* parseToForms(content, metaPrefix) {
   for (const child of parse(content).rootNode.namedChildren) yield nodeToForm(child)
 }
 
-const size = (list) => list.length
-
 const with_meta = (object, meta) => {
   if (object instanceof Closure) return cloneClosureWithMeta(object, meta)
   if (Array.isArray(object)) {
@@ -204,7 +209,8 @@ import { jsHost } from './host-js.js'
 const { host } = jsHost
 const externs = {
   host,
-  size,
+  global,
+  size: (list) => list.length,
   at: (list, i) => list.at(i),
 
   add: (a, b) => a + b,
@@ -213,7 +219,6 @@ const externs = {
   log: console.log,
   'performance-now': () => performance.now(),
   'with-meta': with_meta,
-  meta: getMeta,
 }
 
 import fs from 'node:fs'
