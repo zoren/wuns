@@ -437,8 +437,6 @@
         [freeze-mutable-list ml]
         ml]]]]
 
-[def ascii-dash [i32 45]]
-
 [def-extern meta [func [form] kv-map]]
 [def-extern var-get [func [var] any]]
 [def-extern var-meta [func [var] any]]
