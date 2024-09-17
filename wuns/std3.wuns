@@ -203,27 +203,7 @@
 [def-extern push [type-scheme [a] [func [[growable-list a] a] []]]]
 [def-extern clone-growable-to-frozen-list [type-scheme [a] [func [[growable-list a]] [list a]]]]
 
-[defn int-to-word [n]
-  [if [is-zero n]
-    [word 0]
-    [let [gl [growable-list]]
-      [if [is-negative n]
-        [do
-          [loop [i n]
-            [when i
-              [push gl [char-code-to-word [add [i32 48] [sub 0 [i32.rem-s i [i32 10]]]]]]
-              [continue i [i32.div-s i [i32 10]]]]]
-          [push gl [word -]]]
-        [loop [i n]
-          [when i
-            [push gl [char-code-to-word [add [i32 48] [i32.rem-s i [i32 10]]]]]
-            [continue i [i32.div-s i [i32 10]]]]]]
-      [loop [l [clone-growable-to-frozen-list gl]
-             res [first l]
-             i 1]
-        [if [lt-s i [size l]]
-          [continue res [concat-words [at l i] res] i [inc i]]
-          res]]]]]
+[def-extern int-to-word [func [i32] word]]
 
 [defn i32-to-form [i]
   [form-list [quote i32] [form-word [int-to-word i]]]]

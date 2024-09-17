@@ -208,3 +208,4 @@ export const concat = (l1, l2) => {
   if (!isFrozenList(l2)) throw new Error('concat expects frozen list')
   return arrayToList([...l1, ...l2])
 }
+export const int_to_word = (i) => stringToWord(String(i))
