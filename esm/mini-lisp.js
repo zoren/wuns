@@ -29,13 +29,24 @@ class Closure {
 }
 
 const makeClosure = (env, name, parameters, body) => Object.freeze(new Closure(env, name, parameters, body))
+import { isForm, tryGetFormWord, tryGetFormList } from './core.js'
+
+const printForm = (form) => {
+  const word = tryGetFormWord(form)
+  if (word) return word
+  const list = tryGetFormList(form)
+  if (list) return `[${list.map(printForm).join(' ')}]`
+  throw new Error('unexpected form: ' + form)
+}
 
 const print = (value) => {
-  if (typeof value === 'string') return value
+  if (typeof value === 'string') return `[word ${value}]`
   if (typeof value === 'number') return `[i32 ${value}]`
+  if (isForm(value)) return `[quote ${printForm(value)}]`
   if (Array.isArray(value)) return `[${value.map(print).join(' ')}]`
   if (typeof value === 'function') return '[func]'
   if (value instanceof Closure) return `[closure ${value.name} ${value.parameters.join(' ')}]`
+  throw new Error('unexpected value: ' + value)
 }
 
 const list = (...args) => Object.freeze(args)
@@ -56,7 +67,19 @@ const makeParamEnv = (defFunc, args) => {
   return paramEnv
 }
 
-import { tryGetFormWord, tryGetFormList, setMeta, meta } from './core.js'
+const getFormWord = (form) => {
+  const word = tryGetFormWord(form)
+  if (!word) throw new Error('expected word: ' + form)
+  return word
+}
+
+const getFormList = (form) => {
+  const list = tryGetFormList(form)
+  if (!list) throw new Error('expected list: ' + form)
+  return list
+}
+
+import { meta } from './core.js'
 
 const makeEvaluator = (externObj) => {
   const defEnv = new Map()
@@ -72,20 +95,19 @@ const makeEvaluator = (externObj) => {
         if (!defEnv.has(word)) throw new Error('undefined variable: ' + word)
         return defEnv.get(word)
       }
-      const list = tryGetFormList(form)
-      if (!list) throw new Error('unexpected form: ' + form)
+      const list = getFormList(form)
       const [firstForm] = list
       const firstWord = tryGetFormWord(firstForm)
       switch (firstWord) {
         case 'i32':
-          return +list[1] | 0
+          return +getFormWord(list[1]) | 0
         case 'word':
-          return tryGetFormWord(list[1])
+          return getFormWord(list[1])
         case 'quote':
           return list[1]
         case 'func': {
-          const name = tryGetFormWord(list[1])
-          const parameters = tryGetFormList(list[2]).map(tryGetFormWord)
+          const name = getFormWord(list[1])
+          const parameters = getFormList(list[2]).map(getFormWord)
           const body = list[3]
           return makeClosure(env, name, parameters, body)
         }
@@ -99,7 +121,7 @@ const makeEvaluator = (externObj) => {
         }
         case 'def': {
           const value = go(env, list[2])
-          defEnv.set(tryGetFormWord(list[1]), value)
+          defEnv.set(getFormWord(list[1]), value)
           return value
         }
 
@@ -112,10 +134,11 @@ const makeEvaluator = (externObj) => {
           form = list.at(-1)
           continue
         case 'let': {
-          const bindings = tryGetFormList(list[1])
+          const bindings = getFormList(list[1])
+          if (bindings.length % 2 !== 0) throw new Error('odd number of bindings')
           const newEnv = makeEnv(env)
           for (let i = 0; i < bindings.length - 1; i += 2)
-            setEnv(newEnv, tryGetFormWord(bindings[i]), go(newEnv, bindings[i + 1]))
+            setEnv(newEnv, getFormWord(bindings[i]), go(newEnv, bindings[i + 1]))
           env = newEnv
           form = list[2]
           continue
@@ -147,6 +170,7 @@ const makeEvaluator = (externObj) => {
             form = go(makeParamEnv(defFunc, args), defFunc.body)
             continue
           }
+          if (funcKind !== null && funcKind !== 'function') throw new Error('unexpected function kind: ' + funcKind)
         }
       }
       {
@@ -203,6 +227,8 @@ import { wrapJSFunctionsToObject } from './utils.js'
 
 const instructions = wrapJSFunctionsToObject(instructionFunctions)
 
+import { setMeta } from './core.js'
+
 const externs = {
   host,
   instructions,
@@ -211,17 +237,17 @@ const externs = {
 
   log: console.log,
   'performance-now': () => performance.now(),
-  'closure-with-meta': (closure, meta) => {
+  'closure-with-meta': (closure, meta_data) => {
     if (!(closure instanceof Closure)) throw new Error('closure-with-meta expects closure')
     const { env, name, parameters, body } = closure
     const clone = new Closure(env, name, parameters, body)
-    setMeta(clone, meta)
+    setMeta(clone, meta_data)
     return Object.freeze(clone)
   },
-  'extern-with-meta': (ext, meta) => {
+  'extern-with-meta': (ext, meta_data) => {
     if (typeof ext !== 'function') throw new Error('extern-with-meta expects function')
     const clone = (...args) => ext(...args)
-    setMeta(clone, meta)
+    setMeta(clone, meta_data)
     return Object.freeze(clone)
   },
 }
