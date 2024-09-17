@@ -307,13 +307,15 @@
     [form-list
       [quote let] [form-list ew end]
       [form-list
-        [quote loop] [form-list iw start]
-        [form-list [quote if]
-          [form-list [quote lt-s] iw ew]
-          [form-concat
-            [list [quote let] [quote []]]
-            forms
-            [list [form-list [quote continue] iw [form-list [quote add] iw [i32-to-form increment]]]]]]]]]]
+        [form-list
+          [quote func] [quote loop] [form-list iw]
+          [form-list [quote if]
+            [form-list [quote lt-s] iw ew]
+            [form-concat
+              [list [quote let] [quote []]]
+              forms
+              [list [form-list [quote recur] [form-list [quote add] iw [i32-to-form increment]]]]]]]
+        start]]]]
 
 [defmacro for [iw start end .. forms]
   [for-func iw start [i32 1] end forms]]
@@ -446,26 +448,6 @@
         ml]]]]
 
 [def ascii-dash [i32 45]]
-
-[defn is-decimal [dw]
-  [let [s [word-byte-size dw]]
-    [loop [i [if [eq [char-code-at dw 0] ascii-dash] 1 0]]
-      [if [lt-s i s]
-        [let [c [char-code-at dw i]]
-          [if [and [le-s [i32 48] c] [le-s c [i32 57]]]
-            [continue i [inc i]]
-            0]]
-        1]]]]
-
-[defn is-non-negative-decimal [dw]
-  [let [s [word-byte-size dw]]
-    [loop [i 0]
-      [if [lt-s i s]
-        [let [c [char-code-at dw i]]
-          [if [and [le-s [i32 48] c] [le-s c [i32 57]]]
-            [continue i [inc i]]
-            0]]
-        1]]]]
 
 [def-extern meta [func [form] kv-map]]
 [def-extern var-get [func [var] any]]

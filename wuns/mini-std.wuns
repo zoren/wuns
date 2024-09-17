@@ -11,9 +11,9 @@
 [def flist [func form-list [.. elements] [form-list elements]]]
 
 [def defmacro
-  [macro defmacro [name params body]
+  [macro defmacro [name params .. bodies]
     [flist [quote def] name
-      [flist [quote macro] name params body]]]]
+      [flist [quote macro] name params [form-list [[extern host concat] [list [quote do]] bodies]]]]]]
 
 [defmacro def-extern [name type]
   [flist [quote def] name
@@ -23,8 +23,8 @@
 
 [def-extern concat [type-scheme [a] [func [.. [list a]] [list a]]]]
 
-[defmacro defn [name params body]
-  [flist [quote def] name [flist [quote func] name params body]]]
+[defmacro defn [name params .. bodies]
+  [flist [quote def] name [flist [quote func] name params [form-list [concat [list [quote do]] bodies]]]]]
 
 [defmacro if-not [c t f] [list [word if] c f t]]
 
@@ -154,7 +154,7 @@
 
 [defmacro assert [cond .. lmsg]
   [flist [quote if] cond
-    [quote []]
+    [quote [do]]
     [flist [quote do]
       [flist [quote log] [quote-list lmsg]]
       [quote [unreachable]]]]]
@@ -279,3 +279,77 @@
     [assert [is-word v] if-let requires a word as the first element of the first argument]
     [flist [quote let] [flist tmp-word cond]
       [flist [quote if] tmp-word [flist [quote let] [flist v tmp-word] true-form] false-form]]]]
+
+[defn eq-word [fa fb]
+  [and [is-word fa] [is-word fb]
+    [let [wa [form-to-word fa] wb [form-to-word fb]
+          sa [word-byte-size wa] sb [word-byte-size wb]]
+      [and
+        [eq sa sb]
+        [[func loop [i]
+          [if [lt-s i sa]
+            [if [eq [char-code-at wa i] [char-code-at wb i]]
+              [recur [inc i]]
+              0]
+            1]] 0]]]]]
+
+[defn eq-form [a b]
+  [or
+    [eq-word a b]
+    [and [is-list a] [is-list b]
+      [let [la [form-to-list a]
+            lb [form-to-list b]
+            sa [size la]]
+        [and [eq sa [size lb]]
+          [[func loop [i]
+            [if [lt-s i sa]
+              [if [recur [at la i] [at lb i]]
+                [continue i [inc i]]
+                0]
+              1]] 0]]]]]]
+
+[defn for-func [iw start increment end forms]
+  [assert [lt-s 0 increment] for-func increment must be positive]
+  [let [ew [genword]]
+    [flist
+      [quote let] [flist ew end]
+      [flist
+        [flist
+          [quote func] [quote loop] [flist iw]
+          [flist [quote if]
+            [flist [quote lt-s] iw ew]
+            [form-concat
+              [list [quote do]]
+              forms
+              [list [flist [quote recur] [flist [quote add] iw [i32-to-form increment]]]]]
+            [quote [do]]]]
+        start]]]]
+
+[defmacro for [iw start end .. forms]
+  [for-func iw start [i32 1] end forms]]
+
+[defmacro for-pair [iw start end .. forms]
+  [for-func iw start [i32 2] end forms]]
+
+[defmacro for-each [element-var collection .. forms]
+  [assert [is-word element-var] for-each requires a word as the first argument]
+  [let [iteration-var [genword]
+        col-var [genword]
+        col-size-var [genword]]
+    [flist
+      [quote let] [flist col-var collection
+                        col-size-var [flist [quote size] col-var]]
+      [flist
+        [flist
+          [quote func] [quote loop] [flist iteration-var]
+          [flist [quote if]
+            [flist [quote lt-s] iteration-var col-size-var]
+            [form-concat
+              [list [quote let]]
+              [list [flist element-var [flist [quote at] col-var iteration-var]]]
+              [list
+                [form-concat [list [quote do]]
+                  forms
+                  [list [flist [quote recur] [flist [quote add] iteration-var [quote [i32 1]]]]]]]]
+            [quote [do]]]]
+        [quote [i32 0]]]]]]
