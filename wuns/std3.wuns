@@ -299,15 +299,13 @@
     [form-list
       [quote let] [form-list ew end]
       [form-list
-        [form-list
-          [quote func] [quote loop] [form-list iw]
-          [form-list [quote if]
-            [form-list [quote lt-s] iw ew]
-            [form-concat
-              [list [quote let] [quote []]]
-              forms
-              [list [form-list [quote recur] [form-list [quote add] iw [i32-to-form increment]]]]]]]
-        start]]]]
+        [quote loop] [form-list iw start]
+        [form-list [quote if]
+          [form-list [quote lt-s] iw ew]
+          [form-concat
+            [list [quote let] [quote []]]
+            forms
+            [list [form-list [quote continue] iw [form-list [quote add] iw [i32-to-form increment]]]]]]]]]]
 
 [defmacro for [iw start end .. forms]
   [for-func iw start [i32 1] end forms]]
