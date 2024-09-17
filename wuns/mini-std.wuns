@@ -9,21 +9,17 @@
     [extern host form-list]
     [quote [type [func [[list form]] form]]]]]
 [def flist [func form-list [.. elements] [form-list elements]]]
-[def closure-with-meta [extern closure-with-meta]]
 
 [def defmacro
-  [closure-with-meta
-    [func defmacro [name params body]
-      [flist [quote def] name
-        [flist [quote closure-with-meta]
-          [flist [quote func] name params body]
-          [quote [quote [function-kind macro]]]]]]
-    [quote [function-kind macro]]]]
+  [macro defmacro [name params body]
+    [flist [quote def] name
+      [flist [quote macro] name params body]]]]
 
 [defmacro def-extern [name type]
   [flist [quote def] name
-    [flist [quote extern] [quote host] name]
-    [flist [quote quote] [flist [quote type] type]]]]
+    [flist [quote extern-with-meta]
+      [flist [quote extern] [quote host] name]
+      [flist [quote quote] [flist [quote type] type]]]]]
 
 [def-extern concat [type-scheme [a] [func [.. [list a]] [list a]]]]
 
@@ -172,3 +168,114 @@
     [quote [unreachable]]]]
 
 [defn identity [x] x]
+
+[defmacro ifs [.. clauses]
+  [let [s [size clauses]]
+    [assert [is-odd s] ifs requires an odd number of arguments]
+    [[func loop [i res]
+      [if [eq i 0]
+        res
+        [recur
+          [sub i 2]
+          [flist [quote if] [at clauses [sub i 2]] [at clauses [dec i]] res]]]]
+      [dec s]
+      [at clauses -1]]]]
+
+[comment and relies on there only being one falsy value [i32 0]
+        it will not return any other falsy value as or returns the first truthy argument]
+[defmacro and [.. clauses]
+  [let [s [size clauses]]
+    [if [is-zero s]
+      [quote [i32 1]]
+      [[func loop [i res]
+        [if [eq i 0]
+          res
+          [recur
+            [dec i]
+            [flist [quote if] [at clauses [dec i]] res [quote [i32 0]]]]]]
+         [dec s]
+         [at clauses -1]]]]]
+
+[def-extern atom [type-scheme [a] [func [a] [atom a]]]]
+
+[def word-counter [atom 0]]
+
+[def-extern char-code-to-word [func [i32] word]]
+
+[def-instruction i32.rem-s i32.rem-s]
+[def-instruction i32.div-s i32.div-s]
+
+[def-extern growable-list [type-scheme [a] [func [] [growable-list a]]]]
+[def-extern push [type-scheme [a] [func [[growable-list a] a] []]]]
+[def-extern clone-growable-to-frozen-list [type-scheme [a] [func [[growable-list a]] [list a]]]]
+
+[def-extern int-to-word [func [i32] word]]
+
+[defn i32-to-form [i]
+  [flist [quote i32] [form-word [int-to-word i]]]]
+
+[def-extern char-code-at [func [word i32] i32]]
+
+[defmacro word-to-char-code [w]
+  [i32-to-form [char-code-at [form-to-word w] 0]]]
+
+[def-bin-i32-inst le-s]
+
+[defn is-between-inclusive [lower c upper]
+  [and [le-s lower c] [le-s c upper]]]
+
+[def-extern word-byte-size [func [word] i32]]
+
+[defn dec-word-to-int [w]
+  [[func loop [i res]
+    [if [lt-s i [word-byte-size w]]
+      [let [cc [char-code-at w i]]
+        [assert [is-between-inclusive [word-to-char-code 0] cc [word-to-char-code 9]] dec-word-to-int expects a decimal word]
+        [continue res [add [mul res [i32 10]] [sub cc [word-to-char-code 0]]] i [inc i]]]
+      res]] 0 0]]
+
+[def-extern atom-get [type-scheme [a] [func [[atom a]] a]]]
+[def-extern atom-set [type-scheme [a] [func [[atom a] a] [tuple]]]]
+
+[defn inc-atom [atom]
+  [let [prev-val [atom-get atom]]
+    [do
+      [atom-set atom [inc prev-val]]
+      prev-val]]]
+
+[defn genword []
+  [form-word [concat-words [word genword] [int-to-word [inc-atom word-counter]]]]]
+
+[defmacro or [.. clauses]
+  [let [s [size clauses]]
+    [if [is-zero s]
+      [quote [i32 0]]
+      [[func loop [i res]
+        [if [eq i 0]
+          res
+          [recur
+            [dec i]
+            [let [w [genword]]
+              [flist [quote let] [flist w [at clauses [dec i]]]
+                [flist [quote if] w w res]]]]]]
+       [dec s]
+       [at clauses -1]]]]]
+
+[def-extern try-get-form-list [func [form] [option [list form]]]]
+
+[defn form-to-list [form]
+  [let [l [try-get-form-list form]]
+    [if l l [unreachable]]]]
+
+[defn is-list [form] [if [try-get-form-list form] 1 0]]
+
+[defmacro if-let [binding-form true-form false-form]
+  [assert [is-list binding-form] if-let requires a list as the first argument]
+  [let [binding [form-to-list binding-form]
+        - [assert [eq 2 [size binding]] if-let bindings should have exactly two elements]
+        v [first binding]
+        cond [second binding]
+        tmp-word [genword]]
+    [assert [is-word v] if-let requires a word as the first element of the first argument]
+    [flist [quote let] [flist tmp-word cond]
+      [flist [quote if] tmp-word [flist [quote let] [flist v tmp-word] true-form] false-form]]]]
