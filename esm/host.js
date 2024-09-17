@@ -47,13 +47,13 @@ export const form_list_with_meta = (l, meta_data) => {
   return formList(l, meta_data)
 }
 
-export const try_get_form_word = (f) => {
-  const w = tryGetFormWord(f)
+export const try_get_form_word = (form) => {
+  const w = tryGetFormWord(form)
   return w ? w : 0
 }
 
-export const try_get_form_list = (f) => {
-  const l = tryGetFormList(f)
+export const try_get_form_list = (form) => {
+  const l = tryGetFormList(form)
   return l ? l : 0
 }
 
