@@ -268,9 +268,10 @@
         v [first binding]
         cond [second binding]
         tmp-word [genword]]
-    [assert [is-word v] if-let requires a word as the first element of the first argument]
-    [flist [quote let] [flist tmp-word cond]
-      [flist [quote if] tmp-word [flist [quote let] [flist v tmp-word] true-form] false-form]]]]
+    [do
+      [assert [is-word v] if-let requires a word as the first element of the first argument]
+      [flist [quote let] [flist tmp-word cond]
+        [flist [quote if] tmp-word [flist [quote let] [flist v tmp-word] true-form] false-form]]]]]
 
 [defn eq-word [fa fb]
   [and [is-word fa] [is-word fb]
@@ -370,3 +371,33 @@
               [quote [do]]]]
           [quote [i32 0]]]
         [flist [quote freeze-mutable-list] new-col-var]]]]]
+
+[defn half [x] [i32.div-s x 2]]
+
+[def-extern transient-kv-map [func [] transient-kv-map]]
+[def-extern set-kv-map [type-scheme [a] [func [transient-kv-map word a] []]]]
+[def-extern freeze-kv-map [func [transient-kv-map] []]]
+
+[defn mk-word [w] [flist [quote word] w]]
+
+[defmacro kv-mapq [.. entries]
+  [let [s [size entries]
+        n-of-pairs [half s]
+        ml [mutable-list-of-size n-of-pairs]
+        tmp-word [genword]]
+    [do
+      [assert [is-even s] kv-map requires an even number of arguments]
+      [for-pair i 0 s
+        [set-array ml [half i]
+          [let [k [at entries i]]
+            [flist [quote set-kv-map] tmp-word
+              [if [is-word k] [mk-word k] k]
+              [at entries [inc i]]]]]]
+      [flist [quote let]
+        [flist tmp-word [quote [transient-kv-map]]]
+        [form-concat
+          [list [quote do]]
+          [freeze-mutable-list ml]
+          [list
+            [flist [quote freeze-kv-map] tmp-word]
+            tmp-word]]]]]]

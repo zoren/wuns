@@ -51,6 +51,16 @@ const print = (value) => {
   if (Array.isArray(value)) return `[list${value.map((v) => ' ' + print(v)).join('')}]`
   if (typeof value === 'function') return '[func]'
   if (value instanceof Closure) return `[closure ${value.name} ${value.parameters.join(' ')}]`
+  if (value === undefined) return '*undefined*'
+
+  if (Object.isFrozen(value))
+    return `[kv-mapq${Object.entries(value)
+      .map(([k, v]) => ` ${k} ${print(v)}`)
+      .join('')}]`
+  return `[transient-kv-map${Object.entries(value)
+    .map(([k, v]) => ` ${k} ${print(v)}`)
+    .join('')}]`
+  console.error(value)
   throw new Error('unexpected value: ' + value)
 }
 
