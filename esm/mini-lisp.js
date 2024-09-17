@@ -88,6 +88,8 @@ const makeEvaluator = (externObj) => {
           return +list[1] | 0
         case 'word':
           return tryGetFormWord(list[1])
+        case 'quote':
+          return list[1]
         case 'func': {
           const name = tryGetFormWord(list[1])
           const parameters = tryGetFormList(list[2]).map(tryGetFormWord)
@@ -102,7 +104,12 @@ const makeEvaluator = (externObj) => {
           }
           return ext
         }
-
+        case 'def': {
+          const value = go(env, list[2])
+          defEnv.set(tryGetFormWord(list[1]), value)
+          return value
+        }
+        
         case 'if':
           form = list[go(env, list[1]) ? 2 : 3]
           continue
@@ -112,9 +119,10 @@ const makeEvaluator = (externObj) => {
           form = list.at(-1)
           continue
         case 'let': {
-          const bindings = list[1]
+          const bindings = tryGetFormList(list[1])
           const newEnv = makeEnv(env)
-          for (let i = 0; i < bindings.length - 1; i += 2) setEnv(newEnv, bindings[i], go(newEnv, bindings[i + 1]))
+          for (let i = 0; i < bindings.length - 1; i += 2)
+            setEnv(newEnv, tryGetFormWord(bindings[i]), go(newEnv, bindings[i + 1]))
           env = newEnv
           form = list[2]
           continue
@@ -126,11 +134,6 @@ const makeEvaluator = (externObj) => {
           setParameters(parameters, paramEnv, eargs)
           form = body
           continue
-        }
-        case 'def': {
-          const [, name, value] = list
-          defEnv.set(name, go(env, value))
-          return
         }
       }
       const args = list.slice(1)
@@ -197,7 +200,10 @@ const with_meta = (object, meta) => {
   throw new Error('with-meta expects closure or list')
 }
 
+import { jsHost } from './host-js.js'
+const { host } = jsHost
 const externs = {
+  host,
   size,
   at: (list, i) => list.at(i),
 

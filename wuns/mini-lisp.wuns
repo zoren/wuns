@@ -1,12 +1,15 @@
+[def list [func list [.. entries] entries]]
+
 [def add [extern add]]
 [def sub [extern sub]]
 [def lt [extern lt]]
+
 [def size [extern size]]
 [def at [extern at]]
+
 [def performance-now [extern performance-now]]
 [def log [extern log]]
 [def with-meta [extern with-meta]]
-[def list [func list [.. entries] entries]]
 
 [let
   [0 [i32 0]
@@ -54,14 +57,19 @@
     [log [va [i32 1] [i32 2] [i32 3]]]
     [log [va [i32 1] [i32 2] [i32 3] [i32 4]]]]
   ]
+[def form-word [extern host form-word]]
+[def form-list [extern host form-list]]
+[def flist [func flist [.. elements] [form-list elements]]]
+
 [def defmacro
   [with-meta
     [func defmacro [name params body]
-      [list [word def] name
-        [list [word with-meta] [list [word func] name params body]
-          [list [word word] [word macro]]]]]
+      [flist [quote def] name
+        [flist [quote with-meta] [flist [quote func] name params body]
+          [flist [quote quote] [quote macro]]]]]
     [word macro]]]
+
 [defmacro defn [name params body]
-  [list [word def] name [list [word func] name params body]]]
+  [flist [quote def] name [flist [quote func] name params body]]]
 
 [defmacro if-not [c t f] [list [word if] c f t]]
