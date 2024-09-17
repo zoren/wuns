@@ -252,10 +252,7 @@ import { setMeta } from './core.js'
 const externs = {
   host,
   instructions,
-  size: (list) => list.length,
-  at: (list, i) => list.at(i),
 
-  log: console.log,
   'performance-now': () => performance.now(),
   'extern-with-meta': (ext, meta_data) => {
     if (typeof ext !== 'function') throw new Error('extern-with-meta expects function')

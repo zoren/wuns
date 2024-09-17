@@ -4,11 +4,11 @@
 [def sub [extern instructions i32.sub]]
 [def lt [extern instructions i32.lt-s]]
 
-[def size [extern size]]
-[def at [extern at]]
+[def size [extern host size]]
+[def at [extern host at]]
 
 [def performance-now [extern performance-now]]
-[def log [extern log]]
+[def log [extern host log]]
 
 [let
   [0 [i32 0]

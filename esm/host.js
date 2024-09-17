@@ -191,8 +191,8 @@ export const freeze_kv_map = (kv_map) => {
   Object.freeze(kv_map)
 }
 
-export const log = (form) => {
-  if (form !== undefined) console.log(print(form))
+export const log = (...forms) => {
+  console.log(...forms.map(print))
 }
 const isFrozenList = (l) => isList(l) && Object.isFrozen(l) && !isGrowable(l) && !isMutable(l)
 export const concat_lists = (lists) => {

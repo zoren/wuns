@@ -238,7 +238,7 @@ export const makeHost = () => {
       return (a === b) | 0
     },
 
-    log: (v) => {
+    log: (...v) => {
       const go = (p) => {
         const obj = get(p)
         if (typeof obj === 'string') return obj
@@ -258,7 +258,7 @@ export const makeHost = () => {
         }
         throw new Error('unknown object: ' + obj)
       }
-      console.log(go(v))
+      console.log(...v.map(go))
     },
   }
   const host = {}

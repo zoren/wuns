@@ -136,7 +136,7 @@
 [def-extern freeze-mutable-list [type-scheme [a] [func [[mutable-list a]] [tuple]]]]
 
 [defn is-word [form] [if [try-get-form-word form] 1 0]]
-[def-extern log [func [list] []]]
+[def-extern log [func [.. any] []]]
 
 [defn quote-list [lmsg]
   [let [s [size lmsg]
