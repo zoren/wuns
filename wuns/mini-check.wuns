@@ -1,0 +1,170 @@
+[defn make-type-var [kind level]
+  [let [tv [transient-kv-map]]
+    [setq tv kind kind]
+    [setq tv level level]]]
+
+[defn is-type-var [v]
+  [and [hasq v kind] [hasq v level]]]
+
+[defn type-var-kind [t]
+  [assert [is-type-var t] not a type var [identity t]]
+  [getq t kind]]
+
+[defn type-var-level [t]
+  [assert [is-type-var t] not a type var [identity t]]
+  [getq t level]]
+
+[defn set-type-var-kind [type-var kind]
+  [assert [is-type-var type-var] not a type var [identity type-var]]
+  [setq type-var kind kind]]
+
+[defn set-type-var-level [type-var level]
+  [assert [is-type-var type-var] not a type var [identity type-var]]
+  [setq type-var level level]]
+
+[defn int-to-type-var-name-word [i]
+  [if [lt-s i [i32 26]]
+    [char-code-to-word [add [i32 97] i]]
+    [concat-words
+      [recur [i32.div-s i [i32 26]]]
+      [char-code-to-word [add [i32 97] [i32.rem-s i [i32 26]]]]]]]
+
+[defn generate-fresh-type-var-atom [counter-atom level]
+  [make-type-var [int-to-type-var-name-word [inc-atom counter-atom]] level]]
+
+[defn generate-fresh-type-var [gctx level]
+  [generate-fresh-type-var-atom [getq gctx type-var-counter] level]]
+
+[defn make-type [type-name type-args] [kv-map-id type-name type-args]]
+
+[def type-i32 [make-type [word i32] [list]]]
+[def type-word [make-type [word word] [list]]]
+[def type-form [make-type [word form] [list]]]
+[defn type-list [elem-type] [make-type [word list] [list elem-type]]]
+[def type-empty-tuple [make-type [word tuple] [list]]]
+[defn type-tuple [elem-types]
+  [if [size elem-types]
+    [make-type [word tuple] elem-types]
+    type-empty-tuple]]
+
+
+[defn report-fn [gctx message form]
+  [push [getq gctx messages] [kv-map-id message form]]]
+
+[defmacro report-when [cond form .. lmsg]
+  [flist [quote when] cond
+    [flist [quote report-fn] [quote gctx] [quote-list lmsg] form]]]
+
+[defmacro report-when-not [cond form .. lmsg]
+  [flist [quote when-not] cond
+    [flist [quote report-fn] [quote gctx] [quote-list lmsg] form]]]
+
+[defmacro report [form .. lmsg]
+  [flist [quote report-fn] [quote gctx] [quote-list lmsg] form]]
+
+
+[defn check [gctx lctx form]
+  [ifs
+    [is-word form]
+    [do]
+
+    [not [is-list form]]
+    [logq-abort check input not a form [identity form]]
+
+    [let [sub-forms [form-to-list form]
+          s-form [size sub-forms]
+          first-form [first sub-forms]
+          n-of-args [dec s-form]]
+        [ifs
+          [eq-word [quote i32] first-form]
+          [do
+            [report-when-not [eq n-of-args 1] form expects 1 argument]
+            type-i32]
+
+          [eq-word [quote word] first-form]
+          [do
+            [report-when-not [eq n-of-args 1] form expects 1 argument]
+            type-word]
+
+          [eq-word [quote quote] first-form]
+          [do
+            [report-when-not [eq n-of-args 1] form expects 1 argument]
+            type-form]
+
+          []
+          ]]]]
+
+[defn make-global-context []
+  [kv-mapq
+    messages [growable-list]
+    def-var-types [transient-kv-map]
+    type-var-counter [atom 0]]]
+
+[defn check-top [gctx form]
+  [check gctx [kv-map-id] form]]
+
+[defn check-top-forms [gctx forms]
+  [assert [size forms] check-top-forms expects at least one form]
+  [[func go [i]
+    [if [lt-s i [dec [size forms]]]
+      [do
+        [check-top gctx [at forms i]]
+        [go [inc i]]]
+      [check-top gctx [at forms i]]]] 0]]
+
+[defn internal-to-present-type [internal-type]
+  [let [nt internal-type]
+    [if [is-type-var nt]
+      [let [kind [type-var-kind nt]]
+        [assert [is-word kind] not a type var [identity nt]]
+        kind]
+      [let [type-name [getq nt type-name]
+            type-args [getq nt type-args]
+            n-of-args [size type-args]
+            present-type [mutable-list-of-size [inc n-of-args]]]
+        [if n-of-args
+          [do
+            [set-array present-type 0 type-name]
+            [for i 0 n-of-args
+              [set-array present-type [inc i] [recur [at type-args i]]]]
+            [freeze-mutable-list present-type]
+            [form-list-list present-type]]
+          [if [eq-word type-name [quote tuple]] [quote unit] [form-word type-name]]]]]]]
+
+[def tests-run-atom [atom 0]]
+
+[defn test-ok-fn [expected-type forms]
+  [let [gctx [make-global-context]
+        res [check-top-forms gctx forms]
+        messages [getq gctx messages]]
+    [do
+      [when-not [is-empty messages]
+        [for-each message messages
+          [log message]]
+        [logq-abort test-ok failed there were errors]]
+      [assert [eq-form [internal-to-present-type res] expected-type] test-ok failed expected type [identity expected-type] but found [identity present-type]]
+      [inc-atom tests-run-atom]]]]
+
+[defexpr test-ok [expected-type .. forms]
+  [test-ok-fn expected-type forms]]
+
+[defn check1 [form]
+  [let [gctx [make-global-context]
+        res [check-top gctx form]]
+    [do
+      [for-each message-obj [getq gctx messages]
+        [log [getq message-obj message]]]
+      [internal-to-present-type res]]]]
+
+[test-ok-fn [quote i32] [list [quote [i32 42]]]]
+
+[test-ok i32 [i32 42]]
+
+[comment word]
+[test-ok word [word a]]
+
+[comment quote]
+[test-ok form [quote a]]
+[test-ok form [quote []]]
+[test-ok form [quote [[]]]]
+[test-ok form [quote [a []]]]

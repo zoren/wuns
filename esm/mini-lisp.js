@@ -8,17 +8,16 @@ const setEnv = (env, varName, value) => {
 }
 
 class Closure {
-  constructor(env, name, parameters, body, isMacro) {
+  constructor(env, name, parameters, body, kind) {
     this.env = env
     this.name = name
     this.parameters = parameters
     this.body = body
-    this.isMacro = isMacro
+    this.kind = kind
   }
 }
 
-const makeClosure = (env, name, parameters, body, isMacro) =>
-  Object.freeze(new Closure(env, name, parameters, body, isMacro))
+const makeClosure = (env, name, parameters, body, kind) => Object.freeze(new Closure(env, name, parameters, body, kind))
 import { isForm, tryGetFormWord, tryGetFormList } from './core.js'
 
 const printForm = (form) => {
@@ -165,12 +164,13 @@ const go = (env, form) => {
         return form
       }
       case 'func':
+      case 'fexpr':
       case 'macro': {
         assertNumArgs(3)
         const name = getFormWord(forms[1])
         const parameters = getFormList(forms[2]).map(getFormWord)
         const body = forms[3]
-        return makeClosure(env, name, parameters, body, firstWord === 'macro')
+        return makeClosure(env, name, parameters, body, firstWord)
       }
       case 'extern': {
         let ext = externs
@@ -218,20 +218,33 @@ const go = (env, form) => {
     }
     const func = go(env, firstForm)
     const args = forms.slice(1)
-    if (typeof func === 'function') return func(...args.map((arg) => go(env, arg)))
-    if (!(func instanceof Closure)) throw evalError('not a function')
-    if (func.isMacro) {
-      const macroResult = go(makeParamEnv(func, args), func.body)
-      assertFormDeep(macroResult)
-      form = macroResult
-      continue
+    if (typeof func === 'function') {
+      try {
+        return func(...args.map((arg) => go(env, arg)))
+      } catch (e) {
+        throw evalError(e.message)
+      }
     }
-    env = makeParamEnv(
-      func,
-      args.map((arg) => go(env, arg)),
-    )
-    form = func.body
-    continue
+    if (!(func instanceof Closure)) throw evalError('not a function')
+    switch (func.kind) {
+      case 'macro': {
+        const macroResult = go(makeParamEnv(func, args), func.body)
+        assertFormDeep(macroResult)
+        form = macroResult
+        continue
+      }
+      case 'fexpr':
+        return go(makeParamEnv(func, args), func.body)
+      case 'func':
+        env = makeParamEnv(
+          func,
+          args.map((arg) => go(env, arg)),
+        )
+        form = func.body
+        continue
+      default:
+        throw evalError('unexpected closure kind: ' + func.kind)
+    }
   }
 }
 const evaluate = (form) => {

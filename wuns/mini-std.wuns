@@ -26,6 +26,9 @@
 [defmacro defn [name params .. bodies]
   [flist [quote def] name [flist [quote func] name params [form-list [concat [list [quote do]] bodies]]]]]
 
+[defmacro defexpr [name params .. bodies]
+  [flist [quote def] name [flist [quote fexpr] name params [form-list [concat [list [quote do]] bodies]]]]]
+
 [defmacro if-not [c t f] [list [word if] c f t]]
 
 [def-extern concat-lists [type-scheme [a] [func [[list [list a]]] [list a]]]]
@@ -34,12 +37,6 @@
   [form-list [concat-lists list-forms]]]
 
 [defn mk-quote [form] [flist [quote quote] form]]
-
-[defmacro defexpr [name parameters .. bodies]
-  [flist [quote def] name
-    [closure-with-meta
-      [form-concat [list [quote func] name parameters] bodies]
-      [quote [quote [function-kind fexpr]]]]]]
 
 [def-extern size [type-scheme [a] [func [[list a]] i32]]]
 
@@ -171,15 +168,16 @@
 
 [defmacro ifs [.. clauses]
   [let [s [size clauses]]
-    [assert [is-odd s] ifs requires an odd number of arguments]
-    [[func go [i res]
-      [if [eq i 0]
-        res
-        [go
-          [sub i 2]
-          [flist [quote if] [at clauses [sub i 2]] [at clauses [dec i]] res]]]]
-      [dec s]
-      [at clauses -1]]]]
+    [do
+      [assert [is-odd s] ifs requires an odd number of arguments [identity s] [identity [meta [first clauses]]]]
+      [[func go [i res]
+        [if [eq i 0]
+          res
+          [go
+            [sub i 2]
+            [flist [quote if] [at clauses [sub i 2]] [at clauses [dec i]] res]]]]
+        [dec s]
+        [at clauses -1]]]]]
 
 [comment and relies on there only being one falsy value [i32 0]
         it will not return any other falsy value as or returns the first truthy argument]
@@ -470,9 +468,6 @@
         ml]]]]
 
 [def-extern meta [func [form] kv-map]]
-[def-extern var-get [func [var] any]]
-[def-extern var-meta [func [var] any]]
-[def-extern is-atom [type-scheme [a] [func [[atom a]] i32]]]
 
 [comment
   maybe we should be able to specify in the type-scheme that a is of pointer type
