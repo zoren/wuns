@@ -1,10 +1,6 @@
 const makeEnv = (outer) => {
   const env = new Map()
-  if (outer) {
-    env.outer = outer
-    const { invocation } = outer
-    if (invocation) env.invocation = invocation
-  }
+  if (outer) env.outer = outer
   return env
 }
 const hasLocal = (env, varName) => {
