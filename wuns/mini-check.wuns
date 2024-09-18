@@ -36,6 +36,7 @@
   [generate-fresh-type-var-atom [getq gctx type-var-counter] level]]
 
 [defn make-type [type-name type-args] [kv-map-id type-name type-args]]
+[defn is-type [t] [and [hasq t type-name] [hasq t type-args]]]
 
 [def type-i32 [make-type [word i32] [list]]]
 [def type-word [make-type [word word] [list]]]
@@ -46,7 +47,6 @@
   [if [size elem-types]
     [make-type [word tuple] elem-types]
     type-empty-tuple]]
-
 
 [defn report-fn [gctx message form]
   [push [getq gctx messages] [kv-map-id message form]]]
@@ -63,7 +63,146 @@
   [flist [quote report-fn] [quote gctx] [quote-list lmsg] form]]
 
 
-[defn check [gctx lctx form]
+[defn set-type-var-kind-to-type [type-var type]
+  [set-type-var-kind type-var type]]
+
+[comment normalize a type make type variable point directly to the linked type - if any]
+[defn normalize-type [t0]
+  [if [is-type-var t0]
+    [let [kind [type-var-kind t0]]
+      [if [is-word kind]
+        t0
+        [let [t2 [normalize-type kind]]
+          [set-type-var-kind-to-type t0 t2]
+          t2]]]
+    t0]]
+
+[defn member-type-var-list [set t]
+  [func go [i 0]
+    [if [lt-s i [size set]]
+      [if [is-identical [at set i] t]
+        1
+        [go [inc i]]]
+      0]]]
+
+[defn free-type-vars-growable [set t]
+  [let [nt [normalize-type t]]
+    [if
+      [is-type-var nt]
+      [when-not [member-type-var-list set nt]
+        [push set nt]]
+
+      [if [eq-word [getq nt type-name] [word func]]
+        [let [params [getq nt params]
+              result [getq nt result]]
+            [for-each param params [recur set param]]
+            [if-let [rest-param [try-getq nt rest-param]]
+              [recur set rest-param]
+              [do]]
+            [recur set result]]
+        [for-each arg [getq nt type-args]
+          [recur set arg]]]]]]
+
+[defn free-type-vars [t]
+  [let [set [growable-list]]
+    [free-type-vars-growable set t]
+    [clone-growable-to-frozen-list set]]]
+
+[defn prune-level [max-level tvs]
+  [for-each tv tvs
+    [set-type-var-level tv [min [type-var-level tv] max-level]]]]
+
+[defn link-var-to-type [type-var type]
+  [let
+    [level [type-var-level type-var]
+     fvs [free-type-vars type]]
+    [do
+      [assert [not [member-type-var-list fvs type-var]] type-var occurs in type
+        [list fvs type-var [member-type-var-list fvs type-var]]]
+      [prune-level level fvs]
+      [set-type-var-kind-to-type type-var type]]]]
+
+[defn push-unify-error [errors msg]
+  [push errors msg]]
+
+[defn unify [errors t1 t2]
+  [let [nt1 [normalize-type t1]
+        nt2 [normalize-type t2]]
+    [ifs
+      [and [is-type-var nt1] [is-type-var nt2]]
+      [when-not [is-identical nt1 nt2]
+        [if [lt-s [type-var-level nt1] [type-var-level nt2]]
+          [link-var-to-type nt1 nt2]
+          [link-var-to-type nt2 nt1]]]
+
+      [is-type-var nt1]
+      [link-var-to-type nt1 nt2]
+
+      [is-type-var nt2]
+      [link-var-to-type nt2 nt1]
+
+      [and [is-type nt1] [is-type nt2]]
+      [let [type-name1 [getq nt1 type-name]
+            type-name2 [getq nt2 type-name]]
+        [ifs
+          [not [eq-word type-name1 type-name2]]
+          [push-unify-error errors [quote [not unifiable - different types]]]
+
+          [if [eq-word [word func] type-name1]
+            [let [params1 [getq nt1 params]
+                  params2 [getq nt2 params]
+                  arity1 [size params1]
+                  arity2 [size params2]
+                  opt-rest-param1 [try-getq nt1 rest-param]
+                  opt-rest-param2 [try-getq nt2 rest-param]
+                  result1 [getq nt1 result]
+                  result2 [getq nt2 result]]
+              [ifs
+                [and [not opt-rest-param1] [not opt-rest-param2]]
+                [if
+                  [not [eq arity1 arity2]]
+                  [push-unify-error errors [quote [not unifiable - different number of parameters]]]
+
+                  [for i 0 arity1
+                    [recur errors [at params1 i] [at params2 i]]]]
+
+                [and opt-rest-param1 [not opt-rest-param2]]
+                [if
+                  [lt-s arity2 arity1]
+                  [push-unify-error errors [quote [not unifiable - insufficient number of parameters]]]
+
+                  [do
+                    [for i 0 arity1
+                      [recur errors [at params1 i] [at params2 i]]]
+                    [for i arity1 arity2
+                      [recur errors opt-rest-param1 [at params2 i]]]]]
+
+                [logq-abort func unification not implemented]]
+              [recur errors result1 result2]]
+
+            [let [type-args1 [getq nt1 type-args]
+                  type-args2 [getq nt2 type-args]
+                  arity1 [size type-args1]]
+              [if [not [eq arity1 [size type-args2]]]
+                [push-unify-error errors [quote [not unifiable - different number of type arguments]]]
+                [[func go [i]
+                  [if [lt-s i arity1]
+                    [if-let [msg [unify errors [at type-args1 i] [at type-args2 i]]]
+                      msg
+                      [go i [inc i]]]
+                    0]] 0]]]]]]
+
+      [logq-abort unify arguments not a type nor type variables [identity nt1] [identity nt2]]]]]
+
+[defn unify-report [gctx t1 t2 .. forms]
+  [let [errors [growable-list]
+        form [first forms]]
+    [do
+      [unify errors t1 t2]
+      [for-each error [clone-growable-to-frozen-list errors]
+        [report-fn gctx error form]]]]]
+
+[defn check [gctx level lctx form]
   [ifs
     [is-word form]
     [do]
@@ -75,24 +214,35 @@
           s-form [size sub-forms]
           first-form [first sub-forms]
           n-of-args [dec s-form]]
-        [ifs
-          [eq-word [quote i32] first-form]
-          [do
-            [report-when-not [eq n-of-args 1] form expects 1 argument]
-            type-i32]
+      [ifs
+        [eq-form [quote i32] first-form]
+        [do
+          [report-when-not [eq n-of-args 1] form expects 1 argument]
+          type-i32]
 
-          [eq-word [quote word] first-form]
-          [do
-            [report-when-not [eq n-of-args 1] form expects 1 argument]
-            type-word]
+        [eq-form [quote word] first-form]
+        [do
+          [report-when-not [eq n-of-args 1] form expects 1 argument]
+          type-word]
 
-          [eq-word [quote quote] first-form]
-          [do
-            [report-when-not [eq n-of-args 1] form expects 1 argument]
-            type-form]
+        [eq-form [quote quote] first-form]
+        [do
+          [report-when-not [eq n-of-args 1] form expects 1 argument]
+          type-form]
 
-          []
-          ]]]]
+        [eq-form first-form [quote if]]
+        [let [cond [second sub-forms]
+              then-branch [third sub-forms]
+              else-branch [fourth sub-forms]
+              cond-type [check gctx level lctx cond]
+              then-type [check gctx level lctx then-branch]
+              else-type [check gctx level lctx else-branch]]
+          [do
+            [unify-report gctx cond-type type-i32 cond]
+            [unify-report gctx then-type else-type then-branch else-branch]
+            then-type]]
+
+        [logq-abort check unknown form [identity form]]]]]]
 
 [defn make-global-context []
   [kv-mapq
@@ -101,7 +251,7 @@
     type-var-counter [atom 0]]]
 
 [defn check-top [gctx form]
-  [check gctx [kv-map-id] form]]
+  [check gctx 0 [kv-map-id] form]]
 
 [defn check-top-forms [gctx forms]
   [assert [size forms] check-top-forms expects at least one form]
@@ -120,29 +270,30 @@
         kind]
       [let [type-name [getq nt type-name]
             type-args [getq nt type-args]
-            n-of-args [size type-args]
-            present-type [mutable-list-of-size [inc n-of-args]]]
+            n-of-args [size type-args]]
         [if n-of-args
-          [do
-            [set-array present-type 0 type-name]
-            [for i 0 n-of-args
-              [set-array present-type [inc i] [recur [at type-args i]]]]
-            [freeze-mutable-list present-type]
-            [form-list-list present-type]]
-          [if [eq-word type-name [quote tuple]] [quote unit] [form-word type-name]]]]]]]
+          [let [present-type [mutable-list-of-size [inc n-of-args]]]
+            [do
+              [set-array present-type 0 [form-word type-name]]
+              [for i 0 n-of-args
+                [set-array present-type [inc i] [internal-to-present-type [at type-args i]]]]
+              [freeze-mutable-list present-type]
+              [form-list present-type]]]
+          [if [eq-word type-name [word tuple]] [quote unit] [form-word type-name]]]]]]]
 
 [def tests-run-atom [atom 0]]
 
 [defn test-ok-fn [expected-type forms]
   [let [gctx [make-global-context]
         res [check-top-forms gctx forms]
+        present-type [internal-to-present-type res]
         messages [getq gctx messages]]
     [do
       [when-not [is-empty messages]
         [for-each message messages
           [log message]]
         [logq-abort test-ok failed there were errors]]
-      [assert [eq-form [internal-to-present-type res] expected-type] test-ok failed expected type [identity expected-type] but found [identity present-type]]
+      [assert [eq-form present-type expected-type] test-ok failed expected type [identity expected-type] but found [identity present-type]]
       [inc-atom tests-run-atom]]]]
 
 [defexpr test-ok [expected-type .. forms]
@@ -156,7 +307,25 @@
         [log [getq message-obj message]]]
       [internal-to-present-type res]]]]
 
-[test-ok-fn [quote i32] [list [quote [i32 42]]]]
+[defn test-errors-fn [expected-type expected-messages forms]
+  [let [gctx [make-global-context]
+        res [check-top-forms gctx forms]
+        messages [getq gctx messages]]
+    [do
+      [if [is-empty messages]
+        [logq-abort test-failed failed there were no errors]
+        [when-not [eq [size expected-messages] [size messages]]
+          [for-each message messages [log message]]
+          [logq-abort test-failed failed expected [size expected-messages] messages but found [size messages]]]]
+      [for i 0 [size messages]
+        [let [expected-message [at expected-messages i]
+              message [getq [at messages i] message]]
+          [assert [eq-form expected-message message] test-failed failed expected message [identity expected-message] but found [identity message]]]]
+      [assert [eq-form [internal-to-present-type res] expected-type] test-ok failed expected type [identity expected-type] but found [identity present-type]]
+      [inc-atom tests-run-atom]]]]
+
+[defexpr test-errors [expected-type expected-messages .. forms]
+  [test-errors-fn expected-type [form-to-list expected-messages] forms]]
 
 [test-ok i32 [i32 42]]
 
@@ -168,3 +337,11 @@
 [test-ok form [quote []]]
 [test-ok form [quote [[]]]]
 [test-ok form [quote [a []]]]
+
+[comment if]
+[test-errors i32 [[not unifiable - different types]] [if [quote ok] [i32 5] [i32 5]]]
+[test-errors i32 [[not unifiable - different types]] [if [i32 5] [i32 5] [quote a]]]
+[test-errors form [[not unifiable - different types]] [if [i32 5] [quote a] [i32 5]]]
+[test-ok i32 [if [i32 5] [i32 6] [i32 7]]]
+[test-ok i32 [quote a] [if [i32 5] [i32 6] [i32 7]]]
+[test-ok form [if [i32 5] [quote a] [quote b]]]
