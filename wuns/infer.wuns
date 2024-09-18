@@ -7,19 +7,6 @@
 [defn make-type-var [kind level]
   [atom [kv-map-id kind level]]]
 
-[defn int-to-type-var-name [i]
-  [if [lt-s i [i32 26]]
-    [char-code-to-word [add [i32 97] i]]
-    [concat-words
-      [recur [i32.div-s i [i32 26]]]
-      [char-code-to-word [add [i32 97] [i32.rem-s i [i32 26]]]]]]]
-
-[defn int-to-type-var [i]
-  [form-word [int-to-type-var-name i]]]
-
-[defn generate-fresh-type-var-atom [counter-atom level]
-  [make-type-var [int-to-type-var [inc-atom counter-atom]] level]]
-
 [defn is-type-var [t]
   [and [is-atom t]
     [let [v [atom-get t]] [and [hasq v kind] [hasq v level]]]]]
@@ -79,9 +66,6 @@
       result result]
     [type-func-no-rest params result]]]
 
-[defn is-internal-func-type [t]
-  [and [is-type t] [eq-word [getq t type-name] [quote func]]]]
-
 [defn make-infer-global-context []
   [kv-mapq
     messages [growable-list]
@@ -107,10 +91,6 @@
   [if-let [ltype [try-get-local-var-type local-ctx var-name]]
     ltype
     [try-get [getq gctx def-var-types] var-name]]]
-
-[defn generate-fresh-type-var [gctx level]
-  [generate-fresh-type-var-atom [getq gctx type-var-counter] level]]
-
 
 [defn check-type-arity [gctx type-name n-of-given-type-args]
   [ifs
@@ -269,40 +249,27 @@
     [for-each error [clone-growable-to-frozen-list errors]
       [report-fn gctx error form]]]]
 
+[defn int-to-type-var-name [i]
+  [if [lt-s i [i32 26]]
+    [char-code-to-word [add [i32 97] i]]
+    [concat-words
+      [recur [i32.div-s i [i32 26]]]
+      [char-code-to-word [add [i32 97] [i32.rem-s i [i32 26]]]]]]]
+
+[defn int-to-type-var [i]
+  [form-word [int-to-type-var-name i]]]
+
+[defn generate-fresh-type-var-atom [counter-atom level]
+  [make-type-var [int-to-type-var [inc-atom counter-atom]] level]]
+
+[defn generate-fresh-type-var [gctx level]
+  [generate-fresh-type-var-atom [getq gctx type-var-counter] level]]
+
 [defn unify-call [gctx level func-type arg-types form]
   [let [t-res [generate-fresh-type-var gctx level]
         t-func [type-func-no-rest arg-types t-res]]
     [unify-report gctx func-type t-func form]
     t-res]]
-
-
-[comment
-
-      [and [is-internal-func-type nt1] [is-internal-func-type nt2]]
-      [let [params1 [getq nt1 params]
-            params2 [getq nt2 params]
-            rest-params1 [getq nt1 rest-params]
-            rest-params2 [getq nt2 rest-params]
-            result1 [fourth nt1]
-            result2 [fourth nt2]
-            arity1 [size params1]
-            arity2 [size params2]
-            n-of-params [inc [max arity1 arity2]]]
-        [or
-          [loop [i 0]
-            [if [lt-s i n-of-params]
-              [if-let [p1 [if [lt-s i arity1] [at params1 i] rest-params1]]
-                [if-let [p2 [if [lt-s i arity2] [at params2 i] rest-params2]]
-                  [if-let [msg [recur p1 p2]]
-                    msg
-                    [continue i [inc i]]]
-                  0]
-                0]
-              0]]
-          [recur result1 result2]
-          [if [and [not [size rest-params1]] [not [size rest-params2]] [not [eq arity1 arity2]]]
-            [quote [insufficient number of arguments]] 0]]]
-]
 
 [defn mk-type-scheme [type-vars type] [list [quote type-scheme] type-vars type]]
 
