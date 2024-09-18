@@ -70,7 +70,12 @@ const setParameters = (parameters, paramEnv, eargs) => {
   if (parameters.length > 1 && parameters.at(-2) === '..') {
     const restParam = parameters.at(-1)
     parameters = parameters.slice(0, -2)
+    if (eargs.length < parameters.length)
+      throw new EvalError('expected at least ' + parameters.length + ' arguments, got ' + eargs.length)
     setEnv(paramEnv, restParam, list(...eargs.slice(parameters.length)))
+  } else {
+    if (eargs.length !== parameters.length)
+      throw new EvalError('expected ' + parameters.length + ' arguments, got ' + eargs.length)
   }
   parameters.forEach((param, i) => setEnv(paramEnv, param, eargs[i]))
 }
