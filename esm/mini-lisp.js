@@ -120,11 +120,11 @@ const makeEvaluator = (externObj) => {
         if (!defEnv.has(word)) throw evalError('undefined variable: ' + word)
         return defEnv.get(word)
       }
-      const list = getFormList(form)
-      if (list.length === 0) throw evalError('empty list')
-      const [firstForm] = list
+      const forms = getFormList(form)
+      if (forms.length === 0) throw evalError('empty list')
+      const [firstForm] = forms
       const firstWord = tryGetFormWord(firstForm)
-      const numOfArgs = list.length - 1
+      const numOfArgs = forms.length - 1
       const assertNumArgs = (num) => {
         if (numOfArgs !== num)
           throw evalError(`special form '${firstWord}' expected ${num} arguments, got ${numOfArgs}`)
@@ -132,28 +132,28 @@ const makeEvaluator = (externObj) => {
       switch (firstWord) {
         case 'i32':
           assertNumArgs(1)
-          return +getFormWord(list[1]) | 0
+          return +getFormWord(forms[1]) | 0
         case 'word':
           assertNumArgs(1)
-          return getFormWord(list[1])
+          return getFormWord(forms[1])
         case 'quote': {
           assertNumArgs(1)
-          const form = list[1]
+          const form = forms[1]
           assertFormDeep(form)
           return form
         }
         case 'func':
         case 'macro': {
           assertNumArgs(3)
-          const name = getFormWord(list[1])
-          const parameters = getFormList(list[2]).map(getFormWord)
-          const body = list[3]
+          const name = getFormWord(forms[1])
+          const parameters = getFormList(forms[2]).map(getFormWord)
+          const body = forms[3]
           return makeClosure(env, name, parameters, body, firstWord === 'macro')
         }
         case 'extern': {
           let ext = externObj
-          for (let i = 1; i < list.length; i++) {
-            const prop = getFormWord(list[i])
+          for (let i = 1; i < forms.length; i++) {
+            const prop = getFormWord(forms[i])
             const extProp = ext[prop]
             if (extProp === undefined) throw evalError('undefined extern: ' + prop + ' in ' + ext)
             ext = extProp
@@ -162,8 +162,8 @@ const makeEvaluator = (externObj) => {
         }
         case 'def': {
           assertNumArgs(2)
-          const name = getFormWord(list[1])
-          const value = go(env, list[2])
+          const name = getFormWord(forms[1])
+          const value = go(env, forms[2])
           defEnv.set(name, value)
           return value
         }
@@ -175,28 +175,27 @@ const makeEvaluator = (externObj) => {
 
         case 'if':
           assertNumArgs(3)
-          form = list[go(env, list[1]) ? 2 : 3]
+          form = forms[go(env, forms[1]) ? 2 : 3]
           continue
         case 'do':
-          if (list.length === 1) return langUndefined
-          for (let i = 1; i < list.length - 1; i++) go(env, list[i])
-          form = list.at(-1)
+          if (forms.length === 1) return langUndefined
+          for (let i = 1; i < forms.length - 1; i++) go(env, forms[i])
+          form = forms.at(-1)
           continue
         case 'let': {
           assertNumArgs(2)
-          const bindings = getFormList(list[1])
+          const bindings = getFormList(forms[1])
           if (bindings.length % 2 !== 0) throw evalError('odd number of bindings')
           const newEnv = makeEnv(env)
           for (let i = 0; i < bindings.length - 1; i += 2)
             setEnv(newEnv, getFormWord(bindings[i]), go(newEnv, bindings[i + 1]))
           env = newEnv
-          form = list[2]
+          form = forms[2]
           continue
         }
       }
       const func = go(env, firstForm)
-      const args = list.slice(1)
-      // const eargs = args.map((arg) => go(env, arg))
+      const args = forms.slice(1)
       if (typeof func === 'function') return func(...args.map((arg) => go(env, arg)))
       if (!(func instanceof Closure)) throw evalError('not a function')
       if (func.isMacro) {
@@ -205,7 +204,6 @@ const makeEvaluator = (externObj) => {
         form = macroResult
         continue
       }
-      // todo check if it's a recursive call and use the same env
       env = makeParamEnv(
         func,
         args.map((arg) => go(env, arg)),
