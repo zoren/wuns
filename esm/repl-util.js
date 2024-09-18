@@ -12,7 +12,7 @@ const readHistory = (historyFilePath) => {
   }
 }
 
-export const startRepl = (historyFilePath, promptString, evalLine) => {
+export const startRepl = (historyFilePath, promptString, evalLine, completer) => {
   const history = readHistory(historyFilePath)
 
   const rl = readline.createInterface({
@@ -23,6 +23,7 @@ export const startRepl = (historyFilePath, promptString, evalLine) => {
     history,
     removeHistoryDuplicates: true,
     tabSize: 2,
+    completer,
   })
 
   rl.on('history', (history) => {

@@ -171,7 +171,7 @@ const makeEvaluator = (externObj) => {
         case 'loop':
         case 'continue':
         case 'recur':
-          throw new EvalError('unexpected ' + firstWord, form)
+          throw evalError('unexpected ' + firstWord)
 
         case 'if':
           assertNumArgs(3)
@@ -212,13 +212,21 @@ const makeEvaluator = (externObj) => {
       continue
     }
   }
-  return (form) => {
+  const evaluate = (form) => {
     try {
       return go(makeEnv(), form)
     } catch (e) {
       console.error(e, meta(form))
     }
   }
+  const specialForms = ['i32', 'word', 'quote', 'func', 'macro', 'extern', 'def']
+  const getCompletions = (prefix) => {
+    const completions = []
+    for (const special of specialForms) if (special.startsWith(prefix)) completions.push(special)
+    for (const [key] of defEnv) if (key.startsWith(prefix)) completions.push(key)
+    return completions
+  }
+  return { evaluate, getCompletions }
 }
 
 import { formWord, formList } from './core.js'
@@ -275,7 +283,7 @@ import fs from 'node:fs'
 const commandLineArgs = process.argv.slice(2)
 const endsWithDashFlag = commandLineArgs.at(-1) === '-'
 const files = endsWithDashFlag ? commandLineArgs.slice(0, -1) : commandLineArgs
-const evaluate = makeEvaluator(externs)
+const { evaluate, getCompletions } = makeEvaluator(externs)
 for (const filePath of files) {
   const content = fs.readFileSync(filePath, 'ascii')
   const forms = parseToForms(content, filePath)
@@ -284,7 +292,7 @@ for (const filePath of files) {
 import { startRepl } from './repl-util.js'
 
 if (!endsWithDashFlag) {
-  startRepl('mini-lisp-history.json', 'mini-lisp> ', (line) => {
+  const evalLine = (line) => {
     try {
       let result
       for (const form of parseToForms(line)) result = evaluate(form)
@@ -292,5 +300,13 @@ if (!endsWithDashFlag) {
     } catch (err) {
       console.error(err)
     }
-  })
+  }
+  const completer = (line) => {
+    const m = line.match(/[a-z0-9./-]+$/)
+    if (!m) return [[], '']
+    const currentWord = m[0]
+    const defs = getCompletions(currentWord)
+    return [defs, currentWord]
+  }
+  startRepl('mini-lisp-history.json', 'mini-lisp> ', evalLine, completer)
 }
