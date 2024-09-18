@@ -3,14 +3,6 @@ const makeEnv = (outer) => {
   if (outer) env.outer = outer
   return env
 }
-const hasLocal = (env, varName) => {
-  let curEnv = env
-  while (curEnv) {
-    if (curEnv.has(varName)) return true
-    curEnv = curEnv.outer
-  }
-  return false
-}
 const setEnv = (env, varName, value) => {
   env.set(varName, value)
 }
@@ -202,27 +194,24 @@ const makeEvaluator = (externObj) => {
           continue
         }
       }
+      const func = go(env, firstForm)
       const args = list.slice(1)
-      if (firstWord && !hasLocal(env, firstWord)) {
-        const closure = defEnv.get(firstWord)
-        if (closure instanceof Closure && closure.isMacro) {
-          const macroResult = go(makeParamEnv(closure, args), closure.body)
-          assertFormDeep(macroResult)
-          form = macroResult
-          continue
-        }
-      }
-      {
-        const func = go(env, firstForm)
-        const eargs = args.map((arg) => go(env, arg))
-        if (typeof func === 'function') return func(...eargs)
-        if (!(func instanceof Closure)) throw evalError('not a function')
-        if (func.isMacro) throw evalError('macro not allowed here')
-        // todo check if it's a recursive call and use the same env
-        env = makeParamEnv(func, eargs)
-        form = func.body
+      // const eargs = args.map((arg) => go(env, arg))
+      if (typeof func === 'function') return func(...args.map((arg) => go(env, arg)))
+      if (!(func instanceof Closure)) throw evalError('not a function')
+      if (func.isMacro) {
+        const macroResult = go(makeParamEnv(func, args), func.body)
+        assertFormDeep(macroResult)
+        form = macroResult
         continue
       }
+      // todo check if it's a recursive call and use the same env
+      env = makeParamEnv(
+        func,
+        args.map((arg) => go(env, arg)),
+      )
+      form = func.body
+      continue
     }
   }
   return (form) => {
