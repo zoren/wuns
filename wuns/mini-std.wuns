@@ -8,7 +8,7 @@
   [extern-with-meta
     [extern host form-list]
     [quote [type [func [[list form]] form]]]]]
-[def flist [func form-list [.. elements] [form-list elements]]]
+[def flist [func flist [.. elements] [form-list elements]]]
 
 [def defmacro
   [macro defmacro [name params .. bodies]
@@ -143,12 +143,12 @@
         msg [mutable-list-of-size [inc s]]]
     [do
       [set-array msg 0 [quote list]]
-    [[func loop [i]
+    [[func go [i]
       [when [lt-s i s]
           [set-array msg [inc i]
           [let [e [at lmsg i]]
             [if [is-word e] [mk-quote e] e]]]
-          [recur [inc i]]]]
+          [go [inc i]]]]
       0]
     [form-list [freeze-mutable-list msg]]]]]
 
@@ -172,10 +172,10 @@
 [defmacro ifs [.. clauses]
   [let [s [size clauses]]
     [assert [is-odd s] ifs requires an odd number of arguments]
-    [[func loop [i res]
+    [[func go [i res]
       [if [eq i 0]
         res
-        [recur
+        [go
           [sub i 2]
           [flist [quote if] [at clauses [sub i 2]] [at clauses [dec i]] res]]]]
       [dec s]
@@ -187,10 +187,10 @@
   [let [s [size clauses]]
     [if [is-zero s]
       [quote [i32 1]]
-      [[func loop [i res]
+      [[func go [i res]
         [if [eq i 0]
           res
-          [recur
+          [go
             [dec i]
             [flist [quote if] [at clauses [dec i]] res [quote [i32 0]]]]]]
          [dec s]
@@ -242,10 +242,10 @@
   [let [s [size clauses]]
     [if [is-zero s]
       [quote [i32 0]]
-      [[func loop [i res]
+      [[func go [i res]
         [if [eq i 0]
           res
-          [recur
+          [go
             [dec i]
             [let [w [genword]]
               [flist [quote let] [flist w [at clauses [dec i]]]
@@ -279,10 +279,10 @@
           sa [word-byte-size wa] sb [word-byte-size wb]]
       [and
         [eq sa sb]
-        [[func loop [i]
+        [[func go [i]
           [if [lt-s i sa]
             [if [eq [char-code-at wa i] [char-code-at wb i]]
-              [recur [inc i]]
+              [go [inc i]]
               0]
             1]] 0]]]]]
 
@@ -294,27 +294,28 @@
             lb [form-to-list b]
             sa [size la]]
         [and [eq sa [size lb]]
-          [[func loop [i]
+          [[func go [i]
             [if [lt-s i sa]
-              [if [recur [at la i] [at lb i]]
-                [continue i [inc i]]
+              [if [eq-form [at la i] [at lb i]]
+                [go [inc i]]
                 0]
               1]] 0]]]]]]
 
 [defn for-func [iw start increment end forms]
   [assert [lt-s 0 increment] for-func increment must be positive]
-  [let [ew [genword]]
+  [let [ew [genword]
+        loopw [genword]]
     [flist
       [quote let] [flist ew end]
       [flist
         [flist
-          [quote func] [quote loop] [flist iw]
+          [quote func] loopw [flist iw]
           [flist [quote if]
             [flist [quote lt-s] iw ew]
             [form-concat
               [list [quote do]]
               forms
-              [list [flist [quote recur] [flist [quote add] iw [i32-to-form increment]]]]]
+              [list [flist loopw [flist [quote add] iw [i32-to-form increment]]]]]
             [quote [do]]]]
         start]]]]
 
@@ -328,13 +329,14 @@
   [assert [is-word element-var] for-each requires a word as the first argument]
   [let [iteration-var [genword]
         col-var [genword]
-        col-size-var [genword]]
+        col-size-var [genword]
+        loopw [genword]]
     [flist
       [quote let] [flist col-var collection
                         col-size-var [flist [quote size] col-var]]
       [flist
         [flist
-          [quote func] [quote loop] [flist iteration-var]
+          [quote func] loopw [flist iteration-var]
           [flist [quote if]
             [flist [quote lt-s] iteration-var col-size-var]
             [form-concat
@@ -343,7 +345,7 @@
               [list
                 [form-concat [list [quote do]]
                   forms
-                  [list [flist [quote recur] [flist [quote add] iteration-var [quote [i32 1]]]]]]]]
+                  [list [flist loopw [flist [quote add] iteration-var [quote [i32 1]]]]]]]]
             [quote [do]]]]
         [quote [i32 0]]]]]]
 
@@ -352,7 +354,8 @@
   [let [iteration-var [genword]
         col-var [genword]
         col-size-var [genword]
-        new-col-var [genword]]
+        new-col-var [genword]
+        loopw [genword]]
     [flist
       [quote let] [flist col-var collection
                         col-size-var [flist [quote size] col-var]
@@ -360,14 +363,14 @@
       [flist [quote do]
         [flist
           [flist
-            [quote func] [quote loop] [flist iteration-var]
+            [quote func] loopw [flist iteration-var]
             [flist [quote if]
               [flist [quote lt-s] iteration-var col-size-var]
               [flist [quote let]
                 [flist element-var [flist [quote at] col-var iteration-var]]
                 [flist [quote do]
                   [flist [quote set-array] new-col-var iteration-var form]
-                  [flist [quote recur] [flist [quote add] iteration-var [quote [i32 1]]]]]]
+                  [flist loopw [flist [quote add] iteration-var [quote [i32 1]]]]]]
               [quote [do]]]]
           [quote [i32 0]]]
         [flist [quote freeze-mutable-list] new-col-var]]]]]
@@ -386,7 +389,7 @@
         ml [mutable-list-of-size n-of-pairs]
         tmp-word [genword]]
     [do
-      [assert [is-even s] kv-map requires an even number of arguments]
+      [assert [is-even s] kv-mapq requires an even number of arguments]
       [for-pair i 0 s
         [set-array ml [half i]
           [let [k [at entries i]]
@@ -401,3 +404,78 @@
           [list
             [flist [quote freeze-kv-map] tmp-word]
             tmp-word]]]]]]
+
+[defmacro kv-map-id [.. entries]
+  [let [s [size entries]
+        ml [mutable-list-of-size s]
+        tmp-word [genword]]
+    [do
+      [for i 0 s
+        [set-array ml i
+          [let [k [at entries i]]
+            [flist [quote set-kv-map] tmp-word [mk-word k] k]]]]
+      [flist [quote let]
+        [flist tmp-word [quote [transient-kv-map]]]
+        [form-concat
+          [list [quote do]]
+          [freeze-mutable-list ml]
+          [list
+            [flist [quote freeze-kv-map] tmp-word]
+            tmp-word]]]]]]
+
+[def-extern has [func [kv-map word] i32]]
+
+[defmacro hasq [m w]
+  [flist [quote has] m [mk-word w]]]
+
+[def-extern get [type-scheme [a] [func [kv-map word] a]]]
+
+[defmacro getq [m w]
+  [flist [quote get] m [mk-word w]]]
+
+[defn try-get [m k]
+  [if [has m k]
+    [get m k]
+    0]]
+
+[defmacro try-getq [m w]
+  [flist [quote try-get] m [mk-word w]]]
+
+[defn push-all [mut-list list]
+  [for-each e list [push mut-list e]]]
+
+[def-extern keys [func [kv-map] [form-list word]]]
+
+[defn assoc [m k v]
+  [let [new [transient-kv-map]]
+    [do
+      [for-each k [keys m]
+        [set-kv-map new k [get m k]]]
+      [set-kv-map new k v]
+      [freeze-kv-map new]
+      new]]]
+
+[def empty-kv-map [kv-mapq]]
+
+[defn slice [l start end]
+  [assert [not [is-negative start]] negative start index]
+  [assert [not [is-negative end]] negative end index]
+  [let [s [sub end start]]
+    [if [lt-s s 1]
+      [list]
+      [let [ml [mutable-list-of-size s]]
+        [for i start end
+          [set-array ml [sub i start] [at l i]]]
+        [freeze-mutable-list ml]
+        ml]]]]
+
+[def-extern meta [func [form] kv-map]]
+[def-extern var-get [func [var] any]]
+[def-extern var-meta [func [var] any]]
+[def-extern is-atom [type-scheme [a] [func [[atom a]] i32]]]
+
+[comment
+  maybe we should be able to specify in the type-scheme that a is of pointer type
+  we do not want to be able to compare functions with it
+  and do not want to compare i32s with it]
+[def-extern is-identical [type-scheme [a] [func [a a] i32]]]

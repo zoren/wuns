@@ -16,13 +16,13 @@
    trec
     [func go [n res]
       [if n
-        [recur [sub n 1] [add res n]]
+        [go [sub n 1] [add res n]]
         res]]
    tail-gauss [func tail-gauss [n] [trec n 0]]
    recursive-gauss
     [func go [n]
       [if n
-        [add n [recur [sub n 1]]]
+        [add n [go [sub n 1]]]
         0]]
     time-f [func time-f [f n]
       [let
@@ -37,7 +37,7 @@
           [if [lt i n]
             [do
               [f [at l i]]
-              [recur [add i 1]]]
+              [go [add i 1]]]
             [do]]] 0]]]
     ns [list
         [i32 10]

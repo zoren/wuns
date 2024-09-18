@@ -60,8 +60,6 @@ const print = (value) => {
   return `[transient-kv-map${Object.entries(value)
     .map(([k, v]) => ` ${k} ${print(v)}`)
     .join('')}]`
-  console.error(value)
-  throw new Error('unexpected value: ' + value)
 }
 
 const list = (...args) => Object.freeze(args)
@@ -82,8 +80,9 @@ const setParameters = (parameters, paramEnv, eargs) => {
 
 const makeParamEnv = (defFunc, args) => {
   const paramEnv = makeEnv(defFunc.env)
+  // for recursive calls
+  setEnv(paramEnv, defFunc.name, defFunc)
   setParameters(defFunc.parameters, paramEnv, args)
-  paramEnv.invocation = { closure: defFunc, paramEnv }
   return paramEnv
 }
 
@@ -170,6 +169,7 @@ const makeEvaluator = (externObj) => {
 
         case 'loop':
         case 'continue':
+        case 'recur':
           throw new EvalError('unexpected ' + firstWord, form)
 
         case 'if':
@@ -190,14 +190,6 @@ const makeEvaluator = (externObj) => {
             setEnv(newEnv, getFormWord(bindings[i]), go(newEnv, bindings[i + 1]))
           env = newEnv
           form = list[2]
-          continue
-        }
-        case 'recur': {
-          const eargs = list.slice(1).map((arg) => go(env, arg))
-          const { closure, paramEnv } = env.invocation
-          const { parameters, body } = closure
-          setParameters(parameters, paramEnv, eargs)
-          form = body
           continue
         }
       }
@@ -223,6 +215,7 @@ const makeEvaluator = (externObj) => {
         if (typeof func === 'function') return func(...eargs)
         if (!(func instanceof Closure)) throw evalError('not a function')
         if (func.isMacro) throw evalError('macro not allowed here')
+        // todo check if it's a recursive call and use the same env
         env = makeParamEnv(func, eargs)
         form = func.body
         continue
