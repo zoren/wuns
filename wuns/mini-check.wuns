@@ -1,25 +1,26 @@
 [defn make-type-var [kind level]
-  [let [tv [transient-kv-map]]
+  [let-do [tv [transient-kv-map]]
     [setq tv kind kind]
-    [setq tv level level]]]
+    [setq tv level level]
+    tv]]
 
 [defn is-type-var [v]
   [and [hasq v kind] [hasq v level]]]
 
 [defn type-var-kind [t]
-  [assert [is-type-var t] not a type var [identity t]]
+  [assert [is-type-var t] type-var-kind not a type var [identity t]]
   [getq t kind]]
 
 [defn type-var-level [t]
-  [assert [is-type-var t] not a type var [identity t]]
+  [assert [is-type-var t] type-var-level not a type var [identity t]]
   [getq t level]]
 
 [defn set-type-var-kind [type-var kind]
-  [assert [is-type-var type-var] not a type var [identity type-var]]
+  [assert [is-type-var type-var] set-type-var-kind not a type var [identity type-var]]
   [setq type-var kind kind]]
 
 [defn set-type-var-level [type-var level]
-  [assert [is-type-var type-var] not a type var [identity type-var]]
+  [assert [is-type-var type-var] set-type-var-level not a type var [identity type-var]]
   [setq type-var level level]]
 
 [defn int-to-type-var-name-word [i]
@@ -47,6 +48,20 @@
   [if [size elem-types]
     [make-type [word tuple] elem-types]
     type-empty-tuple]]
+[defn type-func-no-rest [params result]
+  [kv-mapq
+    type-name [word func]
+    params params
+    result result]]
+
+[defn type-func [params opt-rest-param result]
+  [if-let [rest-param opt-rest-param]
+    [kv-mapq
+      type-name [word func]
+      params params
+      rest-param rest-param
+      result result]
+    [type-func-no-rest params result]]]
 
 [defn report-fn [gctx message form]
   [push [getq gctx messages] [kv-map-id message form]]]
@@ -71,18 +86,18 @@
     [let [kind [type-var-kind t0]]
       [if [is-word kind]
         t0
-        [let [t2 [normalize-type kind]]
+        [let-do [t2 [normalize-type kind]]
           [set-type-var-kind-to-type t0 t2]
           t2]]]
     t0]]
 
 [defn member-type-var-list [set t]
-  [func go [i 0]
+  [[func member-type-var-list-go [i]
     [if [lt-s i [size set]]
       [if [is-identical [at set i] t]
         1
-        [go [inc i]]]
-      0]]]
+        [member-type-var-list-go [inc i]]]
+      0]] 0]]
 
 [defn free-type-vars-growable [set t]
   [let [nt [normalize-type t]]
@@ -188,11 +203,11 @@
                   arity1 [size type-args1]]
               [if [not [eq arity1 [size type-args2]]]
                 [push-unify-error errors [message not unifiable - different number of type arguments]]
-                [[func go [i]
+                [[func unify-go [i]
                   [if [lt-s i arity1]
                     [if-let [msg [unify errors [at type-args1 i] [at type-args2 i]]]
                       msg
-                      [go i [inc i]]]
+                      [unify-go i [inc i]]]
                     0]] 0]]]]]]
 
       [logq-abort unify arguments not a type nor type variables [identity nt1] [identity nt2]]]]]
@@ -209,7 +224,7 @@
   [if [lt-s i [i32 26]]
     [char-code-to-word [add [i32 97] i]]
     [concat-words
-      [recur [i32.div-s i [i32 26]]]
+      [int-to-type-var-name [i32.div-s i [i32 26]]]
       [char-code-to-word [add [i32 97] [i32.rem-s i [i32 26]]]]]]]
 
 [defn int-to-type-var [i]
@@ -237,37 +252,48 @@
           [push tvs tv]]]
       [mk-type-scheme [clone-growable-to-frozen-list tvs] type]]]]
 
+[defn try-get-assoc-identical [assoc-list var]
+  [[func try-get-assoc-identical-go [i]
+    [if [lt-s i [size assoc-list]]
+      [let [pair [at assoc-list i]]
+        [if [is-identical var [first pair]]
+          [second pair]
+          [try-get-assoc-identical-go [inc i]]]]
+      0]] 0]]
+
 [defn copy-type [subst-map t]
   [ifs
     [is-type-var t]
-    [if-let [subst-type [try-get-assoc-atom subst-map t]]
+    [if-let [subst-type [try-get-assoc-identical subst-map t]]
       subst-type
       [let [kind [type-var-kind t]]
         [if [is-word kind]
           t
-          [recur subst-map kind]]]]
+          [copy-type subst-map kind]]]]
 
     [let [type-name [getq t type-name]]
-      [if [eq-word type-name [quote func]]
+      [if [eq-word type-name [word func]]
         [let [params [getq t params]
               result [getq t result]
-              cparams [macro-map params param [recur subst-map param]]
-              crest-param [if-let [rest-param [try-getq t rest-param]] [recur subst-map rest-param] 0]]
-          [type-func cparams crest-param [recur subst-map result]]]
+              cparams [list-map param params [copy-type subst-map param]]
+              crest-param [if-let [rest-param [try-getq t rest-param]] [copy-type subst-map rest-param] 0]]
+          [type-func cparams crest-param [copy-type subst-map result]]]
         [let [type-args [getq t type-args]
-              cargs [macro-map type-args arg [recur subst-map arg]]]
+              cargs [list-map arg type-args [copy-type subst-map arg]]]
         [make-type type-name cargs]]]]]]
 
 [defn specialize [gctx level type-vars type]
   [if [is-empty type-vars]
     type
-    [let [subst-assoc-list [macro-map type-vars tv [list tv [generate-fresh-type-var gctx level]]]]
+    [let [subst-assoc-list [list-map tv type-vars [list tv [generate-fresh-type-var gctx level]]]]
       [copy-type subst-assoc-list type]]]]
 
 [defn specialize-type-scheme [gctx level type-scheme]
   [let [type-vars [second type-scheme]
         type [third type-scheme]]
     [specialize gctx level type-vars type]]]
+
+[defn mk-empty-type-scheme [type] [mk-type-scheme [list] type]]
 
 [defn try-get-local-var-type [local-ctx var-name]
   [[func go [cur-ctx]
@@ -280,6 +306,12 @@
   [if-let [ltype [try-get-local-var-type local-ctx var-name]]
     ltype
     [try-get [getq gctx def-var-types] var-name]]]
+
+[defn params-to-map [params]
+  [if [and [lt-s 1 [size params]] [eq-form-word [at params -2] [quote ..]]]
+    [kv-mapq params [slice params 0 [sub [size params] 2]]
+             rest-param [last params]]
+    [kv-mapq params params]]]
 
 [defn check [gctx level lctx form]
   [ifs
@@ -326,8 +358,10 @@
 
         [eq-form first-form [quote do]]
         [if n-of-args
-          [for i 1 n-of-args
-            [check gctx level lctx [at sub-forms i]]]
+          [do
+            [for i 1 [dec n-of-args]
+              [check gctx level lctx [at sub-forms i]]]
+            [check gctx level lctx [last sub-forms]]]
           type-empty-tuple]
 
         [eq-form first-form [quote let]]
@@ -355,6 +389,46 @@
             [check gctx level let-ctx [last sub-forms]]
             type-empty-tuple]]
 
+        [eq-form first-form [quote func]]
+        [let-do
+             [level-1 [inc level]
+              func-name [second sub-forms]
+              params-form [third sub-forms]
+              params [form-to-list params-form]
+              param-ctx [transient-kv-map]
+              parsed-params [params-to-map params]
+              reg-params-parsed [getq parsed-params params]
+              func-type [generate-fresh-type-var gctx level-1]
+              func-ctx [kv-mapq vars param-ctx first-form first-form func-type func-type]
+              reg-params [growable-list]
+              n-of-bodies [sub s-form 3]]
+            [for-each param reg-params-parsed
+              [let-do [tv [generate-fresh-type-var gctx level-1]]
+                [set-kv-map param-ctx [form-to-word param] [mk-empty-type-scheme tv]]
+                [push reg-params tv]]]
+            [let [opt-rest-param
+                  [if-let [rest-param [try-getq parsed-params rest-param]]
+                    [let [tv [generate-fresh-type-var gctx level-1]]
+                      [set-kv-map param-ctx [form-to-word rest-param]
+                        [mk-empty-type-scheme [type-list tv]]]
+                      tv]
+                    0]
+                  return-type
+                  [if n-of-bodies
+                    [do
+                      [for i 3 [dec s-form]
+                        [check gctx level-1 func-ctx [at sub-forms i]]]
+                      [check gctx level-1 func-ctx [last sub-forms]]]
+                    type-empty-tuple]]
+              [unify-report gctx
+                func-type
+                [type-func
+                  [clone-growable-to-frozen-list reg-params]
+                  opt-rest-param
+                  return-type]
+                form]]
+            func-type]
+
         [logq-abort check unknown form [identity form]]]]]]
 
 [defn make-global-context []
@@ -368,38 +442,85 @@
 
 [defn check-top-forms [gctx forms]
   [assert [size forms] check-top-forms expects at least one form]
-  [[func go [i]
+  [[func check-top-forms-go [i]
     [if [lt-s i [dec [size forms]]]
       [do
         [check-top gctx [at forms i]]
-        [go [inc i]]]
+        [check-top-forms-go [inc i]]]
       [check-top gctx [at forms i]]]] 0]]
 
 [defn internal-to-present-type [internal-type]
   [let [nt internal-type]
     [if [is-type-var nt]
-      [let [kind [type-var-kind nt]]
-        [assert [is-word kind] not a type var [identity nt]]
+      [let-do [kind [type-var-kind nt]]
+        [assert [is-word kind] internal-to-present-type not word type var [identity nt]]
         kind]
-      [let [type-name [getq nt type-name]
-            type-args [getq nt type-args]
-            n-of-args [size type-args]]
-        [if n-of-args
-          [let [present-type [mutable-list-of-size [inc n-of-args]]]
-            [do
-              [set-array present-type 0 [form-word type-name]]
-              [for i 0 n-of-args
-                [set-array present-type [inc i] [internal-to-present-type [at type-args i]]]]
-              [freeze-mutable-list present-type]
-              [form-list present-type]]]
-          [if [eq-word type-name [word tuple]] [quote unit] [form-word type-name]]]]]]]
+      [let [type-name [getq nt type-name]]
+        [if
+          [eq-word type-name [word func]]
+          [let [params [getq nt params]
+                n-params [size params]
+                opt-rest-param [try-getq nt rest-param]
+                result [getq nt result]
+                n-present-params [if opt-rest-param [add n-params 2] n-params]
+                regular-present-params [list-map param params [internal-to-present-type param]]
+                present-params
+                [if opt-rest-param
+                  [concat regular-present-params [list [quote ..] [internal-to-present-type opt-rest-param]]]
+                  regular-present-params]]
+              [flist [quote func] [form-list present-params] [internal-to-present-type result]]]
+
+          [let [type-args [getq nt type-args]
+                n-of-args [size type-args]
+                present-type [mutable-list-of-size [inc n-of-args]]]
+            [if n-of-args
+              [let [present-type [mutable-list-of-size [inc n-of-args]]]
+                [do
+                  [set-array present-type 0 [form-word type-name]]
+                  [for i 0 n-of-args
+                    [set-array present-type [inc i] [internal-to-present-type [at type-args i]]]]
+                  [freeze-mutable-list present-type]
+                  [form-list present-type]]]
+              [if [eq-word type-name [word tuple]] [quote unit] [form-word type-name]]]]]]]]]
+
+[defn normalize-deep [internal-type]
+  [let-do [nt [normalize-type internal-type]]
+    [if [is-type-var nt]
+      [assert [is-word [type-var-kind nt]] normalize-deep expected a non-linked type var]
+      [if [eq-word [getq nt type-name] [word func]]
+        [do
+          [for-each p [getq nt params] [normalize-deep p]]
+          [if-let [rp [try-getq nt rest-param]]
+            [normalize-deep rp]
+            [do]]
+          [normalize-deep [getq nt result]]]
+        [for-each type-arg [getq nt type-args]
+          [normalize-deep type-arg]]]]]]
+
+[defn normalize-present-type-scheme [internal-type]
+  [normalize-deep internal-type]
+  [let-do
+       [type-vars [free-type-vars internal-type]
+        type-var-counter [atom 0]
+        fresh-type-vars [list-map tv type-vars [generate-fresh-type-var-atom type-var-counter 0]]
+        subst-assoc-list [mutable-list-of-size [size type-vars]]
+        new-present-type-vars [list-map tv fresh-type-vars [internal-to-present-type tv]]]
+    [for i 0 [size type-vars]
+      [let [tv [at type-vars i]
+            new-tv [at fresh-type-vars i]]
+        [set-array subst-assoc-list i [list tv new-tv]]]]
+    [if [is-empty new-present-type-vars]
+      [internal-to-present-type [copy-type subst-assoc-list internal-type]]
+      [flist [quote type-scheme]
+        [form-list new-present-type-vars]
+        [internal-to-present-type [copy-type subst-assoc-list internal-type]]]]]]
 
 [def tests-run-atom [atom 0]]
 
 [defn test-ok-fn [expected-type forms]
   [let [gctx [make-global-context]
         res [check-top-forms gctx forms]
-        present-type [internal-to-present-type res]
+        present-type [normalize-present-type-scheme res]
         messages [getq gctx messages]]
     [do
       [when-not [is-empty messages]
@@ -418,14 +539,14 @@
     [do
       [for-each message-obj [getq gctx messages]
         [log [getq message-obj message]]]
-      [internal-to-present-type res]]]]
+      [normalize-present-type-scheme res]]]]
 
 [defn eq-list-of-forms [l1 l2]
   [and [eq [size l1] [size l2]]
-    [[func go [i]
+    [[func eq-list-of-forms-go [i]
       [if [lt-s i [size l1]]
         [if [eq-form [at l1 i] [at l2 i]]
-          [go [inc i]]
+          [eq-list-of-forms-go [inc i]]
           0]
         1]] 0]]]
 
@@ -433,7 +554,7 @@
   [let-do
    [gctx [make-global-context]
     res [check-top-forms gctx forms]
-    present-type [internal-to-present-type res]
+    present-type [normalize-present-type-scheme res]
     messages [getq gctx messages]]
     [if [is-empty messages]
       [logq-abort test-failed failed there were no errors]
@@ -469,10 +590,20 @@
 [test-ok i32 [quote a] [if [i32 5] [i32 6] [i32 7]]]
 [test-ok form [if [i32 5] [quote a] [quote b]]]
 
+[comment do]
+[test-ok unit [do]]
+[test-ok form [do [quote a]]]
+[test-ok i32 [do [quote a] [i32 3]]]
+
 [comment let]
 [test-errors unit [[expects two arguments]] [let []]]
 [test-ok form [let [] [quote a]]]
 [test-ok form [let [v [quote a]] v]]
 [test-ok form [let [v [quote a] u v] u]]
+
+[comment func]
+[test-ok
+  [type-scheme [a] [func [a] a]]
+  [func id [x] x]]
 
 [logq tests-run [atom-get tests-run-atom]]

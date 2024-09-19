@@ -448,6 +448,9 @@
 [defmacro try-getq [m w]
   [flist [quote try-get] m [mk-word w]]]
 
+[defmacro setq [m w v]
+  [flist [quote set-kv-map] m [flist [quote quote] w] v]]
+
 [defn push-all [mut-list list]
   [for-each e list [push mut-list e]]]
 
