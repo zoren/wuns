@@ -255,7 +255,12 @@ const evaluate = (form) => {
   }
 }
 
-const specialForms = ['i32', 'word', 'quote', 'func', 'macro', 'extern', 'def', 'if', 'do', 'let']
+const specialForms =
+  ['i32', 'word', 'quote', 'func', 'macro', 'fexpr', 'extern',
+                      'def',
+                      'if', 'do', 'let',
+  // not actually a special form
+  '..']
 
 const getCompletions = (prefix) => {
   const completions = []

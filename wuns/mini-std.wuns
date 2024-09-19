@@ -23,6 +23,9 @@
 
 [def-extern concat [type-scheme [a] [func [.. [list a]] [list a]]]]
 
+[defmacro let-do [bindings .. forms]
+  [flist [quote let] bindings [form-list [concat [list [quote do]] forms]]]]
+
 [defmacro defn [name params .. bodies]
   [flist [quote def] name [flist [quote func] name params [form-list [concat [list [quote do]] bodies]]]]]
 
@@ -134,12 +137,13 @@
 
 [defn is-word [form] [if [try-get-form-word form] 1 0]]
 [def-extern log [func [.. any] []]]
+[def-extern type [func [any] word]]
 
 [defn quote-list [lmsg]
-  [let [s [size lmsg]
-        msg [mutable-list-of-size [inc s]]]
-    [do
-      [set-array msg 0 [quote list]]
+  [let-do
+     [s [size lmsg]
+      msg [mutable-list-of-size [inc s]]]
+    [set-array msg 0 [quote list]]
     [[func go [i]
       [when [lt-s i s]
           [set-array msg [inc i]
@@ -147,7 +151,7 @@
             [if [is-word e] [mk-quote e] e]]]
           [go [inc i]]]]
       0]
-    [form-list [freeze-mutable-list msg]]]]]
+    [form-list [freeze-mutable-list msg]]]]
 
 [defmacro assert [cond .. lmsg]
   [flist [quote if] cond
@@ -302,7 +306,7 @@
               [if [eq-form [at la i] [at lb i]]
                 [go [inc i]]
                 0]
-              1]] 0]]]]]]
+              1]]] 0]]]]]
 
 [defn for-func [iw start increment end forms]
   [assert [lt-s 0 increment] for-func increment must be positive]

@@ -1,4 +1,3 @@
-[def - [quote -]]
 [def .. [quote ..]]
 
 [defn has-local-context [ctx var]
