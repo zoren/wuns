@@ -445,6 +445,12 @@
           [set-kv-map [getq gctx def-var-types] [form-to-word name] general-val-type]
           value-type]
 
+        [eq-form first-form [quote extern]]
+        [do
+          [for i 1 s-form
+            [report-when-not [is-word [at sub-forms i]] form expects words]]
+          [generate-fresh-type-var gctx level]]
+
         [let-do
           [func-type [check gctx level lctx first-form]
            arg-types [mutable-list-of-size n-of-args]]
@@ -741,5 +747,8 @@
 [test-ok form
   [def d [quote a]]
   [def d [quote b]]]
+
+[comment extern]
+[test-ok [type-scheme [a] a] [extern host size]]
 
 [logq tests-run [atom-get tests-run-atom]]
