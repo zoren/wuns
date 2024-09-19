@@ -51,16 +51,18 @@ const print = (value) => {
 
 const list = (...args) => Object.freeze(args)
 
-const setParameters = (parameters, paramEnv, eargs) => {
+const setParameters = (closure, paramEnv, eargs) => {
+  let parameters = closure.parameters
+  const { name } = closure
   if (parameters.length > 1 && parameters.at(-2) === '..') {
     const restParam = parameters.at(-1)
     parameters = parameters.slice(0, -2)
     if (eargs.length < parameters.length)
-      throw new EvalError('expected at least ' + parameters.length + ' arguments, got ' + eargs.length)
+      throw new EvalError(`${name} expected at least ${parameters.length} arguments, got ${eargs.length}`)
     setEnv(paramEnv, restParam, list(...eargs.slice(parameters.length)))
   } else {
     if (eargs.length !== parameters.length)
-      throw new EvalError('expected ' + parameters.length + ' arguments, got ' + eargs.length)
+      throw new EvalError(`${name} expected ${parameters.length} arguments, got ${eargs.length}`)
   }
   parameters.forEach((param, i) => setEnv(paramEnv, param, eargs[i]))
 }
@@ -69,16 +71,17 @@ const makeParamEnv = (defFunc, args) => {
   const paramEnv = makeEnv(defFunc.env)
   // for recursive calls
   setEnv(paramEnv, defFunc.name, defFunc)
-  setParameters(defFunc.parameters, paramEnv, args)
+  setParameters(defFunc, paramEnv, args)
   return paramEnv
 }
 
 import { meta } from './core.js'
 
 class EvalError extends Error {
-  constructor(message, form) {
+  constructor(message, form, innerError) {
     super(message)
     this.form = form
+    this.innerError = innerError
   }
 }
 
@@ -98,7 +101,10 @@ const assertFormDeep = (form) => {
   const go = (f) => {
     if (tryGetFormWord(f)) return
     const list = tryGetFormList(f)
-    if (!list) throw new EvalError('not a form', form)
+    if (!list) {
+      console.dir(f, { depth: 10 })
+      throw new EvalError('not a form', form)
+    }
     list.forEach(go)
   }
   go(form)
@@ -130,7 +136,7 @@ const externs = {
 const defEnv = new Map()
 
 const go = (env, form) => {
-  const evalError = (message) => new EvalError(message, form)
+  const evalError = (message, innerError) => new EvalError(message, form, innerError)
   while (true) {
     const word = tryGetFormWord(form)
     if (word) {
@@ -222,7 +228,7 @@ const go = (env, form) => {
       try {
         return func(...args.map((arg) => go(env, arg)))
       } catch (e) {
-        throw evalError(e.message)
+        throw evalError('error in function call', e)
       }
     }
     if (!(func instanceof Closure)) throw evalError('not a function')
@@ -251,7 +257,12 @@ const evaluate = (form) => {
   try {
     return go(makeEnv(), form)
   } catch (e) {
-    console.error(e, meta(form))
+    // console.error(e, meta(form))
+    let curErr = e
+    while (curErr) {
+      console.error(curErr, meta(curErr.form))
+      curErr = curErr.innerError
+    }
   }
 }
 
