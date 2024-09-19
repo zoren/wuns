@@ -347,17 +347,17 @@
           type-form]
 
         [eq-form first-form [quote if]]
-        [let [cond [second sub-forms]
-              then-branch [third sub-forms]
-              else-branch [fourth sub-forms]
-              cond-type [check gctx level lctx cond]
-              then-type [check gctx level lctx then-branch]
-              else-type [check gctx level lctx else-branch]]
-          [do
-            [report-when-not [eq n-of-args 3] form expects 3 argument]
-            [unify-report gctx cond-type type-i32 cond]
-            [unify-report gctx then-type else-type then-branch else-branch]
-            then-type]]
+        [let-do
+          [cond [second sub-forms]
+           then-branch [third sub-forms]
+           else-branch [fourth sub-forms]
+           cond-type [check gctx level lctx cond]
+           then-type [check gctx level lctx then-branch]
+           else-type [check gctx level lctx else-branch]]
+          [report-when-not [eq n-of-args 3] form expects 3 argument]
+          [unify-report gctx cond-type type-i32 cond]
+          [unify-report gctx then-type else-type then-branch else-branch]
+          then-type]
 
         [eq-form first-form [quote do]]
         [if n-of-args
@@ -395,43 +395,39 @@
         [eq-form first-form [quote func]]
         [let-do
           [level-1 [inc level]
-          func-name [second sub-forms]
-          params-form [third sub-forms]
-          params [form-to-list params-form]
-          param-ctx [transient-kv-map]
-          parsed-params [params-to-map params]
-          reg-params-parsed [getq parsed-params params]
-          func-type [generate-fresh-type-var gctx level-1]
-          func-ctx [kv-mapq vars param-ctx first-form first-form]
-          reg-params [growable-list]
-          n-of-bodies [sub s-form 3]]
-            [set-kv-map param-ctx [form-to-word func-name] [mk-empty-type-scheme func-type]]
-            [for-each param reg-params-parsed
-              [let-do [tv [generate-fresh-type-var gctx level-1]]
-                [set-kv-map param-ctx [form-to-word param] [mk-empty-type-scheme tv]]
-                [push reg-params tv]]]
-            [let [opt-rest-param
-                  [if-let [rest-param [try-getq parsed-params rest-param]]
-                    [let-do [tv [generate-fresh-type-var gctx level-1]]
-                      [set-kv-map param-ctx [form-to-word rest-param]
-                        [mk-empty-type-scheme [type-list tv]]]
-                      tv]
-                    0]
-                  return-type
-                  [if n-of-bodies
-                    [do
-                      [for i 3 [dec s-form]
-                        [check gctx level-1 func-ctx [at sub-forms i]]]
-                      [check gctx level-1 func-ctx [last sub-forms]]]
-                    type-empty-tuple]]
-              [unify-report gctx
-                func-type
-                [type-func
-                  [clone-growable-to-frozen-list reg-params]
-                  opt-rest-param
-                  return-type]
-                form]]
-            func-type]
+           func-name [second sub-forms]
+           params-form [third sub-forms]
+           body [fourth sub-forms]
+           params [form-to-list params-form]
+           param-ctx [transient-kv-map]
+           parsed-params [params-to-map params]
+           reg-params-parsed [getq parsed-params params]
+           func-type [generate-fresh-type-var gctx level-1]
+           func-ctx [kv-mapq vars param-ctx first-form first-form]
+           reg-params [growable-list]]
+          [report-when-not [eq n-of-args 3] form expects 3 arguments]
+          [set-kv-map param-ctx [form-to-word func-name] [mk-empty-type-scheme func-type]]
+          [for-each param reg-params-parsed
+            [let-do [tv [generate-fresh-type-var gctx level-1]]
+              [set-kv-map param-ctx [form-to-word param] [mk-empty-type-scheme tv]]
+              [push reg-params tv]]]
+          [let [opt-rest-param
+                [if-let [rest-param [try-getq parsed-params rest-param]]
+                  [let-do [tv [generate-fresh-type-var gctx level-1]]
+                    [set-kv-map param-ctx [form-to-word rest-param]
+                      [mk-empty-type-scheme [type-list tv]]]
+                    tv]
+                  0]
+                return-type
+                [check gctx level-1 func-ctx body]]
+            [unify-report gctx
+              func-type
+              [type-func
+                [clone-growable-to-frozen-list reg-params]
+                opt-rest-param
+                return-type]
+              form]]
+          func-type]
 
         [eq-form first-form [quote def]]
         [let-do
@@ -439,6 +435,7 @@
            value-form [third sub-forms]
            value-type [check gctx [inc level] lctx value-form]
            general-val-type [generalize level value-type]]
+          [report-when-not [eq n-of-args 2] form expects 2 arguments]
           [set-kv-map [getq gctx def-var-types] [form-to-word name] general-val-type]
           value-type]
 
@@ -639,8 +636,9 @@
 [comment function parameters cannot be polymorphically instantiated]
 [test-errors [type-scheme [a] [func [[func [i32] a]] a]] [[not unifiable  - different types]]
   [func f [i]
-    [i [i32 5]]
-    [i [quote a]]]]
+    [do
+      [i [i32 5]]
+      [i [quote a]]]]]
 [test-ok [type-scheme [a] [func [[func [i32] a]] a]]
   [func f [i]
     [i [i32 5]]]]
@@ -695,7 +693,10 @@
 [test-errors [type-scheme [a] a] [[not unifiable - different types]]
   [[i32 5] [i32 6]]]
 
-[comment test multiple top-level forms]
+[comment def]
+[test-errors [type-scheme [a] a] [[not found]] [def a a]]
+[test-errors [type-scheme [a] a] [[not found]] [def a [do a]]]
+[test-errors [type-scheme [a] a] [[not found]] [def a [[func id [x] x] a]]]
 [test-ok
   form
   [def d [quote a]]]
