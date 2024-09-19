@@ -306,7 +306,7 @@
               [if [eq-form [at la i] [at lb i]]
                 [go [inc i]]
                 0]
-              1]]] 0]]]]]
+              1]] 0]]]]]]
 
 [defn for-func [iw start increment end forms]
   [assert [lt-s 0 increment] for-func increment must be positive]
