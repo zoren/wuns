@@ -37,7 +37,7 @@
   [generate-fresh-type-var-atom [getq gctx type-var-counter] level]]
 
 [defn make-type [type-name type-args] [kv-map-id type-name type-args]]
-[defn is-type [t] [and [hasq t type-name] [hasq t type-args]]]
+[defn is-type [t] [and [hasq t type-name]]]
 
 [def type-i32 [make-type [word i32] [list]]]
 [def type-word [make-type [word word] [list]]]
@@ -167,7 +167,8 @@
           [push-unify-error errors [message not unifiable - different types]]
 
           [if [eq-word [word func] type-name1]
-            [let [params1 [getq nt1 params]
+            [let-do
+                 [params1 [getq nt1 params]
                   params2 [getq nt2 params]
                   arity1 [size params1]
                   arity2 [size params2]
@@ -300,7 +301,7 @@
     [and cur-ctx
       [or
         [try-get [getq cur-ctx vars] var-name]
-        [continue cur-ctx [try-getq cur-ctx outer]]]]] local-ctx]]
+        [go [try-getq cur-ctx outer]]]]] local-ctx]]
 
 [defn try-get-var-type [gctx local-ctx var-name]
   [if-let [ltype [try-get-local-var-type local-ctx var-name]]
@@ -318,7 +319,9 @@
     [is-word form]
     [if-let [type-scheme [try-get-var-type gctx lctx [form-to-word form]]]
       [specialize-type-scheme gctx level type-scheme]
-      [generate-fresh-type-var gctx level]]
+      [do
+        [report form not found]
+        [generate-fresh-type-var gctx level]]]
 
     [not [is-list form]]
     [logq-abort check input not a form [identity form]]
@@ -359,7 +362,7 @@
         [eq-form first-form [quote do]]
         [if n-of-args
           [do
-            [for i 1 [dec n-of-args]
+            [for i 1 n-of-args
               [check gctx level lctx [at sub-forms i]]]
             [check gctx level lctx [last sub-forms]]]
           type-empty-tuple]
@@ -399,16 +402,17 @@
               parsed-params [params-to-map params]
               reg-params-parsed [getq parsed-params params]
               func-type [generate-fresh-type-var gctx level-1]
-              func-ctx [kv-mapq vars param-ctx first-form first-form func-type func-type]
+              func-ctx [kv-mapq vars param-ctx first-form first-form]
               reg-params [growable-list]
               n-of-bodies [sub s-form 3]]
+            [set-kv-map param-ctx [form-to-word func-name] [mk-empty-type-scheme func-type]]
             [for-each param reg-params-parsed
               [let-do [tv [generate-fresh-type-var gctx level-1]]
                 [set-kv-map param-ctx [form-to-word param] [mk-empty-type-scheme tv]]
                 [push reg-params tv]]]
             [let [opt-rest-param
                   [if-let [rest-param [try-getq parsed-params rest-param]]
-                    [let [tv [generate-fresh-type-var gctx level-1]]
+                    [let-do [tv [generate-fresh-type-var gctx level-1]]
                       [set-kv-map param-ctx [form-to-word rest-param]
                         [mk-empty-type-scheme [type-list tv]]]
                       tv]
@@ -429,7 +433,20 @@
                 form]]
             func-type]
 
-        [logq-abort check unknown form [identity form]]]]]]
+        [let-do
+          [func-type [check gctx level lctx first-form]
+           arg-types [mutable-list-of-size n-of-args]]
+          [for i 0 n-of-args
+            [set-array arg-types i [check gctx level lctx [at sub-forms [inc i]]]]]
+          [let-do
+            [t-res [generate-fresh-type-var gctx level]
+             t-func [type-func-no-rest arg-types t-res]]
+            [comment
+              [if-let [annotated-type [try-get-def-var-annotated-type gctx first-form]]
+              [unify-report gctx [instantiate-annotated-type gctx 0 annotated-type] t-func form]
+              [do]]]
+            [unify-report gctx func-type t-func form]
+            t-res]]]]]]
 
 [defn make-global-context []
   [kv-mapq
@@ -442,6 +459,7 @@
 
 [defn check-top-forms [gctx forms]
   [assert [size forms] check-top-forms expects at least one form]
+  [logq we are checking [identity forms]]
   [[func check-top-forms-go [i]
     [if [lt-s i [dec [size forms]]]
       [do
@@ -525,7 +543,7 @@
     [do
       [when-not [is-empty messages]
         [for-each message messages
-          [log message]]
+          [log message [meta [getq message form]]]]
         [logq-abort test-ok failed there were errors]]
       [assert [eq-form present-type expected-type] test-ok failed expected type [identity expected-type] but found [identity present-type]]
       [inc-atom tests-run-atom]]]]
@@ -571,6 +589,10 @@
 [defexpr test-errors [expected-type expected-messages .. forms]
   [test-errors-fn expected-type [form-to-list expected-messages] forms]]
 
+[comment variable]
+[test-errors [type-scheme [a] a] [[not found]] [do not-found]]
+
+[comment i32]
 [test-ok i32 [i32 42]]
 
 [comment word]
@@ -592,6 +614,9 @@
 
 [comment do]
 [test-ok unit [do]]
+[test-errors [type-scheme [a] a] [[not found]] [do v]]
+[test-errors unit [[not found]] [do v [do]]]
+[test-errors [type-scheme [a] a] [[not found]] [do [do] v]]
 [test-ok form [do [quote a]]]
 [test-ok i32 [do [quote a] [i32 3]]]
 
@@ -602,8 +627,63 @@
 [test-ok form [let [v [quote a] u v] u]]
 
 [comment func]
+[comment function parameters cannot be polymorphically instantiated]
+[test-errors [type-scheme [a] [func [[func [i32] a]] a]] [[not unifiable  - different types]]
+  [func f [i]
+    [i [i32 5]]
+    [i [quote a]]]]
+[test-ok [type-scheme [a] [func [[func [i32] a]] a]]
+  [func f [i]
+    [i [i32 5]]]]
+[test-ok
+  [type-scheme [a] [func [.. a] [list a]]]
+  [func list [.. entries] entries]]
+[test-ok
+  [type-scheme [a b] [func [a b] i32]]
+  [func f [x y] [i32 5]]]
+[test-ok
+  [type-scheme [a] [func [] a]]
+  [func diverge [] [diverge]]]
+[test-ok
+  [func [i32] i32]
+  [func f [p]
+    [if p
+      [i32 2]
+      [f [i32 1]]]]]
+[test-ok
+  [type-scheme [a] [func [.. a] i32]]
+  [func f [.. p] [i32 0]]]
+[test-ok
+  [type-scheme [a] [list a]]
+  [[func f [.. p] p]]]
+[test-ok
+  [list i32]
+  [[func f [.. p] p] [i32 5]]]
+[test-ok
+  [list i32]
+  [[func f [.. p] p] [i32 5] [i32 6]]]
+[test-errors
+  [list i32]
+  [[not unifiable - different types]]
+  [[func f [.. p] p] [i32 5] [quote a]]]
 [test-ok
   [type-scheme [a] [func [a] a]]
   [func id [x] x]]
+[test-ok
+  [func [i32] i32]
+  [if [i32 5]
+    [func id-i32 [x] [if x x x]]
+    [func id [x] x]]]
+
+[comment call]
+[test-errors i32 [[not unifiable - different number of parameters]]
+  [[func one-param [p] [i32 5]]]]
+[test-errors i32 [[not unifiable - different number of parameters]]
+  [[func zero-params [] [i32 5]] [quote extra-argument]]]
+[test-ok form
+  [[func f [i] [i [quote a]]] [func id [x] x]]]
+[test-ok form [let [id [func id [x] x]] [do [id [i32 5]] [id [quote a]]]]]
+[test-errors [type-scheme [a] a] [[not unifiable - different types]]
+  [[i32 5] [i32 6]]]
 
 [logq tests-run [atom-get tests-run-atom]]
