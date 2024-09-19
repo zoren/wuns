@@ -394,17 +394,17 @@
 
         [eq-form first-form [quote func]]
         [let-do
-             [level-1 [inc level]
-              func-name [second sub-forms]
-              params-form [third sub-forms]
-              params [form-to-list params-form]
-              param-ctx [transient-kv-map]
-              parsed-params [params-to-map params]
-              reg-params-parsed [getq parsed-params params]
-              func-type [generate-fresh-type-var gctx level-1]
-              func-ctx [kv-mapq vars param-ctx first-form first-form]
-              reg-params [growable-list]
-              n-of-bodies [sub s-form 3]]
+          [level-1 [inc level]
+          func-name [second sub-forms]
+          params-form [third sub-forms]
+          params [form-to-list params-form]
+          param-ctx [transient-kv-map]
+          parsed-params [params-to-map params]
+          reg-params-parsed [getq parsed-params params]
+          func-type [generate-fresh-type-var gctx level-1]
+          func-ctx [kv-mapq vars param-ctx first-form first-form]
+          reg-params [growable-list]
+          n-of-bodies [sub s-form 3]]
             [set-kv-map param-ctx [form-to-word func-name] [mk-empty-type-scheme func-type]]
             [for-each param reg-params-parsed
               [let-do [tv [generate-fresh-type-var gctx level-1]]
@@ -432,6 +432,15 @@
                   return-type]
                 form]]
             func-type]
+
+        [eq-form first-form [quote def]]
+        [let-do
+          [name [second sub-forms]
+           value-form [third sub-forms]
+           value-type [check gctx [inc level] lctx value-form]
+           general-val-type [generalize level value-type]]
+          [set-kv-map [getq gctx def-var-types] [form-to-word name] general-val-type]
+          value-type]
 
         [let-do
           [func-type [check gctx level lctx first-form]
@@ -685,5 +694,32 @@
 [test-ok form [let [id [func id [x] x]] [do [id [i32 5]] [id [quote a]]]]]
 [test-errors [type-scheme [a] a] [[not unifiable - different types]]
   [[i32 5] [i32 6]]]
+
+[comment test multiple top-level forms]
+[test-ok
+  form
+  [def d [quote a]]]
+[test-ok
+  form
+  [def d [quote a]]
+  d]
+[test-ok
+  i32
+  [def f [func id [x] x]]
+  [f [i32 5]]
+  [f [i32 6]]]
+[test-ok
+  form
+  [def f [func id [x] x]]
+  [f [i32 5]]
+  [f [quote a]]]
+[test-ok
+  [list i32]
+  [def list [func list [.. entries] entries]]
+  [def test [list [i32 1] [i32 2]]]
+  test]
+[test-ok form
+  [def d [quote a]]
+  [def d [quote b]]]
 
 [logq tests-run [atom-get tests-run-atom]]
