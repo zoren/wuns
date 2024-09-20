@@ -116,6 +116,9 @@ const { host } = jsHost
 import { instructionFunctions } from './instructions.js'
 import { wrapJSFunctionsToObject } from './utils.js'
 
+import fs from 'node:fs'
+const readFile = filePath => parseToForms(fs.readFileSync(filePath, 'ascii'), filePath)
+
 const instructions = wrapJSFunctionsToObject(instructionFunctions)
 
 const externs = {
@@ -277,6 +280,10 @@ externs.interpreter = {
     const paramEnv = makeParamEnv(func, args)
     return evalForm(context)(paramEnv, func.body)
   },
+  'read-file': (path) => {
+    if (typeof path !== 'string') throw new Error('read-file expects string')
+    return [...readFile(path)]
+  }
 }
 
 const specialForms = [
@@ -328,8 +335,6 @@ function* parseToForms(content, metaPrefix) {
   for (const child of parse(content).rootNode.namedChildren) yield nodeToForm(child)
 }
 
-import fs from 'node:fs'
-
 const commandLineArgs = process.argv.slice(2)
 const endsWithDashFlag = commandLineArgs.at(-1) === '-'
 const files = endsWithDashFlag ? commandLineArgs.slice(0, -1) : commandLineArgs
@@ -344,21 +349,33 @@ const evaluateForms = (forms) => {
   } catch (e) {
     let curErr = e
     while (curErr) {
-      console.error(curErr, meta(curErr.form))
+      const dumpFormMeta = (form) => {
+        const metaToStr = form => {
+          const [file, row, column] = tryGetFormList(meta(form))
+          return `${file}:${row}:${column}`
+        }
+        const word = tryGetFormWord(form)
+        if (word) return `'${word}' ${meta(form)}`
+        const list = tryGetFormList(form)
+        if (list) return `[${list.map(dumpFormMeta).join(' ')} ${meta(form)}]`
+        // throw new Error('unexpected form: ' + form)
+        return '???'
+      }
+      console.error(curErr, dumpFormMeta(curErr.form))
       curErr = curErr.innerError
     }
   }
 }
 
 for (const filePath of files) {
-  const content = fs.readFileSync(filePath, 'ascii')
-  const forms = parseToForms(content, filePath)
+  const forms = readFile(filePath)
   evaluateForms(forms)
 }
 import { startRepl } from './repl-util.js'
 
 if (!endsWithDashFlag) {
-  const evalLine = (line) => console.log(print(evaluateForms(parseToForms(line))))
+  let replLineNo = 0
+  const evalLine = (line) => console.log(print(evaluateForms(parseToForms(line, `repl-${replLineNo++}`))))
   const completer = (line) => {
     const m = line.match(/[a-z0-9./-]+$/)
     if (!m) return [[], '']
