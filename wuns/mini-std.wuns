@@ -32,8 +32,6 @@
 [defmacro defexpr [name params .. bodies]
   [flist [quote def] name [flist [quote fexpr] name params [form-list [concat [list [quote do]] bodies]]]]]
 
-[defmacro if-not [c t f] [list [word if] c f t]]
-
 [def-extern concat-lists [type-scheme [a] [func [[list [list a]]] [list a]]]]
 
 [defn form-concat [.. list-forms]

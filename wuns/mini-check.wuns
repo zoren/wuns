@@ -30,12 +30,6 @@
       [int-to-type-var-name-word [i32.div-s i [i32 26]]]
       [char-code-to-word [add [i32 97] [i32.rem-s i [i32 26]]]]]]]
 
-[defn generate-fresh-type-var-atom [counter-atom level]
-  [make-type-var [int-to-type-var-name-word [inc-atom counter-atom]] level]]
-
-[defn generate-fresh-type-var [gctx level]
-  [generate-fresh-type-var-atom [getq gctx type-var-counter] level]]
-
 [defn make-type [type-name type-args] [kv-map-id type-name type-args]]
 [defn is-type [t] [and [hasq t type-name]]]
 
