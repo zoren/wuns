@@ -135,7 +135,6 @@
 
 [defn is-word [form] [if [try-get-form-word form] 1 0]]
 [def-extern log [func [.. any] []]]
-[def-extern type [func [any] word]]
 
 [defn quote-list [lmsg]
   [let-do

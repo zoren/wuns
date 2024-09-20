@@ -194,6 +194,25 @@ export const freeze_kv_map = (kv_map) => {
 export const log = (...forms) => {
   console.log(...forms.map(print))
 }
+// maybe add this...
+const type = (x) => {
+  const go = (x) => {
+    if (x === undefined) return 'undefined'
+    if (isList(x)) return 'list'
+    const word = tryGetFormWord(x)
+    if (word) return 'form-word'
+    const list = tryGetFormList(x)
+    if (list) return 'form-list'
+    if (isAtom(x)) return `[atom ${go(x.value)}]`
+    const t = typeof x
+    if (t === 'string') return 'word'
+    if (t === 'number') return 'i32'
+    if (t === 'function') return t
+    if (Object.isFrozen(x)) return 'kv-map'
+    return 'transient-kv-map'
+  }
+  return stringToWord(go(x))
+}
 const isFrozenList = (l) => isList(l) && Object.isFrozen(l) && !isGrowable(l) && !isMutable(l)
 export const concat_lists = (lists) => {
   const l = []
