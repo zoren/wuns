@@ -2,11 +2,11 @@
 [def form-word
   [type-anno
     [extern host form-word]
-    [quote [type [func [word] form]]]]]
+    [func [word] form]]]
 [def form-list
   [type-anno
     [extern host form-list]
-    [quote [type [func [[list form]] form]]]]]
+    [func [[list form]] form]]]
 [def flist [func flist [.. elements] [form-list elements]]]
 
 [def defmacro
@@ -18,7 +18,7 @@
   [flist [quote def] name
     [flist [quote type-anno]
       [flist [quote extern] [quote host] name]
-      [flist [quote quote] [flist [quote type] type]]]]]
+      type]]]
 
 [def-extern concat [type-scheme [a] [func [.. [list a]] [list a]]]]
 
@@ -53,7 +53,7 @@
     def-name
     [flist [quote type-anno]
       [flist [quote extern] [quote instructions] inst-name]
-      [quote [quote [type [func [i32 i32] i32]]]]]]]
+      [quote [func [i32 i32] i32]]]]]
 
 [defmacro def-instruction [def-name inst-name] [def-instruction-fn def-name inst-name]]
 
