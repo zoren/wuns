@@ -133,147 +133,146 @@ const externs = {
   },
 }
 
-const defEnv = new Map()
-
-const go = (env, form) => {
-  const evalError = (message, innerError) => new EvalError(message, form, innerError)
-  while (true) {
-    const word = tryGetFormWord(form)
-    if (word) {
-      let curEnv = env
-      while (curEnv) {
-        if (curEnv.has(word)) return curEnv.get(word)
-        curEnv = curEnv.outer
-      }
-      if (!defEnv.has(word)) throw evalError('undefined variable: ' + word)
-      return defEnv.get(word)
-    }
-    const forms = getFormList(form)
-    if (forms.length === 0) throw evalError('empty list')
-    const [firstForm] = forms
-    const firstWord = tryGetFormWord(firstForm)
-    const numOfArgs = forms.length - 1
-    const assertNumArgs = (num) => {
-      if (numOfArgs !== num) throw evalError(`special form '${firstWord}' expected ${num} arguments, got ${numOfArgs}`)
-    }
-    switch (firstWord) {
-      case 'i32':
-        assertNumArgs(1)
-        return +getFormWord(forms[1]) | 0
-      case 'word':
-        assertNumArgs(1)
-        return getFormWord(forms[1])
-      case 'quote': {
-        assertNumArgs(1)
-        const form = forms[1]
-        assertFormDeep(form)
-        return form
-      }
-      case 'func':
-      case 'fexpr':
-      case 'macro': {
-        assertNumArgs(3)
-        const name = getFormWord(forms[1])
-        const parameters = getFormList(forms[2]).map(getFormWord)
-        const body = forms[3]
-        return makeClosure(env, name, parameters, body, firstWord)
-      }
-      case 'extern': {
-        let ext = externs
-        for (let i = 1; i < forms.length; i++) {
-          const prop = getFormWord(forms[i])
-          const extProp = ext[prop]
-          if (extProp === undefined) throw evalError('undefined extern: ' + prop + ' in ' + ext)
-          ext = extProp
+const evalForm = (defEnv, form) => {
+  const go = (env, form) => {
+    const evalError = (message, innerError) => new EvalError(message, form, innerError)
+    while (true) {
+      const word = tryGetFormWord(form)
+      if (word) {
+        let curEnv = env
+        while (curEnv) {
+          if (curEnv.has(word)) return curEnv.get(word)
+          curEnv = curEnv.outer
         }
-        return ext
+        if (!defEnv.has(word)) throw evalError('undefined variable: ' + word)
+        return defEnv.get(word)
       }
-      case 'def': {
-        assertNumArgs(2)
-        const name = getFormWord(forms[1])
-        const value = go(env, forms[2])
-        defEnv.set(name, value)
-        return value
+      const forms = getFormList(form)
+      if (forms.length === 0) throw evalError('empty list')
+      const [firstForm] = forms
+      const firstWord = tryGetFormWord(firstForm)
+      const numOfArgs = forms.length - 1
+      const assertNumArgs = (num) => {
+        if (numOfArgs !== num)
+          throw evalError(`special form '${firstWord}' expected ${num} arguments, got ${numOfArgs}`)
       }
+      switch (firstWord) {
+        case 'i32':
+          assertNumArgs(1)
+          return +getFormWord(forms[1]) | 0
+        case 'word':
+          assertNumArgs(1)
+          return getFormWord(forms[1])
+        case 'quote': {
+          assertNumArgs(1)
+          const form = forms[1]
+          assertFormDeep(form)
+          return form
+        }
+        case 'func':
+        case 'fexpr':
+        case 'macro': {
+          assertNumArgs(3)
+          const name = getFormWord(forms[1])
+          const parameters = getFormList(forms[2]).map(getFormWord)
+          const body = forms[3]
+          return makeClosure(env, name, parameters, body, firstWord)
+        }
+        case 'extern': {
+          let ext = externs
+          for (let i = 1; i < forms.length; i++) {
+            const prop = getFormWord(forms[i])
+            const extProp = ext[prop]
+            if (extProp === undefined) throw evalError('undefined extern: ' + prop + ' in ' + ext)
+            ext = extProp
+          }
+          return ext
+        }
+        case 'def': {
+          assertNumArgs(2)
+          const name = getFormWord(forms[1])
+          const value = go(env, forms[2])
+          defEnv.set(name, value)
+          return value
+        }
 
-      case 'loop':
-      case 'continue':
-      case 'recur':
-        throw evalError('unexpected ' + firstWord)
+        case 'loop':
+        case 'continue':
+        case 'recur':
+          throw evalError('unexpected ' + firstWord)
 
-      case 'if':
-        assertNumArgs(3)
-        form = forms[go(env, forms[1]) ? 2 : 3]
-        continue
-      case 'do':
-        if (forms.length === 1) return langUndefined
-        for (let i = 1; i < forms.length - 1; i++) go(env, forms[i])
-        form = forms.at(-1)
-        continue
-      case 'let': {
-        assertNumArgs(2)
-        const bindings = getFormList(forms[1])
-        if (bindings.length % 2 !== 0) throw evalError('odd number of bindings')
-        const newEnv = makeEnv(env)
-        for (let i = 0; i < bindings.length - 1; i += 2)
-          setEnv(newEnv, getFormWord(bindings[i]), go(newEnv, bindings[i + 1]))
-        env = newEnv
-        form = forms[2]
-        continue
+        case 'if':
+          assertNumArgs(3)
+          form = forms[go(env, forms[1]) ? 2 : 3]
+          continue
+        case 'do':
+          if (forms.length === 1) return langUndefined
+          for (let i = 1; i < forms.length - 1; i++) go(env, forms[i])
+          form = forms.at(-1)
+          continue
+        case 'let': {
+          assertNumArgs(2)
+          const bindings = getFormList(forms[1])
+          if (bindings.length % 2 !== 0) throw evalError('odd number of bindings')
+          const newEnv = makeEnv(env)
+          for (let i = 0; i < bindings.length - 1; i += 2)
+            setEnv(newEnv, getFormWord(bindings[i]), go(newEnv, bindings[i + 1]))
+          env = newEnv
+          form = forms[2]
+          continue
+        }
       }
-    }
-    const func = go(env, firstForm)
-    const args = forms.slice(1)
-    if (typeof func === 'function') {
-      try {
-        return func(...args.map((arg) => go(env, arg)))
-      } catch (e) {
-        throw evalError('error in function call', e)
+      const func = go(env, firstForm)
+      const args = forms.slice(1)
+      if (typeof func === 'function') {
+        try {
+          return func(...args.map((arg) => go(env, arg)))
+        } catch (e) {
+          throw evalError('error in function call', e)
+        }
       }
-    }
-    if (!(func instanceof Closure)) throw evalError('not a function')
-    switch (func.kind) {
-      case 'macro': {
-        const macroResult = go(makeParamEnv(func, args), func.body)
-        assertFormDeep(macroResult)
-        form = macroResult
-        continue
+      if (!(func instanceof Closure)) throw evalError('not a function')
+      switch (func.kind) {
+        case 'macro': {
+          const macroResult = go(makeParamEnv(func, args), func.body)
+          assertFormDeep(macroResult)
+          form = macroResult
+          continue
+        }
+        case 'fexpr':
+          return go(makeParamEnv(func, args), func.body)
+        case 'func':
+          env = makeParamEnv(
+            func,
+            args.map((arg) => go(env, arg)),
+          )
+          form = func.body
+          continue
+        default:
+          throw evalError('unexpected closure kind: ' + func.kind)
       }
-      case 'fexpr':
-        return go(makeParamEnv(func, args), func.body)
-      case 'func':
-        env = makeParamEnv(
-          func,
-          args.map((arg) => go(env, arg)),
-        )
-        form = func.body
-        continue
-      default:
-        throw evalError('unexpected closure kind: ' + func.kind)
     }
   }
-}
-const evaluate = (form) => {
-  try {
-    return go(makeEnv(), form)
-  } catch (e) {
-    // console.error(e, meta(form))
-    let curErr = e
-    while (curErr) {
-      console.error(curErr, meta(curErr.form))
-      curErr = curErr.innerError
-    }
-  }
+  return go(makeEnv(), form)
 }
 
-const specialForms =
-  ['i32', 'word', 'quote', 'func', 'macro', 'fexpr', 'extern',
-                      'def',
-                      'if', 'do', 'let',
+const specialForms = [
+  'i32',
+  'word',
+  'quote',
+  'func',
+  'macro',
+  'fexpr',
+  'extern',
+  'def',
+  'if',
+  'do',
+  'let',
   // not actually a special form
-  '..']
+  '..',
+]
 
-const getCompletions = (prefix) => {
+const getCompletions = (defEnv, prefix) => {
   const completions = []
   for (const special of specialForms) if (special.startsWith(prefix)) completions.push(special)
   for (const key of defEnv.keys()) if (key.startsWith(prefix)) completions.push(key)
@@ -311,29 +310,36 @@ import fs from 'node:fs'
 const commandLineArgs = process.argv.slice(2)
 const endsWithDashFlag = commandLineArgs.at(-1) === '-'
 const files = endsWithDashFlag ? commandLineArgs.slice(0, -1) : commandLineArgs
+const defEnv = new Map()
+
+const evaluateForms = (forms) => {
+  try {
+    let result = langUndefined
+    for (const form of forms) result = evalForm(defEnv, form)
+    return result
+  } catch (e) {
+    let curErr = e
+    while (curErr) {
+      console.error(curErr, meta(curErr.form))
+      curErr = curErr.innerError
+    }
+  }
+}
 
 for (const filePath of files) {
   const content = fs.readFileSync(filePath, 'ascii')
   const forms = parseToForms(content, filePath)
-  for (const form of forms) evaluate(form)
+  evaluateForms(forms)
 }
 import { startRepl } from './repl-util.js'
 
 if (!endsWithDashFlag) {
-  const evalLine = (line) => {
-    try {
-      let result
-      for (const form of parseToForms(line)) result = evaluate(form)
-      console.log(print(result))
-    } catch (err) {
-      console.error(err)
-    }
-  }
+  const evalLine = (line) => console.log(print(evaluateForms(parseToForms(line))))
   const completer = (line) => {
     const m = line.match(/[a-z0-9./-]+$/)
     if (!m) return [[], '']
     const currentWord = m[0]
-    const defs = getCompletions(currentWord)
+    const defs = getCompletions(defEnv, currentWord)
     return [defs, currentWord]
   }
   startRepl('mini-lisp-history.json', 'mini-lisp> ', evalLine, completer)
