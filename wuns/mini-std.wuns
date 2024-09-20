@@ -1,11 +1,10 @@
 [def list [func list [.. entries] entries]]
-[def extern-with-meta [extern extern-with-meta]]
 [def form-word
-  [extern-with-meta
+  [type-anno
     [extern host form-word]
     [quote [type [func [word] form]]]]]
 [def form-list
-  [extern-with-meta
+  [type-anno
     [extern host form-list]
     [quote [type [func [[list form]] form]]]]]
 [def flist [func flist [.. elements] [form-list elements]]]
@@ -17,7 +16,7 @@
 
 [defmacro def-extern [name type]
   [flist [quote def] name
-    [flist [quote extern-with-meta]
+    [flist [quote type-anno]
       [flist [quote extern] [quote host] name]
       [flist [quote quote] [flist [quote type] type]]]]]
 
@@ -52,7 +51,7 @@
   [flist
     [quote def]
     def-name
-    [flist [quote extern-with-meta]
+    [flist [quote type-anno]
       [flist [quote extern] [quote instructions] inst-name]
       [quote [quote [type [func [i32 i32] i32]]]]]]]
 

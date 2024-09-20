@@ -118,19 +118,11 @@ import { wrapJSFunctionsToObject } from './utils.js'
 
 const instructions = wrapJSFunctionsToObject(instructionFunctions)
 
-import { setMeta } from './core.js'
-
 const externs = {
   host,
   instructions,
 
   'performance-now': () => performance.now(),
-  'extern-with-meta': (ext, meta_data) => {
-    if (typeof ext !== 'function') throw new Error('extern-with-meta expects function')
-    const clone = (...args) => ext(...args)
-    setMeta(clone, meta_data)
-    return Object.freeze(clone)
-  },
 }
 
 const evalForm = (defEnv) => {
@@ -219,6 +211,11 @@ const evalForm = (defEnv) => {
             setEnv(newEnv, getFormWord(bindings[i]), go(newEnv, bindings[i + 1]))
           env = newEnv
           form = forms[2]
+          continue
+        }
+        case 'type-anno': {
+          assertNumArgs(2)
+          form = forms[1]
           continue
         }
       }
