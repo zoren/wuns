@@ -129,11 +129,12 @@
     false-form]]
 
 [def-extern mutable-list-of-size [type-scheme [a] [func [i32] [mutable-list a]]]]
-[def-extern set-array [type-scheme [a] [func [[mutable-list a] i32 a] []]]]
-[def-extern freeze-mutable-list [type-scheme [a] [func [[mutable-list a]] [tuple]]]]
+[def-extern freeze-mutable-list [type-scheme [a] [func [[mutable-list a]] [list a]]]]
 
 [defn is-word [form] [if [try-get-form-word form] 1 0]]
-[def-extern log [func [.. any] []]]
+[def-extern log [type-scheme [a] [func [.. a] [tuple]]]]
+
+[def-extern set-array [type-scheme [a] [func [[mutable-list a] i32 a] [tuple]]]]
 
 [defn quote-list [lmsg]
   [let-do
@@ -142,10 +143,10 @@
     [set-array msg 0 [quote list]]
     [[func go [i]
       [when [lt-s i s]
-          [set-array msg [inc i]
+        [set-array msg [inc i]
           [let [e [at lmsg i]]
             [if [is-word e] [mk-quote e] e]]]
-          [go [inc i]]]]
+        [go [inc i]]]]
       0]
     [form-list [freeze-mutable-list msg]]]]
 
@@ -204,7 +205,7 @@
 [def-instruction i32.div-s i32.div-s]
 
 [def-extern growable-list [type-scheme [a] [func [] [growable-list a]]]]
-[def-extern push [type-scheme [a] [func [[growable-list a] a] []]]]
+[def-extern push [type-scheme [a] [func [[growable-list a] a] [tuple]]]]
 [def-extern clone-growable-to-frozen-list [type-scheme [a] [func [[growable-list a]] [list a]]]]
 
 [def-extern int-to-word [func [i32] word]]
@@ -381,8 +382,8 @@
 [defn half [x] [i32.div-s x 2]]
 
 [def-extern transient-kv-map [func [] transient-kv-map]]
-[def-extern set-kv-map [type-scheme [a] [func [transient-kv-map word a] []]]]
-[def-extern freeze-kv-map [func [transient-kv-map] []]]
+[def-extern set-kv-map [type-scheme [a] [func [transient-kv-map word a] [tuple]]]]
+[def-extern freeze-kv-map [func [transient-kv-map] [tuple]]]
 
 [defn mk-word [w] [flist [quote word] w]]
 
@@ -450,7 +451,7 @@
 [defn push-all [mut-list list]
   [for-each e list [push mut-list e]]]
 
-[def-extern keys [func [kv-map] [form-list word]]]
+[def-extern keys [func [kv-map] [list word]]]
 
 [defn assoc [m k v]
   [let [new [transient-kv-map]]
@@ -469,11 +470,11 @@
   [let [s [sub end start]]
     [if [lt-s s 1]
       [list]
-      [let [ml [mutable-list-of-size s]]
+      [let-do [ml [mutable-list-of-size s]]
         [for i start end
           [set-array ml [sub i start] [at l i]]]
         [freeze-mutable-list ml]
-        ml]]]]
+        ]]]]
 
 [def-extern meta [func [form] kv-map]]
 
