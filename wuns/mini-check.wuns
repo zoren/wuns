@@ -448,7 +448,8 @@
         [eq-form first-form [quote extern]]
         [do
           [for i 1 s-form
-            [report-when-not [is-word [at sub-forms i]] form expects words]]
+            [let [sf [at sub-forms i]]
+              [report-when-not [is-word sf] sf expects words]]]
           [generate-fresh-type-var gctx level]]
 
         [let-do
@@ -510,13 +511,12 @@
                 n-of-args [size type-args]
                 present-type [mutable-list-of-size [inc n-of-args]]]
             [if n-of-args
-              [let [present-type [mutable-list-of-size [inc n-of-args]]]
-                [do
-                  [set-array present-type 0 [form-word type-name]]
-                  [for i 0 n-of-args
-                    [set-array present-type [inc i] [internal-to-present-type [at type-args i]]]]
-                  [freeze-mutable-list present-type]
-                  [form-list present-type]]]
+              [let-do [present-type [mutable-list-of-size [inc n-of-args]]]
+                [set-array present-type 0 [form-word type-name]]
+                [for i 0 n-of-args
+                  [set-array present-type [inc i] [internal-to-present-type [at type-args i]]]]
+                [freeze-mutable-list present-type]
+                [form-list present-type]]
               [if [eq-word type-name [word tuple]] [quote unit] [form-word type-name]]]]]]]]]
 
 [defn normalize-deep [internal-type]
