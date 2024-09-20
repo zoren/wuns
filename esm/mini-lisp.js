@@ -133,7 +133,7 @@ const externs = {
   },
 }
 
-const evalForm = (defEnv, form) => {
+const evalForm = (defEnv) => {
   const go = (env, form) => {
     const evalError = (message, innerError) => new EvalError(message, form, innerError)
     while (true) {
@@ -253,7 +253,33 @@ const evalForm = (defEnv, form) => {
       }
     }
   }
-  return go(makeEnv(), form)
+  return go
+}
+
+externs.interpreter = {
+  'make-context': () => new Map(),
+  'try-get-macro': (context, name) => {
+    if (!(context instanceof Map)) throw new Error('try-get-macro expects context')
+    if (typeof name !== 'string') throw new Error('try-get-macro expects string')
+    const value = context.get(name)
+    if (value instanceof Closure && value.kind === 'macro') return value
+    return 0
+  },
+  evaluate: (context, form) => {
+    if (!(context instanceof Map)) throw new Error('evaluate expects context')
+    try {
+      return evalForm(context)(makeEnv(), form)
+    } catch (e) {
+      return 0
+    }
+  },
+  apply: (context, func, args) => {
+    if (!(context instanceof Map)) throw new Error('apply expects context')
+    if (!(func instanceof Closure)) throw new Error('apply expects closure')
+    if (!Array.isArray(args)) throw new Error('apply expects array')
+    const paramEnv = makeParamEnv(func, args)
+    return evalForm(context)(paramEnv, func.body)
+  },
 }
 
 const specialForms = [
@@ -311,11 +337,12 @@ const commandLineArgs = process.argv.slice(2)
 const endsWithDashFlag = commandLineArgs.at(-1) === '-'
 const files = endsWithDashFlag ? commandLineArgs.slice(0, -1) : commandLineArgs
 const defEnv = new Map()
+const evaluator = evalForm(defEnv)
 
 const evaluateForms = (forms) => {
   try {
     let result = langUndefined
-    for (const form of forms) result = evalForm(defEnv, form)
+    for (const form of forms) result = evaluator(makeEnv(), form)
     return result
   } catch (e) {
     let curErr = e

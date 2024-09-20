@@ -314,6 +314,9 @@
              rest-param [last params]]
     [kv-mapq params params]]]
 
+[def try-get-macro [extern interpreter try-get-macro]]
+[def apply [extern interpreter apply]]
+
 [defn check [gctx level lctx form]
   [ifs
     [is-word form]
@@ -452,28 +455,40 @@
               [report-when-not [is-word sf] sf expects words]]]
           [generate-fresh-type-var gctx level]]
 
-        [let-do
-          [func-type [check gctx level lctx first-form]
-           arg-types [mutable-list-of-size n-of-args]]
-          [for i 0 n-of-args
-            [set-array arg-types i [check gctx level lctx [at sub-forms [inc i]]]]]
-          [let-do
-            [t-res [generate-fresh-type-var gctx level]
-             t-func [type-func-no-rest arg-types t-res]]
-            [comment
-              [if-let [annotated-type [try-get-def-var-annotated-type gctx first-form]]
-              [unify-report gctx [instantiate-annotated-type gctx 0 annotated-type] t-func form]
-              [do]]]
-            [unify-report gctx func-type t-func form]
-            t-res]]]]]]
+        [let [eval-context [getq gctx eval-context]]
+          [if-let [mac [if-let [w [try-get-form-word first-form]]
+                        [try-get-macro eval-context w]
+                        0]]
+            [let [expanded-form [apply eval-context mac [slice sub-forms 1 s-form]]]
+              [check gctx level lctx expanded-form]]
+            [let-do
+              [func-type [check gctx level lctx first-form]
+              arg-types [mutable-list-of-size n-of-args]]
+              [for i 0 n-of-args
+                [set-array arg-types i [check gctx level lctx [at sub-forms [inc i]]]]]
+              [let-do
+                [t-res [generate-fresh-type-var gctx level]
+                t-func [type-func-no-rest arg-types t-res]]
+                [comment
+                  [if-let [annotated-type [try-get-def-var-annotated-type gctx first-form]]
+                    [unify-report gctx [instantiate-annotated-type gctx 0 annotated-type] t-func form]
+                    [do]]]
+                [unify-report gctx func-type t-func form]
+                t-res]]]]]]]]
+
+[def make-eval-context [extern interpreter make-context]]
 
 [defn make-global-context []
   [kv-mapq
     messages [growable-list]
     def-var-types [transient-kv-map]
-    type-var-counter [atom 0]]]
+    type-var-counter [atom 0]
+    eval-context [make-eval-context]]]
+
+[def evaluate [extern interpreter evaluate]]
 
 [defn check-top [gctx form]
+  [evaluate [getq gctx eval-context] form]
   [check gctx 0 0 form]]
 
 [defn check-top-forms [gctx forms]
@@ -747,8 +762,15 @@
 [test-ok form
   [def d [quote a]]
   [def d [quote b]]]
+[test-ok [type-scheme [a] [func [.. a] [list a]]]
+  [def list [func list [.. entries] entries]]]
 
 [comment extern]
 [test-ok [type-scheme [a] a] [extern host size]]
+
+[comment macro expansion]
+[test-ok i32
+  [def m [macro m [] [quote [i32 5]]]]
+  [m]]
 
 [logq tests-run [atom-get tests-run-atom]]
