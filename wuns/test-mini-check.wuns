@@ -218,7 +218,22 @@
     i32]]
 
 [def read-file [extern interpreter read-file]]
-[test-ok-fn [quote form]
+
+[defn test-ok-fn-stop-at-error [forms]
+  [let-do
+    [gctx [make-global-context]]
+    [for-each form forms
+      [evaluate [getq gctx eval-context] form]
+      [check-top gctx form]
+      [let [messages [getq gctx messages]]
+        [when-not [is-empty messages]
+          [logq form [identity form]]
+          [for-each message messages
+              [log message [meta [getq message form]]]]
+          [logq-abort test-ok failed there were errors [identity form] [getq gctx messages]]]]]
+    [inc-atom tests-run-atom]]]
+
+[test-ok-fn-stop-at-error
   [read-file [word mini-std.wuns]]]
 
 [logq tests-run [atom-get tests-run-atom]]
