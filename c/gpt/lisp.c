@@ -175,6 +175,19 @@ void rtenv_set(rtenv_t* env, const char* sym, rtval_t* val) {
 
 rtenv_t* env;
 
+int32_t parse_i32(const char* word){
+    char* endptr;
+    errno = 0;
+    const long result = strtol(word, &endptr, 10);
+    if (errno != 0) {
+        perror("strtol");
+        exit(1);
+    }
+    assert(*endptr == '\0' && "Error: non-integer argument for 'i32'!");
+    assert(result >= INT32_MIN && result <= INT32_MAX && "Error: integer out of range for 'i32'!");
+    return (int32_t)result;
+}
+
 /* Eval function */
 rtval_t* eval(form_t* v) {
     if (v->type == T_WORD) {
@@ -194,16 +207,7 @@ rtval_t* eval(form_t* v) {
         assert(count == 2 && "i32 expects exactly one argument!");
         form_t* arg = v->list.cells[1];
         assert(arg->type == T_WORD);
-        char* endptr;
-        errno = 0;
-        const long result = strtol(arg->word, &endptr, 10);
-        if (errno != 0) {
-            perror("strtol");
-            form_del(v);
-            exit(1);
-        }
-        assert(*endptr == '\0' && "Error: non-integer argument for 'i32'!");
-        assert(result >= INT32_MIN && result <= INT32_MAX && "Error: integer out of range for 'i32'!");
+        const long result = parse_i32(arg->word);
         return rtval_i32(result);
     }
 
