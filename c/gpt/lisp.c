@@ -152,7 +152,6 @@ typedef struct rtenv {
     int count;
     char** syms;
     rtval_t** vals;
-    struct rtenv* parent;
 } rtenv_t;
 
 rtenv_t* rtenv_new(void) {
@@ -160,8 +159,22 @@ rtenv_t* rtenv_new(void) {
     env->count = 0;
     env->syms = NULL;
     env->vals = NULL;
-    env->parent = NULL;
     return env;
+}
+
+void rtenv_set(rtenv_t* env, const char* sym, rtval_t* val) {
+    for (int i = 0; i < env->count; i++) {
+        if (strcmp(env->syms[i], sym) == 0) {
+            env->vals[i] = val;
+            return;
+        }
+    }
+    int prev_count = env->count;
+    env->count++;
+    env->syms = realloc(env->syms, sizeof(char*) * env->count);
+    env->vals = realloc(env->vals, sizeof(rtval_t*) * env->count);
+    env->syms[prev_count] = strdup(sym);
+    env->vals[prev_count] = val;
 }
 
 /* Eval function */
@@ -211,12 +224,24 @@ rtval_t* eval(rtenv_t* env, form_t* v) {
             form_del(v);
             exit(1);
         }
-        // int32_t result = atoi(arg->word);
         return rtval_i32(result);
     }
 
+    if (strcmp(first_word, "def") == 0) {
+        if (v->list.count != 3) {
+            fprintf(stderr, "Error: 'def' expects exactly two arguments!\n");
+            form_del(v);
+            exit(1);
+        }
+        form_t* arg1 = v->list.cells[1];
+        assert(arg1->type == T_WORD);
+        form_t* arg2 = v->list.cells[2];
+        rtenv_set(env, arg1->word, eval(env, arg2));
+        return rtval_i32(0);
+    }
+
     /* Unknown symbol */
-    fprintf(stderr, "Unknown symbol: %s\n", first->word);
+    fprintf(stderr, "Unknown first symbol: %s\n", first->word);
     form_del(v);
     exit(1);
 }
@@ -230,8 +255,9 @@ int main(int argc, char** argv) {
 
     form_t* exprs = parse_input(argv[1]);
     assert(exprs->type == T_LIST);
+    rtenv_t* env = rtenv_new();
     for (int i = 0; i < exprs->list.count; i++) {
-        rtval_t* result = eval(rtenv_new(), exprs->list.cells[i]);
+        rtval_t* result = eval(env, exprs->list.cells[i]);
         rtval_print(result);
         printf("\n");
     }
