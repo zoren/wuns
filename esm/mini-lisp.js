@@ -18,7 +18,7 @@ class Closure {
 }
 
 const makeClosure = (env, name, parameters, body, kind) => Object.freeze(new Closure(env, name, parameters, body, kind))
-import { isForm, tryGetFormWord, tryGetFormList } from './core.js'
+import { isForm, tryGetFormWord, tryGetFormList, isTaggedValue, makeValueTagger } from './core.js'
 
 const printForm = (form) => {
   const word = tryGetFormWord(form)
@@ -116,9 +116,6 @@ const { host } = jsHost
 import { instructionFunctions } from './instructions.js'
 import { wrapJSFunctionsToObject } from './utils.js'
 
-import fs from 'node:fs'
-const readFile = filePath => parseToForms(fs.readFileSync(filePath, 'ascii'), filePath)
-
 const instructions = wrapJSFunctionsToObject(instructionFunctions)
 
 const externs = {
@@ -127,6 +124,8 @@ const externs = {
 
   'performance-now': () => performance.now(),
 }
+
+const recordTag = Symbol('record')
 
 const evalForm = (defEnv) => {
   const go = (env, form) => {
@@ -198,8 +197,107 @@ const evalForm = (defEnv) => {
 
         case 'if':
           assertNumArgs(3)
-          form = forms[go(env, forms[1]) ? 2 : 3]
+          try {
+            form = forms[go(env, forms[1]) ? 2 : 3]
+          } catch (e) {
+            throw evalError('error in if condition', e)
+          }
           continue
+        case 'match': {
+          if (numOfArgs === 0)
+            throw evalError(`special form '${firstWord}' expected at least one argument, got ${numOfArgs}`)
+          const value = go(env, forms[1])
+          if (!isTaggedValue(value)) {
+            console.dir(value)
+            throw evalError('expected tagged value')
+          }
+          const { tag, args } = value
+          const findMatch = () => {
+            for (let i = 2; i < forms.length - 1; i += 2) {
+              const patternList = getFormList(forms[i])
+              const patternCtorFunc = go(env, patternList[0])
+              if (typeof patternCtorFunc !== 'function') throw evalError('expected function')
+              if (typeof patternCtorFunc.tag !== 'string') throw evalError('expected ctor function')
+              if (patternCtorFunc.tag !== tag) continue
+              if (patternList.length - 1 !== args.length)
+                throw evalError(
+                  `pattern length ${patternList.length - 1} but value length was ${args.length} ${tag} ${args} ${meta(patternList[0])}`,
+                )
+              const newEnv = makeEnv(env)
+              for (let j = 1; j < patternList.length; j++) setEnv(newEnv, getFormWord(patternList[j]), args[j - 1])
+              return { newEnv, body: forms[i + 1] }
+            }
+            // an odd number of arguments means there is no default case
+            if (numOfArgs % 2 === 1) {
+              console.dir(value)
+              throw evalError('no match found')
+            }
+            return { newEnv: env, body: forms.at(-1) }
+          }
+          const { newEnv, body } = findMatch()
+          env = newEnv
+          form = body
+          continue
+        }
+        case 'type': {
+          if (numOfArgs % 3 !== 0) throw evalError('type expected triplets')
+          for (let i = 1; i < forms.length; i += 3) {
+            const type = getFormWord(forms[i])
+            const _typeParams = getFormList(forms[i + 1]).map(getFormWord)
+            const body = getFormList(forms[i + 2])
+            const firstBodyWord = getFormWord(body[0])
+            switch (firstBodyWord) {
+              case 'union':
+                for (let i = 1; i < body.length; i++) {
+                  const unionCase = getFormList(body[i])
+                  if (unionCase.length === 0) throw evalError('union case must have at least one word')
+                  const unionCaseName = getFormWord(unionCase[0])
+                  const qualName = `${type}/${unionCaseName}`
+                  const tagger = makeValueTagger(qualName, unionCase.length - 1)
+                  // defEnv.set(unionCaseName, tagger)
+                  defEnv.set(qualName, tagger)
+                }
+                break
+              case 'record': {
+                const fieldNames = []
+                for (let i = 1; i < body.length; i++) {
+                  const recordField = getFormList(body[i])
+                  if (recordField.length < 2) throw evalError('record field must have a name and a type')
+                  const fieldName = getFormWord(recordField[0])
+                  fieldNames.push(fieldName)
+                  const projecterName = `${type}/${fieldName}`
+                  const projecter = (record) => {
+                    if (record[recordTag] !== type) throw evalError(`field projecter ${projecterName} not a ${type}`)
+                    return record[fieldName]
+                  }
+                  defEnv.set(fieldName, projecter)
+                  defEnv.set(projecterName, projecter)
+                  if (recordField.length === 3 && getFormWord(recordField[2]) === 'mutable') {
+                    const setterName = `${type}/set/${fieldName}`
+                    const setter = (record, value) => {
+                      if (record[recordTag] !== type) throw evalError(`field setter ${setterName} not a ${type}`)
+                      record[fieldName] = value
+                    }
+                    defEnv.set(setterName, setter)
+                  }
+                }
+                const constructor = (...args) => {
+                  if (args.length !== fieldNames.length) throw evalError('wrong number of arguments to ' + type)
+                  const record = {}
+                  for (let i = 0; i < fieldNames.length; i++) record[fieldNames[i]] = args[i]
+                  record[Symbol.toStringTag] = type
+                  record[recordTag] = type
+                  return record
+                }
+                defEnv.set(type, constructor)
+                break
+              }
+              default:
+                throw evalError('unexpected type body: ' + firstBodyWord)
+            }
+          }
+          return langUndefined
+        }
         case 'do':
           if (forms.length === 1) return langUndefined
           for (let i = 1; i < forms.length - 1; i++) go(env, forms[i])
@@ -256,14 +354,49 @@ const evalForm = (defEnv) => {
   return go
 }
 
+const defEnv = new Map()
+const evaluator = evalForm(defEnv)
+
+import fs from 'node:fs'
+
+import { formWord, formList } from './core.js'
+import { parse } from './parseTreeSitter.js'
+
+function* parseToForms(content, metaPrefix) {
+  const makeMeta = metaPrefix ? (...args) => list(metaPrefix, ...args) : list
+  /**
+   * @param {TSParser.SyntaxNode} node
+   */
+  const nodeToForm = (node) => {
+    const { isError, type, startPosition } = node
+    if (isError) throw new Error('unexpected error node')
+    const { row, column } = startPosition
+    const metaData = makeMeta(row + 1, column + 1)
+    switch (type) {
+      case 'word':
+        return formWord(node.text, metaData)
+      case 'list':
+        return formList(Object.freeze(node.namedChildren.map(nodeToForm)), metaData)
+      default:
+        throw new Error('unexpected node type: ' + type)
+    }
+  }
+  for (const child of parse(content).rootNode.namedChildren) yield nodeToForm(child)
+}
+
+const readFile = (filePath) => parseToForms(fs.readFileSync(filePath, 'ascii'), filePath)
+
+const none = makeValueTagger('option/none', 0)()
+const some = makeValueTagger('option/some', 1)
+
 externs.interpreter = {
   'make-context': () => new Map(),
   'try-get-macro': (context, name) => {
     if (!(context instanceof Map)) throw new Error('try-get-macro expects context')
     if (typeof name !== 'string') throw new Error('try-get-macro expects string')
     const value = context.get(name)
-    if (value instanceof Closure && value.kind === 'macro') return value
-    return 0
+    if (value instanceof Closure && value.kind === 'macro') return some(value)
+    return none
   },
   evaluate: (context, form) => {
     if (!(context instanceof Map)) throw new Error('evaluate expects context')
@@ -283,7 +416,7 @@ externs.interpreter = {
   'read-file': (path) => {
     if (typeof path !== 'string') throw new Error('read-file expects string')
     return [...readFile(path)]
-  }
+  },
 }
 
 const specialForms = [
@@ -309,37 +442,9 @@ const getCompletions = (defEnv, prefix) => {
   return completions
 }
 
-import { formWord, formList } from './core.js'
-
-import { parse } from './parseTreeSitter.js'
-
-function* parseToForms(content, metaPrefix) {
-  const makeMeta = metaPrefix ? (...args) => list(metaPrefix, ...args) : list
-  /**
-   * @param {TSParser.SyntaxNode} node
-   */
-  const nodeToForm = (node) => {
-    const { isError, type, startPosition } = node
-    if (isError) throw new Error('unexpected error node')
-    const { row, column } = startPosition
-    const metaData = makeMeta(row + 1, column + 1)
-    switch (type) {
-      case 'word':
-        return formWord(node.text, metaData)
-      case 'list':
-        return formList(Object.freeze(node.namedChildren.map(nodeToForm)), metaData)
-      default:
-        throw new Error('unexpected node type: ' + type)
-    }
-  }
-  for (const child of parse(content).rootNode.namedChildren) yield nodeToForm(child)
-}
-
 const commandLineArgs = process.argv.slice(2)
 const endsWithDashFlag = commandLineArgs.at(-1) === '-'
 const files = endsWithDashFlag ? commandLineArgs.slice(0, -1) : commandLineArgs
-const defEnv = new Map()
-const evaluator = evalForm(defEnv)
 
 const evaluateForms = (forms) => {
   try {
@@ -350,7 +455,7 @@ const evaluateForms = (forms) => {
     let curErr = e
     while (curErr) {
       const dumpFormMeta = (form) => {
-        const metaToStr = form => {
+        const metaToStr = (form) => {
           const [file, row, column] = tryGetFormList(meta(form))
           return `${file}:${row}:${column}`
         }
