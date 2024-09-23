@@ -79,15 +79,16 @@ form_t* parse_all_forms(char* input) {
 
     while (*cur) {
         while (*cur == ' ' || *cur == '\n' || *cur == '\t') cur++;
-        char* token_cur = token;
+        int token_cur = 0;
         if (*cur == '[' || *cur == ']') {
-            *token_cur++ = *cur++;
+            token[token_cur++] = *cur++;
         } else {
             while (*cur != ' ' && *cur != '[' && *cur != ']' && *cur != '\0') {
-                *token_cur++ = *cur++;
+                assert(token_cur < MAX_TOKEN_LENGTH && "Token too long!");
+                token[token_cur++] = *cur++;
             }
         }
-        *token_cur = '\0';
+        token[token_cur] = '\0';
         switch (token[0]) {
             case '\0':
                 continue;
