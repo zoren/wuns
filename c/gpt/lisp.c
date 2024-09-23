@@ -20,7 +20,6 @@ typedef struct form {
     };
 } form_t;
 
-/* Memory allocation tracking, quake-style */
 void* safe_malloc(size_t size) {
     void* ptr = malloc(size);
     if (!ptr) {
@@ -31,14 +30,14 @@ void* safe_malloc(size_t size) {
 }
 
 /* Constructors */
-form_t* lval_word(const char* sym) {
+form_t* form_word(const char* sym) {
     form_t* v = safe_malloc(sizeof(form_t));
     v->type = T_WORD;
     v->word = strdup(sym);
     return v;
 }
 
-form_t* lval_list(void) {
+form_t* form_list(void) {
     form_t* v = safe_malloc(sizeof(form_t));
     v->type = T_LIST;
     v->list.count = 0;
@@ -47,10 +46,29 @@ form_t* lval_list(void) {
 }
 
 /* List management */
-void lval_add(form_t* list, form_t* x) {
+void form_add(form_t* list, form_t* x) {
     list->list.count++;
     list->list.cells = realloc(list->list.cells, sizeof(form_t*) * list->list.count);
     list->list.cells[list->list.count - 1] = x;
+}
+
+/* Memory cleanup */
+void form_del(form_t* v) {
+    switch (v->type)
+    {
+    case T_WORD:
+        free(v->word);
+        break;
+    case T_LIST:
+        for (int i = 0; i < v->list.count; i++) {
+            form_del(v->list.cells[i]);
+        }
+        free(v->list.cells);
+        break;
+    default:
+        break;
+    }
+    free(v);
 }
 
 /* Parsing functions */
@@ -69,14 +87,14 @@ char* read_token(char* input, char* token) {
     return input;
 }
 
-/* Tokenize input and parse into lval_t structures */
+/* Tokenize input and parse into form_t structures */
 form_t* parse_input(char* input) {
     char token[MAX_TOKEN_LENGTH];
     char* cur = input;
     form_t* stack[MAX_LIST_DEPTH];
     int depth = 0;
 
-    form_t* current = lval_list();
+    form_t* current = form_list();
 
     while (*cur) {
         cur = read_token(cur, token);
@@ -84,17 +102,17 @@ form_t* parse_input(char* input) {
 
         if (token[0] == '[') {
             stack[depth++] = current;
-            current = lval_list();
+            current = form_list();
         } else if (token[0] == ']') {
             if (depth == 0) {
                 fprintf(stderr, "Unexpected ']'!\n");
                 exit(1);
             }
             form_t* parent = stack[--depth];
-            lval_add(parent, current);
+            form_add(parent, current);
             current = parent;
         } else {
-            lval_add(current, lval_word(token));
+            form_add(current, form_word(token));
         }
     }
 
@@ -104,19 +122,6 @@ form_t* parse_input(char* input) {
     }
 
     return current;
-}
-
-/* Memory cleanup */
-void lval_del(form_t* v) {
-    if (v->type == T_LIST) {
-        for (int i = 0; i < v->list.count; i++) {
-            lval_del(v->list.cells[i]);
-        }
-        free(v->list.cells);
-    } else if (v->type == T_WORD) {
-        free(v->word);
-    }
-    free(v);
 }
 
 typedef enum { RT_I32 } rtval_type_t;
@@ -160,7 +165,7 @@ rtenv_t* rtenv_new(void) {
 }
 
 /* Eval function */
-rtval_t* lval_eval(rtenv_t* env, form_t* v) {
+rtval_t* eval(rtenv_t* env, form_t* v) {
     if (v->type == T_WORD) {
         for (int i = 0; i < env->count; i++) {
             if (strcmp(env->syms[i], v->word) == 0) return env->vals[i];
@@ -175,7 +180,7 @@ rtval_t* lval_eval(rtenv_t* env, form_t* v) {
     form_t* first = v->list.cells[0];
     if (first->type != T_WORD) {
         fprintf(stderr, "Error: list does not start with symbol, was %d\n", first->type);
-        lval_del(v);
+        form_del(v);
         exit(1);
     }
     char* first_word = first->word;
@@ -183,7 +188,7 @@ rtval_t* lval_eval(rtenv_t* env, form_t* v) {
     if (strcmp(first_word, "i32") == 0) {
         if (v->list.count != 2) {
             fprintf(stderr, "Error: 'i32' expects exactly one argument!\n");
-            lval_del(v);
+            form_del(v);
             exit(1);
         }
         form_t* arg = v->list.cells[1];
@@ -193,17 +198,17 @@ rtval_t* lval_eval(rtenv_t* env, form_t* v) {
         const long result = strtol(arg->word, &endptr, 10);
         if (errno != 0) {
             perror("strtol");
-            lval_del(v);
+            form_del(v);
             exit(1);
         }
         if (*endptr != '\0') {
             fprintf(stderr, "Error: non-integer argument for 'i32'!\n");
-            lval_del(v);
+            form_del(v);
             exit(1);
         }
         if (result < INT32_MIN || result > INT32_MAX) {
             fprintf(stderr, "Error: integer out of range for 'i32'!\n");
-            lval_del(v);
+            form_del(v);
             exit(1);
         }
         // int32_t result = atoi(arg->word);
@@ -212,7 +217,7 @@ rtval_t* lval_eval(rtenv_t* env, form_t* v) {
 
     /* Unknown symbol */
     fprintf(stderr, "Unknown symbol: %s\n", first->word);
-    lval_del(v);
+    form_del(v);
     exit(1);
 }
 
@@ -224,10 +229,11 @@ int main(int argc, char** argv) {
     }
 
     form_t* exprs = parse_input(argv[1]);
-    assert(exprs->type == T_LIST && exprs->list.count == 1);
-    form_t* expr = exprs->list.cells[0];
-    rtval_t* result = lval_eval(rtenv_new(), expr);
-    rtval_print(result);
-    printf("\n");
+    assert(exprs->type == T_LIST);
+    for (int i = 0; i < exprs->list.count; i++) {
+        rtval_t* result = eval(rtenv_new(), exprs->list.cells[i]);
+        rtval_print(result);
+        printf("\n");
+    }
     return 0;
 }
