@@ -18,57 +18,43 @@ export const arrayToList = (array) => (array.length === 0 ? emptyList : Object.f
 export const makeList = (...args) => arrayToList(args)
 export const isList = (f) => Array.isArray(f)
 
-class Form {}
-
-export const isForm = (f) => f instanceof Form
-
-class FormWord extends Form {
-  #word
-  constructor(word) {
-    super()
-    if (!isWord(word)) throw new Error('expected word')
-    this.#word = word
-  }
-
-  get word() {
-    return this.#word
-  }
-
-  toString() {
-    return this.#word.toString()
+class TaggedValue {
+  constructor(tag, ...args) {
+    this.tag = tag
+    this.args = Object.freeze(args)
   }
 }
 
-export const formWord = (word, metaData) => {
-  const o = new FormWord(word)
-  setMeta(o, metaData)
-  return Object.freeze(o)
-}
-
-export const tryGetFormWord = (f) => (f instanceof FormWord ? f.word : null)
-
-class FormList extends Form {
-  #list
-  constructor(list) {
-    super()
-    if (!isList(list)) throw new Error('expected list')
-    if (!Object.isFrozen(list)) throw new Error('expected frozen list')
-    for (const f of list) if (!isForm(f)) throw new Error('expected all elements to be forms')
-    this.#list = list
+export const isTaggedValue = (v) => v instanceof TaggedValue
+export const getTag = (v) => (isTaggedValue(v) ? v.tag : null)
+export const makeTaggedValue = (tag, ...args) => Object.freeze(new TaggedValue(tag, ...args))
+export const makeValueTagger = (tag, arity) => {
+  const f = (...args) => {
+    if (args.length !== arity) throw new Error(`'${tag}' expected ${arity} arguments, got ${args.length}`)
+    return makeTaggedValue(tag, ...args);
   }
-
-  get list() {
-    return this.#list
-  }
+  f.tag = tag
+  return f
 }
+export const makeTaggedValueMeta = (tag, meta, ...args) => {
+  const tv = new TaggedValue(tag, ...args)
+  setMeta(tv, meta)
+  return Object.freeze(tv)
+}
+const formWordName = 'form/word'
+const formListName = 'form/list'
+export const formWord = (word, metaData) => makeTaggedValueMeta(formWordName, metaData, word)
+
+export const tryGetFormWord = (f) => (getTag(f) === formWordName ? f.args[0] : null)
+
+export const isForm = (f) => isTaggedValue(f) && (getTag(f) === formWordName || getTag(f) === formListName)
 
 export const formList = (list, metaData) => {
-  const o = new FormList(list)
-  setMeta(o, metaData)
-  return Object.freeze(o)
+  for (const f of list) if (!isForm(f)) throw new Error('expected all elements to be forms')
+  return makeTaggedValueMeta(formListName, metaData, list)
 }
 
-export const tryGetFormList = (f) => (f instanceof FormList ? f.list : null)
+export const tryGetFormList = (f) => (getTag(f) === formListName ? f.args[0] : null)
 
 class DefVar {
   #name

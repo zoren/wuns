@@ -57,24 +57,11 @@
 
 [defmacro def-instruction [def-name inst-name] [def-instruction-fn def-name inst-name]]
 
-[type option [a]
-  [union
-    [none]
-    [some a]]]
-
-[def none option/none]
-[def some option/some]
-
-[def-extern try-get-form-word [func [form] [option word]]]
-[defn try-get-form-word-option [form]
-  [match form
-    [form-word w] [some w]
-    [none]]]
 [def unreachable [extern instructions unreachable]]
 
 [defn form-to-word [form]
-  [match [try-get-form-word-option form]
-    [some w] w
+  [match form
+    [form-word w] w
     [unreachable]]]
 
 [defmacro def-bin-i32-inst [name] [def-instruction-fn name [form-word [concat-words [word i32.] [form-to-word name]]]]]
@@ -144,7 +131,7 @@
 [def-extern mutable-list-of-size [type-scheme [a] [func [i32] [mutable-list a]]]]
 [def-extern freeze-mutable-list [type-scheme [a] [func [[mutable-list a]] [list a]]]]
 
-[defn is-word [form] [match [try-get-form-word-option form] [some x] 1 0]]
+[defn is-word [form] [match form [form-word x] 1 0]]
 [def-extern log [type-scheme [a] [func [.. a] [tuple]]]]
 
 [def-extern set-array [type-scheme [a] [func [[mutable-list a] i32 a] [tuple]]]]
@@ -267,18 +254,15 @@
        [dec s]
        [at clauses -1]]]]]
 
-[def-extern try-get-form-list [func [form] [option [list form]]]]
-[defn try-get-form-list-option [form]
-  [match form
-    [form-list l] [some l]
-    [none]]]
-
 [defn form-to-list [form]
-  [match [try-get-form-list-option form]
-    [some l] l
+  [match form
+    [form-list l] l
     [unreachable]]]
 
-[defn is-list [form] [if [try-get-form-list form] 1 0]]
+[defn is-list [form]
+  [match form
+    [form-list l] 1
+    0]]
 
 [defmacro if-let [binding-form true-form false-form]
   [match binding-form
@@ -318,9 +302,10 @@
           1]] 0]]]]
 
 [defn eq-form-word [fa fb]
-  [if-let [wa [try-get-form-word-option fa]]
-    [if-let [wb [try-get-form-word-option fb]]
-      [eq-word wa wb]
+  [match fa
+    [form-word wa]
+    [match fb
+      [form-word wb] [eq-word wa wb]
       0]
     0]]
 
@@ -470,6 +455,14 @@
 
 [defmacro getq [m w]
   [flist [quote get] m [mk-word w]]]
+
+[type option [a]
+  [union
+    [none]
+    [some a]]]
+
+[def none option/none]
+[def some option/some]
 
 [defn try-get [m k]
   [if [has m k]

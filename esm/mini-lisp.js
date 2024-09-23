@@ -270,7 +270,6 @@ const evalForm = (defEnv) => {
                     if (record[recordTag] !== type) throw evalError(`field projecter ${projecterName} not a ${type}`)
                     return record[fieldName]
                   }
-                  defEnv.set(fieldName, projecter)
                   defEnv.set(projecterName, projecter)
                   if (recordField.length === 3 && getFormWord(recordField[2]) === 'mutable') {
                     const setterName = `${type}/set/${fieldName}`

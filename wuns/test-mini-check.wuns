@@ -217,6 +217,13 @@
     [extern host form-word]
     i32]]
 
+[comment match]
+[test-ok i32
+  [type option []
+    [union
+      [none]]]
+  [match [option/none] [option/none] [i32 5]]]
+
 [def read-file [extern interpreter read-file]]
 
 [defn test-ok-fn-stop-at-error [forms]
@@ -233,7 +240,9 @@
           [logq-abort test-ok failed there were errors [identity form] [getq gctx messages]]]]]
     [inc-atom tests-run-atom]]]
 
+[logq checking std.wuns]
+
 [test-ok-fn-stop-at-error
-  [read-file [word mini-std.wuns]]]
+  [read-file [word std.wuns]]]
 
 [logq tests-run [atom-get tests-run-atom]]

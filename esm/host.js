@@ -11,8 +11,6 @@ import {
   print,
   formWord,
   formList,
-  tryGetFormWord,
-  tryGetFormList,
   setMeta,
   defVar,
   stringToWord,
@@ -45,16 +43,6 @@ export const form_list_with_meta = (l, meta_data) => {
   if (isMutable(l)) throw new Error('form-list-with-meta expects immutable list')
   if (isGrowable(l)) throw new Error('form-list-with-meta expects frozen list')
   return formList(l, meta_data)
-}
-
-export const try_get_form_word = (form) => {
-  const w = tryGetFormWord(form)
-  return w ? w : 0
-}
-
-export const try_get_form_list = (form) => {
-  const l = tryGetFormList(form)
-  return l ? l : 0
 }
 
 export { meta }
@@ -193,25 +181,6 @@ export const freeze_kv_map = (kv_map) => {
 
 export const log = (...forms) => {
   console.log(...forms.map(print))
-}
-// maybe add this...
-const type = (x) => {
-  const go = (x) => {
-    if (x === undefined) return 'undefined'
-    if (isList(x)) return 'list'
-    const word = tryGetFormWord(x)
-    if (word) return 'form-word'
-    const list = tryGetFormList(x)
-    if (list) return 'form-list'
-    if (isAtom(x)) return `[atom ${go(x.value)}]`
-    const t = typeof x
-    if (t === 'string') return 'word'
-    if (t === 'number') return 'i32'
-    if (t === 'function') return t
-    if (Object.isFrozen(x)) return 'kv-map'
-    return 'transient-kv-map'
-  }
-  return stringToWord(go(x))
 }
 const isFrozenList = (l) => isList(l) && Object.isFrozen(l) && !isGrowable(l) && !isMutable(l)
 export const concat_lists = (lists) => {
