@@ -22,10 +22,7 @@ typedef struct form {
 
 void* safe_malloc(size_t size) {
     void* ptr = malloc(size);
-    if (!ptr) {
-        fprintf(stderr, "Out of memory!\n");
-        exit(1);
-    }
+    assert(ptr && "Memory allocation failed!");
     return ptr;
 }
 
@@ -74,8 +71,6 @@ void form_del(form_t* v) {
 /* Parsing functions */
 char* read_token(char* input, char* token) {
     while (*input == ' ' || *input == '\n' || *input == '\t') input++;
-    char* tok_start = token;
-
     if (*input == '[' || *input == ']') {
         *token++ = *input++;
     } else {
@@ -183,30 +178,20 @@ rtenv_t* env;
 /* Eval function */
 rtval_t* eval(form_t* v) {
     if (v->type == T_WORD) {
-        for (int i = 0; i < env->count; i++) {
+        for (int i = 0; i < env->count; i++)
             if (strcmp(env->syms[i], v->word) == 0) return env->vals[i];
-        }
-        fprintf(stderr, "Error: Unbound symbol '%s'!\n", v->word);
-        exit(1);
+        assert(0 && "Unbound symbol!");
     }
     assert(v->type == T_LIST);
     int count = v->list.count;
     assert(count > 0);
 
     form_t* first = v->list.cells[0];
-    if (first->type != T_WORD) {
-        fprintf(stderr, "Error: list does not start with symbol, was %d\n", first->type);
-        form_del(v);
-        exit(1);
-    }
+    assert(first->type == T_WORD && "First element of list must be a symbol!");
     char* first_word = first->word;
 
     if (strcmp(first_word, "i32") == 0) {
-        if (v->list.count != 2) {
-            fprintf(stderr, "Error: 'i32' expects exactly one argument!\n");
-            form_del(v);
-            exit(1);
-        }
+        assert(count == 2 && "i32 expects exactly one argument!");
         form_t* arg = v->list.cells[1];
         assert(arg->type == T_WORD);
         char* endptr;
@@ -217,36 +202,20 @@ rtval_t* eval(form_t* v) {
             form_del(v);
             exit(1);
         }
-        if (*endptr != '\0') {
-            fprintf(stderr, "Error: non-integer argument for 'i32'!\n");
-            form_del(v);
-            exit(1);
-        }
-        if (result < INT32_MIN || result > INT32_MAX) {
-            fprintf(stderr, "Error: integer out of range for 'i32'!\n");
-            form_del(v);
-            exit(1);
-        }
+        assert(*endptr == '\0' && "Error: non-integer argument for 'i32'!");
+        assert(result >= INT32_MIN && result <= INT32_MAX && "Error: integer out of range for 'i32'!");
         return rtval_i32(result);
     }
 
     if (strcmp(first_word, "def") == 0) {
-        if (v->list.count != 3) {
-            fprintf(stderr, "Error: 'def' expects exactly two arguments!\n");
-            form_del(v);
-            exit(1);
-        }
+        assert(count == 3 && "def expects exactly two arguments!");
         form_t* arg1 = v->list.cells[1];
         assert(arg1->type == T_WORD);
         form_t* arg2 = v->list.cells[2];
         rtenv_set(env, arg1->word, eval(arg2));
         return rtval_i32(0);
     }
-
-    /* Unknown symbol */
-    fprintf(stderr, "Unknown first symbol: %s\n", first->word);
-    form_del(v);
-    exit(1);
+    assert(0 && "Unknown symbol" && first->word);
 }
 
 /* Main */
