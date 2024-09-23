@@ -98,21 +98,22 @@ form_t* parse_input(char* input) {
 
     while (*cur) {
         cur = read_token(cur, token);
-        if (token[0] == '\0') continue;
-
-        if (token[0] == '[') {
-            stack[depth++] = current;
-            current = form_list();
-        } else if (token[0] == ']') {
-            if (depth == 0) {
-                fprintf(stderr, "Unexpected ']'!\n");
-                exit(1);
-            }
-            form_t* parent = stack[--depth];
-            form_add(parent, current);
-            current = parent;
-        } else {
-            form_add(current, form_word(token));
+        switch (token[0]) {
+            case '\0':
+                continue;
+            case '[':
+                stack[depth++] = current;
+                current = form_list();
+                break;
+            case ']':
+                assert(depth > 0 && "Unexpected ']'!");
+                form_t* parent = stack[--depth];
+                form_add(parent, current);
+                current = parent;
+                break;
+            default:
+                form_add(current, form_word(token));
+                continue;
         }
     }
 
@@ -177,8 +178,10 @@ void rtenv_set(rtenv_t* env, const char* sym, rtval_t* val) {
     env->vals[prev_count] = val;
 }
 
+rtenv_t* env;
+
 /* Eval function */
-rtval_t* eval(rtenv_t* env, form_t* v) {
+rtval_t* eval(form_t* v) {
     if (v->type == T_WORD) {
         for (int i = 0; i < env->count; i++) {
             if (strcmp(env->syms[i], v->word) == 0) return env->vals[i];
@@ -236,7 +239,7 @@ rtval_t* eval(rtenv_t* env, form_t* v) {
         form_t* arg1 = v->list.cells[1];
         assert(arg1->type == T_WORD);
         form_t* arg2 = v->list.cells[2];
-        rtenv_set(env, arg1->word, eval(env, arg2));
+        rtenv_set(env, arg1->word, eval(arg2));
         return rtval_i32(0);
     }
 
@@ -255,9 +258,9 @@ int main(int argc, char** argv) {
 
     form_t* exprs = parse_input(argv[1]);
     assert(exprs->type == T_LIST);
-    rtenv_t* env = rtenv_new();
+    env = rtenv_new();
     for (int i = 0; i < exprs->list.count; i++) {
-        rtval_t* result = eval(env, exprs->list.cells[i]);
+        rtval_t* result = eval(exprs->list.cells[i]);
         rtval_print(result);
         printf("\n");
     }
