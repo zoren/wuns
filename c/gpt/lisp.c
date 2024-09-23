@@ -12,7 +12,7 @@ typedef enum { T_WORD, T_LIST } form_type_t;
 typedef struct form {
     form_type_t type;
     union {
-        char* word;
+        const char* word;
         struct {
             int count;
             struct form** cells;
@@ -54,7 +54,7 @@ void form_del(form_t* v) {
     switch (v->type)
     {
     case T_WORD:
-        free(v->word);
+        free((void*)v->word);
         break;
     case T_LIST:
         for (int i = 0; i < v->list.count; i++) {
@@ -68,22 +68,8 @@ void form_del(form_t* v) {
     free(v);
 }
 
-/* Parsing functions */
-char* read_token(char* input, char* token) {
-    while (*input == ' ' || *input == '\n' || *input == '\t') input++;
-    if (*input == '[' || *input == ']') {
-        *token++ = *input++;
-    } else {
-        while (*input != ' ' && *input != '[' && *input != ']' && *input != '\0') {
-            *token++ = *input++;
-        }
-    }
-    *token = '\0';
-    return input;
-}
-
 /* Tokenize input and parse into form_t structures */
-form_t* parse_input(char* input) {
+form_t* parse_all_forms(char* input) {
     char token[MAX_TOKEN_LENGTH];
     char* cur = input;
     form_t* stack[MAX_LIST_DEPTH];
@@ -92,11 +78,21 @@ form_t* parse_input(char* input) {
     form_t* current = form_list();
 
     while (*cur) {
-        cur = read_token(cur, token);
+        while (*cur == ' ' || *cur == '\n' || *cur == '\t') cur++;
+        char* token_cur = token;
+        if (*cur == '[' || *cur == ']') {
+            *token_cur++ = *cur++;
+        } else {
+            while (*cur != ' ' && *cur != '[' && *cur != ']' && *cur != '\0') {
+                *token_cur++ = *cur++;
+            }
+        }
+        *token_cur = '\0';
         switch (token[0]) {
             case '\0':
                 continue;
             case '[':
+                assert(depth < MAX_LIST_DEPTH && "Parse stack overflow!");
                 stack[depth++] = current;
                 current = form_list();
                 break;
@@ -188,6 +184,11 @@ int32_t parse_i32(const char* word){
     return (int32_t)result;
 }
 
+const char* get_form_word(form_t* v) {
+    assert(v->type == T_WORD);
+    return v->word;
+}
+
 /* Eval function */
 rtval_t* eval(form_t* v) {
     if (v->type == T_WORD) {
@@ -197,27 +198,25 @@ rtval_t* eval(form_t* v) {
     }
     assert(v->type == T_LIST);
     int count = v->list.count;
+    struct form** cells = v->list.cells;
     assert(count > 0);
 
-    form_t* first = v->list.cells[0];
+    form_t* first = cells[0];
     assert(first->type == T_WORD && "First element of list must be a symbol!");
-    char* first_word = first->word;
+    const char* first_word = first->word;
 
     if (strcmp(first_word, "i32") == 0) {
         assert(count == 2 && "i32 expects exactly one argument!");
-        form_t* arg = v->list.cells[1];
-        assert(arg->type == T_WORD);
-        const long result = parse_i32(arg->word);
-        return rtval_i32(result);
+        return rtval_i32(parse_i32(get_form_word(cells[1])));
     }
 
     if (strcmp(first_word, "def") == 0) {
         assert(count == 3 && "def expects exactly two arguments!");
-        form_t* arg1 = v->list.cells[1];
+        form_t* arg1 = cells[1];
         assert(arg1->type == T_WORD);
-        form_t* arg2 = v->list.cells[2];
-        rtenv_set(env, arg1->word, eval(arg2));
-        return rtval_i32(0);
+        rtval_t* val = eval(cells[2]);
+        rtenv_set(env, arg1->word, val);
+        return val;
     }
     assert(0 && "Unknown symbol" && first->word);
 }
@@ -229,7 +228,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    form_t* exprs = parse_input(argv[1]);
+    form_t* exprs = parse_all_forms(argv[1]);
     assert(exprs->type == T_LIST);
     env = rtenv_new();
     for (int i = 0; i < exprs->list.count; i++) {
