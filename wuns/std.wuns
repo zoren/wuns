@@ -128,6 +128,9 @@
     true-form
     false-form]]
 
+[type mutable-list [a]
+  [union]]
+
 [def-extern mutable-list-of-size [type-scheme [a] [func [i32] [mutable-list a]]]]
 [def-extern freeze-mutable-list [type-scheme [a] [func [[mutable-list a]] [list a]]]]
 
@@ -167,7 +170,9 @@
 
 [defn identity [x] x]
 
-[def-extern meta [func [form] kv-map]]
+[type kv-map [v] [union]]
+
+[def-extern meta [func [form] [kv-map form]]]
 
 [defmacro ifs [.. clauses]
   [let [s [size clauses]]
@@ -197,6 +202,8 @@
          [dec s]
          [at clauses -1]]]]]
 
+[type atom [a] [union]]
+
 [def-extern atom [type-scheme [a] [func [a] [atom a]]]]
 
 [def word-counter [atom 0]]
@@ -205,6 +212,8 @@
 
 [def-instruction i32.rem-s i32.rem-s]
 [def-instruction i32.div-s i32.div-s]
+
+[type growable-list [a] [union]]
 
 [def-extern growable-list [type-scheme [a] [func [] [growable-list a]]]]
 [def-extern push [type-scheme [a] [func [[growable-list a] a] [tuple]]]]
@@ -400,9 +409,11 @@
 
 [defn half [x] [i32.div-s x 2]]
 
-[def-extern transient-kv-map [func [] transient-kv-map]]
-[def-extern set-kv-map [type-scheme [a] [func [transient-kv-map word a] [tuple]]]]
-[def-extern freeze-kv-map [func [transient-kv-map] [tuple]]]
+[type transient-kv-map [v] [union]]
+
+[def-extern transient-kv-map [type-scheme [a] [func [] [transient-kv-map a]]]]
+[def-extern set-kv-map [type-scheme [a] [func [[transient-kv-map a] word a] [tuple]]]]
+[def-extern freeze-kv-map [type-scheme [a] [func [[transient-kv-map a]] [tuple]]]]
 
 [defn mk-word [w] [flist [quote word] w]]
 
@@ -446,12 +457,12 @@
             [flist [quote freeze-kv-map] tmp-word]
             tmp-word]]]]]]
 
-[def-extern has [func [kv-map word] i32]]
+[def-extern has [type-scheme [a] [func [[kv-map a] word] i32]]]
 
 [defmacro hasq [m w]
   [flist [quote has] m [mk-word w]]]
 
-[def-extern get [type-scheme [a] [func [kv-map word] a]]]
+[def-extern get [type-scheme [a] [func [[kv-map a] word] a]]]
 
 [defmacro getq [m w]
   [flist [quote get] m [mk-word w]]]

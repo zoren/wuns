@@ -326,7 +326,13 @@
     [report-when-not [eq n-of-given-type-args 3]
       type-name func type expects a parameter list a rest parameter list and a return type]
 
-    [logq-abort check-builtin-type-arity type-name not a known builtin type [identity type-name]]]]
+    [if-let [type-name-word [try-get-form-word-option type-name]]
+      [if-let [type [try-get [getq gctx types] type-name-word]]
+        [let [arity [size [getq type type-params-list]]]
+          [report-when-not [eq n-of-given-type-args arity]
+            type-name type expects [identity arity] arguments]]
+        [report type-name not a known type [identity type-name]]]
+      [logq-abort check-builtin-type-arity type-name not a known builtin type [identity type-name]]]]]
 
 [comment given a type such as [func [i32 i32] i32] instantiates to a type-scheme]
 [defn instantiate-annotated-type [gctx type-var-env type]
@@ -341,7 +347,7 @@
     type-form
 
     [is-word type]
-    [let [w [form-to-word type]]
+    [let-do [w [form-to-word type]]
       [if-let [t [try-get type-var-env w]]
         t
         [logq-abort type could not be instantiated - not known - [identity type] [identity type-var-env]]]]
@@ -382,7 +388,6 @@
 
           [eq-form first-form [quote type-scheme]]
           [do
-            [report-when type-var-env type cannot have a type-scheme inside a type-scheme]
             [report-when-not [eq n-of-args 2] type type-scheme expects 2 arguments]
             [let-do [type-vars [second elements]
                      type [third elements]
@@ -509,7 +514,7 @@
                     [logq-abort check record type-def not implemented]]
 
                   [logq-abort check type definition not recognized [first type-def-list]]]
-                [set-kv-map types name-word [kv-mapq ]]]]
+                [set-kv-map types name-word [kv-map-id type-params-list]]]]
             [report type-name expects a word]]
           type-empty-tuple]
 
@@ -645,7 +650,7 @@
           [value-form [second sub-forms]
            annotated-type [third sub-forms]
            value-type [check gctx level lctx value-form]
-           inst-anno-type [instantiate-annotated-type gctx 0 annotated-type]]
+           inst-anno-type [instantiate-annotated-type gctx [kv-mapq] annotated-type]]
           [report-when-not [eq n-of-args 2] form expects 2 arguments]
           [unify-report gctx inst-anno-type value-type form]
           value-type]
