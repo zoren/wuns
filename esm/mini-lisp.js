@@ -205,7 +205,7 @@ const evalForm = (defEnv) => {
           continue
         case 'match': {
           if (numOfArgs === 0)
-            throw evalError(`special form '${firstWord}' expected at least one argument, got ${numOfArgs}`)
+            throw evalError(`special form '${firstWord}' expected at least one argument`)
           const value = go(env, forms[1])
           if (!isTaggedValue(value)) {
             console.dir(value)
