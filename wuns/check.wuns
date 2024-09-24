@@ -9,9 +9,15 @@
     [kind type-var-kind mutable]
     [level i32 mutable]]
 
+  func-type []
+  [record
+    [params [list type]]
+    [rest-param-opt [option type]]
+    [result type]]
+
   inst-type []
   [union
-    [func [list type] [option type] type]
+    [func func-type]
     [apply word [list type]]]
 
   type []
@@ -37,7 +43,7 @@
 [def type-empty-tuple [make-type-list [word tuple] [list]]]
 
 [defn type-func [params opt-rest-param result]
-  [type/inst [inst-type/func params opt-rest-param result]]]
+  [type/inst [inst-type/func [func-type params opt-rest-param result]]]]
 
 [defn type-func-no-rest [params result]
   [type-func params [none] result]]
@@ -89,13 +95,13 @@
 
       [type/inst inst-type]
       [match inst-type
-        [inst-type/func params rest-param-opt result]
+        [inst-type/func ft]
         [do
-          [for-each param params
+          [for-each param [func-type/params ft]
             [free-type-vars-growable set param]]
-          [when-let [rest rest-param-opt]
+          [when-let [rest [func-type/rest-param-opt ft]]
             [free-type-vars-growable set rest]]
-          [free-type-vars-growable set result]]
+          [free-type-vars-growable set [func-type/result ft]]]
 
         [inst-type/apply type-name type-args]
         [for-each arg type-args
@@ -148,23 +154,24 @@
 
         [type/inst inst-type2]
         [match inst-type1
-          [inst-type/func type-args1 opt-rest1 result1]
+          [inst-type/func ft1]
           [match inst-type2
-            [inst-type/func type-args2 opt-rest2 result2]
-            [let-do [s1 [size type-args1] s2 [size type-args2]]
+            [inst-type/func ft2]
+            [let-do [type-args1 [func-type/params ft1] type-args2 [func-type/params ft2]
+                     s1 [size type-args1] s2 [size type-args2]]
               [for i 0 [min s1 s2]
                 [unify errors [at type-args1 i] [at type-args2 i]]]
               [when [not [eq s1 s2]]
                 [if [lt-s s1 s2]
-                  [if-let [rest1 opt-rest1]
+                  [if-let [rest1 [func-type/rest-param-opt ft1]]
                     [for i s1 s2
                       [unify errors rest1 [at type-args2 i]]]
                     [push-unify-error errors [message not unifiable - different number of parameters]]]
-                  [if-let [rest2 opt-rest2]
+                  [if-let [rest2 [func-type/rest-param-opt ft2]]
                     [for i s2 s1
                       [unify errors [at type-args1 i] rest2]]
                     [push-unify-error errors [message not unifiable - different number of parameters]]]]]
-              [unify errors result1 result2]]
+              [unify errors [func-type/result ft1] [func-type/result ft2]]]
 
             [push-unify-error errors [message not unifiable - different types]]]
 
@@ -244,13 +251,13 @@
 
     [type/inst inst-type]
     [match inst-type
-      [inst-type/func types opt-rest result]
+      [inst-type/func ft]
       [type-func
-        [list-map type types [copy-type subst-map type]]
-        [if-let [rest opt-rest]
+        [list-map param [func-type/params ft] [copy-type subst-map param]]
+        [if-let [rest [func-type/rest-param-opt ft]]
           [some [copy-type subst-map rest]]
           [none]]
-        [copy-type subst-map result]]
+        [copy-type subst-map [func-type/result ft]]]
 
       [inst-type/apply type-name type-args]
       [type/inst [inst-type/apply type-name [list-map arg type-args [copy-type subst-map arg]]]]]]]
@@ -681,12 +688,12 @@
 
       [type/inst inst-type]
       [match inst-type
-        [inst-type/func types opt-rest-type result]
+        [inst-type/func ft]
         [flist [quote func]
-          [if-let [rest-type opt-rest-type]
-            [form-concat [list-map type types [internal-to-present-type type]] [list [quote ..] [internal-to-present-type rest-type]]]
-            [form-list [list-map type types [internal-to-present-type type]]]]
-          [internal-to-present-type result]]
+          [if-let [rest-type [func-type/rest-param-opt ft]]
+            [form-concat [list-map type [func-type/params ft] [internal-to-present-type type]] [list [quote ..] [internal-to-present-type rest-type]]]
+            [form-list [list-map type [func-type/params ft] [internal-to-present-type type]]]]
+          [internal-to-present-type [func-type/result ft]]]
 
         [inst-type/apply type-name type-args]
         [if [eq-word type-name [word tuple]]
@@ -712,12 +719,12 @@
 
       [type/inst inst-type]
       [match inst-type
-        [inst-type/func types opt-rest-type result]
+        [inst-type/func ft]
         [do
-          [for-each type types [normalize-deep type]]
-          [when-let [rest-type opt-rest-type]
+          [for-each param [func-type/params ft] [normalize-deep param]]
+          [when-let [rest-type [func-type/rest-param-opt ft]]
             [normalize-deep rest-type]]
-          [normalize-deep result]]
+          [normalize-deep [func-type/result ft]]]
 
         [inst-type/apply type-name type-args]
         [for-each type-arg type-args
