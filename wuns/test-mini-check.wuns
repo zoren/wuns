@@ -217,7 +217,7 @@
     [extern host form-word]
     i32]]
 
-[comment type]
+[comment type union]
 [test-ok boolean
   [type boolean [] [union [false] [true]]]
   [boolean/false]]

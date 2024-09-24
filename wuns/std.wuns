@@ -354,6 +354,9 @@
 [defmacro for [iw start end .. forms]
   [for-func iw start [i32 1] end forms]]
 
+[defmacro for-3 [iw start end .. forms]
+  [for-func iw start [i32 3] end forms]]
+
 [defmacro for-pair [iw start end .. forms]
   [for-func iw start [i32 2] end forms]]
 
