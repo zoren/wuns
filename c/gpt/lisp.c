@@ -214,9 +214,9 @@ rtval_t* eval(form_t* v) {
     if (strcmp(first_word, "def") == 0) {
         assert(count == 3 && "def expects exactly two arguments!");
         form_t* arg1 = cells[1];
-        assert(arg1->type == T_WORD);
+        const char* arg1_word = get_form_word(arg1);
         rtval_t* val = eval(cells[2]);
-        rtenv_set(env, arg1->word, val);
+        rtenv_set(env, arg1_word, val);
         return val;
     }
     assert(0 && "Unknown symbol" && first->word);
