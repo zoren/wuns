@@ -163,11 +163,6 @@ export const get = (kv_map, key) => {
   if (ks in kv_map) return kv_map[ks]
   throw new Error(`key not found: ${ks} in [${Object.keys(kv_map)}]`)
 }
-// todo this is only used in assoc, for cloning, maybe consider refactoring, key ordering maybe become an issue as programs will rely on it
-export const keys = (kv_map) => {
-  if (!isPlainObject(kv_map)) throw new Error('keys expect map')
-  return arrayToList(Object.keys(kv_map).map(stringToWord))
-}
 export const set_kv_map = (kv_map, key, value) => {
   if (!isPlainObject(kv_map)) throw new Error('set-kv-map expect map')
   if (Object.isFrozen(kv_map)) throw new Error('set-kv-map expects mutable object')

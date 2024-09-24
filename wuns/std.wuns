@@ -478,17 +478,6 @@
 [defn push-all [mut-list list]
   [for-each e list [push mut-list e]]]
 
-[def-extern keys [func [kv-map] [list word]]]
-
-[defn assoc [m k v]
-  [let [new [transient-kv-map]]
-    [do
-      [for-each k [keys m]
-        [set-kv-map new k [get m k]]]
-      [set-kv-map new k v]
-      [freeze-kv-map new]
-      new]]]
-
 [def empty-kv-map [kv-mapq]]
 
 [defn slice [l start end]
