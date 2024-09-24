@@ -27,8 +27,6 @@
     [inst inst-type]]
   ]
 
-[defn make-type-var [kind level] [type-var kind level]]
-
 [defn make-type-list [type-name type-args] [type/inst [inst-type/apply type-name type-args]]]
 
 [defn make-type [type-name .. type-args] [make-type-list type-name type-args]]
@@ -207,7 +205,7 @@
       [char-code-to-word [add [i32 97] [i32.rem-s i [i32 26]]]]]]]
 
 [defn generate-fresh-type-var-atom [counter-atom level]
-  [type/var [make-type-var [type-var-kind/word [int-to-type-var-name [inc-atom counter-atom]]] level]]]
+  [type/var [type-var [type-var-kind/word [int-to-type-var-name [inc-atom counter-atom]]] level]]]
 
 [defn generate-fresh-type-var [gctx level]
   [generate-fresh-type-var-atom [getq gctx type-var-counter] level]]
