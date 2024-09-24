@@ -508,9 +508,9 @@
             [when-let [name-word [try-get-form-word-option [at sub-forms i]]]
               [let-do
                 [type-prefix [concat-words name-word [word /]]
-                 type-def-list [form-to-list [at sub-forms [add 2 i]]]
                  this-type [get types name-word]
-                 param-map [getq this-type param-map]]
+                 param-map [getq this-type param-map]
+                 type-def-list [try-get-list-report [at sub-forms [add 2 i]]]]
                 [ifs
                   [eq-form [quote union] [first type-def-list]]
                   [for i 1 [size type-def-list]
@@ -521,8 +521,13 @@
                           [generalize 0 [type-ctor param-list [getq [get types name-word] result-type]]]]]]]
 
                   [eq-form [quote record] [first type-def-list]]
-                  [do
-                    [logq-abort check record type-def not implemented]]
+                  [let-do
+                    [fields [growable-list]]
+                    [for i 1 [size type-def-list]
+                      [push fields [instantiate-annotated-type gctx param-map [second [try-get-list-report [at type-def-list i]]]]]]
+
+                    [set-kv-map def-var-types name-word
+                      [generalize 0 [type-ctor [clone-growable-to-frozen-list  fields] [getq [get types name-word] result-type]]]]]
 
                   [logq-abort check type definition not recognized [first type-def-list]]]]]]]
 

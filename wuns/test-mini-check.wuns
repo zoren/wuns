@@ -237,6 +237,14 @@
   [type linked-list [a] [union [nil] [cons a [linked-list a]]]]
   [linked-list/cons [i32 5] [linked-list/nil]]]
 
+[comment type record]
+[test-ok empty-rec
+  [type empty-rec [] [record]]
+  [empty-rec]]
+[test-ok [atom i32]
+  [type atom [a] [record [value a mutable]]]
+  [atom [i32 5]]]
+
 [comment match]
 [test-ok i32
   [type option []
