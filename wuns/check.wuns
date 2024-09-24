@@ -514,14 +514,11 @@
                 [ifs
                   [eq-form [quote union] [first type-def-list]]
                   [for i 1 [size type-def-list]
-                    [let-do [
-                      ctor [form-to-list [at type-def-list i]]
-                      ctor-name [form-to-word [first ctor]]
-                      gl [growable-list]]
-                      [for j 1 [size ctor]
-                        [push gl [instantiate-annotated-type gctx param-map [at ctor j]]]]
-                      [set-kv-map def-var-types [concat-words type-prefix ctor-name]
-                        [generalize 0 [type-ctor [clone-growable-to-frozen-list gl] [getq [get types name-word] result-type]]]]]]
+                    [let-do [ctor [try-get-list-report [at type-def-list i]]
+                             param-list [list-map param [slice ctor 1 [size ctor]] [instantiate-annotated-type gctx param-map param]]]
+                      [when-let [ctor-name [try-get-word-report [first ctor]]]
+                        [set-kv-map def-var-types [concat-words type-prefix ctor-name]
+                          [generalize 0 [type-ctor param-list [getq [get types name-word] result-type]]]]]]]
 
                   [eq-form [quote record] [first type-def-list]]
                   [do

@@ -230,6 +230,12 @@
 [test-ok [type-scheme [a] [func [a] [option a]]]
   [type option [a] [union [none] [some a]]]
   option/some]
+[test-ok [type-scheme [a] [linked-list a]]
+  [type linked-list [a] [union [nil] [cons a [linked-list a]]]]
+  [linked-list/nil]]
+[test-ok [linked-list i32]
+  [type linked-list [a] [union [nil] [cons a [linked-list a]]]]
+  [linked-list/cons [i32 5] [linked-list/nil]]]
 
 [comment match]
 [test-ok i32
