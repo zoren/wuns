@@ -245,13 +245,12 @@
     [type/inst inst-type]
     [match inst-type
       [inst-type/func types opt-rest result]
-      [type/inst
-        [inst-type/func
-          [list-map type types [copy-type subst-map type]]
-          [if-let [rest opt-rest]
-            [some [copy-type subst-map rest]]
-            [none]]
-          [copy-type subst-map result]]]
+      [type-func
+        [list-map type types [copy-type subst-map type]]
+        [if-let [rest opt-rest]
+          [some [copy-type subst-map rest]]
+          [none]]
+        [copy-type subst-map result]]
 
       [inst-type/apply type-name type-args]
       [type/inst [inst-type/apply type-name [list-map arg type-args [copy-type subst-map arg]]]]]]]
