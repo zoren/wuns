@@ -11,7 +11,7 @@
 
   inst-type []
   [union
-    [tuple [list type] [option type]]
+    [func [list type] [option type] type]
     [apply word [list type]]]
 
   type []
@@ -34,19 +34,13 @@
 
 [defn type-list [elem-type] [make-type [word list] elem-type]]
 
-[defn type-tuple [types] [type/inst [inst-type/tuple types [none]]]]
-
-[defn type-tuple-rest [types opt-rest] [type/inst [inst-type/tuple types opt-rest]]]
-
-[def type-empty-tuple [type-tuple [list]]]
-
-[defn type-func-no-rest [params result]
-  [make-type [word func] [type-tuple params] result]]
+[def type-empty-tuple [make-type-list [word tuple] [list]]]
 
 [defn type-func [params opt-rest-param result]
-  [if-let [rest-param opt-rest-param]
-    [make-type [word func] [type-tuple-rest params opt-rest-param] result]
-    [type-func-no-rest params result]]]
+  [type/inst [inst-type/func params opt-rest-param result]]]
+
+[defn type-func-no-rest [params result]
+  [type-func params [none] result]]
 
 [defn report-fn [gctx message form]
   [push [getq gctx messages] [kv-map-id message form]]]
@@ -95,12 +89,13 @@
 
       [type/inst inst-type]
       [match inst-type
-        [inst-type/tuple types opt-rest]
+        [inst-type/func params rest-param-opt result]
         [do
-          [for-each arg types
-            [free-type-vars-growable set arg]]
-          [when-let [rest opt-rest]
-            [free-type-vars-growable set rest]]]
+          [for-each param params
+            [free-type-vars-growable set param]]
+          [when-let [rest rest-param-opt]
+            [free-type-vars-growable set rest]]
+          [free-type-vars-growable set result]]
 
         [inst-type/apply type-name type-args]
         [for-each arg type-args
@@ -153,9 +148,9 @@
 
         [type/inst inst-type2]
         [match inst-type1
-          [inst-type/tuple type-args1 opt-rest1]
+          [inst-type/func type-args1 opt-rest1 result1]
           [match inst-type2
-            [inst-type/tuple type-args2 opt-rest2]
+            [inst-type/func type-args2 opt-rest2 result2]
             [let-do [s1 [size type-args1] s2 [size type-args2]]
               [for i 0 [min s1 s2]
                 [unify errors [at type-args1 i] [at type-args2 i]]]
@@ -168,9 +163,10 @@
                   [if-let [rest2 opt-rest2]
                     [for i s2 s1
                       [unify errors [at type-args1 i] rest2]]
-                    [push-unify-error errors [message not unifiable - different number of parameters]]]]]]
+                    [push-unify-error errors [message not unifiable - different number of parameters]]]]]
+              [unify errors result1 result2]]
 
-            [push-unify-error errors [message not unifiable - tuple vs apply type]]]
+            [push-unify-error errors [message not unifiable - different types]]]
 
           [inst-type/apply type-name1 type-args1]
           [match inst-type2
@@ -182,7 +178,7 @@
                 [for i 0 [size type-args1]
                   [unify errors [at type-args1 i] [at type-args2 i]]]]]
 
-            [push-unify-error errors [message not unifiable - tuple vs apply type]]]]]]]]
+            [push-unify-error errors [message not unifiable - different types]]]]]]]]
 
 [defn unify-report [gctx t1 t2 .. forms]
   [let [errors [growable-list]
@@ -248,13 +244,14 @@
 
     [type/inst inst-type]
     [match inst-type
-      [inst-type/tuple types opt-rest]
+      [inst-type/func types opt-rest result]
       [type/inst
-        [inst-type/tuple
+        [inst-type/func
           [list-map type types [copy-type subst-map type]]
           [if-let [rest opt-rest]
             [some [copy-type subst-map rest]]
-            [none]]]]
+            [none]]
+          [copy-type subst-map result]]]
 
       [inst-type/apply type-name type-args]
       [type/inst [inst-type/apply type-name [list-map arg type-args [copy-type subst-map arg]]]]]]]
@@ -685,28 +682,16 @@
 
       [type/inst inst-type]
       [match inst-type
-        [inst-type/tuple types opt-rest-type]
-        [if-let [rest-type opt-rest-type]
-          [form-concat [list [quote [tuple]]] [list-map type types [internal-to-present-type type]]
-            [list [quote ..] [internal-to-present-type rest-type]]]
-          [if [is-empty types]
-            [quote unit]
-            [form-concat [list [quote [tuple]]] [list-map type types [internal-to-present-type type]]]]]
+        [inst-type/func types opt-rest-type result]
+        [flist [quote func]
+          [if-let [rest-type opt-rest-type]
+            [form-concat [list-map type types [internal-to-present-type type]] [list [quote ..] [internal-to-present-type rest-type]]]
+            [form-list [list-map type types [internal-to-present-type type]]]]
+          [internal-to-present-type result]]
 
         [inst-type/apply type-name type-args]
-        [if [eq-word type-name [word func]]
-          [match [at type-args 0]
-            [type/inst inst-type]
-            [match inst-type
-              [inst-type/tuple types opt-rest-type]
-              [flist [quote func]
-                [if-let [rest-type opt-rest-type]
-                  [form-concat [list-map type types [internal-to-present-type type]] [list [quote ..] [internal-to-present-type rest-type]]]
-                  [form-list [list-map type types [internal-to-present-type type]]]]
-                [internal-to-present-type [at type-args 1]]]
-
-              [logq-abort internal-to-present-type expected a parameter tuple in func type]]
-            [logq-abort internal-to-present-type expected a parameter tuple in func type]]
+        [if [eq-word type-name [word tuple]]
+          [form-concat [list [quote tuple]] [list-map type type-args [internal-to-present-type type]]]
           [let [n-of-args [size type-args]
                 present-type [mutable-list-of-size [inc n-of-args]]]
           [if n-of-args
@@ -728,11 +713,12 @@
 
       [type/inst inst-type]
       [match inst-type
-        [inst-type/tuple types opt-rest-type]
+        [inst-type/func types opt-rest-type result]
         [do
           [for-each type types [normalize-deep type]]
           [when-let [rest-type opt-rest-type]
-            [normalize-deep rest-type]]]
+            [normalize-deep rest-type]]
+          [normalize-deep result]]
 
         [inst-type/apply type-name type-args]
         [for-each type-arg type-args

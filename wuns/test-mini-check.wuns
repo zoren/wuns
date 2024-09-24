@@ -79,15 +79,15 @@
 [test-ok form [if [i32 5] [quote a] [quote b]]]
 
 [comment do]
-[test-ok unit [do]]
+[test-ok [tuple] [do]]
 [test-errors [type-scheme [a] a] [[not found]] [do v]]
-[test-errors unit [[not found]] [do v [do]]]
+[test-errors [tuple] [[not found]] [do v [do]]]
 [test-errors [type-scheme [a] a] [[not found]] [do [do] v]]
 [test-ok form [do [quote a]]]
 [test-ok i32 [do [quote a] [i32 3]]]
 
 [comment let]
-[test-errors unit [[expects two arguments]] [let []]]
+[test-errors [tuple] [[expects two arguments]] [let []]]
 [test-ok form [let [] [quote a]]]
 [test-ok form [let [v [quote a]] v]]
 [test-ok form [let [v [quote a] u v] u]]
