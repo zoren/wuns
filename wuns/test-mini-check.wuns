@@ -217,6 +217,20 @@
     [extern host form-word]
     i32]]
 
+[comment type]
+[test-ok boolean
+  [type boolean [] [union [false] [true]]]
+  [boolean/false]]
+[test-ok boolean
+  [type boolean [] [union [false] [true]]]
+  [boolean/true]]
+[test-ok [type-scheme [a] [func [] [option a]]]
+  [type option [a] [union [none] [some a]]]
+  option/none]
+[test-ok [type-scheme [a] [func [a] [option a]]]
+  [type option [a] [union [none] [some a]]]
+  option/some]
+
 [comment match]
 [test-ok i32
   [type option []
