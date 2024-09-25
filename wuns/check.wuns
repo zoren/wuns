@@ -47,9 +47,6 @@
 [defn type-ctor [params result]
   [type/inst [inst-type/func [func-type params [none] result 1]]]]
 
-[defn type-func-no-rest [params result]
-  [type-func params [none] result]]
-
 [defn report-fn [gctx message form]
   [push [getq gctx messages] [kv-map-id message form]]]
 
@@ -212,7 +209,7 @@
 
 [defn unify-call [gctx level func-type arg-types form]
   [let [t-res [generate-fresh-type-var gctx level]
-        t-func [type-func-no-rest arg-types t-res]]
+        t-func [type-func arg-types [none] t-res]]
     [unify-report gctx func-type t-func form]
     t-res]]
 
@@ -681,7 +678,7 @@
                 [set-array arg-types i [check gctx level lctx [at sub-forms [inc i]]]]]
               [let-do
                 [t-res [generate-fresh-type-var gctx level]
-                 t-func [type-func-no-rest arg-types t-res]]
+                 t-func [type-func arg-types [none] t-res]]
                 [unify-report gctx func-type t-func form]
                 t-res]]]]]]]]
 
