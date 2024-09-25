@@ -18,7 +18,7 @@ class Closure {
 }
 
 const makeClosure = (env, name, parameters, body, kind) => Object.freeze(new Closure(env, name, parameters, body, kind))
-import { isForm, tryGetFormWord, tryGetFormList, isTaggedValue, makeValueTagger } from './core.js'
+import { isForm, tryGetFormWord, tryGetFormList, isTaggedValue, makeValueTagger, isWord } from './core.js'
 
 const printForm = (form) => {
   const word = tryGetFormWord(form)
@@ -204,8 +204,7 @@ const evalForm = (defEnv) => {
           }
           continue
         case 'match': {
-          if (numOfArgs === 0)
-            throw evalError(`special form '${firstWord}' expected at least one argument`)
+          if (numOfArgs === 0) throw evalError(`special form '${firstWord}' expected at least one argument`)
           const value = go(env, forms[1])
           if (!isTaggedValue(value)) {
             console.dir(value)
@@ -361,16 +360,19 @@ import fs from 'node:fs'
 import { formWord, formList } from './core.js'
 import { parse } from './parseTreeSitter.js'
 
-function* parseToForms(content, metaPrefix) {
-  const makeMeta = metaPrefix ? (...args) => list(metaPrefix, ...args) : list
+function* parseToForms(content, contentName) {
+  if(!isWord(contentName)) throw new Error('contentName must be a word')
   /**
    * @param {TSParser.SyntaxNode} node
    */
   const nodeToForm = (node) => {
-    const { isError, type, startPosition } = node
-    if (isError) throw new Error('unexpected error node')
+    const { isError, type, startPosition, endPosition } = node
+    if (isError) {
+      console.dir({ metaPrefix: contentName, startPosition, endPosition })
+      throw new Error('unexpected error node')
+    }
     const { row, column } = startPosition
-    const metaData = makeMeta(row + 1, column + 1)
+    const metaData = list(contentName, row + 1, column + 1)
     switch (type) {
       case 'word':
         return formWord(node.text, metaData)
