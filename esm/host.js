@@ -35,13 +35,11 @@ export const form_word_with_meta = (w, meta_data) => {
 export const form_list = (l) => {
   if (!isList(l)) throw new Error('form-list expects list')
   if (isMutable(l)) throw new Error('form-list expects immutable list')
-  if (isGrowable(l)) throw new Error('form-list expects frozen list')
   return formList(l)
 }
 export const form_list_with_meta = (l, meta_data) => {
   if (!isList(l)) throw new Error('form-list-with-meta expects list')
   if (isMutable(l)) throw new Error('form-list-with-meta expects immutable list')
-  if (isGrowable(l)) throw new Error('form-list-with-meta expects frozen list')
   return formList(l, meta_data)
 }
 
@@ -69,7 +67,7 @@ export const var_get = (v) => {
 
 export const word_byte_size = (word) => {
   if (isWord(word)) return wordValue(word).length
-  throw new Error('word-byte-size expects word, found: ' + word + ' ' + typeof word)
+  throw new Error(`word-byte-size expects word, found: ${word} ${typeof word} ${word.constructor.name}`)
 }
 
 export const char_code_at = (word, index) => {
@@ -87,26 +85,11 @@ export const size = (list) => {
   if (isList(list)) return list.length
   throw new Error('size expects list, found: ' + list + ' ' + typeof list)
 }
-const symbolListGrowable = Symbol.for('wuns-list-growable')
+
 const symbolListMutable = Symbol.for('wuns-list-mutable')
-const isGrowable = (l) => l[symbolListGrowable]
+
 const isMutable = (l) => l[symbolListMutable]
-export const growable_list = () => {
-  const l = []
-  l[symbolListGrowable] = true
-  return l
-}
-export const clone_growable_to_frozen_list = (growable_list) => {
-  if (!isList(growable_list)) throw new Error('clone-growable-to-frozen-list expects list')
-  if (!isGrowable(growable_list)) throw new Error('clone-growable-to-frozen-list expects growable list')
-  return arrayToList([...growable_list])
-}
-export const push = (growable_list, element) => {
-  if (!isList(growable_list)) throw new Error('push expects array')
-  if (!isGrowable(growable_list)) throw new Error('push expects growable list')
-  if (Object.isFrozen(growable_list)) throw new Error('push expects mutable array')
-  growable_list.push(element)
-}
+
 export const mutable_list_of_size = (size) => {
   if (size < 0) throw new Error('mutable-list-of-size expects non-negative size')
   const l = Array.from({ length: size }, () => undefined)
@@ -177,7 +160,7 @@ export const freeze_kv_map = (kv_map) => {
 export const log = (...forms) => {
   console.log(...forms.map(print))
 }
-const isFrozenList = (l) => isList(l) && Object.isFrozen(l) && !isGrowable(l) && !isMutable(l)
+const isFrozenList = (l) => isList(l) && Object.isFrozen(l) && !isMutable(l)
 export const concat_lists = (lists) => {
   const l = []
   for (const list of lists) {
