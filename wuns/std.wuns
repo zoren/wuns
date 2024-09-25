@@ -134,11 +134,18 @@
 
 [def-extern mutable-list-of-size [type-scheme [a] [func [i32] [mutable-list a]]]]
 [def-extern freeze-mutable-list [type-scheme [a] [func [[mutable-list a]] [list a]]]]
+[def-extern set-array [type-scheme [a] [func [[mutable-list a] i32 a] [tuple]]]]
+[def mutable-list/size
+  [type-anno
+    [extern host size]
+    [type-scheme [a] [func [[mutable-list a]] i32]]]]
+[def mutable-list/at
+  [type-anno
+    [extern host at]
+    [type-scheme [a] [func [[mutable-list a] i32] a]]]]
 
 [defn is-word [form] [match form [form-word x] 1 0]]
 [def-extern log [type-scheme [a] [func [.. a] [tuple]]]]
-
-[def-extern set-array [type-scheme [a] [func [[mutable-list a] i32 a] [tuple]]]]
 
 [defn quote-list [lmsg]
   [let-do
@@ -214,12 +221,6 @@
 [def-instruction i32.rem-s i32.rem-s]
 [def-instruction i32.div-s i32.div-s]
 
-[type growable-list [a] [union]]
-
-[def-extern growable-list [type-scheme [a] [func [] [growable-list a]]]]
-[def-extern push [type-scheme [a] [func [[growable-list a] a] [tuple]]]]
-[def-extern clone-growable-to-frozen-list [type-scheme [a] [func [[growable-list a]] [list a]]]]
-
 [def-extern int-to-word [func [i32] word]]
 
 [defn i32-to-form [i]
@@ -274,6 +275,14 @@
     [form-list l] 1
     0]]
 
+[type option [a]
+  [union
+    [none]
+    [some a]]]
+
+[def none option/none]
+[def some option/some]
+
 [defmacro if-let [binding-form true-form false-form]
   [match binding-form
     [form-list binding]
@@ -283,7 +292,7 @@
         [assert [is-word v] if-let-option requires a word as the first element of the first argument]
         [flist [quote match]
           cond
-          [flist [quote some] v] true-form
+          [flist [quote option/some] v] true-form
           false-form]]]
     [logq-abort if-let requires a list as the first argument]]]
 
@@ -296,7 +305,7 @@
         [assert [is-word v] when-let-option requires a word as the first element of the first argument]
         [flist [quote match]
           cond
-          [flist [quote some] v] [form-concat [list [quote do]] forms]
+          [flist [quote option/some] v] [form-concat [list [quote do]] forms]
           [quote [do]]]]]
     [logq-abort when-let requires a list as the first argument]]]
 
@@ -471,14 +480,6 @@
 [defmacro getq [m w]
   [flist [quote get] m [mk-word w]]]
 
-[type option [a]
-  [union
-    [none]
-    [some a]]]
-
-[def none option/none]
-[def some option/some]
-
 [defn try-get [m k]
   [if [has m k]
     [some [get m k]]
@@ -501,11 +502,51 @@
       [let-do [ml [mutable-list-of-size s]]
         [for i start end
           [set-array ml [sub i start] [at l i]]]
-        [freeze-mutable-list ml]
-        ]]]]
+        [freeze-mutable-list ml]]]]]
 
 [comment
   maybe we should be able to specify in the type-scheme that a is of pointer type
   we do not want to be able to compare functions with it
   and do not want to compare i32s with it]
 [def-extern is-identical [type-scheme [a] [func [a a] i32]]]
+
+[type growable-list [a]
+  [record
+    [list [mutable-list a] mutable]
+    [size i32 mutable]]]
+
+[defn growable-list. []
+  [growable-list [mutable-list-of-size [i32 8]] 0]]
+
+[defn push [gl element]
+  [let-do
+    [cur-size [growable-list/size gl]
+     cur-list [growable-list/list gl]
+     cur-capacity [mutable-list/size cur-list]
+     target
+      [if [eq cur-size cur-capacity]
+        [let-do
+          [new-mut-list [mutable-list-of-size [mul cur-capacity 2]]]
+          [[func go [i]
+            [when [lt-s i cur-size]
+              [set-array new-mut-list i [mutable-list/at cur-list i]]
+              [go [inc i]]]]
+            0]
+          [growable-list/set/list gl new-mut-list]
+          new-mut-list]
+          cur-list]]
+    [set-array target cur-size element]
+    [growable-list/set/size gl [inc cur-size]]]]
+
+[defn clone-growable-to-frozen-list [gl]
+  [let-do [s [growable-list/size gl]
+           l [growable-list/list gl]
+           ml [mutable-list-of-size s]]
+    [for i 0 s
+      [set-array ml i [mutable-list/at l i]]]
+    [freeze-mutable-list ml]]]
+
+[defn growable-list/at [gl i]
+  [when-not [lt-s i [growable-list/size gl]]
+    [logq-abort growable-list/at index out of bounds]]
+  [mutable-list/at [growable-list/list gl] i]]

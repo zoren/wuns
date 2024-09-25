@@ -1,11 +1,14 @@
 
 [def tests-run-atom [atom 0]]
 
+[defn get-messages-list [gctx]
+  [clone-growable-to-frozen-list [getq gctx messages]]]
+
 [defn test-ok-fn [expected-type forms]
   [let [gctx [make-global-context]
         res [check-top-forms gctx forms]
         present-type [normalize-present-type-scheme res]
-        messages [getq gctx messages]]
+        messages [get-messages-list gctx]]
     [do
       [when-not [is-empty messages]
         [for-each message messages
@@ -16,14 +19,6 @@
 
 [defexpr test-ok [expected-type .. forms]
   [test-ok-fn expected-type forms]]
-
-[defn check1 [form]
-  [let [gctx [make-global-context]
-        res [check-top gctx form]]
-    [do
-      [for-each message-obj [getq gctx messages]
-        [log [getq message-obj message]]]
-      [normalize-present-type-scheme res]]]]
 
 [defn eq-list-of-forms [l1 l2]
   [and [eq [size l1] [size l2]]
@@ -39,7 +34,7 @@
    [gctx [make-global-context]
     res [check-top-forms gctx forms]
     present-type [normalize-present-type-scheme res]
-    messages [getq gctx messages]]
+    messages [get-messages-list gctx]]
     [if [is-empty messages]
       [logq-abort test-failed failed there were no errors]
       [when-not [eq [size expected-messages] [size messages]]
@@ -220,6 +215,37 @@
   [type-anno
     [extern host form-word]
     form]]
+[test-ok word
+  [def id [func id [p] p]]
+  [id [i32 4]]
+  [id [word a]]]
+[test-ok word
+  [let
+    [id [func id [p] p]]
+    [do
+      [id [i32 4]]
+      [id [word a]]]]]
+
+[test-ok word
+  [let
+    [id [type-anno [extern] [type-scheme [a] [func [a] a]]]]
+    [do
+      [id [i32 4]]
+      [id [word a]]]]]
+
+[test-ok word
+  [def id [type-anno [extern] [type-scheme [a] [func [a] a]]]]
+  [id [i32 4]]
+  [id [word a]]]
+
+[test-ok i32
+  [def size
+    [type-anno
+      [extern host size]
+      [type-scheme [a] [func [[list a]] i32]]]]
+  [def list [func list [.. entries] entries]]
+  [size [list [i32 5]]]
+  [size [list [word a]]]]
 
 [comment type union]
 [test-ok boolean
@@ -327,12 +353,12 @@
     [for-each form forms
       [evaluate [getq gctx eval-context] form]
       [check-top gctx form]
-      [let [messages [getq gctx messages]]
+      [let [messages [get-messages-list gctx]]
         [when-not [is-empty messages]
           [logq form [identity form]]
           [for-each message messages
               [log message [meta [getq message form]]]]
-          [logq-abort test-ok failed there were errors [identity form] [getq gctx messages]]]]]
+          [logq-abort test-ok failed there were errors [identity form] messages]]]]
     [inc-atom tests-run-atom]]]
 
 [logq checking std.wuns]
