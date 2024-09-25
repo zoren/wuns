@@ -336,28 +336,25 @@
       [eq-word word [word func]]]]
 
 [comment given a type such as [func [i32 i32] i32] instantiates to a type-scheme]
-[defn instantiate-annotated-type [gctx type-var-env type]
-  [ifs
-    [eq-form type [quote i32]]
-    type-i32
+[defn instantiate-annotated-type [gctx type-var-env syntax-type]
+  [match syntax-type
+    [form/word w]
+    [ifs
+      [eq-word w [word i32]]
+      type-i32
 
-    [eq-form type [quote word]]
-    type-word
+      [eq-word w [word word]]
+      type-word
 
-    [eq-form type [quote form]]
-    type-form
+      [eq-word w [word form]]
+      type-form
 
-    [is-word type]
-    [let-do [w [form-to-word type]]
       [if-let [t [try-get type-var-env w]]
         t
         [logq-abort type could not be instantiated - not known - [identity type] [identity type-var-env]]]]
 
-    [not [is-list type]]
-    [logq-abort type expected word or list]
-
-    [let-do [elements [form-to-list type]
-          first-form [first elements]
+    [form/list elements]
+    [let-do [first-form [first elements]
           s-form [size elements]
           n-of-args [dec s-form]]
       [comment todo make this safe for empty lists]
