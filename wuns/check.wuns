@@ -58,13 +58,12 @@
 [defn normalize-type [t0]
   [match t0
     [type/var tv]
-    [let [kind [type-var/kind tv]]
-      [match kind
-        [type-var-kind/word w] t0
-        [type-var-kind/linked linked-t]
-        [let-do [t2 [normalize-type linked-t]]
-          [set-type-var-kind-to-type tv t2]
-          t2]]]
+    [match [type-var/kind tv]
+      [type-var-kind/word w] t0
+      [type-var-kind/linked linked-t]
+      [let-do [t2 [normalize-type linked-t]]
+        [set-type-var-kind-to-type tv t2]
+        t2]]
     t0]]
 
 [defn member-type-var-list [set t]
