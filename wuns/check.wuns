@@ -206,6 +206,11 @@
 [defn generate-fresh-type-var [gctx level]
   [generate-fresh-type-var-atom [getq gctx type-var-counter] level]]
 
+[defmacro report-generate [form .. lmsg]
+  [flist [quote do]
+    [flist [quote report-fn] [quote gctx] [quote-list lmsg] form]
+    [quote [generate-fresh-type-var gctx 0]]]]
+
 [defn unify-call [gctx level func-type arg-types form]
   [let [t-res [generate-fresh-type-var gctx level]
         t-func [type-func arg-types [none] t-res]]
@@ -301,39 +306,25 @@
     [kv-mapq params params]]]
 
 [defn check-type-arity [gctx type-name n-of-given-type-args]
-  [ifs
-    [eq-form type-name [quote tuple]]
-    [report-when [eq n-of-given-type-args 1] type-name tuple type expects zero or multiple arguments]
+  [if-let [type-name-word [try-get-form-word-option type-name]]
+    [ifs
+      [eq-word type-name-word [word tuple]]
+      [report-when [eq n-of-given-type-args 1] type-name tuple type expects zero or multiple arguments]
 
-    [or
-      [eq-form type-name [quote i32]]
-      [eq-form type-name [quote word]]]
-    [report-when [eq n-of-given-type-args 0] type-name atomic type expects no arguments]
+      [or
+        [eq-word type-name-word [word i32]]
+        [eq-word type-name-word [word word]]]
+      [report-when [eq n-of-given-type-args 0] type-name atomic type expects no arguments]
 
-    [eq-form type-name [quote list]]
-    [report-when-not [eq n-of-given-type-args 1] type-name list type expects one argument]
+      [eq-word type-name-word [word list]]
+      [report-when-not [eq n-of-given-type-args 1] type-name list type expects one argument]
 
-    [eq-form type-name [quote func]]
-    [report-when-not [eq n-of-given-type-args 3]
-      type-name func type expects a parameter list a rest parameter list and a return type]
-
-    [if-let [type-name-word [try-get-form-word-option type-name]]
       [if-let [type [try-get [getq gctx types] type-name-word]]
         [let [arity [getq type arity]]
           [report-when-not [eq n-of-given-type-args arity]
             type-name type expects [identity arity] arguments]]
-        [report type-name not a known type [identity type-name]]]
-      [logq-abort check-builtin-type-arity type-name not a known builtin type [identity type-name]]]]]
-
-[defn is-builtin-type [word]
-  [or [eq-word word [word i32]]
-      [eq-word word [word word]]
-
-      [eq-word word [word tuple]]
-
-      [eq-word word [word list]]
-
-      [eq-word word [word func]]]]
+        [report type-name not a known type [identity type-name]]]]
+    [logq-abort check-builtin-type-arity type-name not word [identity type-name]]]]
 
 [comment given a type such as [func [i32 i32] i32] instantiates to a type-scheme]
 [defn instantiate-annotated-type [gctx type-var-env syntax-type]
@@ -354,54 +345,64 @@
         [logq-abort type could not be instantiated - not known - [identity type] [identity type-var-env]]]]
 
     [form/list elements]
-    [let-do [first-form [first elements]
-          s-form [size elements]
-          n-of-args [dec s-form]]
-      [comment todo make this safe for empty lists]
-      [if [eq s-form 0]
-        [logq-abort type expects a non-empty list]
-        [ifs
-          [not [is-word first-form]]
-          [logq-abort type expects a word [identity first-form]]
+    [let-do [s-form [size elements]
+             n-of-args [dec s-form]]
+      [ifs
+        [eq s-form 0]
+        [report-generate syntax-type expects a non-empty list]
 
-          [eq-form first-form [quote func]]
-          [do
-            [report-when-not [eq n-of-args 2] type expects 2 arguments a parameter list and a return type]
-            [let [params [second elements]
-                  - [report-when-not [is-list params] type expects a list]
-                  params-list [form-to-list params]
-                  result [third elements]
-                  params-map [params-to-map params-list]
-                  reg-params [getq params-map params]
+        [if-let [w [try-get-word-report [first elements]]]
+          [ifs
+            [eq-word w [word func]]
+            [do
+              [report-when-not [eq n-of-args 2] type expects 2 arguments a parameter list and a return type]
+              [let [params [second elements]
+                    - [report-when-not [is-list params] type expects a list]
+                    params-list [form-to-list params]
+                    result [third elements]
+                    params-map [params-to-map params-list]
+                    reg-params [getq params-map params]
+                    internal-params
+                    [list-map param reg-params
+                      [do
+                        [report-when [eq-form param [quote ..]] param .. in wrong place]
+                        [instantiate-annotated-type gctx type-var-env param]]]]
+                [type-func
                   internal-params
-                  [list-map param reg-params
-                    [do
-                      [report-when [eq-form param [quote ..]] param .. in wrong place]
-                      [instantiate-annotated-type gctx type-var-env param]]]]
-              [type-func
-                internal-params
-                [if-let [rest-param [try-getq params-map rest-param]]
-                  [some [instantiate-annotated-type gctx type-var-env rest-param]]
-                  [none]]
-                [instantiate-annotated-type gctx type-var-env result]]]]
+                  [if-let [rest-param [try-getq params-map rest-param]]
+                    [some [instantiate-annotated-type gctx type-var-env rest-param]]
+                    [none]]
+                  [instantiate-annotated-type gctx type-var-env result]]]]
 
-          [eq-form first-form [quote type-scheme]]
-          [do
-            [report-when-not [eq n-of-args 2] type type-scheme expects 2 arguments]
-            [let-do [type-vars [second elements]
-                     type [third elements]
-                     type-var-env [transient-kv-map]]
-              [report-when-not [is-list type-vars] type type-vars expects a list]
-              [for-each tv [form-to-list type-vars]
-                [report-when-not [is-word tv] type-vars expects a word]
-                [set-kv-map type-var-env [form-to-word tv] [generate-fresh-type-var gctx 0]]]
-              [instantiate-annotated-type gctx type-var-env type]]]
+            [eq-word w [word type-scheme]]
+            [do
+              [report-when-not [eq n-of-args 2] type type-scheme expects 2 arguments]
+              [let-do [type-vars [second elements]
+                        type [third elements]
+                        type-var-env [transient-kv-map]]
+                [report-when-not [is-list type-vars] type type-vars expects a list]
+                [for-each tv [form-to-list type-vars]
+                  [report-when-not [is-word tv] type-vars expects a word]
+                  [set-kv-map type-var-env [form-to-word tv] [generate-fresh-type-var gctx 0]]]
+                [instantiate-annotated-type gctx type-var-env type]]]
 
-          [let-do [type-args [mutable-list-of-size n-of-args]]
-            [check-type-arity gctx first-form n-of-args]
-            [for i 0 n-of-args
-              [set-array type-args i [instantiate-annotated-type gctx type-var-env [at elements [inc i]]]]]
-            [make-type-list [form-to-word first-form] type-args]]]]]]]
+            [let-do [type-args [mutable-list-of-size n-of-args]]
+              [check-type-arity gctx [first elements] n-of-args]
+              [for i 0 n-of-args
+                [set-array type-args i [instantiate-annotated-type gctx type-var-env [at elements [inc i]]]]]
+              [make-type-list w type-args]]]
+
+          [generate-fresh-type-var gctx 0]]]]]]
+
+[defn is-builtin-type [word]
+  [or [eq-word word [word i32]]
+      [eq-word word [word word]]
+
+      [eq-word word [word tuple]]
+
+      [eq-word word [word list]]
+
+      [eq-word word [word func]]]]
 
 [def try-get-macro [extern interpreter try-get-macro]]
 [def interpreter-apply [extern interpreter apply]]
