@@ -1,3 +1,8 @@
+[type function-kind []
+  [union
+    [ctor]
+    [func]]]
+
 [type
   type-var-kind []
   [union
@@ -14,7 +19,7 @@
     [params [list type]]
     [rest-param-opt [option type]]
     [result type]
-    [is-ctor bool]]
+    [kind function-kind]]
 
   inst-type []
   [union
@@ -41,10 +46,10 @@
 [def type-empty-tuple [make-type-list [word tuple] [list]]]
 
 [defn type-func [params opt-rest-param result]
-  [type/inst [inst-type/func [func-type params opt-rest-param result 0]]]]
+  [type/inst [inst-type/func [func-type params opt-rest-param result [function-kind/func]]]]]
 
 [defn type-ctor [params result]
-  [type/inst [inst-type/func [func-type params [none] result 1]]]]
+  [type/inst [inst-type/func [func-type params [none] result [function-kind/ctor]]]]]
 
 [defn report-fn [gctx message form]
   [push [getq gctx messages] [kv-map-id message form]]]
@@ -342,7 +347,9 @@
 
       [if-let [t [try-get type-var-env w]]
         t
-        [logq-abort type could not be instantiated - not known - [identity type] [identity type-var-env]]]]
+        [do
+          [check-type-arity gctx syntax-type 0]
+          [make-type-list w [list]]]]]
 
     [form/list elements]
     [let-do [s-form [size elements]
@@ -355,9 +362,9 @@
           [ifs
             [eq-word w [word func]]
             [do
-              [report-when-not [eq n-of-args 2] type expects 2 arguments a parameter list and a return type]
+              [report-when-not [eq n-of-args 2] syntax-type expects 2 arguments a parameter list and a return type]
               [let [params [second elements]
-                    - [report-when-not [is-list params] type expects a list]
+                    - [report-when-not [is-list params] syntax-type expects a list]
                     params-list [form-to-list params]
                     result [third elements]
                     params-map [params-to-map params-list]
@@ -377,14 +384,11 @@
             [eq-word w [word type-scheme]]
             [do
               [report-when-not [eq n-of-args 2] type type-scheme expects 2 arguments]
-              [let-do [type-vars [second elements]
-                        type [third elements]
-                        type-var-env [transient-kv-map]]
-                [report-when-not [is-list type-vars] type type-vars expects a list]
-                [for-each tv [form-to-list type-vars]
-                  [report-when-not [is-word tv] type-vars expects a word]
-                  [set-kv-map type-var-env [form-to-word tv] [generate-fresh-type-var gctx 0]]]
-                [instantiate-annotated-type gctx type-var-env type]]]
+              [let-do [type-var-env [transient-kv-map]]
+                [for-each tv [try-get-list-report [second elements]]
+                  [when-let [tvw [try-get-word-report tv]]
+                    [set-kv-map type-var-env tvw [generate-fresh-type-var gctx 0]]]]
+                [instantiate-annotated-type gctx type-var-env [third elements]]]]
 
             [let-do [type-args [mutable-list-of-size n-of-args]]
               [check-type-arity gctx [first elements] n-of-args]
@@ -420,8 +424,8 @@
     [type/inst inst-type]
     [match inst-type
       [inst-type/func ft]
-      [if [func-type/is-ctor ft]
-        [some ft]
+      [match [func-type/kind ft]
+        [function-kind/ctor] [some ft]
         [none]]
 
       [inst-type/apply type-name type-args]

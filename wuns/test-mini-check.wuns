@@ -270,6 +270,45 @@
       [apply word [list [type]]]]]
     type/apply]
 
+[test-ok [func [inst-type] type]
+[type function-kind []
+  [union
+    [ctor]
+    [func]]]
+
+[type option [a]
+  [union
+    [none]
+    [some a]]]
+[type
+  type-var-kind []
+  [union
+    [linked type]
+    [word word]]
+
+  type-var []
+  [record
+    [kind type-var-kind mutable]
+    [level i32 mutable]]
+
+  func-type []
+  [record
+    [params [list type]]
+    [rest-param-opt [option type]]
+    [result type]
+    [kind function-kind]]
+
+  inst-type []
+  [union
+    [func func-type]
+    [apply word [list type]]]
+
+  type []
+  [union
+    [var type-var]
+    [inst inst-type]]]
+    type/inst]
+
 [comment match]
 [test-ok i32
   [type option []
