@@ -51,20 +51,6 @@
 [defn type-ctor [params result]
   [type/inst [inst-type/func [func-type params [none] result [function-kind/ctor]]]]]
 
-[defn report-fn [gctx message form]
-  [push [getq gctx messages] [kv-map-id message form]]]
-
-[defmacro report-when [cond form .. lmsg]
-  [flist [quote when] cond
-    [flist [quote report-fn] [quote gctx] [quote-list lmsg] form]]]
-
-[defmacro report-when-not [cond form .. lmsg]
-  [flist [quote when-not] cond
-    [flist [quote report-fn] [quote gctx] [quote-list lmsg] form]]]
-
-[defmacro report [form .. lmsg]
-  [flist [quote report-fn] [quote gctx] [quote-list lmsg] form]]
-
 [defn set-type-var-kind-to-type [type-var type]
   [type-var/set/kind type-var [type-var-kind/linked type]]]
 
@@ -189,6 +175,20 @@
                   [unify errors [at type-args1 i] [at type-args2 i]]]]]
 
             [push-unify-error errors [message not unifiable - different types]]]]]]]]
+
+[defn report-fn [gctx message form]
+  [push [getq gctx messages] [kv-map-id message form]]]
+
+[defmacro report-when [cond form .. lmsg]
+  [flist [quote when] cond
+    [flist [quote report-fn] [quote gctx] [quote-list lmsg] form]]]
+
+[defmacro report-when-not [cond form .. lmsg]
+  [flist [quote when-not] cond
+    [flist [quote report-fn] [quote gctx] [quote-list lmsg] form]]]
+
+[defmacro report [form .. lmsg]
+  [flist [quote report-fn] [quote gctx] [quote-list lmsg] form]]
 
 [defn unify-report [gctx t1 t2 .. forms]
   [let [errors [growable-list]
@@ -541,12 +541,18 @@
                     [fields [growable-list]]
                     [for i 1 [size type-def-list]
                       [let-do
-                        [type-def-list [try-get-list-report [at type-def-list i]]
-                         inst-field-type [instantiate-annotated-type gctx param-map [second type-def-list]]]
+                        [field-def [try-get-list-report [at type-def-list i]]
+                         inst-field-type [instantiate-annotated-type gctx param-map [second field-def]]]
                         [push fields inst-field-type]
-                        [when-let [field-name [try-get-word-report [first type-def-list]]]
+                        [when-let [field-name [try-get-word-report [first field-def]]]
                           [set-kv-map def-var-types [concat-words type-prefix field-name]
-                            [generalize 0 [type-func [list result-type] [none] inst-field-type]]]]]]
+                            [generalize 0 [type-func [list result-type] [none] inst-field-type]]]
+                          [when [lt-s 2 [size field-def]]
+                            [when-let [option [try-get-word-report [third field-def]]]
+                              [if [eq-word option [word mutable]]
+                                [set-kv-map def-var-types [concat-words type-prefix [concat-words [word set/] field-name]]
+                                  [generalize 0 [type-func [list result-type inst-field-type] [none] type-empty-tuple]]]
+                                [report [third field-def] unknown option]]]]]]]
                     [set-kv-map def-var-types name-word
                       [generalize 0 [type-func [clone-growable-to-frozen-list  fields] [none] [getq [get types name-word] result-type]]]]]
 
@@ -650,7 +656,7 @@
                       [mk-empty-type-scheme [type-list tv]]]
                     [some tv]]
                   [none]]
-                return-type [check gctx level-1 func-ctx body]]
+             return-type [check gctx level-1 func-ctx body]]
             [unify-report gctx
               func-type
               [type-func

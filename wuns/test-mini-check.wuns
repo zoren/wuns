@@ -263,6 +263,9 @@
 [test-ok [type-scheme [a] [func [a] [atom a]]]
   [type atom [a] [record [value a mutable]]]
   atom]
+[test-ok [type-scheme [a] [func [[atom a] a] [tuple]]]
+  [type atom [a] [record [value a mutable]]]
+  atom/set/value]
 [test-ok [func [word [list type]] type]
   [type
     type []
@@ -335,6 +338,8 @@
 [logq checking std.wuns]
 
 [test-ok-fn-stop-at-error
-  [read-file [word std.wuns]]]
+  [concat
+    [read-file [word std.wuns]]
+    [read-file [word check.wuns]]]]
 
 [logq tests-run [atom-get tests-run-atom]]

@@ -275,6 +275,7 @@ const evalForm = (defEnv) => {
                     const setter = (record, value) => {
                       if (record[recordTag] !== type) throw evalError(`field setter ${setterName} not a ${type}`)
                       record[fieldName] = value
+                      return langUndefined
                     }
                     defEnv.set(setterName, setter)
                   }
@@ -416,7 +417,7 @@ externs.interpreter = {
   },
   'read-file': (path) => {
     if (typeof path !== 'string') throw new Error('read-file expects string')
-    return [...readFile(path)]
+    return Object.freeze([...readFile(path)])
   },
 }
 
