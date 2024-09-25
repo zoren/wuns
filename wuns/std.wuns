@@ -67,6 +67,7 @@
 [defmacro def-bin-i32-inst [name] [def-instruction-fn name [form-word [concat-words [word i32.] [form-to-word name]]]]]
 
 [def-bin-i32-inst add]
+[comment maybe introduce booleans instead of i32s for comparisons]
 [def-bin-i32-inst lt-s]
 
 [def -2 [i32 -2]]
@@ -488,9 +489,6 @@
 
 [defmacro setq [m w v]
   [flist [quote set-kv-map] m [flist [quote word] w] v]]
-
-[defn push-all [mut-list list]
-  [for-each e list [push mut-list e]]]
 
 [def empty-kv-map [kv-mapq]]
 
