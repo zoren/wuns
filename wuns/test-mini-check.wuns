@@ -216,6 +216,10 @@
   [type-anno
     [extern host form-word]
     i32]]
+[test-ok form
+  [type-anno
+    [extern host form-word]
+    form]]
 
 [comment type union]
 [test-ok boolean
@@ -241,9 +245,30 @@
 [test-ok empty-rec
   [type empty-rec [] [record]]
   [empty-rec]]
+[test-ok one-field-rec
+  [type one-field-rec [] [record [field i32]]]
+  [one-field-rec [i32 5]]]
+[test-ok [func [one-field-rec] i32]
+  [type one-field-rec [] [record [field i32]]]
+  one-field-rec/field]
+[test-ok two-field-rec
+  [type two-field-rec [] [record [field i32] [word word]]]
+  [two-field-rec [i32 5] [word a]]]
+[test-ok [type-scheme [a] [func [a] [atom a]]]
+  [type atom [a] [record [value a mutable]]]
+  atom]
 [test-ok [atom i32]
   [type atom [a] [record [value a mutable]]]
   [atom [i32 5]]]
+[test-ok [type-scheme [a] [func [a] [atom a]]]
+  [type atom [a] [record [value a mutable]]]
+  atom]
+[test-ok [func [word [list type]] type]
+  [type
+    type []
+    [union
+      [apply word [list [type]]]]]
+    type/apply]
 
 [comment match]
 [test-ok i32

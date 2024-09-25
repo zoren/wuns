@@ -24,8 +24,7 @@
   type []
   [union
     [var type-var]
-    [inst inst-type]]
-  ]
+    [inst inst-type]]]
 
 [defn make-type-list [type-name type-args] [type/inst [inst-type/apply type-name type-args]]]
 
@@ -326,6 +325,16 @@
         [report type-name not a known type [identity type-name]]]
       [logq-abort check-builtin-type-arity type-name not a known builtin type [identity type-name]]]]]
 
+[defn is-builtin-type [word]
+  [or [eq-word word [word i32]]
+      [eq-word word [word word]]
+
+      [eq-word word [word tuple]]
+
+      [eq-word word [word list]]
+
+      [eq-word word [word func]]]]
+
 [comment given a type such as [func [i32 i32] i32] instantiates to a type-scheme]
 [defn instantiate-annotated-type [gctx type-var-env type]
   [ifs
@@ -347,10 +356,11 @@
     [not [is-list type]]
     [logq-abort type expected word or list]
 
-    [let [elements [form-to-list type]
+    [let-do [elements [form-to-list type]
           first-form [first elements]
           s-form [size elements]
           n-of-args [dec s-form]]
+      [comment todo make this safe for empty lists]
       [if [eq s-form 0]
         [logq-abort type expects a non-empty list]
         [ifs
@@ -484,28 +494,35 @@
            def-var-types [getq gctx def-var-types]]
           [report-when-not [eq [i32.rem-s n-of-args 3] 0] form expects triplets of arguments]
           [for-3 i 1 s-form
-            [when-let [name-word [try-get-word-report [at sub-forms i]]]
-              [if [has types name-word]
-                [report name-word already defined]
-                [let-do [type-params-list [try-get-list-report [at sub-forms [inc i]]]
-                         param-map [transient-kv-map]
-                         type-args [growable-list]]
-                  [for-each param type-params-list
-                    [when-let [param-word [try-get-word-report param]]
-                      [report-when [has param-map param-word] param already defined]
-                      [let-do [tv [generate-fresh-type-var gctx level]]
-                        [set-kv-map param-map param-word tv]
-                        [push type-args tv]]]]
-                  [set-kv-map types name-word
-                    [kv-mapq
-                      arity [size type-params-list]
-                      param-map param-map
-                      result-type [make-type-list name-word [clone-growable-to-frozen-list type-args]]]]]]]]
+            [let [name-form [at sub-forms i]]
+              [when-let [name-word [try-get-word-report name-form]]
+                [ifs
+                  [is-builtin-type name-word]
+                  [report name-form built-in type cannot be redefined]
+
+                  [has types name-word]
+                  [report name-form already defined]
+
+                  [let-do [type-params-list [try-get-list-report [at sub-forms [inc i]]]
+                          param-map [transient-kv-map]
+                          type-args [growable-list]]
+                    [for-each param type-params-list
+                      [when-let [param-word [try-get-word-report param]]
+                        [report-when [has param-map param-word] param already defined]
+                        [let-do [tv [generate-fresh-type-var gctx level]]
+                          [set-kv-map param-map param-word tv]
+                          [push type-args tv]]]]
+                    [set-kv-map types name-word
+                      [kv-mapq
+                        arity [size type-params-list]
+                        param-map param-map
+                        result-type [make-type-list name-word [clone-growable-to-frozen-list type-args]]]]]]]]]
           [for-3 i 1 s-form
             [when-let [name-word [try-get-form-word-option [at sub-forms i]]]
               [let-do
                 [type-prefix [concat-words name-word [word /]]
                  this-type [get types name-word]
+                 result-type [getq this-type result-type]
                  param-map [getq this-type param-map]
                  type-def-list [try-get-list-report [at sub-forms [add 2 i]]]]
                 [ifs
@@ -515,16 +532,21 @@
                              param-list [list-map param [slice ctor 1 [size ctor]] [instantiate-annotated-type gctx param-map param]]]
                       [when-let [ctor-name [try-get-word-report [first ctor]]]
                         [set-kv-map def-var-types [concat-words type-prefix ctor-name]
-                          [generalize 0 [type-ctor param-list [getq [get types name-word] result-type]]]]]]]
+                          [generalize 0 [type-ctor param-list result-type]]]]]]
 
                   [eq-form [quote record] [first type-def-list]]
                   [let-do
                     [fields [growable-list]]
                     [for i 1 [size type-def-list]
-                      [push fields [instantiate-annotated-type gctx param-map [second [try-get-list-report [at type-def-list i]]]]]]
-
+                      [let-do
+                        [type-def-list [try-get-list-report [at type-def-list i]]
+                         inst-field-type [instantiate-annotated-type gctx param-map [second type-def-list]]]
+                        [push fields inst-field-type]
+                        [when-let [field-name [try-get-word-report [first type-def-list]]]
+                          [set-kv-map def-var-types [concat-words type-prefix field-name]
+                            [generalize 0 [type-func [list result-type] [none] inst-field-type]]]]]]
                     [set-kv-map def-var-types name-word
-                      [generalize 0 [type-ctor [clone-growable-to-frozen-list  fields] [getq [get types name-word] result-type]]]]]
+                      [generalize 0 [type-func [clone-growable-to-frozen-list  fields] [none] [getq [get types name-word] result-type]]]]]
 
                   [logq-abort check type definition not recognized [first type-def-list]]]]]]]
 
