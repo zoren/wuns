@@ -10,7 +10,7 @@ const setEnv = (env, varName, value) => {
 class Closure {
   constructor(env, name, parameters, body, kind) {
     this.env = env
-    this.name = name
+    this.closureName = name
     this.parameters = parameters
     this.body = body
     this.kind = kind
@@ -18,6 +18,7 @@ class Closure {
 }
 
 const makeClosure = (env, name, parameters, body, kind) => Object.freeze(new Closure(env, name, parameters, body, kind))
+const isClosure = (v) => v instanceof Closure
 import { isForm, tryGetFormWord, tryGetFormList, isTaggedValue, makeValueTagger, isWord } from './core.js'
 
 const printForm = (form) => {
@@ -37,7 +38,7 @@ const print = (value) => {
   if (isForm(value)) return `[quote ${printForm(value)}]`
   if (Array.isArray(value)) return `[list${value.map((v) => ' ' + print(v)).join('')}]`
   if (typeof value === 'function') return '[func]'
-  if (value instanceof Closure) return `[closure ${value.name} ${value.parameters.join(' ')}]`
+  if (isClosure(value)) return `[closure ${value.closureName} ${value.parameters.join(' ')}]`
   if (value === undefined) return '*undefined*'
 
   if (Object.isFrozen(value))
@@ -321,14 +322,16 @@ const evalForm = (defEnv) => {
       }
       const func = go(env, firstForm)
       const args = forms.slice(1)
-      if (typeof func === 'function') {
-        try {
-          return func(...args.map((arg) => go(env, arg)))
-        } catch (e) {
-          throw evalError('error in function call', e)
+      if (!isClosure(func)) {
+        if (typeof func === 'function') {
+          try {
+            return func(...args.map((arg) => go(env, arg)))
+          } catch (e) {
+            throw evalError('error in function call', e)
+          }
         }
+        throw evalError('not a function')
       }
-      if (!(func instanceof Closure)) throw evalError('not a function')
       switch (func.kind) {
         case 'macro': {
           const macroResult = go(makeParamEnv(func, args), func.body)
@@ -362,7 +365,7 @@ import { formWord, formList } from './core.js'
 import { parse } from './parseTreeSitter.js'
 
 function* parseToForms(content, contentName) {
-  if(!isWord(contentName)) throw new Error('contentName must be a word')
+  if (!isWord(contentName)) throw new Error('contentName must be a word')
   /**
    * @param {TSParser.SyntaxNode} node
    */
@@ -397,7 +400,7 @@ externs.interpreter = {
     if (!(context instanceof Map)) throw new Error('try-get-macro expects context')
     if (typeof name !== 'string') throw new Error('try-get-macro expects string')
     const value = context.get(name)
-    if (value instanceof Closure && value.kind === 'macro') return some(value)
+    if (isClosure(value) && value.kind === 'macro') return some(value)
     return none
   },
   evaluate: (context, form) => {
@@ -410,7 +413,7 @@ externs.interpreter = {
   },
   apply: (context, func, args) => {
     if (!(context instanceof Map)) throw new Error('apply expects context')
-    if (!(func instanceof Closure)) throw new Error('apply expects closure')
+    if (!isClosure(func)) throw new Error('apply expects closure')
     if (!Array.isArray(args)) throw new Error('apply expects array')
     const paramEnv = makeParamEnv(func, args)
     return evalForm(context)(paramEnv, func.body)
