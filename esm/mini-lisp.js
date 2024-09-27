@@ -7,13 +7,51 @@ const setEnv = (env, varName, value) => {
   env.set(varName, value)
 }
 
-class Closure {
+const list = (...args) => Object.freeze(args)
+
+const parseParameters = (parameters) => {
+  if (parameters.length > 1 && parameters.at(-2) === '..')
+    return { restParam: parameters.at(-1), regularParameters: parameters.slice(0, -2) }
+  return { restParam: null, regularParameters: parameters }
+}
+
+const setParametersStaged = (closure) => {
+  const { closureName, parameters, env } = closure
+  const { regularParameters, restParam } = parseParameters(parameters)
+  if (!restParam)
+    return (eargs) => {
+      const paramEnv = makeEnv(env)
+      setEnv(paramEnv, closureName, closure)
+      if (eargs.length !== regularParameters.length)
+        throw new EvalError(`${closureName} expected ${regularParameters.length} arguments, got ${eargs.length}`)
+      for (let i = 0; i < regularParameters.length; i++) setEnv(paramEnv, regularParameters[i], eargs[i])
+      return paramEnv
+    }
+  return (eargs) => {
+    const paramEnv = makeEnv(env)
+    setEnv(paramEnv, closureName, closure)
+    if (eargs.length < regularParameters.length)
+      throw new EvalError(`${closureName} expected at least ${regularParameters.length} arguments, got ${eargs.length}`)
+    for (let i = 0; i < regularParameters.length; i++) setEnv(paramEnv, regularParameters[i], eargs[i])
+    setEnv(paramEnv, restParam, list(...eargs.slice(regularParameters.length)))
+    return paramEnv
+  }
+}
+
+class Closure extends Function {
   constructor(env, name, parameters, body, kind) {
-    this.env = env
-    this.closureName = name
-    this.parameters = parameters
-    this.body = body
-    this.kind = kind
+    let paramEnvMaker
+    const f = (...args) => evaluator(paramEnvMaker(args), body)
+    f.env = env
+    f.closureName = name
+    f.parameters = parameters
+    f.body = body
+    f.kind = kind
+    f.toString = () => `[closure ${name} ${parameters.join(' ')}]`
+    paramEnvMaker = setParametersStaged(f)
+    f.paramEnvMaker = paramEnvMaker
+
+    return Object.setPrototypeOf(f, new.target.prototype)
   }
 }
 
@@ -48,32 +86,6 @@ const print = (value) => {
   return `[transient-kv-map${Object.entries(value)
     .map(([k, v]) => ` ${k} ${print(v)}`)
     .join('')}]`
-}
-
-const list = (...args) => Object.freeze(args)
-
-const setParameters = (closure, paramEnv, eargs) => {
-  let parameters = closure.parameters
-  const { name } = closure
-  if (parameters.length > 1 && parameters.at(-2) === '..') {
-    const restParam = parameters.at(-1)
-    parameters = parameters.slice(0, -2)
-    if (eargs.length < parameters.length)
-      throw new EvalError(`${name} expected at least ${parameters.length} arguments, got ${eargs.length}`)
-    setEnv(paramEnv, restParam, list(...eargs.slice(parameters.length)))
-  } else {
-    if (eargs.length !== parameters.length)
-      throw new EvalError(`${name} expected ${parameters.length} arguments, got ${eargs.length}`)
-  }
-  parameters.forEach((param, i) => setEnv(paramEnv, param, eargs[i]))
-}
-
-const makeParamEnv = (defFunc, args) => {
-  const paramEnv = makeEnv(defFunc.env)
-  // for recursive calls
-  setEnv(paramEnv, defFunc.name, defFunc)
-  setParameters(defFunc, paramEnv, args)
-  return paramEnv
 }
 
 import { meta } from './core.js'
@@ -332,24 +344,22 @@ const evalForm = (defEnv) => {
         }
         throw evalError('not a function')
       }
-      switch (func.kind) {
+      const { kind, paramEnvMaker, body } = func
+      switch (kind) {
         case 'macro': {
-          const macroResult = go(makeParamEnv(func, args), func.body)
+          const macroResult = go(paramEnvMaker(args), body)
           assertFormDeep(macroResult)
           form = macroResult
           continue
         }
         case 'fexpr':
-          return go(makeParamEnv(func, args), func.body)
+          return go(paramEnvMaker(args), body)
         case 'func':
-          env = makeParamEnv(
-            func,
-            args.map((arg) => go(env, arg)),
-          )
-          form = func.body
+          env = paramEnvMaker(args.map((arg) => go(env, arg)))
+          form = body
           continue
         default:
-          throw evalError('unexpected closure kind: ' + func.kind)
+          throw evalError('unexpected closure kind: ' + kind + ' ' + func)
       }
     }
   }
@@ -415,7 +425,7 @@ externs.interpreter = {
     if (!(context instanceof Map)) throw new Error('apply expects context')
     if (!isClosure(func)) throw new Error('apply expects closure')
     if (!Array.isArray(args)) throw new Error('apply expects array')
-    const paramEnv = makeParamEnv(func, args)
+    const paramEnv = func.paramEnvMaker(args)
     return evalForm(context)(paramEnv, func.body)
   },
   'read-file': (path) => {
@@ -451,11 +461,9 @@ const commandLineArgs = process.argv.slice(2)
 const endsWithDashFlag = commandLineArgs.at(-1) === '-'
 const files = endsWithDashFlag ? commandLineArgs.slice(0, -1) : commandLineArgs
 
-const evaluateForms = (forms) => {
+const catchErrors = (f) => {
   try {
-    let result = langUndefined
-    for (const form of forms) result = evaluator(makeEnv(), form)
-    return result
+    return f()
   } catch (e) {
     let curErr = e
     while (curErr) {
@@ -477,15 +485,23 @@ const evaluateForms = (forms) => {
   }
 }
 
-for (const filePath of files) {
-  const forms = readFile(filePath)
-  evaluateForms(forms)
+const evaluateForms = (forms) => {
+  let result = langUndefined
+  for (const form of forms) result = evaluator(makeEnv(), form)
+  return result
 }
+catchErrors(() => {
+  for (const filePath of files) {
+    const forms = readFile(filePath)
+    evaluateForms(forms)
+  }
+})
 import { startRepl } from './repl-util.js'
 
 if (!endsWithDashFlag) {
   let replLineNo = 0
-  const evalLine = (line) => console.log(print(evaluateForms(parseToForms(line, `repl-${replLineNo++}`))))
+  const evalLine = (line) =>
+    console.log(print(catchErrors(() => evaluateForms(parseToForms(line, `repl-${replLineNo++}`)))))
   const completer = (line) => {
     const m = line.match(/[a-z0-9./-]+$/)
     if (!m) return [[], '']
