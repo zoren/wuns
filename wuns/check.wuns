@@ -728,7 +728,7 @@
           [if-let [mac [if-let [w [try-get-form-word-option first-form]]
                         [try-get-macro eval-context w]
                         [none]]]
-            [let-do [expanded-form [interpreter-apply eval-context mac [slice sub-forms 1 s-form]]]
+            [let-do [expanded-form [interpreter-apply mac [slice sub-forms 1 s-form]]]
               [check gctx level lctx expanded-form]]
             [let-do
               [func-type [check gctx level lctx first-form]
