@@ -50,7 +50,7 @@ class Closure extends Function {
     f.toString = () => `[closure ${name} ${parameters.join(' ')}]`
     paramEnvMaker = setParametersStaged(f)
     f.paramEnvMaker = paramEnvMaker
-
+    // https://stackoverflow.com/questions/36871299/how-to-extend-function-with-es6-classes
     return Object.setPrototypeOf(f, new.target.prototype)
   }
 }
