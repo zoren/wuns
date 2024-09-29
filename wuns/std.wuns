@@ -20,6 +20,8 @@
       [flist [quote extern] [quote host] name]
       type]]]
 
+[def-extern log [type-scheme [a] [func [.. a] [tuple]]]]
+
 [def-extern concat [type-scheme [a] [func [.. [list a]] [list a]]]]
 
 [defmacro let-do [bindings .. forms]
@@ -57,7 +59,10 @@
 
 [defmacro def-instruction [def-name inst-name] [def-instruction-fn def-name inst-name]]
 
-[def unreachable [extern instructions unreachable]]
+[def unreachable
+  [type-anno
+    [extern instructions unreachable]
+    [type-scheme [a] [func [] a]]]]
 
 [defn form-to-word [form]
   [match form
@@ -132,34 +137,23 @@
 [type mutable-list [a]
   [union]]
 
-[def-extern mutable-list-of-size [type-scheme [a] [func [i32] [mutable-list a]]]]
-[def-extern freeze-mutable-list [type-scheme [a] [func [[mutable-list a]] [list a]]]]
-[def-extern set-array [type-scheme [a] [func [[mutable-list a] i32 a] [tuple]]]]
-[def mutable-list/size
-  [type-anno
-    [extern host size]
-    [type-scheme [a] [func [[mutable-list a]] i32]]]]
-[def mutable-list/at
-  [type-anno
-    [extern host at]
-    [type-scheme [a] [func [[mutable-list a] i32] a]]]]
-
 [defn is-word [form] [match form [form-word x] 1 0]]
-[def-extern log [type-scheme [a] [func [.. a] [tuple]]]]
+
+[def-extern list-init-func [type-scheme [a] [func [i32 [func [i32] a]] [list a]]]]
+
+[defn list-map-fn [f l]
+  [list-init-func [size l] [func list-map-fn-f [i] [f [at l i]]]]]
 
 [defn quote-list [lmsg]
-  [let-do
-     [s [size lmsg]
-      msg [mutable-list-of-size [inc s]]]
-    [set-array msg 0 [quote list]]
-    [[func go [i]
-      [when [lt-s i s]
-        [set-array msg [inc i]
-          [let [e [at lmsg i]]
-            [if [is-word e] [mk-quote e] e]]]
-        [go [inc i]]]]
-      0]
-    [form-list [freeze-mutable-list msg]]]]
+  [form-list
+    [concat
+      [list [quote list]]
+      [list-map-fn
+        [func f [e]
+          [match e
+            [form/word w] [mk-quote e]
+            [form/list l] e]]
+        lmsg]]]]
 
 [defmacro assert [cond .. lmsg]
   [flist [quote if] cond
@@ -178,9 +172,7 @@
 
 [defn identity [x] x]
 
-[type kv-map [v] [union]]
-
-[def-extern meta [func [form] [kv-map form]]]
+[def-extern meta [func [form] form]]
 
 [defmacro ifs [.. clauses]
   [let [s [size clauses]]
@@ -210,9 +202,14 @@
          [dec s]
          [at clauses -1]]]]]
 
-[type atom [a] [union]]
+[def-extern atom-get [type-scheme [a] [func [[atom a]] a]]]
+[def-extern atom-set [type-scheme [a] [func [[atom a] a] [tuple]]]]
 
-[def-extern atom [type-scheme [a] [func [a] [atom a]]]]
+[defn inc-atom [atom]
+  [let [prev-val [atom-get atom]]
+    [do
+      [atom-set atom [inc prev-val]]
+      prev-val]]]
 
 [def word-counter [atom 0]]
 
@@ -238,15 +235,6 @@
 
 [def-extern word-byte-size [func [word] i32]]
 
-[def-extern atom-get [type-scheme [a] [func [[atom a]] a]]]
-[def-extern atom-set [type-scheme [a] [func [[atom a] a] [tuple]]]]
-
-[defn inc-atom [atom]
-  [let [prev-val [atom-get atom]]
-    [do
-      [atom-set atom [inc prev-val]]
-      prev-val]]]
-
 [defn genword []
   [form-word [concat-words [word genword] [int-to-word [inc-atom word-counter]]]]]
 
@@ -268,7 +256,9 @@
 [defn form-to-list [form]
   [match form
     [form-list l] l
-    [unreachable]]]
+    [do
+      [log [quote [form-to-list requires a list as its argument]] form]
+      [unreachable]]]]
 
 [defn is-list [form]
   [match form
@@ -396,29 +386,9 @@
 
 [defmacro list-map [element-var collection form]
   [assert [is-word element-var] list-map requires a word as the first argument]
-  [let [iteration-var [genword]
-        col-var [genword]
-        col-size-var [genword]
-        new-col-var [genword]
-        loopw [genword]]
-    [flist
-      [quote let] [flist col-var collection
-                        col-size-var [flist [quote size] col-var]
-                        new-col-var [flist [quote mutable-list-of-size] col-size-var]]
-      [flist [quote do]
-        [flist
-          [flist
-            [quote func] loopw [flist iteration-var]
-            [flist [quote if]
-              [flist [quote lt-s] iteration-var col-size-var]
-              [flist [quote let]
-                [flist element-var [flist [quote at] col-var iteration-var]]
-                [flist [quote do]
-                  [flist [quote set-array] new-col-var iteration-var form]
-                  [flist loopw [flist [quote add] iteration-var [quote [i32 1]]]]]]
-              [quote [do]]]]
-          [quote [i32 0]]]
-        [flist [quote freeze-mutable-list] new-col-var]]]]]
+  [flist [quote list-map-fn]
+    [flist [quote func] [genword] [flist element-var] form]
+    collection]]
 
 [defn half [x] [i32.div-s x 2]]
 
@@ -427,55 +397,19 @@
 [def-extern transient-kv-map [type-scheme [a] [func [] [transient-kv-map a]]]]
 [def-extern set-kv-map [type-scheme [a] [func [[transient-kv-map a] word a] [tuple]]]]
 [def-extern freeze-kv-map [type-scheme [a] [func [[transient-kv-map a]] [tuple]]]]
-
+[def empty-kv-map
+  [let [kvm [transient-kv-map]]
+    [do
+      [freeze-kv-map kvm]
+      kvm]]]
 [defn mk-word [w] [flist [quote word] w]]
 
-[defmacro kv-mapq [.. entries]
-  [let [s [size entries]
-        n-of-pairs [half s]
-        ml [mutable-list-of-size n-of-pairs]
-        tmp-word [genword]]
-    [do
-      [assert [is-even s] kv-mapq requires an even number of arguments]
-      [for-pair i 0 s
-        [set-array ml [half i]
-          [let [k [at entries i]]
-            [flist [quote set-kv-map] tmp-word
-              [if [is-word k] [mk-word k] k]
-              [at entries [inc i]]]]]]
-      [flist [quote let]
-        [flist tmp-word [quote [transient-kv-map]]]
-        [form-concat
-          [list [quote do]]
-          [freeze-mutable-list ml]
-          [list
-            [flist [quote freeze-kv-map] tmp-word]
-            tmp-word]]]]]]
-
-[defmacro kv-map-id [.. entries]
-  [let [s [size entries]
-        ml [mutable-list-of-size s]
-        tmp-word [genword]]
-    [do
-      [for i 0 s
-        [set-array ml i
-          [let [k [at entries i]]
-            [flist [quote set-kv-map] tmp-word [mk-word k] k]]]]
-      [flist [quote let]
-        [flist tmp-word [quote [transient-kv-map]]]
-        [form-concat
-          [list [quote do]]
-          [freeze-mutable-list ml]
-          [list
-            [flist [quote freeze-kv-map] tmp-word]
-            tmp-word]]]]]]
-
-[def-extern has [type-scheme [a] [func [[kv-map a] word] i32]]]
+[def-extern has [type-scheme [a] [func [[transient-kv-map a] word] i32]]]
 
 [defmacro hasq [m w]
   [flist [quote has] m [mk-word w]]]
 
-[def-extern get [type-scheme [a] [func [[kv-map a] word] a]]]
+[def-extern get [type-scheme [a] [func [[transient-kv-map a] word] a]]]
 
 [defmacro getq [m w]
   [flist [quote get] m [mk-word w]]]
@@ -491,62 +425,10 @@
 [defmacro setq [m w v]
   [flist [quote set-kv-map] m [flist [quote word] w] v]]
 
-[def empty-kv-map [kv-mapq]]
-
-[defn slice [l start end]
-  [assert [not [is-negative start]] negative start index]
-  [assert [not [is-negative end]] negative end index]
-  [let [s [sub end start]]
-    [if [lt-s s 1]
-      [list]
-      [let-do [ml [mutable-list-of-size s]]
-        [for i start end
-          [set-array ml [sub i start] [at l i]]]
-        [freeze-mutable-list ml]]]]]
-
 [comment
   maybe we should be able to specify in the type-scheme that a is of pointer type
   we do not want to be able to compare functions with it
   and do not want to compare i32s with it]
 [def-extern is-identical [type-scheme [a] [func [a a] i32]]]
 
-[type growable-list [a]
-  [record
-    [list [mutable-list a] mutable]
-    [size i32 mutable]]]
-
-[defn growable-list. []
-  [growable-list [mutable-list-of-size [i32 8]] 0]]
-
-[defn push [gl element]
-  [let-do
-    [cur-size [growable-list/size gl]
-     cur-list [growable-list/list gl]
-     cur-capacity [mutable-list/size cur-list]
-     target
-      [if [eq cur-size cur-capacity]
-        [let-do
-          [new-mut-list [mutable-list-of-size [mul cur-capacity 2]]]
-          [[func go [i]
-            [when [lt-s i cur-size]
-              [set-array new-mut-list i [mutable-list/at cur-list i]]
-              [go [inc i]]]]
-            0]
-          [growable-list/set/list gl new-mut-list]
-          new-mut-list]
-          cur-list]]
-    [set-array target cur-size element]
-    [growable-list/set/size gl [inc cur-size]]]]
-
-[defn clone-growable-to-frozen-list [gl]
-  [let-do [s [growable-list/size gl]
-           l [growable-list/list gl]
-           ml [mutable-list-of-size s]]
-    [for i 0 s
-      [set-array ml i [mutable-list/at l i]]]
-    [freeze-mutable-list ml]]]
-
-[defn growable-list/at [gl i]
-  [when-not [lt-s i [growable-list/size gl]]
-    [logq-abort growable-list/at index out of bounds]]
-  [mutable-list/at [growable-list/list gl] i]]
+[def-extern slice [type-scheme [a] [func [[list a] i32 i32] [list a]]]]

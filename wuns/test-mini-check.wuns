@@ -43,7 +43,11 @@
     [for i 0 [size messages]
       [let-do [expected-message [form-to-list [at expected-messages i]]
                message [getq [at messages i] message]]
-        [assert [eq-list-of-forms expected-message message] test-failed failed expected message [identity expected-message] but found [identity message]]]]
+        [assert [eq-list-of-forms expected-message message]
+          test-failed failed expected message
+          [identity expected-message]
+          but found
+          [identity message]]]]
     [assert [eq-form present-type expected-type] test-ok failed expected type [identity expected-type] but found [identity present-type]]
     [inc-atom tests-run-atom]]]
 
@@ -280,18 +284,7 @@
 [test-ok two-field-rec
   [type two-field-rec [] [record [field i32] [word word]]]
   [two-field-rec [i32 5] [word a]]]
-[test-ok [type-scheme [a] [func [a] [atom a]]]
-  [type atom [a] [record [value a mutable]]]
-  atom]
-[test-ok [atom i32]
-  [type atom [a] [record [value a mutable]]]
-  [atom [i32 5]]]
-[test-ok [type-scheme [a] [func [a] [atom a]]]
-  [type atom [a] [record [value a mutable]]]
-  atom]
-[test-ok [type-scheme [a] [func [[atom a] a] [tuple]]]
-  [type atom [a] [record [value a mutable]]]
-  atom/set/value]
+
 [test-ok [func [word [list type]] type]
   [type
     type []
@@ -317,8 +310,8 @@
 
   type-var []
   [record
-    [kind type-var-kind mutable]
-    [level i32 mutable]]
+    [kind [atom type-var-kind]]
+    [level [atom i32]]]
 
   func-type []
   [record
@@ -345,6 +338,68 @@
       [none]]]
   [match [option/none] [option/none] [i32 5]]]
 
+[comment from wright]
+[test-errors i32 [[not unifiable - different types]]
+  [def atom-get
+    [type-anno
+      [extern atom-get]
+      [type-scheme [a] [func [[atom a]] a]]]]
+  [def atom-set
+    [type-anno
+      [extern atom-set]
+      [type-scheme [a] [func [[atom a] a] [tuple]]]]]
+  [def add
+    [type-anno
+      [extern add]
+      [func [i32 i32] i32]]]
+  [let [c [atom [func id [x] x]]]
+    [do
+      [atom-set c [func inc [x] [add [i32 1] x]]]
+      [[atom-get c] [word true]]]]]
+[test-errors i32 [[not unifiable - different types]]
+  [def atom-get
+    [type-anno
+      [extern atom-get]
+      [type-scheme [a] [func [[atom a]] a]]]]
+  [def atom-set
+    [type-anno
+      [extern atom-set]
+      [type-scheme [a] [func [[atom a] a] [tuple]]]]]
+  [def add
+    [type-anno
+      [extern add]
+      [func [i32 i32] i32]]]
+  [def mk-atom [func mk-atom [init] [atom init]]]
+  [let [c [mk-atom [func id [x] x]]]
+    [do
+      [atom-set c [func inc [x] [add [i32 1] x]]]
+      [[atom-get c] [word true]]]]]
+[test-ok i32
+  [def atom-get
+    [type-anno
+      [extern atom-get]
+      [type-scheme [a] [func [[atom a]] a]]]]
+  [def atom-set
+    [type-anno
+      [extern atom-set]
+      [type-scheme [a] [func [[atom a] a] [tuple]]]]]
+  [type linked-list [a]
+    [union
+      [nil]
+      [cons a [linked-list a]]]]
+  [def push [func push [list-ref element]
+    [atom-set list-ref [linked-list/cons element [atom-get list-ref]]]]]
+  [let [gli [atom [linked-list/nil]]]
+    [push gli [i32 5]]]
+  [def push2 [func push [list-ref element]
+    [atom-set list-ref [linked-list/cons element [atom-get list-ref]]]]]
+  push2
+  [let [glw [atom [linked-list/nil]]]
+    [push2 glw [word a]]]
+  [i32 5]]
+
+[logq tests-run [atom-get tests-run-atom]]
+
 [def read-file [extern interpreter read-file]]
 
 [defn test-ok-fn-stop-at-error [forms]
@@ -352,13 +407,14 @@
     [gctx [make-global-context]]
     [for-each form forms
       [evaluate [getq gctx eval-context] form]
-      [check-top gctx form]
+      [let [it [check-top gctx form]]
+        [logq present-type [normalize-present-type-scheme it]]]
       [let [messages [get-messages-list gctx]]
         [when-not [is-empty messages]
           [logq form [identity form]]
           [for-each message messages
-              [log message [meta [getq message form]]]]
-          [logq-abort test-ok failed there were errors [identity form] messages]]]]
+            [log [getq message message] [meta [getq message form]]]]
+          [logq-abort test-ok failed there were errors [meta [identity form]]]]]]
     [inc-atom tests-run-atom]]]
 
 [logq checking std.wuns]
@@ -366,6 +422,6 @@
 [test-ok-fn-stop-at-error
   [concat
     [read-file [word std.wuns]]
-    [read-file [word check.wuns]]]]
-
-[logq tests-run [atom-get tests-run-atom]]
+    [read-file [word check.wuns]]
+    ]
+]
