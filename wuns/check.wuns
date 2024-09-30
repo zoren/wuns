@@ -1,7 +1,9 @@
 [type function-kind []
   [union
     [ctor]
-    [func]]]
+    [func]
+    [macro]
+    [fexpr]]]
 
 [type
   type-var-kind []
@@ -769,18 +771,24 @@
            param-ctx [transient-kv-map]
            params-parsed [parse-parameter-list params]
            reg-params-parsed [parameters/regular-params params-parsed]
-           func-type [generate-fresh-type-var gctx level-1]
+           gen-func-type [generate-fresh-type-var gctx level-1]
            func-ctx [make-local-context param-ctx lctx first-form]
            reg-params [atom [linked-list/nil]]
-           takes-form-params [or [eq-form first-form [quote macro]] [eq-form first-form [quote fexpr]]]]
+           takes-form-params [or [eq-form first-form [quote macro]] [eq-form first-form [quote fexpr]]]
+           function-kind
+           [ifs [eq-form first-form [quote func]] [function-kind/func]
+                [eq-form first-form [quote macro]] [function-kind/macro]
+                [eq-form first-form [quote fexpr]] [function-kind/fexpr]
+                [logq-abort check function-kind not recognized]]]
           [report-when-not [eq n-of-args 3] form expects 3 arguments]
-          [set-kv-map param-ctx [form-to-word func-name] [mk-empty-type-scheme func-type]]
+          [set-kv-map param-ctx [form-to-word func-name] [mk-empty-type-scheme gen-func-type]]
           [for-each param reg-params-parsed
             [let-do [tv [if takes-form-params type-form [generate-fresh-type-var gctx level-1]]]
               [set-kv-map param-ctx [form-to-word param] [mk-empty-type-scheme tv]]
               [push reg-params tv]]]
           [let-do
-            [opt-rest-param
+            [frozen-params [clone-growable-to-frozen-list reg-params]
+             opt-rest-param
                 [if-let [rest-param [parameters/rest-param-opt params-parsed]]
                   [let-do [tv [if takes-form-params type-form [generate-fresh-type-var gctx level-1]]]
                     [set-kv-map param-ctx [form-to-word rest-param]
@@ -789,15 +797,12 @@
                   [none]]
              return-type [check gctx level-1 func-ctx body]]
             [unify-report gctx
-              func-type
-              [type-func
-                [clone-growable-to-frozen-list reg-params]
-                opt-rest-param
-                return-type]
+              gen-func-type
+              [type/inst [inst-type/func [func-type frozen-params opt-rest-param return-type function-kind]]]
               form]
             [when [eq-form first-form [quote macro]]
               [unify-report gctx return-type type-form body]]]
-          func-type]
+          gen-func-type]
 
         [eq-form first-form [quote def]]
         [let-do
