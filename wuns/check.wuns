@@ -918,7 +918,6 @@
         [internal-to-present-type copied-type]]]]]
 
 [defn check-top [gctx form]
-  [logq form [identity form]]
   [evaluate [check-context/eval-context gctx] form]
   [check gctx 0 [none] form]]
 

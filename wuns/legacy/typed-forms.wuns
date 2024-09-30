@@ -1,0 +1,21 @@
+
+[defmacro def-typed-fn [type name parameters .. bodies]
+  [list [quote def-with-meta] name
+    [list [quote [extern host kv-map]] [quote [quote type]] [mk-quote type]]
+    [concat [list [quote func] name parameters] bodies]]]
+
+[comment
+[deftype form []
+  [tagged-union
+    word word
+    list [list form]]]
+]
+
+[defn form-word [word meta-data]
+  [kv-mapq tag [quote word] meta-data meta-data word word]]
+
+[defn form-list [list meta-data]
+  [kv-mapq tag [quote list] meta-data meta-data list list]]
+
+[defn form-is-word [form] [eq-word [getq form tag] [quote word]]]
+[defn form-is-list [form] [eq-word [getq form tag] [quote list]]]

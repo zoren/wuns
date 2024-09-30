@@ -407,11 +407,9 @@
     [gctx [make-global-context]]
     [for-each form forms
       [evaluate [getq gctx eval-context] form]
-      [let [it [check-top gctx form]]
-        [logq present-type [normalize-present-type-scheme it]]]
+      [check-top gctx form]
       [let [messages [get-messages-list gctx]]
         [when-not [is-empty messages]
-          [logq form [identity form]]
           [for-each message messages
             [log [getq message message] [meta [getq message form]]]]
           [logq-abort test-ok failed there were errors [meta [identity form]]]]]]
