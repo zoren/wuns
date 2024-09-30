@@ -160,10 +160,6 @@ export const set_kv_map = (kv_map, key, value) => {
   if (!(kv_map instanceof Map)) throw new Error('set-kv-map expect map')
   kv_map.set(key, value)
 }
-export const freeze_kv_map = (kv_map) => {
-  if (!(kv_map instanceof Map)) throw new Error('keys expect map')
-  return Object.freeze(kv_map)
-}
 
 export const log = (...forms) => {
   console.log(...forms.map(print))

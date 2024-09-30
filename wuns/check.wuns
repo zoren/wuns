@@ -227,7 +227,7 @@
 [type type-def []
   [record
     [arity i32]
-    [param-map [transient-kv-map type]]
+    [param-map [transient-kv-map word type]]
     [result-type type]]]
 
 [type check-type-scheme []
@@ -245,9 +245,9 @@
 [type check-context []
   [record
     [messages [atom [linked-list report-message]]]
-    [def-var-types [transient-kv-map check-type-scheme]]
+    [def-var-types [transient-kv-map word check-type-scheme]]
     [type-var-counter [atom i32]]
-    [types [transient-kv-map type-def]]
+    [types [transient-kv-map word type-def]]
     [eval-context [evaluation-context]]]]
 
 [defn make-global-context []
@@ -367,7 +367,7 @@
 [type
   local-context []
   [record
-    [vars [transient-kv-map check-type-scheme]]
+    [vars [transient-kv-map word check-type-scheme]]
     [outer [option local-context]]
     [first-form form]]]
 
@@ -435,7 +435,6 @@
       [report form expected a word]
       [none]]]]
 
-
 [defn try-get-list-report [gctx form]
   [match form
     [form/list l] l
@@ -497,6 +496,8 @@
           [logq-abort instantiate-annotated-type unknown type]]]]]
             outer-syntax-type
             ]]
+
+[def empty-kv-map [transient-kv-map]]
 
 [defn instantiate-annotated-type-or-scheme [gctx level syntax-type]
   [match syntax-type

@@ -394,24 +394,19 @@
 
 [defn half [x] [i32.div-s x 2]]
 
-[type transient-kv-map [v] [union]]
+[type transient-kv-map [k v] [union]]
 
-[def-extern transient-kv-map [type-scheme [a] [func [] [transient-kv-map a]]]]
-[def-extern set-kv-map [type-scheme [a] [func [[transient-kv-map a] word a] [tuple]]]]
-[def-extern freeze-kv-map [type-scheme [a] [func [[transient-kv-map a]] [tuple]]]]
-[def empty-kv-map
-  [let [kvm [transient-kv-map]]
-    [do
-      [freeze-kv-map kvm]
-      kvm]]]
+[def-extern transient-kv-map [type-scheme [k v] [func [] [transient-kv-map k v]]]]
+[def-extern set-kv-map [type-scheme [k v] [func [[transient-kv-map k v] k v] [tuple]]]]
+
 [defn mk-word [w] [flist [quote word] w]]
 
-[def-extern has [type-scheme [a] [func [[transient-kv-map a] word] i32]]]
+[def-extern has [type-scheme [k v] [func [[transient-kv-map k v] k] i32]]]
 
 [defmacro hasq [m w]
   [flist [quote has] m [mk-word w]]]
 
-[def-extern get [type-scheme [a] [func [[transient-kv-map a] word] a]]]
+[def-extern get [type-scheme [k v] [func [[transient-kv-map k v] k] v]]]
 
 [defmacro getq [m w]
   [flist [quote get] m [mk-word w]]]

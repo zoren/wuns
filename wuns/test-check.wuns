@@ -421,10 +421,9 @@
     [check-top gctx form]
     [let [messages [get-messages-list gctx]]
       [when-not [is-empty messages]
-[comment
-          [for-each message messages
-          [log [getq message message] [meta [getq message form]]]]]
-        [logq-abort test-ok failed there were errors [meta [identity form]]]]]]
+        [for-each message messages
+          [log-report-message message]]
+        [logq-abort test-ok-fn-stop-at-error failed there were errors [meta [identity form]]]]]]
   [inc-atom tests-run-atom]]
 
 [defn test-ok-files [.. files]
