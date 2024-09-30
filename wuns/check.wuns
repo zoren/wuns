@@ -248,7 +248,8 @@
     [def-var-types [transient-kv-map word check-type-scheme]]
     [type-var-counter [atom i32]]
     [types [transient-kv-map word type-def]]
-    [eval-context [evaluation-context]]]]
+    [eval-context [evaluation-context]]
+    [form-expansions [transient-kv-map form form]]]]
 
 [defn make-global-context []
   [check-context
@@ -256,7 +257,8 @@
     [transient-kv-map]
     [atom 0]
     [transient-kv-map]
-    [make-eval-context]]]
+    [make-eval-context]
+    [transient-kv-map]]]
 
 [defn report-fn [gctx message form]
   [push [check-context/messages gctx] [report-message [form-to-list message] form]]]
@@ -491,7 +493,7 @@
             [do
               [check-type-arity gctx [first elements] n-of-args]
               [make-type-list w
-                [list-map e [slice elements 1 s-form] [go e]]]]]
+                [list-map e [rest elements] [go e]]]]]
 
           [logq-abort instantiate-annotated-type unknown type]]]]]
             outer-syntax-type
@@ -592,7 +594,11 @@
         [if-let [w [try-get-form-word-option [first l]]]
           [try-get-macro [check-context/eval-context gctx] w]
           [none]]]
-        [some [interpreter-apply mac [slice l 1 [size l]]]]
+        [let-do [expanded [interpreter-apply mac [rest l]]
+                 form-expansions [check-context/form-expansions gctx]]
+          [assert [not [has form-expansions form]] form already in expansion map]
+          [set-kv-map form-expansions form expanded]
+          [some expanded]]
         [none]]]]]
 
 [defn check [gctx level lctx form]
@@ -678,7 +684,7 @@
                   [eq-form [quote union] [first type-def-list]]
                   [for i 1 [size type-def-list]
                     [let-do [ctor [try-get-list-report gctx [at type-def-list i]]
-                             param-list [list-map param [slice ctor 1 [size ctor]] [instantiate-annotated-type gctx param-map param]]]
+                             param-list [list-map param [rest ctor] [instantiate-annotated-type gctx param-map param]]]
                       [when-let [ctor-name [try-get-word-report gctx [first ctor]]]
                         [set-kv-map def-var-types [concat-words type-prefix ctor-name]
                           [generalize-top [type-ctor param-list result-type]]]]]]
@@ -864,13 +870,13 @@
                 0]]
             [if is-fexpr
               [let-do
-                [arg-types [list-map arg [slice sub-forms 1 s-form] type-form]
+                [arg-types [list-map arg [rest sub-forms] type-form]
                   t-res [generate-fresh-type-var gctx level]
                   t-func [type-func arg-types [none] t-res]]
                 [unify-report gctx func-type t-func form]
                 t-res]
               [let-do
-                [arg-types [list-map arg [slice sub-forms 1 s-form] [check gctx level lctx arg]]
+                [arg-types [list-map arg [rest sub-forms] [check gctx level lctx arg]]
                   t-res [generate-fresh-type-var gctx level]
                   t-func [type-func arg-types [none] t-res]]
                 [unify-report gctx func-type t-func form]

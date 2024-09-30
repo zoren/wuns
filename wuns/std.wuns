@@ -429,3 +429,5 @@
 [def-extern is-identical [type-scheme [a] [func [a a] i32]]]
 
 [def-extern slice [type-scheme [a] [func [[list a] i32 i32] [list a]]]]
+
+[defn rest [l] [slice l 1 [size l]]]
