@@ -4,6 +4,10 @@
 [defn get-messages-list [gctx]
   [clone-growable-to-frozen-list [check-context/messages gctx]]]
 
+[defn log-report-message [message]
+  [log [report-message/message message]]
+  [log [meta [report-message/form message]]]]
+
 [defn test-ok-fn [expected-type forms]
   [let [gctx [make-global-context]
         res [check-top-forms gctx forms]
@@ -12,7 +16,7 @@
     [do
       [when-not [is-empty messages]
         [for-each message messages
-          [log message [meta [getq message form]]]]
+          [log-report-message message]]
         [logq-abort test-ok failed there were errors]]
       [assert [eq-form present-type expected-type] test-ok failed expected type [identity expected-type] but found [identity present-type]]
       [inc-atom tests-run-atom]]]]
@@ -29,6 +33,12 @@
           0]
         1]] 0]]]
 
+[defn i32-form [i]
+  [form/word [int-to-word i]]]
+
+[defn size-form [l]
+  [i32-form [size l]]]
+
 [defn test-errors-fn [expected-type expected-messages forms]
   [let-do
    [gctx [make-global-context]
@@ -38,17 +48,16 @@
     [if [is-empty messages]
       [logq-abort test-failed failed there were no errors]
       [when-not [eq [size expected-messages] [size messages]]
-        [for-each message messages [log message]]
-        [logq-abort test-failed failed expected [size expected-messages] messages but found [size messages]]]]
+        [for-each message messages [log-report-message message]]
+        [logq-abort test-failed failed expected [size-form expected-messages] messages but found [size-form messages]]]]
     [for i 0 [size messages]
       [let-do [expected-message [form-to-list [at expected-messages i]]
                message [report-message/message [at messages i]]]
         [assert [eq-list-of-forms expected-message message]
           test-failed failed expected message
-          [identity expected-message]
           but found
-          [identity message]]]]
-    [assert [eq-form present-type expected-type] test-ok failed expected type [identity expected-type] but found [identity present-type]]
+          ]]]
+    [assert [eq-form present-type expected-type] test-errors failed expected type [identity expected-type] but found [identity present-type]]
     [inc-atom tests-run-atom]]]
 
 [defexpr test-errors [expected-type expected-messages .. forms]
@@ -153,6 +162,10 @@
 [test-ok
   [func [form] i32]
   [fexpr fexpr-i32 [x] [i32 5]]]
+
+[test-ok
+  i32
+  [[fexpr fexpr-i32 [x] [i32 5]] [this is not evaluated]]]
 
 [comment call]
 [test-errors i32 [[not unifiable - different number of parameters]]
@@ -398,28 +411,27 @@
     [push2 glw [word a]]]
   [i32 5]]
 
-[logq tests-run [atom-get tests-run-atom]]
+[logq tests-run [i32-form [atom-get tests-run-atom]]]
 
 [def read-file [extern interpreter read-file]]
 
-[defn test-ok-fn-stop-at-error [forms]
+[defn test-ok-fn-stop-at-error [gctx forms]
+  [for-each form forms
+    [evaluate [check-context/eval-context gctx] form]
+    [check-top gctx form]
+    [let [messages [get-messages-list gctx]]
+      [when-not [is-empty messages]
+[comment
+          [for-each message messages
+          [log [getq message message] [meta [getq message form]]]]]
+        [logq-abort test-ok failed there were errors [meta [identity form]]]]]]
+  [inc-atom tests-run-atom]]
+
+[defn test-ok-files [.. files]
   [let-do
     [gctx [make-global-context]]
-    [for-each form forms
-      [evaluate [check-context/eval-context gctx] form]
-      [check-top gctx form]
-      [let [messages [get-messages-list gctx]]
-        [when-not [is-empty messages]
-          [for-each message messages
-            [log [getq message message] [meta [getq message form]]]]
-          [logq-abort test-ok failed there were errors [meta [identity form]]]]]]
-    [inc-atom tests-run-atom]]]
+    [for-each file files
+      [logq checking [identity file]]
+      [test-ok-fn-stop-at-error gctx [read-file file]]]]]
 
-[logq checking std.wuns]
-
-[test-ok-fn-stop-at-error
-  [concat
-    [read-file [word std.wuns]]
-    [read-file [word check.wuns]]
-    ]
-]
+[test-ok-files [word std.wuns] [word check.wuns]]
