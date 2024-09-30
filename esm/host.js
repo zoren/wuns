@@ -97,6 +97,16 @@ export const mutable_list_of_size = (size) => {
   return l
 }
 
+export const list_init_func = (size, func) => {
+  if (size < 0) throw new Error('list-init-func expects non-negative size')
+  if (typeof func !== 'function') throw new Error('list-init-func expects function was: ' + func + ' ' + typeof func + ' ' + func.constructor.name)
+  const l = Array.from({ length: size }, (_, index) => func(index))
+  return Object.freeze(l)
+}
+export const list_reverse = (list) => {
+  if (!isList(list)) throw new Error('list-reverse expects list')
+  return arrayToList([...list].reverse())
+}
 export const freeze_mutable_list = (mutable_list) => {
   if (!isList(mutable_list)) throw new Error('freeze-mutable-list expects array')
   if (!isMutable(mutable_list)) throw new Error('freeze-mutable-list expects mutable list')
@@ -175,3 +185,9 @@ export const concat = (l1, l2) => {
   return arrayToList([...l1, ...l2])
 }
 export const int_to_word = (i) => stringToWord(String(i))
+export const slice = (list, start, end) => {
+  if (!isFrozenList(list)) throw new Error('slice expects list')
+  if (!isSigned32BitInteger(start)) throw new Error('slice expects number: ' + start)
+  if (!isSigned32BitInteger(end)) throw new Error('slice expects number: ' + end)
+  return arrayToList(list.slice(start, end))
+}

@@ -93,8 +93,6 @@
 
 [defn growable-list. [] [atom [linked-list/nil]]]
 
-[def-extern list-reverse [type-scheme [a] [func [[list a]] [list a]]]]
-
 [defn clone-growable-to-frozen-list [atom-linked-list]
   [list-reverse [linked-list-to-list [atom-get atom-linked-list]]]]
 

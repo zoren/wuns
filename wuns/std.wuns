@@ -144,6 +144,8 @@
 [defn list-map-fn [f l]
   [list-init-func [size l] [func list-map-fn-f [i] [f [at l i]]]]]
 
+[def-extern list-reverse [type-scheme [a] [func [[list a]] [list a]]]]
+
 [defn quote-list [lmsg]
   [form-list
     [concat
