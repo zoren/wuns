@@ -9,6 +9,99 @@ class RuntimeError extends Error {
   }
 }
 
+const makeEnvUpdater = (obj) => {
+  const { nOfParams, hasRestParam } = obj
+  if (!hasRestParam)
+    return (env, funcArgs) => {
+      // split this so we can update params separately from creating the env
+      for (let i = 0; i < nOfParams; i++) env[i] = funcArgs[i]
+      return env
+    }
+  return (env, funcArgs) => {
+    for (let i = 0; i < nOfParams; i++) env[i] = funcArgs[i]
+    env[nOfParams] = funcArgs.slice(nOfParams)
+    return env
+  }
+}
+
+const makeCallEnvMaker = (obj) => {
+  const { numberOfParamsLocalVars } = obj
+  const envUpdater = makeEnvUpdater(obj)
+  return (funcArgs) => envUpdater(new Array(numberOfParamsLocalVars), funcArgs)
+}
+
+const getEnvVar = (env, varIndex) => env[varIndex]
+const setEnvVar = (env, varIndex, value) => (env[varIndex] = value)
+
+const bindParamsToArgs = ({ nOfParams, hasRestParam }, env, args) => {
+  for (let i = 0; i < nOfParams; i++) env[i] = args[i]
+  if (hasRestParam) env[nOfParams] = args.slice(nOfParams)
+}
+
+const evaluate = (env, obj) => {
+  while (true) {
+    switch (obj.op) {
+      // maybe call literal instead of constant
+      case 'constant': {
+        const { value } = obj
+        return value
+      }
+      case 'local-var-get': {
+        const { varIndex } = obj
+        return getEnvVar(varIndex)
+      }
+      case 'func': {
+        const { mkEnv, body } = obj
+        const closure = { mkEnv, body }
+        return closure
+      }
+      case 'tail-call': {
+        throw new Error('tail call not implemented')
+      }
+      case 'call': {
+        const { func, args } = obj
+        const efunc = evaluate(env, func)
+        const evalArgs = args.map((a) => evaluate(env, a))
+        if (efunc.op === 'func') {
+          const { mkEnv, body } = func
+          // if we're recurring here we can reuse the same env updating the parameter entries
+          env = mkEnv(evalArgs)
+          obj = body
+          continue
+        }
+        return efunc(...evalArgs)
+      }
+
+      case 'if': {
+        const { condition, then, else: elseBranch } = obj
+        obj = evaluate(env, condition) ? then : elseBranch
+        continue
+      }
+      case 'do': {
+        const { cforms } = obj
+        for (let i = 0; i < cforms.length - 1; i++) evaluate(env, cforms[i])
+        obj = cforms.at(-1)
+        continue
+      }
+      case 'let': {
+        const { compBindings, body } = obj
+        for (const [varIndex, compValue] of compBindings) setEnvVar(env, varIndex, evaluate(env, compValue))
+        obj = body
+        continue
+      }
+      case 'recur': {
+        const { funcCtx, args } = obj
+        const { updateEnv, cbody } = funcCtx
+        env = updateEnv(args.map((a) => evaluate(env, a)))
+        obj = cbody
+        continue
+      }
+      default:
+        throw new Error('unknown op: ' + obj.op)
+    }
+  }
+}
+
 class CompileError extends Error {
   constructor(message, form, innerError) {
     super(message)
@@ -138,7 +231,8 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
           const { enclosingLoopCtx, updateBindings } = obj
           const { continueVarObj } = enclosingLoopCtx
           const continueVarIndex = continueVarObj.index
-          for (const [_varObj, tmpVarObj, compValue] of updateBindings) env[tmpVarObj.index] = evaluateObject(env, compValue)
+          for (const [_varObj, tmpVarObj, compValue] of updateBindings)
+            env[tmpVarObj.index] = evaluateObject(env, compValue)
           for (const [varObj, tmpVarObj, _compValue] of updateBindings) env[varObj.index] = env[tmpVarObj.index]
           env[continueVarIndex] = 1
           return wunsUnit
@@ -169,6 +263,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
           const { funcCtx, args } = obj
           const evalArgs = args.map((a) => evaluateObject(env, a))
           const { mkEnv, cbody } = funcCtx
+          // instead we can reuse the same env updating the parameter entries, but what about var args?
           const newEnv = mkEnv(evalArgs)
           obj = cbody
           env = newEnv
@@ -177,21 +272,6 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         default:
           throw new Error('unknown op: ' + obj.op)
       }
-    }
-  }
-  const makeCallEnvMaker = (obj) => {
-    const { nOfParams, hasRestParam, numberOfParamsLocalVars } = obj
-    if (!hasRestParam)
-      return (funcArgs) => {
-        const env = new Array(numberOfParamsLocalVars)
-        for (let i = 0; i < nOfParams; i++) env[i] = funcArgs[i]
-        return env
-      }
-    return (funcArgs) => {
-      const env = new Array(numberOfParamsLocalVars)
-      for (let i = 0; i < nOfParams; i++) env[i] = funcArgs[i]
-      env[nOfParams] = funcArgs.slice(nOfParams)
-      return env
     }
   }
   const opConstant = (value) => ({ op: 'constant', value })
@@ -351,7 +431,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
       if (isError) throw new Error('unexpected error node')
       const { row, column } = startPosition
       const metaDataArray = filePathWord ? [filePathWord] : []
-      metaDataArray.push(stringToForm(row + 1), stringToForm(stringToForm(column + 1)))
+      metaDataArray.push(stringToForm(row + 1), stringToForm(column + 1))
       const metaData = formList(arrayToHostList(metaDataArray))
       switch (type) {
         case 'word':

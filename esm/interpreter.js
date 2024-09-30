@@ -409,6 +409,7 @@ const makeInterpreterContext = ({ externalModules, converters }) => {
         } catch (e) {
           if (e instanceof RuntimeError)
             throw new CompileError(`runtime error when calling macro '${firstWordValue}': ${e.message}`, form, e)
+          if (e instanceof CompileError) throw new CompileError(`error when calling macro '${firstWordValue}': ${e.message}`, form, e)
           throw e
         }
         const ctAssertIsForm = (f) => {
