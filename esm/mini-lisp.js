@@ -59,7 +59,7 @@ class Closure extends Function {
 
 const makeClosure = (env, name, parameters, body, kind) => Object.freeze(new Closure(env, name, parameters, body, kind))
 const isClosure = (v) => v instanceof Closure
-import { isForm, tryGetFormWord, tryGetFormList, isTaggedValue, makeValueTagger, isWord } from './core.js'
+import { isForm, tryGetFormWord, tryGetFormList, isTaggedValue, makeValueTagger, isWord, atom } from './core.js'
 
 const printForm = (form) => {
   const word = tryGetFormWord(form)
@@ -202,6 +202,11 @@ const evalForm = (env, form) => {
         env.set(name, value)
         return value
       }
+      case 'atom': {
+        assertNumArgs(1)
+        const initialValue = evalForm(env, forms[1])
+        return atom(initialValue)
+      }
 
       case 'loop':
       case 'continue':
@@ -283,15 +288,6 @@ const evalForm = (env, form) => {
                   return record[fieldName]
                 }
                 env.set(projecterName, projecter)
-                if (recordField.length === 3 && getFormWord(recordField[2]) === 'mutable') {
-                  const setterName = `${type}/set/${fieldName}`
-                  const setter = (record, value) => {
-                    if (record[recordTag] !== type) throw evalError(`field setter ${setterName} not a ${type}`)
-                    record[fieldName] = value
-                    return langUndefined
-                  }
-                  env.set(setterName, setter)
-                }
               }
               const constructor = (...args) => {
                 if (args.length !== fieldNames.length) throw evalError('wrong number of arguments to ' + type)

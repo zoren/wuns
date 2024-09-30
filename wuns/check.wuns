@@ -44,7 +44,7 @@
 [defn type-list [elem-type] [make-type [word list] elem-type]]
 [defn type-atom [elem-type] [make-type [word atom] elem-type]]
 
-[def type-empty-tuple [make-type-list [word tuple] [list]]]
+[def type-empty-tuple [make-type [word tuple]]]
 
 [defn type-func [params opt-rest-param result]
   [type/inst [inst-type/func [func-type params opt-rest-param result [function-kind/func]]]]]
@@ -272,26 +272,6 @@
 
 [defmacro report [form .. lmsg]
   [flist [quote report-fn] [quote gctx] [flist [quote quote] [form/list lmsg]] form]]
-
-[def try-get-meta
-  [type-anno
-    [extern interpreter try-get-meta]
-    [func [form] [option form]]]]
-
-[defn find-first-meta [form]
-  [if-let [m [try-get-meta form]]
-    m
-    [match form
-      [form/word w] [none]
-      [form/list l]
-      [[func go [i]
-        [if [lt-s i [size l]]
-          [if-let [m [find-first-meta [at l i]]]
-            m
-            [go [inc i]]]
-          [none]]]
-        0]]]]
-
 
 [defn unify-report [gctx t1 t2 .. forms]
   [let [form [first forms]
