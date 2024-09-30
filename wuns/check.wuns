@@ -210,6 +210,9 @@
                       [go [at type-args1 i] [at type-args2 i]]]
                     [push-unify-error [quote [not unifiable - different number of type arguments]]]]
                   [do
+                    [logq diff types]
+                    [log type-name1]
+                    [log type-name2]
                     [push-unify-error [quote [not unifiable - different types]]]]]
 
                 [push-unify-error [quote [not unifiable - different types]]]]]]]]]]
@@ -224,7 +227,7 @@
 [type type-def []
   [record
     [arity i32]
-    [param-map [transient-kv-map type-var]]
+    [param-map [transient-kv-map type]]
     [result-type type]]]
 
 [type check-type-scheme []
@@ -270,10 +273,33 @@
 [defmacro report [form .. lmsg]
   [flist [quote report-fn] [quote gctx] [flist [quote quote] [form/list lmsg]] form]]
 
+[def try-get-meta
+  [type-anno
+    [extern interpreter try-get-meta]
+    [func [form] [option form]]]]
+
+[defn find-first-meta [form]
+  [if-let [m [try-get-meta form]]
+    m
+    [match form
+      [form/word w] [none]
+      [form/list l]
+      [[func go [i]
+        [if [lt-s i [size l]]
+          [if-let [m [find-first-meta [at l i]]]
+            m
+            [go [inc i]]]
+          [none]]]
+        0]]]]
+
+
 [defn unify-report [gctx t1 t2 .. forms]
   [let [form [first forms]
         errors [unify t1 t2]]
     [for-each error errors
+      [log [meta form]]
+      [log form]
+      [log [size forms]]
       [report-fn gctx [form/list error] form]]]]
 
 [defn int-to-type-var-name [i]
@@ -430,65 +456,68 @@
       [report form expected a word]
       [none]]]]
 
+
+[defn try-get-list-report [gctx form]
+  [match form
+    [form/list l] l
+    [do
+      [report form expected a list]
+      [list]]]]
+
 [comment given a type such as [func [i32 i32] i32] instantiates to a type-scheme]
-[defn instantiate-annotated-type [gctx type-var-env syntax-type]
-  [match syntax-type
-    [form/word w]
-    [ifs
-      [eq-word w [word i32]]
-      type-i32
-
-      [eq-word w [word word]]
-      type-word
-
-      [eq-word w [word form]]
-      type-form
-
-      [if-let [t [try-get type-var-env w]]
-        t
-        [do
-          [check-type-arity gctx syntax-type 0]
-          [make-type-list w [list]]]]]
-
-    [form/list elements]
-    [let-do [s-form [size elements]
-             n-of-args [dec s-form]]
+[defn instantiate-annotated-type [gctx type-var-env outer-syntax-type]
+  [[func go [syntax-type]
+    [match syntax-type
+      [form/word w]
       [ifs
-        [eq s-form 0]
-        [report-generate syntax-type expects a non-empty list]
+        [eq-word w [word i32]]
+        type-i32
 
+        [eq-word w [word word]]
+        type-word
+
+        [eq-word w [word form]]
+        type-form
+
+        [if-let [t [try-get type-var-env w]]
+          t
+          [do
+            [check-type-arity gctx syntax-type 0]
+            [make-type w]]]]
+
+      [form/list elements]
+      [let-do [s-form [size elements]
+               n-of-args [dec s-form]]
+        [assert [not [eq s-form 0]] type-scheme expects a non-empty list]
         [if-let [w [try-get-word-report gctx [first elements]]]
           [ifs
             [eq-word w [word func]]
             [do
               [report-when-not [eq n-of-args 2] syntax-type expects 2 arguments a parameter list and a return type]
               [let [params [second elements]
-                    - [report-when-not [is-list params] syntax-type expects a list]
-                    params-list [form-to-list params]
-                    result [third elements]
+                    params-list [try-get-list-report gctx params]
                     params-parsed [parse-parameter-list params-list]
                     reg-params [parameters/regular-params params-parsed]
                     internal-params
                     [list-map param reg-params
                       [do
-                        [report-when [eq-form param [quote ..]] param .. in wrong place]
-                        [instantiate-annotated-type gctx type-var-env param]]]]
+                        [go param]]]
+                    result [third elements]]
                 [type-func
                   internal-params
                   [if-let [rest-param [parameters/rest-param-opt params-parsed]]
-                    [some [instantiate-annotated-type gctx type-var-env rest-param]]
+                    [some [go rest-param]]
                     [none]]
-                  [instantiate-annotated-type gctx type-var-env result]]]]
-
-            [eq-word w [word type-scheme]]
-            [logq-abort instantiate-annotated-type type-scheme not allowed here [identity w]]
+                  [go result]]]]
 
             [do
               [check-type-arity gctx [first elements] n-of-args]
               [make-type-list w
-                [list-map e [slice elements 1 s-form] [instantiate-annotated-type gctx type-var-env e]]]]]
+                [list-map e [slice elements 1 s-form] [go e]]]]]
 
-          [logq-abort instantiate-annotated-type unknown type [identity w]]]]]]]
+          [logq-abort instantiate-annotated-type unknown type]]]]]
+            outer-syntax-type
+            ]]
 
 [defn instantiate-annotated-type-or-scheme [gctx level syntax-type]
   [match syntax-type
@@ -498,22 +527,18 @@
     [form/list elements]
     [let-do [s-form [size elements]
              n-of-args [dec s-form]]
-      [ifs
-        [eq s-form 0]
-        [report-generate syntax-type expects a non-empty list]
-
-        [if-let [w [try-get-word-report gctx [first elements]]]
-          [if [eq-word w [word type-scheme]]
-            [do
-              [report-when-not [eq n-of-args 2] type type-scheme expects 2 arguments]
-              [let-do [type-var-env [transient-kv-map]]
-                [for-each tv [try-get-list-report [second elements]]
-                  [when-let [tvw [try-get-word-report gctx tv]]
-                    [set-kv-map type-var-env tvw [generate-fresh-type-var gctx level]]]]
-                [logq instantiate-annotated-type type-var-env [identity type-var-env]]
-                [instantiate-annotated-type gctx type-var-env [third elements]]]]
-            [instantiate-annotated-type gctx empty-kv-map syntax-type]]
-          [instantiate-annotated-type gctx empty-kv-map syntax-type]]]]]]
+      [assert [not [eq s-form 0]] expects a non-empty list]
+      [if-let [w [try-get-word-report gctx [first elements]]]
+        [if [eq-word w [word type-scheme]]
+          [do
+            [report-when-not [eq n-of-args 2] syntax-type type-scheme expects 2 arguments]
+            [let-do [type-var-env [transient-kv-map]]
+              [for-each tv [try-get-list-report gctx [second elements]]
+                [when-let [tvw [try-get-word-report gctx tv]]
+                  [set-kv-map type-var-env tvw [generate-fresh-type-var gctx level]]]]
+              [instantiate-annotated-type gctx type-var-env [third elements]]]]
+          [instantiate-annotated-type gctx empty-kv-map syntax-type]]
+        [instantiate-annotated-type gctx empty-kv-map syntax-type]]]]]
 
 [defn is-builtin-type [word]
   [or [eq-word word [word i32]]
@@ -544,13 +569,6 @@
 
       [inst-type/apply type-name type-args]
       [none]]]]
-
-[defn try-get-list-report [form]
-  [match form
-    [form/list l] l
-    [do
-      [report form expected a list]
-      [list]]]]
 
 [defn is-syntactic-value [form]
   [match form
@@ -585,19 +603,16 @@
         [form/list l] 0]]]]
 
 [defn check [gctx level lctx form]
-  [ifs
-    [is-word form]
-    [if-let [type-scheme [try-get-var-type gctx lctx [form-to-word form]]]
+  [match form
+    [form/word w]
+    [if-let [type-scheme [try-get-var-type gctx lctx w]]
       [specialize-type-scheme gctx level type-scheme]
       [do
         [report form not found]
         [generate-fresh-type-var gctx level]]]
 
-    [not [is-list form]]
-    [logq-abort check input not a form [identity form]]
-
-    [let [sub-forms [form-to-list form]
-          s-form [size sub-forms]
+    [form/list sub-forms]
+    [let [s-form [size sub-forms]
           first-form [first sub-forms]
           n-of-args [dec s-form]]
       [ifs
@@ -644,7 +659,7 @@
                   [has types name-word]
                   [report name-form already defined]
 
-                  [let-do [type-params-list [try-get-list-report [at sub-forms [inc i]]]
+                  [let-do [type-params-list [try-get-list-report gctx [at sub-forms [inc i]]]
                            param-map [transient-kv-map]
                            type-args [atom [linked-list/nil]]]
                     [for-each param type-params-list
@@ -665,11 +680,11 @@
                  this-type-def [get types name-word]
                  result-type [type-def/result-type this-type-def]
                  param-map [type-def/param-map this-type-def]
-                 type-def-list [try-get-list-report [at sub-forms [add 2 i]]]]
+                 type-def-list [try-get-list-report gctx [at sub-forms [add 2 i]]]]
                 [ifs
                   [eq-form [quote union] [first type-def-list]]
                   [for i 1 [size type-def-list]
-                    [let-do [ctor [try-get-list-report [at type-def-list i]]
+                    [let-do [ctor [try-get-list-report gctx [at type-def-list i]]
                              param-list [list-map param [slice ctor 1 [size ctor]] [instantiate-annotated-type gctx param-map param]]]
                       [when-let [ctor-name [try-get-word-report gctx [first ctor]]]
                         [set-kv-map def-var-types [concat-words type-prefix ctor-name]
@@ -680,7 +695,7 @@
                     [fields [atom [linked-list/nil]]]
                     [for i 1 [size type-def-list]
                       [let-do
-                        [field-def [try-get-list-report [at type-def-list i]]
+                        [field-def [try-get-list-report gctx [at type-def-list i]]
                          inst-field-type [instantiate-annotated-type gctx param-map [second field-def]]]
                         [push fields inst-field-type]
                         [when-let [field-name [try-get-word-report gctx [first field-def]]]
@@ -689,7 +704,7 @@
                     [set-kv-map def-var-types name-word
                       [generalize-top [type-func [clone-growable-to-frozen-list fields] [none] [type-def/result-type [get types name-word]]]]]]
 
-                  [logq-abort check type definition not recognized [first type-def-list]]]]]]
+                  [logq-abort check type definition not recognized]]]]]
           type-empty-tuple]
 
         [eq-form first-form [quote match]]
@@ -712,7 +727,8 @@
                                  var-values [transient-kv-map]
                                  branch-ctx [make-local-context var-values lctx first-form]]
                           [report-when-not [eq [size destructor-params] [dec [size pattern-list]]]
-                            pattern-list and destructor-params have different sizes]
+                            pattern
+                            pattern and destructor-params have different sizes]
                           [for i 1 [size pattern-list]
                             [if-let [pattern-var [try-get-form-word-option [at pattern-list i]]]
                               [let [general-val-type [generalize level [at destructor-params [dec i]]]]
@@ -817,9 +833,7 @@
           value-type]
 
         [eq-form first-form [quote atom]]
-        [if [lt-s n-of-args 1]
-          [report form expects at least one argument]
-          [type-atom [check gctx level lctx [second sub-forms]]]]
+        [type-atom [check gctx level lctx [second sub-forms]]]
 
         [eq-form first-form [quote extern]]
         [do
@@ -857,23 +871,6 @@
   [type-anno
     [extern interpreter evaluate]
     [func [evaluation-context form] [tuple]]]]
-
-[defn check-top [gctx form]
-  [logq form [identity form]]
-  [evaluate [check-context/eval-context gctx] form]
-  [let-do [it [check gctx 0 [none] form]]
-   [logq present-type [normalize-present-type-scheme it]]
-   it]]
-
-[defn check-top-forms [gctx forms]
-  [assert [size forms] check-top-forms expects at least one form]
-  [logq we are checking]
-  [[func check-top-forms-go [i]
-    [if [lt-s i [dec [size forms]]]
-      [do
-        [check-top gctx [at forms i]]
-        [check-top-forms-go [inc i]]]
-      [check-top gctx [at forms i]]]] 0]]
 
 [defn internal-to-present-type [internal-type]
   [let [nt internal-type]
@@ -941,3 +938,18 @@
       [flist [quote type-scheme]
         [form-list new-present-type-vars]
         [internal-to-present-type copied-type]]]]]
+
+[defn check-top [gctx form]
+  [logq form [identity form]]
+  [evaluate [check-context/eval-context gctx] form]
+  [check gctx 0 [none] form]]
+
+[defn check-top-forms [gctx forms]
+  [assert [size forms] check-top-forms expects at least one form]
+  [logq we are checking]
+  [[func check-top-forms-go [i]
+    [if [lt-s i [dec [size forms]]]
+      [do
+        [check-top gctx [at forms i]]
+        [check-top-forms-go [inc i]]]
+      [check-top gctx [at forms i]]]] 0]]
