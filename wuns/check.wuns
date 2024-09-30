@@ -582,6 +582,19 @@
             0]
         [form/list l] 0]]]]
 
+[defn try-expand-form [gctx form]
+  [match form
+    [form/word w] [none]
+    [form/list l]
+    [if [is-empty l]
+      [none]
+      [if-let [mac
+        [if-let [w [try-get-form-word-option [first l]]]
+          [try-get-macro [check-context/eval-context gctx] w]
+          [none]]]
+        [some [interpreter-apply mac [slice l 1 [size l]]]]
+        [none]]]]]
+
 [defn check [gctx level lctx form]
   [match form
     [form/word w]
@@ -835,37 +848,33 @@
           [unify-report gctx inst-anno-type value-type form]
           value-type]
 
-        [let [eval-context [check-context/eval-context gctx]]
-          [if-let [mac [if-let [w [try-get-form-word-option first-form]]
-                        [try-get-macro eval-context w]
-                        [none]]]
-            [let-do [expanded-form [interpreter-apply mac [slice sub-forms 1 s-form]]]
-              [check gctx level lctx expanded-form]]
-            [let-do
-              [func-type [check gctx level lctx first-form]
-               is-fexpr
-                [match [normalize-type func-type]
-                  [type/inst inst-type]
-                  [match inst-type
-                    [inst-type/func ft]
-                      [match [func-type/kind ft]
-                        [function-kind/fexpr] 1
-                        0]
-                    0]
-                  0]]
-              [if is-fexpr
-                [let-do
-                  [arg-types [list-map arg [slice sub-forms 1 s-form] type-form]
-                   t-res [generate-fresh-type-var gctx level]
-                   t-func [type-func arg-types [none] t-res]]
-                  [unify-report gctx func-type t-func form]
-                  t-res]
-                [let-do
-                  [arg-types [list-map arg [slice sub-forms 1 s-form] [check gctx level lctx arg]]
-                   t-res [generate-fresh-type-var gctx level]
-                   t-func [type-func arg-types [none] t-res]]
-                  [unify-report gctx func-type t-func form]
-                  t-res]]]]]]]]]
+        [if-let [expanded-form [try-expand-form gctx form]]
+          [check gctx level lctx expanded-form]
+          [let-do
+            [func-type [check gctx level lctx first-form]
+              is-fexpr
+              [match [normalize-type func-type]
+                [type/inst inst-type]
+                [match inst-type
+                  [inst-type/func ft]
+                    [match [func-type/kind ft]
+                      [function-kind/fexpr] 1
+                      0]
+                  0]
+                0]]
+            [if is-fexpr
+              [let-do
+                [arg-types [list-map arg [slice sub-forms 1 s-form] type-form]
+                  t-res [generate-fresh-type-var gctx level]
+                  t-func [type-func arg-types [none] t-res]]
+                [unify-report gctx func-type t-func form]
+                t-res]
+              [let-do
+                [arg-types [list-map arg [slice sub-forms 1 s-form] [check gctx level lctx arg]]
+                  t-res [generate-fresh-type-var gctx level]
+                  t-func [type-func arg-types [none] t-res]]
+                [unify-report gctx func-type t-func form]
+                t-res]]]]]]]]
 
 [def evaluate
   [type-anno
