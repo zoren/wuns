@@ -15,7 +15,6 @@ import {
   defVar,
   stringToWord,
 } from './core.js'
-import { isPlainObject } from './utils.js'
 
 export const apply = (fn, args) => {
   if (typeof fn !== 'function') throw new Error('apply expects function')
@@ -145,26 +144,25 @@ export const atom_set = (atom, value) => {
 }
 export const is_identical = (value_a, value_b) => (value_a === value_b) | 0
 
-export const transient_kv_map = () => ({})
+export const transient_kv_map = () => new Map()
 export const has = (kv_map, key) => {
-  if (!isPlainObject(kv_map)) throw new Error('has expects map')
-  return (wordValue(key) in kv_map) | 0
+  if (!(kv_map instanceof Map)) throw new Error('has expects map')
+  return kv_map.has(key) | 0
 }
 export const get = (kv_map, key) => {
-  if (!isPlainObject(kv_map)) throw new Error('get expects map')
-  const ks = wordValue(key)
-  if (ks in kv_map) return kv_map[ks]
-  throw new Error(`key not found: ${ks} in [${Object.keys(kv_map)}]`)
+  if (!(kv_map instanceof Map)) {
+    console.dir({ kv_map, key })
+    throw new Error('get expects map')}
+  if (kv_map.has(key)) return kv_map.get(key)
+  throw new Error(`key not found: ${key}`)
 }
 export const set_kv_map = (kv_map, key, value) => {
-  if (!isPlainObject(kv_map)) throw new Error('set-kv-map expect map')
-  if (Object.isFrozen(kv_map)) throw new Error('set-kv-map expects mutable object')
-  kv_map[wordValue(key)] = value
+  if (!(kv_map instanceof Map)) throw new Error('set-kv-map expect map')
+  kv_map.set(key, value)
 }
 export const freeze_kv_map = (kv_map) => {
-  if (!isPlainObject(kv_map)) throw new Error('keys expect map')
-  if (Object.isFrozen(kv_map)) throw new Error('freeze expects mutable object')
-  Object.freeze(kv_map)
+  if (!(kv_map instanceof Map)) throw new Error('keys expect map')
+  return Object.freeze(kv_map)
 }
 
 export const log = (...forms) => {

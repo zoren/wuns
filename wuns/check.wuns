@@ -248,7 +248,6 @@
     [types [transient-kv-map type-def]]
     [eval-context [evaluation-context]]]]
 
-
 [defn make-global-context []
   [check-context
     [atom [linked-list/nil]]

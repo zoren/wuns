@@ -2,7 +2,7 @@
 [def tests-run-atom [atom 0]]
 
 [defn get-messages-list [gctx]
-  [clone-growable-to-frozen-list [getq gctx messages]]]
+  [clone-growable-to-frozen-list [check-context/messages gctx]]]
 
 [defn test-ok-fn [expected-type forms]
   [let [gctx [make-global-context]
@@ -42,7 +42,7 @@
         [logq-abort test-failed failed expected [size expected-messages] messages but found [size messages]]]]
     [for i 0 [size messages]
       [let-do [expected-message [form-to-list [at expected-messages i]]
-               message [getq [at messages i] message]]
+               message [report-message/message [at messages i]]]
         [assert [eq-list-of-forms expected-message message]
           test-failed failed expected message
           [identity expected-message]
@@ -406,7 +406,7 @@
   [let-do
     [gctx [make-global-context]]
     [for-each form forms
-      [evaluate [getq gctx eval-context] form]
+      [evaluate [check-context/eval-context gctx] form]
       [check-top gctx form]
       [let [messages [get-messages-list gctx]]
         [when-not [is-empty messages]
