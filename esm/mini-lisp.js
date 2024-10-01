@@ -59,7 +59,7 @@ class Closure extends Function {
 
 const makeClosure = (env, name, parameters, body, kind) => Object.freeze(new Closure(env, name, parameters, body, kind))
 const isClosure = (v) => v instanceof Closure
-import { isForm, tryGetFormWord, tryGetFormList, isTaggedValue, makeValueTagger, isWord, atom, makeRecord, getRecordType } from './core.js'
+import { tryGetFormWord, tryGetFormList, isTaggedValue, makeValueTagger, isWord, atom, makeRecord, getRecordType, print } from './core.js'
 
 const printForm = (form) => {
   const word = tryGetFormWord(form)
@@ -70,25 +70,6 @@ const printForm = (form) => {
 }
 
 const langUndefined = Symbol('undefined')
-
-const print = (value) => {
-  if (value === langUndefined) return '[]'
-  if (typeof value === 'string') return `[word ${value}]`
-  if (typeof value === 'number') return `[i32 ${value}]`
-  if (isForm(value)) return `[quote ${printForm(value)}]`
-  if (Array.isArray(value)) return `[list${value.map((v) => ' ' + print(v)).join('')}]`
-  if (typeof value === 'function') return '[func]'
-  if (isClosure(value)) return `[closure ${value.closureName} ${value.parameters.join(' ')}]`
-  if (value === undefined) return '*undefined*'
-
-  if (Object.isFrozen(value))
-    return `[kv-mapq${Object.entries(value)
-      .map(([k, v]) => ` ${k} ${print(v)}`)
-      .join('')}]`
-  return `[transient-kv-map${Object.entries(value)
-    .map(([k, v]) => ` ${k} ${print(v)}`)
-    .join('')}]`
-}
 
 import { meta } from './core.js'
 
