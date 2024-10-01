@@ -128,10 +128,9 @@ import fs from 'node:fs'
 import { parse } from './parseTreeSitter.js'
 
 const instructions = wrapJSFunctionsToObject(instructionFunctions)
-
+const intrinsics = { instructions }
 const externs = {
   host,
-  instructions,
 
   'performance-now': () => performance.now(),
 }
@@ -215,6 +214,16 @@ export const evalForm = (env, form) => {
           ext = extProp
         }
         return ext
+      }
+      case 'intrinsic': {
+        let intrinsic = intrinsics
+        for (let i = 1; i < forms.length; i++) {
+          const prop = getFormWord(forms[i])
+          const intrinsicProperty = intrinsic[prop]
+          if (intrinsicProperty === undefined) throw evalError('undefined intrinsic: ' + prop + ' in ' + intrinsic)
+          intrinsic = intrinsicProperty
+        }
+        return intrinsic
       }
       case 'def': {
         assertNumArgs(2)
@@ -398,7 +407,6 @@ export const catchErrors = (f) => {
   try {
     return f()
   } catch (e) {
-    // console.dir(e)
     console.log('catchErrors', e.message, e.form, e.innerError ? 'has inner' : '')
     let curErr = e
     while (curErr) {
@@ -407,7 +415,6 @@ export const catchErrors = (f) => {
         if (word) return `'${word}' ${meta(form)}`
         const list = tryGetFormList(form)
         if (list) return `[${list.map(dumpFormMeta).join(' ')} ${meta(form)}]`
-        // throw new Error('unexpected form: ' + form)
         console.log('form was', form)
         return '???'
       }

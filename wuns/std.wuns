@@ -53,16 +53,11 @@
   [flist
     [quote def]
     def-name
-    [flist [quote type-anno]
-      [flist [quote extern] [quote instructions] inst-name]
-      [quote [func [i32 i32] i32]]]]]
+    [flist [quote intrinsic] [quote instructions] inst-name]]]
 
 [defmacro def-instruction [def-name inst-name] [def-instruction-fn def-name inst-name]]
 
-[def unreachable
-  [type-anno
-    [extern instructions unreachable]
-    [type-scheme [a] [func [] a]]]]
+[def unreachable [intrinsic instructions unreachable]]
 
 [defn form-to-word [form]
   [match form

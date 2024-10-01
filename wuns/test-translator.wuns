@@ -43,6 +43,10 @@
       [list [test-assert/eq [list [i32 5]] [word f] [list]]]
       [list
         [quote [def f [func internal-name [] [i32 5]]]]]]
+    [test
+      [list [test-assert/eq [list [i32 5]] [word f] [list]]]
+      [list
+        [quote [def f [func internal-name [] [do [i32 2] [i32 5]]]]]]]
 ]]
 
 [for-each t tests

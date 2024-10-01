@@ -53,6 +53,8 @@
 [defn type-func [params opt-rest-param result]
   [type/inst [inst-type/func [func-type params opt-rest-param result [function-kind/func]]]]]
 
+[def i32i32-to-i32 [type-func [list type-i32 type-i32] [none] type-i32]]
+
 [defn type-ctor [params result]
   [type/inst [inst-type/func [func-type params [none] result [function-kind/ctor]]]]]
 
@@ -607,6 +609,16 @@
           [some expanded]]
         [none]]]]]
 
+[defn word-list-contains [w .. words]
+  [let [s-words [size words]]
+    [[func go [i]
+      [if [lt-s i s-words]
+        [if [eq-word w [at words i]]
+          1
+          [go [inc i]]]
+        0]]
+      0]]]
+
 [defn check [gctx level lctx form]
   [match form
     [form/word w]
@@ -849,6 +861,34 @@
             [let [sf [at sub-forms i]]
               [report-when-not [is-word sf] sf expects words]]]
           [generate-fresh-type-var gctx level]]
+
+        [eq-form first-form [quote intrinsic]]
+        [do
+          [for i 1 s-form
+            [let [sf [at sub-forms i]]
+              [report-when-not [is-word sf] sf expects words]]]
+          [let [opt-type
+            [if-let [w1 [try-get-word-report gctx [second sub-forms]]]
+              [ifs
+                [eq-word w1 [word instructions]]
+                [if-let [w2 [try-get-word-report gctx [third sub-forms]]]
+                  [ifs
+                    [word-list-contains w2
+                      [word i32.add] [word i32.sub] [word i32.mul] [word i32.rem-s] [word i32.div-s]
+                      [word i32.and] [word i32.or] [word i32.xor]
+                      [word i32.eq] [word i32.lt-s] [word i32.le-s]]
+                    [some i32i32-to-i32]
+
+                    [eq-word w2 [word unreachable]]
+                    [some [type-func [list] [none] [generate-fresh-type-var gctx [inc level]]]]
+
+                    [none]]
+                  [none]]
+                [none]]
+              [none]]]
+            [match opt-type
+              [none] [generate-fresh-type-var gctx level]
+              [some t] t]]]
 
         [eq-form first-form [quote type-anno]]
         [let-do
