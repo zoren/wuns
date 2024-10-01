@@ -59,7 +59,19 @@ class Closure extends Function {
 
 const makeClosure = (env, name, parameters, body, kind) => Object.freeze(new Closure(env, name, parameters, body, kind))
 const isClosure = (v) => v instanceof Closure
-import { tryGetFormWord, tryGetFormList, isTaggedValue, makeValueTagger, isWord, atom, makeRecord, getRecordType, print } from './core.js'
+import {
+  tryGetFormWord,
+  tryGetFormList,
+  isTaggedValue,
+  makeValueTagger,
+  isWord,
+  atom,
+  makeRecord,
+  getRecordType,
+  print,
+  formWord,
+  formList,
+} from './core.js'
 
 const printForm = (form) => {
   const word = tryGetFormWord(form)
@@ -111,6 +123,9 @@ const { host } = jsHost
 
 import { instructionFunctions } from './instructions.js'
 import { wrapJSFunctionsToObject } from './utils.js'
+import fs from 'node:fs'
+
+import { parse } from './parseTreeSitter.js'
 
 const instructions = wrapJSFunctionsToObject(instructionFunctions)
 
@@ -120,6 +135,33 @@ const externs = {
 
   'performance-now': () => performance.now(),
 }
+
+function* parseToForms(content, contentName) {
+  if (!isWord(contentName)) throw new Error('contentName must be a word')
+  /**
+   * @param {TSParser.SyntaxNode} node
+   */
+  const nodeToForm = (node) => {
+    const { isError, type, startPosition, endPosition } = node
+    if (isError) {
+      console.dir({ metaPrefix: contentName, startPosition, endPosition })
+      throw new Error('unexpected error node')
+    }
+    const { row, column } = startPosition
+    const metaData = list(contentName, row + 1, column + 1)
+    switch (type) {
+      case 'word':
+        return formWord(node.text, metaData)
+      case 'list':
+        return formList(Object.freeze(node.namedChildren.map(nodeToForm)), metaData)
+      default:
+        throw new Error('unexpected node type: ' + type)
+    }
+  }
+  for (const child of parse(content).rootNode.namedChildren) yield nodeToForm(child)
+}
+
+const readFile = (filePath) => parseToForms(fs.readFileSync(filePath, 'ascii'), filePath)
 
 const evalForm = (env, form) => {
   const curForm = form
@@ -349,37 +391,11 @@ const evalForm = (env, form) => {
 
 const defEnv = makeDefEnv()
 
-import fs from 'node:fs'
-
-import { formWord, formList } from './core.js'
-import { parse } from './parseTreeSitter.js'
-
-function* parseToForms(content, contentName) {
-  if (!isWord(contentName)) throw new Error('contentName must be a word')
-  /**
-   * @param {TSParser.SyntaxNode} node
-   */
-  const nodeToForm = (node) => {
-    const { isError, type, startPosition, endPosition } = node
-    if (isError) {
-      console.dir({ metaPrefix: contentName, startPosition, endPosition })
-      throw new Error('unexpected error node')
-    }
-    const { row, column } = startPosition
-    const metaData = list(contentName, row + 1, column + 1)
-    switch (type) {
-      case 'word':
-        return formWord(node.text, metaData)
-      case 'list':
-        return formList(Object.freeze(node.namedChildren.map(nodeToForm)), metaData)
-      default:
-        throw new Error('unexpected node type: ' + type)
-    }
-  }
-  for (const child of parse(content).rootNode.namedChildren) yield nodeToForm(child)
+const evaluateForms = (forms) => {
+  let result = langUndefined
+  for (const form of forms) result = evalForm(defEnv, form)
+  return result
 }
-
-const readFile = (filePath) => parseToForms(fs.readFileSync(filePath, 'ascii'), filePath)
 
 const none = makeValueTagger('option/none', 0)()
 const some = makeValueTagger('option/some', 1)
@@ -463,16 +479,8 @@ const catchErrors = (f) => {
   }
 }
 
-const evaluateForms = (forms) => {
-  let result = langUndefined
-  for (const form of forms) result = evalForm(defEnv, form)
-  return result
-}
 catchErrors(() => {
-  for (const filePath of files) {
-    const forms = readFile(filePath)
-    evaluateForms(forms)
-  }
+  for (const filePath of files) evaluateForms(readFile(filePath))
 })
 import { startRepl } from './repl-util.js'
 
