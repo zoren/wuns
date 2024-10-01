@@ -276,26 +276,26 @@
     [wat/seq
       [list-map inst insts [wat-inst-to-out inst]]]]]
 
-[defn print-wat-output [printer output]
-  [for-each of [clone-growable-to-frozen-list [wat-output/funcs output]]
-    [print-wat printer
+[defn output-func-to-wat [of]
+  [wat-concat
+    [list
+      [wat/word [word func]]
+      [wat/dollar [output-func/name of]]
+      [wat-list [wat/word [word export]] [wat/dqstring [output-func/name of]]]]
+    [list-map p [output-func/parameters of]
+      [wat-list [wat/word [word param]] [wat/dollar [pair/fst p]] [wat/word [wat-type-basic-to-word [pair/snd p]]]]]
+    [list
       [wat-concat
-        [list
-          [wat/word [word func]]
-          [wat/dollar [output-func/name of]]
-          [wat-list [wat/word [word export]] [wat/dqstring [output-func/name of]]]]
-        [list-map p [output-func/parameters of]
-          [wat-list [wat/word [word param]] [wat/dollar [pair/fst p]] [wat/word [wat-type-basic-to-word [pair/snd p]]]]]
-        [list
-          [wat-concat
-            [list [wat/word [word result]]]
-            [list-map rt [output-func/result of] [wat/word [wat-type-basic-to-word rt]]]]]
-        [list
-          [wat-inst-to-out [output-func/body of]]]]]]]
+        [list [wat/word [word result]]]
+        [list-map rt [output-func/result of] [wat/word [wat-type-basic-to-word rt]]]]]
+    [list
+      [wat-inst-to-out [output-func/body of]]]]]
 
 [defn generate-wat [output]
   [let-do [p [empty-printer [i32 80]]]
-    [print-wat-output p output]
+    [print-wat p
+      [wat/seq [list-map of [clone-growable-to-frozen-list [wat-output/funcs output]]
+        [output-func-to-wat of]]]]
     [let-do [ba [printer-to-byte-array p]]
       [byte-array-log-as-string ba]
       [wasm-instantiate [byte-array-to-wasm-module [wat-to-byte-array ba]]]]]]
