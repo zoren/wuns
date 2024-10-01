@@ -433,4 +433,4 @@
       [logq checking [identity file]]
       [test-ok-fn-stop-at-error gctx [read-file file]]]]]
 
-[test-ok-files [word std.wuns] [word check.wuns]]
+[test-ok-files [word std.wuns] [word check.wuns] [word translator.wuns]]

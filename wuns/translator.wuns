@@ -1,0 +1,131 @@
+[type wat-type-basic []
+  [union
+    [i32]
+    [i64]
+    [f32]
+    [f64]]]
+
+[type wat-type []
+  [union
+    [basic wat-type-basic]
+    [tuple [list wat-type-basic]]]]
+
+[type output-func []
+  [record
+    [name word]
+    [parameters [list [pair word wat-type-basic]]]
+    [result wat-type]
+    [body form]]]
+
+[type wat-output []
+  [record
+    [funcs [atom [linked-list output-func]]]]]
+
+[defn empty-wat-output []
+  [wat-output [atom [linked-list/nil]]]]
+
+[type translate-context []
+  [record
+    [check-context check-context]
+    ]]
+
+[defn empty-translate-context []
+  [translate-context [make-global-context]]]
+
+[defn instructions [insts]
+  [form-concat [list [quote instructions]] insts]]
+
+[defn translate-type [present-type]
+  [match present-type
+    [form/word w]
+    [ifs
+      [eq-word w [word i32]]
+      [wat-type/basic [wat-type-basic/i32]]
+
+      [logq-abort not implemented]]
+
+    [form/list l]
+    [ifs
+      [eq-form [first l] [quote tuple]]
+      [do
+        [assert [is-empty [rest l]] expected non-empty list]
+        [wat-type/tuple [list]]]
+
+      [logq-abort not implemented]]]]
+
+[defn translate-form [tctx lctx form]
+  [match form
+    [form/word w] [logq-abort translate-form word not implemented]
+    [form/list l]
+    [do
+      [assert [not [is-empty l]] expected non-empty list]
+      [match [first l]
+        [form/word w]
+        [ifs
+          [eq-word w [word do]]
+          [instructions [list-map f [rest l] [translate-form tctx lctx f]]]
+
+          [eq-word w [word def]]
+          [logq-abort no defs in top level]
+
+          [logq-abort translate-top unknown special form]]
+
+        [form/list l]
+        [logq-abort not implemented]]]]]
+
+[defn translate-top [tctx output form]
+  [match form
+    [form/word w] [assert 0 not implemented]
+    [form/list l]
+    [do
+      [assert [not [is-empty l]] expected non-empty list]
+      [match [first l]
+        [form/word w]
+        [ifs
+          [eq-word w [word def]]
+          [do
+            [assert [eq [size l] 3] expected 3 elements]
+            [let-do [name [second l]
+                     body [form-to-list [third l]]
+                     head-body [first body]
+                     rest-body [rest body]]
+              [ifs
+                [eq-form head-body [quote func]]
+                [do
+                  [assert [eq [size rest-body] 3] expected 3 elements found]
+                  [let-do [params [form-to-list [second rest-body]]
+                           lctx [transient-kv-map]
+                           output-params [list]
+                           output-result [wat-type/tuple [list]]]
+                    [for i 0 [size params]
+                      [assert 0 not implemented]
+                      [set-kv-map lctx [at params i] i]]
+                    [push
+                      [wat-output/funcs output]
+                      [output-func
+                        [form-to-word name]
+                        output-params
+                        output-result
+                        [translate-form tctx lctx [third rest-body]]]]]]
+
+                [logq-abort translate-top unknown special form]]]]
+
+          [logq-abort translate-top unknown special form]]
+
+        [form/list l]
+        [assert 0 not implemented]
+        ]]]]
+
+[defn translate-intermediate [top-forms]
+  [let-do [o [empty-wat-output]
+           tctx [empty-translate-context]]
+    [for-each f top-forms
+      [translate-top tctx o f]]
+    o]]
+
+[defn generate-wat [output]
+  [for-each f [clone-growable-to-frozen-list [wat-output/funcs output]]
+    [log f]]]
+
+[defn translate-to-wat [forms]
+  [generate-wat [translate-intermediate forms]]]

@@ -215,7 +215,11 @@
                     [log type-name2]
                     [push-unify-error [quote [not unifiable - different types]]]]]
 
-                [push-unify-error [quote [not unifiable - different types]]]]]]]]]]
+                [do
+                  [logq diff types]
+                  [log type-name1]
+                  [log inst-type2]
+                  [push-unify-error [quote [not unifiable - different types]]]]]]]]]]]
     [go outer-t1 outer-t2]
     [clone-growable-to-frozen-list errors]]]
 
