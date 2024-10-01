@@ -125,7 +125,7 @@ export const isAtom = (f) => f instanceof Atom
 const recordTag = Symbol('record')
 
 export const makeRecord = (type, fieldNames, args) => {
-  if (args.length !== fieldNames.length) throw evalError('wrong number of arguments to ' + type)
+  if (args.length !== fieldNames.length) throw new Error('wrong number of arguments to ' + type)
   const record = {}
   for (let i = 0; i < fieldNames.length; i++) record[fieldNames[i]] = args[i]
   record[recordTag] = type

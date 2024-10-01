@@ -325,7 +325,10 @@ export const evalForm = (env, form) => {
                 }
                 env.set(projecterName, projecter)
               }
-              const constructor = (...args) => makeRecord(type, fieldNames, args)
+              const constructor = (...args) => {
+                if (args.length !== fieldNames.length) throw evalError('wrong number of arguments to ' + type)
+                return makeRecord(type, fieldNames, args);
+              }
               env.set(type, constructor)
               break
             }
