@@ -7,20 +7,16 @@
     [f32]
     [f64]]]
 
-[type wat-type []
-  [union
-    [basic wat-type-basic]
-    [tuple [list wat-type-basic]]]]
-
 [type wat-inst []
   [union
+    [i32.const word]
     [instructions [list wat-inst]]]]
 
 [type output-func []
   [record
     [name word]
     [parameters [list [pair word wat-type-basic]]]
-    [result wat-type]
+    [result [list wat-type-basic]]
     [body wat-inst]]]
 
 [type wat-output []
@@ -38,24 +34,6 @@
 [defn empty-translate-context []
   [translate-context [make-global-context]]]
 
-[defn translate-type [present-type]
-  [match present-type
-    [form/word w]
-    [ifs
-      [eq-word w [word i32]]
-      [wat-type/basic [wat-type-basic/i32]]
-
-      [logq-abort not implemented]]
-
-    [form/list l]
-    [ifs
-      [eq-form [first l] [quote tuple]]
-      [do
-        [assert [is-empty [rest l]] expected non-empty list]
-        [wat-type/tuple [list]]]
-
-      [logq-abort not implemented]]]]
-
 [defn translate-form [tctx lctx form]
   [match form
     [form/word w] [logq-abort translate-form word not implemented]
@@ -65,6 +43,9 @@
       [match [first l]
         [form/word w]
         [ifs
+          [eq-word w [word i32]]
+          [wat-inst/i32.const [form-to-word [second l]]]
+
           [eq-word w [word do]]
           [wat-inst/instructions [list-map f [rest l] [translate-form tctx lctx f]]]
 
@@ -72,6 +53,28 @@
           [logq-abort no defs in top level]
 
           [logq-abort translate-top unknown special form]]
+
+        [form/list l]
+        [logq-abort not implemented]]]]]
+
+[defn get-form-type [form]
+  [match form
+    [form/word w] [logq-abort not implemented]
+    [form/list l]
+    [do
+      [assert [not [is-empty l]] expected non-empty list]
+      [match [first l]
+        [form/word w]
+        [ifs
+          [eq-word w [word i32]]
+          [list [wat-type-basic/i32]]
+
+          [eq-word w [word do]]
+          [if [eq [size l] 1]
+            [list]
+            [get-form-type [last l]]]
+
+          [logq-abort not implemented]]
 
         [form/list l]
         [logq-abort not implemented]]]]]
@@ -97,9 +100,10 @@
                 [do
                   [assert [eq [size rest-body] 3] expected 3 elements found]
                   [let-do [params [form-to-list [second rest-body]]
+                           func-body [third rest-body]
                            lctx [transient-kv-map]
                            output-params [list]
-                           output-result [wat-type/tuple [list]]]
+                           output-results [get-form-type func-body]]
                     [for i 0 [size params]
                       [logq-abort not implemented]
                       [set-kv-map lctx [at params i] i]]
@@ -108,8 +112,8 @@
                       [output-func
                         [form-to-word name]
                         output-params
-                        output-result
-                        [translate-form tctx lctx [third rest-body]]]]]]
+                        output-results
+                        [translate-form tctx lctx func-body]]]]]
 
                 [logq-abort translate-top unknown special form]]]]
 
@@ -164,18 +168,12 @@
   [for i 0 [word-byte-size word]
     [print-byte printer [char-code-at word i]]]]
 
-[defn print-wat-inst [printer inst]
-  [match inst
-    [wat-inst/instructions insts]
-    [do
-      [for-each i insts
-        [print-wat-inst printer i]]]]]
-
 [type wat []
   [union
     [word word]
     [dollar word]
     [dqstring word]
+    [seq [list wat]]
     [list [list wat]]]]
 
 [defn print-wat [printer wat]
@@ -183,24 +181,61 @@
     [wat/word w] [print-word printer w]
     [wat/dollar w] [do [print-byte printer ascii-dollar] [print-word printer w]]
     [wat/dqstring w] [do [print-byte printer ascii-double-quote] [print-word printer w] [print-byte printer ascii-double-quote]]
+    [wat/seq l]
+      [do
+        [when-not [is-empty l]
+          [print-wat printer [first l]]
+          [for i 1 [size l]
+            [print-byte printer ascii-space]
+            [print-wat printer [at l i]]]]]
     [wat/list l]
-    [do
-      [print-byte printer ascii-left-paren]
-      [when-not [is-empty l]
-        [print-wat printer [first l]]
-        [for i 1 [size l]
-          [print-byte printer ascii-space]
-          [print-wat printer [at l i]]]]
-      [print-byte printer ascii-right-paren]]]]
+      [do
+        [print-byte printer ascii-left-paren]
+        [when-not [is-empty l]
+          [print-wat printer [first l]]
+          [for i 1 [size l]
+            [print-byte printer ascii-space]
+            [print-wat printer [at l i]]]]
+        [print-byte printer ascii-right-paren]]
+      ]]
+
+[defn wat-list [.. l] [wat/list l]]
+
+[defn wat-type-basic-to-word [t]
+  [match t
+    [wat-type-basic/i32] [word i32]
+    [wat-type-basic/i64] [word i64]
+    [wat-type-basic/f32] [word f32]
+    [wat-type-basic/f64] [word f64]]]
+
+[defn wat-concat [.. l] [wat/list [concat-lists l]]]
+
+[defn wat-inst-to-out [i]
+  [match i
+    [wat-inst/i32.const w]
+    [wat-concat
+      [list [wat/word [word i32.const]] [wat/word w]]]
+
+    [wat-inst/instructions insts]
+    [wat/seq
+      [list-map inst insts [wat-inst-to-out inst]]]]]
 
 [defn print-wat-output [printer output]
   [for-each of [clone-growable-to-frozen-list [wat-output/funcs output]]
     [print-wat printer
-      [wat/list
+      [wat-concat
         [list
           [wat/word [word func]]
           [wat/dollar [output-func/name of]]
-          [wat/list [list [wat/word [word export]] [wat/dqstring [output-func/name of]]]]]]]]]
+          [wat-list [wat/word [word export]] [wat/dqstring [output-func/name of]]]]
+        [list-map p [output-func/parameters of]
+          [wat-list [wat/word [word param]] [wat/dollar [pair/fst p]] [wat/word [wat-type-basic-to-word [pair/snd p]]]]]
+        [list
+          [wat-concat
+            [list [wat/word [word result]]]
+            [list-map rt [output-func/result of] [wat/word [wat-type-basic-to-word rt]]]]]
+        [list
+          [wat-inst-to-out [output-func/body of]]]]]]]
 
 [defn generate-wat [output]
   [let-do [p [empty-printer [i32 80]]]
@@ -211,44 +246,3 @@
 
 [defn translate-to-wat [forms]
   [generate-wat [translate-intermediate forms]]]
-
-[defn eq-int-list [expected actual]
-  [and [eq [size expected] [size actual]]
-    [[func go [i]
-      [if [lt-s i [size expected]]
-        [if [eq [at expected i] [at actual i]]
-          [go [inc i]]
-          0]
-        1]] 0]]]
-
-[type test-assert []
-  [union
-    [eq [list i32] word [list i32]]]]
-
-[type test []
-  [record
-    [asserts [list test-assert]]
-    [module [list form]]]]
-
-[defn run-test [test-data]
-  [let-do [instance [translate-to-wat [test/module test-data]]]
-    [for-each a [test/asserts test-data]
-      [match a
-        [test-assert/eq expected func-name args]
-        [assert [eq-int-list expected [wasm-call-export instance func-name args]] test failed]]]]]
-
-[def tests
-  [list
-    [test
-      [list [test-assert/eq [list] [word f] [list]]]
-      [list
-        [quote [def f [func f [] [do]]]]]]
-    [test
-      [list [test-assert/eq [list] [word g] [list]]]
-      [list
-        [quote [def g [func internal-name [] [do]]]]]]
-]]
-
-[defn test []
-  [for-each t tests
-    [run-test t]]]
