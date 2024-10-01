@@ -246,14 +246,19 @@ export const evalForm = (env, form) => {
       case 'match': {
         if (numOfArgs === 0) throw evalError(`special form '${firstWord}' expected at least one argument`)
         const value = evalForm(env, forms[1])
-        if (!isTaggedValue(value)) {
-          console.dir(value)
-          throw evalError('expected tagged value')
-        }
-        const { tag, args } = value
         const findMatch = () => {
           for (let i = 2; i < forms.length - 1; i += 2) {
-            const patternList = getFormList(forms[i])
+            const pattern = forms[i]
+            const patternList = getFormList(pattern)
+            if (patternList.length === 0) throw evalError('pattern must have at least one word')
+            const firstPatternWord = getFormWord(patternList[0])
+            if (firstPatternWord === 'i32' || firstPatternWord === 'word') {
+              const patternValue = evalForm(env, pattern)
+              if (patternValue === value) return { newEnv: env, body: forms[i + 1] }
+              continue
+            }
+            if (!isTaggedValue(value)) throw evalError('expected tagged value')
+            const { tag, args } = value
             const patternCtorFunc = evalForm(env, patternList[0])
             if (typeof patternCtorFunc !== 'function') throw evalError('expected function')
             if (typeof patternCtorFunc.tag !== 'string') throw evalError('expected ctor function')
