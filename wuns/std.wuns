@@ -439,5 +439,13 @@
 
 [type byte-array [] [union]]
 [def-extern byte-array [func [i32] byte-array]]
+[def-extern byte-array-size [func [byte-array] i32]]
 [def-extern byte-array-get [func [byte-array i32] i32]]
 [def-extern byte-array-set [func [byte-array i32 i32] [tuple]]]
+[def-extern byte-array-log-as-string [func [byte-array] [tuple]]]
+[def-extern wat-to-byte-array [func [byte-array] byte-array]]
+[type wasm-module [] [union]]
+[def-extern byte-array-to-wasm-module [func [byte-array] wasm-module]]
+[type wasm-instance [] [union]]
+[def-extern wasm-instantiate [func [wasm-module] wasm-instance]]
+[def-extern wasm-call-export [func [wasm-instance word [list i32]] [list i32]]]

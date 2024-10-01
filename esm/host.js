@@ -98,7 +98,8 @@ export const mutable_list_of_size = (size) => {
 
 export const list_init_func = (size, func) => {
   if (size < 0) throw new Error('list-init-func expects non-negative size')
-  if (typeof func !== 'function') throw new Error('list-init-func expects function was: ' + func + ' ' + typeof func + ' ' + func.constructor.name)
+  if (typeof func !== 'function')
+    throw new Error('list-init-func expects function was: ' + func + ' ' + typeof func + ' ' + func.constructor.name)
   const l = Array.from({ length: size }, (_, index) => func(index))
   return Object.freeze(l)
 }
@@ -150,9 +151,7 @@ export const has = (kv_map, key) => {
   return kv_map.has(key) | 0
 }
 export const get = (kv_map, key) => {
-  if (!(kv_map instanceof Map)) {
-    console.dir({ kv_map, key })
-    throw new Error('get expects map')}
+  if (!(kv_map instanceof Map)) throw new Error('get expects map')
   if (kv_map.has(key)) return kv_map.get(key)
   throw new Error(`key not found: ${key}`)
 }
@@ -190,17 +189,61 @@ export const byte_array = (size) => {
   if (size < 0) throw new Error('byte-array expects non-negative size')
   return new Uint8Array(size)
 }
+export const byte_array_size = (byte_array) => {
+  if (!(byte_array instanceof Uint8Array)) throw new Error('byte-array-size expects byte array')
+  return byte_array.length
+}
 export const byte_array_get = (byte_array, index) => {
   if (!(byte_array instanceof Uint8Array)) throw new Error('byte-array-get expects byte array')
   if (!isSigned32BitInteger(index)) throw new Error('byte-array-get expects number: ' + index)
-  if (index < 0 || index >= byte_array.length) throw new Error('byte-array-get index out of bounds: ' + index + ' ' + byte_array.length)
+  if (index < 0 || index >= byte_array.length)
+    throw new Error('byte-array-get index out of bounds: ' + index + ' ' + byte_array.length)
   return byte_array[index]
 }
 export const byte_array_set = (byte_array, index, value) => {
   if (!(byte_array instanceof Uint8Array)) throw new Error('byte-array-set expects byte array')
   if (!isSigned32BitInteger(index)) throw new Error('byte-array-set expects number: ' + index)
-  if (index < 0 || index >= byte_array.length) throw new Error('byte-array-set index out of bounds: ' + index + ' ' + byte_array.length)
+  if (index < 0 || index >= byte_array.length)
+    throw new Error('byte-array-set index out of bounds: ' + index + ' ' + byte_array.length)
   if (!isSigned32BitInteger(value)) throw new Error('byte-array-set expects number: ' + value)
   if (value < 0 || value > 255) throw new Error('byte-array-set expects byte: ' + value)
   byte_array[index] = value
+}
+export const byte_array_log_as_string = (byte_array) => {
+  if (!(byte_array instanceof Uint8Array)) throw new Error('byte-array-log-as-string expects byte array')
+  return console.log(String.fromCharCode(...byte_array))
+}
+
+import wabtProm from 'wabt'
+
+const wabt = await wabtProm()
+
+export const wat_to_byte_array = (inputBuffer) => {
+  if (!(inputBuffer instanceof Uint8Array)) throw new Error('expects ArrayBuffer')
+  const module = wabt.parseWat('', inputBuffer)
+  module.resolveNames()
+  module.validate()
+  const { buffer } = module.toBinary({
+    log: true,
+    write_debug_names: true,
+  })
+  return buffer
+}
+export const byte_array_to_wasm_module = (buf) => new WebAssembly.Module(buf)
+export const wasm_instantiate = (module) => new WebAssembly.Instance(module, {})
+const emptyTuple = Object.freeze([])
+export const wasm_call_export = (instance, export_name, args) => {
+  if (!(instance instanceof WebAssembly.Instance)) throw new Error('expects instance')
+  if (typeof export_name !== 'string') throw new Error('expects string')
+  const { exports } = instance
+  if (!(export_name in exports)) throw new Error('export not found: ' + export_name)
+  const func = exports[export_name]
+  if (typeof func !== 'function') throw new Error('export not a function: ' + export_name)
+  if (!Array.isArray(args)) throw new Error('expects array')
+  if (args.length !== func.length) throw new Error('parameter count mismatch')
+  for (const arg of args) if (typeof arg !== 'number') throw new Error('expects number arguments')
+  const res = func(...args)
+  if (res === undefined) return emptyTuple
+  if (!Array.isArray(res)) return Object.freeze([res])
+  return Object.freeze(res)
 }

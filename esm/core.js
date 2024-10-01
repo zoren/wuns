@@ -1,3 +1,5 @@
+import { isPlainObject } from "./utils.js"
+
 export const isSigned32BitInteger = (n) => (n | 0) === n
 
 const wordRegex = /^[a-z0-9.=/-]+$/
@@ -158,6 +160,7 @@ export const print = (ox) => {
     if (t === 'number' || t === 'bigint') return String(x)
     if (t === 'string') return isWord(x) ? x : `'${x}'`
     if (t === 'function') return `[fn ${x.name}]`
+    if (!isPlainObject(x)) return String(x)
     if (Object.isFrozen(x))
       return `[kv-map${Object.entries(x)
         .map(([k, v]) => ` ${k} ${go(v)}`)

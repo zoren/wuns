@@ -12,12 +12,16 @@
     [basic wat-type-basic]
     [tuple [list wat-type-basic]]]]
 
+[type wat-inst []
+  [union
+    [instructions [list wat-inst]]]]
+
 [type output-func []
   [record
     [name word]
     [parameters [list [pair word wat-type-basic]]]
     [result wat-type]
-    [body form]]]
+    [body wat-inst]]]
 
 [type wat-output []
   [record
@@ -33,9 +37,6 @@
 
 [defn empty-translate-context []
   [translate-context [make-global-context]]]
-
-[defn instructions [insts]
-  [form-concat [list [quote instructions]] insts]]
 
 [defn translate-type [present-type]
   [match present-type
@@ -65,7 +66,7 @@
         [form/word w]
         [ifs
           [eq-word w [word do]]
-          [instructions [list-map f [rest l] [translate-form tctx lctx f]]]
+          [wat-inst/instructions [list-map f [rest l] [translate-form tctx lctx f]]]
 
           [eq-word w [word def]]
           [logq-abort no defs in top level]
@@ -124,9 +125,130 @@
       [translate-top tctx o f]]
     o]]
 
+[def ascii-line-feed [i32 10]]
+[def ascii-space [i32 32]]
+[def ascii-double-quote [i32 34]]
+[def ascii-dollar [i32 36]]
+[def ascii-left-paren [i32 40]]
+[def ascii-right-paren [i32 41]]
+[def ascii-equal [i32 61]]
+[def ascii-backslash [i32 92]]
+
+[type printer []
+  [record
+    [bytes [atom byte-array]]
+    [index [atom i32]]]]
+
+[defn empty-printer [init-capacity]
+  [printer [atom [byte-array init-capacity]] [atom 0]]]
+
+[defn printer-to-byte-array [p]
+  [let-do
+    [ci [atom-get [printer/index p]]
+     cb [atom-get [printer/bytes p]]
+     trimmed [byte-array ci]]
+    [for i 0 ci
+      [byte-array-set trimmed i [byte-array-get cb i]]]
+    trimmed]]
+
+[defn print-byte [printer byte]
+  [let-do [ia [printer/index printer]
+           i [atom-get ia]
+           ba [printer/bytes printer]
+           a [atom-get ba]]
+    [assert [lt-s i [byte-array-size a]] printer buffer overflow]
+    [byte-array-set a i byte]
+    [atom-set [printer/index printer] [inc i]]]]
+
+[defn print-word [printer word]
+  [for i 0 [word-byte-size word]
+    [print-byte printer [char-code-at word i]]]]
+
+[defn print-wat-inst [printer inst]
+  [match inst
+    [wat-inst/instructions insts]
+    [do
+      [for-each i insts
+        [print-wat-inst printer i]]]]]
+
+[type wat []
+  [union
+    [word word]
+    [dollar word]
+    [dqstring word]
+    [list [list wat]]]]
+
+[defn print-wat [printer wat]
+  [match wat
+    [wat/word w] [print-word printer w]
+    [wat/dollar w] [do [print-byte printer ascii-dollar] [print-word printer w]]
+    [wat/dqstring w] [do [print-byte printer ascii-double-quote] [print-word printer w] [print-byte printer ascii-double-quote]]
+    [wat/list l]
+    [do
+      [print-byte printer ascii-left-paren]
+      [when-not [is-empty l]
+        [print-wat printer [first l]]
+        [for i 1 [size l]
+          [print-byte printer ascii-space]
+          [print-wat printer [at l i]]]]
+      [print-byte printer ascii-right-paren]]]]
+
+[defn print-wat-output [printer output]
+  [for-each of [clone-growable-to-frozen-list [wat-output/funcs output]]
+    [print-wat printer
+      [wat/list
+        [list
+          [wat/word [word func]]
+          [wat/dollar [output-func/name of]]
+          [wat/list [list [wat/word [word export]] [wat/dqstring [output-func/name of]]]]]]]]]
+
 [defn generate-wat [output]
-  [for-each f [clone-growable-to-frozen-list [wat-output/funcs output]]
-    [log f]]]
+  [let-do [p [empty-printer [i32 80]]]
+    [print-wat-output p output]
+    [let-do [ba [printer-to-byte-array p]]
+      [byte-array-log-as-string ba]
+      [wasm-instantiate [byte-array-to-wasm-module [wat-to-byte-array ba]]]]]]
 
 [defn translate-to-wat [forms]
   [generate-wat [translate-intermediate forms]]]
+
+[defn eq-int-list [expected actual]
+  [and [eq [size expected] [size actual]]
+    [[func go [i]
+      [if [lt-s i [size expected]]
+        [if [eq [at expected i] [at actual i]]
+          [go [inc i]]
+          0]
+        1]] 0]]]
+
+[type test-assert []
+  [union
+    [eq [list i32] word [list i32]]]]
+
+[type test []
+  [record
+    [asserts [list test-assert]]
+    [module [list form]]]]
+
+[defn run-test [test-data]
+  [let-do [instance [translate-to-wat [test/module test-data]]]
+    [for-each a [test/asserts test-data]
+      [match a
+        [test-assert/eq expected func-name args]
+        [assert [eq-int-list expected [wasm-call-export instance func-name args]] test failed]]]]]
+
+[def tests
+  [list
+    [test
+      [list [test-assert/eq [list] [word f] [list]]]
+      [list
+        [quote [def f [func f [] [do]]]]]]
+    [test
+      [list [test-assert/eq [list] [word g] [list]]]
+      [list
+        [quote [def g [func internal-name [] [do]]]]]]
+]]
+
+[defn test []
+  [for-each t tests
+    [run-test t]]]
