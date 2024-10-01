@@ -11,6 +11,7 @@
   [union
     [i32.const word]
     [drop wat-inst]
+    [inst word [list wat-inst]]
     [instructions [list wat-inst]]]]
 
 [type output-func []
@@ -35,9 +36,27 @@
 [defn empty-translate-context []
   [translate-context [make-global-context]]]
 
-[defn get-form-type [form]
+[defn translate-type [present-type]
+  [match present-type
+    [form/word w]
+    [ifs
+      [eq-word w [word i32]] [list [wat-type-basic/i32]]
+
+      [logq-abort not implemented translate-type word]]
+
+    [form/list l]
+    [logq-abort not implemented translate-type word]]]
+
+[defn get-annotated-type [check-gctx form]
+  [if-let [internal-type [try-get [check-context/type-annotations check-gctx] form]]
+    [translate-type [normalize-present-type-scheme internal-type]]
+    [do
+      [log form]
+      [logq-abort get-annotated-type no type annotation found]]]]
+
+[defn get-form-type [tctx form]
   [match form
-    [form/word w] [logq-abort not implemented]
+    [form/word w] [logq-abort not implemented get-form-type variables]
     [form/list l]
     [do
       [assert [not [is-empty l]] expected non-empty list]
@@ -50,12 +69,12 @@
           [eq-word w [word do]]
           [if [eq [size l] 1]
             [list]
-            [get-form-type [last l]]]
+            [get-form-type tctx [last l]]]
 
-          [logq-abort not implemented]]
+          [logq-abort not implemented get-form-type special form]]
 
-        [form/list l]
-        [logq-abort not implemented]]]]]
+        [form/list fl]
+        [get-annotated-type [translate-context/check-context tctx] form]]]]]
 
 [defn translate-form [tctx lctx form]
   [match form
@@ -63,7 +82,7 @@
     [do
       [log w]
       [log [meta form]]
-      [logq-abort translate-form word not implemented]]
+      [logq-abort translate-form word not implemented translate-form word]]
 
     [form/list l]
     [do
@@ -78,9 +97,7 @@
           [wat-inst/instructions
             [concat
               [list-map f [slice l 1 [dec [size l]]]
-                [let-do [types [get-form-type f]]
-                  [logq func]
-                  [log f]
+                [let-do [types [get-form-type tctx f]]
                   [[func go [i]
                     [if i
                       [wat-inst/drop [go [dec i]]]
@@ -95,10 +112,22 @@
 
           [logq-abort translate-top unknown special form]]
 
-        [form/list l]
-        [logq-abort not implemented]]]]]
+        [form/list fl]
+        [if [size fl]
+          [match [first fl]
+            [form/word flw]
+            [ifs
+              [eq-word flw [word intrinsic]]
+              [let [inst-name [form-to-word [third fl]]]
+                [if [or [is-i32-bin-inst inst-name] [eq-word inst-name [word unreachable]]]
+                  [wat-inst/inst inst-name [list-map a [rest l] [translate-form tctx lctx a]]]
+                  [logq-abort translate-form unknown instruction]]]
+
+              [logq-abort translate-form unknown instruction]]]
+          [logq-abort not implemented translate-form empty head list]]]]]]
 
 [defn translate-top [tctx output form]
+  [check-top [translate-context/check-context tctx] form]
   [match form
     [form/word w] [logq-abort not implemented]
     [form/list l]
@@ -122,7 +151,7 @@
                            func-body [third rest-body]
                            lctx [transient-kv-map]
                            output-params [list]
-                           output-results [get-form-type func-body]]
+                           output-results [get-form-type tctx func-body]]
                     [for i 0 [size params]
                       [logq-abort not implemented]
                       [set-kv-map lctx [at params i] i]]
@@ -238,6 +267,10 @@
     [wat-inst/drop inst]
     [wat-concat
       [list [wat/word [word drop]] [wat-inst-to-out inst]]]
+
+    [wat-inst/inst w args]
+    [wat-concat
+      [list [wat/word w]] [list-map a args [wat-inst-to-out a]]]
 
     [wat-inst/instructions insts]
     [wat/seq

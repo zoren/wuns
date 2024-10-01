@@ -257,7 +257,8 @@
     [type-var-counter [atom i32]]
     [types [transient-kv-map word type-def]]
     [eval-context [evaluation-context]]
-    [form-expansions [transient-kv-map form form]]]]
+    [form-expansions [transient-kv-map form form]]
+    [type-annotations [transient-kv-map form type]]]]
 
 [defn make-global-context []
   [check-context
@@ -266,7 +267,12 @@
     [atom 0]
     [transient-kv-map]
     [make-eval-context]
+    [transient-kv-map]
     [transient-kv-map]]]
+
+[defn annotate [gctx form type]
+  [set-kv-map [check-context/type-annotations gctx] form type]
+  type]
 
 [defn report-fn [gctx message form]
   [push [check-context/messages gctx] [report-message [form-to-list message] form]]]
@@ -619,6 +625,12 @@
         0]]
       0]]]
 
+[defn is-i32-bin-inst [w2]
+  [word-list-contains w2
+    [word i32.add] [word i32.sub] [word i32.mul] [word i32.rem-s] [word i32.div-s]
+    [word i32.and] [word i32.or] [word i32.xor]
+    [word i32.eq] [word i32.lt-s] [word i32.le-s]]]
+
 [defn check [gctx level lctx form]
   [match form
     [form/word w]
@@ -873,11 +885,7 @@
                 [eq-word w1 [word instructions]]
                 [if-let [w2 [try-get-word-report gctx [third sub-forms]]]
                   [ifs
-                    [word-list-contains w2
-                      [word i32.add] [word i32.sub] [word i32.mul] [word i32.rem-s] [word i32.div-s]
-                      [word i32.and] [word i32.or] [word i32.xor]
-                      [word i32.eq] [word i32.lt-s] [word i32.le-s]]
-                    [some i32i32-to-i32]
+                    [is-i32-bin-inst w2] [some i32i32-to-i32]
 
                     [eq-word w2 [word unreachable]]
                     [some [type-func [list] [none] [generate-fresh-type-var gctx [inc level]]]]
@@ -913,7 +921,7 @@
           [check gctx level lctx expanded-form]
           [let-do
             [func-type [check gctx level lctx first-form]
-              is-fexpr
+             is-fexpr
               [match [normalize-type func-type]
                 [type/inst inst-type]
                 [match inst-type
@@ -923,19 +931,15 @@
                       0]
                   0]
                 0]]
-            [if is-fexpr
+            [let [arg-types
+                  [if is-fexpr
+                    [list-map arg [rest sub-forms] type-form]
+                    [list-map arg [rest sub-forms] [check gctx level lctx arg]]]]
               [let-do
-                [arg-types [list-map arg [rest sub-forms] type-form]
-                  t-res [generate-fresh-type-var gctx level]
-                  t-func [type-func arg-types [none] t-res]]
+                [t-res [generate-fresh-type-var gctx level]
+                 t-func [type-func arg-types [none] t-res]]
                 [unify-report gctx func-type t-func form]
-                t-res]
-              [let-do
-                [arg-types [list-map arg [rest sub-forms] [check gctx level lctx arg]]
-                  t-res [generate-fresh-type-var gctx level]
-                  t-func [type-func arg-types [none] t-res]]
-                [unify-report gctx func-type t-func form]
-                t-res]]]]]]]]
+                [annotate gctx form t-res]]]]]]]]]
 
 [def evaluate
   [type-anno
