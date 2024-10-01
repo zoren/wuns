@@ -10,6 +10,7 @@
 [type wat-inst []
   [union
     [i32.const word]
+    [drop wat-inst]
     [instructions [list wat-inst]]]]
 
 [type output-func []
@@ -34,29 +35,6 @@
 [defn empty-translate-context []
   [translate-context [make-global-context]]]
 
-[defn translate-form [tctx lctx form]
-  [match form
-    [form/word w] [logq-abort translate-form word not implemented]
-    [form/list l]
-    [do
-      [assert [not [is-empty l]] expected non-empty list]
-      [match [first l]
-        [form/word w]
-        [ifs
-          [eq-word w [word i32]]
-          [wat-inst/i32.const [form-to-word [second l]]]
-
-          [eq-word w [word do]]
-          [wat-inst/instructions [list-map f [rest l] [translate-form tctx lctx f]]]
-
-          [eq-word w [word def]]
-          [logq-abort no defs in top level]
-
-          [logq-abort translate-top unknown special form]]
-
-        [form/list l]
-        [logq-abort not implemented]]]]]
-
 [defn get-form-type [form]
   [match form
     [form/word w] [logq-abort not implemented]
@@ -75,6 +53,47 @@
             [get-form-type [last l]]]
 
           [logq-abort not implemented]]
+
+        [form/list l]
+        [logq-abort not implemented]]]]]
+
+[defn translate-form [tctx lctx form]
+  [match form
+    [form/word w]
+    [do
+      [log w]
+      [log [meta form]]
+      [logq-abort translate-form word not implemented]]
+
+    [form/list l]
+    [do
+      [assert [not [is-empty l]] expected non-empty list]
+      [match [first l]
+        [form/word w]
+        [ifs
+          [eq-word w [word i32]]
+          [wat-inst/i32.const [form-to-word [second l]]]
+
+          [eq-word w [word do]]
+          [wat-inst/instructions
+            [concat
+              [list-map f [slice l 1 [dec [size l]]]
+                [let-do [types [get-form-type f]]
+                  [logq func]
+                  [log f]
+                  [[func go [i]
+                    [if i
+                      [wat-inst/drop [go [dec i]]]
+                      [translate-form tctx lctx f]]]
+                    [size types]]]]
+              [if [eq [size l] 1]
+                [list]
+                [list [translate-form tctx lctx [last l]]]]]]
+
+          [eq-word w [word def]]
+          [logq-abort no defs in top level]
+
+          [logq-abort translate-top unknown special form]]
 
         [form/list l]
         [logq-abort not implemented]]]]]
@@ -215,6 +234,10 @@
     [wat-inst/i32.const w]
     [wat-concat
       [list [wat/word [word i32.const]] [wat/word w]]]
+
+    [wat-inst/drop inst]
+    [wat-concat
+      [list [wat/word [word drop]] [wat-inst-to-out inst]]]
 
     [wat-inst/instructions insts]
     [wat/seq
