@@ -143,7 +143,8 @@ const externs = {
 const recordTag = Symbol('record')
 
 const evalForm = (env, form) => {
-  const evalError = (message, innerError) => new EvalError(message, form, innerError)
+  const curForm = form
+  const evalError = (message, innerError) => new EvalError(message, curForm, innerError)
   while (true) {
     const word = tryGetFormWord(form)
     if (word) {
@@ -308,7 +309,11 @@ const evalForm = (env, form) => {
       }
       case 'do':
         if (forms.length === 1) return langUndefined
-        for (let i = 1; i < forms.length - 1; i++) evalForm(env, forms[i])
+        try {
+          for (let i = 1; i < forms.length - 1; i++) evalForm(env, forms[i])
+        } catch (e) {
+          throw evalError('error in do', e)
+        }
         form = forms.at(-1)
         continue
       case 'let': {
@@ -316,8 +321,12 @@ const evalForm = (env, form) => {
         const bindings = getFormList(forms[1])
         if (bindings.length % 2 !== 0) throw evalError('odd number of bindings')
         const newEnv = makeEnv(env)
-        for (let i = 0; i < bindings.length - 1; i += 2)
-          setEnv(newEnv, getFormWord(bindings[i]), evalForm(newEnv, bindings[i + 1]))
+        try {
+          for (let i = 0; i < bindings.length - 1; i += 2)
+            setEnv(newEnv, getFormWord(bindings[i]), evalForm(newEnv, bindings[i + 1]))
+        } catch (e) {
+          throw evalError('error in let bindings', e)
+        }
         env = newEnv
         form = forms[2]
         continue
@@ -457,18 +466,17 @@ const catchErrors = (f) => {
   try {
     return f()
   } catch (e) {
+    // console.dir(e)
+    console.log('catchErrors', e.message, e.form, e.innerError ? 'has inner' : '')
     let curErr = e
     while (curErr) {
       const dumpFormMeta = (form) => {
-        const metaToStr = (form) => {
-          const [file, row, column] = tryGetFormList(meta(form))
-          return `${file}:${row}:${column}`
-        }
         const word = tryGetFormWord(form)
         if (word) return `'${word}' ${meta(form)}`
         const list = tryGetFormList(form)
         if (list) return `[${list.map(dumpFormMeta).join(' ')} ${meta(form)}]`
         // throw new Error('unexpected form: ' + form)
+        console.log('form was', form)
         return '???'
       }
       console.error(curErr, dumpFormMeta(curErr.form))
