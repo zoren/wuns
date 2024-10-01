@@ -431,3 +431,8 @@
 [def-extern slice [type-scheme [a] [func [[list a] i32 i32] [list a]]]]
 
 [defn rest [l] [slice l 1 [size l]]]
+
+[def read-file
+  [type-anno
+    [extern interpreter read-file]
+    [func [word] [list form]]]]

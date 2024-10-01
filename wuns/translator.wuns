@@ -1,3 +1,5 @@
+[load check.wuns]
+
 [type wat-type-basic []
   [union
     [i32]

@@ -336,6 +336,12 @@ const evalForm = (env, form) => {
         form = forms[1]
         continue
       }
+      case 'load': {
+        assertNumArgs(1)
+        const filePath = getFormWord(forms[1])
+        for (const newForm of readFile(filePath)) evalForm(env, newForm)
+        return langUndefined
+      }
     }
     const func = evalForm(env, firstForm)
     const args = forms.slice(1)

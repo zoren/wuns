@@ -1,3 +1,4 @@
+[load check.wuns]
 
 [def tests-run-atom [atom 0]]
 
@@ -413,8 +414,6 @@
 
 [logq tests-run [i32-form [atom-get tests-run-atom]]]
 
-[def read-file [extern interpreter read-file]]
-
 [defn test-ok-fn-stop-at-error [gctx forms]
   [for-each form forms
     [evaluate [check-context/eval-context gctx] form]
@@ -433,4 +432,4 @@
       [logq checking [identity file]]
       [test-ok-fn-stop-at-error gctx [read-file file]]]]]
 
-[test-ok-files [word std.wuns] [word check.wuns] [word translator.wuns]]
+[test-ok-files [word translator.wuns]]

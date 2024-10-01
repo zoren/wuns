@@ -1,3 +1,5 @@
+[load std.wuns]
+
 [type function-kind []
   [union
     [ctor]
@@ -857,6 +859,15 @@
           [report-when-not [eq n-of-args 2] form expects 2 arguments]
           [unify-report gctx inst-anno-type value-type form]
           value-type]
+
+        [eq-form first-form [quote load]]
+        [do
+          [if-not [eq n-of-args 1]
+            [report form expects 1 argument]
+            [when-let [file-word [try-get-word-report gctx [second sub-forms]]]
+              [for-each form [read-file file-word]
+                [check gctx level lctx form]]]]
+          type-empty-tuple]
 
         [if-let [expanded-form [try-expand-form gctx form]]
           [check gctx level lctx expanded-form]
