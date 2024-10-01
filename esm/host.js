@@ -185,3 +185,22 @@ export const slice = (list, start, end) => {
   if (!isSigned32BitInteger(end)) throw new Error('slice expects number: ' + end)
   return arrayToList(list.slice(start, end))
 }
+export const byte_array = (size) => {
+  if (!isSigned32BitInteger(size)) throw new Error('byte-array expects number: ' + size)
+  if (size < 0) throw new Error('byte-array expects non-negative size')
+  return new Uint8Array(size)
+}
+export const byte_array_get = (byte_array, index) => {
+  if (!(byte_array instanceof Uint8Array)) throw new Error('byte-array-get expects byte array')
+  if (!isSigned32BitInteger(index)) throw new Error('byte-array-get expects number: ' + index)
+  if (index < 0 || index >= byte_array.length) throw new Error('byte-array-get index out of bounds: ' + index + ' ' + byte_array.length)
+  return byte_array[index]
+}
+export const byte_array_set = (byte_array, index, value) => {
+  if (!(byte_array instanceof Uint8Array)) throw new Error('byte-array-set expects byte array')
+  if (!isSigned32BitInteger(index)) throw new Error('byte-array-set expects number: ' + index)
+  if (index < 0 || index >= byte_array.length) throw new Error('byte-array-set index out of bounds: ' + index + ' ' + byte_array.length)
+  if (!isSigned32BitInteger(value)) throw new Error('byte-array-set expects number: ' + value)
+  if (value < 0 || value > 255) throw new Error('byte-array-set expects byte: ' + value)
+  byte_array[index] = value
+}

@@ -31,7 +31,7 @@ export const makeTaggedValue = (tag, ...args) => Object.freeze(new TaggedValue(t
 export const makeValueTagger = (tag, arity) => {
   const f = (...args) => {
     if (args.length !== arity) throw new Error(`'${tag}' expected ${arity} arguments, got ${args.length}`)
-    return makeTaggedValue(tag, ...args);
+    return makeTaggedValue(tag, ...args)
   }
   f.tag = tag
   return f
@@ -144,9 +144,15 @@ export const print = (ox) => {
     if (isAtom(x)) return `[atom ${go(x.value)}]`
     if (isTaggedValue(x)) return `[${x.tag} ${x.args.map(go).join(' ')}]`
     const recordTag = isRecord(x)
-    if (recordTag) return `[record ${recordTag}${Object.entries(x)
-      .map(([k, v]) => ` ${k} ${go(v)}`)
-      .join('')}]`
+    if (recordTag)
+      return `[record ${recordTag}${Object.entries(x)
+        .map(([k, v]) => ` ${k} ${go(v)}`)
+        .join('')}]`
+    if (x instanceof Uint8Array) {
+      const strings = []
+      for (let i = 0; i < x.length; i++) strings.push(` ${x[i]}`)
+      return `[bytes${strings.join('')}]`
+    }
     const t = typeof x
     // todo allow t === 'boolean' too
     if (t === 'number' || t === 'bigint') return String(x)

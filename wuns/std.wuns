@@ -436,3 +436,8 @@
   [type-anno
     [extern interpreter read-file]
     [func [word] [list form]]]]
+
+[type byte-array [] [union]]
+[def-extern byte-array [func [i32] byte-array]]
+[def-extern byte-array-get [func [byte-array i32] i32]]
+[def-extern byte-array-set [func [byte-array i32 i32] [tuple]]]
