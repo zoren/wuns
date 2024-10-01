@@ -22,7 +22,7 @@
 
 [def-extern log [type-scheme [a] [func [.. a] [tuple]]]]
 
-[def-extern concat [type-scheme [a] [func [.. [list a]] [list a]]]]
+[def-extern concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]
 
 [defmacro let-do [bindings .. forms]
   [flist [quote let] bindings [form-list [concat [list [quote do]] forms]]]]
