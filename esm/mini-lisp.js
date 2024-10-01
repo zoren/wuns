@@ -1,4 +1,4 @@
-const makeDefEnv = () => new Map()
+export const makeDefEnv = () => new Map()
 const makeEnv = (outer) => {
   if (!(outer instanceof Map)) throw new Error('makeEnv expects a Map')
   const env = new Map()
@@ -81,7 +81,7 @@ const printForm = (form) => {
   throw new Error('unexpected form: ' + form)
 }
 
-const langUndefined = Symbol('undefined')
+export const langUndefined = Symbol('undefined')
 
 import { meta } from './core.js'
 
@@ -136,7 +136,7 @@ const externs = {
   'performance-now': () => performance.now(),
 }
 
-function* parseToForms(content, contentName) {
+export function* parseToForms(content, contentName) {
   if (!isWord(contentName)) throw new Error('contentName must be a word')
   /**
    * @param {TSParser.SyntaxNode} node
@@ -161,9 +161,9 @@ function* parseToForms(content, contentName) {
   for (const child of parse(content).rootNode.namedChildren) yield nodeToForm(child)
 }
 
-const readFile = (filePath) => parseToForms(fs.readFileSync(filePath, 'ascii'), filePath)
+export const readFile = (filePath) => parseToForms(fs.readFileSync(filePath, 'ascii'), filePath)
 
-const evalForm = (env, form) => {
+export const evalForm = (env, form) => {
   const curForm = form
   const evalError = (message, innerError) => new EvalError(message, curForm, innerError)
   while (true) {
@@ -389,12 +389,27 @@ const evalForm = (env, form) => {
   }
 }
 
-const defEnv = makeDefEnv()
-
-const evaluateForms = (forms) => {
-  let result = langUndefined
-  for (const form of forms) result = evalForm(defEnv, form)
-  return result
+export const catchErrors = (f) => {
+  try {
+    return f()
+  } catch (e) {
+    // console.dir(e)
+    console.log('catchErrors', e.message, e.form, e.innerError ? 'has inner' : '')
+    let curErr = e
+    while (curErr) {
+      const dumpFormMeta = (form) => {
+        const word = tryGetFormWord(form)
+        if (word) return `'${word}' ${meta(form)}`
+        const list = tryGetFormList(form)
+        if (list) return `[${list.map(dumpFormMeta).join(' ')} ${meta(form)}]`
+        // throw new Error('unexpected form: ' + form)
+        console.log('form was', form)
+        return '???'
+      }
+      console.error(curErr, dumpFormMeta(curErr.form))
+      curErr = curErr.innerError
+    }
+  }
 }
 
 const none = makeValueTagger('option/none', 0)()
@@ -428,72 +443,5 @@ externs.interpreter = {
     return Object.freeze([...readFile(path)])
   },
 }
-
-const specialForms = [
-  'i32',
-  'word',
-  'quote',
-  'func',
-  'macro',
-  'fexpr',
-  'extern',
-  'def',
-  'if',
-  'do',
-  'let',
-  // not actually a special form
-  '..',
-]
-
-const getCompletions = (defEnv, prefix) => {
-  const completions = []
-  for (const special of specialForms) if (special.startsWith(prefix)) completions.push(special)
-  for (const key of defEnv.keys()) if (key.startsWith(prefix)) completions.push(key)
-  return completions
-}
-
-const commandLineArgs = process.argv.slice(2)
-const endsWithDashFlag = commandLineArgs.at(-1) === '-'
-const files = endsWithDashFlag ? commandLineArgs.slice(0, -1) : commandLineArgs
-
-const catchErrors = (f) => {
-  try {
-    return f()
-  } catch (e) {
-    // console.dir(e)
-    console.log('catchErrors', e.message, e.form, e.innerError ? 'has inner' : '')
-    let curErr = e
-    while (curErr) {
-      const dumpFormMeta = (form) => {
-        const word = tryGetFormWord(form)
-        if (word) return `'${word}' ${meta(form)}`
-        const list = tryGetFormList(form)
-        if (list) return `[${list.map(dumpFormMeta).join(' ')} ${meta(form)}]`
-        // throw new Error('unexpected form: ' + form)
-        console.log('form was', form)
-        return '???'
-      }
-      console.error(curErr, dumpFormMeta(curErr.form))
-      curErr = curErr.innerError
-    }
-  }
-}
-
-catchErrors(() => {
-  for (const filePath of files) evaluateForms(readFile(filePath))
-})
-import { startRepl } from './repl-util.js'
-
-if (!endsWithDashFlag) {
-  let replLineNo = 0
-  const evalLine = (line) =>
-    console.log(print(catchErrors(() => evaluateForms(parseToForms(line, `repl-${replLineNo++}`)))))
-  const completer = (line) => {
-    const m = line.match(/[a-z0-9./-]+$/)
-    if (!m) return [[], '']
-    const currentWord = m[0]
-    const defs = getCompletions(defEnv, currentWord)
-    return [defs, currentWord]
-  }
-  startRepl('mini-lisp-history.json', 'mini-lisp> ', evalLine, completer)
-}
+Object.freeze(externs.interpreter)
+Object.freeze(externs)
