@@ -109,14 +109,19 @@ const encodeTokenModifiers = (...strTokenModifiers) => {
 const declarationModifier = encodeTokenModifiers('declaration')
 const modificationModifier = encodeTokenModifiers('modification')
 
-const tokenBuilderForParseTree = () => {
+const tokenBuilderForParseTree = (doc) => {
   const tokensBuilder = new SemanticTokensBuilder(legend)
   let prevRow = 0
   let prevColumn = 0
   const pushTokenWithModifier = ({ startPosition, endPosition }, tokenType, tokenModifiers) => {
     const { row, column } = startPosition
     if (row < prevRow || (row === prevRow && column < prevColumn))
-      console.error('sem toks out of order', { row, column }, { prevRow, prevCol: prevColumn })
+      console.error(
+        'sem toks out of order',
+        { doc },
+        { row: row + 1, column: column + 1 },
+        { prevRow: prevRow + 1, prevCol: prevColumn + 1 },
+      )
 
     prevRow = row
     prevColumn = column
@@ -125,6 +130,12 @@ const tokenBuilderForParseTree = () => {
   const pushToken = (node, tokenType) => {
     pushTokenWithModifier(node, tokenType, 0)
   }
+
+  const tagType = (f) => {
+    if (f.type === 'word') pushToken(f, typeTokenType)
+    else f.namedChildren.forEach(tagType)
+  }
+
   /**
    * @param {TSParser.SyntaxNode} node
    */
@@ -157,8 +168,11 @@ const tokenBuilderForParseTree = () => {
           goQ(child)
         }
         break
-
       case 'if':
+        pushToken(head, keywordTokenType)
+        for (const child of tail) go(child)
+        break
+      case 'match':
         pushToken(head, keywordTokenType)
         for (const child of tail) go(child)
         break
@@ -166,8 +180,7 @@ const tokenBuilderForParseTree = () => {
         pushToken(head, keywordTokenType)
         for (const child of tail) go(child)
         break
-      case 'let':
-      case 'loop': {
+      case 'let': {
         pushToken(head, keywordTokenType)
         const [bindingsNode, ...body] = tail
         const bindings = bindingsNode ? bindingsNode.namedChildren : []
@@ -178,17 +191,18 @@ const tokenBuilderForParseTree = () => {
         for (const child of body) go(child)
         break
       }
-      case 'continue':
+      case 'func':
+      case 'fexpr':
+      case 'macro': {
         pushToken(head, keywordTokenType)
-        for (let i = 1; i < namedChildCount - 1; i += 2) {
-          pushTokenWithModifier(node.namedChild(i), variableTokenType, modificationModifier)
-          go(node.namedChild(i + 1))
+        const [name, params, body] = tail
+        if (name.type === 'word') pushToken(name, headText === 'macro' ? macroTokenType : functionTokenType)
+        for (const param of params.namedChildren) {
+          if (param.type === 'word') pushToken(param, parameterTokenType)
         }
+        go(body)
         break
-      case 'recur':
-        pushToken(head, keywordTokenType)
-        for (const arg of tail) go(arg)
-        break
+      }
       case 'def': {
         pushToken(head, keywordTokenType)
         if (tail.length === 0) break
@@ -201,6 +215,30 @@ const tokenBuilderForParseTree = () => {
         pushToken(head, keywordTokenType)
         for (const child of tail) if (child.type === 'word') pushToken(child, declarationModifier)
         break
+      case 'atom':
+        pushToken(head, keywordTokenType)
+        if (tail.length) go(tail[0])
+        break
+      case 'load':
+        pushToken(head, keywordTokenType)
+        if (tail.length) pushToken(tail[0], stringTokenType)
+        break
+      case 'type-anno':
+        pushToken(head, keywordTokenType)
+        if (tail.length > 0) go(tail[0])
+        if (tail.length > 1) tagType(tail[1])
+        break
+      case 'type': {
+        pushToken(head, keywordTokenType)
+        for (let i = 0; i < tail.length; i += 3) {
+          pushToken(tail[i], typeTokenType)
+          for (const typeParam of tail[i + 1].namedChildren) {
+            if (typeParam.type === 'word') pushToken(typeParam, typeTokenType)
+          }
+          tagType(tail[i + 2])
+        }
+        break
+      }
       default:
         pushToken(head, functionTokenType)
         for (const arg of tail) go(arg)
@@ -215,7 +253,7 @@ const tokenBuilderForParseTree = () => {
  */
 const provideDocumentSemanticTokens = (document) => {
   const { tree } = cacheFetchOrParse(document)
-  const { tokensBuilder, build } = tokenBuilderForParseTree()
+  const { tokensBuilder, build } = tokenBuilderForParseTree(document.fileName)
   tree.rootNode.children.forEach(build)
   const semtoks = tokensBuilder.build()
 
