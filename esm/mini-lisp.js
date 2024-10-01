@@ -59,7 +59,7 @@ class Closure extends Function {
 
 const makeClosure = (env, name, parameters, body, kind) => Object.freeze(new Closure(env, name, parameters, body, kind))
 const isClosure = (v) => v instanceof Closure
-import { isForm, tryGetFormWord, tryGetFormList, isTaggedValue, makeValueTagger, isWord, atom } from './core.js'
+import { isForm, tryGetFormWord, tryGetFormList, isTaggedValue, makeValueTagger, isWord, atom, makeRecord, getRecordType } from './core.js'
 
 const printForm = (form) => {
   const word = tryGetFormWord(form)
@@ -139,8 +139,6 @@ const externs = {
 
   'performance-now': () => performance.now(),
 }
-
-const recordTag = Symbol('record')
 
 const evalForm = (env, form) => {
   const curForm = form
@@ -285,19 +283,12 @@ const evalForm = (env, form) => {
                 fieldNames.push(fieldName)
                 const projecterName = `${type}/${fieldName}`
                 const projecter = (record) => {
-                  if (record[recordTag] !== type) throw evalError(`field projecter ${projecterName} not a ${type}`)
+                  if (getRecordType(record) !== type) throw evalError(`field projecter ${projecterName} not a ${type}`)
                   return record[fieldName]
                 }
                 env.set(projecterName, projecter)
               }
-              const constructor = (...args) => {
-                if (args.length !== fieldNames.length) throw evalError('wrong number of arguments to ' + type)
-                const record = {}
-                for (let i = 0; i < fieldNames.length; i++) record[fieldNames[i]] = args[i]
-                record[Symbol.toStringTag] = type
-                record[recordTag] = type
-                return record
-              }
+              const constructor = (...args) => makeRecord(type, fieldNames, args)
               env.set(type, constructor)
               break
             }

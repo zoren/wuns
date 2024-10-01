@@ -120,6 +120,18 @@ class Atom {
 export const atom = (v) => new Atom(v)
 export const isAtom = (f) => f instanceof Atom
 
+const recordTag = Symbol('record')
+
+export const makeRecord = (type, fieldNames, args) => {
+  if (args.length !== fieldNames.length) throw evalError('wrong number of arguments to ' + type)
+  const record = {}
+  for (let i = 0; i < fieldNames.length; i++) record[fieldNames[i]] = args[i]
+  record[recordTag] = type
+  return Object.freeze(record)
+}
+export const isRecord = (v) => v && v[recordTag]
+export const getRecordType = (v) => v[recordTag]
+
 export const print = (ox) => {
   const go = (x) => {
     if (x === undefined) return '*undefined*'
@@ -130,6 +142,11 @@ export const print = (ox) => {
     if (list) return go(list)
     if (isDefVar(x)) return `[var ${x.name}]`
     if (isAtom(x)) return `[atom ${go(x.value)}]`
+    if (isTaggedValue(x)) return `[${x.tag} ${x.args.map(go).join(' ')}]`
+    const recordTag = isRecord(x)
+    if (recordTag) return `[record ${recordTag}${Object.entries(x)
+      .map(([k, v]) => ` ${k} ${go(v)}`)
+      .join('')}]`
     const t = typeof x
     // todo allow t === 'boolean' too
     if (t === 'number' || t === 'bigint') return String(x)
