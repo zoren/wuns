@@ -18,7 +18,7 @@
   [flist [quote def] name
     [flist [quote type-anno]
       [flist [quote extern] [quote host] name]
-      [flist [quote quote] type]]]]
+      type]]]
 
 [def-extern log [type-scheme [a] [func [.. a] [tuple]]]]
 
@@ -1114,7 +1114,7 @@
           [report-when-not [eq n-of-args 3] form expects 3 argument]
           [unify-report gctx cond-type type-i32 cond]
           [unify-report gctx then-type else-type then-branch else-branch]
-          then-type]
+          [annotate gctx form then-type]]
 
         [eq-form first-form [quote type]]
         [let-do
@@ -1908,21 +1908,16 @@
       [when-not [is-empty messages]
         [for-each message messages
           [log-report-message message]]
-        [logq-abort test-ok-fn-stop-at-error failed there were errors [meta [identity form]]]]]]
-  [inc-atom tests-run-atom]]
+        [logq-abort test-ok-fn-stop-at-error failed there were errors [meta [identity form]]]]]]]
 
 [defn test-ok-files [.. files]
   [let-do
     [gctx [make-global-context]]
     [for-each file files
-      [logq checking [identity file]]
       [test-ok-fn-stop-at-error gctx [read-file file]]]]]
 
 [defn test-check []
-  [test-ok-files [word translator.wuns]]
-]
-
-
+  [test-ok-files [word translator.wuns]]]
 
 [type wat-type-basic []
   [union
@@ -1936,6 +1931,7 @@
     [i32.const word]
     [drop wat-inst]
     [inst word [list wat-inst]]
+    [if [list wat-type-basic] wat-inst wat-inst wat-inst]
     [instructions [list wat-inst]]]]
 
 [type output-func []
@@ -1969,7 +1965,16 @@
       [logq-abort not implemented translate-type word]]
 
     [form/list l]
-    [logq-abort not implemented translate-type word]]]
+    [do
+      [assert [not [is-empty l]] expected elements]
+      [match [first l]
+        [form/word w]
+        [ifs
+          [eq-word w [word tuple]]
+          [list-map a [rest l] [translate-type a]]
+
+          [logq-abort not implemented translate-type unknown first]]
+        [logq-abort not implemented translate-type list]]]]]
 
 [defn get-annotated-type [check-gctx form]
   [if-let [internal-type [try-get [check-context/type-annotations check-gctx] form]]
@@ -1994,6 +1999,9 @@
           [if [eq [size l] 1]
             [list]
             [get-form-type tctx [last l]]]
+
+          [eq-word w [word if]]
+          [get-annotated-type [translate-context/check-context tctx] form]
 
           [logq-abort not implemented get-form-type special form]]
 
@@ -2030,6 +2038,13 @@
               [if [eq [size l] 1]
                 [list]
                 [list [translate-form tctx lctx [last l]]]]]]
+
+          [eq-word w [word if]]
+          [wat-inst/if
+            [get-form-type tctx form]
+            [translate-form tctx lctx [second l]]
+            [translate-form tctx lctx [third l]]
+            [translate-form tctx lctx [fourth l]]]
 
           [eq-word w [word def]]
           [logq-abort no defs in top level]
@@ -2201,8 +2216,16 @@
       [list [wat/word w]] [list-map a args [wat-inst-to-out a]]]
 
     [wat-inst/instructions insts]
-    [wat/seq
-      [list-map inst insts [wat-inst-to-out inst]]]]]
+    [wat/seq [list-map inst insts [wat-inst-to-out inst]]]
+
+    [wat-inst/if result-types cond true false]
+    [wat-list [wat/word [word if]]
+      [wat/list [concat [list [wat/word [word result]]] [list-map rt result-types [wat/word [wat-type-basic-to-word rt]]]]]
+      [wat-inst-to-out cond]
+      [wat-list [wat/word [word then]] [wat-inst-to-out true]]
+      [wat-list [wat/word [word else]]  [wat-inst-to-out false]]]
+
+    [logq-abort wat-inst-to-out unknown instruction]]]
 
 [defn output-func-to-wat [of]
   [wat-concat
@@ -2220,7 +2243,7 @@
       [wat-inst-to-out [output-func/body of]]]]]
 
 [defn generate-wat [output]
-  [let-do [p [empty-printer [i32 80]]]
+  [let-do [p [empty-printer [i32 800]]]
     [print-wat p
       [wat/seq [list-map of [clone-growable-to-frozen-list [wat-output/funcs output]]
         [output-func-to-wat of]]]]
@@ -2286,8 +2309,19 @@
       [list [test-assert/eq [list [i32 5]] [word f] [list]]]
       [list
         [quote [def f [func internal-name [] [[intrinsic instructions i32.sub] [i32 7] [i32 2]]]]]]]
-]
-]
+    [test
+      [list [test-assert/eq [list [i32 5]] [word f] [list]]]
+      [list
+        [quote [def f [func f [] [if [i32 0] [i32 7] [i32 5]]]]]]]
+    [test
+      [list [test-assert/eq [list [i32 5]] [word f] [list]]]
+      [list
+        [quote [def f [func f [] [if [i32 1] [i32 5] [i32 9]]]]]]]
+    [test
+      [list [test-assert/eq [list] [word f] [list]]]
+      [list
+        [quote [def f [func f [] [if [i32 1] [do] [do]]]]]]]
+]]
   [for-each t tests
     [run-test t]]]
 ]
