@@ -2,6 +2,12 @@ import { setJSFunctionName } from './utils.js'
 
 const instructionFunctions = []
 
+const pushNamedFunc = (fname, ...args) => {
+  const f = Function(...args)
+  setJSFunctionName(f, fname)
+  instructionFunctions.push(Object.freeze(f))
+}
+
 const i32Instructions = [
   { name: 'add', op: '+' },
   { name: 'sub', op: '-', alias: 'subtract' },
@@ -13,8 +19,8 @@ const i32Instructions = [
   { name: 'ne', op: '!==', alias: 'not-equals' },
 
   { name: 'lt-s', op: '<', alias: 'less-than-signed' },
-  { name: 'le-s', op: '<=', alias: 'less-than-or-equal-signed' },
   { name: 'gt-s', op: '>', alias: 'greater-than-signed' },
+  { name: 'le-s', op: '<=', alias: 'less-than-or-equal-signed' },
   { name: 'ge-s', op: '>=', alias: 'greater-than-or-equal-signed' },
 
   { name: 'and', op: '&', alias: 'bitwise-and' },
@@ -25,38 +31,30 @@ const i32Instructions = [
   { name: 'shr-u', op: '>>>', alias: 'bitwise-shift-right-unsigned' },
 ]
 for (const { op, name } of i32Instructions) {
-  const f = Function('a', 'b', `return (a ${op} b) | 0`)
-  setJSFunctionName(f, `i32.${name}`)
-  Object.freeze(f)
-  instructionFunctions.push(f)
+  pushNamedFunc(`i32.${name}`, 'a', 'b', `return (a ${op} b) | 0`)
 }
 
 const f64ArithInstructions = [
   { name: 'add', op: '+' },
   { name: 'sub', op: '-' },
   { name: 'mul', op: '*' },
+  { name: 'div', op: '/' },
 ]
 for (const { op, name } of f64ArithInstructions) {
-  const f = Function('a', 'b', `return (a ${op} b)`)
-  setJSFunctionName(f, `f64.${name}`)
-  Object.freeze(f)
-  instructionFunctions.push(f)
+  pushNamedFunc(`f64.${name}`, 'a', 'b', `return (a ${op} b)`)
 }
 
 const f64CmpInstructions = [
   { name: 'eq', op: '===' },
   { name: 'ne', op: '!==' },
 
-  { name: 'lt-s', op: '<' },
-  { name: 'le-s', op: '<=' },
-  { name: 'gt-s', op: '>' },
-  { name: 'ge-s', op: '>=' },
+  { name: 'lt', op: '<' },
+  { name: 'gt', op: '>' },
+  { name: 'le', op: '<=' },
+  { name: 'ge', op: '>=' },
 ]
 for (const { op, name } of f64CmpInstructions) {
-  const f = Function('a', 'b', `return (a ${op} b) | 0`)
-  setJSFunctionName(f, `f64.${name}`)
-  Object.freeze(f)
-  instructionFunctions.push(f)
+  pushNamedFunc(`f64.${name}`, 'a', 'b', `return (a ${op} b) | 0`)
 }
 
 const unreachable = () => {
