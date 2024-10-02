@@ -1939,9 +1939,9 @@
   [union
     [i32.const word]
     [f64.const word]
+    [local.get word]
     [inst word [list wat-inst]]
     [if [list wat-type-basic] wat-inst wat-inst wat-inst]
-    [local.get word]
     [instructions [list wat-inst]]]]
 
 [type output-func []
