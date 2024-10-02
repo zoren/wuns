@@ -737,9 +737,6 @@
   [let [form [first forms]
         errors [unify t1 t2]]
     [for-each error errors
-      [log [meta form]]
-      [log form]
-      [log [size forms]]
       [report-fn gctx [form/list error] form]]]]
 
 [defn int-to-type-var-name [i]
@@ -1266,9 +1263,6 @@
                 [eq-form first-form [quote fexpr]] [function-kind/fexpr]
                 [logq-abort check function-kind not recognized]]
            level-1 [inc level]
-           - [when-not [eq n-of-args 3]
-              [log [meta form]]]
-           - [assert [eq n-of-args 3] func expects 3 arguments]
            param-ctx [transient-kv-map]
            gen-func-type [generate-fresh-type-var gctx level-1]
            func-ctx [make-local-context param-ctx lctx first-form]
@@ -1387,8 +1381,6 @@
                   0]
                 0]]
             [let [args [rest sub-forms]
-                  - [logq args]
-                  - [log [size args]]
                   arg-types
                   [if is-fexpr
                     [list-map-fn [func f [-] type-form] args]
@@ -1477,7 +1469,6 @@
 
 [defn check-top-forms [gctx forms]
   [assert [size forms] check-top-forms expects at least one form]
-  [logq we are checking]
   [[func check-top-forms-go [i]
     [if [lt-s i [dec [size forms]]]
       [do
