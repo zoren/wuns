@@ -1,6 +1,5 @@
 const vscode = require('vscode')
-const { SemanticTokensLegend, SemanticTokensBuilder, SelectionRange, Range, Position, Diagnostic, DiagnosticSeverity } =
-  vscode
+const { SemanticTokensLegend, SemanticTokensBuilder, SelectionRange, Range, Position, Uri } = vscode
 
 const positionToPoint = ({ line, character }) => ({ row: line, column: character })
 
@@ -13,6 +12,8 @@ const makeStopWatch = () => {
 }
 
 const cache = new Map()
+
+const TSParser = require('tree-sitter')
 
 /**
  * @param {vscode.TextDocument} document
@@ -37,13 +38,8 @@ const cacheFetchOrParse = (document) => {
   }
   if (cacheObj.version === version) return cacheObj
 
-  // we don't expect to come here, onDidChangeTextDocument should have been called updating the tree
-  console.error('cache miss', document.uri, document.version, cacheObj.version)
-  const oldTree = cacheObj.tree
-  const { tree } = parseDocumentTreeSitter(document, oldTree)
-  cacheObj.tree = tree
-  cacheObj.version = version
-  return cacheObj
+  // we don't expect to come here, onDidChangeTextDocumentReparseChanges should have been called updating the tree
+  throw new Error('cache miss')
 }
 
 const wunsLanguageId = 'wuns'
@@ -109,27 +105,34 @@ const encodeTokenModifiers = (...strTokenModifiers) => {
 const declarationModifier = encodeTokenModifiers('declaration')
 const modificationModifier = encodeTokenModifiers('modification')
 
-const tokenBuilderForParseTree = (doc) => {
-  const tokensBuilder = new SemanticTokensBuilder(legend)
+const tokensBuilderPushWrapper = (tokensBuilder) => {
   let prevRow = 0
   let prevColumn = 0
   const pushTokenWithModifier = ({ startPosition, endPosition }, tokenType, tokenModifiers) => {
     const { row, column } = startPosition
     if (row < prevRow || (row === prevRow && column < prevColumn))
-      console.error(
-        'sem toks out of order',
-        { doc },
-        { row: row + 1, column: column + 1 },
-        { prevRow: prevRow + 1, prevCol: prevColumn + 1 },
-      )
+      console.error('sem toks out of order', {
+        fileName: doc.fileName,
+        row: row + 1,
+        column: column + 1,
+        prevRow: prevRow + 1,
+        prevCol: prevColumn + 1,
+      })
 
     prevRow = row
     prevColumn = column
     tokensBuilder.push(row, column, endPosition.column - column, tokenType, tokenModifiers)
   }
-  const pushToken = (node, tokenType) => {
-    pushTokenWithModifier(node, tokenType, 0)
-  }
+  return pushTokenWithModifier
+}
+
+/**
+ * @param {vscode.TextDocument} doc
+ */
+const tokenBuilderForParseTree = (doc) => {
+  const tokensBuilder = new SemanticTokensBuilder(legend)
+  const pushTokenWithModifier = tokensBuilderPushWrapper(tokensBuilder)
+  const pushToken = (node, tokenType) => pushTokenWithModifier(node, tokenType, 0)
 
   const tagType = (f) => {
     if (f.type === 'word') pushToken(f, typeTokenType)
@@ -140,6 +143,7 @@ const tokenBuilderForParseTree = (doc) => {
    * @param {TSParser.SyntaxNode} node
    */
   const go = (node) => {
+    if (!node) return console.error('no node')
     const { type, namedChildCount } = node
     if (type === 'word') {
       pushToken(node, variableTokenType)
@@ -147,7 +151,10 @@ const tokenBuilderForParseTree = (doc) => {
     }
     if (namedChildCount === 0) return
     const [head, ...tail] = node.namedChildren
-    if (head.type !== 'word') return go(head)
+    if (head.type !== 'word') {
+      for (const form of node.namedChildren) go(form)
+      return
+    }
     const headText = head.text
     switch (headText) {
       case 'i32':
@@ -228,7 +235,7 @@ const tokenBuilderForParseTree = (doc) => {
         if (tail.length > 0) go(tail[0])
         if (tail.length > 1) tagType(tail[1])
         break
-      case 'type': {
+      case 'type':
         pushToken(head, keywordTokenType)
         for (let i = 0; i < tail.length; i += 3) {
           pushToken(tail[i], typeTokenType)
@@ -238,7 +245,6 @@ const tokenBuilderForParseTree = (doc) => {
           tagType(tail[i + 2])
         }
         break
-      }
       default:
         pushToken(head, functionTokenType)
         for (const arg of tail) go(arg)
