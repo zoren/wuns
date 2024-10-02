@@ -1,8 +1,6 @@
 const vscode = require('vscode')
 const { SemanticTokensLegend, SemanticTokensBuilder, SelectionRange, Range, Position, Uri } = vscode
 
-const positionToPoint = ({ line, character }) => ({ row: line, column: character })
-
 const makeStopWatch = () => {
   const before = performance.now()
   return () => {
@@ -10,8 +8,6 @@ const makeStopWatch = () => {
     return Math.round(elapsed * 1000) / 1000
   }
 }
-
-const cache = new Map()
 
 const TSParser = require('tree-sitter')
 
@@ -22,57 +18,7 @@ const TSParser = require('tree-sitter')
  */
 let parseDocumentTreeSitter = null
 
-/**
- *
- * @param {vscode.TextDocument} document
- * @returns
- */
-const cacheFetchOrParse = (document) => {
-  const { version } = document
-  const cacheObj = cache.get(document)
-  if (!cacheObj) {
-    const { tree } = parseDocumentTreeSitter(document)
-    const obj = { version, tree }
-    cache.set(document, obj)
-    return obj
-  }
-  if (cacheObj.version === version) return cacheObj
-
-  // we don't expect to come here, onDidChangeTextDocumentReparseChanges should have been called updating the tree
-  throw new Error('cache miss')
-}
-
 const wunsLanguageId = 'wuns'
-
-/**
- * @param {vscode.TextDocumentChangeEvent} document
- */
-const onDidChangeTextDocumentReparseChanges = (e) => {
-  const { document, contentChanges, reason } = e
-  const { languageId, uri, version } = document
-  if (languageId !== wunsLanguageId) return
-  if (contentChanges.length === 0) return
-  const cacheObj = cache.get(document)
-  const oldTree = cacheObj.tree
-  for (const { range, rangeLength, rangeOffset, text } of contentChanges) {
-    // from https://github.com/microsoft/vscode-anycode/blob/main/anycode/server/src/common/trees.ts#L109
-    const newEndIndex = rangeOffset + text.length
-    const tsEdit = {
-      startIndex: rangeOffset,
-      oldEndIndex: rangeOffset + rangeLength,
-      newEndIndex,
-      startPosition: positionToPoint(range.start),
-      oldEndPosition: positionToPoint(range.end),
-      newEndPosition: positionToPoint(document.positionAt(newEndIndex)),
-    }
-    oldTree.edit(tsEdit)
-  }
-
-  const { tree } = parseDocumentTreeSitter(document, oldTree)
-
-  cacheObj.tree = tree
-  cacheObj.version = version
-}
 
 // https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide
 const tokenTypes = ['variable', 'keyword', 'function', 'macro', 'parameter', 'string', 'number', 'comment', 'type']
@@ -105,168 +51,157 @@ const encodeTokenModifiers = (...strTokenModifiers) => {
 const declarationModifier = encodeTokenModifiers('declaration')
 const modificationModifier = encodeTokenModifiers('modification')
 
-const tokensBuilderPushWrapper = (tokensBuilder) => {
-  let prevRow = 0
-  let prevColumn = 0
-  const pushTokenWithModifier = ({ startPosition, endPosition }, tokenType, tokenModifiers) => {
-    const { row, column } = startPosition
-    if (row < prevRow || (row === prevRow && column < prevColumn))
-      console.error('sem toks out of order', {
-        fileName: doc.fileName,
-        row: row + 1,
-        column: column + 1,
-        prevRow: prevRow + 1,
-        prevCol: prevColumn + 1,
-      })
-
-    prevRow = row
-    prevColumn = column
-    tokensBuilder.push(row, column, endPosition.column - column, tokenType, tokenModifiers)
-  }
-  return pushTokenWithModifier
-}
-
-/**
- * @param {vscode.TextDocument} doc
- */
-const tokenBuilderForParseTree = (doc) => {
-  const tokensBuilder = new SemanticTokensBuilder(legend)
-  const pushTokenWithModifier = tokensBuilderPushWrapper(tokensBuilder)
-  const pushToken = (node, tokenType) => pushTokenWithModifier(node, tokenType, 0)
-
-  const tagType = (f) => {
-    if (f.type === 'word') pushToken(f, typeTokenType)
-    else f.namedChildren.forEach(tagType)
-  }
-
-  /**
-   * @param {TSParser.SyntaxNode} node
-   */
-  const go = (node) => {
-    if (!node) return console.error('no node')
-    const { type, namedChildCount } = node
-    if (type === 'word') {
-      pushToken(node, variableTokenType)
-      return
-    }
-    if (namedChildCount === 0) return
-    const [head, ...tail] = node.namedChildren
-    if (head.type !== 'word') {
-      for (const form of node.namedChildren) go(form)
-      return
-    }
-    const headText = head.text
-    switch (headText) {
-      case 'i32':
-        pushToken(head, keywordTokenType)
-        if (tail.length) pushToken(tail[0], tokenTypeNumber)
-        break
-      case 'word':
-        pushToken(head, keywordTokenType)
-        if (tail.length) pushToken(tail[0], stringTokenType)
-        break
-      case 'quote':
-        pushToken(head, keywordTokenType)
-        for (const child of tail) {
-          const goQ = (node) => {
-            if (node.type === 'word') pushToken(node, stringTokenType)
-            else node.namedChildren.forEach(goQ)
-          }
-          goQ(child)
-        }
-        break
-      case 'if':
-        pushToken(head, keywordTokenType)
-        for (const child of tail) go(child)
-        break
-      case 'match':
-        pushToken(head, keywordTokenType)
-        for (const child of tail) go(child)
-        break
-      case 'do':
-        pushToken(head, keywordTokenType)
-        for (const child of tail) go(child)
-        break
-      case 'let': {
-        pushToken(head, keywordTokenType)
-        const [bindingsNode, ...body] = tail
-        const bindings = bindingsNode ? bindingsNode.namedChildren : []
-        for (let i = 0; i < bindings.length - 1; i += 2) {
-          pushTokenWithModifier(bindings[i], variableTokenType, declarationModifier)
-          go(bindings[i + 1])
-        }
-        for (const child of body) go(child)
-        break
-      }
-      case 'func':
-      case 'fexpr':
-      case 'macro': {
-        pushToken(head, keywordTokenType)
-        const [name, params, body] = tail
-        if (name.type === 'word') pushToken(name, headText === 'macro' ? macroTokenType : functionTokenType)
-        for (const param of params.namedChildren) {
-          if (param.type === 'word') pushToken(param, parameterTokenType)
-        }
-        go(body)
-        break
-      }
-      case 'def': {
-        pushToken(head, keywordTokenType)
-        if (tail.length === 0) break
-        const cname = tail[0]
-        if (cname.type === 'word') pushToken(cname, variableTokenType, declarationModifier)
-        for (let i = 2; i < node.namedChildCount; i++) go(node.namedChildren[i])
-        break
-      }
-      case 'extern':
-        pushToken(head, keywordTokenType)
-        for (const child of tail) if (child.type === 'word') pushToken(child, declarationModifier)
-        break
-      case 'atom':
-        pushToken(head, keywordTokenType)
-        if (tail.length) go(tail[0])
-        break
-      case 'load':
-        pushToken(head, keywordTokenType)
-        if (tail.length) pushToken(tail[0], stringTokenType)
-        break
-      case 'type-anno':
-        pushToken(head, keywordTokenType)
-        if (tail.length > 0) go(tail[0])
-        if (tail.length > 1) tagType(tail[1])
-        break
-      case 'type':
-        pushToken(head, keywordTokenType)
-        for (let i = 0; i < tail.length; i += 3) {
-          pushToken(tail[i], typeTokenType)
-          for (const typeParam of tail[i + 1].namedChildren) {
-            if (typeParam.type === 'word') pushToken(typeParam, typeTokenType)
-          }
-          tagType(tail[i + 2])
-        }
-        break
-      default:
-        pushToken(head, functionTokenType)
-        for (const arg of tail) go(arg)
-        break
-    }
-  }
-  return { tokensBuilder, build: go }
-}
-
 /**
  * @param {vscode.TextDocument} document
  */
-const provideDocumentSemanticTokens = (document) => {
-  const { tree } = cacheFetchOrParse(document)
-  const { tokensBuilder, build } = tokenBuilderForParseTree(document.fileName)
-  tree.rootNode.children.forEach(build)
-  const semtoks = tokensBuilder.build()
+const makeProvideDocumentSemanticTokensForms = async () => {
+  const { tryGetFormWord, tryGetFormList, meta } = await import('./esm/core.js')
+  const { treeToFormsSafe } = await import('./esm/mini-lisp.js')
+  const provideDocumentSemanticTokens = (document) => {
+    const tokensBuilder = new SemanticTokensBuilder(legend)
+    try {
+      const tree = parseDocumentTreeSitter(document)
+      const forms = treeToFormsSafe(tree, document.fileName)
 
-  return semtoks
+      let prevRow = 0
+      let prevColumn = 0
+      const pushTokenWithModifier = (form, tokenType, tokenModifiers) => {
+        if (!form) return console.error('no form')
+        if (!tryGetFormWord(form)) return console.error('expected word')
+        const formMetaList = meta(form)
+        if (!formMetaList) return console.error('no form meta')
+        if (!Array.isArray(formMetaList)) return console.error('no form meta list')
+        const [contentName, row, column, tokenLength] = formMetaList
+        if (row < prevRow || (row === prevRow && column < prevColumn))
+          console.error('sem toks out of order', {
+            row: row + 1,
+            column: column + 1,
+            prevRow: prevRow + 1,
+            prevCol: prevColumn + 1,
+          })
+        prevRow = row
+        prevColumn = column
+        tokensBuilder.push(row, column, tokenLength, tokenType, tokenModifiers)
+      }
+      const pushToken = (form, tokenType) => pushTokenWithModifier(form, tokenType, 0)
+      const emptyList = Object.freeze([])
+      const getListOrEmpty = (form) => {
+        return tryGetFormList(form) || emptyList
+      }
+      const goType = (form) => {
+        if (!form) return
+        if (tryGetFormWord(form)) pushToken(form, typeTokenType)
+        else getListOrEmpty(form).forEach(goType)
+      }
+      const go = (form) => {
+        if (!form) return
+        const word = tryGetFormWord(form)
+        if (word) {
+          pushToken(form, variableTokenType)
+          return
+        }
+        const list = tryGetFormList(form)
+        if (!list) {
+          console.error('expected list', form)
+          return
+        }
+        if (list.length === 0) return
+        const [head, ...tail] = list
+        const headWord = tryGetFormWord(head)
+        const funcSpecial = () => {
+          const [name, paramsForm, body] = tail
+          pushToken(name, headWord === 'macro' ? macroTokenType : functionTokenType)
+          const params = tryGetFormList(paramsForm)
+          if (params) for (const param of params) pushToken(param, parameterTokenType)
+          go(body)
+        }
+        const specialForms = {
+          i32: () => {
+            pushToken(tail[0], tokenTypeNumber)
+          },
+          word: () => {
+            pushToken(tail[0], stringTokenType)
+          },
+          quote: () => {
+            const goQuote = (form) => {
+              if (tryGetFormWord(form)) pushToken(form, stringTokenType)
+              else getListOrEmpty(form).forEach(goQuote)
+            }
+            const [quoteForm] = tail
+            if (quoteForm) goQuote(quoteForm)
+          },
+          if: () => {
+            for (const form of tail) go(form)
+          },
+          match: () => {
+            for (const form of tail) go(form)
+          },
+          do: () => {
+            for (const form of tail) go(form)
+          },
+          let: () => {
+            const [bindingsForm, body] = tail
+            const bindings = getListOrEmpty(bindingsForm)
+            for (let i = 0; i < bindings.length - 1; i += 2) {
+              pushTokenWithModifier(bindings[i], variableTokenType, declarationModifier)
+              go(bindings[i + 1])
+            }
+            go(body)
+          },
+          func: funcSpecial,
+          fexpr: funcSpecial,
+          macro: funcSpecial,
+          def: () => {
+            const [cname, val] = tail
+            pushTokenWithModifier(cname, variableTokenType, declarationModifier)
+            go(val)
+          },
+          extern: () => {
+            for (const form of tail) if (tryGetFormWord(form)) pushToken(form, stringTokenType)
+          },
+          intrinsic: () => {
+            for (const form of tail) if (tryGetFormWord(form)) pushToken(form, stringTokenType)
+          },
+          atom: () => {
+            go(tail[0])
+          },
+          load: () => {
+            pushToken(tail[0], stringTokenType)
+          },
+          'type-anno': () => {
+            go(tail[0])
+            goType(tail[1])
+          },
+          type: () => {
+            for (let i = 0; i < tail.length; i += 3) {
+              pushTokenWithModifier(tail[i], typeTokenType, declarationModifier)
+              for (const typeParam of getListOrEmpty(tail[i + 1])) pushToken(typeParam, parameterTokenType)
+              goType(tail[i + 2])
+            }
+          },
+        }
+        if (headWord) {
+          const specialHandler = specialForms[headWord]
+          if (specialHandler) {
+            // console.log('special form', headWord)
+            pushToken(head, keywordTokenType)
+            specialHandler(tail)
+            return
+          }
+        }
+      }
+      for (const form of forms) go(form)
+    } catch (e) {
+      console.error('provideDocumentSemanticTokensForms error catch', e)
+    }
+    return tokensBuilder.build()
+  }
+  return {
+    provideDocumentSemanticTokens,
+  }
 }
 
-const { languages, workspace } = vscode
+const { languages } = vscode
 
 const pointToPosition = ({ row, column }) => new Position(row, column)
 
@@ -280,7 +215,7 @@ const rangeFromNode = ({ startPosition, endPosition }) =>
  * @param {vscode.CancellationToken} token
  */
 const provideSelectionRanges = (document, positions) => {
-  const { tree } = cacheFetchOrParse(document)
+  const tree = parseDocumentTreeSitter(document)
   const topLevelNodes = tree.rootNode.children
   // todo make selection aware of special forms such as let, where one wants to select bindings(pairs) before entire binding form
   const tryFindRange = (pos) => {
@@ -317,23 +252,18 @@ async function activate(context) {
   parseDocumentTreeSitter = (document, oldTree) => {
     const watch = makeStopWatch()
     const tree = parse(document.getText(), oldTree)
-    console.log('parse treesitter took', watch(), 'ms')
-    return { tree }
+    if (tree.rootNode.hasError) console.error('tree-sitter error')
+    console.log('parse treesitter took', watch(), 'ms', document.fileName)
+    return tree
   }
   console.log('starting wuns lang extension: ' + context.extensionPath)
 
-  const selector = { language: 'wuns', scheme: 'file' }
+  const selector = { language: wunsLanguageId, scheme: 'file' }
+  const documentSemanticTokensProvider = await makeProvideDocumentSemanticTokensForms()
   context.subscriptions.push(
-    languages.registerDocumentSemanticTokensProvider(
-      selector,
-      {
-        provideDocumentSemanticTokens,
-      },
-      legend,
-    ),
+    languages.registerDocumentSemanticTokensProvider(selector, documentSemanticTokensProvider, legend),
     languages.registerSelectionRangeProvider(selector, { provideSelectionRanges }),
   )
-  workspace.onDidChangeTextDocument(onDidChangeTextDocumentReparseChanges)
   console.log('Congratulations, your extension "wunslang" is now active!')
 }
 

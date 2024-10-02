@@ -135,19 +135,63 @@ const externs = {
   'performance-now': () => performance.now(),
 }
 
-export function* parseToForms(content, contentName) {
-  if (!isWord(contentName)) throw new Error('contentName must be a word')
+/**
+ * @param {TSParser.Tree} tree
+ * @param {string} contentName
+ */
+export const treeToFormsSafe = (tree, contentName) => {
+  if (typeof contentName !== 'string') contentName = 'unknown'
+
+  /**
+   * @param {TSParser.SyntaxNode} node
+   */
+  const tryNodeToForm = (node) => {
+    const { isError, type, startPosition, endPosition } = node
+    if (isError) return null
+    const { row, column } = startPosition
+    const tokenLength = endPosition.column - column
+    const metaData = list(contentName, row, column, tokenLength)
+    switch (type) {
+      case 'word':
+        return formWord(node.text, metaData)
+      case 'list': {
+        const subForms = []
+        for (const child of node.namedChildren) {
+          const subForm = tryNodeToForm(child)
+          if (subForm) subForms.push(subForm)
+        }
+        return formList(Object.freeze(subForms), metaData)
+      }
+      default:
+        return null
+    }
+  }
+  const topForms = []
+  for (const child of tree.rootNode.namedChildren) {
+    const form = tryNodeToForm(child)
+    if (form) topForms.push(form)
+  }
+  return Object.freeze(topForms)
+}
+
+/**
+ * @param {TSParser.Tree} tree
+ * @param {string} contentName
+ */
+export function* treeToForms(tree, contentName) {
+  if (typeof contentName !== 'string') throw new Error('contentName must be a word, was: ' + contentName)
   /**
    * @param {TSParser.SyntaxNode} node
    */
   const nodeToForm = (node) => {
     const { isError, type, startPosition, endPosition } = node
     if (isError) {
-      console.dir({ metaPrefix: contentName, startPosition, endPosition })
+      console.dir({ contentName, startPosition, endPosition })
       throw new Error('unexpected error node')
     }
     const { row, column } = startPosition
-    const metaData = list(contentName, row + 1, column + 1)
+    const tokenLength = endPosition.column - startPosition.column
+    const metaData = list(contentName, row + 1, column + 1, tokenLength)
     switch (type) {
       case 'word':
         return formWord(node.text, metaData)
@@ -157,8 +201,10 @@ export function* parseToForms(content, contentName) {
         throw new Error('unexpected node type: ' + type)
     }
   }
-  for (const child of parse(content).rootNode.namedChildren) yield nodeToForm(child)
+  for (const child of tree.rootNode.namedChildren) yield nodeToForm(child)
 }
+
+export const parseToForms = (content, contentName) => treeToForms(parse(content), contentName)
 
 export const readFile = (filePath) => parseToForms(fs.readFileSync(filePath, 'ascii'), filePath)
 
@@ -327,7 +373,7 @@ export const evalForm = (env, form) => {
               }
               const constructor = (...args) => {
                 if (args.length !== fieldNames.length) throw evalError('wrong number of arguments to ' + type)
-                return makeRecord(type, fieldNames, args);
+                return makeRecord(type, fieldNames, args)
               }
               env.set(type, constructor)
               break
