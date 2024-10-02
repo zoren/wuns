@@ -1939,7 +1939,6 @@
   [union
     [i32.const word]
     [f64.const word]
-    [drop wat-inst]
     [inst word [list wat-inst]]
     [if [list wat-type-basic] wat-inst wat-inst wat-inst]
     [local.get word]
@@ -2068,7 +2067,7 @@
                 [let-do [types [get-form-types tctx f]]
                   [[func go [i]
                     [if i
-                      [wat-inst/drop [go [dec i]]]
+                      [wat-inst/inst [word drop] [list [go [dec i]]]]
                       [translate-form tctx lctx f]]]
                     [size types]]]]
               [if [eq [size l] 1]
@@ -2245,10 +2244,6 @@
     [wat-inst/f64.const w]
     [wat-concat
       [list [wat/word [word f64.const]] [wat/word w]]]
-
-    [wat-inst/drop inst]
-    [wat-concat
-      [list [wat/word [word drop]] [wat-inst-to-out inst]]]
 
     [wat-inst/inst w args]
     [wat-concat
