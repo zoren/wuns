@@ -46,7 +46,7 @@ if (!endsWithDashFlag) {
   const evalLine = (line) =>
     console.log(print(catchErrors(() => evaluateForms(parseToForms(line, `repl-${replLineNo++}`)))))
   const completer = (line) => {
-    const m = line.match(/[a-z0-9./-]+$/)
+    const m = line.match(/[-./0-9a-z]+$/)
     if (!m) return [[], '']
     const currentWord = m[0]
     const defs = getCompletions(currentWord)

@@ -6,5 +6,5 @@
   "brackets": [["[", "]"]],
   "autoClosingPairs": [{ "open": "[", "close": "]" }],
   "surroundingPairs": [["[", "]"]],
-  "wordPattern": "([a-z0-9.-=]+)"
+  "wordPattern": "([-./0-9a-z]+)"
 }

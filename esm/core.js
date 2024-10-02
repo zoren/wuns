@@ -2,7 +2,7 @@ import { isPlainObject } from "./utils.js"
 
 export const isSigned32BitInteger = (n) => (n | 0) === n
 
-const wordRegex = /^[a-z0-9.=/-]+$/
+const wordRegex = /^[-./0-9a-z]+$/
 export const isWord = (s) => typeof s === 'string' && s.length > 0 && wordRegex.test(s)
 export const stringToWord = (s) => {
   if (!isWord(s)) throw new Error('invalid word: "' + s + '" ' + typeof s)

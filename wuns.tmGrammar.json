@@ -20,7 +20,7 @@
       ]
     },
     "word": {
-      "match": "[a-z0-9.-=]+",
+      "match": "[-./0-9a-z]+",
       "name": "variable.other.wuns"
     },
     "bracket-form": {

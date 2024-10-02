@@ -3,7 +3,7 @@ module.exports = grammar({
 
   rules: {
     source_file: ($) => repeat($._form),
-    word: () => /[a-z0-9./-]+/,
+    word: () => /[-./0-9a-z]+/,
     list: ($) => seq('[', repeat($._form), ']'),
     _form: ($) => choice($.word, $.list),
   },
