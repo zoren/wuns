@@ -1,5 +1,5 @@
 const vscode = require('vscode')
-const { SemanticTokensLegend, SemanticTokensBuilder, SelectionRange, Range, Position, Uri } = vscode
+const { SemanticTokensLegend, SemanticTokensBuilder, SelectionRange, Range, Position } = vscode
 
 const makeStopWatch = () => {
   const before = performance.now()
@@ -56,32 +56,20 @@ const modificationModifier = encodeTokenModifiers('modification')
  */
 const makeProvideDocumentSemanticTokensForms = async () => {
   const { tryGetFormWord, tryGetFormList, meta } = await import('./esm/core.js')
-  const { treeToFormsSafe } = await import('./esm/mini-lisp.js')
+  const { treeToFormsSafe, makeDefEnv, evalForm, isClosure } = await import('./esm/mini-lisp.js')
+  const defEnv = makeDefEnv()
   const provideDocumentSemanticTokens = (document) => {
     const tokensBuilder = new SemanticTokensBuilder(legend)
     try {
-      const tree = parseDocumentTreeSitter(document)
-      const forms = treeToFormsSafe(tree, document.fileName)
-
-      let prevRow = 0
-      let prevColumn = 0
       const pushTokenWithModifier = (form, tokenType, tokenModifiers) => {
         if (!form) return console.error('no form')
-        if (!tryGetFormWord(form)) return console.error('expected word')
+        const word = tryGetFormWord(form)
+        if (!word) return console.error('expected word')
         const formMetaList = meta(form)
-        if (!formMetaList) return console.error('no form meta')
+        if (!formMetaList) return
         if (!Array.isArray(formMetaList)) return console.error('no form meta list')
-        const [contentName, row, column, tokenLength] = formMetaList
-        if (row < prevRow || (row === prevRow && column < prevColumn))
-          console.error('sem toks out of order', {
-            row: row + 1,
-            column: column + 1,
-            prevRow: prevRow + 1,
-            prevCol: prevColumn + 1,
-          })
-        prevRow = row
-        prevColumn = column
-        tokensBuilder.push(row, column, tokenLength, tokenType, tokenModifiers)
+        const [contentName, row, column] = formMetaList
+        tokensBuilder.push(row, column, word.length, tokenType, tokenModifiers)
       }
       const pushToken = (form, tokenType) => pushTokenWithModifier(form, tokenType, 0)
       const emptyList = Object.freeze([])
@@ -165,9 +153,6 @@ const makeProvideDocumentSemanticTokensForms = async () => {
           atom: () => {
             go(tail[0])
           },
-          load: () => {
-            pushToken(tail[0], stringTokenType)
-          },
           'type-anno': () => {
             go(tail[0])
             goType(tail[1])
@@ -188,9 +173,48 @@ const makeProvideDocumentSemanticTokensForms = async () => {
             specialHandler(tail)
             return
           }
+          // check if headWord is a defed macro or fexpr, or a func
+          const headValue = defEnv.get(headWord)
+          if (isClosure(headValue)) {
+            switch (headValue.kind) {
+              case 'macro': {
+                pushToken(head, macroTokenType)
+                const macroResult = headValue(...tail)
+                go(macroResult)
+                return
+              }
+              case 'fexpr':
+                pushToken(head, functionTokenType)
+                return
+              case 'func':
+                pushToken(head, functionTokenType)
+                for (const form of tail) go(form)
+                return
+              default:
+                throw new Error('unexpected closure kind')
+            }
+          }
+          pushToken(head, functionTokenType)
+          for (const form of tail) go(form)
+          return
         }
+        go(head)
+        for (const form of tail) go(form)
       }
-      for (const form of forms) go(form)
+
+      const tree = parseDocumentTreeSitter(document)
+      const forms = treeToFormsSafe(tree, document.fileName)
+
+      for (const form of forms) {
+        try {
+          evalForm(defEnv, form)
+        } catch (e) {
+          console.error('provideDocumentSemanticTokensForms evalForm error', e.message)
+          console.error(e)
+          console.error(meta(form))
+        }
+        go(form)
+      }
     } catch (e) {
       console.error('provideDocumentSemanticTokensForms error catch', e)
     }

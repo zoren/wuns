@@ -58,17 +58,15 @@ class Closure extends Function {
 }
 
 const makeClosure = (env, name, parameters, body, kind) => Object.freeze(new Closure(env, name, parameters, body, kind))
-const isClosure = (v) => v instanceof Closure
+export const isClosure = (v) => v instanceof Closure
 import {
   tryGetFormWord,
   tryGetFormList,
   isTaggedValue,
   makeValueTagger,
-  isWord,
   atom,
   makeRecord,
   getRecordType,
-  print,
   formWord,
   formList,
 } from './core.js'
@@ -149,8 +147,7 @@ export const treeToFormsSafe = (tree, contentName) => {
     const { isError, type, startPosition, endPosition } = node
     if (isError) return null
     const { row, column } = startPosition
-    const tokenLength = endPosition.column - column
-    const metaData = list(contentName, row, column, tokenLength)
+    const metaData = list(contentName, row, column)
     switch (type) {
       case 'word':
         return formWord(node.text, metaData)
@@ -208,248 +205,259 @@ export const parseToForms = (content, contentName) => treeToForms(parse(content)
 
 export const readFile = (filePath) => parseToForms(fs.readFileSync(filePath, 'ascii'), filePath)
 
-export const evalForm = (env, form) => {
-  const curForm = form
-  const evalError = (message, innerError) => new EvalError(message, curForm, innerError)
-  while (true) {
-    const word = tryGetFormWord(form)
-    if (word) {
-      let curEnv = env
-      while (curEnv) {
-        if (curEnv.has(word)) return curEnv.get(word)
-        curEnv = curEnv.outer
-      }
-      throw evalError('undefined variable: ' + word)
-    }
-    const forms = getFormList(form)
-    if (forms.length === 0) throw evalError('empty list')
-    const [firstForm] = forms
-    const firstWord = tryGetFormWord(firstForm)
-    const numOfArgs = forms.length - 1
-    const assertNumArgs = (num) => {
-      if (numOfArgs !== num) throw evalError(`special form '${firstWord}' expected ${num} arguments, got ${numOfArgs}`)
-    }
-    switch (firstWord) {
-      case 'i32':
-        assertNumArgs(1)
-        return +getFormWord(forms[1]) | 0
-      case 'word':
-        assertNumArgs(1)
-        return getFormWord(forms[1])
-      case 'quote': {
-        assertNumArgs(1)
-        const form = forms[1]
-        assertFormDeep(form)
-        return form
-      }
-      case 'func':
-      case 'fexpr':
-      case 'macro': {
-        assertNumArgs(3)
-        const name = getFormWord(forms[1])
-        const parameters = getFormList(forms[2]).map(getFormWord)
-        const body = forms[3]
-        return makeClosure(env, name, parameters, body, firstWord)
-      }
-      case 'extern': {
-        let ext = externs
-        for (let i = 1; i < forms.length; i++) {
-          const prop = getFormWord(forms[i])
-          const extProp = ext[prop]
-          if (extProp === undefined) throw evalError('undefined extern: ' + prop + ' in ' + ext)
-          ext = extProp
+export const evalForm = (defEnv, topForm) => {
+  const go = (env, form) => {
+    const curForm = form
+    const evalError = (message, innerError) => new EvalError(message, curForm, innerError)
+    while (true) {
+      const word = tryGetFormWord(form)
+      if (word) {
+        let curEnv = env
+        while (curEnv) {
+          if (curEnv.has(word)) return curEnv.get(word)
+          curEnv = curEnv.outer
         }
-        return ext
+        throw evalError('undefined variable: ' + word)
       }
-      case 'intrinsic': {
-        let intrinsic = intrinsics
-        for (let i = 1; i < forms.length; i++) {
-          const prop = getFormWord(forms[i])
-          const intrinsicProperty = intrinsic[prop]
-          if (intrinsicProperty === undefined) throw evalError('undefined intrinsic: ' + prop + ' in ' + intrinsic)
-          intrinsic = intrinsicProperty
+      const forms = getFormList(form)
+      if (forms.length === 0) throw evalError('empty list')
+      const [firstForm] = forms
+      const firstWord = tryGetFormWord(firstForm)
+      const numOfArgs = forms.length - 1
+      const assertNumArgs = (num) => {
+        if (numOfArgs !== num)
+          throw evalError(`special form '${firstWord}' expected ${num} arguments, got ${numOfArgs}`)
+      }
+      switch (firstWord) {
+        case 'i32':
+          assertNumArgs(1)
+          return +getFormWord(forms[1]) | 0
+        case 'word':
+          assertNumArgs(1)
+          return getFormWord(forms[1])
+        case 'quote': {
+          assertNumArgs(1)
+          const form = forms[1]
+          assertFormDeep(form)
+          return form
         }
-        return intrinsic
-      }
-      case 'def': {
-        assertNumArgs(2)
-        const name = getFormWord(forms[1])
-        const value = evalForm(env, forms[2])
-        if (env.outer) throw evalError('def must be defined in the outermost environment')
-        env.set(name, value)
-        return value
-      }
-      case 'atom': {
-        assertNumArgs(1)
-        const initialValue = evalForm(env, forms[1])
-        return atom(initialValue)
-      }
-
-      case 'loop':
-      case 'continue':
-      case 'recur':
-        throw evalError('unexpected ' + firstWord)
-
-      case 'if':
-        assertNumArgs(3)
-        try {
-          form = forms[evalForm(env, forms[1]) ? 2 : 3]
-        } catch (e) {
-          throw evalError('error in if condition', e)
+        case 'func':
+        case 'fexpr':
+        case 'macro': {
+          assertNumArgs(3)
+          const name = getFormWord(forms[1])
+          const parameters = getFormList(forms[2]).map(getFormWord)
+          const body = forms[3]
+          return makeClosure(env, name, parameters, body, firstWord)
         }
-        continue
-      case 'match': {
-        if (numOfArgs === 0) throw evalError(`special form '${firstWord}' expected at least one argument`)
-        const value = evalForm(env, forms[1])
-        const findMatch = () => {
-          for (let i = 2; i < forms.length - 1; i += 2) {
-            const pattern = forms[i]
-            const patternList = getFormList(pattern)
-            if (patternList.length === 0) throw evalError('pattern must have at least one word')
-            const firstPatternWord = getFormWord(patternList[0])
-            if (firstPatternWord === 'i32' || firstPatternWord === 'word') {
-              const patternValue = evalForm(env, pattern)
-              if (patternValue === value) return { newEnv: env, body: forms[i + 1] }
-              continue
-            }
-            if (!isTaggedValue(value)) throw evalError('expected tagged value')
-            const { tag, args } = value
-            const patternCtorFunc = evalForm(env, patternList[0])
-            if (typeof patternCtorFunc !== 'function') throw evalError('expected function')
-            if (typeof patternCtorFunc.tag !== 'string') throw evalError('expected ctor function')
-            if (patternCtorFunc.tag !== tag) continue
-            if (patternList.length - 1 !== args.length)
-              throw evalError(
-                `pattern length ${patternList.length - 1} but value length was ${args.length} ${tag} ${args} ${meta(patternList[0])}`,
-              )
-            const newEnv = makeEnv(env)
-            for (let j = 1; j < patternList.length; j++) setEnv(newEnv, getFormWord(patternList[j]), args[j - 1])
-            return { newEnv, body: forms[i + 1] }
+        case 'extern': {
+          let ext = externs
+          for (let i = 1; i < forms.length; i++) {
+            const prop = getFormWord(forms[i])
+            const extProp = ext[prop]
+            if (extProp === undefined) throw evalError('undefined extern: ' + prop + ' in ' + ext)
+            ext = extProp
           }
-          // an odd number of arguments means there is no default case
-          if (numOfArgs % 2 === 1) {
-            console.dir(value)
-            throw evalError('no match found')
-          }
-          return { newEnv: env, body: forms.at(-1) }
+          return ext
         }
-        const { newEnv, body } = findMatch()
-        env = newEnv
-        form = body
-        continue
-      }
-      case 'type': {
-        if (numOfArgs % 3 !== 0) throw evalError('type expected triplets')
-        if (env.outer) throw evalError('type must be defined in the outermost environment')
-        for (let i = 1; i < forms.length; i += 3) {
-          const type = getFormWord(forms[i])
-          const _typeParams = getFormList(forms[i + 1]).map(getFormWord)
-          const body = getFormList(forms[i + 2])
-          const firstBodyWord = getFormWord(body[0])
-          switch (firstBodyWord) {
-            case 'union':
-              for (let i = 1; i < body.length; i++) {
-                const unionCase = getFormList(body[i])
-                if (unionCase.length === 0) throw evalError('union case must have at least one word')
-                const unionCaseName = getFormWord(unionCase[0])
-                const qualName = `${type}/${unionCaseName}`
-                const tagger = makeValueTagger(qualName, unionCase.length - 1)
-                env.set(qualName, tagger)
+        case 'intrinsic': {
+          let intrinsic = intrinsics
+          for (let i = 1; i < forms.length; i++) {
+            const prop = getFormWord(forms[i])
+            const intrinsicProperty = intrinsic[prop]
+            if (intrinsicProperty === undefined) throw evalError('undefined intrinsic: ' + prop + ' in ' + intrinsic)
+            intrinsic = intrinsicProperty
+          }
+          return intrinsic
+        }
+        case 'def': {
+          assertNumArgs(2)
+          const name = getFormWord(forms[1])
+          const value = go(env, forms[2])
+          if (env.outer) throw evalError('def must be defined in the outermost environment')
+          env.set(name, value)
+          return value
+        }
+        case 'atom': {
+          assertNumArgs(1)
+          const initialValue = go(env, forms[1])
+          return atom(initialValue)
+        }
+
+        case 'loop':
+        case 'continue':
+        case 'recur':
+          throw evalError('unexpected ' + firstWord)
+
+        case 'if':
+          assertNumArgs(3)
+          try {
+            form = forms[go(env, forms[1]) ? 2 : 3]
+          } catch (e) {
+            throw evalError('error in if condition', e)
+          }
+          continue
+        case 'match': {
+          if (numOfArgs === 0) throw evalError(`special form '${firstWord}' expected at least one argument`)
+          const value = go(env, forms[1])
+          const findMatch = () => {
+            for (let i = 2; i < forms.length - 1; i += 2) {
+              const pattern = forms[i]
+              const patternList = getFormList(pattern)
+              if (patternList.length === 0) throw evalError('pattern must have at least one word')
+              const firstPatternWord = getFormWord(patternList[0])
+              if (firstPatternWord === 'i32' || firstPatternWord === 'word') {
+                const patternValue = go(env, pattern)
+                if (patternValue === value) return { newEnv: env, body: forms[i + 1] }
+                continue
               }
-              break
-            case 'record': {
-              const fieldNames = []
-              for (let i = 1; i < body.length; i++) {
-                const recordField = getFormList(body[i])
-                if (recordField.length < 2) throw evalError('record field must have a name and a type')
-                const fieldName = getFormWord(recordField[0])
-                fieldNames.push(fieldName)
-                const projecterName = `${type}/${fieldName}`
-                const projecter = (record) => {
-                  if (getRecordType(record) !== type) throw evalError(`field projecter ${projecterName} not a ${type}`)
-                  return record[fieldName]
+              if (!isTaggedValue(value)) throw evalError('expected tagged value')
+              const { tag, args } = value
+              const patternCtorFunc = go(env, patternList[0])
+              if (typeof patternCtorFunc !== 'function') throw evalError('expected function')
+              if (typeof patternCtorFunc.tag !== 'string') throw evalError('expected ctor function')
+              if (patternCtorFunc.tag !== tag) continue
+              if (patternList.length - 1 !== args.length)
+                throw evalError(
+                  `pattern length ${patternList.length - 1} but value length was ${args.length} ${tag} ${args} ${meta(patternList[0])}`,
+                )
+              const newEnv = makeEnv(env)
+              for (let j = 1; j < patternList.length; j++) setEnv(newEnv, getFormWord(patternList[j]), args[j - 1])
+              return { newEnv, body: forms[i + 1] }
+            }
+            // an odd number of arguments means there is no default case
+            if (numOfArgs % 2 === 1) {
+              console.dir(value)
+              throw evalError('no match found')
+            }
+            return { newEnv: env, body: forms.at(-1) }
+          }
+          const { newEnv, body } = findMatch()
+          env = newEnv
+          form = body
+          continue
+        }
+        case 'type': {
+          if (numOfArgs % 3 !== 0) throw evalError('type expected triplets')
+          if (env.outer) throw evalError('type must be defined in the outermost environment')
+          for (let i = 1; i < forms.length; i += 3) {
+            const type = getFormWord(forms[i])
+            const _typeParams = getFormList(forms[i + 1]).map(getFormWord)
+            const body = getFormList(forms[i + 2])
+            const firstBodyWord = getFormWord(body[0])
+            switch (firstBodyWord) {
+              case 'union':
+                for (let i = 1; i < body.length; i++) {
+                  const unionCase = getFormList(body[i])
+                  if (unionCase.length === 0) throw evalError('union case must have at least one word')
+                  const unionCaseName = getFormWord(unionCase[0])
+                  const qualName = `${type}/${unionCaseName}`
+                  const tagger = makeValueTagger(qualName, unionCase.length - 1)
+                  env.set(qualName, tagger)
                 }
-                env.set(projecterName, projecter)
+                break
+              case 'record': {
+                const fieldNames = []
+                for (let i = 1; i < body.length; i++) {
+                  const recordField = getFormList(body[i])
+                  if (recordField.length < 2) throw evalError('record field must have a name and a type')
+                  const fieldName = getFormWord(recordField[0])
+                  fieldNames.push(fieldName)
+                  const projecterName = `${type}/${fieldName}`
+                  const projecter = (record) => {
+                    if (getRecordType(record) !== type)
+                      throw evalError(`field projecter ${projecterName} not a ${type}`)
+                    return record[fieldName]
+                  }
+                  env.set(projecterName, projecter)
+                }
+                const constructor = (...args) => {
+                  if (args.length !== fieldNames.length) throw evalError('wrong number of arguments to ' + type)
+                  return makeRecord(type, fieldNames, args)
+                }
+                env.set(type, constructor)
+                break
               }
-              const constructor = (...args) => {
-                if (args.length !== fieldNames.length) throw evalError('wrong number of arguments to ' + type)
-                return makeRecord(type, fieldNames, args)
-              }
-              env.set(type, constructor)
-              break
+              default:
+                throw evalError('unexpected type body: ' + firstBodyWord)
             }
-            default:
-              throw evalError('unexpected type body: ' + firstBodyWord)
+          }
+          return langUndefined
+        }
+        case 'do':
+          if (forms.length === 1) return langUndefined
+          try {
+            for (let i = 1; i < forms.length - 1; i++) go(env, forms[i])
+          } catch (e) {
+            throw evalError('error in do', e)
+          }
+          form = forms.at(-1)
+          continue
+        case 'let': {
+          assertNumArgs(2)
+          const bindings = getFormList(forms[1])
+          if (bindings.length % 2 !== 0) {
+            console.log('meta for odd', bindings.length, meta(form))
+            for (const b of bindings) console.log('binding', b, meta(b))
+            throw evalError('odd number of bindings')
+          }
+          const newEnv = makeEnv(env)
+          try {
+            for (let i = 0; i < bindings.length - 1; i += 2)
+              setEnv(newEnv, getFormWord(bindings[i]), go(newEnv, bindings[i + 1]))
+          } catch (e) {
+            throw evalError('error in let bindings', e)
+          }
+          env = newEnv
+          form = forms[2]
+          continue
+        }
+        case 'type-anno': {
+          assertNumArgs(2)
+          form = forms[1]
+          continue
+        }
+        case 'load': {
+          throw evalError('load is not supported')
+          // assertNumArgs(1)
+          // const filePath = getFormWord(forms[1])
+          // const joinedPath = path.join(currentDir, filePath)
+          // for (const newForm of readFile(joinedPath)) evalForm(env, newForm)
+          // return langUndefined
+        }
+      }
+      const func = go(env, firstForm)
+      const args = forms.slice(1)
+      if (!isClosure(func)) {
+        if (typeof func === 'function') {
+          try {
+            return func(...args.map((arg) => go(env, arg)))
+          } catch (e) {
+            throw evalError('error in function call', e)
           }
         }
-        return langUndefined
+        throw evalError('not a function')
       }
-      case 'do':
-        if (forms.length === 1) return langUndefined
-        try {
-          for (let i = 1; i < forms.length - 1; i++) evalForm(env, forms[i])
-        } catch (e) {
-          throw evalError('error in do', e)
+      const { kind, paramEnvMaker, body } = func
+      switch (kind) {
+        case 'macro': {
+          const macroResult = go(paramEnvMaker(args), body)
+          assertFormDeep(macroResult)
+          form = macroResult
+          continue
         }
-        form = forms.at(-1)
-        continue
-      case 'let': {
-        assertNumArgs(2)
-        const bindings = getFormList(forms[1])
-        if (bindings.length % 2 !== 0) throw evalError('odd number of bindings')
-        const newEnv = makeEnv(env)
-        try {
-          for (let i = 0; i < bindings.length - 1; i += 2)
-            setEnv(newEnv, getFormWord(bindings[i]), evalForm(newEnv, bindings[i + 1]))
-        } catch (e) {
-          throw evalError('error in let bindings', e)
-        }
-        env = newEnv
-        form = forms[2]
-        continue
+        case 'fexpr':
+          return go(paramEnvMaker(args), body)
+        case 'func':
+          env = paramEnvMaker(args.map((arg) => go(env, arg)))
+          form = body
+          continue
+        default:
+          throw evalError('unexpected closure kind: ' + kind + ' ' + func)
       }
-      case 'type-anno': {
-        assertNumArgs(2)
-        form = forms[1]
-        continue
-      }
-      case 'load': {
-        assertNumArgs(1)
-        const filePath = getFormWord(forms[1])
-        for (const newForm of readFile(filePath)) evalForm(env, newForm)
-        return langUndefined
-      }
-    }
-    const func = evalForm(env, firstForm)
-    const args = forms.slice(1)
-    if (!isClosure(func)) {
-      if (typeof func === 'function') {
-        try {
-          return func(...args.map((arg) => evalForm(env, arg)))
-        } catch (e) {
-          throw evalError('error in function call', e)
-        }
-      }
-      throw evalError('not a function')
-    }
-    const { kind, paramEnvMaker, body } = func
-    switch (kind) {
-      case 'macro': {
-        const macroResult = evalForm(paramEnvMaker(args), body)
-        assertFormDeep(macroResult)
-        form = macroResult
-        continue
-      }
-      case 'fexpr':
-        return evalForm(paramEnvMaker(args), body)
-      case 'func':
-        env = paramEnvMaker(args.map((arg) => evalForm(env, arg)))
-        form = body
-        continue
-      default:
-        throw evalError('unexpected closure kind: ' + kind + ' ' + func)
     }
   }
+  return go(defEnv, topForm)
 }
 
 export const catchErrors = (f) => {
@@ -467,7 +475,7 @@ export const catchErrors = (f) => {
         console.log('form was', form)
         return '???'
       }
-      console.error(curErr, dumpFormMeta(curErr.form))
+      console.error(curErr.message, dumpFormMeta(curErr.form))
       curErr = curErr.innerError
     }
   }
@@ -477,7 +485,7 @@ const none = makeValueTagger('option/none', 0)()
 const some = makeValueTagger('option/some', 1)
 
 externs.interpreter = {
-  'make-context': () => new Map(),
+  'make-context': () => makeDefEnv(),
   'try-get-macro': (context, name) => {
     if (!(context instanceof Map)) throw new Error('try-get-macro expects context')
     if (typeof name !== 'string') throw new Error('try-get-macro expects string')
@@ -488,16 +496,14 @@ externs.interpreter = {
   evaluate: (context, form) => {
     if (!(context instanceof Map)) throw new Error('evaluate expects context')
     try {
-      return evalForm(context, form)
-    } catch (e) {
-      return 0
-    }
+      evalForm(context, form)
+    } catch (e) {}
+    return langUndefined
   },
   apply: (func, args) => {
     if (!isClosure(func)) throw new Error('apply expects closure')
     if (!Array.isArray(args)) throw new Error('apply expects array')
-    const paramEnv = func.paramEnvMaker(args)
-    return evalForm(paramEnv, func.body)
+    return func(...args)
   },
   'read-file': (path) => {
     if (typeof path !== 'string') throw new Error('read-file expects string')
