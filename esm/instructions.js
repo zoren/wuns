@@ -31,6 +31,34 @@ for (const { op, name } of i32Instructions) {
   instructionFunctions.push(f)
 }
 
+const f64ArithInstructions = [
+  { name: 'add', op: '+' },
+  { name: 'sub', op: '-' },
+  { name: 'mul', op: '*' },
+]
+for (const { op, name } of f64ArithInstructions) {
+  const f = Function('a', 'b', `return (a ${op} b)`)
+  setJSFunctionName(f, `f64.${name}`)
+  Object.freeze(f)
+  instructionFunctions.push(f)
+}
+
+const f64CmpInstructions = [
+  { name: 'eq', op: '===' },
+  { name: 'ne', op: '!==' },
+
+  { name: 'lt-s', op: '<' },
+  { name: 'le-s', op: '<=' },
+  { name: 'gt-s', op: '>' },
+  { name: 'ge-s', op: '>=' },
+]
+for (const { op, name } of f64CmpInstructions) {
+  const f = Function('a', 'b', `return (a ${op} b) | 0`)
+  setJSFunctionName(f, `f64.${name}`)
+  Object.freeze(f)
+  instructionFunctions.push(f)
+}
+
 const unreachable = () => {
   throw new Error('unreachable')
 }

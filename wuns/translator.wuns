@@ -443,7 +443,7 @@
 [def-extern byte-array-to-wasm-module [func [byte-array] wasm-module]]
 [type wasm-instance [] [union]]
 [def-extern wasm-instantiate [func [wasm-module] wasm-instance]]
-[def-extern wasm-call-export [func [wasm-instance word [list i32]] [list i32]]]
+[def-extern wasm-call-export [type-scheme [a] [func [wasm-instance word [list a]] [list a]]]]
 
 [type function-kind []
   [union
@@ -485,6 +485,7 @@
 [defn make-type [type-name .. type-args] [make-type-list type-name type-args]]
 
 [def type-i32 [make-type [word i32]]]
+[def type-f64 [make-type [word f64]]]
 
 [def type-word [make-type [word word]]]
 
@@ -980,6 +981,7 @@
 
 [defn is-builtin-type [word]
   [or [eq-word word [word i32]]
+      [eq-word word [word f64]]
       [eq-word word [word word]]
 
       [eq-word word [word tuple]]
@@ -1017,6 +1019,7 @@
             [eq-word fw [word atom]] 0
 
             [eq-word fw [word i32]] 1
+            [eq-word fw [word f64]] 1
             [eq-word fw [word word]] 1
             [eq-word fw [word quote]] 1
 
@@ -1091,6 +1094,11 @@
         [do
           [report-when-not [eq n-of-args 1] form expects 1 argument]
           type-i32]
+
+        [eq-form [quote f64] first-form]
+        [do
+          [report-when-not [eq n-of-args 1] form expects 1 argument]
+          type-f64]
 
         [eq-form [quote word] first-form]
         [do
@@ -1930,6 +1938,7 @@
 [type wat-inst []
   [union
     [i32.const word]
+    [f64.const word]
     [drop wat-inst]
     [inst word [list wat-inst]]
     [if [list wat-type-basic] wat-inst wat-inst wat-inst]
@@ -1963,6 +1972,7 @@
     [form/word w]
     [ifs
       [eq-word w [word i32]] [wat-type-basic/i32]
+      [eq-word w [word f64]] [wat-type-basic/f64]
 
       [logq-abort not implemented translate-type word]]
 
@@ -1979,6 +1989,7 @@
     [form/word w]
     [ifs
       [eq-word w [word i32]] [list [wat-type-basic/i32]]
+      [eq-word w [word f64]] [list [wat-type-basic/f64]]
 
       [logq-abort not implemented translate-types word]]
 
@@ -2046,6 +2057,9 @@
         [ifs
           [eq-word w [word i32]]
           [wat-inst/i32.const [form-to-word [second l]]]
+
+          [eq-word w [word f64]]
+          [wat-inst/f64.const [form-to-word [second l]]]
 
           [eq-word w [word do]]
           [wat-inst/instructions
@@ -2218,8 +2232,6 @@
 [defn wat-type-basic-to-word [t]
   [match t
     [wat-type-basic/i32] [word i32]
-    [wat-type-basic/i64] [word i64]
-    [wat-type-basic/f32] [word f32]
     [wat-type-basic/f64] [word f64]]]
 
 [defn wat-concat [.. l] [wat/list [concat-lists l]]]
@@ -2229,6 +2241,10 @@
     [wat-inst/i32.const w]
     [wat-concat
       [list [wat/word [word i32.const]] [wat/word w]]]
+
+    [wat-inst/f64.const w]
+    [wat-concat
+      [list [wat/word [word f64.const]] [wat/word w]]]
 
     [wat-inst/drop inst]
     [wat-concat
@@ -2291,9 +2307,19 @@
           0]
         1]] 0]]]
 
+[defn eq-f64-list [expected actual]
+  [and [eq [size expected] [size actual]]
+    [[func go [i]
+      [if [lt-s i [size expected]]
+        [if [[intrinsic instructions f64.eq] [at expected i] [at actual i]]
+          [go [inc i]]
+          0]
+        1]] 0]]]
+
 [type test-assert []
   [union
-    [eq [list i32] word [list i32]]]]
+    [eq [list i32] word [list i32]]
+    [feq [list f64] word [list f64]]]]
 
 [type test []
   [record
@@ -2309,8 +2335,14 @@
           [when-not [eq-int-list expected actual]
             [logq test failed]
             [log expected]
-            [log actual]]]]]]]
+            [log actual]]]
 
+        [test-assert/feq expected func-name args]
+        [let [actual [wasm-call-export instance func-name args]]
+          [when-not [eq-f64-list expected actual]
+            [logq test failed]
+            [log expected]
+            [log actual]]]]]]]
 
 [defn test-translate []
 [let [tests
@@ -2356,6 +2388,16 @@
         [test-assert/eq [list [i32 0]] [word not] [list [i32 10]]]]
       [list
         [quote [def not [func not [p] [if p [i32 0] [i32 1]]]]]]]
+    [test
+      [list
+        [test-assert/feq [list [f64 1.5]] [word twop] [list [f64 0] [f64 0]]]
+        [test-assert/feq [list [f64 1.5]] [word twop] [list [f64 0] [f64 0.25]]]
+        [test-assert/feq [list [f64 0]] [word twop] [list [f64 1] [f64 0]]]
+        [test-assert/feq [list [f64 0.25]] [word twop] [list [f64 13.0] [f64 0.25]]]
+        [test-assert/feq [list [f64 0.1337]] [word twop] [list [f64 13.0] [f64 0.1337]]]
+        ]
+      [list
+        [quote [def twop [func twop [i f] [if i f [f64 1.5]]]]]]]
 ]]
   [for-each t tests
     [run-test t]]]

@@ -232,6 +232,12 @@ export const evalForm = (defEnv, topForm) => {
         case 'i32':
           assertNumArgs(1)
           return +getFormWord(forms[1]) | 0
+        case 'f64': {
+          assertNumArgs(1)
+          const v = +getFormWord(forms[1])
+          if (isNaN(v)) throw evalError('expected number')
+          return v
+        }
         case 'word':
           assertNumArgs(1)
           return getFormWord(forms[1])
