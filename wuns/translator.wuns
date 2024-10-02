@@ -127,7 +127,11 @@
           [logq-abort not implemented translate-form empty head list]]]]]]
 
 [defn translate-top [tctx output form]
-  [check-top [translate-context/check-context tctx] form]
+  [let-do [gctx [translate-context/check-context tctx]]
+    [check-top gctx form]
+    [match [atom-get [check-context/messages gctx]]
+      [linked-list/cons m ms] [logq-abort translate-top binding errors found]
+      [linked-list/nil] [do]]]
   [match form
     [form/word w] [logq-abort not implemented]
     [form/list l]
