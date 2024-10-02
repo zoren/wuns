@@ -1971,7 +1971,7 @@
         [form/word w]
         [ifs
           [eq-word w [word tuple]]
-          [list-map a [rest l] [translate-type a]]
+          [list-map a [rest l] [logq-abort not implemented]]
 
           [logq-abort not implemented translate-type unknown first]]
         [logq-abort not implemented translate-type list]]]]]
