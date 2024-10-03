@@ -56,7 +56,9 @@ const modificationModifier = encodeTokenModifiers('modification')
  */
 const makeProvideDocumentSemanticTokensForms = async () => {
   const { tryGetFormWord, tryGetFormList, meta } = await import('./esm/core.js')
-  const { treeToFormsSafe, makeDefEnv, evalForm, isClosure } = await import('./esm/mini-lisp.js')
+  const { treeToFormsSafe, makeDefEnv, evalForm, isClosure, isSpecialFormPrimitiveConstant } = await import(
+    './esm/mini-lisp.js'
+  )
   const defEnv = makeDefEnv()
   const provideDocumentSemanticTokens = (document) => {
     const tokensBuilder = new SemanticTokensBuilder(legend)
@@ -123,6 +125,15 @@ const makeProvideDocumentSemanticTokensForms = async () => {
           },
           if: () => {
             for (const form of tail) go(form)
+          },
+          switch: () => {
+            go(tail[0])
+            for (let i = 1; i < tail.length; i += 2) {
+              const constForm = tail[i]
+              if (isSpecialFormPrimitiveConstant(tryGetFormList(constForm)[0])) go(constForm)
+              go(tail[i + 1])
+            }
+            go(tail.at(-1))
           },
           match: () => {
             for (const form of tail) go(form)

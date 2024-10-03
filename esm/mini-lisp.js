@@ -205,6 +205,8 @@ export const parseToForms = (content, contentName) => treeToForms(parse(content)
 
 export const readFile = (filePath) => parseToForms(fs.readFileSync(filePath, 'ascii'), filePath)
 
+export const isSpecialFormPrimitiveConstant = (word) => word === 'i32' || word === 'f64' || word === 'word'
+
 export const evalForm = (defEnv, topForm) => {
   const go = (env, form) => {
     const curForm = form
@@ -303,21 +305,36 @@ export const evalForm = (defEnv, topForm) => {
             throw evalError('error in if condition', e)
           }
           continue
+        case 'switch': {
+          if (numOfArgs === 0) throw evalError(`special form '${firstWord}' expected at least one argument`)
+          if (numOfArgs % 2 !== 0) throw evalError('no switch default found')
+          const value = go(env, forms[1])
+          const valueType = typeof value
+          if (valueType !== 'number' && valueType !== 'string') throw evalError('switch value must be number or string')
+          form = forms.at(-1)
+          for (let i = 2; i < forms.length - 1; i += 2) {
+            const pattern = forms[i]
+            const patternList = getFormList(pattern)
+            const firstPatternWord = getFormWord(patternList[0])
+            if (!isSpecialFormPrimitiveConstant(firstPatternWord))
+              throw evalError('switch pattern must be constant, was ' + firstPatternWord)
+            const patternValue = go(env, pattern)
+            if (patternValue === value) {
+              form = forms[i + 1]
+              break
+            }
+          }
+          continue
+        }
         case 'match': {
           if (numOfArgs === 0) throw evalError(`special form '${firstWord}' expected at least one argument`)
           const value = go(env, forms[1])
+          if (!isTaggedValue(value)) throw evalError('expected tagged value')
           const findMatch = () => {
             for (let i = 2; i < forms.length - 1; i += 2) {
               const pattern = forms[i]
               const patternList = getFormList(pattern)
               if (patternList.length === 0) throw evalError('pattern must have at least one word')
-              const firstPatternWord = getFormWord(patternList[0])
-              if (firstPatternWord === 'i32' || firstPatternWord === 'word') {
-                const patternValue = go(env, pattern)
-                if (patternValue === value) return { newEnv: env, body: forms[i + 1] }
-                continue
-              }
-              if (!isTaggedValue(value)) throw evalError('expected tagged value')
               const { tag, args } = value
               const patternCtorFunc = go(env, patternList[0])
               if (typeof patternCtorFunc !== 'function') throw evalError('expected function')

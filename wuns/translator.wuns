@@ -660,15 +660,9 @@
                       [go [at type-args1 i] [at type-args2 i]]]
                     [push-unify-error [quote [not unifiable - different number of type arguments]]]]
                   [do
-                    [logq diff types]
-                    [log type-name1]
-                    [log type-name2]
                     [push-unify-error [quote [not unifiable - different types]]]]]
 
                 [do
-                  [logq diff types]
-                  [log type-name1]
-                  [log inst-type2]
                   [push-unify-error [quote [not unifiable - different types]]]]]]]]]]]
     [go outer-t1 outer-t2]
     [clone-growable-to-frozen-list errors]]]
@@ -1221,6 +1215,31 @@
 
                   [do
                     [report pattern expects a list]
+                    [generate-fresh-type-var gctx level]]]]]
+          result-type]
+
+        [eq-form first-form [quote switch]]
+        [let-do [match-value [second sub-forms]
+                 match-type [check gctx level lctx match-value]
+                 result-type [generate-fresh-type-var gctx level]]
+          [report-when-not [is-even n-of-args] form expects an even number of arguments]
+          [for-pair i 2 [dec s-form]
+            [let [case-const [at sub-forms i]
+                  branch [at sub-forms [inc i]]]
+              [match case-const
+                [form-list case-const-list]
+                [do
+                  [if [is-empty case-const-list]
+                    [report case-const expects a non-empty list]
+                    [let-do
+                      [first-case-const [first case-const-list]]
+                      [when-let [case-const-word [try-get-form-word-option first-case-const]]
+                        [report-when-not [word-list-contains case-const-word [word i32] [word f64] [word word]] case-const expects a constant]]
+                      [unify-report gctx match-type [check gctx level lctx case-const] case-const]]]
+                  [unify-report gctx [check gctx level lctx branch] result-type branch]]
+
+                  [do
+                    [report case-const expects a list]
                     [generate-fresh-type-var gctx level]]]]]
           result-type]
 
@@ -1847,6 +1866,18 @@
     [union
       [none]]]
   [match [option/none] [option/none] [i32 5]]]
+
+[comment switch]
+[test-errors word [[not unifiable - different types]]
+  [switch [i32 0]
+    [i32 0] [word zero]
+    [word a] [word one]
+    [word not-01]]]
+[test-ok word
+  [switch [i32 0]
+    [i32 0] [word zero]
+    [i32 1] [word one]
+    [word not-01]]]
 
 [comment from wright]
 [test-errors i32 [[not unifiable - different types]]
