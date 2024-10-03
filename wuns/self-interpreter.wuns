@@ -475,12 +475,12 @@
       [inst/set-var i val-inst] [let-do [v [go val-inst]] [set-array env i v] v]
       [inst/insts insts]
       [do
+        [assert [not [is-empty insts]] eval-inst requires a non-empty list of instructions]
         [for i 0 [size insts]
           [go [at insts i]]]
         [go [at insts -1]]]
       [logq-abort eval-inst not implemented]]]
    instruction]]
-
 
 [defn decimal-word-to-i32 [dw]
   [if [eq [char-code-at dw 0] [i32 45]]
@@ -524,25 +524,24 @@
     [form/list l]
     [match [first l]
       [form/word fw]
-      [ifs
-        [eq-word fw [word i32]]
+      [switch fw
+        [word i32]
         [inst/const [rt-value/i32 [decimal-word-to-i32 [form-to-word [second l]]]]]
 
-        [eq-word fw [word if]]
+        [word if]
         [inst/if
           [comp lctx [second l]]
           [comp lctx [third l]]
           [comp lctx [fourth l]]]
 
-        [eq-word fw [word let]]
-        [let-do
-          [var-values [transient-kv-map]
-           bindings [form-to-list [second l]]]
-          [inst/insts
-            [list-map pair [pairwise bindings]
+        [word let]
+        [inst/insts
+          [concat
+            [list-map pair [pairwise [form-to-list [second l]]]
               [let
                 [var-index [make-lvar lctx [form-to-word [first pair]]]]
-                [inst/set-var var-index [comp lctx [second pair]]]]]]]
+                [inst/set-var var-index [comp lctx [second pair]]]]]
+            [list [comp lctx [third l]]]]]
 
         [logq-abort call not implemented]
         ]]]]
@@ -575,4 +574,5 @@
   [test [i32 7] [if [i32 0] [i32 6] [i32 7]]]
 
   [test [i32 5] [let [x [i32 5]] x]]
+  [test [i32 5] [let [x [i32 9]] [i32 5]]]
 ]
