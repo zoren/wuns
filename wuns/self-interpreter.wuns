@@ -455,6 +455,8 @@
     [set-var i32 inst]
     [fcall inst [list inst]]
     [if inst inst inst]
+    [loop inst]
+    [continue]
     [insts [list inst]]
     ]]
 
@@ -476,27 +478,36 @@
     [logq-abort get-rt-i32 not a func-2]]]
 
 [defn eval-inst [env instruction]
-  [[func go [inst]
-    [match inst
-      [inst/const v] v
-      [inst/if ci t f]
-      [match [eval-inst env ci]
-        [rt-value/i32 c] [if c [go t] [go f]]
-        [logq-abort if condition must be an i32]]
-      [inst/get-var i] [mutable-list-get env i]
-      [inst/set-var i val-inst] [let-do [v [go val-inst]] [set-array env i v] v]
-      [inst/insts insts]
-      [do
-        [assert [not [is-empty insts]] eval-inst requires a non-empty list of instructions]
-        [for i 0 [size insts]
-          [go [at insts i]]]
-        [go [at insts -1]]]
-      [inst/fcall f args]
-      [switch [size args]
-        [i32 2] [[get-rt-func-2 [go f]] [go [at args 0]] [go [at args 1]]]
-        [logq-abort fcall requires exactly two arguments]]
+  [let-do [current-loop [atom [none]]]
+    [[func go [inst]
+      [match inst
+        [inst/const v] v
+        [inst/if ci t f]
+        [match [eval-inst env ci]
+          [rt-value/i32 c] [if c [go t] [go f]]
+          [logq-abort if condition must be an i32]]
+        [inst/get-var i] [mutable-list-get env i]
+        [inst/set-var i val-inst] [let-do [v [go val-inst]] [set-array env i v] v]
+        [inst/insts insts]
+        [do
+          [assert [not [is-empty insts]] eval-inst requires a non-empty list of instructions]
+          [for i 0 [size insts]
+            [go [at insts i]]]
+          [go [at insts -1]]]
+        [inst/fcall f args]
+        [switch [size args]
+          [i32 2] [[get-rt-func-2 [go f]] [go [at args 0]] [go [at args 1]]]
+          [logq-abort fcall requires exactly two arguments]]
+        [inst/loop body]
+        [do
+          [atom-set current-loop [some body]]
+          [go body]]
+        [inst/continue]
+        [if-let [loop [atom-get current-loop]]
+          [go loop]
+          [logq-abort continue outside of loop]]
       [logq-abort eval-inst not implemented]]]
-   instruction]]
+   instruction]]]
 
 [defn decimal-word-to-i32 [dw]
   [if [eq [char-code-at dw 0] [i32 45]]
@@ -518,19 +529,30 @@
   [record
     [number-of-locals [atom i32]]
     [local-vars [transient-kv-map word i32]]
-    ]]
+    [current-func-name [atom [option word]]]
+    [current-func-params [atom [list word]]]]]
+
+[defn make-local-context []
+  [compiler-context
+    [atom 0]
+    [transient-kv-map]
+    [atom [some [word deez]]]
+    [atom [list]]]]
 
 [defn make-lvar [lctx var-name]
   [let-do [index [inc-atom [compiler-context/number-of-locals lctx]]]
     [set-kv-map [compiler-context/local-vars lctx] var-name index]
     index]]
 
-[defn make-local-context []
-  [compiler-context
-    [atom 0]
-    [transient-kv-map]]]
+[defn make-tmp-lvar [lctx]
+  [inc-atom [compiler-context/number-of-locals lctx]]]
+
+[defn get-lvar-index [lctx var-name]
+  [get [compiler-context/local-vars lctx] var-name]]
 
 [def-extern pairwise [type-scheme [a] [func [[list a]] [list [list a]]]]]
+
+[type pair [a b] [record [fst a] [snd b]]]
 
 [defn comp [lctx form]
   [match form
@@ -576,12 +598,46 @@
                 [func i32.sub [rta rtb] [rt-value/i32 [sub [get-rt-i32 rta] [get-rt-i32 rtb]]]]]
               [logq-abort intrinsic not implemented]]]]
 
-        [logq-abort call on word not implemented]]
+        [if-let [current-func-name [atom-get [compiler-context/current-func-name lctx]]]
+          [if [eq-word current-func-name fw]
+            [let-do [args [rest l]
+                     params [atom-get [compiler-context/current-func-params lctx]]
+                     param-tmp-vars [list-map p params [pair [get-lvar-index lctx p] [make-tmp-lvar lctx]]]]
+              [assert [eq [size params] [size args]] comp requires the same number of arguments as the function]
+              [inst/insts
+                [concat
+                  [concat
+                    [list-init-func [size params]
+                        [func bind [i]
+                          [inst/set-var [pair/snd [at param-tmp-vars i]] [comp lctx [at args i]]]]]
+                      [list-map pp param-tmp-vars
+                        [inst/set-var [pair/fst pp] [inst/get-var [pair/snd pp]]]]]
+                  [list [inst/continue]]]]]
+            [logq-abort call on word not implemented]]
+          [logq-abort call on word not implemented]]]
 
       [form/list fl]
-      [inst/fcall
-        [comp lctx [first l]]
-        [list-map a [rest l] [comp lctx a]]]]]]
+      [switch [form-to-word [first fl]]
+        [word func]
+        [let-do [fname [form-to-word [second fl]]
+              param-list [form-to-list [third fl]]
+              param-list-words [list-map p param-list [form-to-word p]]
+              body [fourth fl]
+              args [rest l]]
+          [assert [eq [size param-list] [size args]] comp requires the same number of arguments as the function]
+          [atom-set [compiler-context/current-func-name lctx] [some fname]]
+          [atom-set [compiler-context/current-func-params lctx] param-list-words]
+          [inst/insts
+            [concat
+              [list-init-func [size param-list]
+                [func bind [i]
+                  [let-do [var-index [make-lvar lctx [at param-list-words i]]]
+                    [inst/set-var var-index [comp lctx [at args i]]]]]]
+              [list [inst/loop [comp lctx body]]]]]]
+
+        [inst/fcall
+          [comp lctx [first l]]
+          [list-map a [rest l] [comp lctx a]]]]]]]
 
 [defn comp-top [form]
   [comp [make-local-context] form]]
@@ -616,11 +672,15 @@
   [test [i32 5] [[intrinsic instructions i32.sub] [i32 9] [i32 4]]]
   [test [i32 0] [[intrinsic instructions i32.eq] [i32 9] [i32 4]]]
   [test [i32 1] [[intrinsic instructions i32.eq] [i32 4] [i32 4]]]
-]
-
-[log
-  [[func gauss-tail [n res]
-    [if [[intrinsic instructions i32.eq] n [i32 0]]
-      res
-      [gauss-tail [[intrinsic instructions i32.sub] n [i32 1]] [[intrinsic instructions i32.add] res n]]]]
-    [i32 100] 0]]
+  [test [i32 55]
+    [[func gauss-tail [res n]
+      [if n
+        [gauss-tail [[intrinsic instructions i32.add] res n] [[intrinsic instructions i32.sub] n [i32 1]]]
+        res]]
+      [i32 0] [i32 10]]]
+  [test [i32 55]
+    [[func gauss-tail-swapped [n res]
+      [if n
+        [gauss-tail-swapped [[intrinsic instructions i32.sub] n [i32 1]] [[intrinsic instructions i32.add] res n]]
+        res]]
+      [i32 10] [i32 0]]]]
