@@ -3,7 +3,11 @@ import { setJSFunctionName } from './utils.js'
 const instructionFunctions = []
 
 const pushNamedFunc = (fname, ...args) => {
-  const f = Function(...args)
+  const last = args.at(-1)
+  const f = Function('a', 'b', `
+    if (typeof a !== 'number') throw new Error('${fname} first arg is not a number');
+    if (typeof b !== 'number') throw new Error('${fname} second arg is not a number');
+    return (${last})`)
   setJSFunctionName(f, fname)
   instructionFunctions.push(Object.freeze(f))
 }
@@ -31,7 +35,7 @@ const i32Instructions = [
   { name: 'shr-u', op: '>>>', alias: 'bitwise-shift-right-unsigned' },
 ]
 for (const { op, name } of i32Instructions) {
-  pushNamedFunc(`i32.${name}`, 'a', 'b', `return (a ${op} b) | 0`)
+  pushNamedFunc(`i32.${name}`, `(a ${op} b) | 0`)
 }
 
 const f64ArithInstructions = [
@@ -41,7 +45,7 @@ const f64ArithInstructions = [
   { name: 'div', op: '/' },
 ]
 for (const { op, name } of f64ArithInstructions) {
-  pushNamedFunc(`f64.${name}`, 'a', 'b', `return (a ${op} b)`)
+  pushNamedFunc(`f64.${name}`, `(a ${op} b)`)
 }
 
 const f64CmpInstructions = [
@@ -54,7 +58,7 @@ const f64CmpInstructions = [
   { name: 'ge', op: '>=' },
 ]
 for (const { op, name } of f64CmpInstructions) {
-  pushNamedFunc(`f64.${name}`, 'a', 'b', `return (a ${op} b) | 0`)
+  pushNamedFunc(`f64.${name}`, `(a ${op} b) | 0`)
 }
 
 const unreachable = () => {
