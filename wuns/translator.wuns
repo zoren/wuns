@@ -2350,8 +2350,7 @@
 
 [type test-assert []
   [union
-    [eq [list i32] word [list i32]]
-    [feq [list f64] word [list f64]]]]
+    [eq [list f64] word [list f64]]]]
 
 [type test []
   [record
@@ -2364,15 +2363,28 @@
       [match a
         [test-assert/eq expected func-name args]
         [let [actual [wasm-call-export instance func-name args]]
-          [when-not [eq-int-list expected actual]
-            [logq test failed]
-            [log expected]
-            [log actual]]]
-
-        [test-assert/feq expected func-name args]
-        [let [actual [wasm-call-export instance func-name args]]
           [when-not [eq-f64-list expected actual]
             [logq test failed]
+            [log expected]
+            [log actual]]]]]]]
+
+[def evaluate-list-num
+  [type-anno
+    [extern interpreter evaluate-list-num]
+    [func [evaluation-context word [list f64]] [list f64]]]]
+
+[defn run-test-interpreter [test-data]
+  [let-do
+    [forms [test/module test-data]
+     eval-ctx [make-eval-context]]
+    [for-each form forms
+      [evaluate eval-ctx form]]
+    [for-each a [test/asserts test-data]
+      [match a
+        [test-assert/eq expected func-name args]
+        [let [actual [evaluate-list-num eval-ctx func-name args]]
+          [when-not [eq-f64-list expected actual]
+            [logq test failed in interpreter]
             [log expected]
             [log actual]]]]]]]
 
@@ -2388,23 +2400,23 @@
       [list
         [quote [def g [func internal-name [] [do]]]]]]
     [test
-      [list [test-assert/eq [list [i32 5]] [word f] [list]]]
+      [list [test-assert/eq [list [f64 5]] [word f] [list]]]
       [list
         [quote [def f [func internal-name [] [i32 5]]]]]]
     [test
-      [list [test-assert/eq [list [i32 5]] [word f] [list]]]
+      [list [test-assert/eq [list [f64 5]] [word f] [list]]]
       [list
         [quote [def f [func internal-name [] [do [i32 2] [i32 5]]]]]]]
     [test
-      [list [test-assert/eq [list [i32 5]] [word f] [list]]]
+      [list [test-assert/eq [list [f64 5]] [word f] [list]]]
       [list
         [quote [def f [func internal-name [] [[intrinsic instructions i32.sub] [i32 7] [i32 2]]]]]]]
     [test
-      [list [test-assert/eq [list [i32 5]] [word f] [list]]]
+      [list [test-assert/eq [list [f64 5]] [word f] [list]]]
       [list
         [quote [def f [func f [] [if [i32 0] [i32 7] [i32 5]]]]]]]
     [test
-      [list [test-assert/eq [list [i32 5]] [word f] [list]]]
+      [list [test-assert/eq [list [f64 5]] [word f] [list]]]
       [list
         [quote [def f [func f [] [if [i32 1] [i32 5] [i32 9]]]]]]]
     [test
@@ -2413,31 +2425,32 @@
         [quote [def f [func f [] [if [i32 1] [do] [do]]]]]]]
     [test
       [list
-        [test-assert/eq [list [i32 1]] [word not] [list [i32 0]]]
-        [test-assert/eq [list [i32 0]] [word not] [list [i32 1]]]
-        [test-assert/eq [list [i32 0]] [word not] [list [i32 2]]]
-        [test-assert/eq [list [i32 0]] [word not] [list [i32 -1]]]
-        [test-assert/eq [list [i32 0]] [word not] [list [i32 10]]]]
+        [test-assert/eq [list [f64 1]] [word not] [list [f64 0]]]
+        [test-assert/eq [list [f64 0]] [word not] [list [f64 1]]]
+        [test-assert/eq [list [f64 0]] [word not] [list [f64 2]]]
+        [test-assert/eq [list [f64 0]] [word not] [list [f64 -1]]]
+        [test-assert/eq [list [f64 0]] [word not] [list [f64 10]]]]
       [list
         [quote [def not [func not [p] [if p [i32 0] [i32 1]]]]]]]
     [test
       [list
-        [test-assert/feq [list [f64 1.5]] [word twop] [list [f64 0] [f64 0]]]
-        [test-assert/feq [list [f64 1.5]] [word twop] [list [f64 0] [f64 0.25]]]
-        [test-assert/feq [list [f64 0]] [word twop] [list [f64 1] [f64 0]]]
-        [test-assert/feq [list [f64 0.25]] [word twop] [list [f64 13.0] [f64 0.25]]]
-        [test-assert/feq [list [f64 0.1337]] [word twop] [list [f64 13.0] [f64 0.1337]]]
+        [test-assert/eq [list [f64 1.5]] [word twop] [list [f64 0] [f64 0]]]
+        [test-assert/eq [list [f64 1.5]] [word twop] [list [f64 0] [f64 0.25]]]
+        [test-assert/eq [list [f64 0]] [word twop] [list [f64 1] [f64 0]]]
+        [test-assert/eq [list [f64 0.25]] [word twop] [list [f64 13.0] [f64 0.25]]]
+        [test-assert/eq [list [f64 0.1337]] [word twop] [list [f64 13.0] [f64 0.1337]]]
         ]
       [list
         [quote [def twop [func twop [i f] [if i f [f64 1.5]]]]]]]
     [test
       [list
-        [test-assert/feq [list [f64 1]] [word f] [list]]
-        [test-assert/feq [list [f64 1]] [word g] [list]]]
+        [test-assert/eq [list [f64 1]] [word f] [list]]
+        [test-assert/eq [list [f64 1]] [word g] [list]]]
       [list
         [quote [def f [func f [] [i32 1]]]]
         [quote [def g [func g [] [f]]]]]]
 ]]
   [for-each t tests
-    [run-test t]]]
+    [run-test t]
+    [run-test-interpreter t]]]
 ]

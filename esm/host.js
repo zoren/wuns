@@ -21,7 +21,6 @@ export const apply = (fn, args) => {
   return fn(...args)
 }
 
-// [func [word] form]
 export const form_word = (w) => {
   if (!isWord(w)) throw new Error('form-word expects word')
   return formWord(w)

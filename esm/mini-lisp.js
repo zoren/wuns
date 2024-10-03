@@ -69,6 +69,7 @@ import {
   getRecordType,
   formWord,
   formList,
+  emptyList,
 } from './core.js'
 
 const printForm = (form) => {
@@ -522,6 +523,28 @@ externs.interpreter = {
       evalForm(context, form)
     } catch (e) {}
     return langUndefined
+  },
+  'evaluate-list-num': (context, fname, args) => {
+    if (!(context instanceof Map)) throw new Error('evaluate expects context')
+    if (typeof fname !== 'string') throw new Error('evaluate expects string')
+    if (!Array.isArray(args)) throw new Error('evaluate expects array')
+    args.forEach((arg) => {
+      if (typeof arg !== 'number') throw new Error('expected number')
+    })
+    try {
+      const func = context.get(fname)
+      const res = func(...args)
+      if (res === langUndefined) return emptyList
+      if (typeof res === 'number') return list(res)
+      if (Array.isArray(res)) {
+        for (const r of res) if (typeof r !== 'number') throw new Error('expected number')
+        return res
+      }
+      throw new Error('expected number or list of numbers')
+    } catch (e) {
+      console.error('evaluate-list-num', e)
+    }
+    return emptyList
   },
   apply: (func, args) => {
     if (!isClosure(func)) throw new Error('apply expects closure')
