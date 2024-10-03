@@ -871,8 +871,9 @@
 
       [or
         [eq-word type-name-word [word i32]]
+        [eq-word type-name-word [word f64]]
         [eq-word type-name-word [word word]]]
-      [report-when [eq n-of-given-type-args 0] type-name atomic type expects no arguments]
+      [report-when-not [eq n-of-given-type-args 0] type-name atomic type expects no arguments]
 
       [eq-word type-name-word [word atom]]
       [report-when-not [eq n-of-given-type-args 1] type-name atom type expects one argument]
@@ -884,7 +885,7 @@
         [let [arity [type-def/arity type]]
           [report-when-not [eq n-of-given-type-args arity]
             type-name type expects [identity arity] arguments]]
-        [report type-name not a known type [identity type-name]]]]
+        [report type-name not a known type]]]
     [logq-abort check-builtin-type-arity type-name not word [identity type-name]]]]
 
 [defn try-get-word-report [gctx form]
@@ -1080,7 +1081,7 @@
   [match form
     [form/word w]
     [if-let [type-scheme [try-get-var-type gctx lctx w]]
-      [specialize-type-scheme gctx level type-scheme]
+      [annotate gctx form [specialize-type-scheme gctx level type-scheme]]
       [do
         [report form not found]
         [generate-fresh-type-var gctx level]]]
@@ -1389,6 +1390,7 @@
                     [logq-abort check unexpected macro]]
                   0]
                 0]]
+            [annotate gctx first-form func-type]
             [let [args [rest sub-forms]
                   arg-types
                   [if is-fexpr
@@ -1942,6 +1944,7 @@
     [local.get word]
     [inst word [list wat-inst]]
     [if [list wat-type-basic] wat-inst wat-inst wat-inst]
+    [call word [list wat-inst]]
     [instructions [list wat-inst]]]]
 
 [type output-func []
@@ -2035,10 +2038,7 @@
             [list]
             [get-form-types tctx [last l]]]
 
-          [eq-word w [word if]]
-          [get-annotated-types [translate-context/check-context tctx] form]
-
-          [logq-abort not implemented get-form-types special form]]
+          [get-annotated-types [translate-context/check-context tctx] form]]
 
         [form/list fl]
         [get-annotated-types [translate-context/check-context tctx] form]]]]]
@@ -2084,7 +2084,7 @@
           [eq-word w [word def]]
           [logq-abort no defs in top level]
 
-          [logq-abort translate-top unknown special form]]
+          [wat-inst/call w [list-map a [rest l] [translate-form tctx lctx a]]]]
 
         [form/list fl]
         [if [size fl]
@@ -2262,6 +2262,11 @@
       [wat-list [wat/word [word then]] [wat-inst-to-out true]]
       [wat-list [wat/word [word else]]  [wat-inst-to-out false]]]
 
+    [wat-inst/call w args]
+    [wat-concat
+      [list [wat/word [word call]] [wat/dollar w]]
+      [list-map a args [wat-inst-to-out a]]]
+
     [logq-abort wat-inst-to-out unknown instruction]]]
 
 [defn output-func-to-wat [of]
@@ -2393,6 +2398,13 @@
         ]
       [list
         [quote [def twop [func twop [i f] [if i f [f64 1.5]]]]]]]
+    [test
+      [list
+        [test-assert/feq [list [f64 1]] [word f] [list]]
+        [test-assert/feq [list [f64 1]] [word g] [list]]]
+      [list
+        [quote [def f [func f [] [i32 1]]]]
+        [quote [def g [func g [] [f]]]]]]
 ]]
   [for-each t tests
     [run-test t]]]
