@@ -530,7 +530,7 @@
     [number-of-locals [atom i32]]
     [local-vars [transient-kv-map word i32]]
     [current-func-name [atom [option word]]]
-    [current-func-params [atom [list word]]]]]
+    [current-func-params [atom [list i32]]]]]
 
 [defn make-local-context []
   [compiler-context
@@ -601,8 +601,8 @@
         [if-let [current-func-name [atom-get [compiler-context/current-func-name lctx]]]
           [if [eq-word current-func-name fw]
             [let-do [args [rest l]
-                     params [atom-get [compiler-context/current-func-params lctx]]
-                     param-tmp-vars [list-map p params [pair [get-lvar-index lctx p] [make-tmp-lvar lctx]]]]
+                    params [atom-get [compiler-context/current-func-params lctx]]
+                    param-tmp-vars [list-map p params [pair p [make-tmp-lvar lctx]]]]
               [assert [eq [size params] [size args]] comp requires the same number of arguments as the function]
               [inst/insts
                 [concat
@@ -620,19 +620,17 @@
       [switch [form-to-word [first fl]]
         [word func]
         [let-do [fname [form-to-word [second fl]]
-              param-list [form-to-list [third fl]]
-              param-list-words [list-map p param-list [form-to-word p]]
-              body [fourth fl]
-              args [rest l]]
-          [assert [eq [size param-list] [size args]] comp requires the same number of arguments as the function]
+                 param-indexes [list-map p [form-to-list [third fl]] [make-lvar lctx [form-to-word p]]]
+                 body [fourth fl]
+                 args [rest l]]
+          [assert [eq [size param-indexes] [size args]] comp requires the same number of arguments as the function]
           [atom-set [compiler-context/current-func-name lctx] [some fname]]
-          [atom-set [compiler-context/current-func-params lctx] param-list-words]
+          [atom-set [compiler-context/current-func-params lctx] param-indexes]
           [inst/insts
             [concat
-              [list-init-func [size param-list]
+              [list-init-func [size param-indexes]
                 [func bind [i]
-                  [let-do [var-index [make-lvar lctx [at param-list-words i]]]
-                    [inst/set-var var-index [comp lctx [at args i]]]]]]
+                  [inst/set-var [at param-indexes i] [comp lctx [at args i]]]]]
               [list [inst/loop [comp lctx body]]]]]]
 
         [inst/fcall
