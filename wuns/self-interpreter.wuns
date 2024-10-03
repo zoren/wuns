@@ -1,0 +1,529 @@
+[def list [func list [.. entries] entries]]
+[type form []
+  [union
+    [word word]
+    [list [list form]]]]
+
+[def form-word form/word]
+[def form-list form/list]
+
+[def flist [func flist [.. elements] [form-list elements]]]
+
+[def defmacro
+  [macro defmacro [name params .. bodies]
+    [flist [quote def] name
+      [flist [quote macro] name params [form-list [[extern host concat] [list [quote do]] bodies]]]]]]
+
+[defmacro def-extern [name type]
+  [flist [quote def] name
+    [flist [quote type-anno]
+      [flist [quote extern] [quote host] name]
+      type]]]
+
+[def-extern log [type-scheme [a] [func [.. a] [tuple]]]]
+
+[def-extern concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]
+
+[defmacro let-do [bindings .. forms]
+  [flist [quote let] bindings [form-list [concat [list [quote do]] forms]]]]
+
+[defmacro defn [name params .. bodies]
+  [flist [quote def] name [flist [quote func] name params [form-list [concat [list [quote do]] bodies]]]]]
+
+[defmacro defexpr [name params .. bodies]
+  [flist [quote def] name [flist [quote fexpr] name params [form-list [concat [list [quote do]] bodies]]]]]
+
+[def-extern concat-lists [type-scheme [a] [func [[list [list a]]] [list a]]]]
+
+[defn form-concat [.. list-forms]
+  [form-list [concat-lists list-forms]]]
+
+[defn mk-quote [form] [flist [quote quote] form]]
+
+[def-extern size [type-scheme [a] [func [[list a]] i32]]]
+
+[def-extern at [type-scheme [a] [func [[list a] i32] a]]]
+
+[defmacro comment [.. -]
+  [quote [do]]]
+
+[def-extern concat-words [func [word word] word]]
+
+[defn def-instruction-fn [def-name inst-name]
+  [flist
+    [quote def]
+    def-name
+    [flist [quote intrinsic] [quote instructions] inst-name]]]
+
+[defmacro def-instruction [def-name inst-name] [def-instruction-fn def-name inst-name]]
+
+[def unreachable [intrinsic instructions unreachable]]
+
+[defn form-to-word [form]
+  [match form
+    [form-word w] w
+    [unreachable]]]
+
+[defmacro def-bin-i32-inst [name] [def-instruction-fn name [form-word [concat-words [word i32.] [form-to-word name]]]]]
+
+[def-bin-i32-inst add]
+[comment maybe introduce booleans instead of i32s for comparisons]
+[def-bin-i32-inst lt-s]
+
+[def -2 [i32 -2]]
+[def -1 [i32 -1]]
+[def 0  [i32 0]]
+[def 1  [i32 1]]
+[def 2  [i32 2]]
+[def 3  [i32 3]]
+[def 4  [i32 4]]
+
+[defn inc [x] [add x 1]]
+
+[def-bin-i32-inst sub]
+[def-bin-i32-inst mul]
+
+[defn dec [x] [sub x 1]]
+
+[defn not [c] [if c 0 1]]
+
+[def-bin-i32-inst eq]
+
+[defn is-empty [form]
+  [eq 0 [size form]]]
+
+[defn is-zero [x] [eq x 0]]
+
+[def-instruction i32.bitwise-and i32.and]
+
+[defn is-odd [x] [i32.bitwise-and x 1]]
+
+[defn is-even [x] [not [is-odd x]]]
+
+[defn is-negative [x] [lt-s x 0]]
+
+[defn min [a b] [if [lt-s a b] a b]]
+[defn max [a b] [if [lt-s a b] b a]]
+
+[defn first [l] [at l 0]]
+[defn second [l] [at l 1]]
+[defn third [l] [at l 2]]
+[defn fourth [l] [at l 3]]
+[defn last [l] [at l -1]]
+
+[defmacro when [cond .. forms]
+  [flist
+    [quote if] cond
+    [form-concat [list [quote do]] forms]
+    [quote [do]]]]
+
+[defmacro when-not [cond .. forms]
+  [flist
+    [quote if] cond
+    [quote [do]]
+    [form-concat [list [quote do]] forms]]]
+
+[defmacro if-not [cond false-form true-form]
+  [flist
+    [quote if] cond
+    true-form
+    false-form]]
+
+[type mutable-list [a]
+  [union]]
+
+[defn is-word [form] [match form [form-word x] 1 0]]
+
+[def-extern list-init-func [type-scheme [a] [func [i32 [func [i32] a]] [list a]]]]
+
+[defn list-map-fn [f l]
+  [list-init-func [size l] [func list-map-fn-f [i] [f [at l i]]]]]
+
+[def-extern list-reverse [type-scheme [a] [func [[list a]] [list a]]]]
+
+[defn quote-list [lmsg]
+  [form-list
+    [concat
+      [list [quote list]]
+      [list-map-fn
+        [func f [e]
+          [match e
+            [form/word w] [mk-quote e]
+            [form/list l] e]]
+        lmsg]]]]
+
+[defmacro assert [cond .. lmsg]
+  [flist [quote if] cond
+    [quote [do]]
+    [flist [quote do]
+      [flist [quote log] [quote-list lmsg]]
+      [quote [unreachable]]]]]
+
+[defmacro logq [.. lmsg]
+  [flist [quote log] [quote-list lmsg]]]
+
+[defmacro logq-abort [.. lmsg]
+  [flist [quote do]
+    [flist [quote log] [quote-list lmsg]]
+    [quote [unreachable]]]]
+
+[defn identity [x] x]
+
+[def-extern meta [func [form] form]]
+
+[defmacro ifs [.. clauses]
+  [let [s [size clauses]]
+    [do
+      [assert [is-odd s] ifs requires an odd number of arguments]
+      [[func go [i res]
+        [if [eq i 0]
+          res
+          [go
+            [sub i 2]
+            [flist [quote if] [at clauses [sub i 2]] [at clauses [dec i]] res]]]]
+        [dec s]
+        [at clauses -1]]]]]
+
+[comment and relies on there only being one falsy value [i32 0]
+        it will not return any other falsy value as or returns the first truthy argument]
+[defmacro and [.. clauses]
+  [let [s [size clauses]]
+    [if [is-zero s]
+      [quote [i32 1]]
+      [[func go [i res]
+        [if [eq i 0]
+          res
+          [go
+            [dec i]
+            [flist [quote if] [at clauses [dec i]] res [quote [i32 0]]]]]]
+         [dec s]
+         [at clauses -1]]]]]
+
+[def-extern atom-get [type-scheme [a] [func [[atom a]] a]]]
+[def-extern atom-set [type-scheme [a] [func [[atom a] a] [tuple]]]]
+
+[defn inc-atom [atom]
+  [let [prev-val [atom-get atom]]
+    [do
+      [atom-set atom [inc prev-val]]
+      prev-val]]]
+
+[def word-counter [atom 0]]
+
+[def-extern char-code-to-word [func [i32] word]]
+
+[def-instruction i32.rem-s i32.rem-s]
+[def-instruction i32.div-s i32.div-s]
+
+[def-extern int-to-word [func [i32] word]]
+
+[defn i32-to-form [i]
+  [flist [quote i32] [form-word [int-to-word i]]]]
+
+[def-extern char-code-at [func [word i32] i32]]
+
+[defmacro word-to-char-code [w]
+  [i32-to-form [char-code-at [form-to-word w] 0]]]
+
+[def-bin-i32-inst le-s]
+
+[defn is-between-inclusive [lower c upper]
+  [and [le-s lower c] [le-s c upper]]]
+
+[def-extern word-byte-size [func [word] i32]]
+
+[defn genword []
+  [form-word [concat-words [word genword] [int-to-word [inc-atom word-counter]]]]]
+
+[defmacro or [.. clauses]
+  [let [s [size clauses]]
+    [if [is-zero s]
+      [quote [i32 0]]
+      [[func go [i res]
+        [if [eq i 0]
+          res
+          [go
+            [dec i]
+            [let [w [genword]]
+              [flist [quote let] [flist w [at clauses [dec i]]]
+                [flist [quote if] w w res]]]]]]
+       [dec s]
+       [at clauses -1]]]]]
+
+[defn form-to-list [form]
+  [match form
+    [form-list l] l
+    [do
+      [log [quote [form-to-list requires a list as its argument]] form]
+      [unreachable]]]]
+
+[defn is-list [form]
+  [match form
+    [form-list l] 1
+    0]]
+
+[type option [a]
+  [union
+    [none]
+    [some a]]]
+
+[def none option/none]
+[def some option/some]
+
+[defmacro if-let [binding-form true-form false-form]
+  [match binding-form
+    [form-list binding]
+    [do
+      [assert [eq 2 [size binding]] if-let bindings should have exactly two elements]
+      [let-do [v [first binding] cond [second binding]]
+        [assert [is-word v] if-let-option requires a word as the first element of the first argument]
+        [flist [quote match]
+          cond
+          [flist [quote option/some] v] true-form
+          false-form]]]
+    [logq-abort if-let requires a list as the first argument]]]
+
+[defmacro when-let [binding-form .. forms]
+  [match binding-form
+    [form-list binding]
+    [do
+      [assert [eq 2 [size binding]] when-let bindings should have exactly two elements]
+      [let-do [v [first binding] cond [second binding]]
+        [assert [is-word v] when-let-option requires a word as the first element of the first argument]
+        [flist [quote match]
+          cond
+          [flist [quote option/some] v] [form-concat [list [quote do]] forms]
+          [quote [do]]]]]
+    [logq-abort when-let requires a list as the first argument]]]
+
+[defn eq-word [wa wb]
+  [let [sa [word-byte-size wa] sb [word-byte-size wb]]
+    [and
+      [eq sa sb]
+      [[func go [i]
+        [if [lt-s i sa]
+          [if [eq [char-code-at wa i] [char-code-at wb i]]
+            [go [inc i]]
+            0]
+          1]] 0]]]]
+
+[defn eq-form-word [fa fb]
+  [match fa
+    [form-word wa]
+    [match fb
+      [form-word wb] [eq-word wa wb]
+      0]
+    0]]
+
+[defn eq-form [a b]
+  [or
+    [eq-form-word a b]
+    [and [is-list a] [is-list b]
+      [let [la [form-to-list a]
+            lb [form-to-list b]
+            sa [size la]]
+        [and [eq sa [size lb]]
+          [[func go [i]
+            [if [lt-s i sa]
+              [if [eq-form [at la i] [at lb i]]
+                [go [inc i]]
+                0]
+              1]] 0]]]]]]
+
+[defn for-func [iw start increment end forms]
+  [assert [lt-s 0 increment] for-func increment must be positive]
+  [let [ew [genword]
+        loopw [genword]]
+    [flist
+      [quote let] [flist ew end]
+      [flist
+        [flist
+          [quote func] loopw [flist iw]
+          [flist [quote if]
+            [flist [quote lt-s] iw ew]
+            [form-concat
+              [list [quote do]]
+              forms
+              [list [flist loopw [flist [quote add] iw [i32-to-form increment]]]]]
+            [quote [do]]]]
+        start]]]]
+
+[defmacro for [iw start end .. forms]
+  [for-func iw start [i32 1] end forms]]
+
+[defmacro for-3 [iw start end .. forms]
+  [for-func iw start [i32 3] end forms]]
+
+[defmacro for-pair [iw start end .. forms]
+  [for-func iw start [i32 2] end forms]]
+
+[defmacro for-each [element-var collection .. forms]
+  [assert [is-word element-var] for-each requires a word as the first argument]
+  [let [iteration-var [genword]
+        col-var [genword]
+        col-size-var [genword]
+        loopw [genword]]
+    [flist
+      [quote let] [flist col-var collection
+                        col-size-var [flist [quote size] col-var]]
+      [flist
+        [flist
+          [quote func] loopw [flist iteration-var]
+          [flist [quote if]
+            [flist [quote lt-s] iteration-var col-size-var]
+            [form-concat
+              [list [quote let]]
+              [list [flist element-var [flist [quote at] col-var iteration-var]]]
+              [list
+                [form-concat [list [quote do]]
+                  forms
+                  [list [flist loopw [flist [quote add] iteration-var [quote [i32 1]]]]]]]]
+            [quote [do]]]]
+        [quote [i32 0]]]]]]
+
+[defmacro list-map [element-var collection form]
+  [assert [is-word element-var] list-map requires a word as the first argument]
+  [flist [quote list-map-fn]
+    [flist [quote func] [genword] [flist element-var] form]
+    collection]]
+
+[defn half [x] [i32.div-s x 2]]
+
+[type transient-kv-map [k v] [union]]
+
+[def-extern transient-kv-map [type-scheme [k v] [func [] [transient-kv-map k v]]]]
+[def-extern set-kv-map [type-scheme [k v] [func [[transient-kv-map k v] k v] [tuple]]]]
+
+[defn mk-word [w] [flist [quote word] w]]
+
+[def-extern has [type-scheme [k v] [func [[transient-kv-map k v] k] i32]]]
+
+[defmacro hasq [m w]
+  [flist [quote has] m [mk-word w]]]
+
+[def-extern get [type-scheme [k v] [func [[transient-kv-map k v] k] v]]]
+
+[defmacro getq [m w]
+  [flist [quote get] m [mk-word w]]]
+
+[defn try-get [m k]
+  [if [has m k]
+    [some [get m k]]
+    [none]]]
+
+[defmacro try-getq [m w]
+  [flist [quote try-get] m [mk-word w]]]
+
+[defmacro setq [m w v]
+  [flist [quote set-kv-map] m [flist [quote word] w] v]]
+
+[comment
+  maybe we should be able to specify in the type-scheme that a is of pointer type
+  we do not want to be able to compare functions with it
+  and do not want to compare i32s with it]
+[def-extern is-identical [type-scheme [a] [func [a a] i32]]]
+
+[def-extern slice [type-scheme [a] [func [[list a] i32 i32] [list a]]]]
+
+[defn rest [l] [slice l 1 [size l]]]
+
+[def read-file
+  [type-anno
+    [extern interpreter read-file]
+    [func [word] [list form]]]]
+
+[type byte-array [] [union]]
+[def-extern byte-array [func [i32] byte-array]]
+[def-extern byte-array-size [func [byte-array] i32]]
+[def-extern byte-array-get [func [byte-array i32] i32]]
+[def-extern byte-array-set [func [byte-array i32 i32] [tuple]]]
+[def-extern byte-array-log-as-string [func [byte-array] [tuple]]]
+[def-extern wat-to-byte-array [func [byte-array] byte-array]]
+[type wasm-module [] [union]]
+[def-extern byte-array-to-wasm-module [func [byte-array] wasm-module]]
+[type wasm-instance [] [union]]
+[def-extern wasm-instantiate [func [wasm-module] wasm-instance]]
+[def-extern wasm-call-export [type-scheme [a] [func [wasm-instance word [list a]] [list a]]]]
+
+[type
+  rt-value []
+  [union
+    [i32 i32]
+    ]
+
+  inst []
+  [union
+    [const rt-value]
+    [if inst inst inst]
+    [get-var i32]
+    [set-var i32 rt-value]]]
+
+[defn eval-inst [env inst]
+  [match inst
+    [inst/const v] v
+    [inst/if ci t f]
+    [match [eval-inst env ci]
+      [rt-value/i32 c] [if c [eval-inst env t] [eval-inst env f]]]
+    [inst/get-var i] [at env i]
+    ]]
+
+[defn decimal-word-to-i32 [dw]
+  [if [eq [char-code-at dw 0] [i32 45]]
+    [logq-abort negative numbers are not supported]
+    [let [s [sub 0 [word-byte-size dw]]]
+      [[func go [i res multi]
+        [if [le-s s i]
+          [let-do [c [char-code-at dw i]]
+            [assert [and [le-s [i32 48] c] [le-s c [i32 57]]] not a decimal character pos]
+            [assert [lt-s res [i32 214748364]] out of bounds]
+            [go
+              [dec i]
+              [add res [mul [sub c [i32 48]] multi]]
+              [mul multi [i32 10]]]]
+          res]]
+          -1 0 1]]]]
+
+[defn comp [lctx form]
+  [match form
+    [form/word w]
+    [inst/get-var [get lctx w]]
+
+    [form/list l]
+    [match [first l]
+      [form/word fw]
+      [ifs
+        [eq-word fw [word i32]]
+        [inst/const [rt-value/i32 [decimal-word-to-i32 [form-to-word [second l]]]]]
+
+        [eq-word fw [word if]]
+        [inst/if
+          [comp lctx [second l]]
+          [comp lctx [third l]]
+          [comp lctx [fourth l]]]
+
+        [logq-abort call not implemented]
+        ]]]]
+
+[defn comp-top [form]
+  [comp [transient-kv-map] form]]
+
+[defn rt-value-to-form [v]
+  [match v
+    [rt-value/i32 i] [flist [quote i32] [form/word [int-to-word i]]]]]
+
+[defn test-fn [expected given-form]
+  [let [actual [rt-value-to-form [eval-inst [list] [comp-top given-form]]]]
+    [when-not [eq-form expected actual]
+      [logq [quote [test passed]]]
+      [logq [quote [test failed]]]
+      [logq expected [identity expected]]
+      [logq actual [identity actual]]]]]
+
+[defexpr test [expected given-form]
+  [test-fn expected given-form]]
+
+[defn run-tests []
+  [test [i32 5] [i32 5]]
+  [test [i32 6] [if [i32 5] [i32 6] [i32 7]]]
+  [test [i32 7] [if [i32 0] [i32 6] [i32 7]]]
+]
