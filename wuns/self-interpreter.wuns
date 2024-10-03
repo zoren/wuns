@@ -129,9 +129,6 @@
     true-form
     false-form]]
 
-[type mutable-list [a]
-  [union]]
-
 [defn is-word [form] [match form [form-word x] 1 0]]
 
 [def-extern list-init-func [type-scheme [a] [func [i32 [func [i32] a]] [list a]]]]
@@ -454,18 +451,36 @@
   inst []
   [union
     [const rt-value]
-    [if inst inst inst]
     [get-var i32]
-    [set-var i32 rt-value]]]
-
-[defn eval-inst [env inst]
-  [match inst
-    [inst/const v] v
-    [inst/if ci t f]
-    [match [eval-inst env ci]
-      [rt-value/i32 c] [if c [eval-inst env t] [eval-inst env f]]]
-    [inst/get-var i] [at env i]
+    [set-var i32 inst]
+    [if inst inst inst]
+    [insts [list inst]]
     ]]
+
+[type mutable-list [a]
+  [union]]
+
+[def-extern mutable-list-of-size [type-scheme [a] [func [i32 a] [mutable-list a]]]]
+[def-extern mutable-list-get [type-scheme [a] [func [[mutable-list a] i32] a]]]
+[def-extern set-array [type-scheme [a] [func [[mutable-list a] i32 a] [tuple]]]]
+
+[defn eval-inst [env instruction]
+  [[func go [inst]
+    [match inst
+      [inst/const v] v
+      [inst/if ci t f]
+      [match [eval-inst env ci]
+        [rt-value/i32 c] [if c [go t] [go f]]]
+      [inst/get-var i] [mutable-list-get env i]
+      [inst/set-var i val-inst] [let-do [v [go val-inst]] [set-array env i v] v]
+      [inst/insts insts]
+      [do
+        [for i 0 [size insts]
+          [go [at insts i]]]
+        [go [at insts -1]]]
+      [logq-abort eval-inst not implemented]]]
+   instruction]]
+
 
 [defn decimal-word-to-i32 [dw]
   [if [eq [char-code-at dw 0] [i32 45]]
@@ -483,10 +498,28 @@
           res]]
           -1 0 1]]]]
 
+[type compiler-context []
+  [record
+    [number-of-locals [atom i32]]
+    [local-vars [transient-kv-map word i32]]
+    ]]
+
+[defn make-lvar [lctx var-name]
+  [let-do [index [inc-atom [compiler-context/number-of-locals lctx]]]
+    [set-kv-map [compiler-context/local-vars lctx] var-name index]
+    index]]
+
+[defn make-local-context []
+  [compiler-context
+    [atom 0]
+    [transient-kv-map]]]
+
+[def-extern pairwise [type-scheme [a] [func [[list a]] [list [list a]]]]]
+
 [defn comp [lctx form]
   [match form
     [form/word w]
-    [inst/get-var [get lctx w]]
+    [inst/get-var [get [compiler-context/local-vars lctx] w]]
 
     [form/list l]
     [match [first l]
@@ -501,18 +534,32 @@
           [comp lctx [third l]]
           [comp lctx [fourth l]]]
 
+        [eq-word fw [word let]]
+        [let-do
+          [var-values [transient-kv-map]
+           bindings [form-to-list [second l]]]
+          [inst/insts
+            [list-map pair [pairwise bindings]
+              [let
+                [var-index [make-lvar lctx [form-to-word [first pair]]]]
+                [inst/set-var var-index [comp lctx [second pair]]]]]]]
+
         [logq-abort call not implemented]
         ]]]]
 
 [defn comp-top [form]
-  [comp [transient-kv-map] form]]
+  [comp [make-local-context] form]]
 
 [defn rt-value-to-form [v]
   [match v
-    [rt-value/i32 i] [flist [quote i32] [form/word [int-to-word i]]]]]
+    [rt-value/i32 i] [flist [quote i32] [form/word [int-to-word i]]]
+    [logq-abort rt-value-to-form not implemented]]]
 
 [defn test-fn [expected given-form]
-  [let [actual [rt-value-to-form [eval-inst [list] [comp-top given-form]]]]
+  [let [ctx [make-local-context]
+        inst [comp ctx given-form]
+        env [mutable-list-of-size [atom-get [compiler-context/number-of-locals ctx]] [rt-value/i32 [i32 0]]]
+        actual [rt-value-to-form [eval-inst env inst]]]
     [when-not [eq-form expected actual]
       [logq [quote [test passed]]]
       [logq [quote [test failed]]]
@@ -526,4 +573,6 @@
   [test [i32 5] [i32 5]]
   [test [i32 6] [if [i32 5] [i32 6] [i32 7]]]
   [test [i32 7] [if [i32 0] [i32 6] [i32 7]]]
+
+  [test [i32 5] [let [x [i32 5]] x]]
 ]

@@ -89,11 +89,19 @@ const symbolListMutable = Symbol.for('wuns-list-mutable')
 
 const isMutable = (l) => l[symbolListMutable]
 
-export const mutable_list_of_size = (size) => {
+export const mutable_list_of_size = (size, init_value) => {
   if (size < 0) throw new Error('mutable-list-of-size expects non-negative size')
-  const l = Array.from({ length: size }, () => undefined)
+  const l = Array.from({ length: size }, () => init_value)
   l[symbolListMutable] = true
   return l
+}
+export const mutable_list_get = (mutable_list, index) => {
+  if (!isList(mutable_list)) throw new Error('mutable-list-get expects list')
+  if (!isMutable(mutable_list)) throw new Error('mutable-list-get expects mutable list')
+  if (!isSigned32BitInteger(index)) throw new Error('mutable-list-get expects number: ' + index)
+  if (index < 0 || index >= mutable_list.length)
+    throw new Error('mutable-list-get index out of bounds: ' + index + ' ' + mutable_list.length)
+  return mutable_list[index]
 }
 
 export const list_init_func = (size, func) => {
@@ -106,6 +114,13 @@ export const list_init_func = (size, func) => {
 export const list_reverse = (list) => {
   if (!isList(list)) throw new Error('list-reverse expects list')
   return arrayToList([...list].reverse())
+}
+export const pairwise = (list) => {
+  if (!isList(list)) throw new Error('pairwise expects list')
+  const len = list.length
+  const pairs = []
+  for (let i = 0; i < len-1; i += 2) pairs.push(arrayToList([list[i], list[i + 1]]))
+  return arrayToList(pairs)
 }
 export const freeze_mutable_list = (mutable_list) => {
   if (!isList(mutable_list)) throw new Error('freeze-mutable-list expects array')
