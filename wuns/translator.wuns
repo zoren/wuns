@@ -901,14 +901,17 @@
   [[func go [syntax-type]
     [match syntax-type
       [form/word w]
-      [ifs
-        [eq-word w [word i32]]
+      [switch w
+        [word i32]
         type-i32
 
-        [eq-word w [word word]]
+        [word f64]
+        type-f64
+
+        [word word]
         type-word
 
-        [eq-word w [word form]]
+        [word form]
         type-form
 
         [if-let [t [try-get type-var-env w]]
@@ -922,8 +925,7 @@
                n-of-args [dec s-form]]
         [assert [not [eq s-form 0]] type-scheme expects a non-empty list]
         [if-let [w [try-get-word-report gctx [first elements]]]
-          [ifs
-            [eq-word w [word func]]
+          [if [eq-word w [word func]]
             [do
               [report-when-not [eq n-of-args 2] syntax-type expects 2 arguments a parameter list and a return type]
               [let [params [second elements]
@@ -1010,28 +1012,28 @@
       [assert [not [is-empty l]] value expects a non-empty list]
       [match [first l]
         [form/word fw]
-          [ifs
-            [eq-word fw [word atom]] 0
+          [switch fw
+            [word atom] 0
 
-            [eq-word fw [word i32]] 1
-            [eq-word fw [word f64]] 1
-            [eq-word fw [word word]] 1
-            [eq-word fw [word quote]] 1
+            [word i32] 1
+            [word f64] 1
+            [word word] 1
+            [word quote] 1
 
-            [eq-word fw [word extern]] 1
+            [word extern] 1
 
-            [eq-word fw [word func]] 1
-            [eq-word fw [word macro]] 1
-            [eq-word fw [word fexpr]] 1
+            [word func] 1
+            [word macro] 1
+            [word fexpr] 1
 
-            [eq-word fw [word if]] 0
-            [eq-word fw [word type]] 0
-            [eq-word fw [word match]] 0
-            [eq-word fw [word do]] 0
-            [eq-word fw [word let]] 0
-            [eq-word fw [word def]] 0
+            [word if] 0
+            [word type] 0
+            [word match] 0
+            [word do] 0
+            [word let] 0
+            [word def] 0
 
-            [eq-word fw [word type-anno]] [is-syntactic-value [second l]]
+            [word type-anno] [is-syntactic-value [second l]]
             0]
         [form/list l] 0]]]]
 
@@ -1156,29 +1158,31 @@
                  result-type [type-def/result-type this-type-def]
                  param-map [type-def/param-map this-type-def]
                  type-def-list [try-get-list-report gctx [at sub-forms [add 2 i]]]]
-                [ifs
-                  [eq-form [quote union] [first type-def-list]]
-                  [for i 1 [size type-def-list]
-                    [let-do [ctor [try-get-list-report gctx [at type-def-list i]]
-                             param-list [list-map param [rest ctor] [instantiate-annotated-type gctx param-map param]]]
-                      [when-let [ctor-name [try-get-word-report gctx [first ctor]]]
-                        [set-kv-map def-var-types [concat-words type-prefix ctor-name]
-                          [generalize-top [type-ctor param-list result-type]]]]]]
-
-                  [eq-form [quote record] [first type-def-list]]
-                  [let-do
-                    [fields [atom [linked-list/nil]]]
+                [if-let [type-def-first-word [try-get-word-report gctx [first type-def-list]]]
+                  [switch type-def-first-word
+                    [word union]
                     [for i 1 [size type-def-list]
-                      [let-do
-                        [field-def [try-get-list-report gctx [at type-def-list i]]
-                         inst-field-type [instantiate-annotated-type gctx param-map [second field-def]]]
-                        [push fields inst-field-type]
-                        [when-let [field-name [try-get-word-report gctx [first field-def]]]
-                          [set-kv-map def-var-types [concat-words type-prefix field-name]
-                            [generalize-top [type-func [list result-type] [none] inst-field-type]]]]]]
-                    [set-kv-map def-var-types name-word
-                      [generalize-top [type-func [clone-growable-to-frozen-list fields] [none] [type-def/result-type [get types name-word]]]]]]
+                      [let-do [ctor [try-get-list-report gctx [at type-def-list i]]
+                              param-list [list-map param [rest ctor] [instantiate-annotated-type gctx param-map param]]]
+                        [when-let [ctor-name [try-get-word-report gctx [first ctor]]]
+                          [set-kv-map def-var-types [concat-words type-prefix ctor-name]
+                            [generalize-top [type-ctor param-list result-type]]]]]]
 
+                    [word record]
+                    [let-do
+                      [fields [atom [linked-list/nil]]]
+                      [for i 1 [size type-def-list]
+                        [let-do
+                          [field-def [try-get-list-report gctx [at type-def-list i]]
+                          inst-field-type [instantiate-annotated-type gctx param-map [second field-def]]]
+                          [push fields inst-field-type]
+                          [when-let [field-name [try-get-word-report gctx [first field-def]]]
+                            [set-kv-map def-var-types [concat-words type-prefix field-name]
+                              [generalize-top [type-func [list result-type] [none] inst-field-type]]]]]]
+                      [set-kv-map def-var-types name-word
+                        [generalize-top [type-func [clone-growable-to-frozen-list fields] [none] [type-def/result-type [get types name-word]]]]]]
+
+                    [logq-abort check type definition not recognized]]
                   [logq-abort check type definition not recognized]]]]]
           type-empty-tuple]
 
@@ -1286,10 +1290,13 @@
         [let-do
           [takes-form-params [or [eq-form first-form [quote macro]] [eq-form first-form [quote fexpr]]]
            function-kind
-           [ifs [eq-form first-form [quote func]] [function-kind/func]
-                [eq-form first-form [quote macro]] [function-kind/macro]
-                [eq-form first-form [quote fexpr]] [function-kind/fexpr]
+           [if-let [fw [try-get-form-word-option first-form]]
+              [switch fw
+                [word func] [function-kind/func]
+                [word macro] [function-kind/macro]
+                [word fexpr] [function-kind/fexpr]
                 [logq-abort check function-kind not recognized]]
+              [logq-abort check function-kind not recognized]]
            level-1 [inc level]
            param-ctx [transient-kv-map]
            gen-func-type [generate-fresh-type-var gctx level-1]
@@ -1350,11 +1357,11 @@
               [report-when-not [is-word sf] sf expects words]]]
           [let [opt-type
             [if-let [w1 [try-get-word-report gctx [second sub-forms]]]
-              [ifs
-                [eq-word w1 [word instructions]]
+              [if [eq-word w1 [word instructions]]
                 [if-let [w2 [try-get-word-report gctx [third sub-forms]]]
                   [ifs
-                    [is-i32-bin-inst w2] [some i32i32-to-i32]
+                    [is-i32-bin-inst w2]
+                    [some i32i32-to-i32]
 
                     [eq-word w2 [word unreachable]]
                     [some [type-func [list] [none] [generate-fresh-type-var gctx [inc level]]]]
@@ -2003,9 +2010,9 @@
 [defn translate-type [present-type]
   [match present-type
     [form/word w]
-    [ifs
-      [eq-word w [word i32]] [wat-type-basic/i32]
-      [eq-word w [word f64]] [wat-type-basic/f64]
+    [switch w
+      [word i32] [wat-type-basic/i32]
+      [word f64] [wat-type-basic/f64]
 
       [logq-abort not implemented translate-type word]]
 
@@ -2020,9 +2027,9 @@
 [defn translate-types [present-type]
   [match present-type
     [form/word w]
-    [ifs
-      [eq-word w [word i32]] [list [wat-type-basic/i32]]
-      [eq-word w [word f64]] [list [wat-type-basic/f64]]
+    [switch w
+      [word i32] [list [wat-type-basic/i32]]
+      [word f64] [list [wat-type-basic/f64]]
 
       [logq-abort not implemented translate-types word]]
 
@@ -2031,10 +2038,8 @@
       [assert [not [is-empty l]] expected elements]
       [match [first l]
         [form/word w]
-        [ifs
-          [eq-word w [word tuple]]
+        [if [eq-word w [word tuple]]
           [list-map a [rest l] [logq-abort not implemented]]
-
           [logq-abort not implemented translate-types unknown first]]
         [logq-abort not implemented translate-types list]]]]]
 
@@ -2060,11 +2065,11 @@
       [assert [not [is-empty l]] expected non-empty list]
       [match [first l]
         [form/word w]
-        [ifs
-          [eq-word w [word i32]]
+        [switch w
+          [word i32]
           [list [wat-type-basic/i32]]
 
-          [eq-word w [word do]]
+          [word do]
           [if [eq [size l] 1]
             [list]
             [get-form-types tctx [last l]]]
@@ -2084,14 +2089,14 @@
       [assert [not [is-empty l]] expected non-empty list]
       [match [first l]
         [form/word w]
-        [ifs
-          [eq-word w [word i32]]
+        [switch w
+          [word i32]
           [wat-inst/i32.const [form-to-word [second l]]]
 
-          [eq-word w [word f64]]
+          [word f64]
           [wat-inst/f64.const [form-to-word [second l]]]
 
-          [eq-word w [word do]]
+          [word do]
           [wat-inst/instructions
             [concat
               [list-map f [slice l 1 [dec [size l]]]
@@ -2105,14 +2110,14 @@
                 [list]
                 [list [translate-form tctx lctx [last l]]]]]]
 
-          [eq-word w [word if]]
+          [word if]
           [wat-inst/if
             [get-form-types tctx form]
             [translate-form tctx lctx [second l]]
             [translate-form tctx lctx [third l]]
             [translate-form tctx lctx [fourth l]]]
 
-          [eq-word w [word def]]
+          [word def]
           [logq-abort no defs in top level]
 
           [wat-inst/call w [list-map a [rest l] [translate-form tctx lctx a]]]]
@@ -2121,13 +2126,11 @@
         [if [size fl]
           [match [first fl]
             [form/word flw]
-            [ifs
-              [eq-word flw [word intrinsic]]
+            [if [eq-word flw [word intrinsic]]
               [let [inst-name [form-to-word [third fl]]]
                 [if [or [is-i32-bin-inst inst-name] [eq-word inst-name [word unreachable]]]
                   [wat-inst/inst inst-name [list-map a [rest l] [translate-form tctx lctx a]]]
                   [logq-abort translate-form unknown instruction]]]
-
               [logq-abort translate-form unknown instruction]]]
           [logq-abort not implemented translate-form empty head list]]]]]]
 
@@ -2144,16 +2147,14 @@
       [assert [not [is-empty l]] expected non-empty list]
       [match [first l]
         [form/word w]
-        [ifs
-          [eq-word w [word def]]
+        [if [eq-word w [word def]]
           [do
             [assert [eq [size l] 3] expected 3 elements]
             [let-do [name [second l]
                      body [form-to-list [third l]]
                      head-body [first body]
                      rest-body [rest body]]
-              [ifs
-                [eq-form head-body [quote func]]
+              [if [eq-form head-body [quote func]]
                 [do
                   [assert [eq [size rest-body] 3] expected 3 elements found]
                   [let-do [params [form-to-list [second rest-body]]
