@@ -53,5 +53,6 @@ if (!endsWithDashFlag) {
     const defs = getCompletions(currentWord)
     return [defs, currentWord]
   }
-  startRepl('mini-lisp-history.json', 'mini-lisp> ', evalLine, completer)
+  const lastWunsFile = files.at(-1) || 'top'
+  startRepl(`repl-histories/${lastWunsFile}-history.json`, 'mini-lisp> ', evalLine, completer)
 }

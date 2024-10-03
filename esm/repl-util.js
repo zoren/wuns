@@ -28,7 +28,7 @@ export const startRepl = (historyFilePath, promptString, evalLine, completer) =>
 
   rl.on('history', (history) => {
     const historyObject = { history, date: new Date().toISOString() }
-    fs.writeFileSync(historyFilePath, JSON.stringify(historyObject))
+    fs.writeFileSync(historyFilePath, JSON.stringify(historyObject, null, 2))
   })
 
   const prompt = () => {
