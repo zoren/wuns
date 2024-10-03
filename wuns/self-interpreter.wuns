@@ -446,13 +446,14 @@
   rt-value []
   [union
     [i32 i32]
-    ]
+    [func-2 [func [rt-value rt-value] rt-value]]]
 
   inst []
   [union
     [const rt-value]
     [get-var i32]
     [set-var i32 inst]
+    [fcall inst [list inst]]
     [if inst inst inst]
     [insts [list inst]]
     ]]
@@ -464,13 +465,24 @@
 [def-extern mutable-list-get [type-scheme [a] [func [[mutable-list a] i32] a]]]
 [def-extern set-array [type-scheme [a] [func [[mutable-list a] i32 a] [tuple]]]]
 
+[defn get-rt-i32 [rtv]
+  [match rtv
+    [rt-value/i32 i] i
+    [logq-abort get-rt-i32 not an i32]]]
+
+[defn get-rt-func-2 [rtv]
+  [match rtv
+    [rt-value/func-2 f] f
+    [logq-abort get-rt-i32 not a func-2]]]
+
 [defn eval-inst [env instruction]
   [[func go [inst]
     [match inst
       [inst/const v] v
       [inst/if ci t f]
       [match [eval-inst env ci]
-        [rt-value/i32 c] [if c [go t] [go f]]]
+        [rt-value/i32 c] [if c [go t] [go f]]
+        [logq-abort if condition must be an i32]]
       [inst/get-var i] [mutable-list-get env i]
       [inst/set-var i val-inst] [let-do [v [go val-inst]] [set-array env i v] v]
       [inst/insts insts]
@@ -479,6 +491,10 @@
         [for i 0 [size insts]
           [go [at insts i]]]
         [go [at insts -1]]]
+      [inst/fcall f args]
+      [switch [size args]
+        [i32 2] [[get-rt-func-2 [go f]] [go [at args 0]] [go [at args 1]]]
+        [logq-abort fcall requires exactly two arguments]]
       [logq-abort eval-inst not implemented]]]
    instruction]]
 
@@ -543,8 +559,29 @@
                 [inst/set-var var-index [comp lctx [second pair]]]]]
             [list [comp lctx [third l]]]]]
 
-        [logq-abort call not implemented]
-        ]]]]
+        [word intrinsic]
+        [do
+          [assert [eq 3 [size l]] intrinsic requires exactly two arguments]
+          [assert [eq-word [form-to-word [second l]] [word instructions]] intrinsic requires the second argument to be instructions]
+          [inst/const
+            [switch [form-to-word [third l]]
+              [word i32.eq]
+              [rt-value/func-2
+                [func i32.eq [rta rtb] [rt-value/i32 [eq [get-rt-i32 rta] [get-rt-i32 rtb]]]]]
+              [word i32.add]
+              [rt-value/func-2
+                [func i32.add [rta rtb] [rt-value/i32 [add [get-rt-i32 rta] [get-rt-i32 rtb]]]]]
+              [word i32.sub]
+              [rt-value/func-2
+                [func i32.sub [rta rtb] [rt-value/i32 [sub [get-rt-i32 rta] [get-rt-i32 rtb]]]]]
+              [logq-abort intrinsic not implemented]]]]
+
+        [logq-abort call on word not implemented]]
+
+      [form/list fl]
+      [inst/fcall
+        [comp lctx [first l]]
+        [list-map a [rest l] [comp lctx a]]]]]]
 
 [defn comp-top [form]
   [comp [make-local-context] form]]
@@ -575,4 +612,15 @@
 
   [test [i32 5] [let [x [i32 5]] x]]
   [test [i32 5] [let [x [i32 9]] [i32 5]]]
+  [test [i32 5] [[intrinsic instructions i32.add] [i32 2] [i32 3]]]
+  [test [i32 5] [[intrinsic instructions i32.sub] [i32 9] [i32 4]]]
+  [test [i32 0] [[intrinsic instructions i32.eq] [i32 9] [i32 4]]]
+  [test [i32 1] [[intrinsic instructions i32.eq] [i32 4] [i32 4]]]
 ]
+
+[log
+  [[func gauss-tail [n res]
+    [if [[intrinsic instructions i32.eq] n [i32 0]]
+      res
+      [gauss-tail [[intrinsic instructions i32.sub] n [i32 1]] [[intrinsic instructions i32.add] res n]]]]
+    [i32 100] 0]]
