@@ -1,29 +1,10 @@
+import fs from 'fs'
 import { parseToForms, evalForm, makeDefEnv } from './mini-lisp.js'
 import { compile, evalInst } from './compiler.js'
 
 const interpretForm = (form) => evalForm(makeDefEnv(), form)
 
-const wunsSource = `
-[i32 007] [i32 7]
-[f64 1.5] [f64 1.5]
-[word abc] [word abc]
-[[intrinsic instructions i32.add] [i32 2] [i32 3]] [i32 5]
-[[intrinsic instructions i32.sub] [i32 8] [i32 3]] [i32 5]
-[switch [i32 0]
-    [i32 0] [word zero]
-    [i32 1] [word one]
-    [word not-01]] [word zero]
-[switch [i32 1]
-    [i32 0] [word zero]
-    [i32 1] [word one]
-    [word not-01]] [word one]
-[switch [i32 10]
-    [i32 0] [word zero]
-    [i32 1] [word one]
-    [word not-01]] [word not-01]
-[if [i32 0] [word zero] [word one]] [word zero]
-[if [i32 1] [word zero] [word one]] [word one]
-`
+const wunsSource = fs.readFileSync('../wuns/test-eval.wuns', 'utf8')
 const wunsForms = [...parseToForms(wunsSource, 'test.wuns')]
 const run = (f) => {
   let assertsRun = 0

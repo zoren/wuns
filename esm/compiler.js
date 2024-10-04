@@ -46,9 +46,14 @@ const evalInst = () => {
           pop()
           return
         case instOpIntrinsic: {
+          // we assume intrinsics is binary taking numbers and returning a number
           const b = pop()
           const a = pop()
-          push(inst.f(a, b))
+          if (typeof a !== 'number') throw evalError('intrinsic first argument is not a number')
+          if (typeof b !== 'number') throw evalError('intrinsic second argument is not a number')
+          const res = inst.f(a, b)
+          if (typeof res !== 'number') throw evalError('intrinsic did not return a number')
+          push(res)
           return
         }
 
