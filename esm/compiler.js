@@ -127,7 +127,31 @@ import { instructionFunctions } from './instructions.js'
 import { wrapJSFunctionsToObject } from './utils.js'
 
 const instructions = wrapJSFunctionsToObject(instructionFunctions)
-const isSpecialFormPrimitiveConstant = (word) => word === 'i32' || word === 'f64' || word === 'word'
+
+const tryFormToConstant = (form) => {
+  const forms = getFormList(form)
+  if (forms.length === 0) throw new CompileError('empty list', form)
+  const firstWord = tryGetFormWord(forms[0])
+  if (!firstWord) return null
+  const specials = {
+    i32: (w) => {
+      const v = +w
+      if (isNaN(v)) throw new CompileError('expected number', form)
+      return v | 0
+    },
+    f64: (w) => {
+      const v = +w
+      if (isNaN(v)) throw new CompileError('expected number', form)
+      return v
+    },
+    word: (w) => w,
+  }
+  const special = specials[firstWord]
+  if (!special) return null
+  if (forms.length !== 2)
+    throw new CompileError(`special form '${firstWord}' expected 2 arguments, got ${forms.length - 1}`, form)
+  return special(getFormWord(forms[1]))
+}
 
 const compile = (form) => {
   const go = (ctx, form) => {
@@ -150,27 +174,6 @@ const compile = (form) => {
       if (numOfArgs !== num)
         throw compileError(`special form '${firstWord}' expected ${num} arguments, got ${numOfArgs}`)
     }
-    const tryFormToConstant = (form) => {
-      const forms = getFormList(form)
-      if (forms.length === 0) throw compileError('empty list')
-      const [firstForm] = forms
-      const firstWord = tryGetFormWord(firstForm)
-      if (!firstWord) return null
-      const specials = {
-        i32: (w) => +w | 0,
-        f64: (w) => {
-          const v = +w
-          if (isNaN(v)) throw compileError('expected number')
-          return v
-        },
-        word: (w) => w,
-      }
-      const special = specials[firstWord]
-      if (!special) return null
-      if (forms.length !== 2)
-        throw compileError(`special form '${firstWord}' expected 2 arguments, got ${forms.length - 1}`)
-      return special(getFormWord(forms[1]))
-    }
     const constantValue = tryFormToConstant(form)
     if (constantValue !== null) return mkConstantInst(constantValue)
     switch (firstWord) {
@@ -188,10 +191,6 @@ const compile = (form) => {
         const cases = []
         for (let i = 2; i < forms.length - 1; i += 2) {
           const pattern = forms[i]
-          const patternList = getFormList(pattern)
-          const firstPatternWord = getFormWord(patternList[0])
-          if (!isSpecialFormPrimitiveConstant(firstPatternWord))
-            throw compileError('switch pattern must be constant, was ' + firstPatternWord)
           const caseValue = tryFormToConstant(pattern)
           if (caseValue === null) throw compileError('switch pattern must be constant')
           cases.push(Object.freeze({ caseValue, caseInst: go(ctx, forms[i + 1]) }))

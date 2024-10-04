@@ -9,9 +9,8 @@ const wunsForms = [...parseToForms(wunsSource, 'test.wuns')]
 const run = (f) => {
   let assertsRun = 0
   for (let i = 0; i < wunsForms.length; i += 2) {
-    const form = wunsForms[i]
+    const actual = f(wunsForms[i])
     const expected = interpretForm(wunsForms[i + 1])
-    const actual = f(form)
     if (actual !== expected) {
       console.log('expected', expected)
       console.log('actual', actual)

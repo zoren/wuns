@@ -1,4 +1,7 @@
 [i32 007] [i32 7]
+[i32 -0] [i32 0]
+[i32 -1] [i32 -1]
+[i32 -01] [i32 -1]
 [f64 1.5] [f64 1.5]
 [word abc] [word abc]
 
@@ -20,3 +23,4 @@
 
 [if [i32 0] [word zero] [word one]] [word one]
 [if [i32 1] [word zero] [word one]] [word zero]
+
