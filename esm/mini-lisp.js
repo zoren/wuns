@@ -292,12 +292,6 @@ export const evalForm = (defEnv, topForm) => {
           const initialValue = go(env, forms[1])
           return atom(initialValue)
         }
-
-        case 'loop':
-        case 'continue':
-        case 'recur':
-          throw evalError('unexpected ' + firstWord)
-
         case 'if':
           assertNumArgs(3)
           try {
@@ -440,14 +434,6 @@ export const evalForm = (defEnv, topForm) => {
           assertNumArgs(2)
           form = forms[1]
           continue
-        }
-        case 'load': {
-          throw evalError('load is not supported')
-          // assertNumArgs(1)
-          // const filePath = getFormWord(forms[1])
-          // const joinedPath = path.join(currentDir, filePath)
-          // for (const newForm of readFile(joinedPath)) evalForm(env, newForm)
-          // return langUndefined
         }
       }
       const func = go(env, firstForm)
