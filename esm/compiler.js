@@ -162,20 +162,20 @@ const compile = (form) => {
       const [firstForm] = forms
       const firstWord = tryGetFormWord(firstForm)
       if (!firstWord) return null
-      if (forms.length !== 2) throw compileError(`special form '${firstWord}' expected 2 arguments, got ${forms.length - 1}`)
-      switch (firstWord) {
-        // constants
-        case 'i32':
-          return +getFormWord(forms[1]) | 0
-        case 'f64': {
-          const v = +getFormWord(forms[1])
+      const specials = {
+        i32: (w) => +w | 0,
+        f64: (w) => {
+          const v = +w
           if (isNaN(v)) throw compileError('expected number')
           return v
-        }
-        case 'word':
-          return getFormWord(forms[1])
+        },
+        word: (w) => w,
       }
-      return null
+      const special = specials[firstWord]
+      if (!special) return null
+      if (forms.length !== 2)
+        throw compileError(`special form '${firstWord}' expected 2 arguments, got ${forms.length - 1}`)
+      return special(getFormWord(forms[1]))
     }
     const constantValue = tryFormToConstant(form)
     if (constantValue !== null) return mkConstantInst(constantValue)
@@ -193,7 +193,7 @@ const compile = (form) => {
             throw compileError('switch pattern must be constant, was ' + firstPatternWord)
           const caseValue = tryFormToConstant(pattern)
           if (caseValue === null) throw compileError('switch pattern must be constant')
-          cases.push(Object.freeze({caseValue, caseInst: go(ctx, forms[i + 1])}))
+          cases.push(Object.freeze({ caseValue, caseInst: go(ctx, forms[i + 1]) }))
         }
         const defaultCase = go(ctx, forms.at(-1))
         return mkDoInst([value], mkSwitchInst(cases, defaultCase))

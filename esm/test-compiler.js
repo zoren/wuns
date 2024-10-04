@@ -9,6 +9,18 @@ const wunsSource = `
 [word abc] [word abc]
 [[intrinsic instructions i32.add] [i32 2] [i32 3]] [i32 5]
 [[intrinsic instructions i32.sub] [i32 8] [i32 3]] [i32 5]
+[switch [i32 0]
+    [i32 0] [word zero]
+    [i32 1] [word one]
+    [word not-01]] [word zero]
+[switch [i32 1]
+    [i32 0] [word zero]
+    [i32 1] [word one]
+    [word not-01]] [word one]
+[switch [i32 10]
+    [i32 0] [word zero]
+    [i32 1] [word one]
+    [word not-01]] [word not-01]
 `
 const wunsForms = [...parseToForms(wunsSource, 'test.wuns')]
 const run = (f) => {
