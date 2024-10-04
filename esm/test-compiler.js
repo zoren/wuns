@@ -21,6 +21,8 @@ const wunsSource = `
     [i32 0] [word zero]
     [i32 1] [word one]
     [word not-01]] [word not-01]
+[if [i32 0] [word zero] [word one]] [word zero]
+[if [i32 1] [word zero] [word one]] [word one]
 `
 const wunsForms = [...parseToForms(wunsSource, 'test.wuns')]
 const run = (f) => {

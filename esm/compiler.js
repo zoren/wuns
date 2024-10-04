@@ -98,18 +98,7 @@ class CompileError extends Error {
   }
 }
 
-import {
-  tryGetFormWord,
-  tryGetFormList,
-  isTaggedValue,
-  makeValueTagger,
-  atom,
-  makeRecord,
-  getRecordType,
-  formWord,
-  formList,
-  emptyList,
-} from './core.js'
+import { tryGetFormWord, tryGetFormList } from './core.js'
 
 const getFormWord = (form) => {
   const word = tryGetFormWord(form)
@@ -180,6 +169,13 @@ const compile = (form) => {
     const constantValue = tryFormToConstant(form)
     if (constantValue !== null) return mkConstantInst(constantValue)
     switch (firstWord) {
+      case 'if': {
+        assertNumArgs(3)
+        const condition = go(ctx, forms[1])
+        const thenInst = go(ctx, forms[2])
+        const elseInst = go(ctx, forms[3])
+        return mkDoInst([condition], mkSwitchInst([{ caseValue: 0, caseInst: elseInst }], thenInst))
+      }
       case 'switch': {
         if (numOfArgs < 2) throw compileError(`special form 'switch' expected at least two arguments`)
         if (numOfArgs % 2 !== 0) throw compileError('no switch default found')
