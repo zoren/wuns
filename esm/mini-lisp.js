@@ -441,6 +441,7 @@ export const evalForm = (defEnv, topForm) => {
       }
       const func = go(env, firstForm)
       const args = forms.slice(1)
+      // closures are also functions so we to check if it is a closure first
       if (!isClosure(func)) {
         if (typeof func === 'function') {
           try {
@@ -460,7 +461,9 @@ export const evalForm = (defEnv, topForm) => {
           continue
         }
         case 'fexpr':
-          return go(paramEnvMaker(args), body)
+          env = paramEnvMaker(args)
+          form = body
+          continue
         case 'func':
           env = paramEnvMaker(args.map((arg) => go(env, arg)))
           form = body
