@@ -301,7 +301,7 @@ export const evalForm = (defEnv, topForm) => {
         case 'if':
           assertNumArgs(3)
           try {
-            form = forms[go(env, forms[1]) ? 2 : 3]
+            form = forms[go(env, forms[1]) !== 0 ? 2 : 3]
           } catch (e) {
             throw evalError('error in if condition', e)
           }
