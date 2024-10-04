@@ -281,10 +281,10 @@ export const evalForm = (defEnv, topForm) => {
         }
         case 'def': {
           assertNumArgs(2)
+          if (env !== defEnv) throw evalError('def must be defined in the outermost environment')
           const name = getFormWord(forms[1])
           const value = go(env, forms[2])
-          if (env.outer) throw evalError('def must be defined in the outermost environment')
-          env.set(name, value)
+          defEnv.set(name, value)
           return value
         }
         case 'atom': {
@@ -357,7 +357,7 @@ export const evalForm = (defEnv, topForm) => {
         }
         case 'type': {
           if (numOfArgs % 3 !== 0) throw evalError('type expected triplets')
-          if (env.outer) throw evalError('type must be defined in the outermost environment')
+          if (env !== defEnv) throw evalError('type must be defined in the outermost environment')
           for (let i = 1; i < forms.length; i += 3) {
             const type = getFormWord(forms[i])
             const _typeParams = getFormList(forms[i + 1]).map(getFormWord)
@@ -371,7 +371,7 @@ export const evalForm = (defEnv, topForm) => {
                   const unionCaseName = getFormWord(unionCase[0])
                   const qualName = `${type}/${unionCaseName}`
                   const tagger = makeValueTagger(qualName, unionCase.length - 1)
-                  env.set(qualName, tagger)
+                  defEnv.set(qualName, tagger)
                 }
                 break
               case 'record': {
@@ -387,13 +387,13 @@ export const evalForm = (defEnv, topForm) => {
                       throw evalError(`field projecter ${projecterName} not a ${type}`)
                     return record[fieldName]
                   }
-                  env.set(projecterName, projecter)
+                  defEnv.set(projecterName, projecter)
                 }
                 const constructor = (...args) => {
                   if (args.length !== fieldNames.length) throw evalError('wrong number of arguments to ' + type)
                   return makeRecord(type, fieldNames, args)
                 }
-                env.set(type, constructor)
+                defEnv.set(type, constructor)
                 break
               }
               default:
