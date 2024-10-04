@@ -210,8 +210,7 @@ export const isSpecialFormPrimitiveConstant = (word) => word === 'i32' || word =
 
 export const evalForm = (defEnv, topForm) => {
   const go = (env, form) => {
-    const curForm = form
-    const evalError = (message, innerError) => new EvalError(message, curForm, innerError)
+    const evalError = (message, innerError) => new EvalError(message, form, innerError)
     while (true) {
       const word = tryGetFormWord(form)
       if (word) {
@@ -232,6 +231,7 @@ export const evalForm = (defEnv, topForm) => {
           throw evalError(`special form '${firstWord}' expected ${num} arguments, got ${numOfArgs}`)
       }
       switch (firstWord) {
+        // constants
         case 'i32':
           assertNumArgs(1)
           return +getFormWord(forms[1]) | 0
@@ -249,15 +249,6 @@ export const evalForm = (defEnv, topForm) => {
           const form = forms[1]
           assertFormDeep(form)
           return form
-        }
-        case 'func':
-        case 'fexpr':
-        case 'macro': {
-          assertNumArgs(3)
-          const name = getFormWord(forms[1])
-          const parameters = getFormList(forms[2]).map(getFormWord)
-          const body = forms[3]
-          return makeClosure(env, name, parameters, body, firstWord)
         }
         case 'extern': {
           let ext = externs
@@ -279,19 +270,22 @@ export const evalForm = (defEnv, topForm) => {
           }
           return intrinsic
         }
-        case 'def': {
-          assertNumArgs(2)
-          if (env !== defEnv) throw evalError('def must be defined in the outermost environment')
+        // constants calculated from environment
+        case 'func':
+        case 'fexpr':
+        case 'macro': {
+          assertNumArgs(3)
           const name = getFormWord(forms[1])
-          const value = go(env, forms[2])
-          defEnv.set(name, value)
-          return value
+          const parameters = getFormList(forms[2]).map(getFormWord)
+          const body = forms[3]
+          return makeClosure(env, name, parameters, body, firstWord)
         }
         case 'atom': {
           assertNumArgs(1)
           const initialValue = go(env, forms[1])
           return atom(initialValue)
         }
+        // control flow
         case 'if':
           assertNumArgs(3)
           try {
@@ -301,7 +295,7 @@ export const evalForm = (defEnv, topForm) => {
           }
           continue
         case 'switch': {
-          if (numOfArgs === 0) throw evalError(`special form '${firstWord}' expected at least one argument`)
+          if (numOfArgs < 2) throw evalError(`special form 'switch' expected at least two arguments`)
           if (numOfArgs % 2 !== 0) throw evalError('no switch default found')
           const value = go(env, forms[1])
           const valueType = typeof value
@@ -355,6 +349,43 @@ export const evalForm = (defEnv, topForm) => {
           form = body
           continue
         }
+        case 'do':
+          if (forms.length === 1) return langUndefined
+          try {
+            for (let i = 1; i < forms.length - 1; i++) go(env, forms[i])
+          } catch (e) {
+            throw evalError('error in do', e)
+          }
+          form = forms.at(-1)
+          continue
+        case 'let': {
+          assertNumArgs(2)
+          const bindings = getFormList(forms[1])
+          if (bindings.length % 2 !== 0) {
+            console.log('meta for odd', bindings.length, meta(form))
+            for (const b of bindings) console.log('binding', b, meta(b))
+            throw evalError('odd number of bindings')
+          }
+          const newEnv = makeEnv(env)
+          try {
+            for (let i = 0; i < bindings.length - 1; i += 2)
+              setEnv(newEnv, getFormWord(bindings[i]), go(newEnv, bindings[i + 1]))
+          } catch (e) {
+            throw evalError('error in let bindings', e)
+          }
+          env = newEnv
+          form = forms[2]
+          continue
+        }
+        case 'def': {
+          assertNumArgs(2)
+          if (env !== defEnv) throw evalError('def must be defined in the outermost environment')
+          const name = getFormWord(forms[1])
+          const value = go(env, forms[2])
+          defEnv.set(name, value)
+          return value
+        }
+        // types
         case 'type': {
           if (numOfArgs % 3 !== 0) throw evalError('type expected triplets')
           if (env !== defEnv) throw evalError('type must be defined in the outermost environment')
@@ -401,34 +432,6 @@ export const evalForm = (defEnv, topForm) => {
             }
           }
           return langUndefined
-        }
-        case 'do':
-          if (forms.length === 1) return langUndefined
-          try {
-            for (let i = 1; i < forms.length - 1; i++) go(env, forms[i])
-          } catch (e) {
-            throw evalError('error in do', e)
-          }
-          form = forms.at(-1)
-          continue
-        case 'let': {
-          assertNumArgs(2)
-          const bindings = getFormList(forms[1])
-          if (bindings.length % 2 !== 0) {
-            console.log('meta for odd', bindings.length, meta(form))
-            for (const b of bindings) console.log('binding', b, meta(b))
-            throw evalError('odd number of bindings')
-          }
-          const newEnv = makeEnv(env)
-          try {
-            for (let i = 0; i < bindings.length - 1; i += 2)
-              setEnv(newEnv, getFormWord(bindings[i]), go(newEnv, bindings[i + 1]))
-          } catch (e) {
-            throw evalError('error in let bindings', e)
-          }
-          env = newEnv
-          form = forms[2]
-          continue
         }
         case 'type-anno': {
           assertNumArgs(2)
