@@ -475,6 +475,12 @@ export const evalForm = (defEnv, topForm) => {
   return go(defEnv, topForm)
 }
 
+export const evaluateForms = (defEnv, forms) => {
+  let result = langUndefined
+  for (const form of forms) result = evalForm(defEnv, form)
+  return result
+}
+
 export const catchErrors = (f) => {
   try {
     return f()
