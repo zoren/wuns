@@ -361,11 +361,7 @@ export const evalForm = (defEnv, topForm) => {
         case 'let': {
           assertNumArgs(2)
           const bindings = getFormList(forms[1])
-          if (bindings.length % 2 !== 0) {
-            console.log('meta for odd', bindings.length, meta(form))
-            for (const b of bindings) console.log('binding', b, meta(b))
-            throw evalError('odd number of bindings')
-          }
+          if (bindings.length % 2 !== 0) throw evalError('odd number of bindings')
           const newEnv = makeEnv(env)
           try {
             for (let i = 0; i < bindings.length - 1; i += 2)
