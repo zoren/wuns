@@ -230,111 +230,109 @@ const getCtxVar = (ctx, varName) => {
   throw new CompileError('undefined variable: ' + varName)
 }
 
-const compile = (outerForm) => {
-  const go = (ctx, form) => {
-    const compileError = (message, innerError) => new CompileError(message, form, innerError)
-    const word = tryGetFormWord(form)
-    if (word) {
-      const varDesc = getCtxVar(ctx, word)
-      if (varDesc.tag === 'param') return mkLocalGetInst(varDesc.index)
-      if (varDesc.tag === 'def') return varDesc.value
-      throw compileError('expected variable')
+const go = (ctx, form) => {
+  const compileError = (message, innerError) => new CompileError(message, form, innerError)
+  const word = tryGetFormWord(form)
+  if (word) {
+    const varDesc = getCtxVar(ctx, word)
+    if (varDesc.tag === 'param') return mkLocalGetInst(varDesc.index)
+    if (varDesc.tag === 'def') return varDesc.value
+    throw compileError('expected variable')
+  }
+  const forms = getFormList(form)
+  if (forms.length === 0) throw compileError('empty list')
+  const [firstForm, ...args] = forms
+  const firstWord = tryGetFormWord(firstForm)
+  const numOfArgs = args.length
+  const assertNumArgs = (num) => {
+    if (numOfArgs !== num) throw compileError(`special form '${firstWord}' expected ${num} arguments, got ${numOfArgs}`)
+  }
+  const constantValue = tryFormToConstant(form)
+  if (constantValue !== null) return mkConstantInst(constantValue)
+  switch (firstWord) {
+    case 'if': {
+      // todo move to a preprocessor generating a switch form
+      assertNumArgs(3)
+      const condition = go(ctx, forms[1])
+      const thenInst = go(ctx, forms[2])
+      const elseInst = go(ctx, forms[3])
+      return mkDoInst(condition, mkSwitchInst([{ caseValue: 0, caseInst: elseInst }], thenInst))
     }
-    const forms = getFormList(form)
-    if (forms.length === 0) throw compileError('empty list')
-    const [firstForm, ...args] = forms
-    const firstWord = tryGetFormWord(firstForm)
-    const numOfArgs = args.length
-    const assertNumArgs = (num) => {
-      if (numOfArgs !== num)
-        throw compileError(`special form '${firstWord}' expected ${num} arguments, got ${numOfArgs}`)
+    case 'switch': {
+      if (numOfArgs < 2) throw compileError(`special form 'switch' expected at least two arguments`)
+      if (numOfArgs % 2 !== 0) throw compileError('no switch default found')
+      const value = go(ctx, forms[1])
+      const cases = []
+      for (let i = 2; i < forms.length - 1; i += 2) {
+        const pattern = forms[i]
+        const caseValue = tryFormToConstant(pattern)
+        if (caseValue === null) throw compileError('switch pattern must be constant')
+        cases.push(Object.freeze({ caseValue, caseInst: go(ctx, forms[i + 1]) }))
+      }
+      const defaultCase = go(ctx, forms.at(-1))
+      return mkDoInst(value, mkSwitchInst(cases, defaultCase))
     }
-    const constantValue = tryFormToConstant(form)
-    if (constantValue !== null) return mkConstantInst(constantValue)
-    switch (firstWord) {
-      case 'if': {
-        // todo move to a preprocessor generating a switch form
-        assertNumArgs(3)
-        const condition = go(ctx, forms[1])
-        const thenInst = go(ctx, forms[2])
-        const elseInst = go(ctx, forms[3])
-        return mkDoInst(condition, mkSwitchInst([{ caseValue: 0, caseInst: elseInst }], thenInst))
-      }
-      case 'switch': {
-        if (numOfArgs < 2) throw compileError(`special form 'switch' expected at least two arguments`)
-        if (numOfArgs % 2 !== 0) throw compileError('no switch default found')
-        const value = go(ctx, forms[1])
-        const cases = []
-        for (let i = 2; i < forms.length - 1; i += 2) {
-          const pattern = forms[i]
-          const caseValue = tryFormToConstant(pattern)
-          if (caseValue === null) throw compileError('switch pattern must be constant')
-          cases.push(Object.freeze({ caseValue, caseInst: go(ctx, forms[i + 1]) }))
-        }
-        const defaultCase = go(ctx, forms.at(-1))
-        return mkDoInst(value, mkSwitchInst(cases, defaultCase))
-      }
-      case 'do': {
-        if (numOfArgs === 0) throw compileError('empty do')
-        return mkDoInst(...args.slice(0, -1).map((f) => mkDoInst(go(ctx, f), dropInst)), go(ctx, args.at(-1)))
-      }
-      case 'def': {
-        assertNumArgs(2)
-        const name = getFormWord(forms[1])
-        if (ctx.outer) throw compileError('def not allowed in inner scope')
-        if (ctx.has(name)) throw compileError('variable already defined')
-        const value = go(ctx, forms[2])
-        setNewCtxVar(ctx, name, { tag: 'def', value })
-        return value
-      }
-      case 'func': {
-        assertNumArgs(3)
-        const name = getFormWord(forms[1])
-        let parameters = getFormList(forms[2]).map(getFormWord)
-        const newCtx = makeCtx(ctx)
-        setNewCtxVar(newCtx, name, { tag: 'func-internal' })
-        let restParam = null
-        if (parameters.length > 1 && parameters.at(-2) === '..') {
-          restParam = parameters.at(-1)
-          parameters = parameters.slice(0, -2)
-          setNewCtxVar(ctx, restParam, { tag: 'param', isRest: true })
-        }
-        parameters.forEach((param, i) => setNewCtxVar(newCtx, param, { tag: 'param', index: i }))
-        const body = go(newCtx, forms[3])
-        return mkFunctionInst(name, parameters, restParam, mkRecursionContextInst(name, body))
-      }
+    case 'do': {
+      if (numOfArgs === 0) throw compileError('empty do')
+      return mkDoInst(...args.slice(0, -1).map((f) => mkDoInst(go(ctx, f), dropInst)), go(ctx, args.at(-1)))
     }
-    if (firstWord) {
-      const varDesc = getCtxVar(ctx, firstWord)
-      if (varDesc.tag === 'def')
-        return mkCallInst(
-          varDesc.value,
-          args.map((arg) => go(ctx, arg)),
-        )
-      if (varDesc.tag != 'func-internal') throw compileError('expected recursive call')
-      return mkCallRecursiveInst(args.map((arg) => go(ctx, arg)))
-    } else {
-      const firstList = getFormList(firstForm)
-      const firstFirstWord = getFormWord(firstList[0])
-      switch (firstFirstWord) {
-        case 'intrinsic': {
-          assertNumArgs(2)
-          const _ins = getFormWord(firstList[1])
-          if (_ins !== 'instructions') throw compileError('expected instructions')
-          const instructionName = getFormWord(firstList[2])
-          if (instructionName === 'unreachable') throw compileError('unreachable not implemented')
-          const instFunc = instructions[instructionName]
-          if (!instFunc) throw compileError('unknown instruction')
-          return mkDoInst(...args.map((f) => go(ctx, f)), mkIntrinsicInst(instFunc))
-        }
+    case 'def': {
+      assertNumArgs(2)
+      const name = getFormWord(forms[1])
+      if (ctx.outer) throw compileError('def not allowed in inner scope')
+      if (ctx.has(name)) throw compileError('variable already defined')
+      const value = go(ctx, forms[2])
+      setNewCtxVar(ctx, name, { tag: 'def', value })
+      return value
+    }
+    case 'func': {
+      assertNumArgs(3)
+      const name = getFormWord(forms[1])
+      let parameters = getFormList(forms[2]).map(getFormWord)
+      const newCtx = makeCtx(ctx)
+      setNewCtxVar(newCtx, name, { tag: 'func-internal' })
+      let restParam = null
+      if (parameters.length > 1 && parameters.at(-2) === '..') {
+        restParam = parameters.at(-1)
+        parameters = parameters.slice(0, -2)
+        setNewCtxVar(ctx, restParam, { tag: 'param', isRest: true })
       }
-      return mkCallInst(
-        go(ctx, firstForm),
-        args.map((arg) => go(ctx, arg)),
-      )
+      parameters.forEach((param, i) => setNewCtxVar(newCtx, param, { tag: 'param', index: i }))
+      const body = go(newCtx, forms[3])
+      return mkFunctionInst(name, parameters, restParam, mkRecursionContextInst(name, body))
     }
   }
-  return go(new Map(), outerForm)
+  if (firstWord) {
+    const varDesc = getCtxVar(ctx, firstWord)
+    if (varDesc.tag === 'def')
+      return mkCallInst(
+        varDesc.value,
+        args.map((arg) => go(ctx, arg)),
+      )
+    if (varDesc.tag != 'func-internal') throw compileError('expected recursive call')
+    return mkCallRecursiveInst(args.map((arg) => go(ctx, arg)))
+  } else {
+    const firstList = getFormList(firstForm)
+    const firstFirstWord = getFormWord(firstList[0])
+    switch (firstFirstWord) {
+      case 'intrinsic': {
+        assertNumArgs(2)
+        const _ins = getFormWord(firstList[1])
+        if (_ins !== 'instructions') throw compileError('expected instructions')
+        const instructionName = getFormWord(firstList[2])
+        if (instructionName === 'unreachable') throw compileError('unreachable not implemented')
+        const instFunc = instructions[instructionName]
+        if (!instFunc) throw compileError('unknown instruction')
+        return mkDoInst(...args.map((f) => go(ctx, f)), mkIntrinsicInst(instFunc))
+      }
+    }
+    return mkCallInst(
+      go(ctx, firstForm),
+      args.map((arg) => go(ctx, arg)),
+    )
+  }
 }
+
+const compile = (form) => go(new Map(), form)
 
 export { compile, evalInst }
