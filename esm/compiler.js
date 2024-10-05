@@ -10,7 +10,8 @@ const instOpDrop = 9
 const instOpFunction = 10
 const instOpCall = 11
 const instOpCallRecursive = 12
-const instOpRecursionContext = 13
+const instOpPushRecursionContext = 13
+const instOpPopRecursionContext = 14
 
 class EvalError extends Error {
   constructor(message, inst) {
@@ -23,7 +24,7 @@ const evalInst = () => {
   const stack = []
   const locals = []
   let currentLoopBody = null
-  let currentRecursionContext = null
+  const recursionContextStack = []
   const go = (inst) => {
     const evalError = (message) => new EvalError(message, inst)
     const pop = () => {
@@ -103,6 +104,7 @@ const evalInst = () => {
           inst = inst.last
           continue
         case instOpFunction:
+          // just a placeholder, we don't allow functions as values
           push(0)
           return
         case instOpCall: {
@@ -115,18 +117,26 @@ const evalInst = () => {
           inst = body
           continue
         }
-        case instOpRecursionContext:
-          currentRecursionContext = inst.body
-          inst = inst.body
+        case instOpPushRecursionContext: {
+          const { body } = inst
+          recursionContextStack.push(body)
+          // inst = body
           continue
+        }
         case instOpCallRecursive: {
           inst.args.forEach((arg, i) => {
             go(arg)
             setLocal(i, pop())
           })
-          inst = currentRecursionContext
+          if (recursionContextStack.length === 0) throw evalError('no recursion context')
+          inst = recursionContextStack.at(-1)
           continue
         }
+        case instOpPopRecursionContext:
+          if (recursionContextStack.length === 0) throw evalError('recursion context stack underflow')
+          recursionContextStack.pop()
+          return
+
         default:
           throw new Error('unexpected inst tag: ' + inst.tag)
       }
@@ -175,7 +185,8 @@ const mkFunctionInst = (name, parameters, restParam, body) =>
   Object.freeze({ tag: instOpFunction, name, parameters, restParam, body })
 const mkCallInst = (func, args) => Object.freeze({ tag: instOpCall, func, args })
 const mkCallRecursiveInst = (args) => Object.freeze({ tag: instOpCallRecursive, args })
-const mkRecursionContextInst = (name, body) => Object.freeze({ tag: instOpRecursionContext, name, body })
+const mkPushRecursionContextInst = (name, body) => Object.freeze({ tag: instOpPushRecursionContext, name, body })
+const popRecursionContextInst = Object.freeze({ tag: instOpPopRecursionContext })
 const dropInst = Object.freeze({ tag: instOpDrop })
 
 import { instructionFunctions } from './instructions.js'
@@ -299,7 +310,12 @@ const go = (ctx, form) => {
       }
       parameters.forEach((param, i) => setNewCtxVar(newCtx, param, { tag: 'param', index: i }))
       const body = go(newCtx, forms[3])
-      return mkFunctionInst(name, parameters, restParam, mkRecursionContextInst(name, body))
+      return mkFunctionInst(
+        name,
+        parameters,
+        restParam,
+        mkDoInst(mkPushRecursionContextInst(name, body), body, popRecursionContextInst),
+      )
     }
   }
   if (firstWord) {
