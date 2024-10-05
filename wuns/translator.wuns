@@ -728,7 +728,7 @@
                  match-type [check gctx level lctx match-value]
                  result-type [generate-fresh-type-var gctx level]
                  has-default [is-even n-of-args]]
-          [for-pair i 2 [if has-default [dec s-form] s-form]
+          [for-pair i 2 [dec s-form]
             [let [pattern [at sub-forms i]
                   branch [at sub-forms [inc i]]]
               [match pattern
@@ -764,7 +764,8 @@
         [eq-form first-form [quote switch]]
         [let-do [match-value [second sub-forms]
                  match-type [check gctx level lctx match-value]
-                 result-type [generate-fresh-type-var gctx level]]
+                 result-type [generate-fresh-type-var gctx level]
+                 has-default [is-even n-of-args]]
           [report-when-not [is-even n-of-args] form expects an even number of arguments]
           [for-pair i 2 [dec s-form]
             [let [case-const [at sub-forms i]
@@ -782,6 +783,9 @@
                   [unify-report gctx [check gctx level lctx branch] result-type branch]]
 
                 [report case-const expects a list]]]]
+          [when has-default
+            [let-do [default-form [last sub-forms]]
+              [unify-report gctx [check gctx level lctx default-form] result-type default-form]]]
           result-type]
 
         [eq-form first-form [quote do]]
@@ -1458,6 +1462,12 @@
     [i32 0] [word zero]
     [word a] [word one]
     [word not-01]]]
+[comment check default case]
+[test-errors word [[not unifiable - different types]]
+  [switch [i32 0]
+    [i32 0] [word zero]
+    [i32 1] [word one]
+    [i32 1337]]]
 [test-ok word
   [switch [i32 0]
     [i32 0] [word zero]
