@@ -144,7 +144,7 @@ export const print = (ox) => {
     if (list) return go(list)
     if (isDefVar(x)) return `[var ${x.name}]`
     if (isAtom(x)) return `[atom ${go(x.value)}]`
-    if (isTaggedValue(x)) return `[${x.tag} ${x.args.map(go).join(' ')}]`
+    if (isTaggedValue(x)) return `[${x.tag}${x.args.map(a => ` ${go(a)}`).join('')}]`
     const recordTag = isRecord(x)
     if (recordTag)
       return `[record ${recordTag}${Object.entries(x)
