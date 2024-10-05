@@ -127,7 +127,7 @@ import fs from 'node:fs'
 import { parse } from './parseTreeSitter.js'
 
 const instructions = wrapJSFunctionsToObject(instructionFunctions)
-const intrinsics = { instructions }
+const intrinsics = instructions
 const externs = {
   host,
 
@@ -456,7 +456,6 @@ export const evalForm = (defEnv, topForm) => {
       switch (kind) {
         case 'macro': {
           const macroResult = go(paramEnvMaker(args), body)
-          assertFormDeep(macroResult)
           form = macroResult
           continue
         }

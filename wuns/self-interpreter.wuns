@@ -57,7 +57,7 @@
 
 [defmacro def-instruction [def-name inst-name] [def-instruction-fn def-name inst-name]]
 
-[def unreachable [intrinsic instructions unreachable]]
+[def unreachable [intrinsic unreachable]]
 
 [defn form-to-word [form]
   [match form

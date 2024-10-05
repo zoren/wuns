@@ -24,25 +24,23 @@ const evalInst = () => {
   const stack = []
   const locals = []
   let currentLoopBody = null
-  const recursionContextStack = []
   const go = (inst) => {
     const evalError = (message) => new EvalError(message, inst)
     const pop = () => {
       if (stack.length === 0) throw evalError('stack underflow')
       return stack.pop()
     }
-    const push = (value) => {
+    const assertValidValue = (value) => {
       if (typeof value !== 'number' && typeof value !== 'string') {
-        console.log(value)
-        throw evalError('expected number')
+        throw evalError('expected number or string')
       }
+    }
+    const push = (value) => {
+      assertValidValue(value)
       stack.push(value)
     }
     const setLocal = (index, value) => {
-      if (typeof value !== 'number' && typeof value !== 'string') {
-        console.log(value)
-        throw evalError('expected number')
-      }
+      assertValidValue(value)
       locals[index] = value
     }
     while (true) {
@@ -108,34 +106,14 @@ const evalInst = () => {
           push(0)
           return
         case instOpCall: {
-          const func = inst.func
-          const { body } = func
-          inst.args.forEach((arg, i) => {
+          const { func, args } = inst
+          args.forEach((arg, i) => {
             go(arg)
             setLocal(i, pop())
           })
-          inst = body
+          inst = func.body
           continue
         }
-        case instOpPushRecursionContext: {
-          const { body } = inst
-          recursionContextStack.push(body)
-          // inst = body
-          continue
-        }
-        case instOpCallRecursive: {
-          inst.args.forEach((arg, i) => {
-            go(arg)
-            setLocal(i, pop())
-          })
-          if (recursionContextStack.length === 0) throw evalError('no recursion context')
-          inst = recursionContextStack.at(-1)
-          continue
-        }
-        case instOpPopRecursionContext:
-          if (recursionContextStack.length === 0) throw evalError('recursion context stack underflow')
-          recursionContextStack.pop()
-          return
 
         default:
           throw new Error('unexpected inst tag: ' + inst.tag)
@@ -184,9 +162,8 @@ const mkSwitchInst = (cases, defaultCase) => Object.freeze({ tag: instOpSwitch, 
 const mkFunctionInst = (name, parameters, restParam, body) =>
   Object.freeze({ tag: instOpFunction, name, parameters, restParam, body })
 const mkCallInst = (func, args) => Object.freeze({ tag: instOpCall, func, args })
-const mkCallRecursiveInst = (args) => Object.freeze({ tag: instOpCallRecursive, args })
+const mkCallRecursiveInst = (name, args) => Object.freeze({ tag: instOpCallRecursive, name, args })
 const mkPushRecursionContextInst = (name, body) => Object.freeze({ tag: instOpPushRecursionContext, name, body })
-const popRecursionContextInst = Object.freeze({ tag: instOpPopRecursionContext })
 const dropInst = Object.freeze({ tag: instOpDrop })
 
 import { instructionFunctions } from './instructions.js'
@@ -314,7 +291,7 @@ const go = (ctx, form) => {
         name,
         parameters,
         restParam,
-        mkDoInst(mkPushRecursionContextInst(name, body), body, popRecursionContextInst),
+        body,
       )
     }
   }
@@ -326,16 +303,13 @@ const go = (ctx, form) => {
         args.map((arg) => go(ctx, arg)),
       )
     if (varDesc.tag != 'func-internal') throw compileError('expected recursive call')
-    return mkCallRecursiveInst(args.map((arg) => go(ctx, arg)))
+    return mkCallRecursiveInst(firstWord, args.map((arg) => go(ctx, arg)))
   } else {
     const firstList = getFormList(firstForm)
     const firstFirstWord = getFormWord(firstList[0])
     switch (firstFirstWord) {
       case 'intrinsic': {
-        assertNumArgs(2)
-        const _ins = getFormWord(firstList[1])
-        if (_ins !== 'instructions') throw compileError('expected instructions')
-        const instructionName = getFormWord(firstList[2])
+        const instructionName = getFormWord(firstList[1])
         if (instructionName === 'unreachable') throw compileError('unreachable not implemented')
         const instFunc = instructions[instructionName]
         if (!instFunc) throw compileError('unknown instruction')

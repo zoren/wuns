@@ -500,6 +500,8 @@
   [type/inst [inst-type/func [func-type params opt-rest-param result [function-kind/func]]]]]
 
 [def i32i32-to-i32 [type-func [list type-i32 type-i32] [none] type-i32]]
+[def f64f64-to-f64 [type-func [list type-f64 type-f64] [none] type-f64]]
+[def f64f64-to-i32 [type-func [list type-f64 type-f64] [none] type-i32]]
 
 [defn type-ctor [params result]
   [type/inst [inst-type/func [func-type params [none] result [function-kind/ctor]]]]]
@@ -1057,22 +1059,6 @@
           [some expanded]]
         [none]]]]]
 
-[defn word-list-contains [w .. words]
-  [let [s-words [size words]]
-    [[func go [i]
-      [if [lt-s i s-words]
-        [if [eq-word w [at words i]]
-          1
-          [go [inc i]]]
-        0]]
-      0]]]
-
-[defn is-i32-bin-inst [w2]
-  [word-list-contains w2
-    [word i32.add] [word i32.sub] [word i32.mul] [word i32.rem-s] [word i32.div-s]
-    [word i32.and] [word i32.or] [word i32.xor]
-    [word i32.eq] [word i32.lt-s] [word i32.le-s]]]
-
 [defn check [gctx level lctx form]
   [match form
     [form/word w]
@@ -1357,21 +1343,25 @@
               [report-when-not [is-word sf] sf expects words]]]
           [let [opt-type
             [if-let [w1 [try-get-word-report gctx [second sub-forms]]]
-              [if [eq-word w1 [word instructions]]
-                [if-let [w2 [try-get-word-report gctx [third sub-forms]]]
-                  [ifs
-                    [is-i32-bin-inst w2]
-                    [some i32i32-to-i32]
+              [ifs
+                [is-i32-bin-inst w1]
+                [some i32i32-to-i32]
 
-                    [eq-word w2 [word unreachable]]
-                    [some [type-func [list] [none] [generate-fresh-type-var gctx [inc level]]]]
+                [is-f64-bin-inst w1]
+                [some f64f64-to-f64]
 
-                    [none]]
-                  [none]]
+                [is-f64-comp-inst w1]
+                [some f64f64-to-i32]
+
+                [eq-word w1 [word unreachable]]
+                [some [type-func [list] [none] [generate-fresh-type-var gctx [inc level]]]]
+
                 [none]]
               [none]]]
             [match opt-type
-              [none] [generate-fresh-type-var gctx level]
+              [none] [do
+                [report form expects a known intrinsic]
+                [generate-fresh-type-var gctx level]]
               [some t] t]]]
 
         [eq-form first-form [quote type-anno]]
@@ -1971,7 +1961,7 @@
     [for-each file files
       [test-ok-fn-stop-at-error gctx [read-file file]]]
     [logq it took ms]
-    [log [[intrinsic instructions f64.sub] [performance-now] before]]]]
+    [log [[intrinsic f64.sub] [performance-now] before]]]]
 
 [defn test-check []
   [test-ok-files [word translator.wuns]]]
@@ -2351,7 +2341,7 @@
   [and [eq [size expected] [size actual]]
     [[func go [i]
       [if [lt-s i [size expected]]
-        [if [[intrinsic instructions f64.eq] [at expected i] [at actual i]]
+        [if [[intrinsic f64.eq] [at expected i] [at actual i]]
           [go [inc i]]
           0]
         1]] 0]]]
@@ -2418,7 +2408,7 @@
     [test
       [list [test-assert/eq [list [f64 5]] [word f] [list]]]
       [list
-        [quote [def f [func internal-name [] [[intrinsic instructions i32.sub] [i32 7] [i32 2]]]]]]]
+        [quote [def f [func internal-name [] [[intrinsic i32.sub] [i32 7] [i32 2]]]]]]]
     [test
       [list [test-assert/eq [list [f64 5]] [word f] [list]]]
       [list
