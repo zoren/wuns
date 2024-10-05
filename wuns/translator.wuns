@@ -331,8 +331,6 @@
 
 [defn generalize-top [type] [generalize 0 type]]
 
-[type pair [a b] [record [fst a] [snd b]]]
-
 [defn try-get-assoc-identical [assoc-list var]
   [[func try-get-assoc-identical-go [i]
     [if [lt-s i [size assoc-list]]
@@ -728,8 +726,9 @@
         [eq-form first-form [quote match]]
         [let-do [match-value [second sub-forms]
                  match-type [check gctx level lctx match-value]
-                 result-type [generate-fresh-type-var gctx level]]
-          [for-pair i 2 [dec s-form]
+                 result-type [generate-fresh-type-var gctx level]
+                 has-default [is-even n-of-args]]
+          [for-pair i 2 [if has-default [dec s-form] s-form]
             [let [pattern [at sub-forms i]
                   branch [at sub-forms [inc i]]]
               [match pattern
@@ -756,9 +755,10 @@
                           [unify-report gctx [check gctx level branch-ctx branch] result-type branch]]
                         [report first-pattern destructor not found]]]]
 
-                  [do
-                    [report pattern expects a list]
-                    [generate-fresh-type-var gctx level]]]]]
+                  [report pattern expects a list]]]]
+          [when has-default
+            [let-do [default-form [last sub-forms]]
+              [unify-report gctx [check gctx level lctx default-form] result-type default-form]]]
           result-type]
 
         [eq-form first-form [quote switch]]
@@ -781,9 +781,7 @@
                       [unify-report gctx match-type [check gctx level lctx case-const] case-const]]]
                   [unify-report gctx [check gctx level lctx branch] result-type branch]]
 
-                  [do
-                    [report case-const expects a list]
-                    [generate-fresh-type-var gctx level]]]]]
+                [report case-const expects a list]]]]
           result-type]
 
         [eq-form first-form [quote do]]
@@ -1443,6 +1441,11 @@
     type/inst]
 
 [comment match]
+[test-errors i32 [[not unifiable - different types]]
+  [type option []
+    [union
+      [none]]]
+  [match [option/none] [option/none] [i32 5] [word a]]]
 [test-ok i32
   [type option []
     [union
