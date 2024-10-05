@@ -9,6 +9,8 @@ const instOpIntrinsic = 8
 const instOpDrop = 9
 const instOpFunction = 10
 const instOpCall = 11
+const instOpCallRecursive = 12
+const instOpRecursionContext = 13
 
 class EvalError extends Error {
   constructor(message, inst) {
@@ -21,6 +23,7 @@ const evalInst = () => {
   const stack = []
   const locals = []
   let currentLoopBody = null
+  let currentRecursionContext = null
   const go = (inst) => {
     const evalError = (message) => new EvalError(message, inst)
     const pop = () => {
@@ -95,7 +98,6 @@ const evalInst = () => {
           continue
         case instOpInsts:
           for (const subInst of inst.insts) {
-            // here we assume nothing is pushed to the stack... or do we need to know that?
             go(subInst)
           }
           inst = inst.last
@@ -111,6 +113,18 @@ const evalInst = () => {
             setLocal(i, pop())
           })
           inst = body
+          continue
+        }
+        case instOpRecursionContext:
+          currentRecursionContext = inst.body
+          inst = inst.body
+          continue
+        case instOpCallRecursive: {
+          inst.args.forEach((arg, i) => {
+            go(arg)
+            setLocal(i, pop())
+          })
+          inst = currentRecursionContext
           continue
         }
         default:
@@ -148,16 +162,20 @@ const getFormList = (form) => {
 
 const mkConstantInst = (value) => Object.freeze({ tag: instOpConstant, value })
 const mkLocalGetInst = (index) => Object.freeze({ tag: instOpLocalGet, index })
-const mkDoInstArray = insts => {
+const mkDoInst = (...insts) => {
   if (insts.length === 0) throw new Error('empty do')
-  return Object.freeze({ tag: instOpInsts, insts: insts.slice(0, -1), last: insts.at(-1) });
+  for (const inst of insts) {
+    if (typeof inst.tag !== 'number') throw new Error('expected inst')
+  }
+  return Object.freeze({ tag: instOpInsts, insts: insts.slice(0, -1), last: insts.at(-1) })
 }
-const mkDoInstArgs = (...args) => mkDoInstArray(args)
 const mkIntrinsicInst = (f) => Object.freeze({ tag: instOpIntrinsic, f })
 const mkSwitchInst = (cases, defaultCase) => Object.freeze({ tag: instOpSwitch, cases, defaultCase })
 const mkFunctionInst = (name, parameters, restParam, body) =>
   Object.freeze({ tag: instOpFunction, name, parameters, restParam, body })
 const mkCallInst = (func, args) => Object.freeze({ tag: instOpCall, func, args })
+const mkCallRecursiveInst = (args) => Object.freeze({ tag: instOpCallRecursive, args })
+const mkRecursionContextInst = (name, body) => Object.freeze({ tag: instOpRecursionContext, name, body })
 const dropInst = Object.freeze({ tag: instOpDrop })
 
 import { instructionFunctions } from './instructions.js'
@@ -240,7 +258,7 @@ const compile = (outerForm) => {
         const condition = go(ctx, forms[1])
         const thenInst = go(ctx, forms[2])
         const elseInst = go(ctx, forms[3])
-        return mkDoInstArgs(condition, mkSwitchInst([{ caseValue: 0, caseInst: elseInst }], thenInst))
+        return mkDoInst(condition, mkSwitchInst([{ caseValue: 0, caseInst: elseInst }], thenInst))
       }
       case 'switch': {
         if (numOfArgs < 2) throw compileError(`special form 'switch' expected at least two arguments`)
@@ -254,14 +272,11 @@ const compile = (outerForm) => {
           cases.push(Object.freeze({ caseValue, caseInst: go(ctx, forms[i + 1]) }))
         }
         const defaultCase = go(ctx, forms.at(-1))
-        return mkDoInstArgs(value, mkSwitchInst(cases, defaultCase))
+        return mkDoInst(value, mkSwitchInst(cases, defaultCase))
       }
       case 'do': {
         if (numOfArgs === 0) throw compileError('empty do')
-        const insts = []
-        args.slice(0, -1).forEach((f) => insts.push(mkDoInstArgs(go(ctx, f), dropInst)))
-        insts.push(go(ctx, args.at(-1)))
-        return mkDoInstArray(insts)
+        return mkDoInst(...args.slice(0, -1).map((f) => mkDoInst(go(ctx, f), dropInst)), go(ctx, args.at(-1)))
       }
       case 'def': {
         assertNumArgs(2)
@@ -269,7 +284,7 @@ const compile = (outerForm) => {
         if (ctx.outer) throw compileError('def not allowed in inner scope')
         if (ctx.has(name)) throw compileError('variable already defined')
         const value = go(ctx, forms[2])
-        setNewCtxVar(ctx, name, { tag : 'def', value })
+        setNewCtxVar(ctx, name, { tag: 'def', value })
         return value
       }
       case 'func': {
@@ -286,16 +301,18 @@ const compile = (outerForm) => {
         }
         parameters.forEach((param, i) => setNewCtxVar(newCtx, param, { tag: 'param', index: i }))
         const body = go(newCtx, forms[3])
-        return mkFunctionInst(name, parameters, restParam, body)
+        return mkFunctionInst(name, parameters, restParam, mkRecursionContextInst(name, body))
       }
     }
     if (firstWord) {
       const varDesc = getCtxVar(ctx, firstWord)
-      if (varDesc.tag === 'def') {
-        return mkCallInst(varDesc.value, args.map((arg) => go(ctx, arg)))
-      }
-      if (varDesc.tag != 'func-internal') throw compileError('expected function')
-      return mkCallInst(varDesc, args.map((arg) => go(ctx, arg)))
+      if (varDesc.tag === 'def')
+        return mkCallInst(
+          varDesc.value,
+          args.map((arg) => go(ctx, arg)),
+        )
+      if (varDesc.tag != 'func-internal') throw compileError('expected recursive call')
+      return mkCallRecursiveInst(args.map((arg) => go(ctx, arg)))
     } else {
       const firstList = getFormList(firstForm)
       const firstFirstWord = getFormWord(firstList[0])
@@ -308,10 +325,7 @@ const compile = (outerForm) => {
           if (instructionName === 'unreachable') throw compileError('unreachable not implemented')
           const instFunc = instructions[instructionName]
           if (!instFunc) throw compileError('unknown instruction')
-          return mkDoInstArgs(
-            ...args.map((f) => go(ctx, f)),
-            mkIntrinsicInst(instFunc),
-          )
+          return mkDoInst(...args.map((f) => go(ctx, f)), mkIntrinsicInst(instFunc))
         }
       }
       return mkCallInst(
@@ -319,7 +333,6 @@ const compile = (outerForm) => {
         args.map((arg) => go(ctx, arg)),
       )
     }
-    throw compileError('unknown form')
   }
   return go(new Map(), outerForm)
 }
