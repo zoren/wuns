@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import path from 'node:path'
 import * as readline from 'node:readline'
 import { stdin, stdout, nextTick } from 'node:process'
 
@@ -13,6 +14,8 @@ const readHistory = (historyFilePath) => {
 }
 
 export const startRepl = (historyFilePath, promptString, evalLine, completer) => {
+  const historyDir = path.dirname(historyFilePath)
+  if (!fs.existsSync(historyDir)) throw new Error(`history directory does not exist: ${historyDir}`)
   const history = readHistory(historyFilePath)
 
   const rl = readline.createInterface({
