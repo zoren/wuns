@@ -105,6 +105,15 @@ const makeProvideDocumentSemanticTokensForms = async () => {
           if (params) for (const param of params) pushToken(param, parameterTokenType)
           go(body)
         }
+        const letSpecial = () => {
+          const [bindingsForm, body] = tail
+          const bindings = getListOrEmpty(bindingsForm)
+          for (let i = 0; i < bindings.length - 1; i += 2) {
+            pushTokenWithModifier(bindings[i], variableTokenType, declarationModifier)
+            go(bindings[i + 1])
+          }
+          go(body)
+        }
         const specialForms = {
           i32: () => {
             pushToken(tail[0], tokenTypeNumber)
@@ -141,15 +150,8 @@ const makeProvideDocumentSemanticTokensForms = async () => {
           do: () => {
             for (const form of tail) go(form)
           },
-          let: () => {
-            const [bindingsForm, body] = tail
-            const bindings = getListOrEmpty(bindingsForm)
-            for (let i = 0; i < bindings.length - 1; i += 2) {
-              pushTokenWithModifier(bindings[i], variableTokenType, declarationModifier)
-              go(bindings[i + 1])
-            }
-            go(body)
-          },
+          let: letSpecial,
+          letrec: letSpecial,
           func: funcSpecial,
           fexpr: funcSpecial,
           macro: funcSpecial,
