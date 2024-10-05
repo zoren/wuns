@@ -798,24 +798,47 @@
         [let-do
           [var-values [transient-kv-map]
            let-ctx [make-local-context var-values lctx first-form]
-           bindings
-            [if [lt-s 1 s-form]
-              [form-to-list [second sub-forms]]
-              [do [report form expects bindings] [list]]]
+           bindings [try-get-list-report gctx [second sub-forms]]
            n-of-bindings [size bindings]
            level-1 [inc level]]
           [report-when-not [eq n-of-args 2] form expects two arguments]
-          [when [lt-s 1 s-form]
+          [for-pair i 0 [dec n-of-bindings]
+            [let-do
+              [var [form-to-word [at bindings i]]
+               value [at bindings [inc i]]
+               val-type [check gctx level-1 let-ctx value]
+               general-val-type
+               [if [is-syntactic-value value]
+                 [generalize level val-type]
+                 [mk-empty-type-scheme val-type]]]
+              [set-kv-map var-values var general-val-type]]]
+          [for i 2 [dec s-form]
+            [check gctx level let-ctx [at sub-forms i]]]
+          [if [lt-s 2 s-form]
+            [check gctx level let-ctx [last sub-forms]]
+            type-empty-tuple]]
+
+        [eq-form first-form [quote letrec]]
+        [let-do
+          [var-values [transient-kv-map]
+           let-ctx [make-local-context var-values lctx first-form]
+           bindings [try-get-list-report gctx [second sub-forms]]
+           n-of-bindings [size bindings]
+           level-1 [inc level]
+           tmp-types [atom [linked-list/nil]]]
+          [report-when-not [eq n-of-args 2] form expects two arguments]
+          [for-pair i 0 [dec n-of-bindings]
+            [let-do
+              [var [form-to-word [at bindings i]]
+               tmp-type [generate-fresh-type-var gctx level-1]]
+              [push tmp-types tmp-type]
+              [set-kv-map var-values var [mk-empty-type-scheme tmp-type]]]]
+          [let [types [clone-growable-to-frozen-list tmp-types]]
             [for-pair i 0 [dec n-of-bindings]
               [let-do
-                [var [form-to-word [at bindings i]]
-                 value [at bindings [inc i]]
-                 val-type [check gctx level-1 let-ctx value]
-                 general-val-type
-                 [if [is-syntactic-value value]
-                    [generalize level val-type]
-                    [mk-empty-type-scheme val-type]]]
-                [set-kv-map var-values var general-val-type]]]]
+                [value [at bindings [inc i]]
+                 val-type [check gctx level-1 let-ctx value]]
+                [unify-report gctx val-type [at types [half i]] value]]]]
           [for i 2 [dec s-form]
             [check gctx level let-ctx [at sub-forms i]]]
           [if [lt-s 2 s-form]
@@ -1165,6 +1188,15 @@
 [test-ok form [let [] [quote a]]]
 [test-ok form [let [v [quote a]] v]]
 [test-ok form [let [v [quote a] u v] u]]
+
+[comment letrec]
+[test-ok [func [i32] i32]
+  [letrec
+    [is-even
+      [func ieven [n] [if [[intrinsic i32.eq] [i32 0] n] [i32 1] [is-odd [[intrinsic i32.sub] n [i32 1]]]]]
+     is-odd
+      [func iodd [n] [if [[intrinsic i32.eq] [i32 0] n] [i32 0] [is-even [[intrinsic i32.sub] n [i32 1]]]]]]
+    is-even]]
 
 [comment func]
 [comment function parameters cannot be polymorphically instantiated]
