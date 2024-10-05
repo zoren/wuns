@@ -24,3 +24,20 @@
 [if [i32 0] [word zero] [word one]] [word one]
 [if [i32 1] [word zero] [word one]] [word zero]
 
+[do
+  [def x [i32 5]]
+  [def y x]
+  y]
+[i32 5]
+
+[do
+  [def f [func f [] [i32 5]]]
+  [f]] [i32 5]
+
+[do
+  [def f [func f [x] x]]
+  [f [i32 5]]] [i32 5]
+[do
+  [def inc [func inc [x] [[intrinsic instructions i32.add] [i32 1] x]]]
+  [def g [func g [x] [inc x]]]
+  [g [i32 4]]] [i32 5]

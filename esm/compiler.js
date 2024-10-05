@@ -7,6 +7,8 @@ const instOpLoop = 6
 const instOpContinue = 7
 const instOpIntrinsic = 8
 const instOpDrop = 9
+const instOpFunction = 10
+const instOpCall = 11
 
 class EvalError extends Error {
   constructor(message, inst) {
@@ -17,6 +19,7 @@ class EvalError extends Error {
 
 const evalInst = () => {
   const stack = []
+  const locals = []
   let currentLoopBody = null
   const go = (inst) => {
     const evalError = (message) => new EvalError(message, inst)
@@ -24,7 +27,20 @@ const evalInst = () => {
       if (stack.length === 0) throw evalError('stack underflow')
       return stack.pop()
     }
-    const push = (value) => stack.push(value)
+    const push = (value) => {
+      if (typeof value !== 'number' && typeof value !== 'string') {
+        console.log(value)
+        throw evalError('expected number')
+      }
+      stack.push(value)
+    }
+    const setLocal = (index, value) => {
+      if (typeof value !== 'number' && typeof value !== 'string') {
+        console.log(value)
+        throw evalError('expected number')
+      }
+      locals[index] = value
+    }
     while (true) {
       if (!inst) throw evalError('no instruction')
       switch (inst.tag) {
@@ -33,14 +49,14 @@ const evalInst = () => {
           return
         case instOpLocalGet: {
           const { index } = inst
-          if (index >= stack.length) throw evalError('stack underflow')
-          push(stack.at(-index))
+          const value = locals[index]
+          if (value === undefined) throw evalError('undefined local')
+          push(value)
           return
         }
         case instOpLocalSet:
           const { index } = inst
-          if (index >= stack.length) throw evalError('stack underflow')
-          stack[stack.length - index] = inst.value
+          setLocal(index, pop())
           return
         case instOpDrop:
           pop()
@@ -84,6 +100,19 @@ const evalInst = () => {
           }
           inst = inst.last
           continue
+        case instOpFunction:
+          push(0)
+          return
+        case instOpCall: {
+          const func = inst.func
+          const { body } = func
+          inst.args.forEach((arg, i) => {
+            go(arg)
+            setLocal(i, pop())
+          })
+          inst = body
+          continue
+        }
         default:
           throw new Error('unexpected inst tag: ' + inst.tag)
       }
@@ -119,9 +148,17 @@ const getFormList = (form) => {
 
 const mkConstantInst = (value) => Object.freeze({ tag: instOpConstant, value })
 const mkLocalGetInst = (index) => Object.freeze({ tag: instOpLocalGet, index })
-const mkDoInst = (insts, last) => Object.freeze({ tag: instOpInsts, insts, last })
+const mkDoInstArray = insts => {
+  if (insts.length === 0) throw new Error('empty do')
+  return Object.freeze({ tag: instOpInsts, insts: insts.slice(0, -1), last: insts.at(-1) });
+}
+const mkDoInstArgs = (...args) => mkDoInstArray(args)
 const mkIntrinsicInst = (f) => Object.freeze({ tag: instOpIntrinsic, f })
 const mkSwitchInst = (cases, defaultCase) => Object.freeze({ tag: instOpSwitch, cases, defaultCase })
+const mkFunctionInst = (name, parameters, restParam, body) =>
+  Object.freeze({ tag: instOpFunction, name, parameters, restParam, body })
+const mkCallInst = (func, args) => Object.freeze({ tag: instOpCall, func, args })
+const dropInst = Object.freeze({ tag: instOpDrop })
 
 import { instructionFunctions } from './instructions.js'
 import { wrapJSFunctionsToObject } from './utils.js'
@@ -133,17 +170,19 @@ const tryFormToConstant = (form) => {
   if (forms.length === 0) throw new CompileError('empty list', form)
   const firstWord = tryGetFormWord(forms[0])
   if (!firstWord) return null
+  const parseNumber = (w) => {
+    const v = +w
+    if (isNaN(v)) throw new CompileError('expected number', form)
+    return v
+  }
   const specials = {
     i32: (w) => {
-      const v = +w
-      if (isNaN(v)) throw new CompileError('expected number', form)
-      return v | 0
+      const v = parseNumber(w)
+      const normed = v | 0
+      if (v !== normed) throw new CompileError('expected i32', form)
+      return normed
     },
-    f64: (w) => {
-      const v = +w
-      if (isNaN(v)) throw new CompileError('expected number', form)
-      return v
-    },
+    f64: parseNumber,
     word: (w) => w,
   }
   const special = specials[firstWord]
@@ -153,23 +192,41 @@ const tryFormToConstant = (form) => {
   return special(getFormWord(forms[1]))
 }
 
-const compile = (form) => {
+const makeCtx = (outer) => {
+  const vars = new Map()
+  vars.outer = outer
+  return vars
+}
+
+const setNewCtxVar = (ctx, varName, varDesc) => {
+  if (ctx.has(varName)) throw new CompileError('variable already defined', varName)
+  ctx.set(varName, varDesc)
+}
+
+const getCtxVar = (ctx, varName) => {
+  let curCtx = ctx
+  while (curCtx) {
+    if (curCtx.has(varName)) return curCtx.get(varName)
+    curCtx = curCtx.outer
+  }
+  throw new CompileError('undefined variable: ' + varName)
+}
+
+const compile = (outerForm) => {
   const go = (ctx, form) => {
     const compileError = (message, innerError) => new CompileError(message, form, innerError)
     const word = tryGetFormWord(form)
     if (word) {
-      let curCtx = ctx
-      while (curCtx) {
-        if (curCtx.has(word)) return mkLocalGetInst(curCtx.get(word))
-        curCtx = curCtx.outer
-      }
-      throw compileError('undefined variable: ' + word)
+      const varDesc = getCtxVar(ctx, word)
+      if (varDesc.tag === 'param') return mkLocalGetInst(varDesc.index)
+      if (varDesc.tag === 'def') return varDesc.value
+      throw compileError('expected variable')
     }
     const forms = getFormList(form)
     if (forms.length === 0) throw compileError('empty list')
-    const [firstForm] = forms
+    const [firstForm, ...args] = forms
     const firstWord = tryGetFormWord(firstForm)
-    const numOfArgs = forms.length - 1
+    const numOfArgs = args.length
     const assertNumArgs = (num) => {
       if (numOfArgs !== num)
         throw compileError(`special form '${firstWord}' expected ${num} arguments, got ${numOfArgs}`)
@@ -178,11 +235,12 @@ const compile = (form) => {
     if (constantValue !== null) return mkConstantInst(constantValue)
     switch (firstWord) {
       case 'if': {
+        // todo move to a preprocessor generating a switch form
         assertNumArgs(3)
         const condition = go(ctx, forms[1])
         const thenInst = go(ctx, forms[2])
         const elseInst = go(ctx, forms[3])
-        return mkDoInst([condition], mkSwitchInst([{ caseValue: 0, caseInst: elseInst }], thenInst))
+        return mkDoInstArgs(condition, mkSwitchInst([{ caseValue: 0, caseInst: elseInst }], thenInst))
       }
       case 'switch': {
         if (numOfArgs < 2) throw compileError(`special form 'switch' expected at least two arguments`)
@@ -196,10 +254,49 @@ const compile = (form) => {
           cases.push(Object.freeze({ caseValue, caseInst: go(ctx, forms[i + 1]) }))
         }
         const defaultCase = go(ctx, forms.at(-1))
-        return mkDoInst([value], mkSwitchInst(cases, defaultCase))
+        return mkDoInstArgs(value, mkSwitchInst(cases, defaultCase))
+      }
+      case 'do': {
+        if (numOfArgs === 0) throw compileError('empty do')
+        const insts = []
+        args.slice(0, -1).forEach((f) => insts.push(mkDoInstArgs(go(ctx, f), dropInst)))
+        insts.push(go(ctx, args.at(-1)))
+        return mkDoInstArray(insts)
+      }
+      case 'def': {
+        assertNumArgs(2)
+        const name = getFormWord(forms[1])
+        if (ctx.outer) throw compileError('def not allowed in inner scope')
+        if (ctx.has(name)) throw compileError('variable already defined')
+        const value = go(ctx, forms[2])
+        setNewCtxVar(ctx, name, { tag : 'def', value })
+        return value
+      }
+      case 'func': {
+        assertNumArgs(3)
+        const name = getFormWord(forms[1])
+        let parameters = getFormList(forms[2]).map(getFormWord)
+        const newCtx = makeCtx(ctx)
+        setNewCtxVar(newCtx, name, { tag: 'func-internal' })
+        let restParam = null
+        if (parameters.length > 1 && parameters.at(-2) === '..') {
+          restParam = parameters.at(-1)
+          parameters = parameters.slice(0, -2)
+          setNewCtxVar(ctx, restParam, { tag: 'param', isRest: true })
+        }
+        parameters.forEach((param, i) => setNewCtxVar(newCtx, param, { tag: 'param', index: i }))
+        const body = go(newCtx, forms[3])
+        return mkFunctionInst(name, parameters, restParam, body)
       }
     }
-    if (!firstWord) {
+    if (firstWord) {
+      const varDesc = getCtxVar(ctx, firstWord)
+      if (varDesc.tag === 'def') {
+        return mkCallInst(varDesc.value, args.map((arg) => go(ctx, arg)))
+      }
+      if (varDesc.tag != 'func-internal') throw compileError('expected function')
+      return mkCallInst(varDesc, args.map((arg) => go(ctx, arg)))
+    } else {
       const firstList = getFormList(firstForm)
       const firstFirstWord = getFormWord(firstList[0])
       switch (firstFirstWord) {
@@ -211,16 +308,20 @@ const compile = (form) => {
           if (instructionName === 'unreachable') throw compileError('unreachable not implemented')
           const instFunc = instructions[instructionName]
           if (!instFunc) throw compileError('unknown instruction')
-          return mkDoInst(
-            forms.slice(1).map((f) => go(ctx, f)),
+          return mkDoInstArgs(
+            ...args.map((f) => go(ctx, f)),
             mkIntrinsicInst(instFunc),
           )
         }
       }
+      return mkCallInst(
+        go(ctx, firstForm),
+        args.map((arg) => go(ctx, arg)),
+      )
     }
     throw compileError('unknown form')
   }
-  return go(null, form)
+  return go(new Map(), outerForm)
 }
 
 export { compile, evalInst }

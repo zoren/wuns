@@ -31,8 +31,8 @@ const compileEval = (form) => {
   return resultStack[0]
 }
 
-console.log('compile to instructions and evaluate')
-run(compileEval)
-
 console.log('interpret form directly')
 run(interpretForm)
+
+console.log('compile to instructions and evaluate')
+run(compileEval)
