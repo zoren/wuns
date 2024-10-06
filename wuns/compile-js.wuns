@@ -13,7 +13,7 @@
     [let [list [pair word wuns-exp]] wuns-exp]
     [letrec [list [pair word wuns-exp]] wuns-exp]
     [def word wuns-exp]
-    [func wuns-func-kind [list word] [option word] wuns-exp]
+    [func wuns-func-kind word [list word] [option word] wuns-exp]
     [call wuns-exp [list wuns-exp]]
     ]]
 
@@ -53,8 +53,7 @@
           [list-map p [pairwise [slice l 2 [dec [size l]]]] [pair [form-to-ast [first p]] [form-to-ast [second p]]]]
           [if [is-odd [size l]]
             [some [form-to-ast [last l]]]
-            [none]
-            ]]
+            [none]]]
 
         [word do]
         [wuns-exp/do [list-map arg [slice l 1 [size l]] [form-to-ast arg]]]
@@ -78,6 +77,7 @@
               body-form [fourth l]]
             [wuns-exp/func
               [wuns-func-kind/func]
+              name
               [pair/fst parsed-params]
               [pair/snd parsed-params]
               [form-to-ast body-form]]]
@@ -114,7 +114,7 @@
     [new js-exp [list js-exp]]
     [binop binop js-exp js-exp]
     [arrow-exp [list word] [option word] js-exp]
-    [arrow-stmt [list word] [option word] [list js-stmt]]
+    [arrow-stmt [list word] [option word] js-stmt]
   ]
 
   js-stmt []
@@ -129,6 +129,8 @@
     [block [list js-stmt]]
   ]
 ]
+
+[defn block [.. stmts] [js-stmt/block stmts]]
 
 [def js-0 [js-exp/number [word 0]]]
 
@@ -164,8 +166,14 @@
           [wuns-exp/if cond t f]
           [js-exp/ternary [cexp cond] [cexp t] [cexp f]]
 
-          [wuns-exp/func kind params opt-rest body]
-          [js-exp/arrow-exp params opt-rest [cexp body]]
+          [wuns-exp/func kind name params opt-rest body]
+          [js-exp/call
+            [js-exp/arrow-stmt [list] [none]
+              [block
+                [js-stmt/const-decl name
+                  [js-exp/arrow-exp params opt-rest [cexp body]]]
+                [js-stmt/return [js-exp/var name]]]]
+            [list]]
 
           [wuns-exp/call f args]
           [match f
@@ -183,8 +191,8 @@
         [match wexp
           [wuns-exp/if cond t f]
           [js-stmt/if [cexp cond]
-            [js-stmt/block [list [cstmt is-tail t]]]
-            [js-stmt/block [list [cstmt is-tail f]]]]
+            [block [cstmt is-tail t]]
+            [block [cstmt is-tail f]]]
 
           [wuns-exp/do exps]
           [js-stmt/block

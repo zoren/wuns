@@ -43,8 +43,12 @@ const jsExpToString = (js) => {
       const [params, optRest, body] = args
       return `(${params.map(escapeIdentifier).join(', ')}) => ${jsExpToString(body)}`
     }
+    case 'js-exp/arrow-stmt': {
+      const [params, optRest, body] = args
+      return `(${params.map(escapeIdentifier).join(', ')}) => ${jsStmtToString(body)}`
+    }
     case 'js-exp/call':
-      return `${jsExpToString(args[0])}(${args[1].map(jsExpToString).join(', ')})`
+      return `(${jsExpToString(args[0])})(${args[1].map(jsExpToString).join(', ')})`
     default:
       throw new Error(`unknown js exp tag: ${tag}`)
   }
