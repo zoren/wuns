@@ -185,7 +185,7 @@
 
             [js-exp/call [cexp f] [list-map arg args [cexp arg]]]]
 
-          [logq-abort cexp not implemented [identity wexp]]]]
+          [logq-abort cexp not implemented]]]
      cstmt
       [func cstmt [is-tail wexp]
         [match wexp
