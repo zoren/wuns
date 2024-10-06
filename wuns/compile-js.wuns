@@ -8,7 +8,7 @@
     [word word]
     [intrinsic word]
     [if wuns-exp wuns-exp wuns-exp]
-    [switch wuns-exp [list [pair wuns-exp wuns-exp]] wuns-exp]
+    [switch wuns-exp [list [pair wuns-exp wuns-exp]] [option wuns-exp]]
     [do [list wuns-exp]]
     [let [list [pair word wuns-exp]] wuns-exp]
     [letrec [list [pair word wuns-exp]] wuns-exp]
@@ -51,7 +51,10 @@
         [wuns-exp/switch
           [form-to-ast [second l]]
           [list-map p [pairwise [slice l 2 [dec [size l]]]] [pair [form-to-ast [first p]] [form-to-ast [second p]]]]
-          [form-to-ast [last l]]]
+          [if [is-odd [size l]]
+            [some [form-to-ast [last l]]]
+            [none]
+            ]]
 
         [word do]
         [wuns-exp/do [list-map arg [slice l 1 [size l]] [form-to-ast arg]]]
@@ -108,21 +111,21 @@
     [var word]
     [ternary js-exp js-exp js-exp]
     [call js-exp [list js-exp]]
+    [new js-exp [list js-exp]]
     [binop binop js-exp js-exp]
     [arrow-exp [list word] [option word] js-exp]
     [arrow-stmt [list word] [option word] [list js-stmt]]
   ]
 
-  js-switch-case  []
-  [record [exp js-exp] [stmt js-stmt]]
-
   js-stmt []
   [union
+    [break]
     [exp js-exp]
+    [throw js-exp]
     [return js-exp]
     [const-decl word js-exp]
     [if js-exp js-stmt js-stmt]
-    [switch js-exp [list js-switch-case] js-stmt]
+    [switch js-exp [list [pair js-exp js-stmt]] js-stmt]
     [block [list js-stmt]]
   ]
 ]
@@ -156,10 +159,13 @@
           [js-exp/number w]
 
           [wuns-exp/word w]
-          [js-exp/number w]
+          [js-exp/string w]
 
           [wuns-exp/if cond t f]
           [js-exp/ternary [cexp cond] [cexp t] [cexp f]]
+
+          [wuns-exp/func kind params opt-rest body]
+          [js-exp/arrow-exp params opt-rest [cexp body]]
 
           [wuns-exp/call f args]
           [match f
@@ -176,8 +182,9 @@
       [func cstmt [is-tail wexp]
         [match wexp
           [wuns-exp/if cond t f]
-          [let [ccond [cexp cond]]
-            [js-stmt/if ccond [cstmt is-tail t] [cstmt is-tail f]]]
+          [js-stmt/if [cexp cond]
+            [js-stmt/block [list [cstmt is-tail t]]]
+            [js-stmt/block [list [cstmt is-tail f]]]]
 
           [wuns-exp/do exps]
           [js-stmt/block
@@ -185,8 +192,21 @@
               [list-map f [slice exps 0 [dec [size exps]]] [cstmt 0 f]]
               [list [cstmt is-tail [last exps]]]]]
 
-          [wuns-exp/switch exp cases default]
-          [logq-abort cstmt not implemented switch]
+          [wuns-exp/switch exp cases opt-default]
+          [if is-tail
+            [js-stmt/switch
+              [cexp exp]
+              [list-map case cases
+                [pair
+                  [cexp [pair/fst case]]
+                  [cstmt is-tail [pair/snd case]]]]
+              [if-let [default-case opt-default]
+                [cstmt is-tail default-case]
+                [logq-abort cstmt switch without default]]]
+            [logq-abort cstmt not implemented switch]]
+
+          [wuns-exp/def w e]
+          [js-stmt/const-decl w [cexp e]]
 
           [if is-tail
             [js-stmt/return [cexp wexp]]
@@ -195,75 +215,3 @@
 
 [defn compile-top [form]
   [wuns-to-js [form-to-ast form]]]
-
-[comment
-[defn comp-top [outer-form]
-  [letrec
-    [comp-exp
-      [func comp-exp [form]
-        [match form
-          [form/word w]
-          [js-exp/var w]
-
-          [form/list l]
-          [match [first l]
-            [form/word fw]
-            [switch fw
-              [word i32]
-              [js-exp/number [form-to-word [second l]]]
-
-              [word f64]
-              [js-exp/number [form-to-word [second l]]]
-
-              [word word]
-              [js-exp/string [form-to-word [second l]]]
-
-              [logq-abort comp-exp not implemented]]
-
-            [form/list fl]
-            [match [first fl]
-              [form/word flfw]
-              [switch flfw
-                [word intrinsic]
-                [let [inst-name [form-to-word [second fl]]]
-                  [ifs
-                    [is-i32-bin-inst inst-name]
-                    [let-do [bop [instruction-name-to-binop inst-name]]
-                      [assert [eq 3 [size l]] [logq-abort comp-exp wrong number of arguments]]
-                      [js-bitwise-or-0 [js-exp/binop bop [comp-exp [second l]] [comp-exp [third l]]]]]
-
-                    [is-f64-bin-inst inst-name]
-                    [logq-abort comp-exp not implemented f64]
-
-                    [is-f64-comp-inst inst-name]
-                    [logq-abort comp-exp not implemented f64]
-
-                    [logq-abort comp-exp not implemented inst [second fl]]]]
-
-                [js-exp/call [comp-exp [first fl]] [list-map arg [slice l 1 [size l]] [comp-exp arg]]]]
-              [js-exp/call [comp-exp [first fl]] [list-map arg [slice l 1 [size l]] [comp-exp arg]]]]]]]
-
-        comp-stmt
-        [func comp-stmt [form]
-          [match form
-          [form/word w]
-          [js-stmt/exp [comp-exp w]]
-
-          [form/list l]
-          [match [first l]
-            [form/word fw]
-            [switch fw
-              [word switch]
-              [let [exp [comp-exp [second l]]]
-                [js-stmt/switch exp
-                  [list-map p [pairwise [slice 2 [dec [size l]]]]
-                    [js-switch-case [comp-exp [first p]] [comp-stmt [second p]]]]
-                  [comp-stmt [last l]]]]
-
-              [logq-abort comp-stmt not implemented]]
-
-            [form/list fl]
-            [logq-abort comp-stmt not implemented]]]]]
-    [comp-stmt outer-form]]]
-
-]

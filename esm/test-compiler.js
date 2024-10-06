@@ -1,6 +1,5 @@
 import fs from 'fs'
 import { parseToForms, evalForm, makeDefEnv } from './mini-lisp.js'
-import { compile, evalInst } from './compiler.js'
 
 const interpretForm = (form) => evalForm(makeDefEnv(), form)
 
@@ -20,19 +19,25 @@ const run = (f) => {
   console.log('assertsRun', assertsRun)
 }
 
-const compileEval = (form) => {
-  const inst = compile(form)
-  const resultStack = evalInst()(inst)
-  if (resultStack.length !== 1) {
-    console.log('expected 1 result')
-    console.log('actual', resultStack.length)
-    throw new Error('expected 1 result')
-  }
-  return resultStack[0]
-}
-
 console.log('interpret form directly')
 run(interpretForm)
 
-console.log('compile to instructions and evaluate')
-run(compileEval)
+// import { compile, evalInst } from './compiler.js'
+
+// const compileEval = (form) => {
+//   const inst = compile(form)
+//   const resultStack = evalInst()(inst)
+//   if (resultStack.length !== 1) {
+//     console.log('expected 1 result')
+//     console.log('actual', resultStack.length)
+//     throw new Error('expected 1 result')
+//   }
+//   return resultStack[0]
+// }
+
+// console.log('compile to instructions and evaluate')
+// run(compileEval)
+
+import { formToJs } from './compiler-js.js'
+
+run(formToJs)

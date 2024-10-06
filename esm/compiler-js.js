@@ -1,3 +1,4 @@
+import { print } from './core.js'
 import { makeDefEnv, readFile, evaluateForms, catchErrors, parseToForms } from './mini-lisp.js'
 
 const forms = [...readFile('../wuns/std.wuns'), ...readFile('../wuns/compile-js.wuns')]
@@ -6,37 +7,87 @@ const defEnv = makeDefEnv()
 
 evaluateForms(defEnv, forms)
 
-const testForm = [...parseToForms(`[[intrinsic i32.add] [i32 2] [i32 3]]`, 'test')][0]
-console.log(testForm)
-const res = defEnv.get('compile-top')(testForm)
 const jsBinopToString = (op) => {
   switch (op) {
-    case 'binop/add': return '+'
-    case 'binop/binary-ior': return '|'
-    default: throw new Error(`unknown op: ${op}`)
+    case 'binop/add':
+      return '+'
+    case 'binop/sub':
+      return '-'
+    case 'binop/mul':
+      return '*'
+    case 'binop/binary-ior':
+      return '|'
+    default:
+      throw new Error(`unknown op: ${op}`)
   }
 }
-const jsExpToString = (js) => {
-  const {tag, args} = js
-  switch (tag) {
-    case 'js-exp/number': return args[0]
-    case 'js-exp/string': return `'${args[0]}'`
-    case 'js-exp/binop': {
-      const op = jsBinopToString(args[0].tag)
-      return `(${jsExpToString(args[1])} ${op} ${jsExpToString(args[2])})`}
 
-    default: throw new Error(`unknown js tag: ${tag}`)
+const escapeIdentifier = (id) => {
+  return id.replace(/-/g, '_')
+}
+
+const jsExpToString = (js) => {
+  const { tag, args } = js
+  switch (tag) {
+    case 'js-exp/number':
+      return args[0]
+    case 'js-exp/string':
+      return `'${args[0]}'`
+    case 'js-exp/var':
+      return escapeIdentifier(args[0])
+    case 'js-exp/binop':
+      return `(${jsExpToString(args[1])} ${jsBinopToString(args[0].tag)} ${jsExpToString(args[2])})`
+    case 'js-exp/ternary':
+      return `(${jsExpToString(args[0])} ? ${jsExpToString(args[1])} : ${jsExpToString(args[2])})`
+    case 'js-exp/arrow-exp': {
+      const [params, optRest, body] = args
+      return `(${params.map(escapeIdentifier).join(', ')}) => ${jsExpToString(body)}`
+    }
+    case 'js-exp/call':
+      return `${jsExpToString(args[0])}(${args[1].map(jsExpToString).join(', ')})`
+    default:
+      throw new Error(`unknown js exp tag: ${tag}`)
   }
 }
 const jsStmtToString = (js) => {
-  const {tag, args} = js
+  const { tag, args } = js
   switch (tag) {
-    case 'js-stmt/return': return `return ${jsExpToString(args[0])}`
+    case 'js-stmt/return':
+      return `return ${jsExpToString(args[0])}`
+    case 'js-stmt/if':
+      return `if (${jsExpToString(args[0])}) ${jsStmtToString(args[1])} else ${jsStmtToString(args[2])}`
+    case 'js-stmt/switch': {
+      const [exp, cases, defaultCase] = args
+      const jsCases = [
+        ...cases.map((jsc) => `case ${jsExpToString(jsc.fst)}: ${jsStmtToString(jsc.snd)}`),
+        `default: ${jsStmtToString(defaultCase)}`,
+      ].join('\n')
+      return `switch (${jsExpToString(exp)}) {\n${jsCases}\n}`
+    }
+    case 'js-stmt/block':
+      return `{\n${args[0].map(jsStmtToString).join('\n')}\n}`
+    case 'js-stmt/const-decl':
+      return `const ${escapeIdentifier(args[0])} = ${jsExpToString(args[1])}`
 
-    default: throw new Error(`unknown js tag: ${tag}`)
+    default:
+      throw new Error(`unknown js stmt tag: ${tag}`)
   }
 }
-const jsSrc = jsStmtToString(res)
-console.log(jsSrc)
-const runFunc = new Function(jsSrc)
-console.log('res', runFunc())
+
+// const testForm = [...parseToForms(`[[intrinsic i32.add] [i32 2] [i32 3]]`, 'test')][0]
+// console.log(testForm)
+// const jsSrc = jsStmtToString(res)
+// console.log(jsSrc)
+// const runFunc = new Function(jsSrc)
+// console.log('res', runFunc())
+
+const compileTop = defEnv.get('compile-top')
+
+export const formToJs = (form) => {
+  const res = compileTop(form)
+  // console.log(print(res))
+  const jsSrc = jsStmtToString(res)
+  // console.log(jsSrc)
+  const runFunc = new Function(jsSrc)
+  return runFunc()
+}

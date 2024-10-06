@@ -8,6 +8,9 @@
 [[intrinsic i32.add] [i32 2] [i32 3]] [i32 5]
 [[intrinsic i32.sub] [i32 8] [i32 3]] [i32 5]
 
+[if [i32 0] [word zero] [word one]] [word one]
+[if [i32 1] [word zero] [word one]] [word zero]
+
 [switch [i32 0]
     [i32 0] [word zero]
     [i32 1] [word one]
@@ -20,9 +23,6 @@
     [i32 0] [word zero]
     [i32 1] [word one]
     [word not-01]] [word not-01]
-
-[if [i32 0] [word zero] [word one]] [word one]
-[if [i32 1] [word zero] [word one]] [word zero]
 
 [do
   [def x [i32 5]]
@@ -50,4 +50,3 @@
 [do
   [def func2p [func func2p [x y] [[intrinsic i32.sub] x y]]]
   [func2p [i32 8] [i32 3]]] [i32 5]
-
