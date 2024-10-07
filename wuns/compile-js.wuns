@@ -132,6 +132,13 @@
   ]
 ]
 
+[type js-value [] [union]]
+
+[def run-js-stmt
+  [type-anno
+    [extern js run-js-stmt]
+    [func [js-stmt] [js-value]]]]
+
 [defn block [.. stmts] [js-stmt/block stmts]]
 
 [def js-0 [js-exp/number [word 0]]]
@@ -225,3 +232,8 @@
 
 [defn compile-top [form]
   [wuns-to-js [form-to-ast form]]]
+
+[defn compile-run [form]
+  [run-js-stmt [compile-top form]]]
+
+compile-run

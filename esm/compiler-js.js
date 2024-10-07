@@ -1,9 +1,4 @@
 import { isJSReservedWord } from './utils.js'
-import { makeDefEnv, evaluateFile } from './mini-lisp.js'
-
-const defEnv = makeDefEnv('../wuns/')
-
-evaluateFile(defEnv, 'compile-js.wuns')
 
 const jsBinopToString = (op) => {
   switch (op) {
@@ -74,20 +69,16 @@ const jsStmtToString = (js) => {
   }
 }
 
-// const testForm = [...parseToForms(`[[intrinsic i32.add] [i32 2] [i32 3]]`, 'test')][0]
-// console.log(testForm)
-// const jsSrc = jsStmtToString(res)
-// console.log(jsSrc)
-// const runFunc = new Function(jsSrc)
-// console.log('res', runFunc())
-
-const compileTop = defEnv.get('compile-top')
-
-export const formToJs = (form) => {
-  const res = compileTop(form)
-  // console.log(print(res))
+const runJsStmt = (res) => {
   const jsSrc = jsStmtToString(res)
-  // console.log(jsSrc)
   const runFunc = new Function(jsSrc)
   return runFunc()
 }
+
+import { makeDefEnv, evaluateFile } from './mini-lisp.js'
+
+const defEnv = makeDefEnv('../wuns/', { js: { 'run-js-stmt': runJsStmt } })
+
+const formToJs = evaluateFile(defEnv, 'compile-js.wuns')
+
+export { formToJs }

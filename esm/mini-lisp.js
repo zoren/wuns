@@ -1,9 +1,20 @@
-export const makeDefEnv = (currentDir) => {
+import { jsHost } from './host-js.js'
+const { host } = jsHost
+
+const externs = {
+  host,
+
+  'performance-now': () => performance.now(),
+}
+
+export const makeDefEnv = (currentDir, additionalExterns) => {
   const defMap = new Map()
   if (currentDir) {
     if (typeof currentDir !== 'string') throw new Error('currentDir must be a string')
     defMap['currentDir'] = currentDir
   }
+  additionalExterns = additionalExterns || {}
+  defMap.externs = { ...externs, ...additionalExterns }
   return defMap
 }
 const makeEnv = (outer) => {
@@ -48,23 +59,16 @@ const setParametersStaged = (closure) => {
 }
 
 class Closure extends Function {
-  constructor(env, name, parameters, body, kind) {
-    let paramEnvMaker
-    const f = (...args) => evalForm(paramEnvMaker(args), body)
-    f.env = env
-    f.closureName = name
-    f.parameters = parameters
-    f.body = body
+  constructor(f, kind, paramEnvMaker, body) {
     f.kind = kind
-    f.toString = () => `[closure ${name} ${parameters.join(' ')}]`
-    paramEnvMaker = setParametersStaged(f)
     f.paramEnvMaker = paramEnvMaker
+    f.body = body
     // https://stackoverflow.com/questions/36871299/how-to-extend-function-with-es6-classes
     return Object.setPrototypeOf(f, new.target.prototype)
   }
 }
 
-const makeClosure = (env, name, parameters, body, kind) => Object.freeze(new Closure(env, name, parameters, body, kind))
+const makeClosure = (f, kind, paramEnvMaker, body) => Object.freeze(new Closure(f, kind, paramEnvMaker, body))
 export const isClosure = (v) => v instanceof Closure
 import {
   tryGetFormWord,
@@ -125,9 +129,6 @@ const assertFormDeep = (form) => {
   go(form)
 }
 
-import { jsHost } from './host-js.js'
-const { host } = jsHost
-
 import { instructionFunctions } from './instructions.js'
 import { wrapJSFunctionsToObject } from './utils.js'
 import fs from 'node:fs'
@@ -136,11 +137,6 @@ import { parse } from './parseTreeSitter.js'
 
 const instructions = wrapJSFunctionsToObject(instructionFunctions)
 const intrinsics = instructions
-const externs = {
-  host,
-
-  'performance-now': () => performance.now(),
-}
 
 /**
  * @param {TSParser.Tree} tree
@@ -223,6 +219,8 @@ const getPathRelativeToCurrentDir = (defEnv, relativeFilePath) => {
 }
 
 export const evalForm = (defEnv, topForm) => {
+  if (!(defEnv instanceof Map)) throw new Error('defEnv must be a Map')
+  if (defEnv.externs === undefined) throw new Error('defEnv.externs must be defined')
   const go = (env, form) => {
     const evalError = (message, innerError) => new EvalError(message, form, innerError)
     while (true) {
@@ -265,7 +263,10 @@ export const evalForm = (defEnv, topForm) => {
           return form
         }
         case 'extern': {
-          let ext = externs
+          let ext = defEnv.externs
+          if (!ext) {
+            throw evalError('no externs defined in defEnv: ' + [...defEnv.keys()].join(' '))
+          }
           for (let i = 1; i < forms.length; i++) {
             const prop = getFormWord(forms[i])
             const extProp = ext[prop]
@@ -292,7 +293,31 @@ export const evalForm = (defEnv, topForm) => {
           const name = getFormWord(forms[1])
           const parameters = getFormList(forms[2]).map(getFormWord)
           const body = forms[3]
-          return makeClosure(env, name, parameters, body, firstWord)
+          const { regularParameters, restParam } = parseParameters(parameters)
+          let closure
+          const paramEnvMaker = restParam
+            ? (eargs) => {
+                const paramEnv = makeEnv(env)
+                setEnv(paramEnv, name, closure)
+                if (eargs.length < regularParameters.length)
+                  throw new EvalError(
+                    `${name} expected at least ${regularParameters.length} arguments, got ${eargs.length}`,
+                  )
+                for (let i = 0; i < regularParameters.length; i++) setEnv(paramEnv, regularParameters[i], eargs[i])
+                setEnv(paramEnv, restParam, list(...eargs.slice(regularParameters.length)))
+                return paramEnv
+              }
+            : (eargs) => {
+                const paramEnv = makeEnv(env)
+                setEnv(paramEnv, name, closure)
+                if (eargs.length !== regularParameters.length)
+                  throw new EvalError(`${name} expected ${regularParameters.length} arguments, got ${eargs.length}`)
+                for (let i = 0; i < regularParameters.length; i++) setEnv(paramEnv, regularParameters[i], eargs[i])
+                return paramEnv
+              }
+          const f = (...args) => go(paramEnvMaker(args), body)
+          closure = makeClosure(f, firstWord, paramEnvMaker, body)
+          return closure
         }
         case 'atom': {
           assertNumArgs(1)
@@ -602,4 +627,3 @@ externs.interpreter = {
   },
 }
 Object.freeze(externs.interpreter)
-Object.freeze(externs)
