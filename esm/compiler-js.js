@@ -1,4 +1,5 @@
 import { print } from './core.js'
+import { isJSReservedWord } from './utils.js'
 import { makeDefEnv, readFile, evaluateForms, catchErrors, parseToForms } from './mini-lisp.js'
 
 const forms = [...readFile('../wuns/std.wuns'), ...readFile('../wuns/compile-js.wuns')]
@@ -22,9 +23,7 @@ const jsBinopToString = (op) => {
   }
 }
 
-const escapeIdentifier = (id) => {
-  return id.replace(/-/g, '_')
-}
+const escapeIdentifier = (id) => (isJSReservedWord(id) ? '_' : '') + id.replace(/-/g, '_')
 
 const jsExpToString = (js) => {
   const { tag, args } = js
