@@ -31,11 +31,11 @@ const jsExpToString = (js) => {
     case 'js-exp/ternary':
       return `(${jsExpToString(args[0])} ? ${jsExpToString(args[1])} : ${jsExpToString(args[2])})`
     case 'js-exp/arrow-exp': {
-      const [params, optRest, body] = args
+      const [params, body] = args
       return `(${params.map(escapeIdentifier).join(', ')}) => ${jsExpToString(body)}`
     }
     case 'js-exp/arrow-stmt': {
-      const [params, optRest, body] = args
+      const [params, body] = args
       return `(${params.map(escapeIdentifier).join(', ')}) => ${jsStmtToString(body)}`
     }
     case 'js-exp/call':

@@ -115,8 +115,8 @@
     [call js-exp [list js-exp]]
     [new js-exp [list js-exp]]
     [binop binop js-exp js-exp]
-    [arrow-exp [list word] [option word] js-exp]
-    [arrow-stmt [list word] [option word] js-stmt]
+    [arrow-exp [list word] js-exp]
+    [arrow-stmt [list word] js-stmt]
   ]
 
   js-stmt []
@@ -178,10 +178,13 @@
 
           [wuns/func kind name params opt-rest body]
           [js-exp/call
-            [js-exp/arrow-stmt [list] [none]
+            [js-exp/arrow-stmt [list]
               [block
                 [js-stmt/const-decl name
-                  [js-exp/arrow-exp params opt-rest [cexp body]]]
+                  [js-exp/arrow-exp
+                    [if-let [rest opt-rest]
+                      [concat params [list [concat-words [word ...] rest]]]
+                      params] [cexp body]]]
                 [js-stmt/return [js-exp/var name]]]]
             [list]]
 
