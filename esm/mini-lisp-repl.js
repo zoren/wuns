@@ -17,7 +17,7 @@ const specialForms = [
   '..',
 ]
 
-const defEnv = makeDefEnv()
+const defEnv = makeDefEnv(process.cwd())
 
 const getCompletions = (prefix) => {
   const completions = []

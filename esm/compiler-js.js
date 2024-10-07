@@ -1,12 +1,9 @@
-import { print } from './core.js'
 import { isJSReservedWord } from './utils.js'
-import { makeDefEnv, readFile, evaluateForms, catchErrors, parseToForms } from './mini-lisp.js'
+import { makeDefEnv, evaluateFile } from './mini-lisp.js'
 
-const forms = [...readFile('../wuns/std.wuns'), ...readFile('../wuns/compile-js.wuns')]
+const defEnv = makeDefEnv('../wuns/')
 
-const defEnv = makeDefEnv()
-
-evaluateForms(defEnv, forms)
+evaluateFile(defEnv, 'compile-js.wuns')
 
 const jsBinopToString = (op) => {
   switch (op) {

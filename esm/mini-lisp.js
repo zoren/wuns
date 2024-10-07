@@ -1,4 +1,11 @@
-export const makeDefEnv = () => new Map()
+export const makeDefEnv = (currentDir) => {
+  const defMap = new Map()
+  if (currentDir) {
+    if (typeof currentDir !== 'string') throw new Error('currentDir must be a string')
+    defMap['currentDir'] = currentDir
+  }
+  return defMap
+}
 const makeEnv = (outer) => {
   if (!(outer instanceof Map)) throw new Error('makeEnv expects a Map')
   const env = new Map()
@@ -71,6 +78,7 @@ import {
   formList,
   emptyList,
 } from './core.js'
+import path from 'node:path'
 
 const printForm = (form) => {
   const word = tryGetFormWord(form)
@@ -207,6 +215,12 @@ export const parseToForms = (content, contentName) => treeToForms(parse(content)
 export const readFile = (filePath) => parseToForms(fs.readFileSync(filePath, 'ascii'), filePath)
 
 export const isSpecialFormPrimitiveConstant = (word) => word === 'i32' || word === 'f64' || word === 'word'
+
+const getPathRelativeToCurrentDir = (defEnv, relativeFilePath) => {
+  const { currentDir } = defEnv
+  if (!currentDir) throw new Error('load expects currentDir')
+  return path.join(currentDir, relativeFilePath)
+}
 
 export const evalForm = (defEnv, topForm) => {
   const go = (env, form) => {
@@ -380,10 +394,8 @@ export const evalForm = (defEnv, topForm) => {
           const newEnv = makeEnv(env)
           try {
             const values = []
-            for (let i = 0; i < bindings.length - 1; i += 2)
-              values.push(go(newEnv, bindings[i + 1]))
-            for (let i = 0; i < bindings.length - 1; i += 2)
-              setEnv(newEnv, getFormWord(bindings[i]), values[i / 2])
+            for (let i = 0; i < bindings.length - 1; i += 2) values.push(go(newEnv, bindings[i + 1]))
+            for (let i = 0; i < bindings.length - 1; i += 2) setEnv(newEnv, getFormWord(bindings[i]), values[i / 2])
           } catch (e) {
             throw evalError('error in let bindings', e)
           }
@@ -452,6 +464,16 @@ export const evalForm = (defEnv, topForm) => {
           form = forms[1]
           continue
         }
+        case 'load': {
+          assertNumArgs(1)
+          const relativeFilePath = getFormWord(forms[1])
+          const resolvedPath = getPathRelativeToCurrentDir(defEnv, relativeFilePath)
+          const fileForms = [...readFile(resolvedPath)]
+          console.log('loaded', resolvedPath, fileForms.length)
+          let result = langUndefined
+          for (const fileForm of fileForms) result = evalForm(defEnv, fileForm)
+          return result
+        }
       }
       const func = go(env, firstForm)
       const args = forms.slice(1)
@@ -493,6 +515,16 @@ export const evaluateForms = (defEnv, forms) => {
   let result = langUndefined
   for (const form of forms) result = evalForm(defEnv, form)
   return result
+}
+
+export const readFileInCurrentDir = (defEnv, relativeFilePath) => {
+  const resolvedPath = getPathRelativeToCurrentDir(defEnv, relativeFilePath)
+  return readFile(resolvedPath)
+}
+
+export const evaluateFile = (defEnv, relativeFilePath) => {
+  const resolvedPath = getPathRelativeToCurrentDir(defEnv, relativeFilePath)
+  return evaluateForms(defEnv, readFile(resolvedPath))
 }
 
 import { print } from './core.js'

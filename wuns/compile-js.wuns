@@ -1,3 +1,5 @@
+[load std.wuns]
+
 [type wuns-func-kind [] [union [func] [fexpr] [macro]]]
 
 [type wuns-exp []

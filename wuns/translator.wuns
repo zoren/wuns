@@ -1,3 +1,5 @@
+[load std.wuns]
+
 [type function-kind []
   [union
     [ctor]
@@ -215,6 +217,8 @@
                       [go [at type-args1 i] [at type-args2 i]]]
                     [push-unify-error [quote [not unifiable - different number of type arguments]]]]
                   [do
+                    [log inst-type1]
+                    [log inst-type2]
                     [push-unify-error [quote [not unifiable - different types]]]]]
 
                 [do
@@ -287,6 +291,8 @@
   [let [form [first forms]
         errors [unify t1 t2]]
     [for-each error errors
+      [logq error]
+      [log form]
       [report-fn gctx [form/list error] form]]]]
 
 [defn int-to-type-var-name [i]
@@ -609,6 +615,11 @@
           [set-kv-map form-expansions form expanded]
           [some expanded]]
         [none]]]]]
+
+[def evaluate
+  [type-anno
+    [extern interpreter evaluate]
+    [func [evaluation-context form] [tuple]]]]
 
 [defn check [gctx level lctx form]
   [match form
@@ -958,7 +969,8 @@
             [report form expects 1 argument]
             [when-let [file-word [try-get-word-report gctx [second sub-forms]]]
               [for-each form [read-file file-word]
-                [check gctx level lctx form]]]]
+                [evaluate [check-context/eval-context gctx] form]
+                [check gctx 0 [none] form]]]]
           type-empty-tuple]
 
         [if-let [expanded-form [try-expand-form gctx form]]
@@ -1062,11 +1074,6 @@
       [flist [quote type-scheme]
         [form-list new-present-type-vars]
         [internal-to-present-type copied-type]]]]]
-
-[def evaluate
-  [type-anno
-    [extern interpreter evaluate]
-    [func [evaluation-context form] [tuple]]]]
 
 [defn check-top [gctx form]
   [evaluate [check-context/eval-context gctx] form]
@@ -1539,7 +1546,6 @@
 
 [defn test-ok-fn-stop-at-error [gctx forms]
   [for-each form forms
-    [evaluate [check-context/eval-context gctx] form]
     [check-top gctx form]
     [let [messages [get-messages-list gctx]]
       [when-not [is-empty messages]
