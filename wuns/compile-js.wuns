@@ -2,21 +2,21 @@
 
 [type wuns-func-kind [] [union [func] [fexpr] [macro]]]
 
-[type wuns-exp []
+[type wuns []
   [union
     [var word]
     [i32 word]
     [f64 word]
     [word word]
     [intrinsic word]
-    [if wuns-exp wuns-exp wuns-exp]
-    [switch wuns-exp [list [pair wuns-exp wuns-exp]] [option wuns-exp]]
-    [do [list wuns-exp]]
-    [let [list [pair word wuns-exp]] wuns-exp]
-    [letrec [list [pair word wuns-exp]] wuns-exp]
-    [def word wuns-exp]
-    [func wuns-func-kind word [list word] [option word] wuns-exp]
-    [call wuns-exp [list wuns-exp]]
+    [if wuns wuns wuns]
+    [switch wuns [list [pair wuns wuns]] [option wuns]]
+    [do [list wuns]]
+    [let [list [pair word wuns]] wuns]
+    [letrec [list [pair word wuns]] wuns]
+    [def word wuns]
+    [func wuns-func-kind word [list word] [option word] wuns]
+    [call wuns [list wuns]]
     ]]
 
 [defn parse-param-words [param-words]
@@ -28,29 +28,29 @@
 [defn form-to-ast [form]
   [match form
     [form/word w]
-    [wuns-exp/var w]
+    [wuns/var w]
 
     [form/list l]
     [match [first l]
       [form/word fw]
       [switch fw
         [word i32]
-        [wuns-exp/i32 [form-to-word [second l]]]
+        [wuns/i32 [form-to-word [second l]]]
 
         [word f64]
-        [wuns-exp/f64 [form-to-word [second l]]]
+        [wuns/f64 [form-to-word [second l]]]
 
         [word word]
-        [wuns-exp/word [form-to-word [second l]]]
+        [wuns/word [form-to-word [second l]]]
 
         [word intrinsic]
-        [wuns-exp/intrinsic [form-to-word [second l]]]
+        [wuns/intrinsic [form-to-word [second l]]]
 
         [word if]
-        [wuns-exp/if [form-to-ast [second l]] [form-to-ast [third l]] [form-to-ast [fourth l]]]
+        [wuns/if [form-to-ast [second l]] [form-to-ast [third l]] [form-to-ast [fourth l]]]
 
         [word switch]
-        [wuns-exp/switch
+        [wuns/switch
           [form-to-ast [second l]]
           [list-map p [pairwise [slice l 2 [dec [size l]]]] [pair [form-to-ast [first p]] [form-to-ast [second p]]]]
           [if [is-odd [size l]]
@@ -58,26 +58,26 @@
             [none]]]
 
         [word do]
-        [wuns-exp/do [list-map arg [slice l 1 [size l]] [form-to-ast arg]]]
+        [wuns/do [list-map arg [slice l 1 [size l]] [form-to-ast arg]]]
 
         [word let]
-        [wuns-exp/let
+        [wuns/let
           [list-map p [pairwise [slice l 1 [dec [size l]]]] [pair [form-to-word [first p]] [form-to-ast [second p]]]]
           [form-to-ast [last l]]]
 
         [word letrec]
-        [wuns-exp/letrec
+        [wuns/letrec
           [list-map p [pairwise [slice l 1 [dec [size l]]]] [pair [form-to-word [first p]] [form-to-ast [second p]]]]
           [form-to-ast [last l]]]
 
         [word def]
-        [wuns-exp/def [form-to-word [second l]] [form-to-ast [third l]]]
+        [wuns/def [form-to-word [second l]] [form-to-ast [third l]]]
 
         [word func]
         [let [name [form-to-word [second l]]
               parsed-params [parse-param-words [list-map p [form-to-list [third l]] [form-to-word p]]]
               body-form [fourth l]]
-            [wuns-exp/func
+            [wuns/func
               [wuns-func-kind/func]
               name
               [pair/fst parsed-params]
@@ -90,10 +90,10 @@
         [word macro]
         [logq-abort form-to-ast not implemented macro]
 
-        [wuns-exp/call [form-to-ast [first l]] [list-map arg [slice l 1 [size l]] [form-to-ast arg]]]]
+        [wuns/call [form-to-ast [first l]] [list-map arg [slice l 1 [size l]] [form-to-ast arg]]]]
 
       [form/list fl]
-      [wuns-exp/call [form-to-ast [first l]] [list-map arg [slice l 1 [size l]] [form-to-ast arg]]]]]]
+      [wuns/call [form-to-ast [first l]] [list-map arg [slice l 1 [size l]] [form-to-ast arg]]]]]]
 
 [type binop []
   [union
@@ -160,22 +160,22 @@
     [cexp
       [func cexp [wexp]
         [match wexp
-          [wuns-exp/var w]
+          [wuns/var w]
           [js-exp/var w]
 
-          [wuns-exp/i32 w]
+          [wuns/i32 w]
           [js-exp/number w]
 
-          [wuns-exp/f64 w]
+          [wuns/f64 w]
           [js-exp/number w]
 
-          [wuns-exp/word w]
+          [wuns/word w]
           [js-exp/string w]
 
-          [wuns-exp/if cond t f]
+          [wuns/if cond t f]
           [js-exp/ternary [cexp cond] [cexp t] [cexp f]]
 
-          [wuns-exp/func kind name params opt-rest body]
+          [wuns/func kind name params opt-rest body]
           [js-exp/call
             [js-exp/arrow-stmt [list] [none]
               [block
@@ -184,9 +184,9 @@
                 [js-stmt/return [js-exp/var name]]]]
             [list]]
 
-          [wuns-exp/call f args]
+          [wuns/call f args]
           [match f
-            [wuns-exp/intrinsic w]
+            [wuns/intrinsic w]
             [js-exp/binop
               [instruction-name-to-binop w]
               [cexp [first args]]
@@ -198,18 +198,18 @@
      cstmt
       [func cstmt [is-tail wexp]
         [match wexp
-          [wuns-exp/if cond t f]
+          [wuns/if cond t f]
           [js-stmt/if [cexp cond]
             [block [cstmt is-tail t]]
             [block [cstmt is-tail f]]]
 
-          [wuns-exp/do exps]
+          [wuns/do exps]
           [js-stmt/block
             [concat
               [list-map f [slice exps 0 [dec [size exps]]] [cstmt 0 f]]
               [list [cstmt is-tail [last exps]]]]]
 
-          [wuns-exp/switch exp cases opt-default]
+          [wuns/switch exp cases opt-default]
           [if is-tail
             [js-stmt/switch
               [cexp exp]
@@ -222,7 +222,7 @@
                 [logq-abort cstmt switch without default]]]
             [logq-abort cstmt not implemented switch]]
 
-          [wuns-exp/def w e]
+          [wuns/def w e]
           [js-stmt/const-decl w [cexp e]]
 
           [if is-tail
