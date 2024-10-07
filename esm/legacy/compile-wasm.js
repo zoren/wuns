@@ -1,9 +1,9 @@
 import path from 'node:path'
 import fs from 'node:fs'
 
-import { parseStringToForms } from './parseTreeSitter.js'
+import { parseStringToForms } from '../parseTreeSitter.js'
 import { makeContext } from './interpreter.js'
-import { meta, print } from './core.js'
+import { meta, print } from '../core.js'
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname)
 const wunsDir = path.resolve(__dirname, '..', 'wuns') + '/'

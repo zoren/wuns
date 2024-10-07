@@ -1,6 +1,6 @@
 import fs from 'fs'
-import { isJSReservedWord, createNamedFunction, wrapJSFunction, wrapJSFunctionsToObject } from './utils.js'
-import { parse } from './parseTreeSitter.js'
+import { isJSReservedWord, createNamedFunction, wrapJSFunction, wrapJSFunctionsToObject } from '../utils.js'
+import { parse } from '../parseTreeSitter.js'
 
 class RuntimeError extends Error {
   constructor(message, form, innerError) {
@@ -486,7 +486,7 @@ export const runCform = (exp) => {
   }
 }
 
-import { instructionFunctions } from './instructions.js'
+import { instructionFunctions } from '../instructions.js'
 
 const instructions = wrapJSFunctionsToObject(instructionFunctions)
 

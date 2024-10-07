@@ -1,5 +1,5 @@
 import fs from 'fs'
-import { parse } from './parseTreeSitter.js'
+import { parse } from '../parseTreeSitter.js'
 
 class RuntimeError extends Error {
   constructor(message, form, innerError) {
@@ -467,7 +467,7 @@ export const runCform = (exp) => {
   }
 }
 
-import { instructionFunctions } from './instructions.js'
+import { instructionFunctions } from '../instructions.js'
 
 const instructions = Object.fromEntries(instructionFunctions.map((f) => [f.name, f]))
 
@@ -560,7 +560,7 @@ export const makeInitContext = ({ host, converters }) => {
 import * as readline from 'node:readline'
 import { stdin, nextTick, stdout } from 'node:process'
 // import { makeHost } from './host-simulated-mem.js'
-import { jsHost } from './host-js.js'
+import { jsHost } from '../host-js.js'
 
 const host = jsHost
 // const host = makeHost()

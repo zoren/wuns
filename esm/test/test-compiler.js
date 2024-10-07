@@ -1,5 +1,5 @@
 import fs from 'fs'
-import { parseToForms, evalForm, makeDefEnv } from './mini-lisp.js'
+import { parseToForms, evalForm, makeDefEnv } from '../mini-lisp.js'
 
 const interpretForm = (form) => evalForm(makeDefEnv(), form)
 
@@ -38,6 +38,6 @@ run(interpretForm)
 // console.log('compile to instructions and evaluate')
 // run(compileEval)
 
-import { formToJs } from './compiler-js.js'
+import { formToJs } from '../compiler-js.js'
 
 run(formToJs)

@@ -1,4 +1,4 @@
-import { wrapJSFunctionName } from './utils.js'
+import { wrapJSFunctionName } from '../utils.js'
 
 export const makeHost = () => {
   const simulatedMemory = ['this placeholder is to make 0 an invalid address']

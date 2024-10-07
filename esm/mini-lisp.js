@@ -495,6 +495,8 @@ export const evaluateForms = (defEnv, forms) => {
   return result
 }
 
+import { print } from './core.js'
+
 export const catchErrors = (f) => {
   try {
     return f()
@@ -502,15 +504,15 @@ export const catchErrors = (f) => {
     console.log('catchErrors', e.message, e.form, e.innerError ? 'has inner' : '')
     let curErr = e
     while (curErr) {
-      const dumpFormMeta = (form) => {
-        const word = tryGetFormWord(form)
-        if (word) return `'${word}' ${meta(form)}`
-        const list = tryGetFormList(form)
-        if (list) return `[${list.map(dumpFormMeta).join(' ')} ${meta(form)}]`
-        console.log('form was', form)
-        return '???'
-      }
-      console.error(curErr.message, dumpFormMeta(curErr.form))
+      // const dumpFormMeta = (form) => {
+      //   const word = tryGetFormWord(form)
+      //   if (word) return `'${word}' ${meta(form)}`
+      //   // const list = tryGetFormList(form)
+      //   // if (list) return `[${list.map(dumpFormMeta).join(' ')} ${meta(form)}]`
+      //   // console.log('form was', form)
+      //   // return '???'
+      // }
+      console.error(curErr.message, print(curErr.form))
       curErr = curErr.innerError
     }
   }

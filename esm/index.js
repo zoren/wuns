@@ -1,9 +1,7 @@
-import { makeHost } from './host-simulated-mem.js'
 import { jsHost } from './host-js.js'
 import { makeInitContext } from './interpreter.js'
 
 const host = jsHost
-// const host = makeHost()
 
 const { parseEvalFiles, parseStringToForms, evalLogForms } = makeInitContext(host)
 const commandLineArgs = process.argv.slice(2)

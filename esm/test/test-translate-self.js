@@ -73,7 +73,7 @@ if (false) {
     }
   }
 }
-import { parseFile } from './parseTreeSitter.js'
+import { parseFile } from '../parseTreeSitter.js'
 const wordBytesToString = (wordBytes) => textDecoder.decode(Uint8Array.from(wordBytes, (v) => +v))
 const ctx = makeInitContext()
 const { compile, defVars } = ctx
@@ -93,7 +93,7 @@ insertFunc('byte-array', (buffer, byteOffset, length) => new Uint8Array(buffer, 
 insertFunc('log-byte-array', (bytes) => {
   console.log(textDecoder.decode(bytes))
 })
-import { isWord, isList, wordValue, makeList, stringToWord, print } from './core.js'
+import { isWord, isList, wordValue, makeList, stringToWord, print } from '../core.js'
 // const formToString = (x) => {
 //   if (isWord(x)) return wordValue(x)
 //   if (isList(x)) return `[${x.map(formToString).join(' ')}]`
