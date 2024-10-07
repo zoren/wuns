@@ -413,7 +413,7 @@
 
 [defn try-get-form-word-option [form]
   [match form
-    [form-word w] [some w]
+    [form/word w] [some w]
     [none]]]
 
 [defn check-type-arity [gctx type-name n-of-given-type-args]
@@ -743,7 +743,7 @@
             [let [pattern [at sub-forms i]
                   branch [at sub-forms [inc i]]]
               [match pattern
-                [form-list pattern-list]
+                [form/list pattern-list]
                 [if [is-empty pattern-list]
                   [report pattern expects a non-empty list]
                   [let-do
@@ -782,7 +782,7 @@
             [let [case-const [at sub-forms i]
                   branch [at sub-forms [inc i]]]
               [match case-const
-                [form-list case-const-list]
+                [form/list case-const-list]
                 [do
                   [if [is-empty case-const-list]
                     [report case-const expects a non-empty list]
@@ -1015,7 +1015,7 @@
       [let-do [kind [get-type-var-kind tv]]
         [match kind
           [type-var-kind/linked lt] [logq-abort internal-to-present-type expected a non-linked type var]
-          [type-var-kind/word w] [form-word w]]]
+          [type-var-kind/word w] [form/word w]]]
 
       [type/inst inst-type]
       [match inst-type
@@ -1023,7 +1023,7 @@
         [flist [quote func]
           [if-let [rest-type [func-type/rest-param-opt ft]]
             [form-concat [list-map type [func-type/params ft] [internal-to-present-type type]] [list [quote ..] [internal-to-present-type rest-type]]]
-            [form-list [list-map type [func-type/params ft] [internal-to-present-type type]]]]
+            [form/list [list-map type [func-type/params ft] [internal-to-present-type type]]]]
           [internal-to-present-type [func-type/result ft]]]
 
         [inst-type/apply type-name type-args]
@@ -1032,9 +1032,9 @@
           [let [n-of-args [size type-args]]
             [if n-of-args
               [form-concat
-                [list [form-word type-name]]
+                [list [form/word type-name]]
                 [list-map ta [slice type-args 0 n-of-args] [internal-to-present-type ta]]]
-              [form-word type-name]]]]]]]]
+              [form/word type-name]]]]]]]]
 
 [defn normalize-deep [internal-type]
   [let-do [nt [normalize-type internal-type]]
@@ -1068,11 +1068,11 @@
           [let-do [kind [get-type-var-kind tv]]
             [match kind
               [type-var-kind/linked lt] [logq-abort internal-to-present-type expected a non-linked type var]
-              [type-var-kind/word w] [form-word w]]]]]
+              [type-var-kind/word w] [form/word w]]]]]
     [if [is-empty new-present-type-vars]
       [internal-to-present-type copied-type]
       [flist [quote type-scheme]
-        [form-list new-present-type-vars]
+        [form/list new-present-type-vars]
         [internal-to-present-type copied-type]]]]]
 
 [defn check-top [gctx form]

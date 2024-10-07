@@ -4,15 +4,12 @@
     [word word]
     [list [list form]]]]
 
-[def form-word form/word]
-[def form-list form/list]
-
-[def flist [func flist [.. elements] [form-list elements]]]
+[def flist [func flist [.. elements] [form/list elements]]]
 
 [def defmacro
   [macro defmacro [name params .. bodies]
     [flist [quote def] name
-      [flist [quote macro] name params [form-list [[extern host concat] [list [quote do]] bodies]]]]]]
+      [flist [quote macro] name params [form/list [[extern host concat] [list [quote do]] bodies]]]]]]
 
 [defmacro def-extern [name type]
   [flist [quote def] name
@@ -25,18 +22,18 @@
 [def-extern concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]
 
 [defmacro let-do [bindings .. forms]
-  [flist [quote let] bindings [form-list [concat [list [quote do]] forms]]]]
+  [flist [quote let] bindings [form/list [concat [list [quote do]] forms]]]]
 
 [defmacro defn [name params .. bodies]
-  [flist [quote def] name [flist [quote func] name params [form-list [concat [list [quote do]] bodies]]]]]
+  [flist [quote def] name [flist [quote func] name params [form/list [concat [list [quote do]] bodies]]]]]
 
 [defmacro defexpr [name params .. bodies]
-  [flist [quote def] name [flist [quote fexpr] name params [form-list [concat [list [quote do]] bodies]]]]]
+  [flist [quote def] name [flist [quote fexpr] name params [form/list [concat [list [quote do]] bodies]]]]]
 
 [def-extern concat-lists [type-scheme [a] [func [[list [list a]]] [list a]]]]
 
 [defn form-concat [.. list-forms]
-  [form-list [concat-lists list-forms]]]
+  [form/list [concat-lists list-forms]]]
 
 [defn mk-quote [form] [flist [quote quote] form]]
 
@@ -61,10 +58,10 @@
 
 [defn form-to-word [form]
   [match form
-    [form-word w] w
+    [form/word w] w
     [unreachable]]]
 
-[defmacro def-bin-i32-inst [name] [def-instruction-fn name [form-word [concat-words [word i32.] [form-to-word name]]]]]
+[defmacro def-bin-i32-inst [name] [def-instruction-fn name [form/word [concat-words [word i32.] [form-to-word name]]]]]
 
 [def-bin-i32-inst add]
 [comment maybe introduce booleans instead of i32s for comparisons]
@@ -132,7 +129,7 @@
 [type mutable-list [a]
   [union]]
 
-[defn is-word [form] [match form [form-word x] 1 0]]
+[defn is-word [form] [match form [form/word x] 1 0]]
 
 [def-extern list-init-func [type-scheme [a] [func [i32 [func [i32] a]] [list a]]]]
 
@@ -142,7 +139,7 @@
 [def-extern list-reverse [type-scheme [a] [func [[list a]] [list a]]]]
 
 [defn quote-list [lmsg]
-  [form-list
+  [form/list
     [concat
       [list [quote list]]
       [list-map-fn
@@ -218,7 +215,7 @@
 [def-extern int-to-word [func [i32] word]]
 
 [defn i32-to-form [i]
-  [flist [quote i32] [form-word [int-to-word i]]]]
+  [flist [quote i32] [form/word [int-to-word i]]]]
 
 [def-extern char-code-at [func [word i32] i32]]
 
@@ -233,7 +230,7 @@
 [def-extern word-byte-size [func [word] i32]]
 
 [defn genword []
-  [form-word [concat-words [word genword] [int-to-word [inc-atom word-counter]]]]]
+  [form/word [concat-words [word genword] [int-to-word [inc-atom word-counter]]]]]
 
 [defmacro or [.. clauses]
   [let [s [size clauses]]
@@ -252,14 +249,14 @@
 
 [defn form-to-list [form]
   [match form
-    [form-list l] l
+    [form/list l] l
     [do
       [log [quote [form-to-list requires a list as its argument]] form]
       [unreachable]]]]
 
 [defn is-list [form]
   [match form
-    [form-list l] 1
+    [form/list l] 1
     0]]
 
 [type option [a]
@@ -272,7 +269,7 @@
 
 [defmacro if-let [binding-form true-form false-form]
   [match binding-form
-    [form-list binding]
+    [form/list binding]
     [do
       [assert [eq 2 [size binding]] if-let bindings should have exactly two elements]
       [let-do [v [first binding] cond [second binding]]
@@ -285,7 +282,7 @@
 
 [defmacro when-let [binding-form .. forms]
   [match binding-form
-    [form-list binding]
+    [form/list binding]
     [do
       [assert [eq 2 [size binding]] when-let bindings should have exactly two elements]
       [let-do [v [first binding] cond [second binding]]
@@ -309,9 +306,9 @@
 
 [defn eq-form-word [fa fb]
   [match fa
-    [form-word wa]
+    [form/word wa]
     [match fb
-      [form-word wb] [eq-word wa wb]
+      [form/word wb] [eq-word wa wb]
       0]
     0]]
 
