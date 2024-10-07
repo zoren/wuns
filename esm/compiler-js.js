@@ -61,6 +61,8 @@ const jsStmtToString = (js) => {
     }
     case 'js-stmt/block':
       return `{\n${args[0].map(jsStmtToString).join('\n')}\n}`
+    case 'js-stmt/seq':
+      return args[0].map(jsStmtToString).join('\n')
     case 'js-stmt/const-decl':
       return `const ${escapeIdentifier(args[0])} = ${jsExpToString(args[1])}`
 
@@ -79,6 +81,7 @@ import { makeDefEnv, evaluateFile } from './mini-lisp.js'
 
 const defEnv = makeDefEnv('../wuns/', { js: { 'run-js-stmt': runJsStmt } })
 
-const formToJs = evaluateFile(defEnv, 'compile-js.wuns')
-
-export { formToJs }
+const wunsExports = evaluateFile(defEnv, 'compile-js.wuns')
+const formToJs = wunsExports['compile-run']
+const compileTopForms = wunsExports['compile-top-forms']
+export { formToJs, compileTopForms, jsStmtToString }

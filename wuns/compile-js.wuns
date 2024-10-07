@@ -129,6 +129,7 @@
     [if js-exp js-stmt js-stmt]
     [switch js-exp [list [pair js-exp js-stmt]] js-stmt]
     [block [list js-stmt]]
+    [seq [list js-stmt]]
   ]
 ]
 
@@ -155,7 +156,7 @@
     [word i32.lt-s] [binop/lt]
     [logq-abort instruction-name-to-binop not implemented]]]
 
-[defn wuns-to-js [outer-wexp]
+[defn compile-top-forms [top-forms]
   [letrec
     [cexp
       [func cexp [wexp]
@@ -194,7 +195,9 @@
 
             [js-exp/call [cexp f] [list-map arg args [cexp arg]]]]
 
-          [logq-abort cexp not implemented]]]
+          [do
+            [log wexp]
+            [logq-abort cexp not implemented]]]]
      cstmt
       [func cstmt [is-tail wexp]
         [match wexp
@@ -228,12 +231,17 @@
           [if is-tail
             [js-stmt/return [cexp wexp]]
             [js-stmt/exp [cexp wexp]]]]]]
-    [cstmt 1 outer-wexp]]]
-
-[defn compile-top [form]
-  [wuns-to-js [form-to-ast form]]]
+      [js-stmt/seq [list-map top-form top-forms [cstmt 1 [form-to-ast top-form]]]]]]
 
 [defn compile-run [form]
-  [run-js-stmt [compile-top form]]]
+  [run-js-stmt [compile-top-forms [list form]]]]
 
-compile-run
+[type
+  exports []
+  [record
+    [compile-run [func [form] js-value]]
+    [compile-top-forms [func [[list form]] js-stmt]]]]
+
+[exports
+  compile-run
+  compile-top-forms]
