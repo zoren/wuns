@@ -1,20 +1,27 @@
 import { isJSReservedWord } from './utils.js'
 
+const binopMap = {
+  add: '+',
+  sub: '-',
+  mul: '*',
+
+  eq: '===',
+  ne: '!==',
+
+  lt: '<',
+  le: '<=',
+  gt: '>',
+  ge: '>=',
+
+  'binary-ior': '|',
+  'binary-and': '&',
+}
+
 const jsBinopToString = (op) => {
-  switch (op) {
-    case 'binop/add':
-      return '+'
-    case 'binop/sub':
-      return '-'
-    case 'binop/mul':
-      return '*'
-    case 'binop/lt':
-      return '<'
-    case 'binop/binary-ior':
-      return '|'
-    default:
-      throw new Error(`unknown op: ${op}`)
-  }
+  if (!op.startsWith('binop/')) throw new Error(`not a binop: ${op}`)
+  const mappedOp = binopMap[op.slice(6)]
+  if (!mappedOp) throw new Error(`unknown binop: ${op}`)
+  return mappedOp
 }
 
 const escapeIdentifier = (id) => (isJSReservedWord(id) ? '_' : '') + id.replace(/-/g, '_').replace(/\//g, '_slash_')

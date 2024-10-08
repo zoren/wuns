@@ -2,11 +2,18 @@
 
 [type binop []
   [union
-    [eq]
-    [lt]
     [add]
     [sub]
     [mul]
+
+    [eq]
+    [ne]
+
+    [lt]
+    [le]
+    [gt]
+    [ge]
+
     [binary-and]
     [binary-ior]
     ]]
@@ -69,8 +76,15 @@
     [word i32.add] [binop/add]
     [word i32.sub] [binop/sub]
     [word i32.mul] [binop/mul]
+
     [word i32.eq] [binop/eq]
+    [word i32.ne] [binop/ne]
+
     [word i32.lt-s] [binop/lt]
+    [word i32.le-s] [binop/le]
+    [word i32.gt-s] [binop/gt]
+    [word i32.ge-s] [binop/ge]
+
     [logq-abort instruction-name-to-binop not implemented]]]
 
 [defn is-wuns-macro [ast]
