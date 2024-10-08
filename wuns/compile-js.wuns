@@ -211,7 +211,8 @@
 
           [wuns/match exp cases opt-default]
           [if is-tail
-            [let-do [tmp [gen-tmp-word]]
+            [let-do [tmp [gen-tmp-word]
+                     tmp-args [js-exp/subscript [js-exp/var tmp] [js-exp/string [word args]]]]
               [block
                 [js-stmt/const-decl tmp [cexp exp]]
                 [js-stmt/switch
@@ -219,9 +220,14 @@
                   [list-map case cases
                     [let-do [mp [pair/fst case]
                              ctor [match-pattern/ctor mp]
-                             params [match-pattern/params mp]]
-                      [assert [is-empty params] match params not supported yet]
-                      [pair [list [js-exp/string ctor]] [cstmt is-tail [pair/snd case]]]]]
+                             params [match-pattern/params mp]
+                             counter [atom 0]]
+                      [pair [list [js-exp/string ctor]]
+                        [js-stmt/block
+                          [concat
+                            [list-map p params
+                              [js-stmt/const-decl p [js-exp/subscript tmp-args [js-exp/number [int-to-word [inc-atom counter]]]]]]
+                            [list [cstmt is-tail [pair/snd case]]]]]]]]
                   [if-let [default-case opt-default]
                     [cstmt is-tail default-case]
                     [js-stmt/throw [js-exp/string [word unmatched-match]]]]]]]
