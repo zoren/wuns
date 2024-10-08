@@ -249,12 +249,6 @@ export const evalForm = (defEnv, topForm) => {
         case 'word':
           assertNumArgs(1)
           return getFormWord(forms[1])
-        case 'quote': {
-          assertNumArgs(1)
-          const form = forms[1]
-          assertFormDeep(form)
-          return form
-        }
         case 'extern': {
           let ext = defEnv.externs
           if (!ext) {

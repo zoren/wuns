@@ -559,7 +559,6 @@
             [word i32] 1
             [word f64] 1
             [word word] 1
-            [word quote] 1
 
             [word extern] 1
 
@@ -631,11 +630,6 @@
         [do
           [report-when-not [eq n-of-args 1] form expects 1 argument]
           type-word]
-
-        [eq-form [quote quote] first-form]
-        [do
-          [report-when-not [eq n-of-args 1] form expects 1 argument]
-          type-form]
 
         [eq-form first-form [quote if]]
         [let-do

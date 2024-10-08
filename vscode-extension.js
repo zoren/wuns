@@ -57,8 +57,9 @@ const modificationModifier = encodeTokenModifiers('modification')
  */
 const makeProvideDocumentSemanticTokensForms = async () => {
   const { tryGetFormWord, tryGetFormList, meta } = await import('./esm/core.js')
-  const { treeToFormsSafe, makeDefEnv, evalForm, isClosure, isSpecialFormPrimitiveConstant } =
-    await import('./esm/mini-lisp.js')
+  const { treeToFormsSafe, makeDefEnv, evalForm, isClosure, isSpecialFormPrimitiveConstant } = await import(
+    './esm/mini-lisp.js'
+  )
   const provideDocumentSemanticTokens = (document) => {
     const defEnv = makeDefEnv(path.dirname(document.fileName))
     const tokensBuilder = new SemanticTokensBuilder(legend)
@@ -123,14 +124,6 @@ const makeProvideDocumentSemanticTokensForms = async () => {
           },
           word: () => {
             pushToken(tail[0], stringTokenType)
-          },
-          quote: () => {
-            const goQuote = (form) => {
-              if (tryGetFormWord(form)) pushToken(form, stringTokenType)
-              else getListOrEmpty(form).forEach(goQuote)
-            }
-            const [quoteForm] = tail
-            if (quoteForm) goQuote(quoteForm)
           },
           if: () => {
             for (const form of tail) go(form)
@@ -202,6 +195,11 @@ const makeProvideDocumentSemanticTokensForms = async () => {
               }
               case 'fexpr':
                 pushToken(head, functionTokenType)
+                const goQuote = (form) => {
+                  if (tryGetFormWord(form)) pushToken(form, stringTokenType)
+                  else getListOrEmpty(form).forEach(goQuote)
+                }
+                for (const form of tail) goQuote(form)
                 return
               case 'func':
                 pushToken(head, functionTokenType)

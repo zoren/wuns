@@ -81,33 +81,26 @@
 [comment word]
 [test-ok word [word a]]
 
-[comment quote]
-[test-ok form [quote a]]
-[test-ok form [quote []]]
-[test-ok form [quote [[]]]]
-[test-ok form [quote [a []]]]
-
 [comment if]
-[test-errors i32 [[not unifiable - different types]] [if [quote ok] [i32 5] [i32 5]]]
-[test-errors i32 [[not unifiable - different types]] [if [i32 5] [i32 5] [quote a]]]
-[test-errors form [[not unifiable - different types]] [if [i32 5] [quote a] [i32 5]]]
+[test-errors i32 [[not unifiable - different types]] [if [word ok] [i32 5] [i32 5]]]
+[test-errors i32 [[not unifiable - different types]] [if [i32 5] [i32 5] [word a]]]
+[test-errors word [[not unifiable - different types]] [if [i32 5] [word a] [i32 5]]]
 [test-ok i32 [if [i32 5] [i32 6] [i32 7]]]
-[test-ok i32 [quote a] [if [i32 5] [i32 6] [i32 7]]]
-[test-ok form [if [i32 5] [quote a] [quote b]]]
+[test-ok word [if [i32 5] [word a] [word b]]]
 
 [comment do]
 [test-ok [tuple] [do]]
 [test-errors [type-scheme [a] a] [[not found]] [do v]]
 [test-errors [tuple] [[not found]] [do v [do]]]
 [test-errors [type-scheme [a] a] [[not found]] [do [do] v]]
-[test-ok form [do [quote a]]]
-[test-ok i32 [do [quote a] [i32 3]]]
+[test-ok word [do [word a]]]
+[test-ok i32 [do [word a] [i32 3]]]
 
 [comment let]
 [test-errors [tuple] [[expects two arguments]] [let []]]
-[test-ok form [let [] [quote a]]]
-[test-ok form [let [v [quote a]] v]]
-[test-ok form [let [v [quote a] u v] u]]
+[test-ok word [let [] [word a]]]
+[test-ok word [let [v [word a]] v]]
+[test-ok word [let [v [word a] u v] u]]
 
 [comment letrec]
 [test-ok [func [i32] i32]
@@ -124,7 +117,7 @@
   [func f [i]
     [do
       [i [i32 5]]
-      [i [quote a]]]]]
+      [i [word a]]]]]
 [test-ok [type-scheme [a] [func [[func [i32] a]] a]]
   [func f [i]
     [i [i32 5]]]]
@@ -158,7 +151,7 @@
 [test-errors
   [list i32]
   [[not unifiable - different types]]
-  [[func f [.. p] p] [i32 5] [quote a]]]
+  [[func f [.. p] p] [i32 5] [word a]]]
 [test-ok
   [type-scheme [a] [func [a] a]]
   [func id [x] x]]
@@ -189,10 +182,10 @@
 [test-errors i32 [[not unifiable - different number of parameters]]
   [[func one-param [p] [i32 5]]]]
 [test-errors i32 [[not unifiable - different number of parameters]]
-  [[func zero-params [] [i32 5]] [quote extra-argument]]]
-[test-ok form
-  [[func f [i] [i [quote a]]] [func id [x] x]]]
-[test-ok form [let [id [func id [x] x]] [do [id [i32 5]] [id [quote a]]]]]
+  [[func zero-params [] [i32 5]] [word extra-argument]]]
+[test-ok word
+  [[func f [i] [i [word a]]] [func id [x] x]]]
+[test-ok word [let [id [func id [x] x]] [do [id [i32 5]] [id [word a]]]]]
 [test-errors [type-scheme [a] a] [[not unifiable - different types]]
   [[i32 5] [i32 6]]]
 
@@ -201,11 +194,11 @@
 [test-errors [type-scheme [a] a] [[not found]] [def a [do a]]]
 [test-errors [type-scheme [a] a] [[not found]] [def a [[func id [x] x] a]]]
 [test-ok
-  form
-  [def d [quote a]]]
+  word
+  [def d [word a]]]
 [test-ok
-  form
-  [def d [quote a]]
+  word
+  [def d [word a]]
   d]
 [test-ok
   i32
@@ -213,18 +206,18 @@
   [f [i32 5]]
   [f [i32 6]]]
 [test-ok
-  form
+  word
   [def f [func id [x] x]]
   [f [i32 5]]
-  [f [quote a]]]
+  [f [word a]]]
 [test-ok
   [list i32]
   [def list [func list [.. entries] entries]]
   [def test [list [i32 1] [i32 2]]]
   test]
-[test-ok form
-  [def d [quote a]]
-  [def d [quote b]]]
+[test-ok word
+  [def d [word a]]
+  [def d [word b]]]
 [test-ok [type-scheme [a] [func [.. a] [list a]]]
   [def list [func list [.. entries] entries]]]
 
@@ -233,7 +226,12 @@
 
 [comment macro expansion]
 [test-ok i32
-  [def m [macro m [] [quote [i32 5]]]]
+  [type form []
+    [union
+      [word word]
+      [list [list form]]]]
+  [def flist [func flist [.. elements] [form/list elements]]]
+  [def m [macro m [] [flist [form/word [word i32]] [form/word [word 5]]]]]
   [m]]
 
 [comment type annotations]
@@ -479,4 +477,8 @@
     [log [[intrinsic f64.sub] [performance-now] before]]]]
 
 [defn test-check []
-  [test-ok-files [word translator.wuns]]]
+  [run-unit-tests]
+  [let-do
+    [file [word test-translator.wuns]]
+    [log [word checking] file]
+    [test-ok-files file]]]

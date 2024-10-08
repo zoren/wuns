@@ -9,13 +9,20 @@
 
 [def defmacro
   [macro defmacro [name params .. bodies]
-    [flist [quote def] name
-      [flist [quote macro] name params [form/list [[extern host concat] [list [quote do]] bodies]]]]]]
+    [flist [form/word [word def]] name
+      [flist [form/word [word macro]] name params
+        [form/list [[extern host concat] [list [form/word [word do]]] bodies]]]]]]
+
+[defmacro qword [m]
+  [match m
+    [form/word w]
+    [flist [form/word [word form/word]]
+      [flist [form/word [word word]] [form/word w]]]]]
 
 [defmacro def-extern [name type]
-  [flist [quote def] name
-    [flist [quote type-anno]
-      [flist [quote extern] [quote host] name]
+  [flist [qword def] name
+    [flist [qword type-anno]
+      [flist [qword extern] [qword host] name]
       type]]]
 
 [def-extern log [type-scheme [a] [func [.. a] [tuple]]]]
@@ -23,13 +30,15 @@
 [def-extern concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]
 
 [defmacro let-do [bindings .. forms]
-  [flist [quote let] bindings [form/list [concat [list [quote do]] forms]]]]
+  [flist [qword let] bindings [form/list [concat [list [qword do]] forms]]]]
 
 [defmacro defn [name params .. bodies]
-  [flist [quote def] name [flist [quote func] name params [form/list [concat [list [quote do]] bodies]]]]]
+  [flist [qword def] name [flist [qword func] name params [form/list [concat [list [qword do]] bodies]]]]]
 
 [defmacro defexpr [name params .. bodies]
-  [flist [quote def] name [flist [quote fexpr] name params [form/list [concat [list [quote do]] bodies]]]]]
+  [flist [qword def] name [flist [qword fexpr] name params [form/list [concat [list [qword do]] bodies]]]]]
+
+[defexpr quote [f] f]
 
 [def-extern concat-lists [type-scheme [a] [func [[list [list a]]] [list a]]]]
 

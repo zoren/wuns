@@ -96,9 +96,6 @@
         [word word]
         [wuns/word [form-to-word [second l]]]
 
-        [word quote]
-        [logq-abort form-to-ast not implemented quote]
-
         [word extern]
         [wuns/extern [list-map w [rest l] [form-to-word w]]]
 
