@@ -1,10 +1,11 @@
-[def list [func list [.. entries] entries]]
 [type form []
   [union
     [word word]
     [list [list form]]]]
 
 [def flist [func flist [.. elements] [form/list elements]]]
+
+[def list [func list [.. entries] entries]]
 
 [def defmacro
   [macro defmacro [name params .. bodies]
@@ -469,3 +470,22 @@
 [type pair [a b] [record [fst a] [snd b]]]
 
 [def-extern pairwise [type-scheme [a] [func [[list a]] [list [list a]]]]]
+[def-extern triplewise [type-scheme [a] [func [[list a]] [list [list a]]]]]
+
+[type linked-list [a]
+  [union
+    [nil]
+    [cons a [linked-list a]]]]
+
+[defn linked-list-to-list [ll]
+  [match ll
+    [linked-list/nil] [list]
+    [linked-list/cons hd tl] [concat [list hd] [linked-list-to-list tl]]]]
+
+[defn push [list-ref element]
+  [atom-set list-ref [linked-list/cons element [atom-get list-ref]]]]
+
+[defn growable-list. [] [atom [linked-list/nil]]]
+
+[defn clone-growable-to-frozen-list [atom-linked-list]
+  [list-reverse [linked-list-to-list [atom-get atom-linked-list]]]]

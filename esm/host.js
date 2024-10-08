@@ -14,11 +14,17 @@ import {
   setMeta,
   defVar,
   stringToWord,
+  makeTaggedValue
 } from './core.js'
 
 export const apply = (fn, args) => {
   if (typeof fn !== 'function') throw new Error('apply expects function')
   return fn(...args)
+}
+
+export const make_tagged_value = (tag, ...args) => {
+  if (!isWord(tag)) throw new Error('make-tagged-value expects word')
+  return makeTaggedValue(tag, ...args)
 }
 
 export const form_word = (w) => {
@@ -118,8 +124,15 @@ export const pairwise = (list) => {
   if (!isList(list)) throw new Error('pairwise expects list')
   const len = list.length
   const pairs = []
-  for (let i = 0; i < len-1; i += 2) pairs.push(arrayToList([list[i], list[i + 1]]))
+  for (let i = 0; i < len - 1; i += 2) pairs.push(arrayToList([list[i], list[i + 1]]))
   return arrayToList(pairs)
+}
+export const triplewise = (list) => {
+  if (!isList(list)) throw new Error('triplewise expects list')
+  const len = list.length
+  const triples = []
+  for (let i = 0; i < len - 2; i += 3) triples.push(arrayToList([list[i], list[i + 1], list[i + 2]]))
+  return arrayToList(triples)
 }
 export const freeze_mutable_list = (mutable_list) => {
   if (!isList(mutable_list)) throw new Error('freeze-mutable-list expects array')

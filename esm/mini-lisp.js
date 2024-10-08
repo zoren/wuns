@@ -1,11 +1,4 @@
-import { jsHost } from './host-js.js'
-const { host } = jsHost
-
-const externs = {
-  host,
-
-  'performance-now': () => performance.now(),
-}
+import externs from './externs.js'
 
 export const makeDefEnv = (currentDir, additionalExterns) => {
   const defMap = new Map()

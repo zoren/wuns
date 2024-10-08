@@ -87,24 +87,6 @@
         [member-type-var-list-go [inc i]]]
       0]] 0]]
 
-[type linked-list [a]
-  [union
-    [nil]
-    [cons a [linked-list a]]]]
-
-[defn linked-list-to-list [ll]
-  [match ll
-    [linked-list/nil] [list]
-    [linked-list/cons hd tl] [concat [list hd] [linked-list-to-list tl]]]]
-
-[defn push [list-ref element]
-  [atom-set list-ref [linked-list/cons element [atom-get list-ref]]]]
-
-[defn growable-list. [] [atom [linked-list/nil]]]
-
-[defn clone-growable-to-frozen-list [atom-linked-list]
-  [list-reverse [linked-list-to-list [atom-get atom-linked-list]]]]
-
 [defn free-type-vars [t]
   [let-do
     [set [atom [linked-list/nil]]
@@ -757,7 +739,7 @@
                           [report-when-not [eq [size destructor-params] [dec [size pattern-list]]]
                             pattern
                             pattern and destructor-params have different sizes]
-                          [for i 1 [size pattern-list]
+                          [for i 1 [min [size pattern-list] [inc [size destructor-params]]]
                             [if-let [pattern-var [try-get-form-word-option [at pattern-list i]]]
                               [let [general-val-type [generalize level [at destructor-params [dec i]]]]
                                 [set-kv-map var-values pattern-var general-val-type]]

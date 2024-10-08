@@ -2,6 +2,22 @@
 
 [type wuns-func-kind [] [union [func] [fexpr] [macro]]]
 
+[type wuns-type []
+  [union
+    [word word]
+    [apply word [list wuns-type]]]]
+
+[type wuns-type-decl-kind []
+  [union
+    [union [list [pair word [list wuns-type]]]]
+    [record [list [pair word wuns-type]]]]]
+
+[type wuns-type-decl []
+  [record
+    [name word]
+    [type-params [list word]]
+    [kind wuns-type-decl-kind]]]
+
 [type wuns []
   [union
     [var word]
@@ -17,6 +33,9 @@
     [def word wuns]
     [func wuns-func-kind word [list word] [option word] wuns]
     [call wuns [list wuns]]
+    [call-word word [list form]]
+    [extern [list word]]
+    [type [list wuns-type-decl]]
     ]]
 
 [defn parse-param-words [param-words]
@@ -24,6 +43,40 @@
     [if [and [lt-s 1 s] [eq-word [at param-words -2] [word ..]]]
       [pair [slice param-words 0 [sub s 2]] [some [last param-words]]]
       [pair param-words [none]]]]]
+
+[defn form-to-type [form]
+  [match form
+    [form/word w]
+    [wuns-type/word w]
+
+    [form/list l]
+    [do
+      [assert [not [is-empty l]] type form-to-type is empty]
+      [wuns-type/apply
+        [form-to-word [first l]]
+        [list-map arg [slice l 1 [size l]] [form-to-type arg]]]]]]
+
+[defn form-to-type-decl-kind [form]
+  [match form
+    [form/list l]
+    [do
+      [assert [not [is-empty l]] type decl kind form is empty]
+      [switch [form-to-word [first l]]
+        [word union]
+        [wuns-type-decl-kind/union
+          [list-map ctor [slice l 1 [size l]]
+            [let-do [ctor-list [form-to-list ctor]]
+              [assert [not [is-empty ctor-list]] type decl kind union ctor is empty]
+              [pair
+                [form-to-word [first ctor-list]]
+                [list-map arg [rest ctor-list] [form-to-type arg]]]]]]
+
+        [word record]
+        [logq-abort form-to-type-decl-kind not implemented record]
+
+        [logq-abort form-to-type-decl-kind not implemented]]]
+
+    [logq-abort form-to-type-decl-kind not implemented]]]
 
 [defn form-to-ast [form]
   [match form
@@ -43,8 +96,42 @@
         [word word]
         [wuns/word [form-to-word [second l]]]
 
+        [word quote]
+        [logq-abort form-to-ast not implemented quote]
+
+        [word extern]
+        [wuns/extern [list-map w [rest l] [form-to-word w]]]
+
         [word intrinsic]
         [wuns/intrinsic [form-to-word [second l]]]
+
+        [word func]
+        [let [name [form-to-word [second l]]
+              parsed-params [parse-param-words [list-map p [form-to-list [third l]] [form-to-word p]]]
+              body-form [fourth l]]
+          [wuns/func
+            [wuns-func-kind/func]
+            name
+            [pair/fst parsed-params]
+            [pair/snd parsed-params]
+            [form-to-ast body-form]]]
+
+        [word fexpr]
+        [logq-abort form-to-ast not implemented fexpr]
+
+        [word macro]
+        [let [name [form-to-word [second l]]
+              parsed-params [parse-param-words [list-map p [form-to-list [third l]] [form-to-word p]]]
+              body-form [fourth l]]
+          [wuns/func
+            [wuns-func-kind/macro]
+            name
+            [pair/fst parsed-params]
+            [pair/snd parsed-params]
+            [form-to-ast body-form]]]
+
+        [word atom]
+        [logq-abort form-to-ast not implemented atom]
 
         [word if]
         [wuns/if [form-to-ast [second l]] [form-to-ast [third l]] [form-to-ast [fourth l]]]
@@ -57,8 +144,11 @@
             [some [form-to-ast [last l]]]
             [none]]]
 
+        [word match]
+        [logq-abort form-to-ast not implemented match]
+
         [word do]
-        [wuns/do [list-map arg [slice l 1 [size l]] [form-to-ast arg]]]
+        [wuns/do [list-map arg [rest l] [form-to-ast arg]]]
 
         [word let]
         [wuns/let
@@ -73,27 +163,21 @@
         [word def]
         [wuns/def [form-to-word [second l]] [form-to-ast [third l]]]
 
-        [word func]
-        [let [name [form-to-word [second l]]
-              parsed-params [parse-param-words [list-map p [form-to-list [third l]] [form-to-word p]]]
-              body-form [fourth l]]
-            [wuns/func
-              [wuns-func-kind/func]
-              name
-              [pair/fst parsed-params]
-              [pair/snd parsed-params]
-              [form-to-ast body-form]]]
+        [word type]
+        [wuns/type
+          [list-map triple [triplewise [rest l]]
+            [wuns-type-decl
+              [form-to-word [first triple]]
+              [list-map tv [form-to-list [second triple]] [form-to-word tv]]
+              [form-to-type-decl-kind [third triple]]]]]
 
-        [word fexpr]
-        [logq-abort form-to-ast not implemented fexpr]
+        [word type-anno]
+        [logq-abort form-to-ast not implemented type-anno]
 
-        [word macro]
-        [logq-abort form-to-ast not implemented macro]
-
-        [wuns/call [form-to-ast [first l]] [list-map arg [slice l 1 [size l]] [form-to-ast arg]]]]
+        [wuns/call-word fw [rest l]]]
 
       [form/list fl]
-      [wuns/call [form-to-ast [first l]] [list-map arg [slice l 1 [size l]] [form-to-ast arg]]]]]]
+      [wuns/call [form-to-ast [first l]] [list-map arg [rest l] [form-to-ast arg]]]]]]
 
 [type binop []
   [union
@@ -111,6 +195,8 @@
     [number word]
     [string word]
     [var word]
+    [array [list js-exp]]
+    [subscript js-exp js-exp]
     [ternary js-exp js-exp js-exp]
     [call js-exp [list js-exp]]
     [new js-exp [list js-exp]]
@@ -140,6 +226,16 @@
     [extern js run-js-stmt]
     [func [js-stmt] [js-value]]]]
 
+[def run-js-exp
+  [type-anno
+    [extern js run-js-exp]
+    [func [js-exp] [js-value]]]]
+
+[def call-js-func
+  [type-anno
+    [extern js call-js-func]
+    [func [js-value [list form]] form]]]
+
 [defn block [.. stmts] [js-stmt/block stmts]]
 
 [def js-0 [js-exp/number [word 0]]]
@@ -156,9 +252,32 @@
     [word i32.lt-s] [binop/lt]
     [logq-abort instruction-name-to-binop not implemented]]]
 
+[defn is-wuns-macro [ast]
+  [match ast
+    [wuns/func kind name params opt-rest body]
+    [match kind [wuns-func-kind/macro] 1 0]
+    0]]
+
+[defn iife [stmt]
+  [js-exp/call
+    [js-exp/arrow-stmt [list] stmt]
+    [list]]]
+
+[defn mk-extern [ws]
+  [[func add-sub [o i]
+    [if [lt-s i [size ws]]
+      [add-sub
+        [js-exp/subscript o [js-exp/string [at ws i]]]
+        [inc i]]
+      o]]
+    [js-exp/var [word externs]] [i32 0]]]
+
 [defn compile-top-forms [top-forms]
   [letrec
-    [cexp
+    [def-ctx [transient-kv-map]
+     macro-funcs [transient-kv-map]
+     top-decls [atom [linked-list/nil]]
+     cexp
       [func cexp [wexp]
         [match wexp
           [wuns/var w]
@@ -188,6 +307,14 @@
                 [js-stmt/return [js-exp/var name]]]]
             [list]]
 
+
+          [wuns/call-word w form-args]
+          [if-let [def-val [try-get def-ctx w]]
+            [if-let [macro-func [try-get macro-funcs w]]
+              [cexp [form-to-ast [call-js-func macro-func form-args]]]
+              [js-exp/call [js-exp/var w] [list-map arg form-args [cexp [form-to-ast arg]]]]]
+            [js-exp/call [js-exp/var w] [list-map arg form-args [cexp [form-to-ast arg]]]]]
+
           [wuns/call f args]
           [match f
             [wuns/intrinsic w]
@@ -195,6 +322,9 @@
               [instruction-name-to-binop w]
               [cexp [first args]]
               [cexp [second args]]]
+
+            [wuns/extern ws]
+            [js-exp/call [mk-extern ws] [list-map arg args [cexp arg]]]
 
             [js-exp/call [cexp f] [list-map arg args [cexp arg]]]]
 
@@ -229,12 +359,54 @@
             [logq-abort cstmt not implemented switch]]
 
           [wuns/def w e]
-          [js-stmt/const-decl w [cexp e]]
+          [do
+            [set-kv-map def-ctx w e]
+            [js-stmt/const-decl w [cexp e]]]
+
+          [wuns/type decls]
+          [js-stmt/seq
+            [concat-lists
+              [list-map decl decls
+                [let [type-name [wuns-type-decl/name decl]
+                      type-name-prefix [concat-words type-name [word /]]
+                      type-params [wuns-type-decl/type-params decl]
+                      kind [wuns-type-decl/kind decl]]
+                  [match kind
+                    [wuns-type-decl-kind/union ctors]
+                    [list-map ctor ctors
+                      [let [n-atom [atom 0]
+                            params [list-map t [pair/snd ctor] [concat-words [word p] [int-to-word [inc-atom n-atom]]]]]
+                        [js-stmt/const-decl
+                          [concat-words type-name-prefix [pair/fst ctor]]
+                          [js-exp/arrow-exp
+                            params
+                            [js-exp/call
+                              [mk-extern [list [word host] [word make-tagged-value]]]
+                              [concat
+                                [list [js-exp/string [concat-words type-name-prefix [pair/fst ctor]]]]
+                                [list-map p params [js-exp/var p]]]]]]]]
+
+                    [wuns-type-decl-kind/record fields]
+                    [logq-abort cstmt not implemented record]]]]]]
 
           [if is-tail
             [js-stmt/return [cexp wexp]]
             [js-stmt/exp [cexp wexp]]]]]]
-      [js-stmt/seq [list-map top-form top-forms [cstmt 1 [form-to-ast top-form]]]]]]
+    [do
+      [for-each top-form top-forms
+        [let-do [ast [form-to-ast top-form]]
+          [push top-decls [cstmt 0 ast]]
+          [match ast
+            [wuns/def w e]
+            [when [is-wuns-macro e]
+              [let-do [top-so-far [clone-growable-to-frozen-list top-decls]
+                    decl-block [js-stmt/block [concat top-so-far [list [js-stmt/return [js-exp/var w]]]]]
+                    mac-func [run-js-stmt decl-block]]
+                [log mac-func]
+                [set-kv-map macro-funcs w mac-func]]]
+            [do]]]]
+      [js-stmt/seq [clone-growable-to-frozen-list top-decls]]]
+    ]]
 
 [defn compile-run [form]
   [run-js-stmt [compile-top-forms [list form]]]]
