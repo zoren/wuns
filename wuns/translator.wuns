@@ -159,7 +159,7 @@
           [match [first fl]
             [form/word flw]
             [if [eq-word flw [word intrinsic]]
-              [let [inst-name [form-to-word [third fl]]]
+              [let [inst-name [form-to-word [second fl]]]
                 [if [or [is-i32-bin-inst inst-name] [eq-word inst-name [word unreachable]]]
                   [wat-inst/inst inst-name [list-map a [rest l] [translate-form tctx lctx a]]]
                   [logq-abort translate-form unknown instruction]]]
