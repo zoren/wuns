@@ -336,13 +336,30 @@ export const evalForm = (defEnv, topForm) => {
           for (let i = 2; i < forms.length - 1; i += 2) {
             const pattern = forms[i]
             const patternList = getFormList(pattern)
-            const firstPatternWord = getFormWord(patternList[0])
-            if (!isSpecialFormPrimitiveConstant(firstPatternWord))
-              throw evalError('switch pattern must be constant, was ' + firstPatternWord)
-            const patternValue = go(env, pattern)
-            if (patternValue === value) {
-              form = forms[i + 1]
-              break
+            const optFirstPatternWord = tryGetFormWord(patternList[0])
+            if (optFirstPatternWord) {
+              if (!isSpecialFormPrimitiveConstant(optFirstPatternWord))
+                throw evalError('switch pattern must be constant, was ' + optFirstPatternWord)
+              if (go(env, pattern) === value) {
+                form = forms[i + 1]
+                break
+              }
+            } else {
+              let match = false
+              for (const subPatternForm of patternList) {
+                const subPatternList = getFormList(subPatternForm)
+                const subPatternWord = tryGetFormWord(subPatternList[0])
+                if (!isSpecialFormPrimitiveConstant(subPatternWord))
+                  throw evalError('switch pattern must be constant, was ' + subPatternWord)
+                if (go(env, subPatternForm) === value) {
+                  match = true
+                  break
+                }
+              }
+              if (match) {
+                form = forms[i + 1]
+                break
+              }
             }
           }
           continue
