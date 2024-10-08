@@ -26,7 +26,7 @@
     [word word]
     [intrinsic word]
     [if wuns wuns wuns]
-    [switch wuns [list [pair wuns wuns]] [option wuns]]
+    [switch wuns [list [pair [list wuns] wuns]] [option wuns]]
     [do [list wuns]]
     [let [list [pair word wuns]] wuns]
     [letrec [list [pair word wuns]] wuns]
@@ -78,6 +78,27 @@
 
     [logq-abort form-to-type-decl-kind not implemented]]]
 
+[defn form-to-lit [form]
+  [match form
+    [form/list l]
+    [do
+      [assert [eq 2 [size l]] lit form-to-lit size is not 2]
+      [switch [form-to-word [first l]]
+        [word i32] [wuns/i32 [form-to-word [second l]]]
+        [word f64] [wuns/f64 [form-to-word [second l]]]
+        [word word] [wuns/word [form-to-word [second l]]]
+        [logq-abort form-to-lit not implemented]]]]]
+
+[defn form-to-literal-list [form]
+  [match form
+    [form/list l]
+    [if [is-empty l]
+      [list]
+      [match [first l]
+        [form/word w] [list [form-to-lit [first l]]]
+        [list-map arg l [form-to-lit arg]]]]
+    [logq-abort form-to-literal-list not implemented]]]
+
 [defn form-to-ast [form]
   [match form
     [form/word w]
@@ -126,7 +147,10 @@
         [word switch]
         [wuns/switch
           [form-to-ast [second l]]
-          [list-map p [pairwise [slice l 2 [dec [size l]]]] [pair [form-to-ast [first p]] [form-to-ast [second p]]]]
+          [list-map p [pairwise [slice l 2 [dec [size l]]]]
+            [pair
+              [form-to-literal-list [first p]]
+              [form-to-ast [second p]]]]
           [if [is-odd [size l]]
             [some [form-to-ast [last l]]]
             [none]]]

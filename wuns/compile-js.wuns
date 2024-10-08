@@ -34,7 +34,7 @@
     [return js-exp]
     [const-decl word js-exp]
     [if js-exp js-stmt js-stmt]
-    [switch js-exp [list [pair js-exp js-stmt]] js-stmt]
+    [switch js-exp [list [pair [list js-exp] js-stmt]] js-stmt]
     [block [list js-stmt]]
     [seq [list js-stmt]]
   ]
@@ -149,9 +149,7 @@
 
             [js-exp/call [cexp f] [list-map arg args [cexp arg]]]]
 
-          [do
-            [log wexp]
-            [logq-abort cexp not implemented]]]]
+          [iife [cstmt 1 wexp]]]]
      cstmt
       [func cstmt [is-tail wexp]
         [match wexp
@@ -168,16 +166,17 @@
 
           [wuns/switch exp cases opt-default]
           [if is-tail
-            [js-stmt/switch
-              [cexp exp]
-              [list-map case cases
-                [pair
-                  [cexp [pair/fst case]]
-                  [cstmt is-tail [pair/snd case]]]]
-              [if-let [default-case opt-default]
-                [cstmt is-tail default-case]
-                [logq-abort cstmt switch without default]]]
-            [logq-abort cstmt not implemented switch]]
+            [block
+              [js-stmt/switch
+                [cexp exp]
+                [list-map case cases
+                  [pair
+                    [list-map cv [pair/fst case] [cexp cv]]
+                    [cstmt is-tail [pair/snd case]]]]
+                [if-let [default-case opt-default]
+                  [cstmt is-tail default-case]
+                  [logq-abort cstmt switch without default]]]]
+            [logq-abort cstmt not implemented switch non-tail]]
 
           [wuns/def w e]
           [do

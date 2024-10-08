@@ -8,6 +8,8 @@ const jsBinopToString = (op) => {
       return '-'
     case 'binop/mul':
       return '*'
+    case 'binop/lt':
+      return '<'
     case 'binop/binary-ior':
       return '|'
     default:
@@ -60,7 +62,10 @@ const jsStmtToString = (js) => {
     case 'js-stmt/switch': {
       const [exp, cases, defaultCase] = args
       const jsCases = [
-        ...cases.map((jsc) => `case ${jsExpToString(jsc.fst)}: ${jsStmtToString(jsc.snd)}`),
+        ...cases.map(({ fst, snd }) => {
+          const cases = fst.map((v) => `case ${jsExpToString(v)}:\n`).join('')
+          return `${cases} ${jsStmtToString(snd)}`
+        }),
         `default: ${jsStmtToString(defaultCase)}`,
       ].join('\n')
       return `switch (${jsExpToString(exp)}) {\n${jsCases}\n}`
@@ -122,6 +127,6 @@ const formToJs = wunsExports['compile-run']
 // const output = jsStmtToString(jsStmt)
 const compileTopFormsDef = wunsExports['compile-top-forms']
 const compileTopForms = (forms) => {
-  return jsStmtToString(catchErrors(() => (compileTopFormsDef(forms))))
+  return catchErrors(() => jsStmtToString(compileTopFormsDef(forms)))
 }
 export { formToJs, compileTopForms, jsStmtToString }

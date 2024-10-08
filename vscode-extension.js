@@ -133,7 +133,14 @@ const makeProvideDocumentSemanticTokensForms = async () => {
             for (let i = 1; i < tail.length - 1; i += 2) {
               const constForm = tail[i]
               const cl = tryGetFormList(constForm)
-              if (cl && cl.length && isSpecialFormPrimitiveConstant(cl[0])) go(constForm)
+              if (cl && cl.length !== 0) {
+                const headWord = tryGetFormWord(cl[0])
+                if (isSpecialFormPrimitiveConstant(headWord)) {
+                  go(constForm)
+                } else {
+                  for (const form of cl) go(form)
+                }
+              }
               go(tail[i + 1])
             }
             go(tail.at(-1))
