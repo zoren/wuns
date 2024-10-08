@@ -35,7 +35,6 @@ export const form_word_with_meta = (w, meta_data) => {
   if (!isWord(w)) throw new Error('form-word-with-meta expects word')
   return formWord(w, meta_data)
 }
-// [func [list [form]] form]
 export const form_list = (l) => {
   if (!isList(l)) throw new Error('form-list expects list')
   if (isMutable(l)) throw new Error('form-list expects immutable list')
@@ -190,23 +189,22 @@ export const set_kv_map = (kv_map, key, value) => {
 export const log = (...forms) => {
   console.log(...forms.map(print))
 }
-const isFrozenList = (l) => isList(l) && Object.isFrozen(l) && !isMutable(l)
 export const concat_lists = (lists) => {
   const l = []
   for (const list of lists) {
-    if (!isFrozenList(list)) throw new Error('concat expects list')
+    if (!isList(list)) throw new Error('concat expects list')
     l.push(...list)
   }
   return arrayToList(l)
 }
 export const concat = (l1, l2) => {
-  if (!isFrozenList(l1)) throw new Error('concat expects frozen list')
-  if (!isFrozenList(l2)) throw new Error('concat expects frozen list')
+  if (!isList(l1)) throw new Error('concat expects frozen list')
+  if (!isList(l2)) throw new Error('concat expects frozen list')
   return arrayToList([...l1, ...l2])
 }
 export const int_to_word = (i) => stringToWord(String(i))
 export const slice = (list, start, end) => {
-  if (!isFrozenList(list)) throw new Error('slice expects list')
+  if (!isList(list)) throw new Error('slice expects list')
   if (!isSigned32BitInteger(start)) throw new Error('slice expects number: ' + start)
   if (!isSigned32BitInteger(end)) throw new Error('slice expects number: ' + end)
   return arrayToList(list.slice(start, end))
