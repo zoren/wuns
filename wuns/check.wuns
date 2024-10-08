@@ -442,6 +442,11 @@
     [none]
     [some [first list]]]]
 
+[defn report-non-literal [gctx form]
+  [when-let [ff [try-get-first-report gctx [try-get-list-report gctx form]]]
+    [when-let [fw [try-get-form-word-option ff]]
+      [report-when-not [word-list-contains fw [word i32] [word f64] [word word]] form expects a constant]]]]
+
 [comment given a type such as [func [i32 i32] i32] instantiates to a type-scheme]
 [defn instantiate-annotated-type [gctx type-var-env outer-syntax-type]
   [[func go [syntax-type]
@@ -759,9 +764,15 @@
                      case-const-list [try-get-list-report gctx case-const]
                      branch [at sub-forms [inc i]]]
               [when-let [first-case-const [try-get-first-report gctx case-const-list]]
-                [when-let [case-const-word [try-get-form-word-option first-case-const]]
-                  [report-when-not [word-list-contains case-const-word [word i32] [word f64] [word word]] case-const expects a constant]]
-                [unify-report gctx match-type [check gctx level lctx case-const] case-const]]
+                [match first-case-const
+                  [form/word -]
+                  [do
+                    [report-non-literal gctx case-const]
+                    [unify-report gctx match-type [check gctx level lctx case-const] case-const]]
+                  [form/list -]
+                  [for-each case-const case-const-list
+                    [report-non-literal gctx case-const]
+                    [unify-report gctx match-type [check gctx level lctx case-const] case-const]]]]
               [unify-report gctx [check gctx level lctx branch] result-type branch]]]
           [when has-default
             [let-do [default-form [last sub-forms]]

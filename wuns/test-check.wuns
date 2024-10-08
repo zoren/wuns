@@ -378,12 +378,23 @@
     [i32 0] [word zero]
     [word a] [word one]
     [word not-01]]]
+[test-errors word [[not unifiable - different types]]
+  [switch [i32 0]
+    [
+      [i32 0]
+      [word a]
+      ] [word zero-a]
+    [word not-01]]]
 [comment check default case]
 [test-errors word [[not unifiable - different types]]
   [switch [i32 0]
     [i32 0] [word zero]
     [i32 1] [word one]
     [i32 1337]]]
+[test-ok word
+  [switch [i32 0]
+    [[i32 0] [i32 1]] [word zero-or-one]
+    [word not-01]]]
 [test-ok word
   [switch [i32 0]
     [i32 0] [word zero]
