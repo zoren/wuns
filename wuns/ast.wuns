@@ -18,6 +18,8 @@
     [type-params [list word]]
     [kind wuns-type-decl-kind]]]
 
+[type match-pattern [] [record [ctor word] [params [list word]]]]
+
 [type wuns []
   [union
     [var word]
@@ -27,6 +29,7 @@
     [intrinsic word]
     [if wuns wuns wuns]
     [switch wuns [list [pair [list wuns] wuns]] [option wuns]]
+    [match wuns  [list [pair match-pattern wuns]] [option wuns]]
     [do [list wuns]]
     [let [list [pair word wuns]] wuns]
     [letrec [list [pair word wuns]] wuns]
@@ -156,7 +159,19 @@
             [none]]]
 
         [word match]
-        [logq-abort form-to-ast not implemented match]
+        [wuns/match
+          [form-to-ast [second l]]
+          [list-map p [pairwise [slice l 2 [dec [size l]]]]
+            [pair
+              [let-do [pat-list [form-to-list [first p]]]
+                [assert [not [is-empty pat-list]] match pattern is empty]
+                [match-pattern
+                  [form-to-word [first pat-list]]
+                  [list-map arg [rest pat-list] [form-to-word arg]]]]
+              [form-to-ast [second p]]]]
+          [if [is-odd [size l]]
+            [some [form-to-ast [last l]]]
+            [none]]]
 
         [word do]
         [wuns/do [list-map arg [rest l] [form-to-ast arg]]]
