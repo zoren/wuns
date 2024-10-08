@@ -102,26 +102,16 @@
         [word intrinsic]
         [wuns/intrinsic [form-to-word [second l]]]
 
-        [word func]
+        [[word func] [word fexpr] [word macro]]
         [let [name [form-to-word [second l]]
               parsed-params [parse-param-words [list-map p [form-to-list [third l]] [form-to-word p]]]
               body-form [fourth l]]
           [wuns/func
-            [wuns-func-kind/func]
-            name
-            [pair/fst parsed-params]
-            [pair/snd parsed-params]
-            [form-to-ast body-form]]]
-
-        [word fexpr]
-        [logq-abort form-to-ast not implemented fexpr]
-
-        [word macro]
-        [let [name [form-to-word [second l]]
-              parsed-params [parse-param-words [list-map p [form-to-list [third l]] [form-to-word p]]]
-              body-form [fourth l]]
-          [wuns/func
-            [wuns-func-kind/macro]
+            [switch fw
+              [word func]  [wuns-func-kind/func]
+              [word fexpr] [wuns-func-kind/fexpr]
+              [word macro] [wuns-func-kind/macro]
+              [logq-abort form-to-ast not implemented wuns-func-kind]]
             name
             [pair/fst parsed-params]
             [pair/snd parsed-params]
