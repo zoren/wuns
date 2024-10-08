@@ -85,6 +85,8 @@ const jsStmtToString = (js) => {
       return `const ${escapeIdentifier(args[0])} = ${jsExpToString(args[1])}`
     case 'js-stmt/exp':
       return jsExpToString(args[0])
+    case 'js-stmt/throw':
+      return `throw ${jsExpToString(args[0])}`
 
     default:
       throw new Error(`unknown js stmt tag: ${tag}`)

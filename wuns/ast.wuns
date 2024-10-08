@@ -161,7 +161,7 @@
         [word match]
         [wuns/match
           [form-to-ast [second l]]
-          [list-map p [pairwise [slice l 2 [dec [size l]]]]
+          [list-map p [pairwise [slice l 2 [size l]]]
             [pair
               [let-do [pat-list [form-to-list [first p]]]
                 [assert [not [is-empty pat-list]] match pattern is empty]
@@ -204,3 +204,12 @@
 
       [form/list fl]
       [wuns/call [form-to-ast [first l]] [list-map arg [rest l] [form-to-ast arg]]]]]]
+
+[defn form-to-wuns-ctor-calls [form]
+  [match form
+    [form/word w]
+    [wuns/call [wuns/var [word form/word]] [list [wuns/word w]]]
+
+    [form/list l]
+    [wuns/call [wuns/var [word flist]]
+      [list-map e l [form-to-wuns-ctor-calls e]]]]]
