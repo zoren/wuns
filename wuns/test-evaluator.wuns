@@ -56,10 +56,9 @@
 
 [defn run-test-suite [mk-evaluator]
   [let-do [test-assert-count-atom [atom 0]]
-[disable
   [comment check if we accidentally allow octal numbers - result would be 8 in that case]
   [test-ok [i32 10] [i32 0010]]
-]
+
   [test-ok [word a] [def a [word a]] a]
   [test-ok [i32 4] [def a [i32 4]] a]
   [test-ok [f64 1.5] [def a [f64 1.5]] a]

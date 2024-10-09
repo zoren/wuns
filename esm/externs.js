@@ -39,7 +39,7 @@ const jsExpToString = (js) => {
   const { tag, args } = js
   switch (tag) {
     case 'js-exp/number':
-      return args[0]
+      return `${+(args[0])}`
     case 'js-exp/string':
       return `'${args[0]}'`
     case 'js-exp/var':
