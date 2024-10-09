@@ -43,6 +43,7 @@
     [call-word word [list form]]
     [extern [list word]]
     [type [list wuns-type-decl]]
+    [type-anno wuns wuns-type]
     ]]
 
 [defn parse-param-words [param-words]
@@ -57,11 +58,12 @@
     [wuns-type/word w]
 
     [form/list l]
-    [do
+    [let-do [fw [form-to-word [first l]]]
       [assert [not [is-empty l]] type form-to-type is empty]
+      [assert [not [eq-word fw [word type-scheme]]] type form-to-type does not accept type-scheme]
       [wuns-type/apply
-        [form-to-word [first l]]
-        [list-map arg [slice l 1 [size l]] [form-to-type arg]]]]]]
+        fw
+        [list-map arg [rest l] [form-to-type arg]]]]]]
 
 [defn form-to-type-decl-kind [form]
   [match form
@@ -136,6 +138,7 @@
 
         [form/list l]
         [let [n-of-args [dec [size l]]
+              assert-n-args [func ana [n] [when-not [eq n-of-args n] [report-error [quote [expected n-of-args arguments]]]]]
               get-arg [func get-arg [i]
                         [if [lt-s i n-of-args]
                           [at l [inc i]]
@@ -232,7 +235,12 @@
                   [form-to-type-decl-kind [third triple]]]]]
 
             [word type-anno]
-            [logq-abort form-to-ast not implemented type-anno]
+            [do
+              [assert-n-args 2]
+              [todo check for type-scheme]
+              [wuns/type-anno
+                [form-to-ast [get-arg 0]]
+                [form-to-type [get-arg 1]]]]
 
             [wuns/call-word fw [rest l]]]
 
