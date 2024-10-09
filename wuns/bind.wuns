@@ -10,7 +10,7 @@
 [type local-context []
   [union
     [top]
-    [local [transient-kv-map word local-descriptor] local-context]]]
+    [local [transient-kv-map word [pair local-descriptor word-with-form]] local-context]]]
 
 [type global-descriptor []
   [union
@@ -18,20 +18,24 @@
 
 [type bound-ast []
   [union
-    [var-local word]
-    [var-global word]
+    [var-local word-with-form]
+    [var-global word-with-form]
     [literal literal]
-    [intrinsic word]
+    [intrinsic word-with-form]
     [if bound-ast bound-ast bound-ast]
     [switch bound-ast [list [pair [list literal] bound-ast]] [option bound-ast]]
     [match bound-ast [list [pair match-pattern bound-ast]] [option bound-ast]]
-    [let [list [pair word bound-ast]] bound-ast]
-    [func wuns-func-kind word [list word] [option word] bound-ast]
+    [do [list bound-ast]]
+    [let [list [pair word-with-form bound-ast]] bound-ast]
+    [letrec [list [pair word-with-form bound-ast]] bound-ast]
+    [def word-with-form bound-ast]
+    [func wuns-func-kind word-with-form [list word-with-form] [option word-with-form] bound-ast]
     ]]
 
 [type bind-ast-errors []
   [union
     [local-redefined]
+    [global-redefined]
     [variable-unbound]
     [not-a-union-ctor]]]
 
@@ -52,22 +56,29 @@
     [errors [atom [linked-list/nil]]
      push-error [func pe [name err] [push errors [pair name err]]]
      def-ctx [transient-kv-map]
+     set-def
+     [func set-def [wwf-name desc]
+      [let-do [name [word-with-form/word wwf-name]]
+        [when [has def-ctx name]
+          [push-error wwf-name [bind-ast-errors/global-redefined]]]
+        [set-kv-map def-ctx name [pair desc wwf-name]]]]
      set-local
-     [func set-local [lctx name desc]
-      [do
+     [func set-local [lctx wwf-name desc]
+      [let-do [name [word-with-form/word wwf-name]]
         [when [has lctx name]
-          [push-error name [bind-ast-errors/local-redefined]]]
-        [set-kv-map lctx name desc]]]
+          [push-error wwf-name [bind-ast-errors/local-redefined]]]
+        [set-kv-map lctx name [pair desc wwf-name]]]]
      bind-ast
      [func bind-ast [lctx ast]
       [match ast
-        [wuns/var w]
-        [if-let [desc [try-get-local lctx w]]
-          [bound-ast/var-local w]
-          [do
-            [when-not [has def-ctx w]
-              [push-error w [bind-ast-errors/variable-unbound]]]
-            [bound-ast/var-global w]]]
+        [wuns/var wwf]
+        [let [w [word-with-form/word wwf]]
+          [if-let [desc [try-get-local lctx w]]
+            [bound-ast/var-local wwf]
+            [do
+              [when-not [has def-ctx w]
+                [push-error wwf [bind-ast-errors/variable-unbound]]]
+              [bound-ast/var-global wwf]]]]
 
         [wuns/literal l]
         [bound-ast/literal l]
@@ -99,8 +110,8 @@
                ctor-name [match-pattern/ctor match-pattern]
                new-ctx-map [transient-kv-map]
                new-ctx [local-context/local new-ctx-map lctx]]
-              [if-let [def-desc [try-get def-ctx ctor-name]]
-                [match def-desc
+              [if-let [def-desc [try-get def-ctx [word-with-form/word ctor-name]]]
+                [match [pair/fst def-desc]
                   [global-descriptor/union-ctor]
                   [do]
                   [push-error ctor-name [bind-ast-errors/not-a-union-ctor]]]
@@ -112,6 +123,9 @@
             [option/some [bind-ast lctx d]]
             [option/none]]]
 
+        [wuns/do forms]
+        [bound-ast/do [list-map f forms [bind-ast lctx f]]]
+
         [wuns/let bindings body]
         [let-do
           [new-ctx-map [transient-kv-map]
@@ -122,6 +136,22 @@
                 [set-local new-ctx-map name [local-descriptor/local]]
                 [pair name [bind-ast new-ctx [pair/snd binding]]]]]
             [bind-ast new-ctx body]]]
+
+        [wuns/letrec bindings body]
+        [let-do
+          [new-ctx-map [transient-kv-map]
+           new-ctx [local-context/local new-ctx-map lctx]]
+          [for-each binding bindings
+            [set-local new-ctx-map [pair/fst binding] [local-descriptor/local]]]
+          [bound-ast/letrec
+            [list-map binding bindings
+              [pair [pair/fst binding] [bind-ast new-ctx [pair/snd binding]]]]
+            [bind-ast new-ctx body]]]
+
+        [wuns/def name value]
+        [let
+          [res [bound-ast/def name [bind-ast lctx value]]]
+          res]
 
         [wuns/func kind name parameters opt-rest body]
         [let-do

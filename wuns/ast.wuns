@@ -2,67 +2,75 @@
 
 [type wuns-func-kind [] [union [func] [fexpr] [macro]]]
 
+[type word-with-form []
+  [record
+    [word word]
+    [form form]]]
+
 [type wuns-type []
   [union
-    [word word]
-    [apply word [list wuns-type]]]]
+    [word word-with-form]
+    [apply word-with-form [list wuns-type]]]]
 
 [type wuns-type-decl-kind []
   [union
-    [union [list [pair word [list wuns-type]]]]
-    [record [list [pair word wuns-type]]]]]
+    [union [list [pair word-with-form [list wuns-type]]]]
+    [record [list [pair word-with-form wuns-type]]]]]
 
 [type wuns-type-decl []
   [record
-    [name word]
-    [type-params [list word]]
+    [name word-with-form]
+    [type-params [list word-with-form]]
     [kind wuns-type-decl-kind]]]
 
-[type match-pattern [] [record [ctor word] [params [list word]]]]
+[type match-pattern [] [record [ctor word-with-form] [params [list word-with-form]]]]
 
 [type literal []
   [union
-    [i32 word]
-    [f64 word]
-    [word word]]]
+    [i32 word-with-form]
+    [f64 word-with-form]
+    [word word-with-form]]]
 
 [type wuns []
   [union
-    [var word]
+    [var word-with-form]
     [literal literal]
-    [intrinsic word]
+    [intrinsic word-with-form]
     [if wuns wuns wuns]
     [switch wuns [list [pair [list literal] wuns]] [option wuns]]
     [match wuns [list [pair match-pattern wuns]] [option wuns]]
     [do [list wuns]]
-    [let [list [pair word wuns]] wuns]
-    [letrec [list [pair word wuns]] wuns]
-    [def word wuns]
-    [func wuns-func-kind word [list word] [option word] wuns]
+    [let [list [pair word-with-form wuns]] wuns]
+    [letrec [list [pair word-with-form wuns]] wuns]
+    [def word-with-form wuns]
+    [func wuns-func-kind word-with-form [list word-with-form] [option word-with-form] wuns]
     [call wuns [list wuns]]
-    [call-word word [list form]]
-    [extern [list word]]
+    [call-word word-with-form [list form]]
+    [extern [list word-with-form]]
     [type [list wuns-type-decl]]
     [type-anno wuns wuns-type]
     ]]
 
 [defn parse-param-words [param-words]
   [let [s [size param-words]]
-    [if [and [lt-s 1 s] [eq-word [at param-words -2] [word ..]]]
+    [if [and [lt-s 1 s] [eq-word [word-with-form/word [at param-words -2]] [word ..]]]
       [pair [slice param-words 0 [sub s 2]] [some [last param-words]]]
       [pair param-words [none]]]]]
+
+[defn form-to-word-with [form]
+  [word-with-form [form-to-word form] form]]
 
 [defn form-to-type [form]
   [match form
     [form/word w]
-    [wuns-type/word w]
+    [wuns-type/word [word-with-form w form]]
 
     [form/list l]
     [let-do [fw [form-to-word [first l]]]
       [assert [not [is-empty l]] type form-to-type is empty]
       [assert [not [eq-word fw [word type-scheme]]] type form-to-type does not accept type-scheme]
       [wuns-type/apply
-        fw
+        [form-to-word-with [first l]]
         [list-map arg [rest l] [form-to-type arg]]]]]]
 
 [defn form-to-type-decl-kind [form]
@@ -73,11 +81,11 @@
       [switch [form-to-word [first l]]
         [word union]
         [wuns-type-decl-kind/union
-          [list-map ctor [slice l 1 [size l]]
+          [list-map ctor [rest l]
             [let-do [ctor-list [form-to-list ctor]]
               [assert [not [is-empty ctor-list]] type decl kind union ctor is empty]
               [pair
-                [form-to-word [first ctor-list]]
+                [form-to-word-with [first ctor-list]]
                 [list-map arg [rest ctor-list] [form-to-type arg]]]]]]
 
         [word record]
@@ -93,9 +101,9 @@
     [do
       [assert [eq 2 [size l]] lit form-to-lit size is not 2]
       [switch [form-to-word [first l]]
-        [word i32] [literal/i32 [form-to-word [second l]]]
-        [word f64] [literal/f64 [form-to-word [second l]]]
-        [word word] [literal/word [form-to-word [second l]]]
+        [word i32] [literal/i32 [form-to-word-with [second l]]]
+        [word f64] [literal/f64 [form-to-word-with [second l]]]
+        [word word] [literal/word [form-to-word-with [second l]]]
         [logq-abort form-to-lit not implemented [identity form]]]]
     [logq-abort form-to-lit not implemented word [identity form]]]]
 
@@ -125,16 +133,16 @@
      get-word
      [func gw [form]
       [match form
-        [form/word w] w
+        [form/word w] [word-with-form w form]
         [do
           [push errors [report-message [quote [expected word]] form]]
-          [word 0]]]]
+          [word-with-form [word 0] [form/word [word 0]]]]]]
      form-to-ast
      [func form-to-ast [form]
       [let [report-error [func r [msg] [push errors [report-message msg form]]]]
         [match form
         [form/word w]
-        [wuns/var w]
+        [wuns/var [get-word form]]
 
         [form/list l]
         [let [n-of-args [dec [size l]]
@@ -242,7 +250,7 @@
                 [form-to-ast [get-arg 0]]
                 [form-to-type [get-arg 1]]]]
 
-            [wuns/call-word fw [rest l]]]
+            [wuns/call-word [get-word [first l]] [rest l]]]
 
           [form/list fl]
           [wuns/call [form-to-ast [first l]] [list-map arg [rest l] [form-to-ast arg]]]]]]]]]
@@ -250,6 +258,7 @@
     form-to-ast
     errors]]]
 
+[comment
 [defn form-to-wuns-ctor-calls [form]
   [match form
     [form/word w]
@@ -258,3 +267,4 @@
     [form/list l]
     [wuns/call [wuns/var [word flist]]
       [list-map e l [form-to-wuns-ctor-calls e]]]]]
+]
