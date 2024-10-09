@@ -90,7 +90,8 @@
         [word i32] [wuns/i32 [form-to-word [second l]]]
         [word f64] [wuns/f64 [form-to-word [second l]]]
         [word word] [wuns/word [form-to-word [second l]]]
-        [logq-abort form-to-lit not implemented]]]]]
+        [logq-abort form-to-lit not implemented [identity form]]]]
+    [logq-abort form-to-lit not implemented word [identity form]]]]
 
 [defn form-to-literal-list [form]
   [match form
@@ -98,7 +99,7 @@
     [if [is-empty l]
       [list]
       [match [first l]
-        [form/word w] [list [form-to-lit [first l]]]
+        [form/word w] [list [form-to-lit form]]
         [list-map arg l [form-to-lit arg]]]]
     [logq-abort form-to-literal-list not implemented]]]
 
