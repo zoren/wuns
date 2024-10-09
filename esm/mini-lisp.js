@@ -239,7 +239,10 @@ export const evalForm = (defEnv, topForm) => {
         // constants
         case 'i32':
           assertNumArgs(1)
-          return +getFormWord(forms[1]) | 0
+          const v = +getFormWord(forms[1])
+          const normalized = v | 0
+          if (v !== normalized) throw evalError('expected i32')
+          return normalized
         case 'f64': {
           assertNumArgs(1)
           const v = +getFormWord(forms[1])
