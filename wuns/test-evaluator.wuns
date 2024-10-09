@@ -10,6 +10,22 @@
 [defmacro disable [.. -]
   [quote [do]]]
 
+[defn test-error-fn [evaluator forms]
+  [match [evaluator forms]
+    [result/error e]
+    [do]
+
+    [result/ok actual]
+    [logq for the forms [identity forms] we expected error]
+    [logq-abort test-error-fn found no error]]]
+
+[defmacro test-error [.. forms]
+  [flist [quote do]
+    [quote [inc-atom test-assert-count-atom]]
+    [flist [quote test-error-fn]
+      [quote [mk-evaluator]]
+      [form-concat [list [quote list]] [list-map f forms [mk-quote f]]]]]]
+
 [defn test-ok-fn [evaluator expected-result forms]
   [match [evaluator forms]
     [result/error e]
@@ -39,9 +55,38 @@
   [test-ok [i32 16] [i32 0x10]]
   [test-ok [i32 2]  [i32 0b10]]
   [test-ok [i32 8]  [i32 0o10]]
-
+[disable
+  [test-error [i32 0x]]
+  [test-error [i32 non-an-integer]]
+  [test-error [i32 2.147.483.648]]
+  [test-error [i32 2147483648]]
+  [test-ok [i32 2147483647] [i32 2147483647]]
+]
   [comment the interface is not type safe - so this works]
   [test-ok [f64 1] [i32 1]]
+
+  [test-ok [word abc] [word abc]]
+
+  [test-ok [i32 5] [[intrinsic i32.add] [i32 2] [i32 3]]]
+  [test-ok [i32 5] [[intrinsic i32.sub] [i32 8] [i32 3]]]
+[disable
+  [test-error [switch [i32 0] [i32 1] [word one]]]
+]
+  [test-ok [word zero]
+    [switch [i32 0]
+      [i32 0] [word zero]
+      [i32 1] [word one]
+      [word not-01]]]
+  [test-ok [word one]
+    [switch [i32 1]
+      [i32 0] [word zero]
+      [i32 1] [word one]
+      [word not-01]]]
+  [test-ok [word not-01]
+    [switch [i32 2]
+      [i32 0] [word zero]
+      [i32 1] [word one]
+      [word not-01]]]
 
   [test-ok [word a] [def a [word a]] a]
   [test-ok [i32 4] [def a [i32 4]] a]
@@ -49,6 +94,7 @@
   [comment the interface is not type safe - so this works]
   [test-ok [f64 1] [def a [i32 1]] a]
 
+  [comment done testing]
   [logq ran [form/word [int-to-word [atom-get test-assert-count-atom]]]]]]
 
 [def interpreter-evaluate-result
