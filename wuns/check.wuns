@@ -224,13 +224,6 @@
     [type-vars [list type-var]]
     [type type]]]
 
-[type evaluation-context [] [union]]
-
-[def make-eval-context
-  [type-anno
-    [extern interpreter make-context]
-    [func [] [evaluation-context]]]]
-
 [type check-context []
   [record
     [messages [atom [linked-list report-message]]]

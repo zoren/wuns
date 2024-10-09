@@ -87,7 +87,7 @@ const printForm = (form) => {
 
 export const langUndefined = Symbol('undefined')
 
-import { meta } from './core.js'
+import { meta, makeTaggedValue } from './core.js'
 
 class EvalError extends Error {
   constructor(message, form, innerError) {
@@ -251,13 +251,11 @@ export const evalForm = (defEnv, topForm) => {
           return getFormWord(forms[1])
         case 'extern': {
           let ext = defEnv.externs
-          if (!ext) {
-            throw evalError('no externs defined in defEnv: ' + [...defEnv.keys()].join(' '))
-          }
           for (let i = 1; i < forms.length; i++) {
             const prop = getFormWord(forms[i])
             const extProp = ext[prop]
-            if (extProp === undefined) throw evalError('undefined extern: ' + prop + ' in ' + ext)
+            // if (extProp === undefined) throw evalError('undefined extern: ' + prop + ' in ' + ext)
+            if (extProp === undefined) return langUndefined
             ext = extProp
           }
           return ext
@@ -581,6 +579,9 @@ export const catchErrors = (f) => {
 const none = makeValueTagger('option/none', 0)()
 const some = makeValueTagger('option/some', 1)
 
+const error = makeValueTagger('result/error', 1)
+const ok = makeValueTagger('result/ok', 1)
+
 externs.interpreter = {
   'make-context': () => makeDefEnv(),
   'try-get-macro': (context, name) => {
@@ -596,6 +597,14 @@ externs.interpreter = {
       evalForm(context, form)
     } catch (e) {}
     return langUndefined
+  },
+  'evaluate-result': (context, form) => {
+    if (!(context instanceof Map)) throw new Error('evaluate-result expects context')
+    try {
+      return ok(evalForm(context, form))
+    } catch (e) {
+      return error(e)
+    }
   },
   'evaluate-list-num': (context, fname, args) => {
     if (!(context instanceof Map)) throw new Error('evaluate expects context')

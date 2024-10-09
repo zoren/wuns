@@ -1,0 +1,76 @@
+[load compile-js.wuns]
+
+[type js-value [] [union]]
+
+[def to-js-value
+  [type-anno
+    [extern js identity]
+    [type-scheme [a] [func [a] js-value]]]]
+
+[def interpreter-evaluate-result
+  [type-anno
+    [extern interpreter evaluate-result]
+    [func [evaluation-context form] [result js-value js-value]]]]
+
+[defn mk-eval-forms []
+  [let [eval-context [make-eval-context]]
+    [func eval-forms [forms]
+      [let [results [list-map form forms [interpreter-evaluate-result eval-context form]]]
+      [last results]]]]]
+
+[defmacro disable [.. -]
+  [quote [do]]]
+
+[defn is-error [result]
+  [match result
+    [result/error e] 1
+    [result/ok r]    0]]
+
+[defn run-forms [evaluator forms]
+  [assert [not [is-empty forms]] expected at least one form]
+  [for-each f [slice forms 0 [dec [size forms]]]
+    [assert [not [is-error [evaluator f]]] expected no error in the non-last form]]
+  [evaluator [last forms]]]
+
+[defn test-ok-fn [evaluator expected-result forms]
+  [match [evaluator forms]
+    [result/error e]
+    [do
+      [log e]
+      [logq-abort test-ok-fn found error]]
+    [result/ok actual]
+    [when-not [is-identical actual [to-js-value expected-result]]
+      [logq test failed]
+      [logq for the forms [identity forms] we expected]
+      [log expected-result]
+      [logq but got]
+      [log actual]]]]
+
+[defmacro test-ok [expected-result .. forms]
+  [flist [quote do]
+    [quote [inc-atom test-assert-count-atom]]
+    [flist [quote test-ok-fn]
+      [quote [mk-evaluator]]
+      expected-result
+      [form-concat [list [quote list]] [list-map f forms [mk-quote f]]]]]]
+
+[defn run-test-suite [mk-evaluator]
+  [let-do [test-assert-count-atom [atom 0]]
+[disable
+  [comment check if we accidentally allow octal numbers - result would be 8 in that case]
+  [test-ok [i32 10] [i32 0010]]
+]
+  [test-ok [word a] [def a [word a]] a]
+  [test-ok [i32 4] [def a [i32 4]] a]
+  [test-ok [f64 1.5] [def a [f64 1.5]] a]
+  [comment the interface is not type safe - so this works]
+  [test-ok [f64 1] [def a [i32 1]] a]
+
+  [logq ran [form/word [int-to-word [atom-get test-assert-count-atom]]]]]]
+
+[defn run-tests []
+  [logq running self eval tests]
+  [run-test-suite mk-eval-forms]
+  [logq running compiler tests]
+  [run-test-suite [func const [] compile-run-forms]]
+  ]
