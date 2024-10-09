@@ -70,6 +70,9 @@
   [test-ok [i32 5] [[intrinsic i32.add] [i32 2] [i32 3]]]
   [test-ok [i32 5] [[intrinsic i32.sub] [i32 8] [i32 3]]]
 
+  [test-ok [word one] [if [i32 0] [word zero] [word one]]]
+  [test-ok [word zero] [if [i32 1] [word zero] [word one]]]
+
   [test-error [switch [i32 0] [i32 1] [word one]]]
   [test-ok [word zero]
     [switch [i32 0]
