@@ -66,9 +66,12 @@
   [test-ok [f64 1] [i32 1]]
 
   [test-ok [word abc] [word abc]]
+  [test-ok [word 00123] [word 00123]]
 
   [test-ok [i32 5] [[intrinsic i32.add] [i32 2] [i32 3]]]
   [test-ok [i32 5] [[intrinsic i32.sub] [i32 8] [i32 3]]]
+
+  [test-ok [i32 2] [[extern host size] [[func list [.. xs] xs] [i32 1] [i32 3]]]]
 
   [test-error [if]]
   [test-error [if [i32 0]]]
@@ -98,6 +101,25 @@
   [test-ok [i32 5] [[func id [p] p] [i32 5]]]
   [test-ok [i32 5] [[func sub [p q] [[intrinsic i32.sub] p q]] [i32 8] [i32 3]]]
 
+  [test-ok [i32 5]
+    [do
+      [def x [i32 5]]
+      [def y x]
+      y]]
+
+  [test-ok [i32 5]
+    [def inc [func inc [x] [[intrinsic i32.add] [i32 1] x]]]
+    [def g [func g [x] [inc x]]]
+    [g [i32 4]]]
+
+  [test-ok [i32 6]
+    [type form []
+      [union
+        [word word]
+        [list [list form]]]]
+    [def qs [fexpr qs [.. xs] [[extern host size] xs]]]
+    [qs these arguments are interpreted as forms]]
+
   [test-ok [word a] [def a [word a]] a]
   [test-ok [i32 4] [def a [i32 4]] a]
   [test-ok [f64 1.5] [def a [f64 1.5]] a]
@@ -125,3 +147,5 @@
   [logq running compiler tests]
   [run-test-suite [func const [] compile-run-forms]]
   ]
+
+[run-tests]

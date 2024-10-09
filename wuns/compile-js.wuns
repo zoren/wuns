@@ -112,7 +112,8 @@
     [macro-funcs [transient-kv-map]
      top-decls [atom [linked-list/nil]]
      form-ast-converter [mk-form-to-ast]
-     form-to-ast [form-to-ast-converter/form-to-ast form-ast-converter]]
+     form-to-ast [form-to-ast-converter/form-to-ast form-ast-converter]
+     defexprs [transient-kv-map]]
     [letrec
     [cexp
       [func cexp [wexp]
@@ -150,7 +151,9 @@
           [wuns/call-word w form-args]
           [if-let [macro-func [try-get macro-funcs w]]
             [iife [cstmt 1 [form-to-ast [call-js-func macro-func form-args]]]]
-            [js-exp/call [js-exp/var w] [list-map arg form-args [cexp [form-to-wuns-ctor-calls arg]]]]]
+            [if [has defexprs w]
+              [js-exp/call [js-exp/var w] [list-map arg form-args [cexp [form-to-wuns-ctor-calls arg]]]]
+              [js-exp/call [js-exp/var w] [list-map arg form-args [cexp [form-to-ast arg]]]]]]
 
           [wuns/extern ws]
           [mk-extern ws]
@@ -263,15 +266,21 @@
           [push top-decls [cstmt 1 ast]]
           [match ast
             [wuns/def w e]
-            [when [if-let [kind [try-get-func-kind e]] [match kind [wuns-func-kind/macro] 1 0] 0]
-              [let-do [top-so-far [clone-growable-to-frozen-list top-decls]
-                       decl-block [js-stmt/block [concat top-so-far [list [js-stmt/return [js-exp/var w]]]]]
-                       mac-func-result [run-js-stmt decl-block]]
-                [match mac-func-result
-                  [result/ok mac-func]
-                  [set-kv-map macro-funcs w mac-func]
-                  [result/error e]
-                  [logq-abort compile-top-forms error compiling macro function]]]]
+            [when-let [kind [try-get-func-kind e]]
+              [match kind
+                [wuns-func-kind/macro]
+                [let-do [top-so-far [clone-growable-to-frozen-list top-decls]
+                         decl-block [js-stmt/block [concat top-so-far [list [js-stmt/return [js-exp/var w]]]]]
+                         mac-func-result [run-js-stmt decl-block]]
+                  [match mac-func-result
+                    [result/ok mac-func]
+                    [set-kv-map macro-funcs w mac-func]
+                    [result/error e]
+                    [logq-abort compile-top-forms error compiling macro function]]]
+                [wuns-func-kind/fexpr]
+                [set-kv-map defexprs w 1]
+                [wuns-func-kind/func]
+                [do]]]
             [do]]]]
       [let [errors [clone-growable-to-frozen-list [form-to-ast-converter/errors form-ast-converter]]]
         [if [is-empty errors]
@@ -283,5 +292,8 @@
     [result/error e] [result/error e]
     [result/ok top-stmt]
     [match [run-js-stmt top-stmt]
-      [result/error jsval-err] [result/error [list]]
+      [result/error jsval-err]
+      [do
+        [comment [log jsval-err]]
+        [result/error [list]]]
       [result/ok v] [result/ok v]]]]
