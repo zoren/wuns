@@ -109,8 +109,7 @@
 
 [defn compile-top-forms [top-forms]
   [let
-    [def-ctx [transient-kv-map]
-     macro-funcs [transient-kv-map]
+    [macro-funcs [transient-kv-map]
      top-decls [atom [linked-list/nil]]
      form-ast-converter [mk-form-to-ast]
      form-to-ast [form-to-ast-converter/form-to-ast form-ast-converter]]
@@ -149,21 +148,9 @@
             [list]]
 
           [wuns/call-word w form-args]
-          [if-let [def-val [try-get def-ctx w]]
-            [if-let [kind [try-get-func-kind def-val]]
-              [match kind
-                [wuns-func-kind/func]
-                [js-exp/call [js-exp/var w] [list-map arg form-args [cexp [form-to-ast arg]]]]
-
-                [wuns-func-kind/macro]
-                [let-do [macro-func [get macro-funcs w]]
-                  [logq calling macro]
-                  [iife [cstmt 1 [form-to-ast [call-js-func macro-func form-args]]]]]
-
-                [wuns-func-kind/fexpr]
-                [js-exp/call [js-exp/var w] [list-map arg form-args [cexp [form-to-wuns-ctor-calls arg]]]]]
-              [js-exp/call [js-exp/var w] [list-map arg form-args [cexp [form-to-ast arg]]]]]
-            [js-exp/call [js-exp/var w] [list-map arg form-args [cexp [form-to-ast arg]]]]]
+          [if-let [macro-func [try-get macro-funcs w]]
+            [iife [cstmt 1 [form-to-ast [call-js-func macro-func form-args]]]]
+            [js-exp/call [js-exp/var w] [list-map arg form-args [cexp [form-to-wuns-ctor-calls arg]]]]]
 
           [wuns/extern ws]
           [mk-extern ws]
@@ -232,9 +219,7 @@
             [logq-abort cstmt not implemented match [if is-tail [quote tail] [quote non-tail]]]]
 
           [wuns/def w e]
-          [do
-            [set-kv-map def-ctx w e]
-            [js-stmt/const-decl w [cexp e]]]
+          [js-stmt/const-decl w [cexp e]]
 
           [wuns/type decls]
           [js-stmt/seq
@@ -263,22 +248,8 @@
                     [logq-abort cstmt not implemented record]]]]]]
 
           [wuns/call-word w form-args]
-          [if-let [def-val [try-get def-ctx w]]
-            [if-let [kind [try-get-func-kind def-val]]
-              [match kind
-                [wuns-func-kind/func]
-                [do
-                  [log [word func-name] w]
-                  [logq-abort cstmt not implemented call-word func]]
-
-                [wuns-func-kind/macro]
-                [cstmt 1 [form-to-ast [call-js-func [get macro-funcs w] form-args]]]
-
-                [wuns-func-kind/fexpr]
-                [logq-abort cstmt not implemented call-word fexpr]]
-              [if is-tail
-                [js-stmt/return [cexp wexp]]
-                [js-stmt/exp [cexp wexp]]]]
+          [if-let [mac-func [try-get macro-funcs w]]
+            [cstmt 1 [form-to-ast [call-js-func mac-func form-args]]]
             [if is-tail
               [js-stmt/return [cexp wexp]]
               [js-stmt/exp [cexp wexp]]]]

@@ -77,6 +77,7 @@
   [test-ok [word zero] [if [i32 1] [word zero] [word one]]]
 
   [test-error [switch [i32 0] [i32 1] [word one]]]
+  [test-error [switch [i32 1] [i32 1] [word one]]]
   [test-ok [word zero]
     [switch [i32 0]
       [i32 0] [word zero]
@@ -93,11 +94,16 @@
       [i32 1] [word one]
       [word not-01]]]
 
+  [test-ok [i32 5] [[func f [] [i32 5]]]]
+  [test-ok [i32 5] [[func id [p] p] [i32 5]]]
+  [test-ok [i32 5] [[func sub [p q] [[intrinsic i32.sub] p q]] [i32 8] [i32 3]]]
+
   [test-ok [word a] [def a [word a]] a]
   [test-ok [i32 4] [def a [i32 4]] a]
   [test-ok [f64 1.5] [def a [f64 1.5]] a]
   [comment the interface is not type safe - so this works]
   [test-ok [f64 1] [def a [i32 1]] a]
+  [test-ok [i32 5] [def f [func f [] [i32 5]]] [f]]
 
   [comment done testing]
   [logq ran [form/word [int-to-word [atom-get test-assert-count-atom]]]]]]
