@@ -4,19 +4,27 @@
   [union
     [internal-func-name]
     [local]
-    [parameter]]]
+    [parameter]
+    [match-parameter]]]
 
 [type local-context []
   [union
     [top]
     [local [transient-kv-map word local-descriptor] local-context]]]
 
+[type global-descriptor []
+  [union
+    [union-ctor]]]
+
 [type bound-ast []
   [union
     [var-local word]
     [var-global word]
+    [literal literal]
+    [intrinsic word]
     [if bound-ast bound-ast bound-ast]
     [switch bound-ast [list [pair [list literal] bound-ast]] [option bound-ast]]
+    [match bound-ast [list [pair match-pattern bound-ast]] [option bound-ast]]
     [let [list [pair word bound-ast]] bound-ast]
     [func wuns-func-kind word [list word] [option word] bound-ast]
     ]]
@@ -24,7 +32,8 @@
 [type bind-ast-errors []
   [union
     [local-redefined]
-    [variable-unbound]]]
+    [variable-unbound]
+    [not-a-union-ctor]]]
 
 [defn try-get-local [lctx name]
   [[func loop [cur-ctx]
@@ -41,12 +50,13 @@
 [defn mk-bind-ast []
   [let
     [errors [atom [linked-list/nil]]
+     push-error [func pe [name err] [push errors [pair name err]]]
      def-ctx [transient-kv-map]
      set-local
      [func set-local [lctx name desc]
       [do
         [when [has lctx name]
-          [push errors [pair name [bind-ast-errors/local-redefined]]]]
+          [push-error name [bind-ast-errors/local-redefined]]]
         [set-kv-map lctx name desc]]]
      bind-ast
      [func bind-ast [lctx ast]
@@ -56,8 +66,14 @@
           [bound-ast/var-local w]
           [do
             [when-not [has def-ctx w]
-              [push errors [pair w [bind-ast-errors/variable-unbound]]]]
+              [push-error w [bind-ast-errors/variable-unbound]]]
             [bound-ast/var-global w]]]
+
+        [wuns/literal l]
+        [bound-ast/literal l]
+
+        [wuns/intrinsic l]
+        [bound-ast/intrinsic l]
 
         [wuns/if c t e]
         [bound-ast/if
@@ -70,6 +86,28 @@
           [bind-ast lctx value]
           [list-map c cases
             [pair [pair/fst c] [bind-ast lctx [pair/snd c]]]]
+          [if-let [d opt-default]
+            [option/some [bind-ast lctx d]]
+            [option/none]]]
+
+        [wuns/match value cases opt-default]
+        [bound-ast/match
+          [bind-ast lctx value]
+          [list-map c cases
+            [let-do
+              [match-pattern [pair/fst c]
+               ctor-name [match-pattern/ctor match-pattern]
+               new-ctx-map [transient-kv-map]
+               new-ctx [local-context/local new-ctx-map lctx]]
+              [if-let [def-desc [try-get def-ctx ctor-name]]
+                [match def-desc
+                  [global-descriptor/union-ctor]
+                  [do]
+                  [push-error ctor-name [bind-ast-errors/not-a-union-ctor]]]
+                [push-error ctor-name [bind-ast-errors/variable-unbound]]]
+              [for-each p [match-pattern/params match-pattern]
+                [set-local new-ctx-map p [local-descriptor/match-parameter]]]
+              [pair match-pattern [bind-ast new-ctx [pair/snd c]]]]]
           [if-let [d opt-default]
             [option/some [bind-ast lctx d]]
             [option/none]]]
