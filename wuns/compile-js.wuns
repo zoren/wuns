@@ -52,12 +52,7 @@
 [def run-js-stmt
   [type-anno
     [extern js run-js-stmt]
-    [func [js-stmt] [js-value]]]]
-
-[def run-js-exp
-  [type-anno
-    [extern js run-js-exp]
-    [func [js-exp] [js-value]]]]
+    [func [js-stmt] [result js-value js-value]]]]
 
 [def call-js-func
   [type-anno
@@ -113,11 +108,14 @@
   [concat-words [word tmp] [int-to-word [inc-atom tmp-counter]]]]
 
 [defn compile-top-forms [top-forms]
-  [letrec
+  [let
     [def-ctx [transient-kv-map]
      macro-funcs [transient-kv-map]
      top-decls [atom [linked-list/nil]]
-     cexp
+     form-ast-converter [mk-form-to-ast]
+     form-to-ast [form-to-ast-converter/form-to-ast form-ast-converter]]
+    [letrec
+    [cexp
       [func cexp [wexp]
         [match wexp
           [wuns/var w]
@@ -297,10 +295,22 @@
             [when [if-let [kind [try-get-func-kind e]] [match kind [wuns-func-kind/macro] 1 0] 0]
               [let-do [top-so-far [clone-growable-to-frozen-list top-decls]
                        decl-block [js-stmt/block [concat top-so-far [list [js-stmt/return [js-exp/var w]]]]]
-                       mac-func [run-js-stmt decl-block]]
-                [set-kv-map macro-funcs w mac-func]]]
+                       mac-func-result [run-js-stmt decl-block]]
+                [match mac-func-result
+                  [result/ok mac-func]
+                  [set-kv-map macro-funcs w mac-func]
+                  [result/error e]
+                  [logq-abort compile-top-forms error compiling macro function]]]]
             [do]]]]
-      [js-stmt/seq [clone-growable-to-frozen-list top-decls]]]
-    ]]
+      [let [errors [clone-growable-to-frozen-list [form-to-ast-converter/errors form-ast-converter]]]
+        [if [is-empty errors]
+          [result/ok [js-stmt/seq [clone-growable-to-frozen-list top-decls]]]
+          [result/error errors]]]]]]]
 
-[defn compile-run-forms [forms] [run-js-stmt [compile-top-forms forms]]]
+[defn compile-run-forms [forms]
+  [match [compile-top-forms forms]
+    [result/error e] [result/error e]
+    [result/ok top-stmt]
+    [match [run-js-stmt top-stmt]
+      [result/error jsval-err] [result/error [list]]
+      [result/ok v] [result/ok v]]]]

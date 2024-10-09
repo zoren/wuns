@@ -103,108 +103,140 @@
         [list-map arg l [form-to-lit arg]]]]
     [logq-abort form-to-literal-list not implemented]]]
 
-[defn form-to-ast [form]
-  [match form
-    [form/word w]
-    [wuns/var w]
+[type report-message []
+  [record
+    [message form]
+    [form form]]]
 
-    [form/list l]
-    [match [first l]
-      [form/word fw]
-      [switch fw
-        [word i32]
-        [wuns/i32 [form-to-word [second l]]]
+[type form-to-ast-converter []
+  [record
+    [form-to-ast [func [form] wuns]]
+    [errors [atom [linked-list report-message]]]]]
 
-        [word f64]
-        [wuns/f64 [form-to-word [second l]]]
+[defn mk-form-to-ast []
+  [let
+    [errors [atom [linked-list/nil]]
+     get-word
+     [func gw [form]
+      [match form
+        [form/word w] w
+        [do
+          [push errors [report-message [quote [expected word]] form]]
+          [word 0]]]]
+     form-to-ast
+     [func form-to-ast [form]
+      [let [report-error [func r [msg] [push errors [report-message msg form]]]]
+        [match form
+        [form/word w]
+        [wuns/var w]
 
-        [word word]
-        [wuns/word [form-to-word [second l]]]
+        [form/list l]
+        [let [n-of-args [dec [size l]]
+              get-arg [func get-arg [i]
+                        [if [lt-s i n-of-args]
+                          [at l [inc i]]
+                          [quote 0]]]]
+        [match [first l]
+          [form/word fw]
+          [switch fw
+            [word i32]
+            [wuns/i32 [get-word [get-arg 0]]]
 
-        [word extern]
-        [wuns/extern [list-map w [rest l] [form-to-word w]]]
+            [word f64]
+            [wuns/f64 [get-word [get-arg 0]]]
 
-        [word intrinsic]
-        [wuns/intrinsic [form-to-word [second l]]]
+            [word word]
+            [wuns/word [get-word [get-arg 0]]]
 
-        [[word func] [word fexpr] [word macro]]
-        [let [name [form-to-word [second l]]
-              parsed-params [parse-param-words [list-map p [form-to-list [third l]] [form-to-word p]]]
-              body-form [fourth l]]
-          [wuns/func
-            [switch fw
-              [word func]  [wuns-func-kind/func]
-              [word fexpr] [wuns-func-kind/fexpr]
-              [word macro] [wuns-func-kind/macro]
-              [logq-abort form-to-ast not implemented wuns-func-kind]]
-            name
-            [pair/fst parsed-params]
-            [pair/snd parsed-params]
-            [form-to-ast body-form]]]
+            [word extern]
+            [wuns/extern [list-map w [rest l] [get-word w]]]
 
-        [word atom]
-        [logq-abort form-to-ast not implemented atom]
+            [word intrinsic]
+            [wuns/intrinsic [get-word [get-arg 0]]]
 
-        [word if]
-        [wuns/if [form-to-ast [second l]] [form-to-ast [third l]] [form-to-ast [fourth l]]]
+            [[word func] [word fexpr] [word macro]]
+            [let [name [get-word [get-arg 0]]
+                  parsed-params [parse-param-words [list-map p [form-to-list [get-arg 1]] [get-word p]]]
+                  body-form [get-arg 2]]
+              [wuns/func
+                [switch fw
+                  [word func]  [wuns-func-kind/func]
+                  [word fexpr] [wuns-func-kind/fexpr]
+                  [word macro] [wuns-func-kind/macro]
+                  [logq-abort form-to-ast not implemented]]
+                name
+                [pair/fst parsed-params]
+                [pair/snd parsed-params]
+                [form-to-ast body-form]]]
 
-        [word switch]
-        [wuns/switch
-          [form-to-ast [second l]]
-          [list-map p [pairwise [slice l 2 [dec [size l]]]]
-            [pair
-              [form-to-literal-list [first p]]
-              [form-to-ast [second p]]]]
-          [if [is-odd [size l]]
-            [some [form-to-ast [last l]]]
-            [none]]]
+            [word atom]
+            [logq-abort form-to-ast not implemented atom]
 
-        [word match]
-        [wuns/match
-          [form-to-ast [second l]]
-          [list-map p [pairwise [slice l 2 [size l]]]
-            [pair
-              [let-do [pat-list [form-to-list [first p]]]
-                [assert [not [is-empty pat-list]] match pattern is empty]
-                [match-pattern
-                  [form-to-word [first pat-list]]
-                  [list-map arg [rest pat-list] [form-to-word arg]]]]
-              [form-to-ast [second p]]]]
-          [if [is-odd [size l]]
-            [some [form-to-ast [last l]]]
-            [none]]]
+            [word if]
+            [do
+              [when-not [eq n-of-args 3] [report-error [quote [if expects 3 arguments]]]]
+              [wuns/if [form-to-ast [get-arg 0]] [form-to-ast [get-arg 1]] [form-to-ast [get-arg 2]]]]
 
-        [word do]
-        [wuns/do [list-map arg [rest l] [form-to-ast arg]]]
+            [word switch]
+            [wuns/switch
+              [form-to-ast [get-arg 0]]
+              [list-map p [pairwise [slice l 2 [dec [size l]]]]
+                [pair
+                  [form-to-literal-list [first p]]
+                  [form-to-ast [second p]]]]
+              [if [is-odd [size l]]
+                [some [form-to-ast [last l]]]
+                [none]]]
 
-        [word let]
-        [wuns/let
-          [list-map p [pairwise [slice l 1 [dec [size l]]]] [pair [form-to-word [first p]] [form-to-ast [second p]]]]
-          [form-to-ast [last l]]]
+            [word match]
+            [wuns/match
+              [form-to-ast [get-arg 0]]
+              [list-map p [pairwise [slice l 2 [size l]]]
+                [pair
+                  [let-do [pat-list [form-to-list [first p]]]
+                    [assert [not [is-empty pat-list]] match pattern is empty]
+                    [match-pattern
+                      [get-word [first pat-list]]
+                      [list-map arg [rest pat-list] [get-word arg]]]]
+                  [form-to-ast [second p]]]]
+              [if [is-odd [size l]]
+                [some [form-to-ast [last l]]]
+                [none]]]
 
-        [word letrec]
-        [wuns/letrec
-          [list-map p [pairwise [slice l 1 [dec [size l]]]] [pair [form-to-word [first p]] [form-to-ast [second p]]]]
-          [form-to-ast [last l]]]
+            [word do]
+            [wuns/do [list-map arg [rest l] [form-to-ast arg]]]
 
-        [word def]
-        [wuns/def [form-to-word [second l]] [form-to-ast [third l]]]
+            [word let]
+            [wuns/let
+              [list-map p [pairwise [slice l 1 [dec [size l]]]] [pair [get-word [first p]] [form-to-ast [second p]]]]
+              [form-to-ast [last l]]]
 
-        [word type]
-        [wuns/type
-          [list-map triple [triplewise [rest l]]
-            [wuns-type-decl
-              [form-to-word [first triple]]
-              [list-map tv [form-to-list [second triple]] [form-to-word tv]]
-              [form-to-type-decl-kind [third triple]]]]]
+            [word letrec]
+            [wuns/letrec
+              [list-map p [pairwise [slice l 1 [dec [size l]]]] [pair [get-word [first p]] [form-to-ast [second p]]]]
+              [form-to-ast [last l]]]
 
-        [word type-anno]
-        [logq-abort form-to-ast not implemented type-anno]
+            [word def]
+            [wuns/def [get-word [get-arg 0]] [form-to-ast [third l]]]
 
-        [wuns/call-word fw [rest l]]]
+            [word type]
+            [wuns/type
+              [list-map triple [triplewise [rest l]]
+                [wuns-type-decl
+                  [get-word [first triple]]
+                  [list-map tv [form-to-list [second triple]] [get-word tv]]
+                  [form-to-type-decl-kind [third triple]]]]]
 
-      [form/list fl]
-      [wuns/call [form-to-ast [first l]] [list-map arg [rest l] [form-to-ast arg]]]]]]
+            [word type-anno]
+            [logq-abort form-to-ast not implemented type-anno]
+
+            [wuns/call-word fw [rest l]]]
+
+          [form/list fl]
+          [wuns/call [form-to-ast [first l]] [list-map arg [rest l] [form-to-ast arg]]]]]]]]]
+  [form-to-ast-converter
+    form-to-ast
+    errors]]]
 
 [defn form-to-wuns-ctor-calls [form]
   [match form
