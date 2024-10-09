@@ -54,6 +54,9 @@
 [defmacro comment [.. -]
   [quote [do]]]
 
+[defmacro todo [.. -]
+  [quote [do]]]
+
 [def-extern concat-words [func [word word] word]]
 
 [defn def-instruction-fn [def-name inst-name]
@@ -510,3 +513,8 @@
   [type-anno
     [extern interpreter make-context]
     [func [] [evaluation-context]]]]
+
+[def performance-now
+  [type-anno
+    [extern performance-now]
+    [func [] f64]]]

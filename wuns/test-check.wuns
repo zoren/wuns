@@ -473,11 +473,6 @@
           [log-report-message message]]
         [logq-abort test-ok-fn-stop-at-error failed there were errors [meta [identity form]]]]]]]
 
-[def performance-now
-  [type-anno
-    [extern performance-now]
-    [func [] f64]]]
-
 [defn test-ok-files [.. files]
   [let-do
     [gctx [make-global-context]
