@@ -20,16 +20,20 @@
 
 [type match-pattern [] [record [ctor word] [params [list word]]]]
 
+[type literal []
+  [union
+    [i32 word]
+    [f64 word]
+    [word word]]]
+
 [type wuns []
   [union
     [var word]
-    [i32 word]
-    [f64 word]
-    [word word]
+    [literal literal]
     [intrinsic word]
     [if wuns wuns wuns]
-    [switch wuns [list [pair [list wuns] wuns]] [option wuns]]
-    [match wuns  [list [pair match-pattern wuns]] [option wuns]]
+    [switch wuns [list [pair [list literal] wuns]] [option wuns]]
+    [match wuns [list [pair match-pattern wuns]] [option wuns]]
     [do [list wuns]]
     [let [list [pair word wuns]] wuns]
     [letrec [list [pair word wuns]] wuns]
@@ -87,9 +91,9 @@
     [do
       [assert [eq 2 [size l]] lit form-to-lit size is not 2]
       [switch [form-to-word [first l]]
-        [word i32] [wuns/i32 [form-to-word [second l]]]
-        [word f64] [wuns/f64 [form-to-word [second l]]]
-        [word word] [wuns/word [form-to-word [second l]]]
+        [word i32] [literal/i32 [form-to-word [second l]]]
+        [word f64] [literal/f64 [form-to-word [second l]]]
+        [word word] [literal/word [form-to-word [second l]]]
         [logq-abort form-to-lit not implemented [identity form]]]]
     [logq-abort form-to-lit not implemented word [identity form]]]]
 
@@ -140,13 +144,13 @@
           [form/word fw]
           [switch fw
             [word i32]
-            [wuns/i32 [get-word [get-arg 0]]]
+            [wuns/literal [literal/i32 [get-word [get-arg 0]]]]
 
             [word f64]
-            [wuns/f64 [get-word [get-arg 0]]]
+            [wuns/literal [literal/f64 [get-word [get-arg 0]]]]
 
             [word word]
-            [wuns/word [get-word [get-arg 0]]]
+            [wuns/literal [literal/word [get-word [get-arg 0]]]]
 
             [word extern]
             [wuns/extern [list-map w [rest l] [get-word w]]]
@@ -241,7 +245,7 @@
 [defn form-to-wuns-ctor-calls [form]
   [match form
     [form/word w]
-    [wuns/call [wuns/var [word form/word]] [list [wuns/word w]]]
+    [wuns/call [wuns/var [word form/word]] [list [wuns/literal [literal/word w]]]]
 
     [form/list l]
     [wuns/call [wuns/var [word flist]]
