@@ -206,7 +206,7 @@
                     [cstmt is-tail [pair/snd case]]]]
                 [if-let [default-case opt-default]
                   [cstmt is-tail default-case]
-                  [logq-abort cstmt switch without default]]]]
+                  [js-stmt/throw [js-exp/string [word unmatched-switch]]]]]]
             [logq-abort cstmt not implemented switch non-tail]]
 
           [wuns/match exp cases opt-default]
