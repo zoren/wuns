@@ -2,7 +2,6 @@ import {
   isWord,
   isList,
   wordValue,
-  isDefVar,
   meta,
   arrayToList,
   atom,
@@ -11,8 +10,6 @@ import {
   print,
   formWord,
   formList,
-  setMeta,
-  defVar,
   stringToWord,
   makeTaggedValue
 } from './core.js'
@@ -47,26 +44,6 @@ export const form_list_with_meta = (l, meta_data) => {
 }
 
 export { meta }
-
-export const var_meta = (v) => {
-  if (!isDefVar(v)) throw new Error('var-meta, not a defvar: ' + v)
-  return meta(v)
-}
-export const set_var_value_meta = (v, value, meta_data) => {
-  if (!isDefVar(v)) throw new Error('not a defvar: ' + v)
-  v.setValue(value)
-  setMeta(v, meta_data)
-}
-export const def_var_with_meta = (name, value, meta_data) => {
-  if (!isWord(name)) throw new Error('def-var-with-meta expects word')
-  const v = defVar(name, value)
-  setMeta(v, meta_data)
-  return v
-}
-export const var_get = (v) => {
-  if (!isDefVar(v)) throw new Error('not a defvar: ' + v)
-  return v.value
-}
 
 export const word_byte_size = (word) => {
   if (isWord(word)) return wordValue(word).length

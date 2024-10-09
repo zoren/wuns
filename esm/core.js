@@ -58,46 +58,13 @@ export const formList = (list, metaData) => {
 
 export const tryGetFormList = (f) => (getTag(f) === formListName ? f.args[0] : null)
 
-class DefVar {
-  #name
-  #value
-  constructor(name, value) {
-    if (typeof name !== 'string') throw new Error('name must be string')
-    if (value === undefined) throw new Error('value must be defined')
-    this.#name = name
-    this.#value = value
-  }
-
-  get name() {
-    return this.#name
-  }
-
-  get value() {
-    return this.#value
-  }
-
-  setValue(value) {
-    this.#value = value
-  }
-
-  toString() {
-    return `[var ${this.#name}]`
-  }
-}
-
-export const isDefVar = (f) => f instanceof DefVar
-
-export const defVar = (name, value) => new DefVar(name, value)
-
 const symbolMeta = Symbol.for('wuns-meta')
 export const meta = (v) => {
-  // if (!isForm(v) && !isDefVar(v)) throw new Error('meta expects form or defvar')
   const t = typeof v
   if ((t === 'object' || t === 'function') && symbolMeta in v) return v[symbolMeta]
   return 0
 }
 export const setMeta = (v, meta) => {
-  // if (!isForm(v) && !isDefVar(v)) throw new Error('setMeta expects form or defvar')
   const t = typeof v
   if (!(t === 'object' || t === 'function') || Object.isFrozen(v)) throw new Error('expects mutable object ' + t)
   if (meta === undefined) {
@@ -142,7 +109,6 @@ export const print = (ox) => {
     if (word) return go(word)
     const list = tryGetFormList(x)
     if (list) return go(list)
-    if (isDefVar(x)) return `[var ${x.name}]`
     if (isAtom(x)) return `[atom ${go(x.value)}]`
     if (isTaggedValue(x)) return `[${x.tag}${x.args.map(a => ` ${go(a)}`).join('')}]`
     const recordTag = isRecord(x)
