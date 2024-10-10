@@ -433,6 +433,32 @@ export const evalForm = (defEnv, topForm) => {
           form = forms[2]
           continue
         }
+        case 'letfn': {
+          assertNumArgs(2)
+          const functionsList = getFormList(forms[1])
+          const funcs = functionsList.map((funcForm) => {
+            const funcList = getFormList(funcForm)
+            if (funcList.length !== 4) throw evalError('letfn function must have three forms')
+            const kind = getFormWord(funcList[0])
+            if (kind !== 'func' && kind !== 'fexpr' && kind !== 'macro')
+              throw evalError('unexpected function kind: ' + kind)
+            const name = getFormWord(funcList[1])
+            const parameters = getFormList(funcList[2]).map(getFormWord)
+            const body = funcList[3]
+            return { kind, name, parameters, body, funcForm }
+          })
+          const newEnv = makeEnv(env)
+          try {
+            const values = []
+            for (const func of funcs) values.push(go(newEnv, func.funcForm))
+            for (let i = 0; i < funcs.length; i++) setEnv(newEnv, funcs[i].name, values[i])
+          } catch (e) {
+            throw evalError('error in let bindings', e)
+          }
+          env = newEnv
+          form = forms[2]
+          continue
+        }
         case 'def': {
           assertNumArgs(2)
           if (env !== defEnv) throw evalError('def must be defined in the outermost environment')

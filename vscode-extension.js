@@ -99,8 +99,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
         if (list.length === 0) return
         const [head, ...tail] = list
         const headWord = tryGetFormWord(head)
-        const funcSpecial = () => {
-          const [name, paramsForm, body] = tail
+        const funcSpecial = (headWord, [name, paramsForm, body]) => {
           pushToken(name, headWord === 'macro' ? macroTokenType : functionTokenType)
           const params = tryGetFormList(paramsForm)
           if (params) for (const param of params) pushToken(param, parameterTokenType)
@@ -153,9 +152,20 @@ const makeProvideDocumentSemanticTokensForms = async () => {
           },
           let: letSpecial,
           letrec: letSpecial,
-          func: funcSpecial,
-          fexpr: funcSpecial,
-          macro: funcSpecial,
+          letfn: () => {
+            const [functionsForm, body] = tail
+            for (const func of getListOrEmpty(functionsForm)) {
+              const [head, ...tail] = getListOrEmpty(func)
+              const headWord = tryGetFormWord(head)
+              if (headWord !== 'func' && headWord !== 'fexpr' && headWord !== 'macro') continue
+              pushToken(head, keywordTokenType)
+              funcSpecial(headWord, tail)
+            }
+            go(body)
+          },
+          func: () => funcSpecial(headWord, tail),
+          fexpr: () => funcSpecial(headWord, tail),
+          macro: () => funcSpecial(headWord, tail),
           def: () => {
             const [cname, val] = tail
             pushTokenWithModifier(cname, variableTokenType, declarationModifier)
