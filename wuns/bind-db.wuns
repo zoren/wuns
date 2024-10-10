@@ -46,6 +46,11 @@
     [no]
     [tail word-with-form]]]
 
+[type binder []
+  [record
+    [bind-ast [func [wuns] [tuple]]]
+    [errors [atom [linked-list [pair word-with-form bind-ast-errors]]]]]]
+
 [defn mk-bind-db []
   [let
     [errors [atom [linked-list/nil]]
@@ -91,7 +96,9 @@
         [do]
 
         [wuns/intrinsic l]
-        [do]
+        [do
+          [comment check if valid intrinsic]
+          ]
 
         [wuns/if c t e]
         [do
@@ -164,12 +171,48 @@
           [if-let [desc [try-get-local lctx w]]
             [match [local-descriptor/kind desc]
               [local-descriptor-kind/internal-func-name]
-              [do]
-              ]
+              [match tail-pos-info
+                [tail-position/no]
+                [logq it is a rec call]
+                [tail-position/tail wwf]
+                [logq it is a tail rec call]
+                ]
+              [do]]
             [if-let [gdesc [try-get def-ctx w]]
               [logq it is a global]
               [do
                 [push-error wwf [bind-ast-errors/variable-unbound]]
                 ]]]]]]]
-    [pair bind-ast errors]
-          ]]]
+    [binder
+      [func out-bind-ast [ast] [bind-ast [local-context/top] [tail-position/no] ast]]
+      errors]]]]
+
+[defn check-errors [name errors-atom]
+  [match [atom-get errors-atom]
+    [linked-list/nil]
+    [do]
+    [do
+      [logq there were errors]
+      [log name]
+      [for-each error [clone-growable-to-frozen-list errors-atom]
+        [log error]]
+      [logq-abort aborting due to errors]]]]
+
+[defn test-bind-fn [test-forms]
+  [let-do
+    [form-ast-converter [mk-form-to-ast]
+     form-to-ast [form-to-ast-converter/form-to-ast form-ast-converter]
+     conversion-errors-atom [form-to-ast-converter/errors form-ast-converter]
+     binder [mk-bind-db]
+     bind-ast [binder/bind-ast binder]
+     binder-errors-atom [binder/errors binder]]
+    [for-each form test-forms
+      [let-do
+        [ast [form-to-ast form]]
+        [check-errors [quote conversion] conversion-errors-atom]
+        [bind-ast ast]]
+        [check-errors [quote binding] binder-errors-atom]]]]
+
+[defexpr test-bind [.. test-forms]
+  [test-bind-fn test-forms]]
+
