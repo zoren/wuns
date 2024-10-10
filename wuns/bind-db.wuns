@@ -2,7 +2,7 @@
 
 [type local-descriptor-kind []
   [union
-    [internal-func-name]
+    [internal-func wuns-func]
     [let]
     [parameter]]]
 
@@ -44,18 +44,25 @@
 [type tail-position []
   [union
     [no]
-    [tail word-with-form]]]
+    [tail]]]
+
+[type fact []
+  [union
+    [recursive-call wuns-func wuns]
+    [tail-recursive-call wuns-func wuns]]]
 
 [type binder []
   [record
     [bind-ast [func [wuns] [tuple]]]
-    [errors [atom [linked-list [pair word-with-form bind-ast-errors]]]]]]
+    [errors [atom [linked-list [pair word-with-form bind-ast-errors]]]]
+    [db [atom [linked-list fact]]]]]
 
 [defn mk-bind-db []
   [let
     [errors [atom [linked-list/nil]]
      push-error [func pe [name err] [push errors [pair name err]]]
      def-ctx [transient-kv-map]
+     db [atom [linked-list/nil]]
      set-def
      [func set-def [wwf-name desc]
       [let-do [name [word-with-form/word wwf-name]]
@@ -74,12 +81,12 @@
           [name [wuns-func/name func]
            new-ctx-map [transient-kv-map]
            new-ctx [local-context/local new-ctx-map lctx]]
-          [set-local new-ctx-map name [local-descriptor-kind/internal-func-name]]
+          [set-local new-ctx-map name [local-descriptor-kind/internal-func func]]
           [for-each p [wuns-func/parameters func]
             [set-local new-ctx-map p [local-descriptor-kind/parameter]]]
           [when-let [r [wuns-func/rest-param func]]
             [set-local new-ctx-map r [local-descriptor-kind/parameter]]]
-          [bind-ast new-ctx [tail-position/tail name] [wuns-func/body func]]]]
+          [bind-ast new-ctx [tail-position/tail] [wuns-func/body func]]]]
      [func bind-ast [lctx tail-pos-info ast]
       [match ast
         [wuns/var wwf]
@@ -170,12 +177,12 @@
           [w [word-with-form/word wwf]]
           [if-let [desc [try-get-local lctx w]]
             [match [local-descriptor/kind desc]
-              [local-descriptor-kind/internal-func-name]
+              [local-descriptor-kind/internal-func func]
               [match tail-pos-info
                 [tail-position/no]
-                [logq it is a rec call]
-                [tail-position/tail wwf]
-                [logq it is a tail rec call]
+                [push db [fact/recursive-call func ast]]
+                [tail-position/tail]
+                [push db [fact/tail-recursive-call func ast]]
                 ]
               [do]]
             [if-let [gdesc [try-get def-ctx w]]
@@ -185,7 +192,8 @@
                 ]]]]]]]
     [binder
       [func out-bind-ast [ast] [bind-ast [local-context/top] [tail-position/no] ast]]
-      errors]]]]
+      errors
+      db]]]]
 
 [defn check-errors [name errors-atom]
   [match [atom-get errors-atom]
@@ -211,7 +219,12 @@
         [ast [form-to-ast form]]
         [check-errors [quote conversion] conversion-errors-atom]
         [bind-ast ast]]
-        [check-errors [quote binding] binder-errors-atom]]]]
+        [check-errors [quote binding] binder-errors-atom]]
+    [let-do [facts [clone-growable-to-frozen-list [binder/db binder]]]
+      [logq facts in db]
+      [log [size facts]]
+      [for-each fact facts
+        [log fact]]]]]
 
 [defexpr test-bind [.. test-forms]
   [test-bind-fn test-forms]]
