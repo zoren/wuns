@@ -267,7 +267,7 @@
         errors [unify t1 t2]]
     [for-each error errors
       [logq error]
-      [log form]
+      [log [meta form]]
       [report-fn gctx [form/list error] form]]]]
 
 [defn int-to-type-var-name [i]
@@ -616,6 +616,9 @@
 
     [form/list sub-forms]
     [let [s-form [size sub-forms]
+          - [when-not s-form
+              [log [meta form]]
+              [logq check expects non-empty list]]
           first-form [first sub-forms]
           n-of-args [dec s-form]]
       [ifs
