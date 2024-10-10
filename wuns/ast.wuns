@@ -31,7 +31,15 @@
     [f64 word-with-form]
     [word word-with-form]]]
 
-[type wuns []
+[type
+  wuns-func []
+  [record
+    [kind wuns-func-kind]
+    [name word-with-form]
+    [params [list word-with-form]]
+    [rest-param [option word-with-form]]
+    [body wuns]]
+  wuns []
   [union
     [var word-with-form]
     [literal literal]
@@ -42,8 +50,9 @@
     [do [list wuns]]
     [let [list [pair word-with-form wuns]] wuns]
     [letrec [list [pair word-with-form wuns]] wuns]
+    [letfn [list wuns-func] wuns]
     [def word-with-form wuns]
-    [func wuns-func-kind word-with-form [list word-with-form] [option word-with-form] wuns]
+    [func wuns-func]
     [call wuns [list wuns]]
     [call-word word-with-form [list form]]
     [extern [list word-with-form]]
@@ -136,8 +145,26 @@
         [form/word w] [word-with-form w form]
         [do
           [push errors [report-message [quote [expected word]] form]]
-          [word-with-form [word 0] [form/word [word 0]]]]]]
-     form-to-ast
+          [word-with-form [word 0] [form/word [word 0]]]]]]]
+  [letfn [
+     [func form-to-func [form]
+        [let [form-list [form-to-list form]
+              kind
+              [switch [word-with-form/word [get-word [first form-list]]]
+                [word func]  [wuns-func-kind/func]
+                [word fexpr] [wuns-func-kind/fexpr]
+                [word macro] [wuns-func-kind/macro]
+                [do
+                  [push errors [report-message [quote [expected func fexpr or macro]] form]]
+                  [wuns-func-kind/func]]]
+              name [get-word [second form-list]]
+              parsed-params [parse-param-words [list-map p [form-to-list [third form-list]] [get-word p]]]]
+          [wuns-func
+            kind
+            name
+            [pair/fst parsed-params]
+            [pair/snd parsed-params]
+            [form-to-ast [fourth form-list]]]]]
      [func form-to-ast [form]
       [let [report-error [func r [msg] [push errors [report-message msg form]]]]
         [match form
@@ -170,26 +197,14 @@
             [wuns/intrinsic [get-word [get-arg 0]]]
 
             [[word func] [word fexpr] [word macro]]
-            [let [name [get-word [get-arg 0]]
-                  parsed-params [parse-param-words [list-map p [form-to-list [get-arg 1]] [get-word p]]]
-                  body-form [get-arg 2]]
-              [wuns/func
-                [switch fw
-                  [word func]  [wuns-func-kind/func]
-                  [word fexpr] [wuns-func-kind/fexpr]
-                  [word macro] [wuns-func-kind/macro]
-                  [logq-abort form-to-ast not implemented]]
-                name
-                [pair/fst parsed-params]
-                [pair/snd parsed-params]
-                [form-to-ast body-form]]]
+            [wuns/func [form-to-func form]]
 
             [word atom]
             [logq-abort form-to-ast not implemented atom]
 
             [word if]
             [do
-              [when-not [eq n-of-args 3] [report-error [quote [if expects 3 arguments]]]]
+              [assert-n-args 3]
               [wuns/if [form-to-ast [get-arg 0]] [form-to-ast [get-arg 1]] [form-to-ast [get-arg 2]]]]
 
             [word switch]
@@ -222,14 +237,27 @@
             [wuns/do [list-map arg [rest l] [form-to-ast arg]]]
 
             [word let]
-            [wuns/let
-              [list-map p [pairwise [slice l 1 [dec [size l]]]] [pair [get-word [first p]] [form-to-ast [second p]]]]
-              [form-to-ast [last l]]]
+            [let-do
+              [bindings [form-to-list [get-arg 0]]]
+              [assert-n-args 2]
+              [wuns/let
+                [list-map p [pairwise bindings] [pair [get-word [first p]] [form-to-ast [second p]]]]
+                [form-to-ast [get-arg 1]]]]
 
             [word letrec]
-            [wuns/letrec
-              [list-map p [pairwise [slice l 1 [dec [size l]]]] [pair [get-word [first p]] [form-to-ast [second p]]]]
-              [form-to-ast [last l]]]
+            [let-do
+              [bindings [form-to-list [get-arg 0]]]
+              [assert-n-args 2]
+              [wuns/letrec
+                [list-map p [pairwise bindings] [pair [get-word [first p]] [form-to-ast [second p]]]]
+                [form-to-ast [get-arg 1]]]]
+
+            [word letfn]
+            [do
+              [assert-n-args 2]
+              [wuns/letfn
+                [list-map ff [form-to-list [get-arg 0]] [form-to-func ff]]
+                [form-to-ast [get-arg 1]]]]
 
             [word def]
             [wuns/def [get-word [get-arg 0]] [form-to-ast [third l]]]
@@ -256,7 +284,7 @@
           [wuns/call [form-to-ast [first l]] [list-map arg [rest l] [form-to-ast arg]]]]]]]]]
   [form-to-ast-converter
     form-to-ast
-    errors]]]
+    errors]]]]
 
 [comment
 [defn form-to-wuns-ctor-calls [form]
