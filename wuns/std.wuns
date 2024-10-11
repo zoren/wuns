@@ -489,18 +489,25 @@
     [nil]
     [cons a [linked-list a]]]]
 
-[defn linked-list-to-list [ll]
-  [match ll
-    [linked-list/nil] [list]
-    [linked-list/cons hd tl] [concat [list hd] [linked-list-to-list tl]]]]
+[type growable-list [a] [union]]
 
-[defn push [list-ref element]
-  [atom-set list-ref [linked-list/cons element [atom-get list-ref]]]]
+[def-extern growable-list [type-scheme [a] [func [] [growable-list a]]]]
+[def-extern push [type-scheme [a] [func [[growable-list a] a] [tuple]]]]
+[def-extern clone-growable-to-frozen-list [type-scheme [a] [func [[growable-list a]] [list a]]]]
 
-[defn growable-list. [] [atom [linked-list/nil]]]
+[type set [a] [union]]
 
-[defn clone-growable-to-frozen-list [atom-linked-list]
-  [list-reverse [linked-list-to-list [atom-get atom-linked-list]]]]
+[def-extern set [type-scheme [a] [func [] [set a]]]]
+[def-extern set-add [type-scheme [a] [func [[set a] a] [tuple]]]]
+[def-extern set-has [type-scheme [a] [func [[set a] a] i32]]]
+[def-extern set-to-list [type-scheme [a] [func [[set a]] [list a]]]]
+
+[defn filter [l pred]
+  [let-do [filtered [growable-list]]
+    [for-each x l
+      [when [pred x]
+        [push filtered x]]]
+    [clone-growable-to-frozen-list filtered]]]
 
 [type result [ok-type error-type]
   [union
