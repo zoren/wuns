@@ -51,6 +51,7 @@ import {
   formWord,
   formList,
   emptyList,
+  langUndefined,
 } from './core.js'
 import path from 'node:path'
 
@@ -61,8 +62,6 @@ const printForm = (form) => {
   if (list) return `[${list.map(printForm).join(' ')}]`
   throw new Error('unexpected form: ' + form)
 }
-
-export const langUndefined = Symbol('undefined')
 
 import { meta, makeTaggedValue } from './core.js'
 

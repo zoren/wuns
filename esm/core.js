@@ -1,5 +1,7 @@
 import { isPlainObject } from "./utils.js"
 
+export const langUndefined = Symbol('undefined')
+
 export const isSigned32BitInteger = (n) => (n | 0) === n
 
 const wordRegex = /^[-./0-9a-z]+$/
@@ -103,7 +105,8 @@ export const getRecordType = (v) => v[recordTag]
 
 export const print = (ox) => {
   const go = (x) => {
-    if (x === undefined) return '*undefined*'
+    if (x === undefined) return '*js-undefined*'
+    if (x === langUndefined) return '*wuns-undefined*'
     if (isList(x)) return `[${x.map(go).join(' ')}]`
     const word = tryGetFormWord(x)
     if (word) return go(word)
@@ -126,6 +129,7 @@ export const print = (ox) => {
     if (t === 'number' || t === 'bigint') return String(x)
     if (t === 'string') return isWord(x) ? x : `'${x}'`
     if (t === 'function') return `[fn ${x.name}]`
+    if (x instanceof Map) return `[transient-kv-map${[...x].map(([k, v]) => ` ${go(k)} ${go(v)}`).join('')}]`
     if (!isPlainObject(x)) return String(x)
     if (Object.isFrozen(x))
       return `[kv-map${Object.entries(x)
