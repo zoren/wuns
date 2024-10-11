@@ -89,24 +89,14 @@
 
 [defn free-type-vars [t]
   [let-do
-    [set [atom [linked-list/nil]]
-     is-member
-     [func is-member [tv]
-      [[func is-member-go [ll]
-        [match ll
-          [linked-list/nil] 0
-          [linked-list/cons hd tl]
-            [if [is-identical hd tv]
-              1
-              [is-member-go tl]]]]
-        [atom-get set]]]
+    [ftvs [set]
      go
      [func go [t]
       [let [nt [normalize-type t]]
         [match nt
           [type/var tv]
-          [when-not [is-member tv]
-            [push set tv]]
+          [when-not [set-has ftvs tv]
+            [set-add ftvs tv]]
 
           [type/inst inst-type]
           [match inst-type
@@ -122,7 +112,7 @@
             [for-each arg type-args
               [go arg]]]]]]]
     [go t]
-    [clone-growable-to-frozen-list set]]]
+    [set-to-list ftvs]]]
 
 [defn prune-level [max-level tvs]
   [for-each tv tvs
@@ -143,7 +133,7 @@
 
 [defn unify [outer-t1 outer-t2]
   [let-do
-    [errors [atom [linked-list/nil]]
+    [errors [growable-list]
      push-unify-error
      [func push-unify-error [msg] [push errors [form-to-list msg]]]
      go
@@ -226,7 +216,7 @@
 
 [type check-context []
   [record
-    [messages [atom [linked-list report-message]]]
+    [messages [growable-list report-message]]
     [def-var-types [transient-kv-map word check-type-scheme]]
     [type-var-counter [atom i32]]
     [types [transient-kv-map word type-def]]
@@ -236,7 +226,7 @@
 
 [defn make-global-context []
   [check-context
-    [atom [linked-list/nil]]
+    [growable-list]
     [transient-kv-map]
     [atom 0]
     [transient-kv-map]
@@ -300,7 +290,7 @@
 [defn mk-empty-type-scheme [type] [check-type-scheme [list] type]]
 
 [defn generalize [current-level type]
-  [let-do [tvs [atom [linked-list/nil]]
+  [let-do [tvs [growable-list]
            ftvs [free-type-vars type]]
     [for-each tv ftvs
       [if [lt-s current-level [get-type-var-level tv]]
@@ -467,7 +457,7 @@
       [form/list elements]
       [let-do [s-form [size elements]
                n-of-args [dec s-form]]
-        [assert [not [eq s-form 0]] type-scheme expects a non-empty list]
+        [assert [not [eq s-form 0]] type or type-scheme expects a non-empty list]
         [if-let [w [try-get-word-report gctx [first elements]]]
           [if [eq-word w [word func]]
             [do
@@ -668,7 +658,7 @@
 
                   [let-do [type-params-list [try-get-list-report gctx [at sub-forms [inc i]]]
                            param-map [transient-kv-map]
-                           type-args [atom [linked-list/nil]]]
+                           type-args [growable-list]]
                     [for-each param type-params-list
                       [when-let [param-word [try-get-word-report gctx param]]
                         [report-when [has param-map param-word] param already defined]
@@ -700,7 +690,7 @@
 
                     [word record]
                     [let-do
-                      [fields [atom [linked-list/nil]]]
+                      [fields [growable-list]]
                       [for i 1 [size type-def-list]
                         [let-do
                           [field-def [try-get-list-report gctx [at type-def-list i]]
@@ -814,7 +804,7 @@
            bindings [try-get-list-report gctx [second sub-forms]]
            n-of-bindings [size bindings]
            level-1 [inc level]
-           tmp-types [atom [linked-list/nil]]]
+           tmp-types [growable-list]]
           [report-when-not [eq n-of-args 2] form expects two arguments]
           [for-pair i 0 [dec n-of-bindings]
             [let-do
@@ -840,7 +830,7 @@
            let-ctx [make-local-context var-values lctx first-form]
            functions [try-get-list-report gctx [second sub-forms]]
            level-1 [inc level]
-           tmp-types [atom [linked-list/nil]]]
+           tmp-types [growable-list]]
           [report-when-not [eq n-of-args 2] form expects two arguments]
           [for-each function-form functions
             [let-do [func-list [try-get-list-report gctx function-form]
@@ -878,7 +868,7 @@
            param-ctx [transient-kv-map]
            gen-func-type [generate-fresh-type-var gctx level-1]
            func-ctx [make-local-context param-ctx lctx first-form]
-           reg-params [atom [linked-list/nil]]
+           reg-params [growable-list]
            opt-rest-param-atom [atom [none]]]
           [report-when-not [eq n-of-args 3] form expects 3 arguments]
           [when-let [func-name [try-get-form-word-option [second sub-forms]]]
