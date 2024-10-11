@@ -28,29 +28,6 @@ const parseParameters = (parameters) => {
   return { restParam: null, regularParameters: parameters }
 }
 
-const setParametersStaged = (closure) => {
-  const { closureName, parameters, env } = closure
-  const { regularParameters, restParam } = parseParameters(parameters)
-  if (!restParam)
-    return (eargs) => {
-      const paramEnv = makeEnv(env)
-      setEnv(paramEnv, closureName, closure)
-      if (eargs.length !== regularParameters.length)
-        throw new EvalError(`${closureName} expected ${regularParameters.length} arguments, got ${eargs.length}`)
-      for (let i = 0; i < regularParameters.length; i++) setEnv(paramEnv, regularParameters[i], eargs[i])
-      return paramEnv
-    }
-  return (eargs) => {
-    const paramEnv = makeEnv(env)
-    setEnv(paramEnv, closureName, closure)
-    if (eargs.length < regularParameters.length)
-      throw new EvalError(`${closureName} expected at least ${regularParameters.length} arguments, got ${eargs.length}`)
-    for (let i = 0; i < regularParameters.length; i++) setEnv(paramEnv, regularParameters[i], eargs[i])
-    setEnv(paramEnv, restParam, list(...eargs.slice(regularParameters.length)))
-    return paramEnv
-  }
-}
-
 class Closure extends Function {
   constructor(f, kind, paramEnvMaker, body) {
     f.kind = kind
