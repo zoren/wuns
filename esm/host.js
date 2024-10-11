@@ -11,7 +11,7 @@ import {
   formWord,
   formList,
   stringToWord,
-  makeTaggedValue
+  makeTaggedValue,
 } from './core.js'
 
 export const apply = (fn, args) => {
@@ -248,4 +248,28 @@ export const wasm_call_export = (instance, export_name, args) => {
   if (res === undefined) return emptyTuple
   if (!Array.isArray(res)) return Object.freeze([res])
   return Object.freeze(res)
+}
+
+export const growable_list = () => []
+export const push = (growable_list, value) => {
+  if (!Array.isArray(growable_list)) throw new Error('push expects array')
+  growable_list.push(value)
+}
+export const clone_growable_to_frozen_list = (growable_list) => {
+  if (!Array.isArray(growable_list)) throw new Error('clone-growable-to-frozen-list expects array')
+  return Object.freeze([...growable_list])
+}
+
+export const set = () => new Set()
+export const set_add = (set, value) => {
+  if (!(set instanceof Set)) throw new Error('set-add expects set')
+  set.add(value)
+}
+export const set_has = (set, value) => {
+  if (!(set instanceof Set)) throw new Error('set-has expects set')
+  return set.has(value) | 0
+}
+export const set_to_list = (set) => {
+  if (!(set instanceof Set)) throw new Error('set-to-frozen-list expects set')
+  return Object.freeze([...set])
 }
