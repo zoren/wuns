@@ -71,6 +71,10 @@ const jsStmtToString = (js) => {
   if (!js) throw new Error('js stmt is falsy')
   const { tag, args } = js
   switch (tag) {
+    case 'js-stmt/break':
+      return 'break'
+    case 'js-stmt/continue':
+      return 'continue'
     case 'js-stmt/return':
       return `return ${jsExpToString(args[0])}`
     case 'js-stmt/if':
@@ -92,10 +96,14 @@ const jsStmtToString = (js) => {
       return args[0].map(jsStmtToString).join(';\n')
     case 'js-stmt/const-decl':
       return `const ${escapeIdentifier(args[0])} = ${jsExpToString(args[1])}`
+    case 'js-stmt/assign':
+      return `${escapeIdentifier(args[0])} = ${jsExpToString(args[1])}`
     case 'js-stmt/exp':
       return jsExpToString(args[0])
     case 'js-stmt/throw':
       return `throw ${jsExpToString(args[0])}`
+    case 'js-stmt/while':
+      return `while (${jsExpToString(args[0])}) ${jsStmtToString(args[1])}`
 
     default:
       throw new Error(`unknown js stmt tag: ${tag}`)
