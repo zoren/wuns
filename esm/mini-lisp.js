@@ -179,8 +179,6 @@ export const parseToForms = (content, contentName) => treeToForms(parse(content)
 
 export const readFile = (filePath) => parseToForms(fs.readFileSync(filePath, 'ascii'), filePath)
 
-export const isSpecialFormPrimitiveConstant = (word) => word === 'i32' || word === 'f64' || word === 'word'
-
 const getPathRelativeToCurrentDir = (defEnv, relativeFilePath) => {
   const { currentDir } = defEnv
   if (!currentDir) throw new Error('load expects currentDir')
@@ -307,30 +305,9 @@ export const evalForm = (defEnv, topForm) => {
           for (let i = 2; i < forms.length - 1; i += 2) {
             const pattern = forms[i]
             const patternList = getFormList(pattern)
-            const optFirstPatternWord = tryGetFormWord(patternList[0])
-            if (optFirstPatternWord) {
-              if (!isSpecialFormPrimitiveConstant(optFirstPatternWord))
-                throw evalError('switch pattern must be constant, was ' + optFirstPatternWord)
-              if (go(env, pattern) === value) {
-                form = forms[i + 1]
-                break
-              }
-            } else {
-              let match = false
-              for (const subPatternForm of patternList) {
-                const subPatternList = getFormList(subPatternForm)
-                const subPatternWord = tryGetFormWord(subPatternList[0])
-                if (!isSpecialFormPrimitiveConstant(subPatternWord))
-                  throw evalError('switch pattern must be constant, was ' + subPatternWord)
-                if (go(env, subPatternForm) === value) {
-                  match = true
-                  break
-                }
-              }
-              if (match) {
-                form = forms[i + 1]
-                break
-              }
+            if (patternList.some((patForm) => go(env, patForm) === value)) {
+              form = forms[i + 1]
+              break
             }
           }
           continue
