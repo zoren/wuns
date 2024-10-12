@@ -1,0 +1,269 @@
+[load std.wuns]
+
+[type wordf []
+  [record
+    [word word]
+    [form form]]]
+
+[type type []
+  [union
+    [word wordf]
+    [apply wordf [list type]]]]
+
+[type type-decl-kind []
+  [union
+    [union [list [pair wordf [list type]]]]
+    [record [list [pair wordf type]]]]]
+
+[type type-decl []
+  [record
+    [name wordf]
+    [type-params [list wordf]]
+    [kind type-decl-kind]]]
+
+[type match-pattern [] [record [ctor wordf] [params [list wordf]]]]
+
+[type literal []
+  [union
+    [i32 wordf]
+    [f64 wordf]
+    [word wordf]]]
+[type
+  bfunc []
+  [record
+    [name wordf]
+    [parameters [list wordf]]
+    [rest-param [option wordf]]
+    [body bform]]
+  bform []
+  [union
+    [var wordf]
+    [literal literal]
+    [intrinsic wordf]
+    [extern [list wordf]]
+    [type [list type-decl]]
+
+    [func bfunc]
+    [if bform bform bform]
+    [do [list bform]]
+    [switch bform [list [pair [list bform] bform]] [option bform]]
+    [match bform [list [pair match-pattern bform]] [option bform]]
+    [letfn [list bfunc] bform]
+    [let [list [pair wordf bform]] bform]
+    [def wordf bform]
+    [defexpr bfunc]
+    [call bform [list bform]]
+    [call-fexpr bform [list form]]
+    [type-anno bform type]
+    ]]
+
+[defn parse-param-words [param-words]
+  [let [s [size param-words]]
+    [if [and [lt-s 1 s] [eq-word [wordf/word [at param-words -2]] [word ..]]]
+      [pair [slice param-words 0 [sub s 2]] [some [last param-words]]]
+      [pair param-words [none]]]]]
+
+[defn form-to-word-with [form]
+  [wordf [form-to-word form] form]]
+
+[defn form-to-type [form]
+  [match form
+    [form/word w]
+    [type/word [wordf w form]]
+
+    [form/list l]
+    [let-do [fw [form-to-word [first l]]]
+      [assert [not [is-empty l]] type form-to-type is empty]
+      [assert [not [eq-word fw [word type-scheme]]] type form-to-type does not accept type-scheme]
+      [type/apply
+        [form-to-word-with [first l]]
+        [list-map arg [rest l] [form-to-type arg]]]]]]
+
+[defn form-to-type-decl-kind [form]
+  [match form
+    [form/list l]
+    [do
+      [assert [not [is-empty l]] type decl kind form is empty]
+      [switch [form-to-word [first l]]
+        [[word union]]
+        [type-decl-kind/union
+          [list-map ctor [rest l]
+            [let-do [ctor-list [form-to-list ctor]]
+              [assert [not [is-empty ctor-list]] type decl kind union ctor is empty]
+              [pair
+                [form-to-word-with [first ctor-list]]
+                [list-map arg [rest ctor-list] [form-to-type arg]]]]]]
+
+        [[word record]]
+        [logq-abort form-to-type-decl-kind not implemented record]
+
+        [logq-abort form-to-type-decl-kind not implemented]]]
+
+    [logq-abort form-to-type-decl-kind not implemented]]]
+
+[type report-message []
+  [record
+    [message form]
+    [form form]]]
+
+[type form-to-ast-converter []
+  [record
+    [form-to-ast [func [form] bform]]
+    [errors [growable-list report-message]]]]
+
+[defn mk-form-to-ast []
+  [let
+    [eval-ctx [make-eval-context [current-dir]]
+     errors [growable-list]
+     get-word
+     [func gw [form]
+      [match form
+        [form/word w] [wordf w form]
+        [do
+          [push errors [report-message [quote [expected word]] form]]
+          [wordf [word 0] [form/word [word 0]]]]]]
+     get-list
+     [func gl [form]
+      [match form
+        [form/list l] l
+        [do
+          [push errors [report-message [quote [expected list]] form]]
+          [list]]]]]
+    [letfn [
+      [func form-to-func [form]
+          [let [form-list [get-list form]
+                name [get-word [second form-list]]
+                parsed-params [parse-param-words [list-map p [get-list [third form-list]] [get-word p]]]]
+            [bfunc
+              name
+              [pair/fst parsed-params]
+              [pair/snd parsed-params]
+              [form-to-ast [fourth form-list]]]]]
+      [func form-to-ast [form]
+        [let [report-error [func r [msg] [push errors [report-message msg form]]]]
+          [match form
+          [form/word w]
+          [bform/var [get-word form]]
+
+          [form/list l]
+          [let [n-of-args [dec [size l]]
+                assert-n-args [func ana [n] [when-not [eq n-of-args n] [report-error [quote [expected n-of-args arguments]]]]]
+                get-arg [func get-arg [i]
+                          [if [lt-s i n-of-args]
+                            [at l [inc i]]
+                            [quote 0]]]]
+            [match [first l]
+              [form/word fw]
+              [switch fw
+                [[word i32]]
+                [bform/literal [literal/i32 [get-word [get-arg 0]]]]
+
+                [[word f64]]
+                [bform/literal [literal/f64 [get-word [get-arg 0]]]]
+
+                [[word word]]
+                [bform/literal [literal/word [get-word [get-arg 0]]]]
+
+                [[word extern]]
+                [bform/extern [list-map w [rest l] [get-word w]]]
+
+                [[word intrinsic]]
+                [bform/intrinsic [get-word [get-arg 0]]]
+
+                [[word fexpr] [word macro]]
+                [logq-abort form-to-ast no longer allowed]
+
+                [[word func]]
+                [bform/func [form-to-func form]]
+
+                [[word atom]]
+                [logq-abort form-to-ast not implemented atom]
+
+                [[word if]]
+                [do
+                  [assert-n-args 3]
+                  [bform/if [form-to-ast [get-arg 0]] [form-to-ast [get-arg 1]] [form-to-ast [get-arg 2]]]]
+
+                [[word switch]]
+                [bform/switch
+                  [form-to-ast [get-arg 0]]
+                  [list-map p [pairwise [slice l 2 [dec [size l]]]]
+                    [pair
+                      [list-map v [get-list [first p]] [form-to-ast v]]
+                      [form-to-ast [second p]]]]
+                  [if [is-odd [size l]]
+                    [some [form-to-ast [last l]]]
+                    [none]]]
+
+                [[word match]]
+                [bform/match
+                  [form-to-ast [get-arg 0]]
+                  [list-map p [pairwise [slice l 2 [size l]]]
+                    [pair
+                      [let-do [pat-list [get-list [first p]]]
+                        [assert [not [is-empty pat-list]] match pattern is empty]
+                        [match-pattern
+                          [get-word [first pat-list]]
+                          [list-map arg [rest pat-list] [get-word arg]]]]
+                      [form-to-ast [second p]]]]
+                  [if [is-odd [size l]]
+                    [some [form-to-ast [last l]]]
+                    [none]]]
+
+                [[word do]]
+                [bform/do [list-map arg [rest l] [form-to-ast arg]]]
+
+                [[word let]]
+                [let-do
+                  [bindings [get-list [get-arg 0]]]
+                  [assert-n-args 2]
+                  [bform/let
+                    [list-map p [pairwise bindings] [pair [get-word [first p]] [form-to-ast [second p]]]]
+                    [form-to-ast [get-arg 1]]]]
+
+                [[word letrec]]
+                [logq-abort form-to-ast letrec deprecated]
+
+                [[word letfn]]
+                [do
+                  [assert-n-args 2]
+                  [bform/letfn
+                    [list-map ff [get-list [get-arg 0]] [form-to-func ff]]
+                    [form-to-ast [get-arg 1]]]]
+
+                [[word def]]
+                [bform/def [get-word [get-arg 0]] [form-to-ast [third l]]]
+
+                [[word defexpr]]
+                [logq-abort form-to-ast not implemented defexpr]
+
+                [[word defmacro]]
+                [logq-abort form-to-ast not implemented defmacro]
+
+                [[word type]]
+                [bform/type
+                  [list-map triple [triplewise [rest l]]
+                    [type-decl
+                      [get-word [first triple]]
+                      [list-map tv [get-list [second triple]] [get-word tv]]
+                      [form-to-type-decl-kind [third triple]]]]]
+
+                [[word type-anno]]
+                [do
+                  [assert-n-args 2]
+                  [todo check for type-scheme]
+                  [bform/type-anno
+                    [form-to-ast [get-arg 0]]
+                    [form-to-type [get-arg 1]]]]
+
+                [do
+                  [comment [bform/call-word [get-word [first l]] [rest l]]]
+                  [logq-abort form-to-ast not implemented]
+                  ]
+                ]
+
+              [form/list fl]
+              [bform/call [form-to-ast [first l]] [list-map arg [rest l] [form-to-ast arg]]]]]]]]]
+    [form-to-ast-converter
+      form-to-ast
+      errors]]]]
