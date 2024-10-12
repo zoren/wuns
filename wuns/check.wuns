@@ -649,10 +649,8 @@
           [for-3 i 1 s-form
             [let [name-form [at sub-forms i]]
               [when-let [name-word [try-get-word-report gctx name-form]]
+                [assert [not [is-builtin-type name-word]] cannot be redefined [identity name-form]]
                 [ifs
-                  [is-builtin-type name-word]
-                  [report name-form built-in type cannot be redefined]
-
                   [has types name-word]
                   [report name-form already defined]
 
@@ -672,6 +670,7 @@
                         [make-type-list name-word [clone-growable-to-frozen-list type-args]]]]]]]]]
           [for-3 i 1 s-form
             [when-let [name-word [try-get-form-word-option [at sub-forms i]]]
+              [assert [not [is-builtin-type name-word]] cannot be redefined [at sub-forms i]]
               [let-do
                 [type-prefix [concat-words name-word [word /]]
                  this-type-def [get types name-word]
@@ -700,7 +699,7 @@
                             [set-kv-map def-var-types [concat-words type-prefix field-name]
                               [generalize-top [type-func [list result-type] [none] inst-field-type]]]]]]
                       [set-kv-map def-var-types name-word
-                        [generalize-top [type-func [clone-growable-to-frozen-list fields] [none] [type-def/result-type [get types name-word]]]]]]
+                        [generalize-top [type-func [clone-growable-to-frozen-list fields] [none] [type-def/result-type this-type-def]]]]]
 
                     [logq-abort check type definition not recognized]]
                   [logq-abort check type definition not recognized]]]]]
