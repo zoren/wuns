@@ -1,111 +1,178 @@
 [load ast.wuns]
 
+[type parameter-descriptor []
+  [record
+    [index i32]
+    [func wuns-func]]]
+
 [type local-descriptor-kind []
   [union
     [internal-func wuns-func]
     [let]
-    [parameter]]]
+    [match-case-parameter]
+    [parameter parameter-descriptor]]]
 
 [type local-descriptor []
   [record
     [kind local-descriptor-kind]
     [form form]]]
 
+[type local-context-kind []
+  [union
+    [function wuns-func]
+    [match]
+    [let]
+    [letfn]]]
+
 [type local-context []
+  [record
+    [vars [transient-kv-map word local-descriptor]]
+    [kind local-context-kind]]]
+
+[type local-context-stack []
   [union
     [top]
-    [local
-      [transient-kv-map word local-descriptor]
-      local-context]]]
+    [frame
+      local-context
+      local-context-stack]]]
 
-[defn try-get-local [lctx name]
+[defn try-get-local [lctx-stack name]
   [[func loop [cur-ctx]
     [match cur-ctx
-      [local-context/top]
+      [local-context-stack/top]
       [option/none]
 
-      [local-context/local map rest]
-      [if-let [desc [try-get map name]]
+      [local-context-stack/frame lctx outer]
+      [if-let [desc [try-get [local-context/vars lctx] name]]
         [option/some desc]
-        [loop rest]]]]
-    lctx]]
+        [loop outer]]]]
+    lctx-stack]]
+
+[defn try-get-enclosing-func [lctx-stack]
+  [[func loop [cur-ctx]
+    [match cur-ctx
+      [local-context-stack/top]
+      [option/none]
+
+      [local-context-stack/frame lctx outer]
+      [match [local-context/kind lctx]
+        [local-context-kind/function func]
+        [option/some func]
+        [loop outer]]]]
+    lctx-stack]]
+
+[type global-descriptor-kind []
+  [union
+    [def]
+    [union-ctor]
+    [record-ctor i32]]]
 
 [type global-descriptor []
-  [union
-    [union-ctor]]]
+  [record
+    [kind global-descriptor-kind]
+    [form form]]]
 
 [type bind-ast-errors []
   [union
     [local-redefined]
     [global-redefined]
     [variable-unbound]
-    [not-a-union-ctor]]]
+    [not-a-union-ctor]
+    [def-in-non-top-level-context]]]
 
 [type tail-position []
   [union
     [no]
     [tail]]]
 
-[type fact []
-  [union
-    [recursive-call wuns-func wuns]
-    [tail-recursive-call wuns-func wuns]]]
+[type database []
+  [record
+    [global-ctx [transient-kv-map word global-descriptor]]
+    [calls [transient-kv-map wuns-func [growable-list [pair wuns tail-position]]]]
+    [tail-calls [transient-kv-map wuns wuns-func]]
+    [local-use-index [transient-kv-map wuns local-descriptor]]
+    ]]
+
+[defn database-make []
+  [database
+    [transient-kv-map]
+    [transient-kv-map]
+    [transient-kv-map]
+    [transient-kv-map]]]
+
+[defn push-index [map key value]
+  [let [l [if-let [gl [try-get map key]]
+            gl
+            [let-do [ngl [growable-list]] [set-kv-map map key ngl] ngl]]]
+    [push l value]]]
+
+[defn has-tail-and-only-tail-recursive-calls [db func]
+  [if-let [calls [try-get [database/calls db] func]]
+    [all [clone-growable-to-frozen-list calls]
+      [func pred [call]
+        [match [pair/snd call]
+          [tail-position/tail]
+          true
+          [tail-position/no]
+          false]]]
+      false]]
 
 [type binder []
   [record
     [bind-ast [func [wuns] [tuple]]]
-    [errors [atom [linked-list [pair word-with-form bind-ast-errors]]]]
-    [db [atom [linked-list fact]]]]]
+    [errors [growable-list [pair word-with-form bind-ast-errors]]]
+    [db database]]]
 
 [defn mk-bind-db []
   [let
-    [errors [atom [linked-list/nil]]
+    [errors [growable-list]
      push-error [func pe [name err] [push errors [pair name err]]]
-     def-ctx [transient-kv-map]
-     db [atom [linked-list/nil]]
-     set-def
-     [func set-def [wwf-name desc]
-      [let-do [name [word-with-form/word wwf-name]]
+     db [database-make]
+     def-ctx [database/global-ctx db]
+     set-global
+     [func set-global [name wwf-name desc-kind]
+      [let-do []
         [when [has def-ctx name]
           [push-error wwf-name [bind-ast-errors/global-redefined]]]
-        [set-kv-map def-ctx name [pair desc wwf-name]]]]
+        [set-kv-map def-ctx name [global-descriptor desc-kind [word-with-form/form wwf-name]]]]]
+     mk-local-map [func mk-local [] [transient-kv-map]]
      set-local
-     [func set-local [lctx wwf-name desc-kind]
+     [func set-local [lctx-map wwf-name desc-kind]
       [let-do [name [word-with-form/word wwf-name]]
-        [when [has lctx name]
+        [when [has lctx-map name]
           [push-error wwf-name [bind-ast-errors/local-redefined]]]
-        [set-kv-map lctx name [local-descriptor desc-kind [word-with-form/form wwf-name]]]]]]
+        [set-kv-map lctx-map name [local-descriptor desc-kind [word-with-form/form wwf-name]]]]]]
      [letfn [
       [func bind-func [lctx func]
         [let-do
-          [name [wuns-func/name func]
-           new-ctx-map [transient-kv-map]
-           new-ctx [local-context/local new-ctx-map lctx]]
-          [set-local new-ctx-map name [local-descriptor-kind/internal-func func]]
+          [new-ctx-map [mk-local-map]
+           param-counter [atom 0]]
+          [set-local new-ctx-map [wuns-func/name func] [local-descriptor-kind/internal-func func]]
           [for-each p [wuns-func/parameters func]
-            [set-local new-ctx-map p [local-descriptor-kind/parameter]]]
+            [set-local new-ctx-map p [local-descriptor-kind/parameter [parameter-descriptor [inc-atom param-counter] func]]]]
           [when-let [r [wuns-func/rest-param func]]
-            [set-local new-ctx-map r [local-descriptor-kind/parameter]]]
-          [bind-ast new-ctx [tail-position/tail] [wuns-func/body func]]]]
+            [set-local new-ctx-map r [local-descriptor-kind/parameter [parameter-descriptor [inc-atom param-counter] func]]]]
+          [bind-ast
+            [local-context-stack/frame [local-context new-ctx-map [local-context-kind/function func]] lctx]
+            [tail-position/tail] [wuns-func/body func]]]]
      [func bind-ast [lctx tail-pos-info ast]
       [match ast
         [wuns/var wwf]
-[comment
-          [let [w [word-with-form/word wwf]]
-          [if-let [desc [try-get-local lctx w]]
-            [bound-ast/var-local wwf]
-            [do
-              [when-not [has def-ctx w]
-                [push-error wwf [bind-ast-errors/variable-unbound]]]
-              [bound-ast/var-global wwf]]]]]
+        [let [w [word-with-form/word wwf]]
+          [if-let [ldesc [try-get-local lctx w]]
+            [set-kv-map [database/local-use-index db] ast ldesc]
+            [if-let [gdesc [try-get def-ctx w]]
+              [comment  [set-index [database/use-index db] w [pair ast gdesc]] ]
+              [push-error wwf [bind-ast-errors/variable-unbound]]]]]
 
         [wuns/literal l]
         [do]
 
         [wuns/intrinsic l]
-        [do
-          [comment check if valid intrinsic]
-          ]
+        [do]
+
+        [wuns/extern l]
+        [do]
 
         [wuns/if c t e]
         [do
@@ -128,17 +195,18 @@
             [let-do
               [match-pattern [pair/fst c]
                ctor-name [match-pattern/ctor match-pattern]
-               new-ctx-map [transient-kv-map]
-               new-ctx [local-context/local new-ctx-map lctx]]
+               new-ctx-map [mk-local-map]]
               [if-let [def-desc [try-get def-ctx [word-with-form/word ctor-name]]]
-                [match [pair/fst def-desc]
-                  [global-descriptor/union-ctor]
+                [match [global-descriptor/kind def-desc]
+                  [global-descriptor-kind/union-ctor]
                   [do]
                   [push-error ctor-name [bind-ast-errors/not-a-union-ctor]]]
                 [push-error ctor-name [bind-ast-errors/variable-unbound]]]
               [for-each p [match-pattern/params match-pattern]
-                [set-local new-ctx-map p [local-descriptor-kind/parameter]]]
-              [bind-ast new-ctx tail-pos-info [pair/snd c]]]]
+                [set-local new-ctx-map p [local-descriptor-kind/match-case-parameter]]]
+              [bind-ast
+                [local-context-stack/frame [local-context new-ctx-map [local-context-kind/match]] lctx]
+                tail-pos-info [pair/snd c]]]]
           [when-let [d opt-default]
             [bind-ast lctx tail-pos-info d]]]
 
@@ -149,8 +217,8 @@
 
         [wuns/let bindings body]
         [let-do
-          [new-ctx-map [transient-kv-map]
-           new-ctx [local-context/local new-ctx-map lctx]]
+          [new-ctx-map [mk-local-map]
+           new-ctx [local-context-stack/frame [local-context new-ctx-map [local-context-kind/let]] lctx]]
           [for-each binding bindings
             [bind-ast new-ctx [tail-position/no] [pair/snd binding]]
             [set-local new-ctx-map [pair/fst binding] [local-descriptor-kind/let]]]
@@ -158,8 +226,8 @@
 
         [wuns/letfn functions body]
         [let-do
-          [new-ctx-map [transient-kv-map]
-           new-ctx [local-context/local new-ctx-map lctx]]
+          [new-ctx-map [mk-local-map]
+           new-ctx [local-context-stack/frame [local-context new-ctx-map [local-context-kind/letfn]] lctx]]
           [for-each function functions
             [set-local new-ctx-map [wuns-func/name function] [local-descriptor-kind/let]]]
           [for-each function functions
@@ -167,10 +235,21 @@
           [bind-ast new-ctx tail-pos-info body]]
 
         [wuns/def name value]
-        [set-def name [bind-ast lctx [tail-position/no] value]]
+        [do
+          [match lctx
+            [local-context-stack/frame lctx outer] [push-error name [bind-ast-errors/def-in-non-top-level-context]]
+            [do]]
+          [bind-ast lctx [tail-position/no] value]
+          [set-global [word-with-form/word name] name [global-descriptor-kind/def]]]
 
         [wuns/func func]
         [bind-func lctx func]
+
+        [wuns/call func args]
+        [do
+          [bind-ast lctx [tail-position/no] func]
+          [for-each arg args
+            [bind-ast lctx [tail-position/no] arg]]]
 
         [wuns/call-word wwf form-args]
         [let-do
@@ -178,31 +257,54 @@
           [if-let [desc [try-get-local lctx w]]
             [match [local-descriptor/kind desc]
               [local-descriptor-kind/internal-func func]
-              [match tail-pos-info
-                [tail-position/no]
-                [push db [fact/recursive-call func ast]]
-                [tail-position/tail]
-                [push db [fact/tail-recursive-call func ast]]
-                ]
+              [do
+                [when-let [enc-func [try-get-enclosing-func lctx]]
+                  [when [is-identical func enc-func]
+                    [comment we are in a recursive call]
+                    [push-index [database/calls db] func [pair ast tail-pos-info]]
+                    [set-kv-map [database/tail-calls db] ast func]]]
+                [for-each arg form-args
+                  [comment check if arg depends on parameter before]]]
               [do]]
             [if-let [gdesc [try-get def-ctx w]]
-              [logq it is a global]
+              [comment it is a global we need to see if its a func or fexpr or macro to know what to with argument forms]
               [do
                 [push-error wwf [bind-ast-errors/variable-unbound]]
-                ]]]]]]]
+                ]]]]
+
+        [wuns/type decls]
+        [for-each decl decls
+          [let [type-name-wwf [wuns-type-decl/name decl]
+                type-name [word-with-form/word type-name-wwf]
+                type-name-prefix [concat-words type-name [word /]]
+                kind [wuns-type-decl/kind decl]]
+            [match kind
+              [wuns-type-decl-kind/union ctors]
+              [for-each ctor ctors
+                [let [wwf [pair/fst ctor]
+                      tag [concat-words type-name-prefix [word-with-form/word wwf]]
+                      n-atom [atom 0]
+                      params [list-map t [pair/snd ctor] [concat-words [word p] [int-to-word [inc-atom n-atom]]]]]
+                  [set-global tag wwf [global-descriptor-kind/union-ctor]]]]
+
+              [wuns-type-decl-kind/record fields]
+              [set-global type-name type-name-wwf [global-descriptor-kind/record-ctor [size fields]]]]]]
+
+        [do
+          [log ast]
+          [logq-abort bind-ast not implemented]]]]]
+
     [binder
-      [func out-bind-ast [ast] [bind-ast [local-context/top] [tail-position/no] ast]]
+      [func out-bind-ast [ast] [bind-ast [local-context-stack/top] [tail-position/no] ast]]
       errors
       db]]]]
 
-[defn check-errors [name errors-atom]
-  [match [atom-get errors-atom]
-    [linked-list/nil]
-    [do]
-    [do
+[defn check-errors [name errors-growable]
+  [let [errors [clone-growable-to-frozen-list errors-growable]]
+    [when-not [is-empty errors]
       [logq there were errors]
       [log name]
-      [for-each error [clone-growable-to-frozen-list errors-atom]
+      [for-each error errors
         [log error]]
       [logq-abort aborting due to errors]]]]
 
@@ -220,11 +322,7 @@
         [check-errors [quote conversion] conversion-errors-atom]
         [bind-ast ast]]
         [check-errors [quote binding] binder-errors-atom]]
-    [let-do [facts [clone-growable-to-frozen-list [binder/db binder]]]
-      [logq facts in db]
-      [log [size facts]]
-      [for-each fact facts
-        [log fact]]]]]
+    [log [binder/db binder]]]]
 
 [defexpr test-bind [.. test-forms]
   [test-bind-fn test-forms]]
