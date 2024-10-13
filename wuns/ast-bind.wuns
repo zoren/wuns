@@ -124,7 +124,8 @@
 [type form-to-ast-converter []
   [record
     [form-to-ast [func [form] [result bform [list report-message]]]]
-    [errors [growable-list report-message]]]]
+    [errors [growable-list report-message]]
+    [node-to-ldesc [transient-kv-map bform local-var-kind]]]]
 
 [defn mk-form-to-ast []
   [let
@@ -132,6 +133,7 @@
      errors [growable-list]
      push-error [func pe [form msg] [push errors [report-message msg form]]]
      def-ctx [transient-kv-map]
+     node-to-ldesc [transient-kv-map]
      get-word
      [func gw [form]
       [match form
@@ -170,6 +172,7 @@
                 lvars [transient-kv-map]
                 lctx [local-context lvars form]
                 new-lstack [local-stack/frame lstack lctx]]
+            [set-local lvars [second form-list] [local-var-kind/func-internal-self]]
             [for-each param regular-param-forms
               [set-local lvars param [local-var-kind/param]]]
             [when-let [rest-param opt-rest-param]
@@ -187,13 +190,13 @@
                   [local-stack/frame lvars lctx] [report-error [quote [not allowed in local context]]]]]]
           [match form
           [form/word w]
-          [do
+          [let-do [bf [bform/var [get-word form]]]
             [if-let [ldesc [try-get-local lstack w]]
-              [do]
+              [set-kv-map node-to-ldesc bf ldesc]
               [if-let [ddesc [try-get def-ctx w]]
                 [do]
                 [report-error [quote [undefined word]]]]]
-            [bform/var [get-wordf form]]]
+            bf]
 
           [form/list l]
           [let [n-of-args [dec [size l]]
@@ -208,6 +211,9 @@
 
                 [[word f64]]
                 [bform/literal [literal/f64 [get-word [get-arg 0]]]]
+
+                [[word i64] [word f32] [word v128]]
+                [logq-abort form-to-ast not implemented [identity first-form]]
 
                 [[word word]]
                 [bform/literal [literal/word [get-word [get-arg 0]]]]
@@ -365,4 +371,96 @@
                 [result/ok -] [do]]
               [result/ok bform]]
             [result/error errors]]]]
-      errors]]]]
+      errors
+      node-to-ldesc]]]]
+
+[type tail-call-result []
+  [union
+    [no-rec-calls]
+    [non-tail]
+    [only-tail]]]
+
+[defn tail-call-analysis [node-to-ldesc the-func]
+  [comment also returns a map of the tail calls so a compiler knows names of parameters to bind before continuing in a loop]
+  [let-do
+    [tail-rec-calls [growable-list]
+     non-tail-rec-calls [atom false]
+     go
+      [func go [is-tail bf]
+        [match bf
+          [bform/var w] [do]
+          [bform/literal l] [do]
+          [bform/intrinsic w] [do]
+          [bform/extern l] [do]
+          [bform/type l] [do]
+
+          [bform/func f] [logq-abort tail-call-analysis not implemented func]
+          [bform/if c t e]
+          [do
+            [go false c]
+            [go is-tail t]
+            [go is-tail e]]
+
+          [bform/do l]
+          [when-not [is-empty l]
+            [for i 0 [dec [size l]] [go false [at l i]]]
+            [go is-tail [last l]]]
+
+          [bform/call f args]
+          [do
+            [match f
+              [bform/var wf]
+              [when [and
+                      [eq-word [bfunc/name the-func] wf]
+                      [match [get node-to-ldesc f] [local-var-kind/func-internal-self] 1 0]]
+                  [if is-tail
+                    [do
+                      [push tail-rec-calls bf]
+                      [todo figure out dependencies between params or give data for other phase to do it]]
+                    [atom-set non-tail-rec-calls true]]]
+              [do]]
+            [for-each arg args [go false arg]]]]]]
+      [go true [bfunc/body the-func]]
+      [if [atom-get non-tail-rec-calls]
+        [tail-call-result/non-tail]
+        [if [is-empty [clone-growable-to-frozen-list tail-rec-calls]]
+          [tail-call-result/no-rec-calls]
+          [tail-call-result/only-tail]]]]]
+
+[defn test-tail [form]
+  [let-do [converter [mk-form-to-ast]
+           f2a [form-to-ast-converter/form-to-ast converter]
+           node-to-ldesc [form-to-ast-converter/node-to-ldesc converter]]
+    [match [f2a form]
+      [result/error errors]
+      [logq-abort form-to-ast errors]
+
+      [result/ok bform]
+        [match bform
+          [bform/func bf]
+          [tail-call-analysis node-to-ldesc bf]
+
+          [logq-abort test-tail not a func]]]]]
+
+[defn test-assert-no-rec-calls [result]
+  [match result
+    [tail-call-result/no-rec-calls] [do]
+    [logq-abort assert-no-rec-calls not no rec calls]]]
+
+[defn test-assert-only-tail [result]
+  [match result
+    [tail-call-result/only-tail] [do]
+    [logq-abort assert-only-tail not only tail]]]
+
+[defn test-assert-has-non-tail [result]
+  [match result
+    [tail-call-result/non-tail] [do]
+    [logq-abort assert-no-tail not no tail]]]
+
+[defn run-tests []
+  [test-assert-no-rec-calls
+    [test-tail [quote [func f [] [do]]]]]
+  [test-assert-only-tail
+    [test-tail [quote [func f [] [f]]]]]
+  [test-assert-has-non-tail
+    [test-tail [quote [func f [] [do [f] [i32 4]]]]]]]
