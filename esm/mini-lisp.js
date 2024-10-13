@@ -107,7 +107,10 @@ export const treeToFormsSafe = (tree, contentName) => {
    */
   const tryNodeToForm = (node) => {
     const { isError, type, startPosition, endPosition } = node
-    if (isError) return null
+    if (isError) {
+      console.log('unexpected error node', { contentName, startPosition, endPosition })
+      return null
+    }
     const { row, column } = startPosition
     const metaData = list(contentName, row, column)
     switch (type) {

@@ -59,7 +59,8 @@ const makeProvideDocumentSemanticTokensForms = async () => {
   const { tryGetFormWord, tryGetFormList, meta } = await import('./esm/core.js')
   const { treeToFormsSafe, makeDefEnv, evalForm, isClosure } = await import('./esm/mini-lisp.js')
   const provideDocumentSemanticTokens = (document) => {
-    const defEnv = makeDefEnv(path.dirname(document.fileName))
+    const { fileName } = document
+    const defEnv = makeDefEnv(path.dirname(fileName))
     const tokensBuilder = new SemanticTokensBuilder(legend)
     try {
       const pushTokenWithModifier = (form, tokenType, tokenModifiers) => {
@@ -69,7 +70,12 @@ const makeProvideDocumentSemanticTokensForms = async () => {
         const formMetaList = meta(form)
         if (!formMetaList) return
         if (!Array.isArray(formMetaList)) return console.error('no form meta list')
+        if (formMetaList.length !== 3) return console.error('form meta list length', formMetaList)
         const [contentName, row, column] = formMetaList
+        if (contentName !== fileName) {
+          // console.error('contentName != fileName', { contentName, fileName })
+          return
+        }
         tokensBuilder.push(row, column, word.length, tokenType, tokenModifiers)
       }
       const pushToken = (form, tokenType) => pushTokenWithModifier(form, tokenType, 0)
@@ -182,6 +188,9 @@ const makeProvideDocumentSemanticTokensForms = async () => {
               goType(tail[i + 2])
             }
           },
+          load: () => {
+            if (tail.length === 1 && tryGetFormWord(tail[0])) pushToken(tail[0], stringTokenType)
+          },
         }
         if (headWord) {
           const specialHandler = specialForms[headWord]
@@ -226,7 +235,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
       }
 
       const tree = parseDocumentTreeSitter(document)
-      const forms = treeToFormsSafe(tree, document.fileName)
+      const forms = treeToFormsSafe(tree, fileName)
 
       for (const form of forms) {
         try {
@@ -299,7 +308,7 @@ async function activate(context) {
   parseDocumentTreeSitter = (document, oldTree) => {
     const watch = makeStopWatch()
     const tree = parse(document.getText(), oldTree)
-    if (tree.rootNode.hasError) console.error('tree-sitter error')
+    if (tree.rootNode.hasError) console.error('tree-sitter error', document.fileName)
     console.log('parse treesitter took', watch(), 'ms', document.fileName)
     return tree
   }
