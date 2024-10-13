@@ -39,7 +39,7 @@ const jsExpToString = (js) => {
   const { tag, args } = js
   switch (tag) {
     case 'js-exp/number':
-      return `${+(args[0])}`
+      return `${+args[0]}`
     case 'js-exp/string':
       return `'${args[0]}'`
     case 'js-exp/var':
@@ -114,10 +114,22 @@ const error = makeValueTagger('result/error', 1)
 const ok = makeValueTagger('result/ok', 1)
 
 const runJs = (jsSrc) => {
+  // console.log(jsSrc)
   try {
     const runFunc = new Function('externs', jsSrc)
-    return ok(runFunc(externs))
+    const before = performance.now()
+    const r = runFunc(externs)
+    const after = performance.now()
+    // console.log('runJs time', after - before)
+    return ok(r)
   } catch (e) {
+    if (e instanceof SyntaxError || e instanceof TypeError || e instanceof ReferenceError) {
+      console.log('runJs error')
+      console.log(e)
+      console.log(jsSrc)
+      // return error(`SyntaxError: ${e.message}`)
+      // return error(e)
+    }
     return error(e)
   }
 }

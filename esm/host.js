@@ -162,7 +162,14 @@ export const set_kv_map = (kv_map, key, value) => {
   if (!(kv_map instanceof Map)) throw new Error('set-kv-map expect map')
   kv_map.set(key, value)
 }
-
+export const kv_map_size = (kv_map) => {
+  if (!(kv_map instanceof Map)) throw new Error('kv-map-size expects map')
+  return kv_map.size
+}
+export const kv_map_values = (kv_map) => {
+  if (!(kv_map instanceof Map)) throw new Error('kv-map-values expects map')
+  return arrayToList([...kv_map.values()])
+}
 export const log = (...forms) => {
   console.log(...forms.map(print))
 }

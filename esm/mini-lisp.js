@@ -1,15 +1,14 @@
 import externs from './externs.js'
-
-export const makeDefEnv = (currentDir, additionalExterns) => {
+const defEnvTag = Symbol('def-env')
+export const makeDefEnv = (currentDir) => {
+  if (!currentDir) throw new Error('makeDefEnv expects currentDir')
+  if (typeof currentDir !== 'string') throw new Error('currentDir must be a string')
   const defMap = new Map()
-  if (currentDir) {
-    if (typeof currentDir !== 'string') throw new Error('currentDir must be a string')
-    defMap['currentDir'] = currentDir
-  }
-  additionalExterns = additionalExterns || {}
-  defMap.externs = { ...externs, ...additionalExterns }
+  defMap[defEnvTag] = true
+  defMap.currentDir = currentDir
   return defMap
 }
+const isDefEnv = (v) => v instanceof Map && v[defEnvTag]
 const makeEnv = (outer) => {
   if (!(outer instanceof Map)) throw new Error('makeEnv expects a Map')
   const env = new Map()
@@ -20,13 +19,14 @@ const setEnv = (env, varName, value) => {
   env.set(varName, value)
 }
 
-const list = (...args) => Object.freeze(args)
-
-const parseParameters = (parameters) => {
-  if (parameters.length > 1 && parameters.at(-2) === '..')
-    return { restParam: parameters.at(-1), regularParameters: parameters.slice(0, -2) }
-  return { restParam: null, regularParameters: parameters }
+const getPathRelativeToCurrentDir = (defEnv, relativeFilePath) => {
+  const { currentDir } = defEnv
+  if (!currentDir) throw new Error('load expects currentDir')
+  if (typeof currentDir !== 'string') throw new Error('currentDir must be a string')
+  return path.join(currentDir, relativeFilePath)
 }
+
+const list = (...args) => Object.freeze(args)
 
 class Closure extends Function {
   constructor(f, kind, paramEnvMaker, body) {
@@ -52,6 +52,7 @@ import {
   formList,
   emptyList,
   langUndefined,
+  isForm,
 } from './core.js'
 import path from 'node:path'
 
@@ -63,7 +64,7 @@ const printForm = (form) => {
   throw new Error('unexpected form: ' + form)
 }
 
-import { meta, makeTaggedValue } from './core.js'
+import { meta } from './core.js'
 
 class EvalError extends Error {
   constructor(message, form, innerError) {
@@ -83,19 +84,6 @@ const getFormList = (form) => {
   const list = tryGetFormList(form)
   if (list) return list
   throw new EvalError('expected list', form)
-}
-
-const assertFormDeep = (form) => {
-  const go = (f) => {
-    if (tryGetFormWord(f)) return
-    const list = tryGetFormList(f)
-    if (!list) {
-      console.dir(f, { depth: 10 })
-      throw new EvalError('not a form', form)
-    }
-    list.forEach(go)
-  }
-  go(form)
 }
 
 import { instructionFunctions } from './instructions.js'
@@ -179,15 +167,13 @@ export const parseToForms = (content, contentName) => treeToForms(parse(content)
 
 export const readFile = (filePath) => parseToForms(fs.readFileSync(filePath, 'ascii'), filePath)
 
-const getPathRelativeToCurrentDir = (defEnv, relativeFilePath) => {
-  const { currentDir } = defEnv
-  if (!currentDir) throw new Error('load expects currentDir')
-  return path.join(currentDir, relativeFilePath)
-}
-
 export const evalForm = (defEnv, topForm) => {
-  if (!(defEnv instanceof Map)) throw new Error('defEnv must be a Map')
-  if (defEnv.externs === undefined) throw new Error('defEnv.externs must be defined')
+  if (!isDefEnv(defEnv)) throw new Error('first argument must be a defEnv')
+  // we need an extern func that gives access to the current directory or the file path of the current dir
+  // this allows writing load as a macro also we can make
+  // this function is not pure as it needs access to a non-variable on defEnv
+  const externCurrentDir = () => defEnv.currentDir
+  const instanceExterns = { ...externs, 'current-dir': externCurrentDir }
   const go = (env, form) => {
     const evalError = (message, innerError) => new EvalError(message, form, innerError)
     while (true) {
@@ -200,7 +186,11 @@ export const evalForm = (defEnv, topForm) => {
         }
         throw evalError('undefined variable: ' + word)
       }
-      const forms = getFormList(form)
+      const forms = tryGetFormList(form)
+      if (!forms) {
+        // here we throw an Error not an evalError as the input is not a form
+        throw new Error('expected a valid form value', { cause: form })
+      }
       if (forms.length === 0) throw evalError('empty list')
       const [firstForm] = forms
       const firstWord = tryGetFormWord(firstForm)
@@ -208,6 +198,40 @@ export const evalForm = (defEnv, topForm) => {
       const assertNumArgs = (num) => {
         if (numOfArgs !== num)
           throw evalError(`special form '${firstWord}' expected ${num} arguments, got ${numOfArgs}`)
+      }
+      const makeClosureOfKind = (kind) => {
+        const name = getFormWord(forms[1])
+        const parameters = getFormList(forms[2]).map(getFormWord)
+        const body = forms[3]
+        let closure
+        const paramEnvMaker = (() => {
+          if (parameters.length < 2 || parameters.at(-2) !== '..') {
+            const arity = parameters.length
+            return (eargs) => {
+              const paramEnv = makeEnv(env)
+              setEnv(paramEnv, name, closure)
+              if (eargs.length !== arity)
+                throw new EvalError(`${name} expected ${arity} arguments, got ${eargs.length}`)
+              for (let i = 0; i < arity; i++) setEnv(paramEnv, parameters[i], eargs[i])
+              return paramEnv
+            }
+          }
+          const restParam = parameters.at(-1)
+          const regularParameters = parameters.slice(0, -2)
+          const arity = regularParameters.length
+          return (eargs) => {
+            const paramEnv = makeEnv(env)
+            setEnv(paramEnv, name, closure)
+            if (eargs.length < arity)
+              throw new EvalError(`${name} expected at least ${arity} arguments, got ${eargs.length}`)
+            for (let i = 0; i < arity; i++) setEnv(paramEnv, regularParameters[i], eargs[i])
+            setEnv(paramEnv, restParam, list(...eargs.slice(arity)))
+            return paramEnv
+          }
+        })()
+        const f = (...args) => go(paramEnvMaker(args), body)
+        closure = makeClosure(f, kind, paramEnvMaker, body)
+        return closure
       }
       switch (firstWord) {
         // constants
@@ -227,7 +251,7 @@ export const evalForm = (defEnv, topForm) => {
           assertNumArgs(1)
           return getFormWord(forms[1])
         case 'extern': {
-          let ext = defEnv.externs
+          let ext = instanceExterns
           for (let i = 1; i < forms.length; i++) {
             const prop = getFormWord(forms[i])
             const extProp = ext[prop]
@@ -247,39 +271,30 @@ export const evalForm = (defEnv, topForm) => {
           }
           return intrinsic
         }
-        // constants calculated from environment
-        case 'func':
         case 'fexpr':
-        case 'macro': {
+          throw evalError('closure fexprs are not allowed anymore')
+        case 'macro':
+          throw evalError('closure macros are not allowed anymore')
+        case 'defexpr': {
           assertNumArgs(3)
+          if (env !== defEnv) throw evalError('defmacro defined in the outermost environment')
           const name = getFormWord(forms[1])
-          const parameters = getFormList(forms[2]).map(getFormWord)
-          const body = forms[3]
-          const { regularParameters, restParam } = parseParameters(parameters)
-          let closure
-          const paramEnvMaker = restParam
-            ? (eargs) => {
-                const paramEnv = makeEnv(env)
-                setEnv(paramEnv, name, closure)
-                if (eargs.length < regularParameters.length)
-                  throw new EvalError(
-                    `${name} expected at least ${regularParameters.length} arguments, got ${eargs.length}`,
-                  )
-                for (let i = 0; i < regularParameters.length; i++) setEnv(paramEnv, regularParameters[i], eargs[i])
-                setEnv(paramEnv, restParam, list(...eargs.slice(regularParameters.length)))
-                return paramEnv
-              }
-            : (eargs) => {
-                const paramEnv = makeEnv(env)
-                setEnv(paramEnv, name, closure)
-                if (eargs.length !== regularParameters.length)
-                  throw new EvalError(`${name} expected ${regularParameters.length} arguments, got ${eargs.length}`)
-                for (let i = 0; i < regularParameters.length; i++) setEnv(paramEnv, regularParameters[i], eargs[i])
-                return paramEnv
-              }
-          const f = (...args) => go(paramEnvMaker(args), body)
-          closure = makeClosure(f, firstWord, paramEnvMaker, body)
-          return closure
+          const closure = makeClosureOfKind('fexpr')
+          defEnv.set(name, closure)
+          return langUndefined
+        }
+        case 'defmacro': {
+          assertNumArgs(3)
+          if (env !== defEnv) throw evalError('defmacro defined in the outermost environment')
+          const name = getFormWord(forms[1])
+          const closure = makeClosureOfKind('macro')
+          defEnv.set(name, closure)
+          return langUndefined
+        }
+        // constants calculated from environment
+        case 'func': {
+          assertNumArgs(3)
+          return makeClosureOfKind(firstWord)
         }
         case 'atom': {
           assertNumArgs(1)
@@ -299,13 +314,9 @@ export const evalForm = (defEnv, topForm) => {
           if (numOfArgs < 2) throw evalError(`special form 'switch' expected at least two arguments`)
           if (numOfArgs % 2 !== 0) throw evalError('no switch default found')
           const value = go(env, forms[1])
-          const valueType = typeof value
-          if (valueType !== 'number' && valueType !== 'string') throw evalError('switch value must be number or string')
           form = forms.at(-1)
           for (let i = 2; i < forms.length - 1; i += 2) {
-            const pattern = forms[i]
-            const patternList = getFormList(pattern)
-            if (patternList.some((patForm) => go(env, patForm) === value)) {
+            if (getFormList(forms[i]).some((patForm) => go(env, patForm) === value)) {
               form = forms[i + 1]
               break
             }
@@ -393,12 +404,9 @@ export const evalForm = (defEnv, topForm) => {
             const funcList = getFormList(funcForm)
             if (funcList.length !== 4) throw evalError('letfn function must have three forms')
             const kind = getFormWord(funcList[0])
-            if (kind !== 'func' && kind !== 'fexpr' && kind !== 'macro')
-              throw evalError('unexpected function kind: ' + kind)
+            if (kind !== 'func') throw evalError('unexpected function kind: ' + kind)
             const name = getFormWord(funcList[1])
-            const parameters = getFormList(funcList[2]).map(getFormWord)
-            const body = funcList[3]
-            return { kind, name, parameters, body, funcForm }
+            return { name, funcForm }
           })
           const newEnv = makeEnv(env)
           try {
@@ -525,11 +533,6 @@ export const evaluateForms = (defEnv, forms) => {
   return result
 }
 
-export const readFileInCurrentDir = (defEnv, relativeFilePath) => {
-  const resolvedPath = getPathRelativeToCurrentDir(defEnv, relativeFilePath)
-  return readFile(resolvedPath)
-}
-
 export const evaluateFile = (defEnv, relativeFilePath) => {
   const resolvedPath = getPathRelativeToCurrentDir(defEnv, relativeFilePath)
   return evaluateForms(defEnv, readFile(resolvedPath))
@@ -565,23 +568,51 @@ const error = makeValueTagger('result/error', 1)
 const ok = makeValueTagger('result/ok', 1)
 
 externs.interpreter = {
-  'make-context': () => makeDefEnv(),
+  'make-context': (currentDir) => {
+    if (typeof currentDir !== 'string') throw new Error('make-context expects string')
+    return makeDefEnv(currentDir)
+  },
+  'macro-expand': (context, form) => {
+    if (!isDefEnv(context)) throw new Error('macro-expand expects context')
+    if (!isForm(form)) throw new Error('macro-expand expects a form')
+    const list = tryGetFormList(form)
+    if (!list || list.length === 0) {
+      console.log('expected non-empty list')
+      return form
+    }
+    const firstWord = tryGetFormWord(list[0])
+    if (!firstWord) {
+      console.log('expected word first')
+      return form
+    }
+    const defValue = context.get(firstWord)
+    if (!defValue || !isClosure(defValue) || defValue.kind !== 'macro') {
+      console.log('expected macro', defValue)
+      return form
+    }
+    return defValue(...list.slice(1))
+  },
   'try-get-macro': (context, name) => {
-    if (!(context instanceof Map)) throw new Error('try-get-macro expects context')
+    if (!isDefEnv(context)) throw new Error('try-get-macro expects context')
     if (typeof name !== 'string') throw new Error('try-get-macro expects string')
     const value = context.get(name)
     if (isClosure(value) && value.kind === 'macro') return some(value)
     return none
   },
   evaluate: (context, form) => {
-    if (!(context instanceof Map)) throw new Error('evaluate expects context')
+    if (!isDefEnv(context)) throw new Error('evaluate expects context')
     try {
       evalForm(context, form)
-    } catch (e) {}
+    } catch (e) {
+      console.error('evaluate error discarded')
+      console.log(form)
+      console.error(e)
+    }
     return langUndefined
   },
   'evaluate-result': (context, form) => {
-    if (!(context instanceof Map)) throw new Error('evaluate-result expects context')
+    if (!isDefEnv(context)) throw new Error('evaluate-result expects context')
+    if (!isForm(form)) throw new Error('evaluate-result expects form')
     try {
       return ok(evalForm(context, form))
     } catch (e) {
@@ -589,7 +620,7 @@ externs.interpreter = {
     }
   },
   'evaluate-list-num': (context, fname, args) => {
-    if (!(context instanceof Map)) throw new Error('evaluate expects context')
+    if (!isDefEnv(context)) throw new Error('evaluate expects context')
     if (typeof fname !== 'string') throw new Error('evaluate expects string')
     if (!Array.isArray(args)) throw new Error('evaluate expects array')
     args.forEach((arg) => {
