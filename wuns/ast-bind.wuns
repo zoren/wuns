@@ -119,6 +119,16 @@
     [empty]
     [frame local-stack local-context]]]
 
+[defn try-get-local [lstack w]
+  [match lstack
+    [local-stack/empty] [none]
+    [local-stack/frame outer lctx]
+      [match [try-get [local-context/vars lctx] w]
+        [option/none] [try-get-local outer w]
+        [option/some kind] [some kind]]]]
+
+[type def-desc [] [union [func] [fexpr] [macro]]]
+
 [type form-to-ast-converter []
   [record
     [form-to-ast [func [form] [result bform [list report-message]]]]
@@ -128,28 +138,40 @@
   [let
     [eval-ctx [make-eval-context [current-dir]]
      errors [growable-list]
+     push-error [func pe [form msg] [push errors [report-message msg form]]]
+     def-ctx [transient-kv-map]
      get-word
      [func gw [form]
       [match form
         [form/word w] w
         [do
-          [push errors [report-message [quote [expected word]] form]]
+          [push-error form [quote [expected word]]]
           [word 0]]]]
      get-wordf
      [func gw [form]
       [match form
         [form/word w] [wordf w form]
         [do
-          [push errors [report-message [quote [expected word]] form]]
+          [push-error form [quote [expected word]]]
           [wordf [word 0] [form/word [word 0]]]]]]
      get-list
      [func gl [form]
       [match form
         [form/list l] l
         [do
-          [push errors [report-message [quote [expected list]] form]]
+          [push-error form [quote [expected list]]]
           [list]]]]
-    set-local [func sl [lvars f kind] [set-kv-map lvars [get-word f] kind]]]
+    set-local
+    [func sl [lvars f kind]
+      [let-do [w [get-word f]]
+        [when [has lvars w] [push-error f [quote [redeclaring local]]]]
+        [set-kv-map lvars w kind]]]
+    set-def
+    [func sd [f kind]
+      [let-do [w [get-word f]]
+        [when [has def-ctx w] [push-error f [quote [redefing def]]]]
+        [set-kv-map def-ctx w kind]]]
+    ]
     [letfn [
       [func form-to-func [lstack form]
           [let-do
@@ -173,10 +195,20 @@
               [match opt-rest-param [option/none] [option/none] [option/some v] [option/some [get-wordf v]]]
               [form-to-ast new-lstack [fourth form-list]]]]]
       [func form-to-ast [lstack form]
-        [let [report-error [func r [msg] [push errors [report-message msg form]]]]
+        [let [report-error [func r [msg] [push-error form msg]]
+              assert-empty-stack [func aes []
+                [match lstack
+                  [local-stack/empty] [do]
+                  [local-stack/frame lvars lctx] [report-error [quote [not allowed in local context]]]]]]
           [match form
           [form/word w]
-          [bform/var [get-wordf form]]
+          [do
+            [if-let [ldesc [try-get-local lstack w]]
+              [do]
+              [if-let [ddesc [try-get def-ctx w]]
+                [do]
+                [report-error [quote [undefined word]]]]]
+            [bform/var [get-wordf form]]]
 
           [form/list l]
           [let [n-of-args [dec [size l]]
@@ -184,8 +216,8 @@
                 get-arg [func get-arg [i] [if [lt-s i n-of-args] [at l [inc i]] [quote 0]]]
                 first-form [first l]]
             [match first-form
-              [form/word fw]
-              [switch fw
+              [form/word first-word]
+              [switch first-word
                 [[word i32]]
                 [bform/literal [literal/i32 [get-wordf [get-arg 0]]]]
 
@@ -278,12 +310,21 @@
                 [[word def]]
                 [do
                   [assert-n-args 2]
-                  [match lstack
-                    [local-stack/empty] [do]
-                    [local-stack/frame lvars lctx] [report-error [quote [def not allowed in local context]]]]
+                  [assert-empty-stack]
                   [bform/def [get-wordf [get-arg 0]] [form-to-ast lstack [third l]]]]
 
-                [[word fexpr] [word macro] [word defexpr] [word defmacro] [word letrec]]
+                [[word defmacro] [word defexpr]]
+                [do
+                  [assert-n-args 2]
+                  [assert-empty-stack]
+                  [set-def [get-arg 0]
+                    [switch first-word
+                      [[word defexpr]] def-desc/fexpr
+                      [[word defmacro]] def-desc/macro
+                      [unreachable]]]
+                  [bform/defmacro [form-to-func lstack form]]]
+
+                [[word fexpr] [word macro] [word letrec]]
                 [logq-abort form-to-ast [identity first-form] deprecated]
 
                 [[word load]]
@@ -305,11 +346,25 @@
                     [form-to-ast lstack [get-arg 0]]
                     [form-to-type [get-arg 1]]]]
 
-                [do
-                  [comment [bform/call-word [get-word [first l]] [rest l]]]
-                  [logq-abort form-to-ast not implemented]
-                  ]
-                ]
+                [if-let [ldesc [try-get-local lstack first-word]]
+                  [bform/call [bform/var [get-wordf first-form]] [list-map arg [rest l] [form-to-ast lstack arg]]]
+                  [if-let [ddesc [try-get def-ctx first-word]]
+                    [match ddesc
+                      [def-desc/fexpr]
+                      [bform/call-fexpr [bform/var [get-wordf first-form]] [rest l]]
+
+                      [def-desc/macro]
+                      [if-let [macro-func [try-get-macro eval-ctx first-word]]
+                        [form-to-ast lstack [interpreter-apply macro-func [rest l]]]
+                        [logq-abort form-to-ast macro not found]]
+
+                      [def-desc/func]
+                      [bform/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]]
+                    [do
+                      [report-error [quote [undefined word]]]
+                      [bform/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]]]
+
+                    ]]
 
               [form/list fl]
               [bform/call [form-to-ast lstack [first l]] [list-map arg [rest l] [form-to-ast lstack arg]]]]]]]]]
