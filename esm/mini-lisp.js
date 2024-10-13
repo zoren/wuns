@@ -95,45 +95,44 @@ import { parse } from './parseTreeSitter.js'
 const instructions = wrapJSFunctionsToObject(instructionFunctions)
 const intrinsics = instructions
 
+import { makeTaggedValue } from './core.js'
+
 /**
  * @param {TSParser.Tree} tree
- * @param {string} contentName
  */
-export const treeToFormsSafe = (tree, contentName) => {
-  if (typeof contentName !== 'string') contentName = 'unknown'
-
+export const treeToFormsSafeNoMeta = (tree) => {
+  const formToNodeMap = new Map()
   /**
    * @param {TSParser.SyntaxNode} node
    */
   const tryNodeToForm = (node) => {
-    const { isError, type, startPosition, endPosition } = node
-    if (isError) {
-      console.log('unexpected error node', { contentName, startPosition, endPosition })
-      return null
-    }
-    const { row, column } = startPosition
-    const metaData = list(contentName, row, column)
+    const { isError, type } = node
+    if (isError) return null
     switch (type) {
-      case 'word':
-        return formWord(node.text, metaData)
-      case 'list': {
-        const subForms = []
-        for (const child of node.namedChildren) {
-          const subForm = tryNodeToForm(child)
-          if (subForm) subForms.push(subForm)
-        }
-        return formList(Object.freeze(subForms), metaData)
+      case 'word': {
+        const formWord = makeTaggedValue('form/word', node.text)
+        formToNodeMap.set(formWord, node)
+        return formWord
       }
+      case 'list':
+        return makeTaggedValue('form/list', childrenToList(node))
       default:
         return null
     }
   }
-  const topForms = []
-  for (const child of tree.rootNode.namedChildren) {
-    const form = tryNodeToForm(child)
-    if (form) topForms.push(form)
+  const childrenToList = (node) => {
+    const childForms = []
+    for (const child of node.namedChildren) {
+      const subForm = tryNodeToForm(child)
+      if (subForm) childForms.push(subForm)
+    }
+    return Object.freeze(childForms)
   }
-  return Object.freeze(topForms)
+  const topForms = childrenToList(tree.rootNode)
+  console.log('returning topForms', topForms.length)
+  console.log('formToNodeMap', formToNodeMap.size)
+
+  return { topForms, formToNodeMap }
 }
 
 /**

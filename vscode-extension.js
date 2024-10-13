@@ -57,25 +57,22 @@ const modificationModifier = encodeTokenModifiers('modification')
  */
 const makeProvideDocumentSemanticTokensForms = async () => {
   const { tryGetFormWord, tryGetFormList, meta } = await import('./esm/core.js')
-  const { treeToFormsSafe, makeDefEnv, evalForm, isClosure } = await import('./esm/mini-lisp.js')
+  const { treeToFormsSafeNoMeta, makeDefEnv, evalForm, isClosure } = await import('./esm/mini-lisp.js')
   const provideDocumentSemanticTokens = (document) => {
     const { fileName } = document
     const defEnv = makeDefEnv(path.dirname(fileName))
     const tokensBuilder = new SemanticTokensBuilder(legend)
+    const tree = parseDocumentTreeSitter(document)
+    const { topForms, formToNodeMap } = treeToFormsSafeNoMeta(tree)
     try {
       const pushTokenWithModifier = (form, tokenType, tokenModifiers) => {
         if (!form) return console.error('no form')
         const word = tryGetFormWord(form)
         if (!word) return console.error('expected word')
-        const formMetaList = meta(form)
-        if (!formMetaList) return
-        if (!Array.isArray(formMetaList)) return console.error('no form meta list')
-        if (formMetaList.length !== 3) return console.error('form meta list length', formMetaList)
-        const [contentName, row, column] = formMetaList
-        if (contentName !== fileName) {
-          // console.error('contentName != fileName', { contentName, fileName })
-          return
-        }
+        const node = formToNodeMap.get(form)
+        if (!node) return
+        const { startPosition } = node
+        const { row, column } = startPosition
         tokensBuilder.push(row, column, word.length, tokenType, tokenModifiers)
       }
       const pushToken = (form, tokenType) => pushTokenWithModifier(form, tokenType, 0)
@@ -161,8 +158,8 @@ const makeProvideDocumentSemanticTokensForms = async () => {
             go(body)
           },
           func: () => funcSpecial(headWord, tail),
-          fexpr: () => funcSpecial(headWord, tail),
-          macro: () => funcSpecial(headWord, tail),
+          defexpr: () => funcSpecial(headWord, tail),
+          defmacro: () => funcSpecial(headWord, tail),
           def: () => {
             const [cname, val] = tail
             pushTokenWithModifier(cname, variableTokenType, declarationModifier)
@@ -234,18 +231,15 @@ const makeProvideDocumentSemanticTokensForms = async () => {
         for (const form of tail) go(form)
       }
 
-      const tree = parseDocumentTreeSitter(document)
-      const forms = treeToFormsSafe(tree, fileName)
-
-      for (const form of forms) {
+      for (const topForm of topForms) {
         try {
-          evalForm(defEnv, form)
+          evalForm(defEnv, topForm)
         } catch (e) {
           console.error('provideDocumentSemanticTokensForms evalForm error', e.message)
           console.error(e)
-          console.error(meta(form))
+          console.error(meta(topForm))
         }
-        go(form)
+        go(topForm)
       }
     } catch (e) {
       console.error('provideDocumentSemanticTokensForms error catch', e)
