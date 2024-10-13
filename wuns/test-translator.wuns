@@ -46,7 +46,7 @@
 [defn run-test-interpreter [test-data]
   [let-do
     [forms [test/module test-data]
-     eval-ctx [make-eval-context]]
+     eval-ctx [make-eval-context [current-dir]]]
     [for-each form forms
       [evaluate eval-ctx form]]
     [for-each a [test/asserts test-data]

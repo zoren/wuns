@@ -1,4 +1,4 @@
-[load ast.wuns]
+[load ast-bind.wuns]
 
 [type binop []
   [union
@@ -36,18 +36,19 @@
   js-stmt []
   [union
     [break]
+    [continue]
     [exp js-exp]
     [throw js-exp]
     [return js-exp]
     [const-decl word js-exp]
+    [assign word js-exp]
     [if js-exp js-stmt js-stmt]
     [switch js-exp [list [pair [list js-exp] js-stmt]] js-stmt]
     [block [list js-stmt]]
     [seq [list js-stmt]]
+    [while js-exp js-stmt]
   ]
 ]
-
-[type js-value [] [union]]
 
 [def run-js-stmt
   [type-anno
@@ -62,31 +63,26 @@
 [defn block [.. stmts] [js-stmt/block stmts]]
 
 [def js-0 [js-exp/number [word 0]]]
+[def js-1 [js-exp/number [word 1]]]
 
 [defn js-bitwise-or-0 [e]
   [js-exp/binop [binop/binary-ior] js-0 e]]
 
 [defn instruction-name-to-binop [inst-name]
-  [switch [word-with-form/word inst-name]
-    [word i32.add] [binop/add]
-    [word i32.sub] [binop/sub]
-    [word i32.mul] [binop/mul]
+  [switch inst-name
+    [[word i32.add]] [binop/add]
+    [[word i32.sub]] [binop/sub]
+    [[word i32.mul]] [binop/mul]
 
-    [word i32.eq] [binop/eq]
-    [word i32.ne] [binop/ne]
+    [[word i32.eq]] [binop/eq]
+    [[word i32.ne]] [binop/ne]
 
-    [word i32.lt-s] [binop/lt]
-    [word i32.le-s] [binop/le]
-    [word i32.gt-s] [binop/gt]
-    [word i32.ge-s] [binop/ge]
+    [[word i32.lt-s]] [binop/lt]
+    [[word i32.le-s]] [binop/le]
+    [[word i32.gt-s]] [binop/gt]
+    [[word i32.ge-s]] [binop/ge]
 
     [logq-abort instruction-name-to-binop not implemented]]]
-
-[defn try-get-func-kind [ast]
-  [match ast
-    [wuns/func f]
-    [some [wuns-func/kind f]]
-    [none]]]
 
 [defn iife [stmt]
   [js-exp/call
@@ -116,79 +112,262 @@
     [js-exp/call [js-exp/var [word form/list]]
       [list [js-exp/array [list-map e l [form-to-quoted-js e]]]]]]]
 
-[defn literal-to-js-exp [lit]
-  [match lit
-    [literal/i32 wwf]
-    [js-exp/number [word-with-form/word wwf]]
+[defn try-get-word [form]
+  [match form
+    [form/word w] [some w]
+    [form/list l] [none]]]
 
-    [literal/f64 wwf]
-    [js-exp/number [word-with-form/word wwf]]
+[defn try-get-list [form]
+  [match form
+    [form/word w] [none]
+    [form/list l] [some l]]]
 
-    [literal/word wwf]
-    [js-exp/string [word-with-form/word wwf]]]]
-
-[defn compile-top-forms [top-forms]
+[defn compile-top-form [node-to-ldesc top-form]
   [let
-    [macro-funcs [transient-kv-map]
-     top-decls [atom [linked-list/nil]]
-     form-ast-converter [mk-form-to-ast]
-     form-to-ast [form-to-ast-converter/form-to-ast form-ast-converter]
-     defexprs [transient-kv-map]]
+    [current-func [atom [option/none]]
+     current-tail-calls [atom [option/none]]
+     try-get-tail
+     [func tgt []
+        [if-let [ctc [atom-get current-tail-calls]]
+          [match ctc
+            [tail-call-result/only-tail call-to-deps]
+            [some call-to-deps]
+
+            [none]]
+          [none]]]]
     [letfn
-    [[func cexp [wexp]
-        [match wexp
-          [wuns/var wwf]
-          [js-exp/var [word-with-form/word wwf]]
+    [[func cfunc [f]
+      [let-do
+        [name [bfunc/name f]
+         params [bfunc/parameters f]
+         opt-rest-param [bfunc/rest-param f]
+         body [bfunc/body f]
+         js-params
+         [if-let [rest-param opt-rest-param]
+           [concat params [list [concat-words [word ...] rest-param]]]
+           params]
+         tail-analysis [tail-call-analysis node-to-ldesc f]]
+        [atom-set current-func [option/some f]]
+        [atom-set current-tail-calls [option/some tail-analysis]]
+        [let [js-body
+              [match tail-analysis
+                [tail-call-result/only-tail call-to-deps]
+                [do
+                  [js-exp/arrow-stmt
+                    js-params
+                    [block
+                      [js-stmt/while js-1
+                        [block
+                          [cstmt true body]
+                          [js-stmt/break]]]]]]
 
-          [wuns/literal l]
-          [literal-to-js-exp l]
+                [js-exp/arrow-exp js-params [cexp body]]]]
+          [iife
+            [block
+              [js-stmt/const-decl name js-body]
+              [js-stmt/return [js-exp/var name]]]]]]]
+     [func cexp [bform]
+      [match bform
+        [bform/var wf]
+        [js-exp/var wf]
 
-          [wuns/if cond t f]
-          [js-exp/ternary [cexp cond] [cexp t] [cexp f]]
+        [bform/literal l]
+        [match l
+          [literal/i32 wf] [js-exp/number wf]
+          [literal/f64 wf] [js-exp/number wf]
+          [literal/word wf] [js-exp/string wf]]
 
-          [wuns/def w e]
-          [logq-abort cexp def not implemented in cexp defs in exps seem wrong]
+        [bform/if c t e]
+        [js-exp/ternary [cexp c] [cexp t] [cexp e]]
 
-          [wuns/func func]
-          [let [name [word-with-form/word [wuns-func/name func]]
-                params [list-map p [wuns-func/parameters func] [word-with-form/word p]]
-                body [wuns-func/body func]]
-            [js-exp/call
-              [js-exp/arrow-stmt [list]
-                [block
-                  [js-stmt/const-decl name
-                    [js-exp/arrow-exp
-                      [if-let [rest [wuns-func/rest-param func]]
-                        [concat params [list [concat-words [word ...] [word-with-form/word rest]]]]
-                        params]
-                      [cexp body]]]
-                  [js-stmt/return [js-exp/var name]]]]
-              [list]]]
+        [bform/intrinsic i]
+        [logq-abort cexp toplevel intrinsic not allowed]
 
-          [wuns/call-word wwf form-args]
-          [let [w [word-with-form/word wwf]]
-            [if-let [macro-func [try-get macro-funcs w]]
-              [iife [cstmt 1 [form-to-ast [call-js-func macro-func form-args]]]]
-              [if [has defexprs w]
-                [js-exp/call [js-exp/var w] [list-map arg form-args [form-to-quoted-js arg]]]
-                [js-exp/call [js-exp/var w] [list-map arg form-args [cexp [form-to-ast arg]]]]]]]
+        [bform/extern ws]
+        [mk-extern ws]
 
+        [bform/type decls]
+        [logq-abort cexp type not implemented]
+
+        [bform/def wf e]
+        [logq-abort cexp def not implemented]
+
+        [bform/let w e]
+        [logq-abort cexp let not implemented]
+
+        [bform/letfn w e]
+        [logq-abort cexp letfn not implemented]
+
+        [bform/func f]
+        [cfunc f]
+
+        [bform/call-fexpr fexpr arg-forms]
+        [js-exp/call [cexp fexpr] [list-map arg arg-forms [form-to-quoted-js arg]]]
+
+        [bform/call f args]
+        [match f
+          [bform/intrinsic i]
+          [js-exp/binop
+            [instruction-name-to-binop i]
+            [cexp [at args 0]]
+            [cexp [at args 1]]]
+
+          [if-let [deps [try-get-tail]]
+            [logq-abort cexp found a tail call not expected]
+            [js-exp/call [cexp f] [list-map arg args [cexp arg]]]]]
+
+        [do
+          [log bform]
+          [logq-abort cexp not implemented]]]]
+
+      [func cstmt [is-tail bform]
+        [match bform
+          [bform/if cond t f]
+          [js-stmt/if [cexp cond]
+            [block [cstmt is-tail t]]
+            [block [cstmt is-tail f]]]
+
+          [bform/switch exp cases default]
+          [let-do
+            []
+            [if is-tail
+              [block
+                [js-stmt/switch
+                  [cexp exp]
+                  [list-map case cases
+                    [pair
+                      [list-map lit [pair/fst case] [cexp lit]]
+                      [cstmt is-tail [pair/snd case]]]]
+                  [cstmt is-tail default]]]
+              [logq-abort cstmt not implemented switch non-tail]]]
+
+          [bform/do forms]
+          [js-stmt/block
+            [concat
+              [list-map f [slice forms 0 [dec [size forms]]] [cstmt 0 f]]
+              [list [cstmt is-tail [last forms]]]]]
+
+          [bform/def w e]
+          [js-stmt/const-decl w [cexp e]]
+
+          [bform/defexpr fexpr-func]
+          [js-stmt/const-decl [bfunc/name fexpr-func] [cfunc fexpr-func]]
+
+          [bform/type decls]
+          [js-stmt/seq
+            [concat-lists
+              [list-map decl decls
+                [let [type-name [type-decl/name decl]
+                      type-params [type-decl/type-params decl]
+                      kind [type-decl/kind decl]
+                      type-name-prefix [concat-words type-name [word /]]]
+                  [match kind
+                    [type-decl-kind/union ctors]
+                    [list-map ctor ctors
+                      [let [ctor-name [pair/fst ctor]
+                            tag [concat-words type-name-prefix ctor-name]
+                            n-atom [atom 0]
+                            params [list-map - [pair/snd ctor] [concat-words [word p] [int-to-word [inc-atom n-atom]]]]]
+                        [js-stmt/const-decl
+                          tag
+                          [js-exp/arrow-exp
+                            params
+                            [js-exp/call
+                              [mk-extern [list [word host] [word make-tagged-value]]]
+                              [concat
+                                [list [js-exp/string tag]]
+                                [list-map p params [js-exp/var p]]]]]]]]
+
+                    [type-decl-kind/record fields]
+                    [logq-abort cstmt not implemented record]
+
+                    [logq-abort cstmt unknown type kind]]]]]]
+
+          [bform/call f args]
+          [if-let [call-to-deps [try-get-tail]]
+            [if-let [deps [try-get call-to-deps bform]]
+              [let-do
+                [params [if-let [cf [atom-get current-func]] [bfunc/parameters cf] [logq-abort cstmt]]
+                 deps-set [set]]
+                [for-each i deps [set-add deps-set i]]
+                [assert is-tail tail call must be tail]
+
+                [let-do [tmp-consts [growable-list]
+                         assignments [growable-list]
+                         subst [transient-kv-map]]
+                  [for i 0 [size args]
+                    [if [set-has deps-set i]
+                      [let-do [tmp [concat-words [word tmp] [int-to-word i]]]
+                        [push tmp-consts [js-stmt/const-decl tmp [js-exp/var [at params i]]]]
+                        [push assignments [js-stmt/assign [at params i] [cexp [at args i]]]]
+                        [set-kv-map subst [at params i] [bform/var tmp]]]
+                      [push assignments [js-stmt/assign [at params i] [cexp [substitute [at args i] subst]]]]]]
+                  [js-stmt/seq
+                    [concat
+                      [concat
+                        [clone-growable-to-frozen-list tmp-consts]
+                        [clone-growable-to-frozen-list assignments]]
+                      [list [js-stmt/continue]]]]]]
+                [if is-tail
+                  [js-stmt/return [cexp bform]]
+                  [js-stmt/exp [cexp bform]]]]
+            [if is-tail
+              [js-stmt/return [cexp bform]]
+              [js-stmt/exp [cexp bform]]]]
+
+          [if is-tail
+            [js-stmt/return [cexp bform]]
+            [js-stmt/exp [cexp bform]]]]]]
+    [cstmt true top-form]]]]
+
+[type compile-run-error []
+  [union
+    [form-to-ast-errors [list report-message]]
+    [eval-error js-value]]]
+
+[defn map-result [l f]
+  [let [gl [growable-list]]
+    [[func go [i]
+      [if [lt-s i [size l]]
+        [match [f [at l i]]
+          [result/error e] [result/error e]
+          [result/ok v]
+          [do
+            [push gl v]
+            [go [inc i]]]]
+        [result/ok [clone-growable-to-frozen-list gl]]]]
+      0]]]
+
+[defn compile-run-forms [forms]
+  [assert [not [is-empty forms]] run-forms must not be empty]
+  [let-do
+    [converter [mk-form-to-ast]
+     f2a [form-to-ast-converter/form-to-ast converter]
+     node-to-ldesc [form-to-ast-converter/node-to-ldesc converter]
+     comp-run
+     [func comp-run [form]
+      [match [f2a form]
+        [result/error f2a-errors]
+        [result/error [compile-run-error/form-to-ast-errors f2a-errors]]
+
+        [result/ok bform]
+        [let [stmt [compile-top-form node-to-ldesc bform]]
+          [result/ok stmt]]]]]
+    [match [map-result forms comp-run]
+      [result/error e] [result/error e]
+      [result/ok stmts]
+      [match [run-js-stmt [js-stmt/seq stmts]]
+        [result/error jsval-err]
+        [result/error [compile-run-error/eval-error jsval-err]]
+
+        [result/ok v]
+        [result/ok v]]]]]
+
+
+[comment  [match wexp
           [wuns/extern wwfs]
-          [mk-extern [list-map wwf wwfs [word-with-form/word wwf]]]
+          [logq-abort cstmt extern not implemented]
 
-          [wuns/call f args]
-          [match f
-            [wuns/intrinsic w]
-            [js-exp/binop
-              [instruction-name-to-binop w]
-              [cexp [first args]]
-              [cexp [second args]]]
-
-            [js-exp/call [cexp f] [list-map arg args [cexp arg]]]]
-
-          [iife [cstmt 1 wexp]]]]
-      [func cstmt [is-tail wexp]
-        [match wexp
           [wuns/if cond t f]
           [js-stmt/if [cexp cond]
             [block [cstmt is-tail t]]
@@ -271,48 +450,19 @@
           [wuns/call-word wwf form-args]
           [if-let [mac-func [try-get macro-funcs [word-with-form/word wwf]]]
             [cstmt 1 [form-to-ast [call-js-func mac-func form-args]]]
-            [if is-tail
-              [js-stmt/return [cexp wexp]]
-              [js-stmt/exp [cexp wexp]]]]
+            [if-let [wfunc [try-get [database/tail-calls bind-db] wexp]]
+              [let-do [params [wuns-func/parameters wfunc]
+                       assignments [growable-list]]
+                [for i 0 [size form-args]
+                  [push assignments [js-stmt/assign [word-with-form/word [at params i]] [cexp [form-to-ast [at form-args i]]]]]]
+                [js-stmt/seq
+                  [concat
+                    [clone-growable-to-frozen-list assignments]
+                    [list [js-stmt/continue]]]]]
+              [if is-tail
+                [js-stmt/return [cexp wexp]]
+                [js-stmt/exp [cexp wexp]]]]]
 
           [if is-tail
             [js-stmt/return [cexp wexp]]
-            [js-stmt/exp [cexp wexp]]]]]]
-    [do
-      [for-each top-form top-forms
-        [let-do [ast [form-to-ast top-form]]
-          [push top-decls [cstmt 1 ast]]
-          [match ast
-            [wuns/def wwf e]
-            [let [w [word-with-form/word wwf]]
-              [when-let [kind [try-get-func-kind e]]
-                [match kind
-                  [wuns-func-kind/macro]
-                  [let-do [top-so-far [clone-growable-to-frozen-list top-decls]
-                          decl-block [js-stmt/block [concat top-so-far [list [js-stmt/return [js-exp/var w]]]]]
-                          mac-func-result [run-js-stmt decl-block]]
-                    [match mac-func-result
-                      [result/ok mac-func]
-                      [set-kv-map macro-funcs w mac-func]
-                      [result/error e]
-                      [logq-abort compile-top-forms error compiling macro function]]]
-                  [wuns-func-kind/fexpr]
-                  [set-kv-map defexprs w 1]
-                  [wuns-func-kind/func]
-                  [do]]]]
-            [do]]]]
-      [let [errors [clone-growable-to-frozen-list [form-to-ast-converter/errors form-ast-converter]]]
-        [if [is-empty errors]
-          [result/ok [js-stmt/seq [clone-growable-to-frozen-list top-decls]]]
-          [result/error errors]]]]]]]
-
-[defn compile-run-forms [forms]
-  [match [compile-top-forms forms]
-    [result/error e] [result/error e]
-    [result/ok top-stmt]
-    [match [run-js-stmt top-stmt]
-      [result/error jsval-err]
-      [do
-        [log jsval-err]
-        [result/error [list]]]
-      [result/ok v] [result/ok v]]]]
+            [js-stmt/exp [cexp wexp]]]] ]

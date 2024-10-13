@@ -1,0 +1,66 @@
+[load ast-bind.wuns]
+
+[defn test-tail [form]
+  [let-do [converter [mk-form-to-ast]
+           f2a [form-to-ast-converter/form-to-ast converter]
+           node-to-ldesc [form-to-ast-converter/node-to-ldesc converter]]
+    [match [f2a form]
+      [result/error errors]
+      [logq-abort form-to-ast errors]
+
+      [result/ok bform]
+        [match bform
+          [bform/func bf]
+          [tail-call-analysis node-to-ldesc bf]
+
+          [logq-abort test-tail not a func]]]]]
+
+[defn test-assert-no-rec-calls [form]
+  [match [test-tail form]
+    [tail-call-result/no-rec-calls] [do]
+    [logq-abort assert-no-rec-calls not no rec calls]]]
+
+[defn int-list-eq [l1 l2]
+  [and [eq [size l1] [size l2]]
+    [[func go [i]
+      [if [eq i [size l1]]
+        true
+        [and [eq [at l1 i] [at l2 i]] [go [inc i]]]]] 0]]]
+
+[defn test-assert-only-tail [expected form]
+  [match [test-tail form]
+    [tail-call-result/only-tail call-to-deps]
+    [let-do [lls [kv-map-values call-to-deps]]
+      [assert [eq [size lls] [size expected]] only tail size]
+      [[func go [i]
+        [when [lt-s i [size lls]]
+          [assert [int-list-eq [at expected i] [at lls i]]]
+          [go [inc i]]]] 0]]
+    [logq-abort assert-only-tail not only tail]]]
+
+[defn test-assert-has-non-tail [form]
+  [match [test-tail form]
+    [tail-call-result/non-tail] [do]
+    [logq-abort assert-no-tail not no tail]]]
+
+[defn test-tail-analysis []
+  [test-assert-no-rec-calls
+    [quote [func f [] [do]]]]
+  [test-assert-only-tail [list [list]]
+    [quote [func f [] [f]]]]
+  [test-assert-only-tail [list [list] [list]]
+    [quote [func f [] [if [i32 1] [f] [f]]]]]
+  [test-assert-only-tail [list [list]]
+    [quote
+      [func go [res n]
+        [if n
+          [go [[intrinsic i32.add] res n] [[intrinsic i32.sub] n [i32 1]]]
+          res]]]]
+  [comment here arg 1 depends on parameter 0 in the tail call]
+  [test-assert-only-tail [list [list 0]]
+    [quote [func go [n res]
+      [if n
+        [go [[intrinsic i32.sub] n [i32 1]] [[intrinsic i32.add] res n]]
+        res]]]]
+  [test-assert-has-non-tail
+    [quote [func f [] [do [f] [i32 4]]]]]]

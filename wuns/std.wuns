@@ -7,12 +7,6 @@
 
 [def list [func list [.. entries] entries]]
 
-[def defmacro
-  [macro defmacro [name params .. bodies]
-    [flist [form/word [word def]] name
-      [flist [form/word [word macro]] name params
-        [form/list [[extern host concat] [list [form/word [word do]]] bodies]]]]]]
-
 [defmacro qword [m]
   [match m
     [form/word w]
@@ -34,9 +28,6 @@
 
 [defmacro defn [name params .. bodies]
   [flist [qword def] name [flist [qword func] name params [form/list [concat [list [qword do]] bodies]]]]]
-
-[defmacro defexpr [name params .. bodies]
-  [flist [qword def] name [flist [qword fexpr] name params [form/list [concat [list [qword do]] bodies]]]]]
 
 [defexpr quote [f] f]
 
@@ -317,6 +308,7 @@
             0]
           1]] 0]]]]
 
+[todo remove this]
 [defn eq-form-word [fa fb]
   [match fa
     [form/word wa]
@@ -368,11 +360,12 @@
   [for-func iw start [i32 2] end forms]]
 
 [defmacro for-each [element-var collection .. forms]
-  [assert [is-word element-var] for-each requires a word as the first argument]
-  [let [iteration-var [genword]
-        col-var [genword]
-        col-size-var [genword]
-        loopw [genword]]
+  [let-do
+    [iteration-var [genword]
+     col-var [genword]
+     col-size-var [genword]
+     loopw [genword]]
+    [assert [is-word element-var] for-each requires a word as the first argument]
     [flist
       [quote let] [flist col-var collection
                         col-size-var [flist [quote size] col-var]]
@@ -392,10 +385,11 @@
         [quote [i32 0]]]]]]
 
 [defmacro list-map [element-var collection form]
-  [assert [is-word element-var] list-map requires a word as the first argument]
-  [flist [quote list-map-fn]
-    [flist [quote func] [genword] [flist element-var] form]
-    collection]]
+  [do
+    [assert [is-word element-var] list-map requires a word as the first argument]
+    [flist [quote list-map-fn]
+      [flist [quote func] [genword] [flist element-var] form]
+      collection]]]
 
 [defn half [x] [i32.div-s x 2]]
 
@@ -403,6 +397,8 @@
 
 [def-extern transient-kv-map [type-scheme [k v] [func [] [transient-kv-map k v]]]]
 [def-extern set-kv-map [type-scheme [k v] [func [[transient-kv-map k v] k v] [tuple]]]]
+[def-extern kv-map-size [type-scheme [k v] [func [[transient-kv-map k v]] i32]]]
+[def-extern kv-map-values [type-scheme [k v] [func [[transient-kv-map k v]] [list v]]]]
 
 [defn mk-word [w] [flist [quote word] w]]
 
@@ -484,10 +480,26 @@
 [def-extern pairwise [type-scheme [a] [func [[list a]] [list [list a]]]]]
 [def-extern triplewise [type-scheme [a] [func [[list a]] [list [list a]]]]]
 
-[type linked-list [a]
-  [union
-    [nil]
-    [cons a [linked-list a]]]]
+[def false [i32 0]]
+[def true [i32 1]]
+
+[defn all [l pred]
+  [[func go [i]
+    [if [lt-s i [size l]]
+      [if [pred [at l i]]
+        [go [inc i]]
+        false]
+      true]]
+    0]]
+
+[defn exists [l pred]
+  [[func go [i]
+    [if [lt-s i [size l]]
+      [if [pred [at l i]]
+        true
+        [go [inc i]]]
+      false]]
+    0]]
 
 [type growable-list [a] [union]]
 
@@ -519,9 +531,48 @@
 [def make-eval-context
   [type-anno
     [extern interpreter make-context]
-    [func [] [evaluation-context]]]]
+    [func [word] [evaluation-context]]]]
+
+[def evaluate
+  [type-anno
+    [extern interpreter evaluate]
+    [func [evaluation-context form] [tuple]]]]
+
+[type js-value [] [union]]
+
+[def evaluate-result
+  [type-anno
+    [extern interpreter evaluate-result]
+    [func [evaluation-context form] [result js-value js-value]]]]
+
+[def macro-expand
+  [type-anno
+    [extern interpreter macro-expand]
+    [func [evaluation-context form] [form]]]]
+
+[type macro [] [union]]
+
+[def try-get-macro
+  [type-anno
+    [extern interpreter try-get-macro]
+    [func [evaluation-context word] [option macro]]]]
+
+[def interpreter-apply
+  [type-anno
+    [extern interpreter apply]
+    [func [macro [list form]] form]]]
+
+[def current-dir
+  [type-anno
+    [extern current-dir]
+    [func [] [word]]]]
 
 [def performance-now
   [type-anno
     [extern performance-now]
     [func [] f64]]]
+
+[def to-js-value
+  [type-anno
+    [extern js identity]
+    [type-scheme [a] [func [a] js-value]]]]

@@ -1,12 +1,5 @@
 [load compile-js.wuns]
 
-[type js-value [] [union]]
-
-[def to-js-value
-  [type-anno
-    [extern js identity]
-    [type-scheme [a] [func [a] js-value]]]]
-
 [defmacro disable [.. -]
   [quote [do]]]
 
@@ -83,18 +76,18 @@
   [test-error [switch [i32 1] [i32 1] [word one]]]
   [test-ok [word zero]
     [switch [i32 0]
-      [i32 0] [word zero]
-      [i32 1] [word one]
+      [[i32 0]] [word zero]
+      [[i32 1]] [word one]
       [word not-01]]]
   [test-ok [word one]
     [switch [i32 1]
-      [i32 0] [word zero]
-      [i32 1] [word one]
+      [[i32 0]] [word zero]
+      [[i32 1]] [word one]
       [word not-01]]]
   [test-ok [word not-01]
     [switch [i32 2]
-      [i32 0] [word zero]
-      [i32 1] [word one]
+      [[i32 0]] [word zero]
+      [[i32 1]] [word one]
       [word not-01]]]
 
   [test-ok [i32 5] [[func f [] [i32 5]]]]
@@ -117,8 +110,8 @@
       [union
         [word word]
         [list [list form]]]]
-    [def qs [fexpr qs [.. xs] [[extern host size] xs]]]
-    [qs these arguments are interpreted as forms]]
+    [defexpr my-fexpr [.. xs] [[extern host size] xs]]
+    [my-fexpr these arguments are interpreted as forms]]
 
   [test-ok [word a] [def a [word a]] a]
   [test-ok [i32 4] [def a [i32 4]] a]
@@ -127,25 +120,135 @@
   [test-ok [f64 1] [def a [i32 1]] a]
   [test-ok [i32 5] [def f [func f [] [i32 5]]] [f]]
 
+  [test-ok [i32 55]
+    [def gauss
+      [func gauss-direct [n]
+        [if n
+          [[intrinsic i32.add] n [gauss-direct [[intrinsic i32.sub] n [i32 1]]]]
+          [i32 0]]]]
+    [gauss [i32 10]]]
+  [test-ok [i32 5050]
+    [def gauss
+      [func gauss-direct [n]
+        [if n
+          [[intrinsic i32.add] n [gauss-direct [[intrinsic i32.sub] n [i32 1]]]]
+          [i32 0]]]]
+    [gauss [i32 100]]]
   [comment done testing]
   [logq ran [form/word [int-to-word [atom-get test-assert-count-atom]]]]]]
 
-[def interpreter-evaluate-result
-  [type-anno
-    [extern interpreter evaluate-result]
-    [func [evaluation-context form] [result js-value js-value]]]]
-
 [defn mk-eval-forms []
-  [let [eval-context [make-eval-context]]
+  [let [eval-context [make-eval-context [current-dir]]]
     [func eval-forms [forms]
-      [let [results [list-map form forms [interpreter-evaluate-result eval-context form]]]
+      [let [results [list-map form forms [evaluate-result eval-context form]]]
       [last results]]]]]
+
+[defn time-fn [f]
+  [let-do
+    [before [performance-now]
+     res [f]]
+  [logq it took ms]
+  [log [[intrinsic f64.sub] [performance-now] before]]
+  res]]
 
 [defn run-tests []
   [logq running self eval tests]
-  [run-test-suite mk-eval-forms]
+  [time-fn [func go [] [run-test-suite mk-eval-forms]]]
   [logq running compiler tests]
-  [run-test-suite [func const [] compile-run-forms]]
+  [time-fn [func go [] [run-test-suite [func const [] compile-run-forms]]]]
   ]
 
-[run-tests]
+
+[defn run-performance-tests [name mk-evaluator]
+  [logq running performance tests for [form/word name]]
+  [let-do [test-assert-count-atom [atom 0]]
+
+  [time-fn
+    [func go []
+      [test-ok [i32 5050]
+        [[func gauss-direct [n]
+          [if n
+            [[intrinsic i32.add] n [gauss-direct [[intrinsic i32.sub] n [i32 1]]]]
+            [i32 0]]]
+          [i32 100]]]]]
+  [time-fn
+    [func go []
+      [test-ok [i32 5050]
+        [[func gauss-direct [n]
+          [if n
+            [[intrinsic i32.add] n [gauss-direct [[intrinsic i32.sub] n [i32 1]]]]
+            [i32 0]]]
+          [i32 100]]]]]
+  [time-fn
+    [func go []
+      [test-ok [i32 500500]
+        [def gauss-tail
+          [func gauss-tail [nn]
+            [[func go [res n]
+              [if n
+                [go [[intrinsic i32.add] res n] [[intrinsic i32.sub] n [i32 1]]]
+                res]] [i32 0] nn]]]
+        [gauss-tail [i32 1000]]]]]
+  [comment this version has a data dependency between parameters
+  when tail calling does destructive updates we need a temporary variable]
+  [time-fn
+    [func go []
+      [test-ok [i32 500500]
+        [def gauss-tail-rev
+          [func gauss-tail-rev [nn]
+            [[func go [n res]
+              [if n
+                [go [[intrinsic i32.sub] n [i32 1]] [[intrinsic i32.add] res n]]
+                res]] nn [i32 0]]]]
+        [gauss-tail-rev [i32 1000]]]]]
+
+  [time-fn
+    [func go []
+      [test-ok [i32 50005000]
+        [def gauss-tail
+          [func gauss-tail [nn]
+            [[func go [res n]
+              [if n
+                [go [[intrinsic i32.add] res n] [[intrinsic i32.sub] n [i32 1]]]
+                res]] [i32 0] nn]]]
+        [gauss-tail [i32 10000]]]]]
+  [logq the big one 65535 equals 2147450880]
+  [time-fn
+    [func go []
+      [test-ok [i32 2147450880]
+        [def gauss-tail
+          [func gauss-tail [nn]
+            [[func go [res n]
+              [if n
+                [go [[intrinsic i32.add] res n] [[intrinsic i32.sub] n [i32 1]]]
+                res]] [i32 0] nn]]]
+        [gauss-tail [i32 65535]]]]]
+]]
+
+[defn run-perf-tests []
+  [run-performance-tests [word evaluator] mk-eval-forms]
+  [run-performance-tests [word compiler] [func const [] compile-run-forms]]
+  ]
+
+[def gauss-tail-res-n
+  [func gauss-tail [nn]
+    [[func go [res n]
+      [if n
+        [go [[intrinsic i32.add] res n] [[intrinsic i32.sub] n [i32 1]]]
+        res]] [i32 0] nn]]]
+
+[comment this version has a data dependency between parameters
+  when tail calling does destructive updates we need a temporary variable
+  for the new value of res - otherwise we would use the new value of n when calculating res]
+[def gauss-tail-n-res
+  [func gauss-tail [nn]
+    [[func go [n res]
+      [if n
+        [go [[intrinsic i32.sub] n [i32 1]] [[intrinsic i32.add] res n]]
+        res]] nn [i32 0]]]]
+[def gauss-tail-rev
+          [func gauss-tail-rev [nn]
+            [[func go [n res]
+              [if n
+                [go [[intrinsic i32.sub] n [i32 1]] [[intrinsic i32.add] res n]]
+                res]] nn [i32 0]]]]

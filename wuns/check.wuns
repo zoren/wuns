@@ -230,7 +230,7 @@
     [transient-kv-map]
     [atom 0]
     [transient-kv-map]
-    [make-eval-context]
+    [make-eval-context [current-dir]]
     [transient-kv-map]
     [transient-kv-map]]]
 
@@ -436,16 +436,16 @@
     [match syntax-type
       [form/word w]
       [switch w
-        [word i32]
+        [[word i32]]
         type-i32
 
-        [word f64]
+        [[word f64]]
         type-f64
 
-        [word word]
+        [[word word]]
         type-word
 
-        [word form]
+        [[word form]]
         type-form
 
         [if-let [t [try-get type-var-env w]]
@@ -547,31 +547,19 @@
       [match [first l]
         [form/word fw]
           [switch fw
-            [word atom] 0
+            [[word atom]] 0
 
-            [word i32] 1
-            [word f64] 1
-            [word word] 1
+            [[word i32] [word f64] [word word]] 1
 
-            [word extern] 1
+            [[word extern]] 1
 
-            [word func] 1
-            [word macro] 1
-            [word fexpr] 1
+            [[word func] [word defmacro] [word defexpr]] 1
 
-            [word if] 0
-            [word type] 0
-            [word match] 0
-            [word do] 0
-            [word let] 0
-            [word def] 0
+            [[word if] [word type] [word match] [word do] [word let] [word def]] 0
 
-            [word type-anno] [is-syntactic-value [second l]]
+            [[word type-anno]] [is-syntactic-value [second l]]
             0]
         [form/list l] 0]]]]
-
-[def try-get-macro [extern interpreter try-get-macro]]
-[def interpreter-apply [extern interpreter apply]]
 
 [defn try-expand-form [gctx form]
   [match form
@@ -589,11 +577,6 @@
           [set-kv-map form-expansions form expanded]
           [some expanded]]
         [none]]]]]
-
-[def evaluate
-  [type-anno
-    [extern interpreter evaluate]
-    [func [evaluation-context form] [tuple]]]]
 
 [defn check [gctx level lctx form]
   [match form
@@ -679,7 +662,7 @@
                  type-def-list [try-get-list-report gctx [at sub-forms [add 2 i]]]]
                 [if-let [type-def-first-word [try-get-word-report gctx [first type-def-list]]]
                   [switch type-def-first-word
-                    [word union]
+                    [[word union]]
                     [for i 1 [size type-def-list]
                       [let-do [ctor [try-get-list-report gctx [at type-def-list i]]
                               param-list [list-map param [rest ctor] [instantiate-annotated-type gctx param-map param]]]
@@ -687,7 +670,7 @@
                           [set-kv-map def-var-types [concat-words type-prefix ctor-name]
                             [generalize-top [type-ctor param-list result-type]]]]]]
 
-                    [word record]
+                    [[word record]]
                     [let-do
                       [fields [growable-list]]
                       [for i 1 [size type-def-list]
@@ -849,29 +832,40 @@
             [check gctx level let-ctx [last sub-forms]]
             type-empty-tuple]]
 
+        [eq-form first-form [quote fexpr]]
+        [logq-abort check fexpr not allowed here]
+
+        [eq-form first-form [quote macro]]
+        [logq-abort check macro not allowed here]
+
         [or
           [eq-form first-form [quote func]]
-          [eq-form first-form [quote macro]]
-          [eq-form first-form [quote fexpr]]]
+          [eq-form first-form [quote defexpr]]
+          [eq-form first-form [quote defmacro]]]
         [let-do
-          [takes-form-params [or [eq-form first-form [quote macro]] [eq-form first-form [quote fexpr]]]
-           function-kind
+          [function-kind
            [if-let [fw [try-get-form-word-option first-form]]
               [switch fw
-                [word func] [function-kind/func]
-                [word macro] [function-kind/macro]
-                [word fexpr] [function-kind/fexpr]
+                [[word func]] [function-kind/func]
+                [[word defmacro]] [function-kind/macro]
+                [[word defexpr]] [function-kind/fexpr]
                 [logq-abort check function-kind not recognized]]
               [logq-abort check function-kind not recognized]]
+           takes-form-params
+           [match function-kind
+             [function-kind/func] 0
+             [function-kind/macro] 1
+             [function-kind/fexpr] 1]
            level-1 [inc level]
+           func-name [form-to-word [second sub-forms]]
            param-ctx [transient-kv-map]
            gen-func-type [generate-fresh-type-var gctx level-1]
+           func-type-scheme [mk-empty-type-scheme gen-func-type]
            func-ctx [make-local-context param-ctx lctx first-form]
            reg-params [growable-list]
            opt-rest-param-atom [atom [none]]]
           [report-when-not [eq n-of-args 3] form expects 3 arguments]
-          [when-let [func-name [try-get-form-word-option [second sub-forms]]]
-            [set-kv-map param-ctx func-name [mk-empty-type-scheme gen-func-type]]]
+          [set-kv-map param-ctx func-name func-type-scheme]
           [let [params [try-get-list-report gctx [third sub-forms]]]
             [let-do
               [params-parsed [parse-parameter-list params]]
@@ -892,9 +886,19 @@
               gen-func-type
               [type/inst [inst-type/func [func-type frozen-params [atom-get opt-rest-param-atom] return-type function-kind]]]
               form]
-            [when [eq-form first-form [quote macro]]
-              [unify-report gctx return-type type-form body]]]
-          gen-func-type]
+            [match function-kind
+              [function-kind/fexpr]
+              [do
+                [set-kv-map [check-context/def-var-types gctx] func-name func-type-scheme]
+                type-empty-tuple]
+
+              [function-kind/macro]
+              [do
+                [unify-report gctx return-type type-form body]
+                [set-kv-map [check-context/def-var-types gctx] func-name func-type-scheme]
+                type-empty-tuple]
+
+              gen-func-type]]]
 
         [eq-form first-form [quote def]]
         [let-do
