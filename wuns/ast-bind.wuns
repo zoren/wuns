@@ -1,46 +1,41 @@
 [load std.wuns]
 
-[type wordf []
-  [record
-    [word word]
-    [form form]]]
-
 [type type []
   [union
-    [word wordf]
-    [apply wordf [list type]]]]
+    [word word]
+    [apply word [list type]]]]
 
 [type type-decl-kind []
   [union
-    [union [list [pair wordf [list type]]]]
-    [record [list [pair wordf type]]]]]
+    [union [list [pair word [list type]]]]
+    [record [list [pair word type]]]]]
 
 [type type-decl []
   [record
-    [name wordf]
-    [type-params [list wordf]]
+    [name word]
+    [type-params [list word]]
     [kind type-decl-kind]]]
 
-[type match-pattern [] [record [ctor wordf] [params [list wordf]]]]
+[type match-pattern [] [record [ctor word] [params [list word]]]]
 
 [type literal []
   [union
-    [i32 wordf]
-    [f64 wordf]
-    [word wordf]]]
+    [i32 word]
+    [f64 word]
+    [word word]]]
 [type
   bfunc []
   [record
-    [name wordf]
-    [parameters [list wordf]]
-    [rest-param [option wordf]]
+    [name word]
+    [parameters [list word]]
+    [rest-param [option word]]
     [body bform]]
   bform []
   [union
-    [var wordf]
+    [var word]
     [literal literal]
-    [intrinsic wordf]
-    [extern [list wordf]]
+    [intrinsic word]
+    [extern [list word]]
     [type [list type-decl]]
 
     [func bfunc]
@@ -49,8 +44,8 @@
     [switch bform [list [pair [list bform] bform]] bform]
     [match bform [list [pair match-pattern bform]] [option bform]]
     [letfn [list bfunc] bform]
-    [let [list [pair wordf bform]] bform]
-    [def wordf bform]
+    [let [list [pair word bform]] bform]
+    [def word bform]
     [defexpr bfunc]
     [defmacro bfunc]
     [call bform [list bform]]
@@ -58,20 +53,17 @@
     [type-anno bform type]
     ]]
 
-[defn form-to-word-with [form]
-  [wordf [form-to-word form] form]]
-
 [defn form-to-type [form]
   [match form
     [form/word w]
-    [type/word [wordf w form]]
+    [type/word w]
 
     [form/list l]
     [let-do [fw [form-to-word [first l]]]
       [assert [not [is-empty l]] type form-to-type is empty]
       [assert [not [eq-word fw [word type-scheme]]] type form-to-type does not accept type-scheme]
       [type/apply
-        [form-to-word-with [first l]]
+        fw
         [list-map arg [rest l] [form-to-type arg]]]]]]
 
 [defn form-to-type-decl-kind [form]
@@ -86,7 +78,7 @@
             [let-do [ctor-list [form-to-list ctor]]
               [assert [not [is-empty ctor-list]] type decl kind union ctor is empty]
               [pair
-                [form-to-word-with [first ctor-list]]
+                [form-to-word [first ctor-list]]
                 [list-map arg [rest ctor-list] [form-to-type arg]]]]]]
 
         [[word record]]
@@ -147,13 +139,6 @@
         [do
           [push-error form [quote [expected word]]]
           [word 0]]]]
-     get-wordf
-     [func gw [form]
-      [match form
-        [form/word w] [wordf w form]
-        [do
-          [push-error form [quote [expected word]]]
-          [wordf [word 0] [form/word [word 0]]]]]]
      get-list
      [func gl [form]
       [match form
@@ -176,7 +161,7 @@
       [func form-to-func [lstack form]
           [let-do
                [form-list [get-list form]
-                name [get-wordf [second form-list]]
+                name [get-word [second form-list]]
                 param-list [get-list [third form-list]]
                 n-of-param-forms [size param-list]
                 has-rest-param [and [lt-s 1 n-of-param-forms] [eq-word [get-word [at param-list -2]] [word ..]]]
@@ -191,8 +176,8 @@
               [set-local lvars rest-param [local-var-kind/param]]]
             [bfunc
               name
-              [list-map param regular-param-forms [get-wordf param]]
-              [match opt-rest-param [option/none] [option/none] [option/some v] [option/some [get-wordf v]]]
+              [list-map param regular-param-forms [get-word param]]
+              [match opt-rest-param [option/none] [option/none] [option/some v] [option/some [get-word v]]]
               [form-to-ast new-lstack [fourth form-list]]]]]
       [func form-to-ast [lstack form]
         [let [report-error [func r [msg] [push-error form msg]]
@@ -219,19 +204,19 @@
               [form/word first-word]
               [switch first-word
                 [[word i32]]
-                [bform/literal [literal/i32 [get-wordf [get-arg 0]]]]
+                [bform/literal [literal/i32 [get-word [get-arg 0]]]]
 
                 [[word f64]]
-                [bform/literal [literal/f64 [get-wordf [get-arg 0]]]]
+                [bform/literal [literal/f64 [get-word [get-arg 0]]]]
 
                 [[word word]]
-                [bform/literal [literal/word [get-wordf [get-arg 0]]]]
+                [bform/literal [literal/word [get-word [get-arg 0]]]]
 
                 [[word extern]]
-                [bform/extern [list-map w [rest l] [get-wordf w]]]
+                [bform/extern [list-map w [rest l] [get-word w]]]
 
                 [[word intrinsic]]
-                [bform/intrinsic [get-wordf [get-arg 0]]]
+                [bform/intrinsic [get-word [get-arg 0]]]
 
                 [[word func]]
                 [bform/func [form-to-func lstack form]]
@@ -266,11 +251,11 @@
                       [assert [not [is-empty pat-list]] match pattern is empty]
                       [pair
                         [match-pattern
-                          [get-wordf [first pat-list]]
+                          [get-word [first pat-list]]
                           [list-map param [rest pat-list]
                             [do
                               [set-local lvars param [local-var-kind/match-param]]
-                              [get-wordf param]]]]
+                              [get-word param]]]]
                         [form-to-ast new-lstack [second p]]]]]
                   [if [is-odd [size l]]
                     [some [form-to-ast lstack [last l]]]
@@ -287,7 +272,7 @@
                    new-lstack [local-stack/frame lstack lctx]]
                   [assert-n-args 2]
                   [bform/let
-                    [list-map p [pairwise bindings] [pair [get-wordf [first p]] [form-to-ast new-lstack [second p]]]]
+                    [list-map p [pairwise bindings] [pair [get-word [first p]] [form-to-ast new-lstack [second p]]]]
                     [form-to-ast new-lstack [get-arg 1]]]]
 
                 [[word letfn]]
@@ -311,7 +296,7 @@
                 [do
                   [assert-n-args 2]
                   [assert-empty-stack]
-                  [bform/def [get-wordf [get-arg 0]] [form-to-ast lstack [third l]]]]
+                  [bform/def [get-word [get-arg 0]] [form-to-ast lstack [third l]]]]
 
                 [[word defmacro] [word defexpr]]
                 [do
@@ -334,8 +319,8 @@
                 [bform/type
                   [list-map triple [triplewise [rest l]]
                     [type-decl
-                      [get-wordf [first triple]]
-                      [list-map tv [get-list [second triple]] [get-wordf tv]]
+                      [get-word [first triple]]
+                      [list-map tv [get-list [second triple]] [get-word tv]]
                       [form-to-type-decl-kind [third triple]]]]]
 
                 [[word type-anno]]
@@ -347,11 +332,11 @@
                     [form-to-type [get-arg 1]]]]
 
                 [if-let [ldesc [try-get-local lstack first-word]]
-                  [bform/call [bform/var [get-wordf first-form]] [list-map arg [rest l] [form-to-ast lstack arg]]]
+                  [bform/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]
                   [if-let [ddesc [try-get def-ctx first-word]]
                     [match ddesc
                       [def-desc/fexpr]
-                      [bform/call-fexpr [bform/var [get-wordf first-form]] [rest l]]
+                      [bform/call-fexpr [bform/var [get-word first-form]] [rest l]]
 
                       [def-desc/macro]
                       [if-let [macro-func [try-get-macro eval-ctx first-word]]
