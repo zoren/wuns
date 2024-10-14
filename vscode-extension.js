@@ -72,6 +72,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
         if (!word) return console.error('expected word')
         const node = tryGetNodeFromForm(form)
         if (!node) return
+        if (node.tree.contentName !== fileName) return
         const { row, column } = node.startPosition
         tokensBuilder.push(row, column, word.length, tokenType, tokenModifiers)
       }
