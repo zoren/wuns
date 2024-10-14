@@ -272,7 +272,7 @@ const provideSelectionRanges = (document, positions) => {
     const go = (node, parentSelectionRange) => {
       const range = rangeFromNode(node)
       if (!range.contains(pos)) return null
-      if (node.type === 'word') return new SelectionRange(range, parentSelectionRange)
+      if (node.namedChildCount === 0) return new SelectionRange(range, parentSelectionRange)
       const selRange = new SelectionRange(range, parentSelectionRange)
       for (const child of node.namedChildren) {
         const found = go(child, selRange)
