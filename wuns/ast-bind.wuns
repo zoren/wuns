@@ -161,28 +161,29 @@
     ]
     [letfn [
       [func form-to-func [lstack form]
-          [let-do
-               [form-list [get-list form]
-                name [get-word [second form-list]]
-                param-list [get-list [third form-list]]
-                n-of-param-forms [size param-list]
-                has-rest-param [and [lt-s 1 n-of-param-forms] [eq-word [get-word [at param-list -2]] [word ..]]]
-                regular-param-forms [if has-rest-param [slice param-list 0 [sub n-of-param-forms 2]] param-list]
-                opt-rest-param [if has-rest-param [some [last param-list]] [none]]
-                lvars [transient-kv-map]
-                lctx [local-context lvars form]
-                new-lstack [local-stack/frame lstack lctx]
-                counter-atom [atom 0]]
-            [set-local lvars [second form-list] [local-var-kind/func-internal-self]]
-            [for-each param regular-param-forms
-              [set-local lvars param [local-var-kind/param name [inc-atom counter-atom]]]]
-            [when-let [rest-param opt-rest-param]
-              [set-local lvars rest-param [local-var-kind/param name [inc-atom counter-atom]]]]
-            [bfunc
-              name
-              [list-map param regular-param-forms [get-word param]]
-              [match opt-rest-param [option/none] [option/none] [option/some v] [option/some [get-word v]]]
-              [form-to-ast new-lstack [fourth form-list]]]]]
+        [let-do
+           [form-list [get-list form]
+            - [when-not [eq [size form-list] 4] [push-error form [quote [function-like form expected 4 sub-forms]]]]
+            name [get-word [second form-list]]
+            param-list [get-list [third form-list]]
+            n-of-param-forms [size param-list]
+            has-rest-param [and [lt-s 1 n-of-param-forms] [eq-word [get-word [at param-list -2]] [word ..]]]
+            regular-param-forms [if has-rest-param [slice param-list 0 [sub n-of-param-forms 2]] param-list]
+            opt-rest-param [if has-rest-param [some [last param-list]] [none]]
+            lvars [transient-kv-map]
+            lctx [local-context lvars form]
+            new-lstack [local-stack/frame lstack lctx]
+            counter-atom [atom 0]]
+          [set-local lvars [second form-list] [local-var-kind/func-internal-self]]
+          [for-each param regular-param-forms
+            [set-local lvars param [local-var-kind/param name [inc-atom counter-atom]]]]
+          [when-let [rest-param opt-rest-param]
+            [set-local lvars rest-param [local-var-kind/param name [inc-atom counter-atom]]]]
+          [bfunc
+            name
+            [list-map param regular-param-forms [get-word param]]
+            [match opt-rest-param [option/none] [option/none] [option/some v] [option/some [get-word v]]]
+            [form-to-ast new-lstack [fourth form-list]]]]]
       [func form-to-ast [lstack form]
         [let [report-error [func r [msg] [push-error form msg]]
               assert-empty-stack [func aes []
@@ -309,14 +310,12 @@
 
                 [[word defexpr]]
                 [do
-                  [assert-n-args 3]
                   [assert-empty-stack]
                   [set-def [get-arg 0] [def-desc/fexpr]]
                   [bform/defexpr [form-to-func lstack form]]]
 
                 [[word defmacro]]
                 [do
-                  [assert-n-args 3]
                   [assert-empty-stack]
                   [set-def [get-arg 0] [def-desc/macro]]
                   [bform/defmacro [form-to-func lstack form]]]
