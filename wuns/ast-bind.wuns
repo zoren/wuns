@@ -76,6 +76,7 @@
         [type-decl-kind/union
           [list-map ctor [rest l]
             [let-do [ctor-list [form-to-list ctor]]
+              [todo drop form-to-list here]
               [assert [not [is-empty ctor-list]] type decl kind union ctor is empty]
               [pair
                 [form-to-word [first ctor-list]]
@@ -391,7 +392,7 @@
         [bform/switch c cases d] [logq-abort map-option not implemented switch]
         [bform/match c cases d] [logq-abort map-option not implemented match]
         [bform/letfn l d] [logq-abort map-option not implemented letfn]
-        [bform/let l d] [bform/let [list-map p l [pair [first p] [go [second p]]]] [go d]]
+        [bform/let l d] [bform/let [list-map p l [pair [pair/fst p] [go [pair/snd p]]]] [go d]]
         [bform/def w d] [bform/def w [go d]]
         [bform/defexpr f] [logq-abort map-option not implemented defexpr]
         [bform/defmacro f] [logq-abort map-option not implemented defmacro]

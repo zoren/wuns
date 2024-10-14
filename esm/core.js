@@ -1,4 +1,4 @@
-import { isPlainObject } from "./utils.js"
+import { isPlainObject } from './utils.js'
 
 export const langUndefined = Symbol('undefined')
 
@@ -40,41 +40,17 @@ export const makeValueTagger = (tag, arity) => {
   f.tag = tag
   return f
 }
-export const makeTaggedValueMeta = (tag, meta, ...args) => {
-  const tv = new TaggedValue(tag, ...args)
-  setMeta(tv, meta)
-  return Object.freeze(tv)
-}
+
 const formWordName = 'form/word'
 const formListName = 'form/list'
-export const formWord = (word, metaData) => makeTaggedValueMeta(formWordName, metaData, word)
+export const optionNone = makeTaggedValue('option/none')
+export const makeOptionSome = makeValueTagger('option/some', 1)
 
 export const tryGetFormWord = (f) => (getTag(f) === formWordName ? f.args[0] : null)
 
 export const isForm = (f) => isTaggedValue(f) && (getTag(f) === formWordName || getTag(f) === formListName)
 
-export const formList = (list, metaData) => {
-  for (const f of list) if (!isForm(f)) throw new Error('expected all elements to be forms')
-  return makeTaggedValueMeta(formListName, metaData, list)
-}
-
 export const tryGetFormList = (f) => (getTag(f) === formListName ? f.args[0] : null)
-
-const symbolMeta = Symbol.for('wuns-meta')
-export const meta = (v) => {
-  const t = typeof v
-  if ((t === 'object' || t === 'function') && symbolMeta in v) return v[symbolMeta]
-  return 0
-}
-export const setMeta = (v, meta) => {
-  const t = typeof v
-  if (!(t === 'object' || t === 'function') || Object.isFrozen(v)) throw new Error('expects mutable object ' + t)
-  if (meta === undefined) {
-    delete v[symbolMeta]
-    return
-  }
-  v[symbolMeta] = meta
-}
 
 class Atom {
   #value
@@ -92,14 +68,17 @@ export const atom = (v) => new Atom(v)
 export const isAtom = (f) => f instanceof Atom
 
 const recordTag = Symbol('record')
-
-export const makeRecord = (type, fieldNames, args) => {
-  if (args.length !== fieldNames.length) throw new Error('wrong number of arguments to ' + type)
-  const record = {}
-  for (let i = 0; i < fieldNames.length; i++) record[fieldNames[i]] = args[i]
+export const makeRecordFromObj = (type, fieldObj) => {
+  const record = { ...fieldObj }
   record[recordTag] = type
   return Object.freeze(record)
 }
+export const makePair = (fst, snd) =>
+  makeRecordFromObj('pair', {
+    fst,
+    snd,
+  })
+
 export const isRecord = (v) => v && v[recordTag]
 export const getRecordType = (v) => v[recordTag]
 
@@ -113,7 +92,7 @@ export const print = (ox) => {
     const list = tryGetFormList(x)
     if (list) return go(list)
     if (isAtom(x)) return `[atom ${go(x.value)}]`
-    if (isTaggedValue(x)) return `[${x.tag}${x.args.map(a => ` ${go(a)}`).join('')}]`
+    if (isTaggedValue(x)) return `[${x.tag}${x.args.map((a) => ` ${go(a)}`).join('')}]`
     const recordTag = isRecord(x)
     if (recordTag)
       return `[record ${recordTag}${Object.entries(x)
@@ -142,3 +121,64 @@ export const print = (ox) => {
   }
   return go(ox)
 }
+
+import fs from 'node:fs'
+
+import { parse } from './parseTreeSitter.js'
+/**
+ * @typedef {import('tree-sitter').TSParser} TSParser
+ */
+
+const formToNodeMap = new WeakMap()
+
+export const tryGetNodeFromForm = (form) => formToNodeMap.get(form)
+
+/**
+ * @param {TSParser.Tree} tree
+ * @returns { topForms: readonly TaggedValue[], formToNodeMap: Map<TaggedValue, TSParser.SyntaxNode> }
+ */
+export const treeToFormsSafeNoMeta = (tree) => {
+  /**
+   * @param {TSParser.SyntaxNode} node
+   */
+  const tryNodeToForm = (node) => {
+    const { isError, type } = node
+    if (isError) return null
+    switch (type) {
+      case 'word': {
+        const formWord = makeTaggedValue('form/word', node.text)
+        formToNodeMap.set(formWord, node)
+        return formWord
+      }
+      case 'list': {
+        const formList = makeTaggedValue('form/list', childrenToList(node))
+        formToNodeMap.set(formList, node)
+        return formList
+      }
+      default:
+        return null
+    }
+  }
+  const childrenToList = (node) => {
+    const childForms = []
+    for (const child of node.namedChildren) {
+      const subForm = tryNodeToForm(child)
+      if (subForm) childForms.push(subForm)
+    }
+    return Object.freeze(childForms)
+  }
+  return childrenToList(tree.rootNode)
+}
+
+export const parseTagTreeSitter = (content, contentName) => {
+  const tree = parse(content)
+  tree.contentName = contentName
+  return tree
+}
+
+export const readString = (content, contentName) => {
+  const tree = parseTagTreeSitter(content, contentName)
+  return arrayToList(treeToFormsSafeNoMeta(tree, contentName))
+}
+
+export const readFile = (filePath) => readString(fs.readFileSync(filePath, 'ascii'), filePath)

@@ -2,7 +2,6 @@ import {
   isWord,
   isList,
   wordValue,
-  meta,
   arrayToList,
   atom,
   isAtom,
@@ -10,19 +9,49 @@ import {
   print,
   stringToWord,
   makeTaggedValue,
+  readFile,
+  tryGetNodeFromForm,
+  optionNone,
+  makeOptionSome,
+  makeRecordFromObj,
 } from './core.js'
+
+export const read_file = (path) => {
+  if (typeof path !== 'string') throw new Error('read-file expects string')
+  return readFile(path)
+}
+
+export const try_get_syntax_node = (form) => {
+  const node = tryGetNodeFromForm(form)
+  if (!node) return optionNone
+  return makeOptionSome(node)
+}
+
+import TSParser from 'tree-sitter'
+
+export const syntax_node_content_name = (syntax_node) => {
+  if (!(syntax_node instanceof TSParser.SyntaxNode)) throw new Error('expects syntax node')
+  const contentName = syntax_node.tree.contentName
+  if (typeof contentName !== 'string') throw new Error('get-node-content-name expects string')
+  return contentName
+}
+
+export const syntax_node_location = (syntax_node) => {
+  if (!(syntax_node instanceof TSParser.SyntaxNode)) throw new Error('expects syntax node')
+  const { row, column } = syntax_node.startPosition
+  return makeRecordFromObj('syntax-node-location', { row, column })
+}
 
 export const apply = (fn, args) => {
   if (typeof fn !== 'function') throw new Error('apply expects function')
   return fn(...args)
 }
 
+// for code compiled to js
 export const make_tagged_value = (tag, ...args) => {
   if (!isWord(tag)) throw new Error('make-tagged-value expects word')
   return makeTaggedValue(tag, ...args)
 }
-
-export { meta }
 
 export const word_byte_size = (word) => {
   if (isWord(word)) return wordValue(word).length
@@ -149,8 +178,12 @@ export const kv_map_values = (kv_map) => {
   if (!(kv_map instanceof Map)) throw new Error('kv-map-values expects map')
   return arrayToList([...kv_map.values()])
 }
-export const log = (...forms) => {
-  console.log(...forms.map(print))
+export const stdout_print = (v) => {
+  process.stdout.write(print(v))
+}
+export const stdout_write_code_point = (code_point) => {
+  if (typeof code_point !== 'number') throw new Error('stdout-write-code-point expects number')
+  process.stdout.write(String.fromCodePoint(code_point))
 }
 export const concat_lists = (lists) => {
   const l = []

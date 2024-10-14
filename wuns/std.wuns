@@ -19,8 +19,6 @@
       [flist [qword extern] [qword host] name]
       type]]]
 
-[def-extern log [type-scheme [a] [func [.. a] [tuple]]]]
-
 [def-extern concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]
 
 [defmacro let-do [bindings .. forms]
@@ -153,6 +151,31 @@
             [form/list l] e]]
         lmsg]]]]
 
+[def-extern slice [type-scheme [a] [func [[list a] i32 i32] [list a]]]]
+
+[defn rest [l] [slice l 1 [size l]]]
+
+[def-extern stdout-print [type-scheme [a] [func [a] [tuple]]]]
+[def-extern stdout-write-code-point [func [i32] [tuple]]]
+
+[defn log-fn [forms]
+  [when-not [is-empty forms]
+    [stdout-print [first forms]]
+    [for-each f [rest forms]
+      [stdout-write-code-point [i32 32]]
+      [stdout-print f]]]
+  [stdout-write-code-point [i32 10]]]
+
+[defmacro log [.. forms]
+  [flist [quote log-fn]
+    [form/list
+      [concat
+        [list [quote list]]
+        forms]]]]
+
+[defmacro logq [.. lmsg]
+  [flist [quote log-fn] [quote-list lmsg]]]
+
 [defmacro assert [cond .. lmsg]
   [flist [quote if] cond
     [quote [do]]
@@ -160,17 +183,12 @@
       [flist [quote log] [quote-list lmsg]]
       [quote [unreachable]]]]]
 
-[defmacro logq [.. lmsg]
-  [flist [quote log] [quote-list lmsg]]]
-
 [defmacro logq-abort [.. lmsg]
   [flist [quote do]
     [flist [quote log] [quote-list lmsg]]
     [quote [unreachable]]]]
 
 [defn identity [x] x]
-
-[def-extern meta [func [form] form]]
 
 [defmacro ifs [.. clauses]
   [let [s [size clauses]]
@@ -429,14 +447,25 @@
   and do not want to compare i32s with it]
 [def-extern is-identical [type-scheme [a] [func [a a] i32]]]
 
-[def-extern slice [type-scheme [a] [func [[list a] i32 i32] [list a]]]]
+[type syntax-node-location [] [record [row i32] [column i32]]]
 
-[defn rest [l] [slice l 1 [size l]]]
+[def-extern read-file [func [word] [list form]]]
+[type syntax-node [] [union]]
+[type string [] [union]]
+[def-extern try-get-syntax-node [func [form] [option syntax-node]]]
+[def-extern syntax-node-content-name [func [syntax-node] string]]
+[def-extern syntax-node-location [func [syntax-node] syntax-node-location]]
 
-[def read-file
-  [type-anno
-    [extern interpreter read-file]
-    [func [word] [list form]]]]
+[defn log-location [form]
+  [if-let [node [try-get-syntax-node form]]
+    [let-do [loc [syntax-node-location node]]
+      [stdout-print [syntax-node-content-name node]]
+      [stdout-write-code-point [i32 58]]
+      [stdout-print [inc [syntax-node-location/row loc]]]
+      [stdout-write-code-point [i32 58]]
+      [stdout-print [inc [syntax-node-location/column loc]]]
+      [stdout-write-code-point [i32 10]]]
+    [logq unable to log location no node found]]]
 
 [type byte-array [] [union]]
 [def-extern byte-array [func [i32] byte-array]]

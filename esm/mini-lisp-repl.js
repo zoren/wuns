@@ -1,5 +1,5 @@
-import { print } from './core.js'
-import { makeDefEnv, readFile, evaluateForms, catchErrors, parseToForms } from './mini-lisp.js'
+import { print, readString } from './core.js'
+import { makeDefEnv, evaluateForms, evaluateFile, catchErrors } from './mini-lisp.js'
 
 const specialForms = [
   'i32',
@@ -31,14 +31,14 @@ const endsWithDashFlag = commandLineArgs.at(-1) === '-'
 const files = endsWithDashFlag ? commandLineArgs.slice(0, -1) : commandLineArgs
 
 catchErrors(() => {
-  for (const filePath of files) evaluateForms(defEnv, readFile(filePath))
+  for (const filePath of files) evaluateFile(defEnv, filePath)
 })
 import { startRepl } from './repl-util.js'
 
 if (!endsWithDashFlag) {
   let replLineNo = 0
   const evalLine = (line) =>
-    console.log(print(catchErrors(() => evaluateForms(defEnv, parseToForms(line, `repl-${replLineNo++}`)))))
+    console.log(print(catchErrors(() => evaluateForms(defEnv, readString(line, `repl-${replLineNo++}`)))))
   const regexEndWord = /[-./0-9a-z]+$/
   const completer = (line) => {
     const m = line.match(regexEndWord)

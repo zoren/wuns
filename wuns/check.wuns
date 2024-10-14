@@ -257,7 +257,7 @@
         errors [unify t1 t2]]
     [for-each error errors
       [logq error]
-      [log [meta form]]
+      [log-location form]
       [report-fn gctx [form/list error] form]]]]
 
 [defn int-to-type-var-name [i]
@@ -590,7 +590,7 @@
     [form/list sub-forms]
     [let [s-form [size sub-forms]
           - [when-not s-form
-              [log [meta form]]
+              [log-location form]
               [logq check expects non-empty list]]
           first-form [first sub-forms]
           n-of-args [dec s-form]]
@@ -987,7 +987,7 @@
                   [function-kind/macro]
                   [do
                     [log first-form]
-                    [log [meta first-form]]
+                    [log-location first-form]
                     [logq-abort check unexpected macro]]
                   0]
                 0]]

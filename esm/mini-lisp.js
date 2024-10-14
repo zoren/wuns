@@ -26,8 +26,6 @@ const getPathRelativeToCurrentDir = (defEnv, relativeFilePath) => {
   return path.join(currentDir, relativeFilePath)
 }
 
-const list = (...args) => Object.freeze(args)
-
 class Closure extends Function {
   constructor(f, kind, paramEnvMaker, body) {
     f.kind = kind
@@ -46,13 +44,15 @@ import {
   isTaggedValue,
   makeValueTagger,
   atom,
-  makeRecord,
   getRecordType,
-  formWord,
-  formList,
   emptyList,
   langUndefined,
   isForm,
+  makeList,
+  readFile,
+  optionNone,
+  makeOptionSome,
+  makeRecordFromObj,
 } from './core.js'
 import path from 'node:path'
 
@@ -63,8 +63,6 @@ const printForm = (form) => {
   if (list) return `[${list.map(printForm).join(' ')}]`
   throw new Error('unexpected form: ' + form)
 }
-
-import { meta } from './core.js'
 
 class EvalError extends Error {
   constructor(message, form, innerError) {
@@ -88,86 +86,9 @@ const getFormList = (form) => {
 
 import { instructionFunctions } from './instructions.js'
 import { wrapJSFunctionsToObject } from './utils.js'
-import fs from 'node:fs'
-
-import { parse } from './parseTreeSitter.js'
 
 const instructions = wrapJSFunctionsToObject(instructionFunctions)
 const intrinsics = instructions
-
-import { makeTaggedValue } from './core.js'
-
-/**
- * @param {TSParser.Tree} tree
- */
-export const treeToFormsSafeNoMeta = (tree) => {
-  const formToNodeMap = new Map()
-  /**
-   * @param {TSParser.SyntaxNode} node
-   */
-  const tryNodeToForm = (node) => {
-    const { isError, type } = node
-    if (isError) return null
-    switch (type) {
-      case 'word': {
-        const formWord = makeTaggedValue('form/word', node.text)
-        formToNodeMap.set(formWord, node)
-        return formWord
-      }
-      case 'list':
-        return makeTaggedValue('form/list', childrenToList(node))
-      default:
-        return null
-    }
-  }
-  const childrenToList = (node) => {
-    const childForms = []
-    for (const child of node.namedChildren) {
-      const subForm = tryNodeToForm(child)
-      if (subForm) childForms.push(subForm)
-    }
-    return Object.freeze(childForms)
-  }
-  const topForms = childrenToList(tree.rootNode)
-  console.log('returning topForms', topForms.length)
-  console.log('formToNodeMap', formToNodeMap.size)
-
-  return { topForms, formToNodeMap }
-}
-
-/**
- * @param {TSParser.Tree} tree
- * @param {string} contentName
- */
-export function* treeToForms(tree, contentName) {
-  if (typeof contentName !== 'string') throw new Error('contentName must be a word, was: ' + contentName)
-  /**
-   * @param {TSParser.SyntaxNode} node
-   */
-  const nodeToForm = (node) => {
-    const { isError, type, startPosition, endPosition } = node
-    if (isError) {
-      console.dir({ contentName, startPosition, endPosition })
-      throw new Error('unexpected error node')
-    }
-    const { row, column } = startPosition
-    const tokenLength = endPosition.column - startPosition.column
-    const metaData = list(contentName, row + 1, column + 1, tokenLength)
-    switch (type) {
-      case 'word':
-        return formWord(node.text, metaData)
-      case 'list':
-        return formList(Object.freeze(node.namedChildren.map(nodeToForm)), metaData)
-      default:
-        throw new Error('unexpected node type: ' + type)
-    }
-  }
-  for (const child of tree.rootNode.namedChildren) yield nodeToForm(child)
-}
-
-export const parseToForms = (content, contentName) => treeToForms(parse(content), contentName)
-
-export const readFile = (filePath) => parseToForms(fs.readFileSync(filePath, 'ascii'), filePath)
 
 export const evalForm = (defEnv, topForm) => {
   if (!isDefEnv(defEnv)) throw new Error('first argument must be a defEnv')
@@ -194,6 +115,7 @@ export const evalForm = (defEnv, topForm) => {
         throw new Error('expected a valid form value', { cause: form })
       }
       if (forms.length === 0) throw evalError('empty list')
+
       const [firstForm] = forms
       const firstWord = tryGetFormWord(firstForm)
       const numOfArgs = forms.length - 1
@@ -227,7 +149,7 @@ export const evalForm = (defEnv, topForm) => {
             if (eargs.length < arity)
               throw new EvalError(`${name} expected at least ${arity} arguments, got ${eargs.length}`)
             for (let i = 0; i < arity; i++) setEnv(paramEnv, regularParameters[i], eargs[i])
-            setEnv(paramEnv, restParam, list(...eargs.slice(arity)))
+            setEnv(paramEnv, restParam, makeList(...eargs.slice(arity)))
             return paramEnv
           }
         })()
@@ -341,7 +263,7 @@ export const evalForm = (defEnv, topForm) => {
               if (patternCtorFunc.tag !== tag) continue
               if (patternList.length - 1 !== args.length)
                 throw evalError(
-                  `pattern length ${patternList.length - 1} but value length was ${args.length} ${tag} ${args} ${meta(patternList[0])}`,
+                  `pattern length ${patternList.length - 1} but value length was ${args.length} ${tag} ${args}`,
                 )
               const newEnv = makeEnv(env)
               for (let j = 1; j < patternList.length; j++) setEnv(newEnv, getFormWord(patternList[j]), args[j - 1])
@@ -467,7 +389,9 @@ export const evalForm = (defEnv, topForm) => {
                 }
                 const constructor = (...args) => {
                   if (args.length !== fieldNames.length) throw evalError('wrong number of arguments to ' + type)
-                  return makeRecord(type, fieldNames, args)
+                  const fieldObj = {}
+                  for (let i = 0; i < fieldNames.length; i++) fieldObj[fieldNames[i]] = args[i]
+                  return makeRecordFromObj(type, fieldObj)
                 }
                 defEnv.set(type, constructor)
                 break
@@ -487,7 +411,7 @@ export const evalForm = (defEnv, topForm) => {
           assertNumArgs(1)
           const relativeFilePath = getFormWord(forms[1])
           const resolvedPath = getPathRelativeToCurrentDir(defEnv, relativeFilePath)
-          const fileForms = [...readFile(resolvedPath)]
+          const fileForms = readFile(resolvedPath)
           let result = langUndefined
           for (const fileForm of fileForms) result = evalForm(defEnv, fileForm)
           return result
@@ -549,22 +473,11 @@ export const catchErrors = (f) => {
     console.log('catchErrors', e.message, e.form, e.innerError ? 'has inner' : '')
     let curErr = e
     while (curErr) {
-      // const dumpFormMeta = (form) => {
-      //   const word = tryGetFormWord(form)
-      //   if (word) return `'${word}' ${meta(form)}`
-      //   // const list = tryGetFormList(form)
-      //   // if (list) return `[${list.map(dumpFormMeta).join(' ')} ${meta(form)}]`
-      //   // console.log('form was', form)
-      //   // return '???'
-      // }
       console.error(curErr.message, print(curErr.form))
       curErr = curErr.innerError
     }
   }
 }
-
-const none = makeValueTagger('option/none', 0)()
-const some = makeValueTagger('option/some', 1)
 
 const error = makeValueTagger('result/error', 1)
 const ok = makeValueTagger('result/ok', 1)
@@ -598,8 +511,8 @@ externs.interpreter = {
     if (!isDefEnv(context)) throw new Error('try-get-macro expects context')
     if (typeof name !== 'string') throw new Error('try-get-macro expects string')
     const value = context.get(name)
-    if (isClosure(value) && value.kind === 'macro') return some(value)
-    return none
+    if (isClosure(value) && value.kind === 'macro') return makeOptionSome(value)
+    return optionNone
   },
   evaluate: (context, form) => {
     if (!isDefEnv(context)) throw new Error('evaluate expects context')
@@ -621,6 +534,7 @@ externs.interpreter = {
       return error(e)
     }
   },
+  // todo get rid of this
   'evaluate-list-num': (context, fname, args) => {
     if (!isDefEnv(context)) throw new Error('evaluate expects context')
     if (typeof fname !== 'string') throw new Error('evaluate expects string')
@@ -632,7 +546,7 @@ externs.interpreter = {
       const func = context.get(fname)
       const res = func(...args)
       if (res === langUndefined) return emptyList
-      if (typeof res === 'number') return list(res)
+      if (typeof res === 'number') return makeList(res)
       if (Array.isArray(res)) {
         for (const r of res) if (typeof r !== 'number') throw new Error('expected number')
         return res
@@ -647,10 +561,6 @@ externs.interpreter = {
     if (!isClosure(func)) throw new Error('apply expects closure')
     if (!Array.isArray(args)) throw new Error('apply expects array')
     return func(...args)
-  },
-  'read-file': (path) => {
-    if (typeof path !== 'string') throw new Error('read-file expects string')
-    return Object.freeze([...readFile(path)])
   },
 }
 Object.freeze(externs.interpreter)

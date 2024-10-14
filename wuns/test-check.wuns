@@ -5,7 +5,7 @@
 
 [defn log-report-message [message]
   [log [report-message/message message]]
-  [log [meta [report-message/form message]]]]
+  [log-location [report-message/form message]]]
 
 [defn eq-list-of-forms [l1 l2]
   [and [eq [size l1] [size l2]]
@@ -478,7 +478,8 @@
       [when-not [is-empty messages]
         [for-each message messages
           [log-report-message message]]
-        [logq-abort test-ok-fn-stop-at-error failed there were errors [meta [identity form]]]]]]]
+        [log-location form]
+        [logq-abort test-ok-fn-stop-at-error failed there were errors]]]]]
 
 [defn test-ok-files [.. files]
   [let-do
@@ -486,8 +487,7 @@
      before [performance-now]]
     [for-each file files
       [test-ok-fn-stop-at-error gctx [read-file file]]]
-    [logq it took ms]
-    [log [[intrinsic f64.sub] [performance-now] before]]]]
+    [logq it took [[intrinsic f64.sub] [performance-now] before] ms]]]
 
 [defn test-check []
   [run-unit-tests]

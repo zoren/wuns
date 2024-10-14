@@ -10,12 +10,13 @@ const makeStopWatch = () => {
   }
 }
 
-const TSParser = require('tree-sitter')
+/**
+ * @typedef {import('tree-sitter').TSParser} TSParser
+ */
 
 /**
  * @param {vscode.TextDocument} document
- * @param {TSParser.Tree} oldTree
- * @returns {{tree: TSParser.Tree}} cache
+ * @returns {TSParser.Tree}
  */
 let parseDocumentTreeSitter = null
 
@@ -56,23 +57,22 @@ const modificationModifier = encodeTokenModifiers('modification')
  * @param {vscode.TextDocument} document
  */
 const makeProvideDocumentSemanticTokensForms = async () => {
-  const { tryGetFormWord, tryGetFormList, meta } = await import('./esm/core.js')
-  const { treeToFormsSafeNoMeta, makeDefEnv, evalForm, isClosure } = await import('./esm/mini-lisp.js')
+  const { tryGetFormWord, tryGetFormList, treeToFormsSafeNoMeta, tryGetNodeFromForm } = await import('./esm/core.js')
+  const { makeDefEnv, evalForm, isClosure } = await import('./esm/mini-lisp.js')
   const provideDocumentSemanticTokens = (document) => {
     const { fileName } = document
     const defEnv = makeDefEnv(path.dirname(fileName))
     const tokensBuilder = new SemanticTokensBuilder(legend)
     const tree = parseDocumentTreeSitter(document)
-    const { topForms, formToNodeMap } = treeToFormsSafeNoMeta(tree)
+    const topForms = treeToFormsSafeNoMeta(tree)
     try {
       const pushTokenWithModifier = (form, tokenType, tokenModifiers) => {
         if (!form) return console.error('no form')
         const word = tryGetFormWord(form)
         if (!word) return console.error('expected word')
-        const node = formToNodeMap.get(form)
+        const node = tryGetNodeFromForm(form)
         if (!node) return
-        const { startPosition } = node
-        const { row, column } = startPosition
+        const { row, column } = node.startPosition
         tokensBuilder.push(row, column, word.length, tokenType, tokenModifiers)
       }
       const pushToken = (form, tokenType) => pushTokenWithModifier(form, tokenType, 0)
@@ -233,11 +233,12 @@ const makeProvideDocumentSemanticTokensForms = async () => {
 
       for (const topForm of topForms) {
         try {
+          // eval for side effects so macros are defined and can be expanded
+          // todo only eval def and do forms, to avoid evaling top level forms, that may crash
           evalForm(defEnv, topForm)
         } catch (e) {
           console.error('provideDocumentSemanticTokensForms evalForm error', e.message)
           console.error(e)
-          console.error(meta(topForm))
         }
         go(topForm)
       }
@@ -298,10 +299,10 @@ const provideSelectionRanges = (document, positions) => {
  * @param {vscode.ExtensionContext} context
  */
 async function activate(context) {
-  const { parse } = await import('./esm/parseTreeSitter.js')
-  parseDocumentTreeSitter = (document, oldTree) => {
+  const { parseTagTreeSitter } = await import('./esm/core.js')
+  parseDocumentTreeSitter = (document) => {
     const watch = makeStopWatch()
-    const tree = parse(document.getText(), oldTree)
+    const tree = parseTagTreeSitter(document.getText(), document.fileName)
     if (tree.rootNode.hasError) console.error('tree-sitter error', document.fileName)
     console.log('parse treesitter took', watch(), 'ms', document.fileName)
     return tree
