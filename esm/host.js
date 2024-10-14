@@ -8,8 +8,6 @@ import {
   isAtom,
   isSigned32BitInteger,
   print,
-  formWord,
-  formList,
   stringToWord,
   makeTaggedValue,
 } from './core.js'
@@ -22,25 +20,6 @@ export const apply = (fn, args) => {
 export const make_tagged_value = (tag, ...args) => {
   if (!isWord(tag)) throw new Error('make-tagged-value expects word')
   return makeTaggedValue(tag, ...args)
-}
-
-export const form_word = (w) => {
-  if (!isWord(w)) throw new Error('form-word expects word')
-  return formWord(w)
-}
-export const form_word_with_meta = (w, meta_data) => {
-  if (!isWord(w)) throw new Error('form-word-with-meta expects word')
-  return formWord(w, meta_data)
-}
-export const form_list = (l) => {
-  if (!isList(l)) throw new Error('form-list expects list')
-  if (isMutable(l)) throw new Error('form-list expects immutable list')
-  return formList(l)
-}
-export const form_list_with_meta = (l, meta_data) => {
-  if (!isList(l)) throw new Error('form-list-with-meta expects list')
-  if (isMutable(l)) throw new Error('form-list-with-meta expects immutable list')
-  return formList(l, meta_data)
 }
 
 export { meta }
