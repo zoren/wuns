@@ -105,6 +105,11 @@
     [def g [func g [x] [inc x]]]
     [g [i32 4]]]
 
+  [test-ok [i32 5]
+    [def inc [func inc [x] [let [c [i32 1]] [[intrinsic i32.add] c x]]]]
+    [def g [func g [x] [inc x]]]
+    [g [i32 4]]]
+
   [test-ok [i32 6]
     [type form []
       [union
@@ -121,6 +126,15 @@
 
   [test-ok [i32 5]
     [let [x [i32 2] y [i32 3]] [[intrinsic i32.add] x y]]]
+
+  [test-ok [i32 0]
+    [def is-even-slow-letfn
+      [func f [outer-n]
+        [letfn
+          [[func is-even [n] [if [[intrinsic i32.eq] n [i32 0]] [i32 1] [is-odd [[intrinsic i32.sub] n [i32 1]]]]]
+           [func is-odd [n] [if [[intrinsic i32.eq] n [i32 0]] [i32 0] [is-even [[intrinsic i32.sub] n [i32 1]]]]]]
+          [is-even outer-n]]]]
+    [is-even-slow-letfn [i32 5]]]
 
   [test-ok [word a] [def a [word a]] a]
   [test-ok [i32 4] [def a [i32 4]] a]

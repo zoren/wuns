@@ -193,8 +193,15 @@
               [list-map decl lpairs [js-stmt/const-decl [pair/fst decl] [cexp [pair/snd decl]]]]
               [list [js-stmt/return [cexp e]]]]]]
 
-        [bform/letfn w e]
-        [logq-abort cexp letfn not implemented]
+        [bform/letfn fns e]
+        [iife
+          [js-stmt/block
+            [concat
+              [list-map fn fns
+                [js-stmt/const-decl
+                  [bfunc/name fn]
+                  [cfunc fn]]]
+              [list [js-stmt/return [cexp e]]]]]]
 
         [bform/func f]
         [cfunc f]

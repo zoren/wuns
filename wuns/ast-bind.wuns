@@ -141,6 +141,7 @@
         [do
           [assert [not [is-empty l]] type form-to-type is empty]
           [let-do [fw [get-word [first l]]]
+            [todo check for type-scheme]
             [assert [not [eq-word fw [word type-scheme]]] type form-to-type does not accept type-scheme]
             [type/apply
               fw
@@ -265,7 +266,11 @@
                    new-lstack [local-stack/frame lstack lctx]]
                   [assert-n-args 2]
                   [bform/let
-                    [list-map p [pairwise bindings] [pair [get-word [first p]] [form-to-ast new-lstack [second p]]]]
+                    [list-map p [pairwise bindings]
+                      [let-do [name [first p]
+                               be [form-to-ast new-lstack [second p]]]
+                        [set-local lvars name [local-var-kind/let]]
+                        [pair [get-word name] be]]]
                     [form-to-ast new-lstack [get-arg 1]]]]
 
                 [[word letfn]]
@@ -374,7 +379,6 @@
                 [[word type-anno]]
                 [do
                   [assert-n-args 2]
-                  [todo check for type-scheme]
                   [bform/type-anno
                     [form-to-ast lstack [get-arg 0]]
                     [form-to-type [get-arg 1]]]]
@@ -498,6 +502,16 @@
           [when-not [is-empty l]
             [for i 0 [dec [size l]] [go false [at l i]]]
             [go is-tail [last l]]]
+
+          [bform/let bindings e]
+          [do
+            [for-each p bindings [go false [pair/snd p]]]
+            [go is-tail e]]
+
+          [bform/letfn fns e]
+          [do
+            [for-each fn fns [go false [bfunc/body fn]]]
+            [go is-tail e]]
 
           [bform/call f args]
           [do
