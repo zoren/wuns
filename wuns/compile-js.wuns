@@ -186,12 +186,6 @@
         [bform/extern ws]
         [mk-extern ws]
 
-        [bform/type decls]
-        [logq-abort cexp type not implemented]
-
-        [bform/def wf e]
-        [logq-abort cexp def not implemented]
-
         [bform/let w e]
         [logq-abort cexp let not implemented]
 
@@ -252,6 +246,9 @@
 
           [bform/defexpr fexpr-func]
           [js-stmt/const-decl [bfunc/name fexpr-func] [cfunc fexpr-func]]
+
+          [bform/defmacro macro-func]
+          [js-stmt/const-decl [bfunc/name macro-func] [cfunc macro-func]]
 
           [bform/type decls]
           [js-stmt/seq

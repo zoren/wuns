@@ -113,6 +113,12 @@
     [defexpr my-fexpr [.. xs] [[extern host size] xs]]
     [my-fexpr these arguments are interpreted as forms]]
 
+  [test-ok [i32 5]
+    [type form [] [union [word word] [list [list form]]]]
+    [def list [func l [.. es] es]]
+    [defmacro m [] [form/list [list [form/word [word i32]] [form/word [word 5]]]]]
+    [m]]
+
   [test-ok [word a] [def a [word a]] a]
   [test-ok [i32 4] [def a [i32 4]] a]
   [test-ok [f64 1.5] [def a [f64 1.5]] a]
