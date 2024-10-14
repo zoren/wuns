@@ -147,8 +147,7 @@
   [let-do
     [before [performance-now]
      res [f]]
-  [logq it took ms]
-  [log [[intrinsic f64.sub] [performance-now] before]]
+  [logq it took [[intrinsic f64.sub] [performance-now] before] ms]
   res]]
 
 [defn run-tests []

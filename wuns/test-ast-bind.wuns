@@ -1,5 +1,29 @@
 [load ast-bind.wuns]
 
+[defn test-form-to-ast-fn [forms]
+  [let-do [converter [mk-form-to-ast]
+           f2a [form-to-ast-converter/form-to-ast converter]
+           node-to-ldesc [form-to-ast-converter/node-to-ldesc converter]]
+    [list-map form forms
+      [match [f2a form]
+        [result/error errors]
+        [logq-abort form-to-ast errors [identity errors]]
+
+        [result/ok bform]
+          bform]]]]
+
+[defn r []
+[test-form-to-ast-fn
+  [list
+    [quote [type opt [] [union [none]]]]
+    [quote [opt/none]]]]]
+
+[defn r2[]
+  [test-form-to-ast-fn
+    [list
+      [quote [load m.wuns]]
+      [quote x]]]]
+
 [defn test-tail [form]
   [let-do [converter [mk-form-to-ast]
            f2a [form-to-ast-converter/form-to-ast converter]

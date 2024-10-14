@@ -100,6 +100,16 @@ const makeProvideDocumentSemanticTokensForms = async () => {
         if (list.length === 0) return
         const [head, ...tail] = list
         const headWord = tryGetFormWord(head)
+        const runForm = () => {
+          try {
+            // eval for side effects so macros are defined and can be expanded
+            // todo only eval def and do forms, to avoid evaling top level forms, that may crash
+            evalForm(defEnv, form)
+          } catch (e) {
+            console.error('provideDocumentSemanticTokensForms evalForm error', e.message)
+            console.error(e)
+          }
+        }
         const funcSpecial = (headWord, [name, paramsForm, body]) => {
           pushToken(name, headWord === 'macro' ? macroTokenType : functionTokenType)
           const params = tryGetFormList(paramsForm)
@@ -158,12 +168,19 @@ const makeProvideDocumentSemanticTokensForms = async () => {
             go(body)
           },
           func: () => funcSpecial(headWord, tail),
-          defexpr: () => funcSpecial(headWord, tail),
-          defmacro: () => funcSpecial(headWord, tail),
+          defexpr: () => {
+            funcSpecial(headWord, tail)
+            runForm()
+          },
+          defmacro: () => {
+            funcSpecial(headWord, tail)
+            runForm()
+          },
           def: () => {
             const [cname, val] = tail
             pushTokenWithModifier(cname, variableTokenType, declarationModifier)
             go(val)
+            runForm()
           },
           extern: () => {
             for (const form of tail) if (tryGetFormWord(form)) pushToken(form, stringTokenType)
@@ -184,9 +201,11 @@ const makeProvideDocumentSemanticTokensForms = async () => {
               for (const typeParam of getListOrEmpty(tail[i + 1])) pushToken(typeParam, parameterTokenType)
               goType(tail[i + 2])
             }
+            runForm()
           },
           load: () => {
             if (tail.length === 1 && tryGetFormWord(tail[0])) pushToken(tail[0], stringTokenType)
+            runForm()
           },
         }
         if (headWord) {
@@ -231,17 +250,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
         for (const form of tail) go(form)
       }
 
-      for (const topForm of topForms) {
-        try {
-          // eval for side effects so macros are defined and can be expanded
-          // todo only eval def and do forms, to avoid evaling top level forms, that may crash
-          evalForm(defEnv, topForm)
-        } catch (e) {
-          console.error('provideDocumentSemanticTokensForms evalForm error', e.message)
-          console.error(e)
-        }
-        go(topForm)
-      }
+      for (const topForm of topForms) go(topForm)
     } catch (e) {
       console.error('provideDocumentSemanticTokensForms error catch', e)
     }
