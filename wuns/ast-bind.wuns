@@ -84,7 +84,7 @@
         [option/none] [try-get-local outer w]
         [option/some kind] [some kind]]]]
 
-[type def-desc [] [union [fexpr] [macro] [any] [union-ctor]]]
+[type def-desc [] [union [fexpr] [macro] [any] [union-ctor] [record-ctor] [record-proj]]]
 
 [type form-to-ast-converter []
   [record
@@ -328,32 +328,46 @@
                       [list-map triple [triplewise [rest l]]
                         [let
                           [type-name [get-word [first triple]]
-                           type-prefix [concat-words type-name [word /]]]
+                           type-prefix [concat-words type-name [word /]]
+                           def-prefix
+                           [func dp [name desc]
+                            [let-do [full-name [concat-words type-prefix name]]
+                              [when [has def-ctx full-name]
+                                [report-error [quote [redefining type]]]]
+                              [set-kv-map def-ctx full-name [def-desc/record-proj]]]]]
                           [type-decl
-                          [get-word [first triple]]
-                          [list-map tv [get-list [second triple]] [get-word tv]]
-                          [match [third triple]
-                            [form/list l]
-                            [do
-                              [assert [not [is-empty l]] type decl kind form is empty]
-                              [switch [get-word [first l]]
-                                [[word union]]
-                                [type-decl-kind/union
-                                  [list-map ctor [rest l]
-                                    [let-do [ctor-list [get-list ctor]
-                                             ctor-name [get-word [first ctor-list]]]
-                                      [assert [not [is-empty ctor-list]] type decl kind union ctor is empty]
-                                      [set-kv-map def-ctx [concat-words type-prefix ctor-name] [def-desc/union-ctor]]
-                                      [pair
-                                        ctor-name
-                                        [list-map arg [rest ctor-list] [form-to-type arg]]]]]]
+                            type-name
+                            [list-map tv [get-list [second triple]] [get-word tv]]
+                            [match [third triple]
+                              [form/list l]
+                              [do
+                                [assert [not [is-empty l]] type decl kind form is empty]
+                                [switch [get-word [first l]]
+                                  [[word union]]
+                                  [type-decl-kind/union
+                                    [list-map ctor [rest l]
+                                      [let-do [ctor-list [get-list ctor]
+                                              ctor-name [get-word [first ctor-list]]]
+                                        [assert [not [is-empty ctor-list]] type decl kind union ctor is empty]
+                                        [def-prefix ctor-name [def-desc/union-ctor]]
+                                        [pair
+                                          ctor-name
+                                          [list-map arg [rest ctor-list] [form-to-type arg]]]]]]
 
-                                [[word record]]
-                                [logq-abort form-to-type-decl-kind not implemented record]
+                                  [[word record]]
+                                  [do
+                                    [set-def [first triple] [def-desc/record-ctor]]
+                                    [type-decl-kind/record
+                                      [list-map field [rest l]
+                                        [let-do [field-list [get-list field]
+                                                 field-name [get-word [first field-list]]]
+                                          [assert [not [is-empty field-list]] type decl kind record field is empty]
+                                          [def-prefix field-name [def-desc/record-proj]]
+                                          [pair field-name [form-to-type [second field-list]]]]]]]
 
-                                [logq-abort form-to-type-decl-kind not implemented]]]
+                                  [logq-abort unknown type kind]]]
 
-                            [logq-abort form-to-type-decl-kind not implemented]]]]]]]
+                              [logq-abort form-to-type-decl-kind not implemented]]]]]]]
                   [eval-form form]
                   fb]
 
