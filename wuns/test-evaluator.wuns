@@ -119,6 +119,9 @@
     [defmacro m [] [form/list [list [form/word [word i32]] [form/word [word 5]]]]]
     [m]]
 
+  [test-ok [i32 5]
+    [let [x [i32 2] y [i32 3]] [[intrinsic i32.add] x y]]]
+
   [test-ok [word a] [def a [word a]] a]
   [test-ok [i32 4] [def a [i32 4]] a]
   [test-ok [f64 1.5] [def a [f64 1.5]] a]

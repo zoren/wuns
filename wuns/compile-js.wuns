@@ -186,8 +186,12 @@
         [bform/extern ws]
         [mk-extern ws]
 
-        [bform/let w e]
-        [logq-abort cexp let not implemented]
+        [bform/let lpairs e]
+        [iife
+          [js-stmt/block
+            [concat
+              [list-map decl lpairs [js-stmt/const-decl [pair/fst decl] [cexp [pair/snd decl]]]]
+              [list [js-stmt/return [cexp e]]]]]]
 
         [bform/letfn w e]
         [logq-abort cexp letfn not implemented]
