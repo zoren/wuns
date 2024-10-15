@@ -31,6 +31,13 @@
       [quote [pair [i32 1] [word a]]]
       [quote [pair/snd [pair [i32 1] [word a]]]]]]]
 
+[defn r4 []
+  [test-form-to-ast-fn
+    [list
+      [quote
+        [type-anno [i32 2] [type-scheme [a b c] [func [[list a] [list b]] [list c]]]]
+      ]]]]
+
 [defn test-tail [form]
   [let-do [converter [mk-form-to-ast]
            f2a [form-to-ast-converter/form-to-ast converter]

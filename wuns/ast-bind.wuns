@@ -3,7 +3,13 @@
 [type type []
   [union
     [word word]
+    [func [list type] [option type] type]
     [apply word [list type]]]]
+
+[type btype-scheme []
+  [record
+    [type-params [list word]]
+    [type type]]]
 
 [type type-decl-kind []
   [union
@@ -50,7 +56,7 @@
     [defmacro bfunc]
     [call bform [list bform]]
     [call-fexpr bform [list form]]
-    [type-anno bform type]
+    [type-anno bform btype-scheme]
     ]]
 
 [type report-message []
@@ -134,25 +140,54 @@
     [func parse-param-list [param-list]
       [let
         [n-of-param-forms [size param-list]]
-        [if [and [lt-s 1 n-of-param-forms] [eq-word [get-word [at param-list -2]] [word ..]]]
+        [if [and
+              [lt-s 1 n-of-param-forms]
+              [if-let [but-last-param [try-get-word [at param-list -2]]]
+                [eq-word but-last-param [word ..]]
+                false]]
           [pair [slice param-list 0 [sub n-of-param-forms 2]] [some [last param-list]]]
           [pair param-list [none]]]]]
     ]
     [letfn [
-    [func form-to-type [form]
-      [match form
-        [form/word w]
-        [type/word w]
+      [func form-to-type [form]
+        [match form
+          [form/word w]
+          [type/word w]
 
-        [form/list l]
-        [do
-          [assert [not [is-empty l]] type form-to-type is empty]
-          [let-do [fw [get-word [first l]]]
-            [todo check for type-scheme]
-            [assert [not [eq-word fw [word type-scheme]]] type form-to-type does not accept type-scheme]
-            [type/apply
-              fw
-              [list-map arg [rest l] [form-to-type arg]]]]]]]
+          [form/list l]
+          [do
+            [assert [not [is-empty l]] type form-to-type is empty]
+            [let-do [fw [get-word [first l]]]
+              [switch fw
+                [[word type-scheme]]
+                [logq-abort form-to-type does not accept type-scheme]
+
+                [[word func]]
+                [let-do [parsed-params [parse-param-list [get-list [second l]]]]
+                  [log parsed-params]
+                  [type/func
+                    [list-map p [pair/fst parsed-params] [form-to-type p]]
+                    [if-let [rest-param [pair/snd parsed-params]]
+                      [some [form-to-type rest-param]]
+                      [none]]
+                    [form-to-type [third l]]]]
+
+                [type/apply
+                  fw
+                  [list-map arg [rest l] [form-to-type arg]]]]]]]]
+      [func form-to-type-scheme [form]
+        [match form
+          [form/word w]
+          [btype-scheme [list] [form-to-type form]]
+
+          [form/list l]
+          [do
+            [assert [not [is-empty l]] type form-to-type-scheme is empty]
+            [if [eq-word [get-word [first l]] [word type-scheme]]
+              [btype-scheme
+                [list-map type-param [get-list [second l]] [get-word type-param]]
+                [form-to-type [third l]]]
+              [btype-scheme [list] [form-to-type form]]]]]]
       [func form-to-func [lstack form]
         [let-do
            [form-list [get-list form]
@@ -386,7 +421,7 @@
                   [assert-n-args 2]
                   [bform/type-anno
                     [form-to-ast lstack [get-arg 0]]
-                    [form-to-type [get-arg 1]]]]
+                    [form-to-type-scheme [get-arg 1]]]]
 
                 [if-let [ldesc [try-get-local lstack first-word]]
                   [bform/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]

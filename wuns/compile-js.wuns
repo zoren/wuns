@@ -113,16 +113,6 @@
     [js-exp/call [js-exp/var [word form/list]]
       [list [js-exp/array [list-map e l [form-to-quoted-js e]]]]]]]
 
-[defn try-get-word [form]
-  [match form
-    [form/word w] [some w]
-    [form/list l] [none]]]
-
-[defn try-get-list [form]
-  [match form
-    [form/word w] [none]
-    [form/list l] [some l]]]
-
 [defn compile-top-form [node-to-ldesc top-form]
   [let
     [current-func [atom [option/none]]
@@ -409,7 +399,10 @@
      [func comp-run [form]
       [match [f2a form]
         [result/error f2a-errors]
-        [result/error [compile-run-error/form-to-ast-errors f2a-errors]]
+        [do
+          [for-each error f2a-errors
+            [log-location [report-message/form error]]]
+          [result/error [compile-run-error/form-to-ast-errors f2a-errors]]]
 
         [result/ok bform]
         [let [stmt [compile-top-form node-to-ldesc bform]]

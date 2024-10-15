@@ -18,7 +18,7 @@ import {
 } from './core.js'
 
 export const abort = (message) => {
-  throw new Error('abort: ' + message)
+  throw new Error('abort: ' + message.map(f => print(f)).join(' '))
 }
 
 export const read_file = (path) => {
