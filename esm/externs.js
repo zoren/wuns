@@ -47,6 +47,12 @@ const jsExpToString = (js) => {
     if (!args[i]) throw new Error(`jsStmt ${tag} arg ${i} not found`)
     return args[i]
   }
+  const paramsToString = () => {
+    const allParams = arg(0).map(escapeIdentifier)
+    const optRest = arg(1)
+    if (optRest.tag === 'option/some') allParams.push(`...${escapeIdentifier(optRest.args[0])}`)
+    return allParams.join(', ')
+  }
   switch (tag) {
     case 'js-exp/number':
       return `${+arg(0)}`
@@ -56,22 +62,20 @@ const jsExpToString = (js) => {
       return escapeIdentifier(arg(0))
     case 'js-exp/array':
       return `[${arg(0).map(jsExpToString).join(', ')}]`
-    case 'js-exp/object':
-      return `{${arg(0).map(({ fst, snd }) => `${fst}: ${jsExpToString(snd)}`).join(', ')}}`
+    case 'js-exp/object': {
+      const entries = arg(0).map(({ fst, snd }) => `${fst}: ${jsExpToString(snd)}`)
+      return `{${entries.join(', ')}}`
+    }
     case 'js-exp/subscript':
       return `${jsExpToString(arg(0))}[${jsExpToString(args[1])}]`
     case 'js-exp/binop':
       return `(${jsExpToString(arg(1))} ${jsBinopToString(arg(0).tag)} ${jsExpToString(arg(2))})`
     case 'js-exp/ternary':
       return `(${jsExpToString(arg(0))} ? ${jsExpToString(arg(1))} : ${jsExpToString(arg(2))})`
-    case 'js-exp/arrow-exp': {
-      const [params, body] = args
-      return `(${params.map(escapeIdentifier).join(', ')}) => ${jsExpToString(body)}`
-    }
-    case 'js-exp/arrow-stmt': {
-      const [params, body] = args
-      return `(${params.map(escapeIdentifier).join(', ')}) => ${jsStmtToString(body)}`
-    }
+    case 'js-exp/arrow-exp':
+      return `(${paramsToString()}) => ${jsExpToString(arg(2))}`
+    case 'js-exp/arrow-stmt':
+      return `(${paramsToString()}) => ${jsStmtToString(arg(2))}`
     case 'js-exp/call':
       return `(${jsExpToString(arg(0))})(${arg(1).map(jsExpToString).join(', ')})`
     default:
@@ -125,7 +129,7 @@ const jsStmtToString = (js) => {
     case 'js-stmt/export':
       return `export { ${arg(0).map(escapeIdentifier).join(', ')} }`
 
-      default:
+    default:
       throw new Error(`unknown js stmt tag: ${tag}`)
   }
 }
@@ -176,7 +180,6 @@ const callJsFunc = (func, args) => {
   return res
 }
 
-
 import * as prettier from 'prettier'
 
 const prettierOptions = {
@@ -201,7 +204,7 @@ const jsExtern = {
   'run-js-exp': runJsExp,
   'call-js-func': callJsFunc,
   identity: (v) => v,
-  'write-js-stmt': writeJsStmt
+  'write-js-stmt': writeJsStmt,
 }
 
 externs.js = jsExtern

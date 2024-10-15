@@ -30,6 +30,7 @@
     [i32 word]
     [f64 word]
     [word word]]]
+
 [type
   bfunc []
   [record
@@ -37,6 +38,7 @@
     [parameters [list word]]
     [rest-param [option word]]
     [body bform]]
+
   bform []
   [union
     [var word]
@@ -45,6 +47,7 @@
     [extern [list word]]
     [type [list type-decl]]
 
+    [atom bform]
     [func bfunc]
     [if bform bform bform]
     [do [list bform]]
@@ -257,7 +260,7 @@
                 [bform/func [form-to-func lstack form]]
 
                 [[word atom]]
-                [logq-abort form-to-ast not implemented atom]
+                [bform/atom [form-to-ast lstack [get-arg 0]]]
 
                 [[word if]]
                 [do
@@ -469,7 +472,7 @@
         [bform/defexpr f] [logq-abort map-option not implemented defexpr]
         [bform/defmacro f] [logq-abort map-option not implemented defmacro]
         [bform/call f args] [bform/call [go f] [list-map arg args [go arg]]]
-        [bform/call-fexpr f args] [logq-abort map-option not implemented call-fexpr]
+        [bform/call-fexpr f form-args] [bform/call-fexpr [go f] form-args]
         [bform/type-anno f t] [bform/type-anno [go f] t]
 
         ast]]]
@@ -509,7 +512,18 @@
             [bform/call f args]
             [or
               [go f]
-              [exists args go]]]]]]]
+              [exists args go]]
+
+            [bform/call-fexpr f form-args] [go f]
+
+            [bform/let bindings e]
+            [or
+              [exists bindings [func f [b] [go [pair/snd b]]]]
+              [go e]]
+
+            [do
+              [log bf]
+              [logq-abort has-dep-on-param not implemented]]]]]]]
     [go arg]]]
 
 [type tail-call-result []
@@ -532,7 +546,7 @@
           [bform/extern l] [do]
           [bform/type l] [do]
 
-          [bform/func f] [logq-abort tail-call-analysis not implemented func]
+          [bform/func f] [do]
           [bform/if c t e]
           [do
             [go false c]

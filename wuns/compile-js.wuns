@@ -5,6 +5,8 @@
     [add]
     [sub]
     [mul]
+    [div]
+    [rem]
 
     [eq]
     [ne]
@@ -30,8 +32,8 @@
     [call js-exp [list js-exp]]
     [new js-exp [list js-exp]]
     [binop binop js-exp js-exp]
-    [arrow-exp [list word] js-exp]
-    [arrow-stmt [list word] js-stmt]
+    [arrow-exp [list word] [option word] js-exp]
+    [arrow-stmt [list word] [option word] js-stmt]
   ]
 
   js-stmt []
@@ -48,6 +50,8 @@
     [block [list js-stmt]]
     [seq [list js-stmt]]
     [while js-exp js-stmt]
+    [import word word]
+    [export [list word]]
   ]
 ]
 
@@ -55,6 +59,11 @@
   [type-anno
     [extern js run-js-stmt]
     [func [js-stmt] [result js-value js-value]]]]
+
+[def write-js-stmt
+  [type-anno
+    [extern js write-js-stmt]
+    [func [word js-stmt] [tuple]]]]
 
 [def call-js-func
   [type-anno
@@ -74,6 +83,8 @@
     [[word i32.add]] [binop/add]
     [[word i32.sub]] [binop/sub]
     [[word i32.mul]] [binop/mul]
+    [[word i32.div-s]] [binop/div]
+    [[word i32.rem-s]] [binop/rem]
 
     [[word i32.eq]] [binop/eq]
     [[word i32.ne]] [binop/ne]
@@ -83,11 +94,16 @@
     [[word i32.gt-s]] [binop/gt]
     [[word i32.ge-s]] [binop/ge]
 
-    [logq-abort instruction-name-to-binop not implemented]]]
+    [[word i32.and]] [binop/binary-and]
+    [[word i32.or]] [binop/binary-ior]
+
+    [do
+      [log inst-name]
+      [logq-abort instruction-name-to-binop not implemented]]]]
 
 [defn iife [stmt]
   [js-exp/call
-    [js-exp/arrow-stmt [list] stmt]
+    [js-exp/arrow-stmt [list] [none] stmt]
     [list]]]
 
 [defn mk-extern [ws]
@@ -118,11 +134,11 @@
     [current-func [atom [option/none]]
      current-tail-calls [atom [option/none]]
      try-get-tail
-     [func tgt []
+     [func tgt [call-form]
         [if-let [ctc [atom-get current-tail-calls]]
           [match ctc
             [tail-call-result/only-tail call-to-deps]
-            [some call-to-deps]
+            [try-get call-to-deps call-form]
 
             [none]]
           [none]]]]
@@ -133,10 +149,6 @@
          params [bfunc/parameters f]
          opt-rest-param [bfunc/rest-param f]
          body [bfunc/body f]
-         js-params
-         [if-let [rest-param opt-rest-param]
-           [concat params [list [concat-words [word ...] rest-param]]]
-           params]
          tail-analysis [tail-call-analysis node-to-ldesc f]]
         [atom-set current-func [option/some f]]
         [atom-set current-tail-calls [option/some tail-analysis]]
@@ -145,14 +157,15 @@
                 [tail-call-result/only-tail call-to-deps]
                 [do
                   [js-exp/arrow-stmt
-                    js-params
+                    params
+                    opt-rest-param
                     [block
                       [js-stmt/while js-1
                         [block
                           [cstmt true body]
                           [js-stmt/break]]]]]]
 
-                [js-exp/arrow-exp js-params [cexp body]]]]
+                [js-exp/arrow-exp params opt-rest-param [cexp body]]]]
           [iife
             [block
               [js-stmt/const-decl name js-body]
@@ -168,6 +181,9 @@
           [literal/f64 wf] [js-exp/number wf]
           [literal/word wf] [js-exp/string wf]]
 
+        [bform/atom init-val]
+        [js-exp/call [mk-extern [list [word host] [word atom]]] [list [cexp init-val]]]
+
         [bform/if c t e]
         [js-exp/ternary [cexp c] [cexp t] [cexp e]]
 
@@ -178,11 +194,7 @@
         [mk-extern ws]
 
         [bform/let lpairs e]
-        [iife
-          [js-stmt/block
-            [concat
-              [list-map decl lpairs [js-stmt/const-decl [pair/fst decl] [cexp [pair/snd decl]]]]
-              [list [js-stmt/return [cexp e]]]]]]
+        [iife [cstmt true bform]]
 
         [bform/letfn fns e]
         [iife
@@ -208,7 +220,7 @@
             [cexp [at args 0]]
             [cexp [at args 1]]]
 
-          [if-let [deps [try-get-tail]]
+          [if-let [deps [try-get-tail bform]]
             [logq-abort cexp found a tail call not expected]
             [js-exp/call [cexp f] [list-map arg args [cexp arg]]]]]
 
@@ -267,10 +279,20 @@
                   [js-stmt/throw [js-exp/string [word unmatched-match]]]]]]]
 
           [bform/do forms]
+          [if [is-empty forms]
+            [if is-tail
+              [js-stmt/return [js-exp/string [word wuns-undefined]]]
+              [js-stmt/seq [list]]]
+            [js-stmt/block
+              [concat
+                [list-map f [slice forms 0 [dec [size forms]]] [cstmt 0 f]]
+                [list [cstmt is-tail [last forms]]]]]]
+
+          [bform/let decls e]
           [js-stmt/block
             [concat
-              [list-map f [slice forms 0 [dec [size forms]]] [cstmt 0 f]]
-              [list [cstmt is-tail [last forms]]]]]
+              [list-map decl decls [js-stmt/const-decl [pair/fst decl] [cexp [pair/snd decl]]]]
+              [list [cstmt is-tail e]]]]
 
           [bform/def w e]
           [js-stmt/const-decl w [cexp e]]
@@ -300,6 +322,7 @@
                           tag
                           [js-exp/arrow-exp
                             params
+                            [none]
                             [js-exp/call
                               [mk-extern [list [word host] [word make-tagged-value]]]
                               [list
@@ -314,6 +337,7 @@
                             type-name
                             [js-exp/arrow-exp
                               field-names
+                              [none]
                               [js-exp/call
                                 [mk-extern [list [word host] [word make-record-from-object]]]
                                 [list
@@ -328,6 +352,7 @@
                             [concat-words type-name-prefix field-name]
                             [js-exp/arrow-exp
                               [list [word record]]
+                              [none]
                               [js-exp/subscript
                                 [js-exp/var [word record]]
                                 [js-exp/string field-name]]]]]]]
@@ -335,33 +360,29 @@
                     [logq-abort cstmt unknown type kind]]]]]]
 
           [bform/call f args]
-          [if-let [call-to-deps [try-get-tail]]
-            [if-let [deps [try-get call-to-deps bform]]
-              [let-do
-                [params [if-let [cf [atom-get current-func]] [bfunc/parameters cf] [logq-abort cstmt]]
-                 deps-set [set]]
-                [for-each i deps [set-add deps-set i]]
-                [assert is-tail tail call must be tail]
+          [if-let [deps [try-get-tail bform]]
+            [let-do
+              [params [if-let [cf [atom-get current-func]] [bfunc/parameters cf] [logq-abort cstmt]]
+               deps-set [set]]
+              [for-each i deps [set-add deps-set i]]
+              [assert is-tail tail call must be tail]
 
-                [let-do [tmp-consts [growable-list]
-                         assignments [growable-list]
-                         subst [transient-kv-map]]
-                  [for i 0 [size args]
-                    [if [set-has deps-set i]
-                      [let-do [tmp [concat-words [word tmp] [int-to-word i]]]
-                        [push tmp-consts [js-stmt/const-decl tmp [js-exp/var [at params i]]]]
-                        [push assignments [js-stmt/assign [at params i] [cexp [at args i]]]]
-                        [set-kv-map subst [at params i] [bform/var tmp]]]
-                      [push assignments [js-stmt/assign [at params i] [cexp [substitute [at args i] subst]]]]]]
-                  [js-stmt/seq
+              [let-do [tmp-consts [growable-list]
+                        assignments [growable-list]
+                        subst [transient-kv-map]]
+                [for i 0 [size args]
+                  [if [set-has deps-set i]
+                    [let-do [tmp [concat-words [word tmp] [int-to-word i]]]
+                      [push tmp-consts [js-stmt/const-decl tmp [js-exp/var [at params i]]]]
+                      [push assignments [js-stmt/assign [at params i] [cexp [at args i]]]]
+                      [set-kv-map subst [at params i] [bform/var tmp]]]
+                    [push assignments [js-stmt/assign [at params i] [cexp [substitute [at args i] subst]]]]]]
+                [js-stmt/seq
+                  [concat
                     [concat
-                      [concat
-                        [clone-growable-to-frozen-list tmp-consts]
-                        [clone-growable-to-frozen-list assignments]]
-                      [list [js-stmt/continue]]]]]]
-                [if is-tail
-                  [js-stmt/return [cexp bform]]
-                  [js-stmt/exp [cexp bform]]]]
+                      [clone-growable-to-frozen-list tmp-consts]
+                      [clone-growable-to-frozen-list assignments]]
+                    [list [js-stmt/continue]]]]]]
             [if is-tail
               [js-stmt/return [cexp bform]]
               [js-stmt/exp [cexp bform]]]]
@@ -416,3 +437,36 @@
 
         [result/ok v]
         [result/ok v]]]]]
+
+[defn compile-file-to-file [wuns-file-name js-file-name exports]
+  [let-do
+    [converter [mk-form-to-ast]
+     f2a [form-to-ast-converter/form-to-ast converter]
+     node-to-ldesc [form-to-ast-converter/node-to-ldesc converter]
+     comp-run
+     [func comp-run [form]
+      [match [f2a form]
+        [result/error f2a-errors]
+        [do
+          [for-each error f2a-errors
+            [log-location [report-message/form error]]]
+          [result/error [compile-run-error/form-to-ast-errors f2a-errors]]]
+
+        [result/ok bform]
+        [let [stmt [compile-top-form node-to-ldesc bform]]
+          [result/ok stmt]]]]]
+    [match [map-result [read-file wuns-file-name] comp-run]
+      [result/error e]
+      [log e]
+
+      [result/ok stmts]
+      [let-do [
+          prologue [list [js-stmt/import [word externs] [word ./externs.js]]]
+          epilogue [list [js-stmt/export exports]]]
+        [write-js-stmt js-file-name
+          [js-stmt/seq
+            [concat
+              [concat prologue stmts]
+              epilogue]]
+        ]
+      ]]]]
