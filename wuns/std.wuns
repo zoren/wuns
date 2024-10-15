@@ -232,6 +232,9 @@
 
 [def-extern word-byte-size [func [word] i32]]
 
+[defn genword-prefix [prefix]
+  [form/word [concat-words [concat-words [word gen] prefix] [int-to-word [inc-atom word-counter]]]]]
+
 [defn genword []
   [form/word [concat-words [word genword] [int-to-word [inc-atom word-counter]]]]]
 
@@ -368,10 +371,10 @@
 
 [defmacro for-each [element-var collection .. forms]
   [let-do
-    [iteration-var [genword]
-     col-var [genword]
-     col-size-var [genword]
-     loopw [genword]]
+    [iteration-var [genword-prefix [word it]]
+     col-var [genword-prefix [word col]]
+     col-size-var [genword-prefix [word col-size]]
+     loopw [genword-prefix [word loop-fun]]]
     [assert [is-word element-var] for-each requires a word as the first argument]
     [flist
       [quote let] [flist col-var collection
