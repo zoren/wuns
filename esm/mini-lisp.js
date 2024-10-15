@@ -251,16 +251,12 @@ export const evalForm = (defEnv, topForm) => {
           if (numOfArgs === 0) throw evalError(`special form '${firstWord}' expected at least one argument`)
           const value = go(env, forms[1])
           if (!isTaggedValue(value)) throw evalError('expected tagged value')
+          const { tag, args } = value
           const findMatch = () => {
             for (let i = 2; i < forms.length - 1; i += 2) {
-              const pattern = forms[i]
-              const patternList = getFormList(pattern)
+              const patternList = getFormList(forms[i])
               if (patternList.length === 0) throw evalError('pattern must have at least one word')
-              const { tag, args } = value
-              const patternCtorFunc = go(env, patternList[0])
-              if (typeof patternCtorFunc !== 'function') throw evalError('expected function')
-              if (typeof patternCtorFunc.tag !== 'string') throw evalError('expected ctor function')
-              if (patternCtorFunc.tag !== tag) continue
+              if (getFormWord(patternList[0]) !== tag) continue
               if (patternList.length - 1 !== args.length)
                 throw evalError(
                   `pattern length ${patternList.length - 1} but value length was ${args.length} ${tag} ${args}`,
@@ -270,7 +266,7 @@ export const evalForm = (defEnv, topForm) => {
               return { newEnv, body: forms[i + 1] }
             }
             // an odd number of arguments means there is no default case
-            if (numOfArgs % 2 === 1) {
+            if (numOfArgs % 2 !== 0) {
               console.dir(value)
               throw evalError('no match found')
             }
