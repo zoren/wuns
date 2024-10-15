@@ -52,7 +52,11 @@
   [flist
     [quote def]
     def-name
-    [flist [quote intrinsic] inst-name]]]
+    [flist [quote func] def-name [quote [a b]]
+      [flist
+        [flist [quote intrinsic] inst-name]
+        [quote a]
+        [quote b]]]]]
 
 [defmacro def-instruction [def-name inst-name] [def-instruction-fn def-name inst-name]]
 
