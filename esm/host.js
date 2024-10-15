@@ -48,7 +48,7 @@ export const apply = (fn, args) => {
 }
 
 // for code compiled to js
-export const make_tagged_value = (tag, ...args) => {
+export const make_tagged_value = (tag, args) => {
   if (!isWord(tag)) throw new Error('make-tagged-value expects word')
   return makeTaggedValue(tag, ...args)
 }

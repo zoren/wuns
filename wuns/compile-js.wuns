@@ -289,9 +289,9 @@
                             params
                             [js-exp/call
                               [mk-extern [list [word host] [word make-tagged-value]]]
-                              [concat
-                                [list [js-exp/string tag]]
-                                [list-map p params [js-exp/var p]]]]]]]]
+                              [list
+                                [js-exp/string tag]
+                                [js-exp/array [list-map p params [js-exp/var p]]]]]]]]]
 
                     [type-decl-kind/record fields]
                     [logq-abort cstmt not implemented record]
