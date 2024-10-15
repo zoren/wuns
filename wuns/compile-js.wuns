@@ -234,25 +234,17 @@
             [block [cstmt is-tail f]]]
 
           [bform/switch exp cases default]
-          [if is-tail
-            [block
-              [js-stmt/switch
-                [cexp exp]
-                [list-map case cases
-                  [pair
-                    [list-map lit [pair/fst case] [cexp lit]]
-                    [cstmt is-tail [pair/snd case]]]]
-                [cstmt is-tail default]]]
-            [block
-              [js-stmt/switch
-                [cexp exp]
-                [list-map case cases
-                  [pair
-                    [list-map lit [pair/fst case] [cexp lit]]
-                    [block
-                      [cstmt is-tail [pair/snd case]]
-                      [js-stmt/break]]]]
-                [cstmt is-tail default]]]]
+          [js-stmt/switch
+            [cexp exp]
+            [list-map case cases
+              [pair
+                [list-map lit [pair/fst case] [cexp lit]]
+                [if is-tail
+                  [cstmt is-tail [pair/snd case]]
+                  [block
+                    [cstmt is-tail [pair/snd case]]
+                    [js-stmt/break]]]]]
+            [cstmt is-tail default]]
 
           [bform/do forms]
           [js-stmt/block
