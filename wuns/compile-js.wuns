@@ -129,7 +129,7 @@
     [js-exp/call [js-exp/var [word form/list]]
       [list [js-exp/array [list-map e l [form-to-quoted-js e]]]]]]]
 
-[defn compile-top-form [node-to-ldesc top-form]
+[defn compile-top-form [node-to-ldesc outer-is-tail top-form]
   [let
     [current-func [atom [option/none]]
      current-tail-calls [atom [option/none]]
@@ -390,7 +390,7 @@
           [if is-tail
             [js-stmt/return [cexp bform]]
             [js-stmt/exp [cexp bform]]]]]]
-    [cstmt true top-form]]]]
+    [cstmt outer-is-tail top-form]]]]
 
 [type compile-run-error []
   [union
@@ -426,7 +426,7 @@
           [result/error [compile-run-error/form-to-ast-errors f2a-errors]]]
 
         [result/ok bform]
-        [let [stmt [compile-top-form node-to-ldesc bform]]
+        [let [stmt [compile-top-form node-to-ldesc true bform]]
           [result/ok stmt]]]]]
     [match [map-result forms comp-run]
       [result/error e] [result/error e]
@@ -453,7 +453,7 @@
           [result/error [compile-run-error/form-to-ast-errors f2a-errors]]]
 
         [result/ok bform]
-        [let [stmt [compile-top-form node-to-ldesc bform]]
+        [let [stmt [compile-top-form node-to-ldesc false bform]]
           [result/ok stmt]]]]]
     [match [map-result [read-file wuns-file-name] comp-run]
       [result/error e]
