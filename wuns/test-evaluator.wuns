@@ -190,6 +190,35 @@
 
 [is-form-list [form/word [word a]]]]
 
+    [test-ok [word a]
+[type option [a] [union [none] [some a]]]
+
+[match [option/some [word a]]
+  [option/none] [word none-word]
+  [option/some a] a]]
+
+    [test-ok [i32 1]
+[type form [] [union [word word] [list [list form]]]]
+
+[def flist [func flist [.. elements] [form/list elements]]]
+
+[def is-form-list [func ifl [m]
+  [match m
+    [form/word w] [i32 0]
+    [form/list l] [i32 1]]]]
+
+[is-form-list [flist [flist] [form/word [word a]]]]]
+
+    [test-ok [i32 0]
+[type form [] [union [word word] [list [list form]]]]
+
+[def is-form-list [func ifl [m]
+  [match m
+    [form/word w] [i32 0]
+    [form/list l] [i32 1]]]]
+
+[is-form-list [form/word [word a]]]]
+
   [test-ok [i32 55]
     [def gauss
       [func gauss-direct [n]
