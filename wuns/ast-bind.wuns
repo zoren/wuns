@@ -130,6 +130,13 @@
       [let-do [w [get-word f]]
         [when [has def-ctx w] [push-error f [quote [redefing def]]]]
         [set-kv-map def-ctx w kind]]]
+    parse-param-list
+    [func parse-param-list [param-list]
+      [let
+        [n-of-param-forms [size param-list]]
+        [if [and [lt-s 1 n-of-param-forms] [eq-word [get-word [at param-list -2]] [word ..]]]
+          [pair [slice param-list 0 [sub n-of-param-forms 2]] [some [last param-list]]]
+          [pair param-list [none]]]]]
     ]
     [letfn [
     [func form-to-type [form]
@@ -151,11 +158,9 @@
            [form-list [get-list form]
             - [when-not [eq [size form-list] 4] [push-error form [quote [function-like form expected 4 sub-forms]]]]
             name [get-word [second form-list]]
-            param-list [get-list [third form-list]]
-            n-of-param-forms [size param-list]
-            has-rest-param [and [lt-s 1 n-of-param-forms] [eq-word [get-word [at param-list -2]] [word ..]]]
-            regular-param-forms [if has-rest-param [slice param-list 0 [sub n-of-param-forms 2]] param-list]
-            opt-rest-param [if has-rest-param [some [last param-list]] [none]]
+            parsed-params [parse-param-list [get-list [third form-list]]]
+            regular-param-forms [pair/fst parsed-params]
+            opt-rest-param [pair/snd parsed-params]
             lvars [transient-kv-map]
             lctx [local-context lvars form]
             new-lstack [local-stack/frame lstack lctx]
