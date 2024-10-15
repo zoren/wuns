@@ -503,10 +503,11 @@
         0]]
       0]]]
 
+[todo remove this]
 [defn is-i32-bin-inst [w2]
   [word-list-contains w2
     [word i32.add] [word i32.sub] [word i32.mul] [word i32.rem-s] [word i32.div-s]
-    [word i32.and] [word i32.or] [word i32.xor]
+    [word i32.and] [word i32.or]
     [word i32.eq] [word i32.lt-s] [word i32.le-s]]]
 
 [defn is-f64-bin-inst [w2]
