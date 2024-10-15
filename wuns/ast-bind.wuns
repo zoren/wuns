@@ -585,6 +585,9 @@
               [do]]
             [for-each arg args [go false arg]]]
 
+          [bform/call-fexpr f form-args]
+          [go false f]
+
             [do
               [log bf]
               [logq-abort tail-call-analysis not implemented]]]]]
