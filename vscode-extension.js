@@ -72,6 +72,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
         if (!word) return console.error('expected word')
         const node = tryGetNodeFromForm(form)
         if (!node) return
+        // ignore if not in the same file, this can happen with macros
         if (node.tree.contentName !== fileName) return
         const { row, column } = node.startPosition
         tokensBuilder.push(row, column, word.length, tokenType, tokenModifiers)
