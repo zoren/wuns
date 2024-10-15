@@ -17,6 +17,10 @@ import {
   tryGetTag,
 } from './core.js'
 
+export const abort = (message) => {
+  throw new Error('abort: ' + message)
+}
+
 export const read_file = (path) => {
   if (typeof path !== 'string') throw new Error('read-file expects string')
   return readFile(path)

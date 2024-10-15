@@ -56,12 +56,12 @@
 
 [defmacro def-instruction [def-name inst-name] [def-instruction-fn def-name inst-name]]
 
-[def unreachable [intrinsic unreachable]]
+[def-extern abort [type-scheme [a] [func [[list form]] a]]]
 
 [defn form-to-word [form]
   [match form
     [form/word w] w
-    [unreachable]]]
+    [abort [list [quote [form-to-word requires a word as its argument]]]]]]
 
 [defmacro def-bin-i32-inst [name] [def-instruction-fn name [form/word [concat-words [word i32.] [form-to-word name]]]]]
 
@@ -155,38 +155,15 @@
 
 [defn rest [l] [slice l 1 [size l]]]
 
-[def-extern stdout-print [type-scheme [a] [func [a] [tuple]]]]
-[def-extern stdout-write-code-point [func [i32] [tuple]]]
-
-[defn log-fn [forms]
-  [when-not [is-empty forms]
-    [stdout-print [first forms]]
-    [for-each f [rest forms]
-      [stdout-write-code-point [i32 32]]
-      [stdout-print f]]]
-  [stdout-write-code-point [i32 10]]]
-
-[defmacro log [.. forms]
-  [flist [quote log-fn]
-    [form/list
-      [concat
-        [list [quote list]]
-        forms]]]]
-
-[defmacro logq [.. lmsg]
-  [flist [quote log-fn] [quote-list lmsg]]]
-
 [defmacro assert [cond .. lmsg]
   [flist [quote if] cond
     [quote [do]]
     [flist [quote do]
-      [flist [quote log] [quote-list lmsg]]
-      [quote [unreachable]]]]]
+      [flist [quote abort] [quote-list lmsg]]]]]
 
 [defmacro logq-abort [.. lmsg]
   [flist [quote do]
-    [flist [quote log] [quote-list lmsg]]
-    [quote [unreachable]]]]
+    [flist [quote abort] [quote-list lmsg]]]]
 
 [defn identity [x] x]
 
@@ -271,10 +248,8 @@
 
 [defn form-to-list [form]
   [match form
-    [form/list l] l
-    [do
-      [log [quote [form-to-list requires a list as its argument]] form]
-      [unreachable]]]]
+    [form/word w] [logq-abort form-to-list requires a list as its argument]
+    [form/list l] l]]
 
 [defn is-list [form]
   [match form
@@ -456,6 +431,27 @@
 [def-extern syntax-node-content-name [func [syntax-node] string]]
 [def-extern syntax-node-location [func [syntax-node] syntax-node-location]]
 
+[def-extern stdout-print [type-scheme [a] [func [a] [tuple]]]]
+[def-extern stdout-write-code-point [func [i32] [tuple]]]
+
+[defn log-fn [forms]
+  [when-not [is-empty forms]
+    [stdout-print [first forms]]
+    [for-each f [rest forms]
+      [stdout-write-code-point [i32 32]]
+      [stdout-print f]]]
+  [stdout-write-code-point [i32 10]]]
+
+[defmacro log [.. forms]
+  [flist [quote log-fn]
+    [form/list
+      [concat
+        [list [quote list]]
+        forms]]]]
+
+[defmacro logq [.. lmsg]
+  [flist [quote log-fn] [quote-list lmsg]]]
+
 [defn log-location [form]
   [if-let [node [try-get-syntax-node form]]
     [let-do [loc [syntax-node-location node]]
@@ -465,7 +461,7 @@
       [stdout-write-code-point [i32 58]]
       [stdout-print [inc [syntax-node-location/column loc]]]
       [stdout-write-code-point [i32 10]]]
-    [logq unable to log location no node found]]]
+    [logq log-location unable to log location no node found]]]
 
 [type byte-array [] [union]]
 [def-extern byte-array [func [i32] byte-array]]
