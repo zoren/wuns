@@ -1,0 +1,32 @@
+[def make-eval-context
+  [type-anno
+    [extern interpreter make-context]
+    [func [word] [evaluation-context]]]]
+
+[def evaluate
+  [type-anno
+    [extern interpreter evaluate]
+    [func [evaluation-context form] [tuple]]]]
+
+[def evaluate-result
+  [type-anno
+    [extern interpreter evaluate-result]
+    [func [evaluation-context form] [result js-value js-value]]]]
+
+[def macro-expand
+  [type-anno
+    [extern interpreter macro-expand]
+    [func [evaluation-context form] [form]]]]
+
+
+[type macro [] [union]]
+
+[def try-get-macro
+  [type-anno
+    [extern interpreter try-get-macro]
+    [func [evaluation-context word] [option macro]]]]
+
+[def interpreter-apply
+  [type-anno
+    [extern interpreter apply]
+    [func [macro [list form]] form]]]

@@ -1,4 +1,5 @@
 [load std.wuns]
+[load interpreter-externs.wuns]
 
 [type function-kind []
   [union
