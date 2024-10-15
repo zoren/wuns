@@ -24,6 +24,7 @@
     [string word]
     [var word]
     [array [list js-exp]]
+    [object [list [pair word js-exp]]]
     [subscript js-exp js-exp]
     [ternary js-exp js-exp js-exp]
     [call js-exp [list js-exp]]
@@ -294,7 +295,30 @@
                                 [js-exp/array [list-map p params [js-exp/var p]]]]]]]]]
 
                     [type-decl-kind/record fields]
-                    [logq-abort cstmt not implemented record]
+                    [let-do [field-names [list-map field fields [pair/fst field]]]
+                      [concat
+                        [list
+                          [js-stmt/const-decl
+                            type-name
+                            [js-exp/arrow-exp
+                              field-names
+                              [js-exp/call
+                                [mk-extern [list [word host] [word make-record-from-object]]]
+                                [list
+                                  [js-exp/string type-name]
+                                  [js-exp/object
+                                    [list-map field-name field-names
+                                      [pair
+                                        field-name
+                                        [js-exp/var field-name]]]]]]]]]
+                        [list-map field-name field-names
+                          [js-stmt/const-decl
+                            [concat-words type-name-prefix field-name]
+                            [js-exp/arrow-exp
+                              [list [word record]]
+                              [js-exp/subscript
+                                [js-exp/var [word record]]
+                                [js-exp/string field-name]]]]]]]
 
                     [logq-abort cstmt unknown type kind]]]]]]
 

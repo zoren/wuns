@@ -46,6 +46,8 @@ const jsExpToString = (js) => {
       return escapeIdentifier(args[0])
     case 'js-exp/array':
       return `[${args[0].map(jsExpToString).join(', ')}]`
+    case 'js-exp/object':
+      return `{${args[0].map(({ fst, snd }) => `${fst}: ${jsExpToString(snd)}`).join(', ')}}`
     case 'js-exp/subscript':
       return `${jsExpToString(args[0])}[${jsExpToString(args[1])}]`
     case 'js-exp/binop':

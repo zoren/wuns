@@ -125,6 +125,13 @@
     [m]]
 
   [test-ok [i32 5]
+    [type pair [a b] [record [fst a] [snd b]]]
+    [pair/fst [pair [i32 5] [word a]]]]
+  [test-ok [word a]
+    [type pair [a b] [record [fst a] [snd b]]]
+    [pair/snd [pair [i32 5] [word a]]]]
+
+  [test-ok [i32 5]
     [let [x [i32 2] y [i32 3]] [[intrinsic i32.add] x y]]]
 
   [test-ok [i32 0]

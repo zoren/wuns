@@ -52,6 +52,11 @@ export const make_tagged_value = (tag, args) => {
   if (!isWord(tag)) throw new Error('make-tagged-value expects word')
   return makeTaggedValue(tag, ...args)
 }
+export const make_record_from_object = (tag, obj) => {
+  if (!isWord(tag)) throw new Error('make-record-from-obj expects word')
+  if (typeof obj !== 'object') throw new Error('make-record-from-obj expects object')
+  return makeRecordFromObj(tag, obj)
+}
 
 export const word_byte_size = (word) => {
   if (isWord(word)) return wordValue(word).length
