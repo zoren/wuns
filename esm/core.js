@@ -24,13 +24,14 @@ export const isList = (f) => Array.isArray(f)
 
 class TaggedValue {
   constructor(tag, ...args) {
+    if (!isWord(tag)) throw new Error('tag must be a word')
     this.tag = tag
     this.args = Object.freeze(args)
   }
 }
 
 export const isTaggedValue = (v) => v instanceof TaggedValue
-export const getTag = (v) => (isTaggedValue(v) ? v.tag : null)
+export const tryGetTag = (v) => (isTaggedValue(v) ? v.tag : null)
 export const makeTaggedValue = (tag, ...args) => Object.freeze(new TaggedValue(tag, ...args))
 export const makeValueTagger = (tag, arity) => {
   const f = (...args) => {
@@ -46,11 +47,11 @@ const formListName = 'form/list'
 export const optionNone = makeTaggedValue('option/none')
 export const makeOptionSome = makeValueTagger('option/some', 1)
 
-export const tryGetFormWord = (f) => (getTag(f) === formWordName ? f.args[0] : null)
+export const tryGetFormWord = (f) => (tryGetTag(f) === formWordName ? f.args[0] : null)
 
-export const isForm = (f) => isTaggedValue(f) && (getTag(f) === formWordName || getTag(f) === formListName)
+export const isForm = (f) => isTaggedValue(f) && (tryGetTag(f) === formWordName || tryGetTag(f) === formListName)
 
-export const tryGetFormList = (f) => (getTag(f) === formListName ? f.args[0] : null)
+export const tryGetFormList = (f) => (tryGetTag(f) === formListName ? f.args[0] : null)
 
 class Atom {
   #value

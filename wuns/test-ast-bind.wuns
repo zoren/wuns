@@ -24,6 +24,13 @@
       [quote [load m.wuns]]
       [quote x]]]]
 
+[defn r3 []
+  [test-form-to-ast-fn
+    [list
+      [quote [type pair [a b] [record [fst a] [snd b]]]]
+      [quote [pair [i32 1] [word a]]]
+      [quote [pair/snd [pair [i32 1] [word a]]]]]]]
+
 [defn test-tail [form]
   [let-do [converter [mk-form-to-ast]
            f2a [form-to-ast-converter/form-to-ast converter]

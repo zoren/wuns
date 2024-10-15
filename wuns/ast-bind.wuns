@@ -498,6 +498,19 @@
             [go is-tail t]
             [go is-tail e]]
 
+          [bform/switch e cases default]
+          [do
+            [go false e]
+            [for-each p cases [go is-tail [pair/snd p]]]
+            [go is-tail default]]
+
+          [bform/match e cases opt-default]
+          [do
+            [go false e]
+            [for-each p cases [go is-tail [pair/snd p]]]
+            [when-let [default opt-default]
+              [go is-tail default]]]
+
           [bform/do l]
           [when-not [is-empty l]
             [for i 0 [dec [size l]] [go false [at l i]]]
@@ -530,7 +543,11 @@
                       [set-kv-map tail-rec-calls bf [clone-growable-to-frozen-list dependent-args]]]
                     [atom-set non-tail-rec-calls true]]]
               [do]]
-            [for-each arg args [go false arg]]]]]]
+            [for-each arg args [go false arg]]]
+
+            [do
+              [log bf]
+              [logq-abort tail-call-analysis not implemented]]]]]
       [go true [bfunc/body the-func]]
       [if [atom-get non-tail-rec-calls]
         [tail-call-result/non-tail]

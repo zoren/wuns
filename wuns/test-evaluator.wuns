@@ -90,6 +90,14 @@
       [[i32 1]] [word one]
       [word not-01]]]
 
+  [test-ok [word not-01]
+    [[func f [p]
+      [switch p
+        [[i32 0]] [word zero]
+        [[i32 1]] [word one]
+        [word not-01]]]
+      [i32 2]]]
+
   [test-ok [i32 5] [[func f [] [i32 5]]]]
   [test-ok [i32 5] [[func id [p] p] [i32 5]]]
   [test-ok [i32 5] [[func sub [p q] [[intrinsic i32.sub] p q]] [i32 8] [i32 3]]]
@@ -146,9 +154,41 @@
   [test-ok [word a] [def a [word a]] a]
   [test-ok [i32 4] [def a [i32 4]] a]
   [test-ok [f64 1.5] [def a [f64 1.5]] a]
-  [comment the interface is not type safe - so this works]
+  [comment the test interface is not type safe - so this works]
   [test-ok [f64 1] [def a [i32 1]] a]
   [test-ok [i32 5] [def f [func f [] [i32 5]]] [f]]
+
+  [test-ok [i32 5]
+    [do
+      [if [i32 0] [i32 4] [i32 5]]]
+      [i32 5]]
+
+  [test-ok [i32 5]
+    [do
+      [switch [i32 0] [[i32 0]] [word a] [word b]]
+      [i32 5]]]
+
+    [test-ok [i32 1]
+[type form [] [union [word word] [list [list form]]]]
+
+[def flist [func flist [.. elements] [form/list elements]]]
+
+[def is-form-list [func ifl [m]
+  [match m
+    [form/word w] [i32 0]
+    [form/list l] [i32 1]]]]
+
+[is-form-list [flist [flist] [form/word [word a]]]]]
+
+    [test-ok [i32 0]
+[type form [] [union [word word] [list [list form]]]]
+
+[def is-form-list [func ifl [m]
+  [match m
+    [form/word w] [i32 0]
+    [form/list l] [i32 1]]]]
+
+[is-form-list [form/word [word a]]]]
 
   [test-ok [i32 55]
     [def gauss

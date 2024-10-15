@@ -222,9 +222,10 @@
             [logq-abort cexp found a tail call not expected]
             [js-exp/call [cexp f] [list-map arg args [cexp arg]]]]]
 
-        [do
-          [log bform]
-          [logq-abort cexp not implemented]]]]
+        [bform/type-anno bf t]
+        [cexp bf]
+
+        [iife [block [cstmt true bform]]]]]
 
       [func cstmt [is-tail bform]
         [match bform
@@ -245,6 +246,35 @@
                     [cstmt is-tail [pair/snd case]]
                     [js-stmt/break]]]]]
             [cstmt is-tail default]]
+
+          [bform/match exp cases opt-default]
+          [let-do [tmp [gen-tmp-word]
+                   tmp-args [gen-tmp-word]]
+            [block
+              [js-stmt/const-decl tmp [cexp exp]]
+              [js-stmt/const-decl tmp-args [js-exp/subscript [js-exp/var tmp] [js-exp/string [word args]]]]
+              [js-stmt/switch
+                [js-exp/call
+                  [mk-extern [list [word host] [word get-tag]]]
+                  [list [js-exp/var tmp]]]
+                [list-map case cases
+                  [let-do [mp [pair/fst case]
+                            ctor [match-pattern/ctor mp]
+                            params [match-pattern/params mp]
+                            counter [atom 0]]
+                    [pair [list [js-exp/string ctor]]
+                      [js-stmt/block
+                        [concat
+                          [list-map p params
+                            [js-stmt/const-decl p [js-exp/subscript [js-exp/var tmp-args] [js-exp/number [int-to-word [inc-atom counter]]]]]]
+                          [if is-tail
+                            [list [cstmt is-tail [pair/snd case]]]
+                            [list
+                              [cstmt is-tail [pair/snd case]]
+                              [js-stmt/break]]]]]]]]
+                [if-let [default-case opt-default]
+                  [cstmt is-tail default-case]
+                  [js-stmt/throw [js-exp/string [word unmatched-match]]]]]]]
 
           [bform/do forms]
           [js-stmt/block
@@ -393,107 +423,3 @@
 
         [result/ok v]
         [result/ok v]]]]]
-
-
-[comment  [match wexp
-          [wuns/extern wwfs]
-          [logq-abort cstmt extern not implemented]
-
-          [wuns/if cond t f]
-          [js-stmt/if [cexp cond]
-            [block [cstmt is-tail t]]
-            [block [cstmt is-tail f]]]
-
-          [wuns/do exps]
-          [js-stmt/block
-            [concat
-              [list-map f [slice exps 0 [dec [size exps]]] [cstmt 0 f]]
-              [list [cstmt is-tail [last exps]]]]]
-
-          [wuns/switch exp cases opt-default]
-          [if is-tail
-            [block
-              [js-stmt/switch
-                [cexp exp]
-                [list-map case cases
-                  [pair
-                    [list-map lit [pair/fst case] [literal-to-js-exp lit]]
-                    [cstmt is-tail [pair/snd case]]]]
-                [if-let [default-case opt-default]
-                  [cstmt is-tail default-case]
-                  [js-stmt/throw [js-exp/string [word unmatched-switch]]]]]]
-            [logq-abort cstmt not implemented switch non-tail]]
-
-          [wuns/match exp cases opt-default]
-          [if is-tail
-            [let-do [tmp [gen-tmp-word]
-                     tmp-args [js-exp/subscript [js-exp/var tmp] [js-exp/string [word args]]]]
-              [comment let us call a get-tag function instead]
-              [block
-                [js-stmt/const-decl tmp [cexp exp]]
-                [js-stmt/switch
-                  [js-exp/subscript [js-exp/var tmp] [js-exp/string [word tag]]]
-                  [list-map case cases
-                    [let-do [mp [pair/fst case]
-                             ctor [word-with-form/word [match-pattern/ctor mp]]
-                             params [match-pattern/params mp]
-                             counter [atom 0]]
-                      [pair [list [js-exp/string ctor]]
-                        [js-stmt/block
-                          [concat
-                            [list-map p params
-                              [js-stmt/const-decl [word-with-form/word p] [js-exp/subscript tmp-args [js-exp/number [int-to-word [inc-atom counter]]]]]]
-                            [list [cstmt is-tail [pair/snd case]]]]]]]]
-                  [if-let [default-case opt-default]
-                    [cstmt is-tail default-case]
-                    [js-stmt/throw [js-exp/string [word unmatched-match]]]]]]]
-            [logq-abort cstmt not implemented match [if is-tail [quote tail] [quote non-tail]]]]
-
-          [wuns/def wwf e]
-          [js-stmt/const-decl [word-with-form/word wwf] [cexp e]]
-
-          [wuns/type decls]
-          [js-stmt/seq
-            [concat-lists
-              [list-map decl decls
-                [let [type-name [word-with-form/word [wuns-type-decl/name decl]]
-                      type-name-prefix [concat-words type-name [word /]]
-                      kind [wuns-type-decl/kind decl]]
-                  [match kind
-                    [wuns-type-decl-kind/union ctors]
-                    [list-map ctor ctors
-                      [let [tag [concat-words type-name-prefix [word-with-form/word [pair/fst ctor]]]
-                            n-atom [atom 0]
-                            params [list-map t [pair/snd ctor] [concat-words [word p] [int-to-word [inc-atom n-atom]]]]]
-                        [js-stmt/const-decl
-                          tag
-                          [js-exp/arrow-exp
-                            params
-                            [js-exp/call
-                              [mk-extern [list [word host] [word make-tagged-value]]]
-                              [concat
-                                [list [js-exp/string tag]]
-                                [list-map p params [js-exp/var p]]]]]]]]
-
-                    [wuns-type-decl-kind/record fields]
-                    [logq-abort cstmt not implemented record]]]]]]
-
-          [wuns/call-word wwf form-args]
-          [if-let [mac-func [try-get macro-funcs [word-with-form/word wwf]]]
-            [cstmt 1 [form-to-ast [call-js-func mac-func form-args]]]
-            [if-let [wfunc [try-get [database/tail-calls bind-db] wexp]]
-              [let-do [params [wuns-func/parameters wfunc]
-                       assignments [growable-list]]
-                [for i 0 [size form-args]
-                  [push assignments [js-stmt/assign [word-with-form/word [at params i]] [cexp [form-to-ast [at form-args i]]]]]]
-                [js-stmt/seq
-                  [concat
-                    [clone-growable-to-frozen-list assignments]
-                    [list [js-stmt/continue]]]]]
-              [if is-tail
-                [js-stmt/return [cexp wexp]]
-                [js-stmt/exp [cexp wexp]]]]]
-
-          [if is-tail
-            [js-stmt/return [cexp wexp]]
-            [js-stmt/exp [cexp wexp]]]] ]

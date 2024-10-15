@@ -14,6 +14,7 @@ import {
   optionNone,
   makeOptionSome,
   makeRecordFromObj,
+  tryGetTag,
 } from './core.js'
 
 export const read_file = (path) => {
@@ -51,6 +52,11 @@ export const apply = (fn, args) => {
 export const make_tagged_value = (tag, args) => {
   if (!isWord(tag)) throw new Error('make-tagged-value expects word')
   return makeTaggedValue(tag, ...args)
+}
+export const get_tag = (v) => {
+  const tag = tryGetTag(v)
+  if (!tag) throw new Error('get-tag expects tagged value')
+  return tag
 }
 export const make_record_from_object = (tag, obj) => {
   if (!isWord(tag)) throw new Error('make-record-from-obj expects word')
