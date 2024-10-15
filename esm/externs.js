@@ -12,6 +12,8 @@ const binopMap = {
   add: '+',
   sub: '-',
   mul: '*',
+  div: '/',
+  rem: '%',
 
   eq: '===',
   ne: '!==',
@@ -32,28 +34,36 @@ const jsBinopToString = (op) => {
   return mappedOp
 }
 
-const escapeIdentifier = (id) => (isJSReservedWord(id) ? '_' : '') + id.replace(/-/g, '_').replace(/\//g, '_slash_')
+const escapeIdentifier = (id) => {
+  if (typeof id !== 'string') throw new Error('not a string')
+  if (!isNaN(+id)) return ('n' + id).replace(/-/g, '_')
+  return (isJSReservedWord(id) ? '_' : '') + id.replace(/-/g, '_').replace(/\//g, '_slash_').replace(/\./g, '_dot_')
+}
 
 const jsExpToString = (js) => {
   if (!js) throw new Error('js exp is falsy')
   const { tag, args } = js
+  const arg = (i) => {
+    if (!args[i]) throw new Error(`jsStmt ${tag} arg ${i} not found`)
+    return args[i]
+  }
   switch (tag) {
     case 'js-exp/number':
-      return `${+args[0]}`
+      return `${+arg(0)}`
     case 'js-exp/string':
-      return `'${args[0]}'`
+      return `'${arg(0)}'`
     case 'js-exp/var':
-      return escapeIdentifier(args[0])
+      return escapeIdentifier(arg(0))
     case 'js-exp/array':
-      return `[${args[0].map(jsExpToString).join(', ')}]`
+      return `[${arg(0).map(jsExpToString).join(', ')}]`
     case 'js-exp/object':
-      return `{${args[0].map(({ fst, snd }) => `${fst}: ${jsExpToString(snd)}`).join(', ')}}`
+      return `{${arg(0).map(({ fst, snd }) => `${fst}: ${jsExpToString(snd)}`).join(', ')}}`
     case 'js-exp/subscript':
-      return `${jsExpToString(args[0])}[${jsExpToString(args[1])}]`
+      return `${jsExpToString(arg(0))}[${jsExpToString(args[1])}]`
     case 'js-exp/binop':
-      return `(${jsExpToString(args[1])} ${jsBinopToString(args[0].tag)} ${jsExpToString(args[2])})`
+      return `(${jsExpToString(arg(1))} ${jsBinopToString(arg(0).tag)} ${jsExpToString(arg(2))})`
     case 'js-exp/ternary':
-      return `(${jsExpToString(args[0])} ? ${jsExpToString(args[1])} : ${jsExpToString(args[2])})`
+      return `(${jsExpToString(arg(0))} ? ${jsExpToString(arg(1))} : ${jsExpToString(arg(2))})`
     case 'js-exp/arrow-exp': {
       const [params, body] = args
       return `(${params.map(escapeIdentifier).join(', ')}) => ${jsExpToString(body)}`
@@ -63,7 +73,7 @@ const jsExpToString = (js) => {
       return `(${params.map(escapeIdentifier).join(', ')}) => ${jsStmtToString(body)}`
     }
     case 'js-exp/call':
-      return `(${jsExpToString(args[0])})(${args[1].map(jsExpToString).join(', ')})`
+      return `(${jsExpToString(arg(0))})(${arg(1).map(jsExpToString).join(', ')})`
     default:
       throw new Error(`unknown js exp tag: ${tag}`)
   }
@@ -72,15 +82,19 @@ const jsExpToString = (js) => {
 const jsStmtToString = (js) => {
   if (!js) throw new Error('js stmt is falsy')
   const { tag, args } = js
+  const arg = (i) => {
+    if (!args[i]) throw new Error(`jsStmt ${tag} arg ${i} not found`)
+    return args[i]
+  }
   switch (tag) {
     case 'js-stmt/break':
       return 'break'
     case 'js-stmt/continue':
       return 'continue'
     case 'js-stmt/return':
-      return `return ${jsExpToString(args[0])}`
+      return `return ${jsExpToString(arg(0))}`
     case 'js-stmt/if':
-      return `if (${jsExpToString(args[0])}) ${jsStmtToString(args[1])} else ${jsStmtToString(args[2])}`
+      return `if (${jsExpToString(arg(0))}) ${jsStmtToString(arg(1))} else ${jsStmtToString(arg(2))}`
     case 'js-stmt/switch': {
       const [exp, cases, defaultCase] = args
       const jsCases = [
@@ -93,21 +107,25 @@ const jsStmtToString = (js) => {
       return `switch (${jsExpToString(exp)}) {\n${jsCases}\n}`
     }
     case 'js-stmt/block':
-      return `{\n${args[0].map(jsStmtToString).join(';\n')}\n}`
+      return `{\n${arg(0).map(jsStmtToString).join(';\n')}\n}`
     case 'js-stmt/seq':
-      return args[0].map(jsStmtToString).join(';\n')
+      return arg(0).map(jsStmtToString).join(';\n')
     case 'js-stmt/const-decl':
-      return `const ${escapeIdentifier(args[0])} = ${jsExpToString(args[1])}`
+      return `const ${escapeIdentifier(arg(0))} = ${jsExpToString(arg(1))}`
     case 'js-stmt/assign':
-      return `${escapeIdentifier(args[0])} = ${jsExpToString(args[1])}`
+      return `${escapeIdentifier(arg(0))} = ${jsExpToString(arg(1))}`
     case 'js-stmt/exp':
-      return jsExpToString(args[0])
+      return jsExpToString(arg(0))
     case 'js-stmt/throw':
-      return `throw ${jsExpToString(args[0])}`
+      return `throw ${jsExpToString(arg(0))}`
     case 'js-stmt/while':
-      return `while (${jsExpToString(args[0])}) ${jsStmtToString(args[1])}`
+      return `while (${jsExpToString(arg(0))}) ${jsStmtToString(arg(1))}`
+    case 'js-stmt/import':
+      return `import ${arg(0)} from '${arg(1)}'`
+    case 'js-stmt/export':
+      return `export { ${arg(0).map(escapeIdentifier).join(', ')} }`
 
-    default:
+      default:
       throw new Error(`unknown js stmt tag: ${tag}`)
   }
 }
@@ -158,7 +176,33 @@ const callJsFunc = (func, args) => {
   return res
 }
 
-const jsExtern = { 'run-js-stmt': runJsStmt, 'run-js-exp': runJsExp, 'call-js-func': callJsFunc, identity: (v) => v }
+
+import * as prettier from 'prettier'
+
+const prettierOptions = {
+  singleQuote: true,
+  trailingComma: 'all',
+  semi: false,
+  printWidth: 120,
+  parser: 'babel',
+}
+
+import fs from 'fs'
+
+const writeJsStmt = (file_name, stmt) => {
+  const jsSrc = jsStmtToString(stmt)
+  prettier.format(jsSrc, prettierOptions).then((formatted) => {
+    fs.writeFileSync(file_name, formatted)
+  })
+}
+
+const jsExtern = {
+  'run-js-stmt': runJsStmt,
+  'run-js-exp': runJsExp,
+  'call-js-func': callJsFunc,
+  identity: (v) => v,
+  'write-js-stmt': writeJsStmt
+}
 
 externs.js = jsExtern
 export default externs
