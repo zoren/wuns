@@ -443,7 +443,7 @@
 [type string [] [union]]
 [def-extern try-get-syntax-node [func [form] [option syntax-node]]]
 [def-extern syntax-node-content-name [func [syntax-node] string]]
-[def-extern syntax-node-location [func [syntax-node] syntax-node-location]]
+[def-extern get-syntax-node-location [func [syntax-node] syntax-node-location]]
 
 [def-extern stdout-print [type-scheme [a] [func [a] [tuple]]]]
 [def-extern stdout-write-code-point [func [i32] [tuple]]]
@@ -468,7 +468,7 @@
 
 [defn log-location [form]
   [if-let [node [try-get-syntax-node form]]
-    [let-do [loc [syntax-node-location node]]
+    [let-do [loc [get-syntax-node-location node]]
       [stdout-print [syntax-node-content-name node]]
       [stdout-write-code-point [i32 58]]
       [stdout-print [inc [syntax-node-location/row loc]]]

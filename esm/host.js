@@ -41,7 +41,7 @@ export const syntax_node_content_name = (syntax_node) => {
   return contentName
 }
 
-export const syntax_node_location = (syntax_node) => {
+export const get_syntax_node_location = (syntax_node) => {
   if (!(syntax_node instanceof TSParser.SyntaxNode)) throw new Error('expects syntax node')
   const { row, column } = syntax_node.startPosition
   return makeRecordFromObj('syntax-node-location', { row, column })
