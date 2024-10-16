@@ -545,6 +545,7 @@
           [bform/intrinsic w] [do]
           [bform/extern l] [do]
           [bform/type l] [do]
+          [bform/atom v] [do]
 
           [bform/func f] [do]
           [bform/if c t e]
