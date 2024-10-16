@@ -75,36 +75,35 @@
 [def js-0 [js-exp/number [word 0]]]
 [def js-1 [js-exp/number [word 1]]]
 
-[defn js-bitwise-or-0 [e]
-  [js-exp/binop [binop/binary-ior] js-0 e]]
+[defn instruction-name-and-args-to-js-exp [inst-name eargs]
+  [assert [eq [size eargs] 2] instruction-name-and-args-to-js-exp expects 2 arguments]
+  [let [bin [func bin [op] [js-exp/binop op [at eargs 0] [at eargs 1]]]
+        bin-0 [func bin-0 [op] [js-exp/binop [binop/binary-ior] [bin op] js-0]]]
+    [switch inst-name
+      [[word i32.add]]   [bin-0 [binop/add]]
+      [[word i32.sub]]   [bin-0 [binop/sub]]
+      [[word i32.mul]]   [bin-0 [binop/mul]]
+      [[word i32.div-s]] [bin-0 [binop/div]]
+      [[word i32.rem-s]] [bin-0 [binop/rem]]
 
-[defn instruction-name-to-binop [inst-name]
-  [todo make sure i32 functions wrap]
-  [switch inst-name
-    [[word i32.add]] [binop/add]
-    [[word i32.sub]] [binop/sub]
-    [[word i32.mul]] [binop/mul]
-    [[word i32.div-s]] [binop/div]
-    [[word i32.rem-s]] [binop/rem]
+      [[word i32.eq]]    [bin-0 [binop/eq]]
+      [[word i32.ne]]    [bin-0 [binop/ne]]
 
-    [[word i32.eq]] [binop/eq]
-    [[word i32.ne]] [binop/ne]
+      [[word i32.lt-s]]  [bin-0 [binop/lt]]
+      [[word i32.le-s]]  [bin-0 [binop/le]]
+      [[word i32.gt-s]]  [bin-0 [binop/gt]]
+      [[word i32.ge-s]]  [bin-0 [binop/ge]]
 
-    [[word i32.lt-s]] [binop/lt]
-    [[word i32.le-s]] [binop/le]
-    [[word i32.gt-s]] [binop/gt]
-    [[word i32.ge-s]] [binop/ge]
+      [[word i32.and]]   [bin [binop/binary-and]]
+      [[word i32.or]]    [bin [binop/binary-ior]]
 
-    [[word i32.and]] [binop/binary-and]
-    [[word i32.or]] [binop/binary-ior]
+      [[word f64.add]]   [bin [binop/add]]
+      [[word f64.sub]]   [bin [binop/sub]]
+      [[word f64.mul]]   [bin [binop/mul]]
 
-    [[word f64.add]] [binop/add]
-    [[word f64.sub]] [binop/sub]
-    [[word f64.mul]] [binop/mul]
-
-    [do
-      [log inst-name]
-      [logq-abort instruction-name-to-binop not implemented]]]]
+      [do
+        [log inst-name]
+        [logq-abort instruction-name-to-binop not implemented]]]]]
 
 [defn iife [stmt]
   [js-exp/call
@@ -220,10 +219,7 @@
         [bform/call f args]
         [match f
           [bform/intrinsic i]
-          [js-exp/binop
-            [instruction-name-to-binop i]
-            [cexp [at args 0]]
-            [cexp [at args 1]]]
+          [instruction-name-and-args-to-js-exp i [list-map arg args [cexp arg]]]
 
           [if-let [deps [try-get-tail bform]]
             [logq-abort cexp found a tail call not expected]
