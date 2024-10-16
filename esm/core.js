@@ -11,9 +11,7 @@ export const stringToWord = (s) => {
   return s
 }
 export const wordValue = (w) => {
-  if (!isWord(w)) {
-    throw new Error(`expected word, got: '${w}' ${typeof w} ${w.constructor.name}`)
-  }
+  if (!isWord(w)) throw new Error(`expected word, got: '${w}' ${typeof w} ${w.constructor.name}`)
   return w
 }
 
