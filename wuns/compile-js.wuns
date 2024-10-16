@@ -55,17 +55,10 @@
   ]
 ]
 
-[type externs-object [] [union]]
-
 [def run-js-stmt
   [type-anno
     [extern js run-js-stmt]
     [func [js-stmt externs-object] [result js-value js-value]]]]
-
-[def externs-object-value
-  [type-anno
-    [extern]
-    [externs-object]]]
 
 [def write-js-stmt
   [type-anno

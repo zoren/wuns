@@ -237,10 +237,11 @@
   [logq ran [form/word [int-to-word [atom-get test-assert-count-atom]]]]]]
 
 [defn mk-eval-forms []
-  [let [eval-context [make-eval-context [current-dir]]]
+  [let [eval-context [make-eval-context [current-dir]]
+        evaluator [make-evaluator externs-object-value eval-context]]
     [func eval-forms [forms]
-      [let [results [list-map form forms [evaluate-result eval-context form]]]
-      [last results]]]]]
+      [let [results [list-map form forms [evaluate-result evaluator form]]]
+        [last results]]]]]
 
 [defn time-fn [f]
   [let-do

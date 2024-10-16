@@ -467,7 +467,20 @@
         forms]]]]
 
 [defmacro logq [.. lmsg]
-  [flist [quote log-fn] [quote-list lmsg]]]
+  [let [qforms [list-map form lmsg [match form [form/word w] [mk-quote form] [form/list l] form]]]
+    [form/list
+      [concat
+        [list [quote do]]
+        [concat
+          [if [is-empty lmsg]
+            [list]
+            [concat
+              [list [flist [quote stdout-print] [first qforms]]]
+              [list-map qform [rest qforms]
+                [flist [quote do]
+                  [quote [stdout-write-code-point [i32 32]]]
+                  [flist [quote stdout-print] qform]]]]]
+          [list [quote [stdout-write-code-point [i32 10]]]]]]]]]
 
 [defn log-location [form]
   [if-let [node [try-get-syntax-node form]]
@@ -562,8 +575,6 @@
   [union
     [ok ok-type]
     [error error-type]]]
-
-[type evaluation-context [] [union]]
 
 [type js-value [] [union]]
 

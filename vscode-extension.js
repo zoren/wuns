@@ -57,11 +57,15 @@ const modificationModifier = encodeTokenModifiers('modification')
  * @param {vscode.TextDocument} document
  */
 const makeProvideDocumentSemanticTokensForms = async () => {
-  const { makeDefEnv, isClosure, tryGetFormWord, tryGetFormList, treeToFormsSafeNoMeta, tryGetNodeFromForm } = await import('./esm/core.js')
-  const { evalForm } = await import('./esm/mini-lisp.js')
+  const { makeDefEnv, isClosure, tryGetFormWord, tryGetFormList, treeToFormsSafeNoMeta, tryGetNodeFromForm } =
+    await import('./esm/core.js')
+  const { makeEvalForm } = await import('./esm/mini-lisp.js')
+  const { default: externs } = await import('./esm/runtime-lib/externs.js')
   const provideDocumentSemanticTokens = (document) => {
     const { fileName } = document
     const defEnv = makeDefEnv(path.dirname(fileName))
+    const evalForm = makeEvalForm(externs, defEnv)
+
     const tokensBuilder = new SemanticTokensBuilder(legend)
     const tree = parseDocumentTreeSitter(document)
     const topForms = treeToFormsSafeNoMeta(tree)
@@ -106,7 +110,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
           try {
             // eval for side effects so macros are defined and can be expanded
             // todo only eval def and do forms, to avoid evaling top level forms, that may crash
-            evalForm(defEnv, form)
+            evalForm(form)
           } catch (e) {
             console.error('provideDocumentSemanticTokensForms evalForm error', e.message)
             console.error(e)

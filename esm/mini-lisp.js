@@ -1,4 +1,3 @@
-import externs from './runtime-lib/externs.js'
 const makeEnv = (outer) => {
   if (!(outer instanceof Map)) throw new Error('makeEnv expects a Map')
   const env = new Map()
@@ -22,7 +21,6 @@ import {
   atom,
   getRecordType,
   isDefEnv,
-  isForm,
   isTaggedValue,
   langUndefined,
   makeList,
@@ -33,8 +31,6 @@ import {
   tryGetFormWord,
   isClosure,
   makeClosure,
-  resultError,
-  resultOk,
 } from './core.js'
 
 class EvalError extends Error {
@@ -63,41 +59,14 @@ import { wrapJSFunctionsToObject } from './utils.js'
 const instructions = wrapJSFunctionsToObject(instructionFunctions)
 const intrinsics = instructions
 
-// these externs are defined here to avoid a circular dependency
-const evaluate = (context, form) => {
-  if (!isDefEnv(context)) throw new Error('evaluate expects context')
-  try {
-    evalForm(context, form)
-  } catch (e) {
-    console.error('evaluate error discarded')
-    console.log(form)
-    console.error(e)
-  }
-  return langUndefined
-}
-
-const evaluate_result = (context, form) => {
-  if (!isDefEnv(context)) throw new Error('evaluate-result expects context')
-  if (!isForm(form)) throw new Error('evaluate-result expects form')
-  try {
-    return resultOk(evalForm(context, form))
-  } catch (e) {
-    return resultError(e)
-  }
-}
-
-const evalExtern = Object.freeze({
-  evaluate,
-  'evaluate-result': evaluate_result,
-})
-
-export const evalForm = (defEnv, topForm) => {
+export const makeEvalForm = (externs, defEnv) => {
   if (!isDefEnv(defEnv)) throw new Error('first argument must be a defEnv')
   // we need an extern func that gives access to the current directory or the file path of the current dir
   // this allows writing load as a macro also we can make
   // this function is not pure as it needs access to a non-variable on defEnv
   const externCurrentDir = () => defEnv.currentDir
-  const instanceExterns = { ...externs, 'current-dir': externCurrentDir, evaluation: evalExtern }
+
+  const instanceExterns = { ...externs, 'current-dir': externCurrentDir }
   const go = (env, form) => {
     const evalError = (message, innerError) => new EvalError(message, form, innerError)
     while (true) {
@@ -437,18 +406,7 @@ export const evalForm = (defEnv, topForm) => {
       }
     }
   }
-  return go(defEnv, topForm)
-}
-
-export const evaluateForms = (defEnv, forms) => {
-  let result = langUndefined
-  for (const form of forms) result = evalForm(defEnv, form)
-  return result
-}
-
-export const evaluateFile = (defEnv, relativeFilePath) => {
-  const resolvedPath = getPathRelativeToCurrentDir(defEnv, relativeFilePath)
-  return evaluateForms(defEnv, readFile(resolvedPath))
+  return (topForm) => go(defEnv, topForm)
 }
 
 import { print } from './core.js'

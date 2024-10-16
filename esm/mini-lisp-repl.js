@@ -1,5 +1,6 @@
-import { makeDefEnv, print, readString } from './core.js'
-import { evaluateForms, evaluateFile, catchErrors } from './mini-lisp.js'
+import externs from './runtime-lib/externs.js'
+import { makeDefEnv, print, readString, readFile, langUndefined } from './core.js'
+import { makeEvalForm, catchErrors } from './mini-lisp.js'
 
 const specialForms = [
   'i32',
@@ -13,6 +14,7 @@ const specialForms = [
   'if',
   'do',
   'let',
+  // todo add a whole bunch
   // not actually a special form
   '..',
 ]
@@ -30,15 +32,21 @@ const commandLineArgs = process.argv.slice(2)
 const endsWithDashFlag = commandLineArgs.at(-1) === '-'
 const files = endsWithDashFlag ? commandLineArgs.slice(0, -1) : commandLineArgs
 
+const evalForm = makeEvalForm(externs, defEnv)
+const evaluateForms = (forms) => {
+  let result = langUndefined
+  for (const form of forms) result = evalForm(form)
+  return result
+}
 catchErrors(() => {
-  for (const filePath of files) evaluateFile(defEnv, filePath)
+  for (const filePath of files) evaluateForms(readFile(filePath))
 })
 import { startRepl } from './repl-util.js'
 
 if (!endsWithDashFlag) {
   let replLineNo = 0
   const evalLine = (line) =>
-    console.log(print(catchErrors(() => evaluateForms(defEnv, readString(line, `repl-${replLineNo++}`)))))
+    console.log(print(catchErrors(() => evaluateForms(readString(line, `repl-${replLineNo++}`)))))
   const regexEndWord = /[-./0-9a-z]+$/
   const completer = (line) => {
     const m = line.match(regexEndWord)

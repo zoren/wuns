@@ -222,18 +222,22 @@
     [type-var-counter [atom i32]]
     [types [transient-kv-map word type-def]]
     [eval-context [evaluation-context]]
+    [evaluator evaluator]
     [form-expansions [transient-kv-map form form]]
     [type-annotations [transient-kv-map form type]]]]
 
 [defn make-global-context []
-  [check-context
-    [growable-list]
-    [transient-kv-map]
-    [atom 0]
-    [transient-kv-map]
-    [make-eval-context [current-dir]]
-    [transient-kv-map]
-    [transient-kv-map]]]
+  [let [eval-context [make-eval-context [current-dir]]
+        evaluator [make-evaluator externs-object-value eval-context]]
+    [check-context
+      [growable-list]
+      [transient-kv-map]
+      [atom 0]
+      [transient-kv-map]
+      eval-context
+      evaluator
+      [transient-kv-map]
+      [transient-kv-map]]]]
 
 [defn annotate [gctx form type]
   [set-kv-map [check-context/type-annotations gctx] form type]
@@ -965,7 +969,7 @@
             [report form expects 1 argument]
             [when-let [file-word [try-get-word-report gctx [second sub-forms]]]
               [for-each form [read-file file-word]
-                [evaluate [check-context/eval-context gctx] form]
+                [evaluate [check-context/evaluator gctx] form]
                 [check gctx 0 [none] form]]]]
           type-empty-tuple]
 
@@ -1072,7 +1076,7 @@
         [internal-to-present-type copied-type]]]]]
 
 [defn check-top [gctx form]
-  [evaluate [check-context/eval-context gctx] form]
+  [evaluate [check-context/evaluator gctx] form]
   [check gctx 0 [none] form]]
 
 [defn check-top-forms [gctx forms]

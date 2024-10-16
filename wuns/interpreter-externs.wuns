@@ -1,3 +1,5 @@
+[type evaluation-context [] [union]]
+
 [def make-eval-context
   [type-anno
     [extern interpreter make-context]
@@ -20,12 +22,26 @@
     [extern interpreter apply]
     [func [macro [list form]] form]]]
 
+[type externs-object [] [union]]
+
+[type evaluator [] [union]]
+
+[def make-evaluator
+  [type-anno
+    [extern evaluation make-evaluator]
+    [func [externs-object evaluation-context] evaluator]]]
+
+[def externs-object-value
+  [type-anno
+    [extern]
+    [externs-object]]]
+
 [def evaluate
   [type-anno
     [extern evaluation evaluate]
-    [func [evaluation-context form] [tuple]]]]
+    [func [evaluator form] [tuple]]]]
 
 [def evaluate-result
   [type-anno
     [extern evaluation evaluate-result]
-    [func [evaluation-context form] [result js-value js-value]]]]
+    [func [evaluator form] [result js-value js-value]]]]

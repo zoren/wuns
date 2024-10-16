@@ -105,10 +105,11 @@
 [defn mk-form-to-ast []
   [let
     [eval-ctx [make-eval-context [current-dir]]
+     evaluator [make-evaluator externs-object-value eval-ctx]
      errors [growable-list]
      push-error [func pe [form msg] [push errors [report-message msg form]]]
      eval-form [func ef [top-form]
-      [match [evaluate-result eval-ctx top-form]
+      [match [evaluate-result evaluator top-form]
         [result/error error]
         [push-error top-form [quote [runtime error when evaluating form]]]
 
