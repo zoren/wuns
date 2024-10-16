@@ -1,5 +1,5 @@
-import { print, readString } from './core.js'
-import { makeDefEnv, evaluateForms, evaluateFile, catchErrors } from './mini-lisp.js'
+import { makeDefEnv, print, readString } from './core.js'
+import { evaluateForms, evaluateFile, catchErrors } from './mini-lisp.js'
 
 const specialForms = [
   'i32',

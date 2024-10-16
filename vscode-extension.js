@@ -57,8 +57,8 @@ const modificationModifier = encodeTokenModifiers('modification')
  * @param {vscode.TextDocument} document
  */
 const makeProvideDocumentSemanticTokensForms = async () => {
-  const { tryGetFormWord, tryGetFormList, treeToFormsSafeNoMeta, tryGetNodeFromForm } = await import('./esm/core.js')
-  const { makeDefEnv, evalForm, isClosure } = await import('./esm/mini-lisp.js')
+  const { makeDefEnv, isClosure, tryGetFormWord, tryGetFormList, treeToFormsSafeNoMeta, tryGetNodeFromForm } = await import('./esm/core.js')
+  const { evalForm } = await import('./esm/mini-lisp.js')
   const provideDocumentSemanticTokens = (document) => {
     const { fileName } = document
     const defEnv = makeDefEnv(path.dirname(fileName))

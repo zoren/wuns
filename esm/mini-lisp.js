@@ -1,14 +1,4 @@
 import externs from './runtime-lib/externs.js'
-const defEnvTag = Symbol('def-env')
-export const makeDefEnv = (currentDir) => {
-  if (!currentDir) throw new Error('makeDefEnv expects currentDir')
-  if (typeof currentDir !== 'string') throw new Error('currentDir must be a string')
-  const defMap = new Map()
-  defMap[defEnvTag] = true
-  defMap.currentDir = currentDir
-  return defMap
-}
-const isDefEnv = (v) => v instanceof Map && v[defEnvTag]
 const makeEnv = (outer) => {
   if (!(outer instanceof Map)) throw new Error('makeEnv expects a Map')
   const env = new Map()
@@ -18,19 +8,6 @@ const makeEnv = (outer) => {
 const setEnv = (env, varName, value) => {
   env.set(varName, value)
 }
-
-class Closure extends Function {
-  constructor(f, kind, paramEnvMaker, body) {
-    f.kind = kind
-    f.paramEnvMaker = paramEnvMaker
-    f.body = body
-    // https://stackoverflow.com/questions/36871299/how-to-extend-function-with-es6-classes
-    return Object.setPrototypeOf(f, new.target.prototype)
-  }
-}
-
-const makeClosure = (f, kind, paramEnvMaker, body) => Object.freeze(new Closure(f, kind, paramEnvMaker, body))
-export const isClosure = (v) => v instanceof Closure
 
 import path from 'node:path'
 
@@ -42,20 +19,24 @@ const getPathRelativeToCurrentDir = (defEnv, relativeFilePath) => {
 }
 
 import {
-  tryGetFormWord,
-  tryGetFormList,
-  isTaggedValue,
-  makeValueTagger,
   atom,
-  getRecordType,
   emptyList,
-  langUndefined,
+  getRecordType,
+  isDefEnv,
   isForm,
+  isTaggedValue,
+  langUndefined,
+  makeDefEnv,
   makeList,
-  readFile,
-  optionNone,
   makeOptionSome,
   makeRecordFromObj,
+  makeValueTagger,
+  optionNone,
+  readFile,
+  tryGetFormList,
+  tryGetFormWord,
+  isClosure,
+  makeClosure,
 } from './core.js'
 
 class EvalError extends Error {
