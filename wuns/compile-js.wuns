@@ -402,7 +402,11 @@
           [if is-tail
             [js-stmt/return [cexp bform]]
             [js-stmt/exp [cexp bform]]]]]]
-    [cstmt outer-is-tail top-form]]]]
+    [match top-form
+      [bform/do forms]
+      [js-stmt/seq [list-map f forms [cstmt outer-is-tail f]]]
+
+      [cstmt outer-is-tail top-form]]]]]
 
 [type compile-run-error []
   [union
