@@ -477,7 +477,7 @@
 
       [result/ok stmts]
       [let-do [
-          prologue [list [js-stmt/import [word externs] [word ./externs.js]]]
+          prologue [list [js-stmt/import [word externs] [word ../runtime-lib/externs.js]]]
           epilogue [list [js-stmt/export exports]]]
         [write-js-stmt js-file-name
           [js-stmt/seq

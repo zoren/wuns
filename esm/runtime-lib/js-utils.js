@@ -1,5 +1,5 @@
 import { isJSReservedWord } from '../utils.js'
-import { makeValueTagger } from '../core.js'
+import { resultError, resultOk } from '../core.js'
 
 const binopMap = {
   add: '+',
@@ -127,9 +127,6 @@ const jsStmtToString = (js) => {
   }
 }
 
-const error = makeValueTagger('result/error', 1)
-const ok = makeValueTagger('result/ok', 1)
-
 const runJs = (jsSrc, externs) => {
   // console.log(jsSrc)
   try {
@@ -138,7 +135,7 @@ const runJs = (jsSrc, externs) => {
     const r = runFunc(externs)
     const after = performance.now()
     // console.log('runJs time', after - before)
-    return ok(r)
+    return resultOk(r)
   } catch (e) {
     if (e instanceof SyntaxError || e instanceof TypeError || e instanceof ReferenceError) {
       console.log('runJs error')
@@ -147,7 +144,7 @@ const runJs = (jsSrc, externs) => {
       // return error(`SyntaxError: ${e.message}`)
       // return error(e)
     }
-    return error(e)
+    return resultError(e)
   }
 }
 

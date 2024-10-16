@@ -45,6 +45,9 @@ const formListName = 'form/list'
 export const optionNone = makeTaggedValue('option/none')
 export const makeOptionSome = makeValueTagger('option/some', 1)
 
+export const resultError = makeValueTagger('result/error', 1)
+export const resultOk = makeValueTagger('result/ok', 1)
+
 export const tryGetFormWord = (f) => (tryGetTag(f) === formWordName ? f.args[0] : null)
 
 export const isForm = (f) => isTaggedValue(f) && (tryGetTag(f) === formWordName || tryGetTag(f) === formListName)
