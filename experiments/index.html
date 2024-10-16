@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html>
   <head>
     <title>canvas gfx</title>
@@ -7,14 +7,6 @@
     <canvas id="myCanvas" width="400" height="400"></canvas>
 
     <script type="module">
-      import { defineMemory } from './core.js'
-      import { setFile, parseEvalFile, getExported, apply } from './interpreter.js'
-      const wunsModules = import.meta.glob('../wuns/*.wuns', {
-        query: '?raw',
-        import: 'default',
-      })
-      for (const [path, module] of Object.entries(wunsModules)) setFile(path, await module())
-
       // Get the canvas element
       const canvas = document.getElementById('myCanvas')
       const dim = 256 * 2
@@ -33,26 +25,17 @@
       canvas.height = height * dpiScale
 
       ctx.scale(dpiScale, dpiScale)
-      const f = '../wuns/gfx.wuns'
-      parseEvalFile(f)
-      import { fill } from './gfx.js'
-      // const fillWuns = getExported(f, 'fill')
-      // const fill = (p, w, h, c) => apply(fillWuns, [p, w, h, c])
       const byteCount = canvas.width * canvas.height * 4
       const pages = Math.ceil(byteCount / 65536) + 1
       console.log({ byteCount, pages })
-      const wunsMemArBuf = defineMemory(pages)
 
-      const clampedui8 = new Uint8ClampedArray(wunsMemArBuf, 0, byteCount)
+      const mem = new WebAssembly.Memory({ initial: pages })
+      import init from './wasm/gfx.wasm?init'
+      const instance = await init({ env: { memory: mem } })
+      const clampedui8 = new Uint8ClampedArray(mem.buffer).subarray(0, byteCount)
       const imageData = new ImageData(clampedui8, canvas.width, canvas.height, { colorSpace: 'display-p3' })
-
-      // const mem = new WebAssembly.Memory({ initial: pages })
-      // import init from '../src/gfx.wasm?init'
-      // const instance = await init({ env: { memory: mem } })
-      // const clampedui8 = new Uint8ClampedArray(mem.buffer).subarray(0, byteCount)
-      // const imageData = new ImageData(clampedui8, canvas.width, canvas.height, { colorSpace: 'display-p3' })
-      // const { exports } = instance
-      // const { fill, fillVec } = exports
+      const { exports } = instance
+      const { fill, fillVec } = exports
       let i = 0
       let incDec = 1
       let frameCount = 0
@@ -65,7 +48,10 @@
           incDec = 1
         }
         i += incDec
+        // call wasm function
         fill(0, canvas.width, canvas.height, ((255 - i) << 16) + i)
+        // fillVec(0, canvas.width, canvas.height, ((255 - i) << 16) + i)
+
         ctx.putImageData(imageData, 0, 0)
         const elapsed = performance.now() - now
         totalElapsed += elapsed
@@ -75,7 +61,9 @@
           totalElapsed = 0
           const fps = 1000 / avgElapsed
           console.log(
-            `rendered ${canvas.width} x ${canvas.height} ${canvas.width * canvas.height} pixels in ${avgElapsed.toFixed(1)}ms or ${fps | 0}fps`,
+            `rendered ${canvas.width} x ${canvas.height} ${canvas.width * canvas.height} pixels in ${avgElapsed.toFixed(
+              2,
+            )}ms or ${fps | 0}fps`,
           )
         }
         window.requestAnimationFrame(step)
