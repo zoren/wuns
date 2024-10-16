@@ -124,6 +124,9 @@ export const evalForm = (defEnv, topForm) => {
         if (numOfArgs !== num)
           throw evalError(`special form '${firstWord}' expected ${num} arguments, got ${numOfArgs}`)
       }
+      const assertTopLevel = () => {
+        if (env !== defEnv) throw evalError(`special form '${firstWord}' must be used at the top level`)
+      }
       const makeClosureOfKind = (kind) => {
         const name = getFormWord(forms[1])
         const parameters = getFormList(forms[2]).map(getFormWord)
@@ -202,7 +205,7 @@ export const evalForm = (defEnv, topForm) => {
           throw evalError('closure macros are not allowed anymore')
         case 'defexpr': {
           assertNumArgs(3)
-          if (env !== defEnv) throw evalError('defmacro defined in the outermost environment')
+          assertTopLevel()
           const name = getFormWord(forms[1])
           const closure = makeClosureOfKind('fexpr')
           defEnv.set(name, closure)
@@ -210,7 +213,7 @@ export const evalForm = (defEnv, topForm) => {
         }
         case 'defmacro': {
           assertNumArgs(3)
-          if (env !== defEnv) throw evalError('defmacro defined in the outermost environment')
+          assertTopLevel()
           const name = getFormWord(forms[1])
           const closure = makeClosureOfKind('macro')
           defEnv.set(name, closure)
@@ -329,7 +332,7 @@ export const evalForm = (defEnv, topForm) => {
         }
         case 'def': {
           assertNumArgs(2)
-          if (env !== defEnv) throw evalError('def must be defined in the outermost environment')
+          assertTopLevel()
           const name = getFormWord(forms[1])
           const value = go(env, forms[2])
           defEnv.set(name, value)
@@ -338,7 +341,7 @@ export const evalForm = (defEnv, topForm) => {
         // types
         case 'type': {
           if (numOfArgs % 3 !== 0) throw evalError('type expected triplets')
-          if (env !== defEnv) throw evalError('type must be defined in the outermost environment')
+          assertTopLevel()
           for (let i = 1; i < forms.length; i += 3) {
             const type = getFormWord(forms[i])
             const _typeParams = getFormList(forms[i + 1]).map(getFormWord)
@@ -392,6 +395,7 @@ export const evalForm = (defEnv, topForm) => {
         }
         case 'load': {
           assertNumArgs(1)
+          assertTopLevel()
           const relativeFilePath = getFormWord(forms[1])
           const resolvedPath = getPathRelativeToCurrentDir(defEnv, relativeFilePath)
           const fileForms = readFile(resolvedPath)
