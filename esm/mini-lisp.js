@@ -19,13 +19,6 @@ const setEnv = (env, varName, value) => {
   env.set(varName, value)
 }
 
-const getPathRelativeToCurrentDir = (defEnv, relativeFilePath) => {
-  const { currentDir } = defEnv
-  if (!currentDir) throw new Error('load expects currentDir')
-  if (typeof currentDir !== 'string') throw new Error('currentDir must be a string')
-  return path.join(currentDir, relativeFilePath)
-}
-
 class Closure extends Function {
   constructor(f, kind, paramEnvMaker, body) {
     f.kind = kind
@@ -38,6 +31,16 @@ class Closure extends Function {
 
 const makeClosure = (f, kind, paramEnvMaker, body) => Object.freeze(new Closure(f, kind, paramEnvMaker, body))
 export const isClosure = (v) => v instanceof Closure
+
+import path from 'node:path'
+
+const getPathRelativeToCurrentDir = (defEnv, relativeFilePath) => {
+  const { currentDir } = defEnv
+  if (!currentDir) throw new Error('load expects currentDir')
+  if (typeof currentDir !== 'string') throw new Error('currentDir must be a string')
+  return path.join(currentDir, relativeFilePath)
+}
+
 import {
   tryGetFormWord,
   tryGetFormList,
@@ -54,7 +57,6 @@ import {
   makeOptionSome,
   makeRecordFromObj,
 } from './core.js'
-import path from 'node:path'
 
 class EvalError extends Error {
   constructor(message, form, innerError) {
