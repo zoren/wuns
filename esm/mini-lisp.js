@@ -295,22 +295,8 @@ export const evalForm = (defEnv, topForm) => {
           form = forms[2]
           continue
         }
-        case 'letrec': {
-          assertNumArgs(2)
-          const bindings = getFormList(forms[1])
-          if (bindings.length % 2 !== 0) throw evalError('odd number of bindings')
-          const newEnv = makeEnv(env)
-          try {
-            const values = []
-            for (let i = 0; i < bindings.length - 1; i += 2) values.push(go(newEnv, bindings[i + 1]))
-            for (let i = 0; i < bindings.length - 1; i += 2) setEnv(newEnv, getFormWord(bindings[i]), values[i / 2])
-          } catch (e) {
-            throw evalError('error in let bindings', e)
-          }
-          env = newEnv
-          form = forms[2]
-          continue
-        }
+        case 'letrec':
+          throw evalError('letrec is not allowed anymore')
         case 'letfn': {
           assertNumArgs(2)
           const functionsList = getFormList(forms[1])
