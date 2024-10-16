@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>canvas gfx</title>
+  </head>
+  <body>
+    <script>
+      // https://stackoverflow.com/a/1547940/3495920
+      const urlChars = `ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~:/?#[]@!$&'()*+,;=`
+      const charCodes = [...urlChars].map((c) => c.charCodeAt(0))
+      charCodes.sort((a, b) => a - b)
+      const urlSet = new Set(charCodes)
+      for (let i = 32; i < 127; i++) console.log(i, String.fromCharCode(i), urlSet.has(i))
+    </script>
+  </body>
+</html>
