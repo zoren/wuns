@@ -396,7 +396,7 @@ export const evalForm = (defEnv, topForm) => {
           const resolvedPath = getPathRelativeToCurrentDir(defEnv, relativeFilePath)
           const fileForms = readFile(resolvedPath)
           let result = langUndefined
-          for (const fileForm of fileForms) result = evalForm(defEnv, fileForm)
+          for (const fileForm of fileForms) result = go(defEnv, fileForm)
           return result
         }
       }
