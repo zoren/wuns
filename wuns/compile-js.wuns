@@ -404,7 +404,7 @@
             [js-stmt/exp [cexp bform]]]]]]
     [match top-form
       [bform/do forms]
-      [js-stmt/seq [list-map f forms [cstmt outer-is-tail f]]]
+      [js-stmt/seq [list-map f forms [compile-top-form node-to-ldesc outer-is-tail f]]]
 
       [cstmt outer-is-tail top-form]]]]]
 
