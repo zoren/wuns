@@ -486,12 +486,6 @@
 [def-extern byte-array-get [func [byte-array i32] i32]]
 [def-extern byte-array-set [func [byte-array i32 i32] [tuple]]]
 [def-extern byte-array-log-as-string [func [byte-array] [tuple]]]
-[def-extern wat-to-byte-array [func [byte-array] byte-array]]
-[type wasm-module [] [union]]
-[def-extern byte-array-to-wasm-module [func [byte-array] wasm-module]]
-[type wasm-instance [] [union]]
-[def-extern wasm-instantiate [func [wasm-module] wasm-instance]]
-[def-extern wasm-call-export [type-scheme [a] [func [wasm-instance word [list a]] [list a]]]]
 
 [defn word-list-contains [w .. words]
   [let [s-words [size words]]
