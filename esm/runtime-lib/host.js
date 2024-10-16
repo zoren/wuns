@@ -15,7 +15,7 @@ import {
   makeOptionSome,
   makeRecordFromObj,
   tryGetTag,
-} from './core.js'
+} from '../core.js'
 
 export const abort = (message) => {
   throw new Error('abort: ' + message.map(f => print(f)).join(' '))

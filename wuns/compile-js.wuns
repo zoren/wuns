@@ -55,10 +55,17 @@
   ]
 ]
 
+[type externs-object [] [union]]
+
 [def run-js-stmt
   [type-anno
     [extern js run-js-stmt]
-    [func [js-stmt] [result js-value js-value]]]]
+    [func [js-stmt externs-object] [result js-value js-value]]]]
+
+[def externs-object-value
+  [type-anno
+    [extern]
+    [externs-object]]]
 
 [def write-js-stmt
   [type-anno
@@ -431,7 +438,7 @@
     [match [map-result forms comp-run]
       [result/error e] [result/error e]
       [result/ok stmts]
-      [match [run-js-stmt [js-stmt/seq stmts]]
+      [match [run-js-stmt [js-stmt/seq stmts] externs-object-value]
         [result/error jsval-err]
         [result/error [compile-run-error/eval-error jsval-err]]
 

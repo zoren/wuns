@@ -1,12 +1,5 @@
-import { jsHost } from './host-js.js'
-import { isJSReservedWord } from './utils.js'
-import { makeValueTagger } from './core.js'
-
-const { host } = jsHost
-
-const perf = () => performance.now()
-
-const externs = { host, 'performance-now': perf }
+import { isJSReservedWord } from '../utils.js'
+import { makeValueTagger } from '../core.js'
 
 const binopMap = {
   add: '+',
@@ -137,7 +130,7 @@ const jsStmtToString = (js) => {
 const error = makeValueTagger('result/error', 1)
 const ok = makeValueTagger('result/ok', 1)
 
-const runJs = (jsSrc) => {
+const runJs = (jsSrc, externs) => {
   // console.log(jsSrc)
   try {
     const runFunc = new Function('externs', jsSrc)
@@ -158,19 +151,13 @@ const runJs = (jsSrc) => {
   }
 }
 
-const runJsExp = (res) => {
-  const jsSrc = jsExpToString(res)
-  // console.log('runJsExp src', jsSrc)
-  return runJs(jsSrc)
-}
-
-const runJsStmt = (res) => {
+export const run_js_stmt = (res, externs) => {
   const jsSrc = jsStmtToString(res)
   // console.log('runJsStmt src', jsSrc)
-  return runJs(jsSrc)
+  return runJs(jsSrc, externs)
 }
 
-const callJsFunc = (func, args) => {
+export const call_js_func = (func, args) => {
   if (typeof func !== 'function') {
     console.log('func', func)
     throw new Error('not a function')
@@ -192,20 +179,11 @@ const prettierOptions = {
 
 import fs from 'fs'
 
-const writeJsStmt = (file_name, stmt) => {
+export const write_js_stmt = (file_name, stmt) => {
   const jsSrc = jsStmtToString(stmt)
   prettier.format(jsSrc, prettierOptions).then((formatted) => {
     fs.writeFileSync(file_name, formatted)
   })
 }
 
-const jsExtern = {
-  'run-js-stmt': runJsStmt,
-  'run-js-exp': runJsExp,
-  'call-js-func': callJsFunc,
-  identity: (v) => v,
-  'write-js-stmt': writeJsStmt,
-}
-
-externs.js = jsExtern
-export default externs
+export const identity = (v) => v

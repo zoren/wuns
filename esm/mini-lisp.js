@@ -1,4 +1,4 @@
-import externs from './externs.js'
+import externs from './runtime-lib/externs.js'
 const defEnvTag = Symbol('def-env')
 export const makeDefEnv = (currentDir) => {
   if (!currentDir) throw new Error('makeDefEnv expects currentDir')
