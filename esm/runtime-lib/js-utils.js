@@ -56,7 +56,7 @@ const jsExpToString = (js) => {
     case 'js-exp/array':
       return `[${arg(0).map(jsExpToString).join(', ')}]`
     case 'js-exp/object': {
-      const entries = arg(0).map(({ fst, snd }) => `${fst}: ${jsExpToString(snd)}`)
+      const entries = arg(0).map(({ fst, snd }) => `'${fst}': ${jsExpToString(snd)}`)
       return `{${entries.join(', ')}}`
     }
     case 'js-exp/subscript':
