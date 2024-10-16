@@ -29,8 +29,8 @@ import {
   readFile,
   tryGetFormList,
   tryGetFormWord,
-  isClosure,
   makeClosure,
+  tryGetClosureKind,
 } from './core.js'
 
 class EvalError extends Error {
@@ -376,23 +376,20 @@ export const makeEvalForm = (externs, defEnv) => {
       const func = go(env, firstForm)
       const args = forms.slice(1)
       // closures are also functions so we to check if it is a closure first
-      if (!isClosure(func)) {
-        if (typeof func === 'function') {
-          try {
-            return func(...args.map((arg) => go(env, arg)))
-          } catch (e) {
-            throw evalError('error in function call', e)
-          }
+      const closureKind = tryGetClosureKind(func)
+      if (!closureKind) {
+        if (typeof func !== 'function') throw evalError('not a function')
+        try {
+          return func(...args.map((arg) => go(env, arg)))
+        } catch (e) {
+          throw evalError('error in function call', e)
         }
-        throw evalError('not a function')
       }
-      const { kind, paramEnvMaker, body } = func
-      switch (kind) {
-        case 'macro': {
-          const macroResult = go(paramEnvMaker(args), body)
-          form = macroResult
+      const { paramEnvMaker, body } = func
+      switch (closureKind) {
+        case 'macro':
+          form = go(paramEnvMaker(args), body)
           continue
-        }
         case 'fexpr':
           env = paramEnvMaker(args)
           form = body

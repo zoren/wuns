@@ -57,7 +57,7 @@ const modificationModifier = encodeTokenModifiers('modification')
  * @param {vscode.TextDocument} document
  */
 const makeProvideDocumentSemanticTokensForms = async () => {
-  const { makeDefEnv, isClosure, tryGetFormWord, tryGetFormList, treeToFormsSafeNoMeta, tryGetNodeFromForm } =
+  const { makeDefEnv, tryGetClosureKind, tryGetFormWord, tryGetFormList, treeToFormsSafeNoMeta, tryGetNodeFromForm } =
     await import('./esm/core.js')
   const { makeEvalForm } = await import('./esm/mini-lisp.js')
   const { default: externs } = await import('./esm/runtime-lib/externs.js')
@@ -224,29 +224,27 @@ const makeProvideDocumentSemanticTokensForms = async () => {
           }
           // check if headWord is a defed macro or fexpr, or a func
           const headValue = defEnv.get(headWord)
-          if (isClosure(headValue)) {
-            switch (headValue.kind) {
-              case 'macro': {
-                pushToken(head, macroTokenType)
-                const macroResult = headValue(...tail)
-                go(macroResult)
-                return
+          switch (tryGetClosureKind(headValue)) {
+            case 'macro':
+              pushToken(head, macroTokenType)
+              go(headValue(...tail))
+              return
+            case 'fexpr':
+              pushToken(head, functionTokenType)
+              const goQuote = (form) => {
+                if (tryGetFormWord(form)) pushToken(form, stringTokenType)
+                else getListOrEmpty(form).forEach(goQuote)
               }
-              case 'fexpr':
-                pushToken(head, functionTokenType)
-                const goQuote = (form) => {
-                  if (tryGetFormWord(form)) pushToken(form, stringTokenType)
-                  else getListOrEmpty(form).forEach(goQuote)
-                }
-                for (const form of tail) goQuote(form)
-                return
-              case 'func':
-                pushToken(head, functionTokenType)
-                for (const form of tail) go(form)
-                return
-              default:
-                throw new Error('unexpected closure kind')
-            }
+              for (const form of tail) goQuote(form)
+              return
+            case 'func':
+              pushToken(head, functionTokenType)
+              for (const form of tail) go(form)
+              return
+            case null:
+              break
+            default:
+              throw new Error('unexpected closure kind')
           }
           pushToken(head, functionTokenType)
           for (const form of tail) go(form)

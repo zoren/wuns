@@ -207,4 +207,4 @@ class Closure extends Function {
 }
 
 export const makeClosure = (f, kind, paramEnvMaker, body) => Object.freeze(new Closure(f, kind, paramEnvMaker, body))
-export const isClosure = (v) => v instanceof Closure
+export const tryGetClosureKind = (v) => (v instanceof Closure ? v.kind : null)

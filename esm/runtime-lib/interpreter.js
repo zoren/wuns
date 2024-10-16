@@ -9,7 +9,7 @@ import {
   optionNone,
   tryGetFormList,
   tryGetFormWord,
-  isClosure,
+  tryGetClosureKind,
 } from '../core.js'
 
 export const make_context = (currentDir) => {
@@ -31,7 +31,7 @@ export const macro_expand = (context, form) => {
     return form
   }
   const defValue = context.get(firstWord)
-  if (!defValue || !isClosure(defValue) || defValue.kind !== 'macro') {
+  if (!defValue || tryGetClosureKind(defValue) !== 'macro') {
     console.log('expected macro', defValue)
     return form
   }
@@ -42,7 +42,7 @@ export const try_get_macro = (context, name) => {
   if (!isDefEnv(context)) throw new Error('try-get-macro expects context')
   if (typeof name !== 'string') throw new Error('try-get-macro expects string')
   const value = context.get(name)
-  if (isClosure(value) && value.kind === 'macro') return makeOptionSome(value)
+  if (tryGetClosureKind(value) === 'macro') return makeOptionSome(value)
   return optionNone
 }
 
@@ -71,7 +71,7 @@ export const evaluate_list_num = (context, fname, args) => {
 }
 
 export const apply = (func, args) => {
-  if (!isClosure(func)) throw new Error('apply expects closure')
+  if (typeof func !== 'function') throw new Error('apply expects function')
   if (!Array.isArray(args)) throw new Error('apply expects array')
   return func(...args)
 }
