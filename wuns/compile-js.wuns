@@ -127,7 +127,7 @@
 [defn form-to-quoted-js [form]
   [match form
     [form/word w]
-    [js-exp/call [js-exp/var [word form/word]] [list [js-exp/string [word w]]]]
+    [js-exp/call [js-exp/var [word form/word]] [list [js-exp/string w]]]
 
     [form/list l]
     [js-exp/call [js-exp/var [word form/list]]
