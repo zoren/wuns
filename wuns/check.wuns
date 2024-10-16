@@ -944,10 +944,10 @@
                 [none]]
               [none]]]
             [match opt-type
-              [none] [do
+              [option/none] [do
                 [report form expects a known intrinsic]
                 [generate-fresh-type-var gctx level]]
-              [some t] t]]]
+              [option/some t] t]]]
 
         [eq-form first-form [quote type-anno]]
         [let-do
@@ -982,7 +982,7 @@
                 [none]]
              is-fexpr
               [match opt-func-kind
-                [some fk]
+                [option/some fk]
                 [match fk
                   [function-kind/fexpr] 1
                   [function-kind/macro]
