@@ -56,14 +56,6 @@ import {
 } from './core.js'
 import path from 'node:path'
 
-const printForm = (form) => {
-  const word = tryGetFormWord(form)
-  if (word) return word
-  const list = tryGetFormList(form)
-  if (list) return `[${list.map(printForm).join(' ')}]`
-  throw new Error('unexpected form: ' + form)
-}
-
 class EvalError extends Error {
   constructor(message, form, innerError) {
     super(message)
