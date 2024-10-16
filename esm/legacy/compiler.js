@@ -134,7 +134,7 @@ class CompileError extends Error {
   }
 }
 
-import { tryGetFormWord, tryGetFormList } from './core.js'
+import { tryGetFormWord, tryGetFormList } from '../core.js'
 
 const getFormWord = (form) => {
   const word = tryGetFormWord(form)
@@ -166,8 +166,8 @@ const mkCallRecursiveInst = (name, args) => Object.freeze({ tag: instOpCallRecur
 const mkPushRecursionContextInst = (name, body) => Object.freeze({ tag: instOpPushRecursionContext, name, body })
 const dropInst = Object.freeze({ tag: instOpDrop })
 
-import { instructionFunctions } from './instructions.js'
-import { wrapJSFunctionsToObject } from './utils.js'
+import { instructionFunctions } from '../instructions.js'
+import { wrapJSFunctionsToObject } from '../utils.js'
 
 const instructions = wrapJSFunctionsToObject(instructionFunctions)
 
