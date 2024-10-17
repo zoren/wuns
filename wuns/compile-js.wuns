@@ -415,6 +415,10 @@
         [result/ok [clone-growable-to-frozen-list gl]]]]
       0]]]
 
+[defn log-report-message [error]
+  [log-location [report-message/form error]]
+  [log [report-message/message error]]]
+
 [defn compile-run-forms [forms]
   [assert [not [is-empty forms]] run-forms must not be empty]
   [let-do
@@ -427,7 +431,7 @@
         [result/error f2a-errors]
         [do
           [for-each error f2a-errors
-            [log-location [report-message/form error]]]
+            [log-report-message error]]
           [result/error [compile-run-error/form-to-ast-errors f2a-errors]]]
 
         [result/ok bform]
@@ -454,7 +458,7 @@
         [result/error f2a-errors]
         [do
           [for-each error f2a-errors
-            [log-location [report-message/form error]]]
+            [log-report-message error]]
           [result/error [compile-run-error/form-to-ast-errors f2a-errors]]]
 
         [result/ok bform]
