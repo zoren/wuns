@@ -32,12 +32,10 @@ export const isTaggedValue = (v) => v instanceof TaggedValue
 export const tryGetTag = (v) => (isTaggedValue(v) ? v.tag : null)
 export const makeTaggedValue = (tag, ...args) => Object.freeze(new TaggedValue(tag, ...args))
 export const makeValueTagger = (tag, arity) => {
-  const f = (...args) => {
+  return (...args) => {
     if (args.length !== arity) throw new Error(`'${tag}' expected ${arity} arguments, got ${args.length}`)
     return makeTaggedValue(tag, ...args)
   }
-  f.tag = tag
-  return f
 }
 
 const formWordName = 'form/word'
