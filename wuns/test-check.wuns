@@ -102,15 +102,6 @@
 [test-ok word [let [v [word a]] v]]
 [test-ok word [let [v [word a] u v] u]]
 
-[comment letrec]
-[test-ok [func [i32] i32]
-  [letrec
-    [is-even
-      [func ieven [n] [if [[intrinsic i32.eq] [i32 0] n] [i32 1] [is-odd [[intrinsic i32.sub] n [i32 1]]]]]
-     is-odd
-      [func iodd [n] [if [[intrinsic i32.eq] [i32 0] n] [i32 0] [is-even [[intrinsic i32.sub] n [i32 1]]]]]]
-    is-even]]
-
 [comment letfn]
 [test-ok [func [i32] i32]
   [letfn
