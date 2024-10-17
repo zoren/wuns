@@ -178,8 +178,9 @@ import fs from 'fs'
 
 export const write_js_stmt = (file_name, stmt) => {
   const jsSrc = jsStmtToString(stmt)
+  fs.writeFileSync(file_name + '.orig.js', jsSrc)
   prettier.format(jsSrc, prettierOptions).then((formatted) => {
-    fs.writeFileSync(file_name, formatted)
+    fs.writeFileSync(file_name + '.formatted.js', formatted)
   })
 }
 
