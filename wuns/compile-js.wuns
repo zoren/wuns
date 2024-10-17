@@ -402,19 +402,6 @@
     [form-to-ast-errors [list report-message]]
     [eval-error js-value]]]
 
-[defn map-result [l f]
-  [let [gl [growable-list]]
-    [[func go [i]
-      [if [lt-s i [size l]]
-        [match [f [at l i]]
-          [result/error e] [result/error e]
-          [result/ok v]
-          [do
-            [push gl v]
-            [go [inc i]]]]
-        [result/ok [clone-growable-to-frozen-list gl]]]]
-      0]]]
-
 [defn log-report-message [error]
   [log-location [report-message/form error]]
   [log [report-message/message error]]]
