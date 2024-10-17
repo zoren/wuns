@@ -102,6 +102,19 @@
     [errors [growable-list report-message]]
     [node-to-ldesc [transient-kv-map bform local-var-kind]]]]
 
+[defn builtin-type-arity-ok [type-name n-of-type-args]
+  [switch type-name
+    [[word tuple]] [some true]
+    [[word i32] [word f64] [word word]] [some [eq n-of-type-args 0]]
+    [[word list] [word atom]] [some [eq n-of-type-args 1]]
+    [[word type] [word type-anno]] [some [eq n-of-type-args 2]]
+    [none]]]
+
+[defn is-builtin-type [type-name]
+  [if-let [arity [builtin-type-arity-ok type-name 0]]
+    true
+    false]]
+
 [defn mk-form-to-ast []
   [let
     [eval-ctx [make-eval-context [current-dir]]
@@ -141,6 +154,12 @@
       [let-do [w [get-word f]]
         [when [has def-ctx w] [push-error f [quote [redefing def]]]]
         [set-kv-map def-ctx w kind]]]
+    type-ctx [transient-kv-map]
+    set-type
+    [func st [f kind]
+      [let-do [w [get-word f]]
+        [when [has type-ctx w] [push-error f [quote [redefing type]]]]
+        [set-kv-map type-ctx w kind]]]
     parse-param-list
     [func parse-param-list [param-list]
       [let
