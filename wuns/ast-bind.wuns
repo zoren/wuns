@@ -1,21 +1,21 @@
 [load std.wuns]
 [load interpreter-externs.wuns]
 
-[type type []
+[type btype []
   [union
     [word word]
-    [func [list type] [option type] type]
-    [apply word [list type]]]]
+    [func [list btype] [option btype] btype]
+    [apply word [list btype]]]]
 
 [type btype-scheme []
   [record
     [type-params [list word]]
-    [type type]]]
+    [type btype]]]
 
 [type type-decl-kind []
   [union
-    [union [list [pair word [list type]]]]
-    [record [list [pair word type]]]]]
+    [union [list [pair word [list btype]]]]
+    [record [list [pair word btype]]]]]
 
 [type type-decl []
   [record
@@ -157,7 +157,7 @@
       [func form-to-type [form]
         [match form
           [form/word w]
-          [type/word w]
+          [btype/word w]
 
           [form/list l]
           [do
@@ -170,14 +170,14 @@
                 [[word func]]
                 [let-do [parsed-params [parse-param-list [get-list [second l]]]]
                   [log parsed-params]
-                  [type/func
+                  [btype/func
                     [list-map p [pair/fst parsed-params] [form-to-type p]]
                     [if-let [rest-param [pair/snd parsed-params]]
                       [some [form-to-type rest-param]]
                       [none]]
                     [form-to-type [third l]]]]
 
-                [type/apply
+                [btype/apply
                   fw
                   [list-map arg [rest l] [form-to-type arg]]]]]]]]
       [func form-to-type-scheme [form]
