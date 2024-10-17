@@ -145,20 +145,28 @@ export const treeToFormsSafeNoMeta = (tree) => {
    */
   const tryNodeToForm = (node) => {
     const { isError, type } = node
-    if (isError) return null
+    const mkWord = () => {
+      const formWord = makeTaggedValue('form/word', node.text)
+      formToNodeMap.set(formWord, node)
+      return formWord
+    }
+    const mkList = () => {
+      const formList = makeTaggedValue('form/list', childrenToList(node))
+      formToNodeMap.set(formList, node)
+      return formList
+    }
+    if (isError) {
+      if (node.text.startsWith(']')) return null
+      if (node.text.startsWith('[')) return mkList()
+      return mkWord()
+    }
     switch (type) {
-      case 'word': {
-        const formWord = makeTaggedValue('form/word', node.text)
-        formToNodeMap.set(formWord, node)
-        return formWord
-      }
-      case 'list': {
-        const formList = makeTaggedValue('form/list', childrenToList(node))
-        formToNodeMap.set(formList, node)
-        return formList
-      }
+      case 'word':
+        return mkWord()
+      case 'list':
+        return mkList()
       default:
-        return null
+        throw new Error('unexpected node type: ' + type)
     }
   }
   const childrenToList = (node) => {
