@@ -398,6 +398,14 @@
       [unify-report gctx then-type else-type cond]
       then-type]
 
+    [bform/do sub-forms]
+    [if [is-empty sub-forms]
+      type-empty-tuple
+      [do
+        [for i 0 [dec [size sub-forms]]
+          [check gctx [at sub-forms i]]]
+        [check gctx [last sub-forms]]]]
+
     [logq-abort check not implemented]]]
 
 [defn normalize-deep [internal-type]

@@ -38,4 +38,8 @@
   [test-errors word [[not unifiable - different types]] [if [i32 5] [word a] [i32 5]]]
   [test-ok i32 [if [i32 5] [i32 6] [i32 7]]]
   [test-ok word [if [i32 5] [word a] [word b]]]
+
+  [test-ok [tuple] [do]]
+  [test-ok word [do [word a]]]
+  [test-ok i32 [do [word a] [i32 3]]]
 ]]
