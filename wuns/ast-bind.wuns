@@ -118,6 +118,10 @@
       true
       false]]]
 
+[defn log-report-message [error]
+  [log-location [report-message/form error]]
+  [log [report-message/message error]]]
+
 [defn mk-form-to-ast []
   [let
     [eval-ctx [make-eval-context [current-dir]]
