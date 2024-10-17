@@ -279,11 +279,10 @@
   clocal-context []
   [record
     [vars [transient-kv-map word check-type-scheme]]
-    [outer [option clocal-context]]
-    [first-form form]]]
+    [outer [option clocal-context]]]]
 
-[defn make-local-context [var-values lctx-opt first-form]
-  [some [clocal-context var-values lctx-opt first-form]]]
+[defn make-local-context [var-values lctx-opt]
+  [some [clocal-context var-values lctx-opt]]]
 
 [defn try-get-local-var-type [local-ctx var-name]
   [[func go [cur-ctx]
@@ -381,32 +380,60 @@
     [for-each error errors
       [report-fn gctx error form]]]]
 
-[defn check [gctx bform]
-  [match bform
-    [bform/literal l]
-    [literal-to-type l]
+[defmacro report [form .. lmsg]
+  [flist [quote report-fn] [quote gctx] [flist [quote quote] [form/list lmsg]] form]]
 
-    [bform/intrinsic in]
-    [intrinsic-name-to-type in]
+[defn check [gctx outer-bform]
+  [letfn [
+    [func go [level lctx bform]
+      [match bform
+        [bform/var w]
+        [if-let [type-scheme [try-get-var-type gctx lctx w]]
+          [specialize-type-scheme [check-context/type-var-counter gctx] level type-scheme]
+          [do
+            [report bform check not implemented]
+            [generate-fresh-type-var-atom [check-context/type-var-counter gctx] level]]]
 
-    [bform/if cond then else]
-    [let-do
-      [cond-type [check gctx cond]
-       then-type [check gctx then]
-       else-type [check gctx else]]
-      [unify-report gctx type-i32 cond-type cond]
-      [unify-report gctx then-type else-type cond]
-      then-type]
+        [bform/literal l]
+        [literal-to-type l]
 
-    [bform/do sub-forms]
-    [if [is-empty sub-forms]
-      type-empty-tuple
-      [do
-        [for i 0 [dec [size sub-forms]]
-          [check gctx [at sub-forms i]]]
-        [check gctx [last sub-forms]]]]
+        [bform/intrinsic in]
+        [intrinsic-name-to-type in]
 
-    [logq-abort check not implemented]]]
+        [bform/if cond then else]
+        [let-do
+          [cond-type [go level lctx cond]
+           then-type [go level lctx then]
+           else-type [go level lctx else]]
+          [unify-report gctx type-i32 cond-type cond]
+          [unify-report gctx then-type else-type then]
+          then-type]
+
+        [bform/do sub-forms]
+        [if [is-empty sub-forms]
+          type-empty-tuple
+          [do
+            [for i 0 [dec [size sub-forms]]
+              [go level lctx [at sub-forms i]]]
+            [go level lctx [last sub-forms]]]]
+
+        [bform/let bindings body]
+        [let-do
+          [var-types [transient-kv-map]
+           let-ctx [make-local-context var-types lctx]
+           level-1 [inc level]]
+          [for-each binding bindings
+            [let-do
+              [var [pair/fst binding]
+               val-type [go level-1 let-ctx [pair/snd binding]]
+               general-val-type [generalize level val-type]]
+              [set-kv-map var-types var general-val-type]]]
+          [go level let-ctx body]]
+
+        [do
+          [log bform]
+          [logq-abort check not implemented]]]]]
+      [go 0 [none] outer-bform]]]
 
 [defn normalize-deep [internal-type]
   [let-do [nt [normalize-type internal-type]]

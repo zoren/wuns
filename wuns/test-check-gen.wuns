@@ -42,4 +42,10 @@
   [test-ok [tuple] [do]]
   [test-ok word [do [word a]]]
   [test-ok i32 [do [word a] [i32 3]]]
+
+  [test-ok word [let [] [word a]]]
+  [test-ok word [let [v [word a]] [word a]]]
+  [test-ok word [let [v [word a]] v]]
+  [test-ok word [let [v [word a] u v] u]]
+
 ]]
