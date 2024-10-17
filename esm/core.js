@@ -144,12 +144,12 @@ export const treeToFormsSafeNoMeta = (tree) => {
   const tryNodeToForm = (node) => {
     const { isError, type } = node
     const mkWord = () => {
-      const formWord = makeTaggedValue('form/word', node.text)
+      const formWord = makeTaggedValue(formWordName, node.text)
       formToNodeMap.set(formWord, node)
       return formWord
     }
     const mkList = () => {
-      const formList = makeTaggedValue('form/list', childrenToList(node))
+      const formList = makeTaggedValue(formListName, childrenToList(node))
       formToNodeMap.set(formList, node)
       return formList
     }
