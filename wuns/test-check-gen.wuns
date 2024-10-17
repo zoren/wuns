@@ -1,0 +1,41 @@
+[load std.wuns]
+
+[type check-test []
+  [union
+    [ok form [list form]]
+    [error form [list form] [list form]]]]
+
+[defn make-check-test-ok [expected-type forms]
+  [assert [not [is-empty forms]] make-check-test-error forms is empty]
+  [check-test/ok expected-type forms]]
+
+[defmacro test-ok [expected-type .. forms]
+  [flist [quote make-check-test-ok]
+    [mk-quote expected-type]
+    [form-concat [list [quote list]] [list-map f forms [mk-quote f]]]]]
+
+[defn make-check-test-error [expected-type expected-messages forms]
+  [assert [not [is-empty expected-messages]] make-check-test-error expected-messages is empty]
+  [assert [not [is-empty forms]] make-check-test-error forms is empty]
+  [check-test/error expected-type expected-messages forms]]
+
+[defmacro test-errors [expected-type expected-messages .. forms]
+  [flist [quote make-check-test-error]
+    [mk-quote expected-type]
+    [form-concat [list [quote list]] [list-map m [form-to-list expected-messages] [mk-quote m]]]
+    [form-concat [list [quote list]] [list-map f forms [mk-quote f]]]]]
+
+[def tests [list
+  [test-ok i32 [i32 5]]
+  [test-ok f64 [f64 1.5]]
+  [test-ok word [word a]]
+
+  [test-ok [func [i32 i32] i32] [intrinsic i32.add]]
+  [test-ok [func [f64 f64] f64] [intrinsic f64.add]]
+
+  [test-errors i32 [[not unifiable - different types]] [if [word ok] [i32 5] [i32 5]]]
+  [test-errors i32 [[not unifiable - different types]] [if [i32 5] [i32 5] [word a]]]
+  [test-errors word [[not unifiable - different types]] [if [i32 5] [word a] [i32 5]]]
+  [test-ok i32 [if [i32 5] [i32 6] [i32 7]]]
+  [test-ok word [if [i32 5] [word a] [word b]]]
+]]

@@ -147,7 +147,7 @@
   [let-do
     [errors [growable-list]
      push-unify-error
-     [func push-unify-error [msg] [push errors [form-to-list msg]]]
+     [func push-unify-error [msg] [push errors msg]]
      go
      [func go [t1 t2]
       [let [nt1 [normalize-type t1]
@@ -201,8 +201,6 @@
                       [go [at type-args1 i] [at type-args2 i]]]
                     [push-unify-error [quote [not unifiable - different number of type arguments]]]]
                   [do
-                    [log inst-type1]
-                    [log inst-type2]
                     [push-unify-error [quote [not unifiable - different types]]]]]
 
                 [do
@@ -295,27 +293,6 @@
         [go outer]
         [none]]]] local-ctx]]
 
-[type check-context []
-  [record
-    [messages [growable-list report-message]]
-    [def-var-types [transient-kv-map word check-type-scheme]]
-    [type-var-counter [atom i32]]
-    [types [transient-kv-map word type-def]]]]
-
-[defn make-global-context []
-  [check-context
-    [growable-list]
-    [transient-kv-map]
-    [atom 0]
-    [transient-kv-map]]]
-
-[defn try-get-var-type [gctx local-ctx-opt var-name]
-  [if-let [ltype [if-let [local-ctx local-ctx-opt]
-                    [try-get-local-var-type local-ctx var-name]
-                    [none]]]
-    [some ltype]
-    [try-get [check-context/def-var-types gctx] var-name]]]
-
 [defn instantiate-annotated-type [type-var-env outer-syntax-type]
   [[func go [syntax-type]
     [match syntax-type
@@ -372,6 +349,38 @@
 
     [logq-abort intrinsic-name-to-type not implemented]]]
 
+[type check-context []
+  [record
+    [messages [growable-list report-message]]
+    [def-var-types [transient-kv-map word check-type-scheme]]
+    [type-var-counter [atom i32]]
+    [types [transient-kv-map word type-def]]
+    [form-to-ast-converter form-to-ast-converter]]]
+
+[defn make-global-context []
+  [check-context
+    [growable-list]
+    [transient-kv-map]
+    [atom 0]
+    [transient-kv-map]
+    [mk-form-to-ast]]]
+
+[defn try-get-var-type [gctx local-ctx-opt var-name]
+  [if-let [ltype [if-let [local-ctx local-ctx-opt]
+                    [try-get-local-var-type local-ctx var-name]
+                    [none]]]
+    [some ltype]
+    [try-get [check-context/def-var-types gctx] var-name]]]
+
+[defn report-fn [gctx message form]
+  [push [check-context/messages gctx] [report-message message form]]]
+
+[defn unify-report [gctx t1 t2 bform]
+  [let [form [get [form-to-ast-converter/bform-to-form [check-context/form-to-ast-converter gctx]] bform]
+        errors [unify t1 t2]]
+    [for-each error errors
+      [report-fn gctx error form]]]]
+
 [defn check [gctx bform]
   [match bform
     [bform/literal l]
@@ -380,30 +389,16 @@
     [bform/intrinsic in]
     [intrinsic-name-to-type in]
 
+    [bform/if cond then else]
+    [let-do
+      [cond-type [check gctx cond]
+       then-type [check gctx then]
+       else-type [check gctx else]]
+      [unify-report gctx type-i32 cond-type cond]
+      [unify-report gctx then-type else-type cond]
+      then-type]
+
     [logq-abort check not implemented]]]
-
-[defn check-top-forms [gctx forms]
-  [assert [size forms] check-top-forms expects at least one form]
-  [let-do
-    [converter [mk-form-to-ast]
-     f2a [form-to-ast-converter/form-to-ast converter]
-     node-to-ldesc [form-to-ast-converter/node-to-ldesc converter]
-     check-top
-      [func ct [form]
-        [match [f2a form]
-          [result/error f2a-errors]
-          [do
-            [for-each error f2a-errors [log-report-message error]]
-            [result/error f2a-errors]]
-
-          [result/ok bform]
-          [result/ok [check gctx bform]]]]]
-    [[func check-top-forms-go [i]
-      [if [lt-s i [dec [size forms]]]
-        [do
-          [check-top [at forms i]]
-          [check-top-forms-go [inc i]]]
-        [check-top [at forms i]]]] 0]]]
 
 [defn normalize-deep [internal-type]
   [let-do [nt [normalize-type internal-type]]
@@ -472,41 +467,27 @@
         [form/list new-present-type-vars]
         [internal-to-present-type copied-type]]]]]
 
-[defn test-ok-fn [tests-run-atom expected-type forms]
-  [let [gctx [make-global-context]]
-    [match [check-top-forms gctx forms]
-      [result/error messages]
-      [do
-        [assert [not [is-empty messages]] test-ok error but no messages]
-        [for-each message messages
-          [log-report-message message]]
-        [logq-abort test-ok failed there were errors]]
+[defn check-top-forms [gctx forms]
+  [assert [size forms] check-top-forms expects at least one form]
+  [let-do
+    [converter [check-context/form-to-ast-converter gctx]
+     f2a [form-to-ast-converter/form-to-ast converter]
+     node-to-ldesc [form-to-ast-converter/node-to-ldesc converter]
+     check-top
+      [func ct [form]
+        [match [f2a form]
+          [result/error f2a-errors]
+          [do
+            [assert [not [is-empty f2a-errors]] run-forms error but no messages]
+            [logq run-forms form to bound syntax had errors]
+            [for-each f2a-error f2a-errors [log-report-message f2a-error]]
+            [logq-abort check-top-forms failed there were errors]]
 
-      [result/ok res]
-      [let-do [actual-type [normalize-present-type-scheme res]]
-        [assert [eq-form actual-type expected-type] test-ok failed expected type [identity expected-type] but found [identity actual-type]]
-        [inc-atom tests-run-atom]]]]]
-
-[defmacro test-ok [expected-type .. forms]
-  [flist [quote test-ok-fn]
-    [quote tests-run-atom]
-    [mk-quote expected-type]
-    [form-concat [list [quote list]] [list-map f forms [mk-quote f]]]]]
-
-[defn run-test-suite []
-  [let-do [tests-run-atom [atom 0]]
-    [test-ok i32 [i32 5]]
-    [test-ok f64 [f64 1.5]]
-    [test-ok word [word a]]
-
-    [test-ok [func [i32 i32] i32] [intrinsic i32.add]]
-    [test-ok [func [f64 f64] f64] [intrinsic f64.add]]
-
-    [logq tests-run [atom-get tests-run-atom]]
-  ]]
-
-
-[type check-test []
-  [union
-    [ok form [list form]]
-    ]]
+          [result/ok bform]
+          [check gctx bform]]]]
+    [[func check-top-forms-go [i]
+      [if [lt-s i [dec [size forms]]]
+        [do
+          [check-top [at forms i]]
+          [check-top-forms-go [inc i]]]
+        [check-top [at forms i]]]] 0]]]

@@ -101,7 +101,8 @@
   [record
     [form-to-ast [func [form] [result bform [list report-message]]]]
     [errors [growable-list report-message]]
-    [node-to-ldesc [transient-kv-map bform local-var-kind]]]]
+    [node-to-ldesc [transient-kv-map bform local-var-kind]]
+    [bform-to-form [transient-kv-map bform form]]]]
 
 [defn builtin-type-arity-ok [type-name n-of-type-args]
   [switch type-name
@@ -186,6 +187,7 @@
                 false]]
           [pair [slice param-list 0 [sub n-of-param-forms 2]] [some [last param-list]]]
           [pair param-list [none]]]]]
+    bform-to-form [transient-kv-map]
     ]
     [letfn [
       [func mk-form-to-type [type-param-map]
@@ -299,11 +301,13 @@
             [match opt-rest-param [option/none] [option/none] [option/some v] [option/some [get-word v]]]
             [form-to-ast new-lstack [fourth form-list]]]]]
       [func form-to-ast [lstack form]
-        [let [report-error [func r [msg] [push-error form msg]]
+        [let-do
+             [report-error [func r [msg] [push-error form msg]]
               assert-empty-stack [func aes []
                 [match lstack
                   [local-stack/empty] [do]
-                  [local-stack/frame lvars lctx] [report-error [quote [not allowed in local context]]]]]]
+                  [local-stack/frame lvars lctx] [report-error [quote [not allowed in local context]]]]]
+              bform
           [match form
           [form/word w]
           [let-do [bf [bform/var [get-word form]]]
@@ -534,7 +538,11 @@
                       [bform/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]]]]]
 
               [form/list fl]
-              [bform/call [form-to-ast lstack [first l]] [list-map arg [rest l] [form-to-ast lstack arg]]]]]]]]]
+              [bform/call [form-to-ast lstack [first l]] [list-map arg [rest l] [form-to-ast lstack arg]]]]]]
+        ]
+        [set-kv-map bform-to-form bform form]
+        bform
+              ]]]
     [form-to-ast-converter
       [func f2a [top-form]
         [let [bform [form-to-ast [local-stack/empty] top-form]
@@ -543,7 +551,8 @@
             [result/ok bform]
             [result/error errors]]]]
       errors
-      node-to-ldesc]]]]
+      node-to-ldesc
+      bform-to-form]]]]
 
 [defn map-option [f ast]
   [[func go [ast]
