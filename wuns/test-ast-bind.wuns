@@ -33,6 +33,7 @@
       [result/error errors]
       [let-do [expected-errors [form-to-list expected-errors-form]]
         [when-not [eq [size expected-errors] [size errors]]
+          [log-location [first forms]]
           [logq different number of errors than expected]
           [logq expected]
           [for-each error expected-errors [log error]]
@@ -43,6 +44,7 @@
           [let-do [expected-message [at expected-errors i]
                   actual-message [report-message/message [at errors i]]]
             [when-not [eq-form expected-message actual-message]
+              [log-location [first forms]]
               [logq different message than expected]
               [logq expected [identity expected-message]]
               [logq actual [identity actual-message]]]]]]
@@ -72,9 +74,10 @@
     [type-anno [i32 2] [type-scheme [a b c] [func [[list a] [list b]] [list c]]]]]
 
   [test-error [[redefing type]] [type t [] [union]] [type t [] [union]]]
-  [test-error [[builtin type cannot be redefined]] [type i32 [] [union]]]
+  [test-error [[type name is reserved]] [type i32 [] [union]]]
 
-  [test-error [[undefined type]] [type t [] [union [ctor no-such-type]]]]
+  [test-error [[undefined type or type param]] [type t [] [union [ctor no-such-type]]]]
+  [test-error [[undefined type]] [type t [] [union [ctor [no-such-type]]]]]
   [test-error [[type is empty]] [type-anno [i32 2] []]]
   [test-error [[type is empty]] [type-anno [i32 2] [type-scheme [] []]]]
 [comment    [test-error [[does not accept type-scheme]] [type-anno [i32 2] [type-scheme [] type-scheme]]] ]
@@ -87,6 +90,7 @@
   [test-error [[undefined type]] [type t [] [union [ctor [no-such-type]]]]]
   [test-error [[duplicate type param]] [type-anno [i32 2] [type-scheme [a a] i32]]]
   [test-error [[duplicate type param]] [type t [a a] [union]]]
+  [test-error [[reserved types cannot be used as type params]] [type t [i32] [union]]]
 
   ]
 

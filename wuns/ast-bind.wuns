@@ -3,9 +3,10 @@
 
 [type btype []
   [union
-    [word word]
+    [var word]
     [func [list btype] [option btype] btype]
-    [apply word [list btype]]]]
+    [apply word [list btype]]
+    [error]]]
 
 [type btype-scheme []
   [record
@@ -109,10 +110,13 @@
     [[word list] [word atom]] [some [eq n-of-type-args 1]]
     [none]]]
 
-[defn is-builtin-type [type-name]
-  [if-let [arity [builtin-type-arity-ok type-name 0]]
-    true
-    false]]
+[defn is-reserved-type-name [type-name]
+  [switch type-name
+    [[word type-scheme] [word func]] true
+
+    [if-let [arity [builtin-type-arity-ok type-name 0]]
+      true
+      false]]]
 
 [defn mk-form-to-ast []
   [let
@@ -162,8 +166,11 @@
     set-type
     [func st [f arity]
       [let-do [w [get-word f]]
-        [when [has type-ctx w] [push-error f [quote [redefing type]]]]
-        [set-kv-map type-ctx w arity]]]
+        [if [is-reserved-type-name w]
+          [push-error f [quote [type name is reserved]]]
+          [do
+            [when [has type-ctx w] [push-error f [quote [redefing type]]]]
+            [set-kv-map type-ctx w arity]]]]]
     parse-param-list
     [func parse-param-list [param-list]
       [let
@@ -187,33 +194,33 @@
                   [push-error form [quote [wrong number of type arguments to builtin]]]]
                 [btype/apply w [list]]]
               [if [has type-param-map w]
-                [btype/word w]
+                [btype/var w]
                 [if-let [arity [try-get type-ctx w]]
                   [do
                     [when-not [eq 0 arity]
                       [push-error form [quote [wrong number of type arguments]]]]
                     [btype/apply w [list]]]
                   [do
-                    [push-error form [quote [undefined type]]]
-                    [btype/word w]]]]]
+                    [push-error form [quote [undefined type or type param]]]
+                    [btype/var w]]]]]
 
             [form/list l]
             [if [is-empty l]
               [do
                  [push-error form [quote [type is empty]]]
-                 [btype/word [word error]]]
+                 [btype/error]]
               [let-do [fw [get-word [first l]]]
                 [switch fw
                   [[word type-scheme]]
                   [do
                     [push-error form [quote [does not accept type-scheme]]]
-                    [btype/word [word error]]]
+                    [btype/error]]
 
                   [[word func]]
                   [if [lt-s [size l] 3]
                     [do
                       [push-error form [quote [func expects a parameter list and a return type]]]
-                      [btype/word [word error]]]
+                      [btype/error]]
                     [let-do [parsed-params [parse-param-list [get-list [second l]]]]
                       [btype/func
                         [list-map p [pair/fst parsed-params] [f2t p]]
@@ -230,9 +237,7 @@
                         [when-not [eq n-of-args arity]
                           [push-error form [quote [wrong number of type arguments]]]]
                         [push-error form [quote [undefined type]]]]]
-                    [btype/apply
-                      fw
-                      [list-map arg [rest l] [f2t arg]]]]]]]]]]
+                    [btype/apply fw [list-map arg [rest l] [f2t arg]]]]]]]]]]
       [func form-to-type [form] [[mk-form-to-type [transient-kv-map]] form]]
       [func form-to-type-param-list [form]
         [let-do
@@ -243,6 +248,8 @@
               [do
                 [when [has word-to-form tpw]
                   [push-error tpf [quote [duplicate type param]]]]
+                [when [is-reserved-type-name tpw]
+                  [push-error tpf [quote [reserved types cannot be used as type params]]]]
                 [set-kv-map word-to-form tpw tpf]
                 [push type-param-words tpw]]]]
           [pair
@@ -257,7 +264,7 @@
           [if [is-empty l]
             [do
               [push-error form [quote [type is empty]]]
-              [btype-scheme [list] [btype/word [word error]]]]
+              [btype-scheme [list] [btype/error]]]
             [if [eq-word [get-word [first l]] [word type-scheme]]
               [let-do
                 [param-pair [form-to-type-param-list [second l]]]
@@ -461,8 +468,6 @@
                            type-params [pair/fst param-pair]
                            type-params-map [pair/snd param-pair]
                            form-to-type-with-params [mk-form-to-type type-params-map]]
-                          [when [is-builtin-type type-name]
-                            [report-error [quote [builtin type cannot be redefined]]]]
                           [set-type [first triple] [size type-params]]
                           [type-decl
                             type-name
