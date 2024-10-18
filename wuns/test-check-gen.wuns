@@ -64,5 +64,13 @@
     [def d [i32 5]]
     [def d2 d]
     d2]
+  [test-ok [func [[list form]] form]
+    [type form []
+      [union
+        [word word]
+        [list [list form]]]]
+    form/list
+    ]
+
 
 ]]

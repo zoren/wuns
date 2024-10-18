@@ -296,7 +296,7 @@
   [[func go [syntax-type]
     [match syntax-type
       [btype/var tv]
-      [get type-var-env tv]
+      [get type-var-env [syntax-word/word tv]]
 
       [btype/apply type-name targs]
       [switch [syntax-word/word type-name]
@@ -323,7 +323,7 @@
 [defn instantiate-annotated-type-or-scheme [counter-atom level syntax-type-scheme]
   [let [type-var-env [transient-kv-map]]
     [for-each tv [btype-scheme/type-params syntax-type-scheme]
-      [set-kv-map type-var-env tv [generate-fresh-type-var-atom counter-atom level]]]
+      [set-kv-map type-var-env [syntax-word/word tv] [generate-fresh-type-var-atom counter-atom level]]]
     [instantiate-annotated-type type-var-env [btype-scheme/type syntax-type-scheme]]]]
 
 [defn literal-to-type [l]
@@ -351,7 +351,7 @@
 [type check-message []
   [record
     [message form]
-    [location [option syntax-node-location]]]]
+    [location [option syntax-node]]]]
 
 [type check-context []
   [record
@@ -372,6 +372,9 @@
 [defn report-fn [gctx message opt-location]
   [push [check-context/messages gctx] [check-message message opt-location]]]
 
+[defn report-sword [gctx sw message]
+  [push [check-context/messages gctx] [check-message message [syntax-word/node sw]]]]
+
 [defn generate-fresh-type-var [gctx level]
   [generate-fresh-type-var-atom [check-context/type-var-counter gctx] level]]
 
@@ -382,15 +385,15 @@
     [some ltype]
     [try-get [check-context/def-var-types gctx] var-name]]]
 
-[defn try-get-location [gctx bst]
+[defn try-get-node [gctx bst]
   [let [converter [check-context/form-to-ast-converter gctx]
         form [get [form-to-ast-converter/bst-to-form converter] [to-js-value bst]]]
-    [if-let [node [try-get-syntax-node form]] [some [get-syntax-node-location node]] [none]]]]
+    [if-let [node [try-get-syntax-node form]] [some node] [none]]]]
 
 [defn unify-report [gctx t1 t2 bst]
-  [let [opt-location [try-get-location gctx bst]]
+  [let [opt-node [try-get-node gctx bst]]
     [for-each error [unify t1 t2]
-      [report-fn gctx error opt-location]]]]
+      [report-fn gctx error opt-node]]]]
 
 [defn check [gctx outer-bform]
   [letfn [
@@ -407,7 +410,7 @@
         [if-let [type-scheme [try-get-var-type gctx lctx [syntax-word/word w]]]
           [specialize-type-scheme [check-context/type-var-counter gctx] level type-scheme]
           [do
-            [report-fn gctx [quote [check not implemented]] [try-get-location gctx bform]]
+            [report-fn gctx [quote [check not implemented]] [try-get-node gctx bform]]
             [generate-fresh-type-var-atom [check-context/type-var-counter gctx] level]]]
 
         [bform/literal l]
@@ -447,6 +450,60 @@
            general-val-type [generalize level value-type]]
           [set-kv-map [check-context/def-var-types gctx] [syntax-word/word var] general-val-type]
           value-type]
+
+        [bform/type decls]
+        [let
+          [types [check-context/types gctx]
+           def-var-types [check-context/def-var-types gctx]]
+          [for-each decl decls
+            [let [sname [type-decl/name decl]
+                  name-word [syntax-word/word sname]]
+              [if [has types name-word]
+                [report-sword gctx sname [quote [already defined]]]
+                [let [type-params-list [type-decl/type-params decl]
+                      param-map [transient-kv-map]
+                      type-args [growable-list]]
+                  [for-each param-word type-params-list
+                    [when [has param-map [syntax-word/word param-word]]
+                      [report-sword gctx param-word [quote [already defined]]]]
+                    [let [tv [generate-fresh-type-var gctx 1]]
+                      [set-kv-map param-map [syntax-word/word param-word] tv]
+                      [push type-args tv]]]
+                  [set-kv-map types name-word
+                    [type-def
+                      [size type-params-list]
+                      param-map
+                      [make-type-list name-word [clone-growable-to-frozen-list type-args]]]]]]]]
+          [for-each decl decls
+            [let
+             [sname [type-decl/name decl]
+              name-word [syntax-word/word sname]type-prefix [concat-words name-word [word /]]
+              this-type-def [get types name-word]
+              result-type [type-def/result-type this-type-def]
+              param-map [type-def/param-map this-type-def]]
+            [match [type-decl/kind decl]
+              [type-decl-kind/union ctors]
+              [for-each ctor ctors
+                [let [param-list [list-map param [pair/snd ctor] [instantiate-annotated-type param-map param]]
+                      tctor [type-ctor param-list result-type]]
+                  [set-kv-map def-var-types
+                    [concat-words type-prefix [syntax-word/word [pair/fst ctor]]]
+                    [generalize-top tctor]]]]
+
+              [type-decl-kind/record field-decls]
+              [let
+                [fields [growable-list]]
+                [for-each field field-decls
+                  [let
+                    [inst-field-type [instantiate-annotated-type param-map [pair/snd field]]]
+                    [push fields inst-field-type]
+                    [set-kv-map def-var-types [concat-words type-prefix [syntax-word/word [pair/fst field]]]
+                        [generalize-top [type-func [list result-type] [none] inst-field-type]]]]]
+                [set-kv-map def-var-types name-word
+                  [generalize-top [type-func [clone-growable-to-frozen-list fields] [none] [type-def/result-type this-type-def]]]]]
+
+              [logq-abort check type definition not recognized]]]]
+          type-empty-tuple]
 
         [do
           [log bform]
