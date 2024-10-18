@@ -317,8 +317,7 @@
      bind-ast [binder/bind-ast binder]
      binder-errors-atom [binder/errors binder]]
     [for-each form test-forms
-      [let
-        [ast [form-to-ast form]]
+      [let [ast [form-to-ast form]]
         [check-errors [quote conversion] conversion-errors-atom]
         [bind-ast ast]]
         [check-errors [quote binding] binder-errors-atom]]
