@@ -148,7 +148,7 @@
           [none]]]]
     [letfn
     [[func cfunc [f]
-      [let-do
+      [let
         [name [bfunc/name f]
          params [bfunc/parameters f]
          opt-rest-param [bfunc/rest-param f]
@@ -251,7 +251,7 @@
             [cstmt is-tail default]]
 
           [bform/match exp cases opt-default]
-          [let-do [tmp [gen-tmp-word]
+          [let [tmp [gen-tmp-word]
                    tmp-args [gen-tmp-word]]
             [block
               [js-stmt/const-decl tmp [cexp exp]]
@@ -261,7 +261,7 @@
                   [mk-extern [list [word host] [word get-tag]]]
                   [list [js-exp/var tmp]]]
                 [list-map case cases
-                  [let-do [mp [pair/fst case]
+                  [let [mp [pair/fst case]
                             ctor [match-pattern/ctor mp]
                             params [match-pattern/params mp]
                             counter [atom 0]]
@@ -331,7 +331,7 @@
                                 [js-exp/array [list-map p params [js-exp/var p]]]]]]]]]
 
                     [type-decl-kind/record fields]
-                    [let-do [field-names [list-map field fields [pair/fst field]]]
+                    [let [field-names [list-map field fields [pair/fst field]]]
                       [concat
                         [list
                           [js-stmt/const-decl
@@ -362,18 +362,18 @@
 
           [bform/call f args]
           [if-let [deps [try-get-tail bform]]
-            [let-do
+            [let
               [params [if-let [cf [atom-get current-func]] [bfunc/parameters cf] [logq-abort cstmt]]
                deps-set [set]]
               [for-each i deps [set-add deps-set i]]
               [assert is-tail tail call must be tail]
 
-              [let-do [tmp-consts [growable-list]
+              [let [tmp-consts [growable-list]
                         assignments [growable-list]
                         subst [transient-kv-map]]
                 [for i 0 [size args]
                   [if [set-has deps-set i]
-                    [let-do [tmp [concat-words [word tmp] [int-to-word i]]]
+                    [let [tmp [concat-words [word tmp] [int-to-word i]]]
                       [push tmp-consts [js-stmt/const-decl tmp [js-exp/var [at params i]]]]
                       [push assignments [js-stmt/assign [at params i] [cexp [at args i]]]]
                       [set-kv-map subst [at params i] [bform/var tmp]]]
@@ -404,7 +404,7 @@
 
 [defn compile-run-forms [forms]
   [assert [not [is-empty forms]] run-forms must not be empty]
-  [let-do
+  [let
     [converter [mk-form-to-ast]
      f2a [form-to-ast-converter/form-to-ast converter]
      node-to-ldesc [form-to-ast-converter/node-to-ldesc converter]
@@ -431,7 +431,7 @@
         [result/ok v]]]]]
 
 [defn compile-file-to-file [wuns-file-name js-file-name exports]
-  [let-do
+  [let
     [converter [mk-form-to-ast]
      f2a [form-to-ast-converter/form-to-ast converter]
      node-to-ldesc [form-to-ast-converter/node-to-ldesc converter]
@@ -452,7 +452,7 @@
       [log e]
 
       [result/ok stmts]
-      [let-do [
+      [let [
           prologue [list [js-stmt/import [word externs] [word ../runtime-lib/externs.js]]]
           epilogue [list [js-stmt/export exports]]]
         [write-js-stmt js-file-name

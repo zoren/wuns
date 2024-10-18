@@ -103,7 +103,7 @@
 [defn push-index [map key value]
   [let [l [if-let [gl [try-get map key]]
             gl
-            [let-do [ngl [growable-list]] [set-kv-map map key ngl] ngl]]]
+            [let [ngl [growable-list]] [set-kv-map map key ngl] ngl]]]
     [push l value]]]
 
 [defn has-tail-and-only-tail-recursive-calls [db func]
@@ -131,20 +131,20 @@
      def-ctx [database/global-ctx db]
      set-global
      [func set-global [name wwf-name desc-kind]
-      [let-do []
+      [let []
         [when [has def-ctx name]
           [push-error wwf-name [bind-ast-errors/global-redefined]]]
         [set-kv-map def-ctx name [global-descriptor desc-kind [word-with-form/form wwf-name]]]]]
      mk-local-map [func mk-local [] [transient-kv-map]]
      set-local
      [func set-local [lctx-map wwf-name desc-kind]
-      [let-do [name [word-with-form/word wwf-name]]
+      [let [name [word-with-form/word wwf-name]]
         [when [has lctx-map name]
           [push-error wwf-name [bind-ast-errors/local-redefined]]]
         [set-kv-map lctx-map name [local-descriptor desc-kind [word-with-form/form wwf-name]]]]]]
      [letfn [
       [func bind-func [lctx func]
-        [let-do
+        [let
           [new-ctx-map [mk-local-map]
            param-counter [atom 0]]
           [set-local new-ctx-map [wuns-func/name func] [local-descriptor-kind/internal-func func]]
@@ -192,7 +192,7 @@
         [do
           [bind-ast lctx [tail-position/no] value]
           [for-each c cases
-            [let-do
+            [let
               [match-pattern [pair/fst c]
                ctor-name [match-pattern/ctor match-pattern]
                new-ctx-map [mk-local-map]]
@@ -216,7 +216,7 @@
           [bind-ast lctx tail-pos-info [last forms]]]
 
         [wuns/let bindings body]
-        [let-do
+        [let
           [new-ctx-map [mk-local-map]
            new-ctx [local-context-stack/frame [local-context new-ctx-map [local-context-kind/let]] lctx]]
           [for-each binding bindings
@@ -225,7 +225,7 @@
           [bind-ast new-ctx tail-pos-info body]]
 
         [wuns/letfn functions body]
-        [let-do
+        [let
           [new-ctx-map [mk-local-map]
            new-ctx [local-context-stack/frame [local-context new-ctx-map [local-context-kind/letfn]] lctx]]
           [for-each function functions
@@ -252,7 +252,7 @@
             [bind-ast lctx [tail-position/no] arg]]]
 
         [wuns/call-word wwf form-args]
-        [let-do
+        [let
           [w [word-with-form/word wwf]]
           [if-let [desc [try-get-local lctx w]]
             [match [local-descriptor/kind desc]
@@ -309,7 +309,7 @@
       [logq-abort aborting due to errors]]]]
 
 [defn test-bind-fn [test-forms]
-  [let-do
+  [let
     [form-ast-converter [mk-form-to-ast]
      form-to-ast [form-to-ast-converter/form-to-ast form-ast-converter]
      conversion-errors-atom [form-to-ast-converter/errors form-ast-converter]
@@ -317,7 +317,7 @@
      bind-ast [binder/bind-ast binder]
      binder-errors-atom [binder/errors binder]]
     [for-each form test-forms
-      [let-do
+      [let
         [ast [form-to-ast form]]
         [check-errors [quote conversion] conversion-errors-atom]
         [bind-ast ast]]

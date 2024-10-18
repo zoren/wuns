@@ -85,7 +85,7 @@
     [match [get-type-var-kind tv]
       [type-var-kind/word w] t0
       [type-var-kind/linked linked-t]
-      [let-do [t2 [normalize-type linked-t]]
+      [let [t2 [normalize-type linked-t]]
         [set-type-var-kind-to-type tv t2]
         t2]]
     t0]]
@@ -100,7 +100,7 @@
       0]] 0]]
 
 [defn free-type-vars [t]
-  [let-do
+  [let
     [ftvs [set]
      go
      [func go [t]
@@ -135,7 +135,7 @@
   [atom-get [type-var/level tv]]]
 
 [defn link-var-to-type [type-var type]
-  [let-do
+  [let
     [level [get-type-var-level type-var]
      fvs [free-type-vars type]]
     [todo report instead of assert]
@@ -144,7 +144,7 @@
     [set-type-var-kind-to-type type-var type]]]
 
 [defn unify [outer-t1 outer-t2]
-  [let-do
+  [let
     [errors [growable-list]
      push-unify-error
      [func push-unify-error [msg] [push errors msg]]
@@ -174,7 +174,7 @@
               [inst-type/func ft1]
               [match inst-type2
                 [inst-type/func ft2]
-                [let-do [type-args1 [func-type/params ft1] type-args2 [func-type/params ft2]
+                [let [type-args1 [func-type/params ft1] type-args2 [func-type/params ft2]
                         s1 [size type-args1] s2 [size type-args2]]
                   [for i 0 [min s1 s2]
                     [go [at type-args1 i] [at type-args2 i]]]
@@ -224,14 +224,14 @@
 [defn mk-empty-type-scheme [type] [check-type-scheme [list] type]]
 
 [defn generalize [current-level type]
-  [let-do [tvs [growable-list]
+  [let [tvs [growable-list]
            ftvs [free-type-vars type]]
     [for-each tv ftvs
       [if [lt-s current-level [get-type-var-level tv]]
         [push tvs tv]
         [comment [logq tv not generalized [identity tv]]]
         ]]
-    [let-do [ftvs [clone-growable-to-frozen-list tvs]]
+    [let [ftvs [clone-growable-to-frozen-list tvs]]
       [check-type-scheme ftvs type]]]]
 
 [defn generalize-top [type] [generalize 0 type]]
@@ -321,7 +321,7 @@
     outer-syntax-type]]
 
 [defn instantiate-annotated-type-or-scheme [counter-atom level syntax-type-scheme]
-  [let-do [type-var-env [transient-kv-map]]
+  [let [type-var-env [transient-kv-map]]
     [for-each tv [btype-scheme/type-params syntax-type-scheme]
       [set-kv-map type-var-env tv [generate-fresh-type-var-atom counter-atom level]]]
     [instantiate-annotated-type type-var-env [btype-scheme/type syntax-type-scheme]]]]
@@ -410,7 +410,7 @@
         [intrinsic-name-to-type in]
 
         [bform/if cond then else]
-        [let-do
+        [let
           [cond-type [go level lctx cond]
            then-type [go level lctx then]
            else-type [go level lctx else]]
@@ -427,12 +427,12 @@
             [go level lctx [last sub-forms]]]]
 
         [bform/let bindings body]
-        [let-do
+        [let
           [var-types [transient-kv-map]
            let-ctx [make-local-context var-types lctx]
            level-1 [inc level]]
           [for-each binding bindings
-            [let-do
+            [let
               [var [pair/fst binding]
                val-type [go level-1 let-ctx [pair/snd binding]]
                general-val-type [generalize level val-type]]
@@ -445,7 +445,7 @@
       [go 0 [none] outer-bform]]]
 
 [defn normalize-deep [internal-type]
-  [let-do [nt [normalize-type internal-type]]
+  [let [nt [normalize-type internal-type]]
     [match nt
       [ctype/var tv]
       [match [get-type-var-kind tv]
@@ -469,7 +469,7 @@
   [let [nt internal-type]
     [match nt
       [ctype/var tv]
-      [let-do [kind [get-type-var-kind tv]]
+      [let [kind [get-type-var-kind tv]]
         [match kind
           [type-var-kind/linked lt] [logq-abort internal-to-present-type expected a non-linked type var]
           [type-var-kind/word w] [form/word w]]]
@@ -495,13 +495,13 @@
 
 [defn normalize-present-type-scheme [internal-type]
   [normalize-deep internal-type]
-  [let-do
+  [let
        [type-vars [free-type-vars internal-type]
         type-var-counter [atom 0]
         subst-assoc-list [list-map tv type-vars [pair tv [generate-fresh-type-var-atom type-var-counter 0]]]
         copied-type [copy-type subst-assoc-list internal-type]
         new-present-type-vars [list-map tv [free-type-vars copied-type]
-          [let-do [kind [get-type-var-kind tv]]
+          [let [kind [get-type-var-kind tv]]
             [match kind
               [type-var-kind/linked lt] [logq-abort internal-to-present-type expected a non-linked type var]
               [type-var-kind/word w] [form/word w]]]]]
@@ -513,7 +513,7 @@
 
 [defn check-top-forms [gctx forms]
   [assert [size forms] check-top-forms expects at least one form]
-  [let-do
+  [let
     [converter [check-context/form-to-ast-converter gctx]
      f2a [form-to-ast-converter/form-to-ast converter]
      node-to-ldesc [form-to-ast-converter/node-to-ldesc converter]

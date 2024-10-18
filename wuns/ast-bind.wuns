@@ -159,18 +159,18 @@
           [list]]]]
     set-local
     [func sl [lvars f kind]
-      [let-do [w [get-word f]]
+      [let [w [get-word f]]
         [when [has lvars w] [push-error f [quote [redeclaring local]]]]
         [set-kv-map lvars w kind]]]
     set-def
     [func sd [f kind]
-      [let-do [w [get-word f]]
+      [let [w [get-word f]]
         [when [has def-ctx w] [push-error f [quote [redefing def]]]]
         [set-kv-map def-ctx w kind]]]
     type-ctx [transient-kv-map]
     set-type
     [func st [f arity]
-      [let-do [w [get-word f]]
+      [let [w [get-word f]]
         [if [is-reserved-type-name w]
           [push-error f [quote [type name is reserved]]]
           [do
@@ -220,7 +220,7 @@
               [do
                  [push-error form [quote [type is empty]]]
                  [btype/error]]
-              [let-do [fw [get-word [first l]]]
+              [let [fw [get-word [first l]]]
                 [switch fw
                   [[word type-scheme]]
                   [do
@@ -232,7 +232,7 @@
                     [do
                       [push-error form [quote [func expects a parameter list and a return type]]]
                       [btype/error]]
-                    [let-do [parsed-params [parse-param-list [get-list [second l]]]]
+                    [let [parsed-params [parse-param-list [get-list [second l]]]]
                       [btype/func
                         [list-map p [pair/fst parsed-params] [f2t p]]
                         [if-let [rest-param [pair/snd parsed-params]]
@@ -240,7 +240,7 @@
                           [none]]
                         [f2t [third l]]]]]
 
-                  [let-do [n-of-args [dec [size l]]]
+                  [let [n-of-args [dec [size l]]]
                     [if-let [arity-ok [builtin-type-arity-ok fw n-of-args]]
                       [when-not arity-ok
                         [push-error form [quote [wrong number of type arguments to builtin]]]]
@@ -251,7 +251,7 @@
                     [btype/apply fw [list-map arg [rest l] [f2t arg]]]]]]]]]]
       [func form-to-type [form] [[mk-form-to-type [transient-kv-map]] form]]
       [func form-to-type-param-list [form]
-        [let-do
+        [let
           [type-param-words [growable-list]
            word-to-form [transient-kv-map]]
           [for-each tpf [get-list form]
@@ -277,14 +277,14 @@
               [push-error form [quote [type is empty]]]
               [btype-scheme [list] [btype/error]]]
             [if [eq-word [get-word [first l]] [word type-scheme]]
-              [let-do
+              [let
                 [param-pair [form-to-type-param-list [second l]]]
                 [btype-scheme
                   [pair/fst param-pair]
                   [[mk-form-to-type [pair/snd param-pair]] [third l]]]]
               [btype-scheme [list] [form-to-type form]]]]]]
       [func form-to-func [lstack form]
-        [let-do
+        [let
            [form-list [get-list form]
             - [when-not [eq [size form-list] 4] [push-error form [quote [function-like form expected 4 sub-forms]]]]
             name [get-word [second form-list]]
@@ -307,7 +307,7 @@
               [match opt-rest-param [option/none] [option/none] [option/some v] [option/some [get-word v]]]
               [form-to-ast new-lstack [fourth form-list]]]]]]
       [func form-to-ast [lstack form]
-        [let-do
+        [let
           [report-error [func r [msg] [push-error form msg]]
            assert-empty-stack [func aes []
             [match lstack
@@ -316,7 +316,7 @@
           [insert-form form
           [match form
           [form/word w]
-          [let-do [bf [bform/var [get-word form]]]
+          [let [bf [bform/var [get-word form]]]
             [if-let [ldesc [try-get-local lstack w]]
               [set-kv-map node-to-ldesc bf ldesc]
               [if-let [ddesc [try-get def-ctx w]]
@@ -376,7 +376,7 @@
                 [bform/match
                   [form-to-ast lstack [get-arg 0]]
                   [list-map p [pairwise [slice l 2 [size l]]]
-                    [let-do [pat-list [get-list [first p]]
+                    [let [pat-list [get-list [first p]]
                               lvars [transient-kv-map]
                               lctx [local-context lvars form]
                               new-lstack [local-stack/frame lstack lctx]]
@@ -397,7 +397,7 @@
                 [bform/do [list-map arg [rest l] [form-to-ast lstack arg]]]
 
                 [[word let]]
-                [let-do
+                [let
                   [bindings [get-list [get-arg 0]]
                    lvars [transient-kv-map]
                    lctx [local-context lvars form]
@@ -405,14 +405,14 @@
                   [assert-n-args 2]
                   [bform/let
                     [list-map p [pairwise bindings]
-                      [let-do [name [first p]
+                      [let [name [first p]
                                be [form-to-ast new-lstack [second p]]]
                         [set-local lvars name [local-var-kind/let]]
                         [pair [get-word name] be]]]
                     [form-to-ast new-lstack [get-arg 1]]]]
 
                 [[word letfn]]
-                [let-do
+                [let
                   [funcs [get-list [get-arg 0]]
                    lvars [transient-kv-map]
                    lctx [local-context lvars form]
@@ -432,7 +432,7 @@
                 [do
                   [assert-n-args 2]
                   [assert-empty-stack]
-                  [let-do [bf [bform/def [get-word [get-arg 0]] [form-to-ast lstack [third l]]]]
+                  [let [bf [bform/def [get-word [get-arg 0]] [form-to-ast lstack [third l]]]]
                     [set-def [get-arg 0] [def-desc/any]]
                     [eval-form form]
                     bf]]
@@ -440,7 +440,7 @@
                 [[word defexpr]]
                 [do
                   [assert-empty-stack]
-                  [let-do [bf [bform/defexpr [form-to-func lstack form]]]
+                  [let [bf [bform/defexpr [form-to-func lstack form]]]
                     [set-def [get-arg 0] [def-desc/fexpr]]
                     [eval-form form]
                     bf]]
@@ -448,7 +448,7 @@
                 [[word defmacro]]
                 [do
                   [assert-empty-stack]
-                  [let-do [bf [bform/defmacro [form-to-func lstack form]]]
+                  [let [bf [bform/defmacro [form-to-func lstack form]]]
                     [set-def [get-arg 0] [def-desc/macro]]
                     [eval-form form]
                     bf]]
@@ -460,21 +460,21 @@
                 [do
                   [assert-empty-stack]
                   [assert-n-args 1]
-                  [let-do [bforms [list-map bf [read-file [get-word [get-arg 0]]] [form-to-ast lstack bf]]]
+                  [let [bforms [list-map bf [read-file [get-word [get-arg 0]]] [form-to-ast lstack bf]]]
                     [eval-form form]
                     [bform/do bforms]]]
 
                 [[word type]]
-                [let-do
+                [let
                   [fb
                     [bform/type
                       [list-map triple [triplewise [rest l]]
-                        [let-do
+                        [let
                           [type-name [get-word [first triple]]
                            type-prefix [concat-words type-name [word /]]
                            def-prefix
                            [func dp [name desc]
-                            [let-do [full-name [concat-words type-prefix name]]
+                            [let [full-name [concat-words type-prefix name]]
                               [when [has def-ctx full-name]
                                 [report-error [quote [redefining type]]]]
                               [set-kv-map def-ctx full-name [def-desc/record-proj]]]]
@@ -494,7 +494,7 @@
                                   [[word union]]
                                   [type-decl-kind/union
                                     [list-map ctor [rest l]
-                                      [let-do [ctor-list [get-list ctor]
+                                      [let [ctor-list [get-list ctor]
                                               ctor-name [get-word [first ctor-list]]]
                                         [assert [not [is-empty ctor-list]] type decl kind union ctor is empty]
                                         [def-prefix ctor-name [def-desc/union-ctor]]
@@ -507,7 +507,7 @@
                                     [set-def [first triple] [def-desc/record-ctor]]
                                     [type-decl-kind/record
                                       [list-map field [rest l]
-                                        [let-do [field-list [get-list field]
+                                        [let [field-list [get-list field]
                                                  field-name [get-word [first field-list]]]
                                           [assert [not [is-empty field-list]] type decl kind record field is empty]
                                           [def-prefix field-name [def-desc/record-proj]]
@@ -634,7 +634,7 @@
 
 [defn tail-call-analysis [node-to-ldesc the-func]
   [comment also returns a map of the tail calls so a compiler knows names of parameters to bind before continuing in a loop]
-  [let-do
+  [let
     [tail-rec-calls [transient-kv-map]
      non-tail-rec-calls [atom false]
      go
@@ -690,7 +690,7 @@
                       [eq-word [bfunc/name the-func] wf]
                       [match [get node-to-ldesc f] [local-var-kind/func-internal-self] 1 0]]
                   [if is-tail
-                    [let-do [dependent-args [growable-list]]
+                    [let [dependent-args [growable-list]]
                       [for i 0 [size args]
                         [when
                           [exists [slice args [inc i] [size args]]

@@ -21,9 +21,6 @@
 
 [def-extern concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]
 
-[defmacro let-do [bindings .. forms]
-  [flist [qword let] bindings [form/list [concat [list [qword do]] forms]]]]
-
 [defmacro defn [name params .. bodies]
   [flist [qword def] name [flist [qword func] name params [form/list [concat [list [qword do]] bodies]]]]]
 
@@ -173,16 +170,15 @@
 
 [defmacro ifs [.. clauses]
   [let [s [size clauses]]
-    [do
-      [assert [is-odd s] ifs requires an odd number of arguments]
-      [[func go [i res]
-        [if [eq i 0]
-          res
-          [go
-            [sub i 2]
-            [flist [quote if] [at clauses [sub i 2]] [at clauses [dec i]] res]]]]
-        [dec s]
-        [at clauses -1]]]]]
+    [assert [is-odd s] ifs requires an odd number of arguments]
+    [[func go [i res]
+      [if [eq i 0]
+        res
+        [go
+          [sub i 2]
+          [flist [quote if] [at clauses [sub i 2]] [at clauses [dec i]] res]]]]
+      [dec s]
+      [at clauses -1]]]]
 
 [comment and relies on there only being one falsy value [i32 0]
         it will not return any other falsy value as or returns the first truthy argument]
@@ -204,9 +200,8 @@
 
 [defn inc-atom [atom]
   [let [prev-val [atom-get atom]]
-    [do
-      [atom-set atom [inc prev-val]]
-      prev-val]]]
+    [atom-set atom [inc prev-val]]
+    prev-val]]
 
 [def word-counter [atom 0]]
 
@@ -286,7 +281,7 @@
     [form/list binding]
     [do
       [assert [eq 2 [size binding]] if-let bindings should have exactly two elements]
-      [let-do [v [first binding] cond [second binding]]
+      [let [v [first binding] cond [second binding]]
         [assert [is-word v] if-let-option requires a word as the first element of the first argument]
         [flist [quote match]
           cond
@@ -299,7 +294,7 @@
     [form/list binding]
     [do
       [assert [eq 2 [size binding]] when-let bindings should have exactly two elements]
-      [let-do [v [first binding] cond [second binding]]
+      [let [v [first binding] cond [second binding]]
         [assert [is-word v] when-let-option requires a word as the first element of the first argument]
         [flist [quote match]
           cond
@@ -370,7 +365,7 @@
   [for-func iw start [i32 2] end forms]]
 
 [defmacro for-each [element-var collection .. forms]
-  [let-do
+  [let
     [iteration-var [genword-prefix [word it]]
      col-var [genword-prefix [word col]]
      col-size-var [genword-prefix [word col-size]]
@@ -484,7 +479,7 @@
 
 [defn log-location [form]
   [if-let [node [try-get-syntax-node form]]
-    [let-do [loc [get-syntax-node-location node]]
+    [let [loc [get-syntax-node-location node]]
       [stdout-print [syntax-node-content-name node]]
       [stdout-write-code-point [i32 58]]
       [stdout-print [inc [syntax-node-location/row loc]]]
@@ -565,7 +560,7 @@
 [def-extern set-to-list [type-scheme [a] [func [[set a]] [list a]]]]
 
 [defn filter [l pred]
-  [let-do [filtered [growable-list]]
+  [let [filtered [growable-list]]
     [for-each x l
       [when [pred x]
         [push filtered x]]]

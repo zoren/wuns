@@ -28,7 +28,7 @@
     [module [list form]]]]
 
 [defn run-test [test-data]
-  [let-do [instance [translate-to-wat [test/module test-data]]]
+  [let [instance [translate-to-wat [test/module test-data]]]
     [for-each a [test/asserts test-data]
       [match a
         [test-assert/eq expected func-name args]
@@ -44,7 +44,7 @@
     [func [evaluation-context word [list f64]] [list f64]]]]
 
 [defn run-test-interpreter [test-data]
-  [let-do
+  [let
     [forms [test/module test-data]
      eval-ctx [make-eval-context [current-dir]]]
     [for-each form forms

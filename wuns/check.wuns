@@ -75,7 +75,7 @@
     [match [get-type-var-kind tv]
       [type-var-kind/word w] t0
       [type-var-kind/linked linked-t]
-      [let-do [t2 [normalize-type linked-t]]
+      [let [t2 [normalize-type linked-t]]
         [set-type-var-kind-to-type tv t2]
         t2]]
     t0]]
@@ -89,7 +89,7 @@
       0]] 0]]
 
 [defn free-type-vars [t]
-  [let-do
+  [let
     [ftvs [set]
      go
      [func go [t]
@@ -124,7 +124,7 @@
   [atom-get [type-var/level tv]]]
 
 [defn link-var-to-type [type-var type]
-  [let-do
+  [let
     [level [get-type-var-level type-var]
      fvs [free-type-vars type]]
     [comment todo report instead of assert]
@@ -133,7 +133,7 @@
     [set-type-var-kind-to-type type-var type]]]
 
 [defn unify [outer-t1 outer-t2]
-  [let-do
+  [let
     [errors [growable-list]
      push-unify-error
      [func push-unify-error [msg] [push errors [form-to-list msg]]]
@@ -163,7 +163,7 @@
               [inst-type/func ft1]
               [match inst-type2
                 [inst-type/func ft2]
-                [let-do [type-args1 [func-type/params ft1] type-args2 [func-type/params ft2]
+                [let [type-args1 [func-type/params ft1] type-args2 [func-type/params ft2]
                         s1 [size type-args1] s2 [size type-args2]]
                   [for i 0 [min s1 s2]
                     [go [at type-args1 i] [at type-args2 i]]]
@@ -287,7 +287,7 @@
     [quote [generate-fresh-type-var gctx 0]]]]
 
 [defn unify-call [gctx level func-type arg-types form]
-  [let-do [t-res [generate-fresh-type-var gctx level]
+  [let [t-res [generate-fresh-type-var gctx level]
         t-func [type-func arg-types [none] t-res]]
     [unify-report gctx func-type t-func form]
     t-res]]
@@ -295,14 +295,14 @@
 [defn mk-empty-type-scheme [type] [check-type-scheme [list] type]]
 
 [defn generalize [current-level type]
-  [let-do [tvs [growable-list]
+  [let [tvs [growable-list]
            ftvs [free-type-vars type]]
     [for-each tv ftvs
       [if [lt-s current-level [get-type-var-level tv]]
         [push tvs tv]
         [comment [logq tv not generalized [identity tv]]]
         ]]
-    [let-do [ftvs [clone-growable-to-frozen-list tvs]]
+    [let [ftvs [clone-growable-to-frozen-list tvs]]
       [check-type-scheme ftvs type]]]]
 
 [defn generalize-top [type] [generalize 0 type]]
@@ -460,7 +460,7 @@
             [make-type w]]]]
 
       [form/list elements]
-      [let-do [s-form [size elements]
+      [let [s-form [size elements]
                n-of-args [dec s-form]]
         [assert [not [eq s-form 0]] type or type-scheme expects a non-empty list]
         [if-let [w [try-get-word-report gctx [first elements]]]
@@ -500,14 +500,14 @@
     [instantiate-annotated-type gctx empty-kv-map syntax-type]
 
     [form/list elements]
-    [let-do [s-form [size elements]
+    [let [s-form [size elements]
              n-of-args [dec s-form]]
       [assert [not [eq s-form 0]] expects a non-empty list]
       [if-let [w [try-get-word-report gctx [first elements]]]
         [if [eq-word w [word type-scheme]]
           [do
             [report-when-not [eq n-of-args 2] syntax-type type-scheme expects 2 arguments]
-            [let-do [type-var-env [transient-kv-map]]
+            [let [type-var-env [transient-kv-map]]
               [for-each tv [try-get-list-report gctx [second elements]]
                 [when-let [tvw [try-get-word-report gctx tv]]
                   [set-kv-map type-var-env tvw [generate-fresh-type-var gctx level]]]]
@@ -576,7 +576,7 @@
         [if-let [w [try-get-form-word-option [first l]]]
           [try-get-macro [check-context/eval-context gctx] w]
           [none]]]
-        [let-do [expanded [interpreter-apply mac [rest l]]
+        [let [expanded [interpreter-apply mac [rest l]]
                  form-expansions [check-context/form-expansions gctx]]
           [assert [not [has form-expansions form]] form already in expansion map]
           [set-kv-map form-expansions form expanded]
@@ -616,7 +616,7 @@
           type-word]
 
         [eq-form first-form [quote if]]
-        [let-do
+        [let
           [- [assert [eq n-of-args 3] form expects 3 arguments]
            cond [second sub-forms]
            then-branch [third sub-forms]
@@ -630,7 +630,7 @@
           [annotate gctx form then-type]]
 
         [eq-form first-form [quote type]]
-        [let-do
+        [let
           [types [check-context/types gctx]
            def-var-types [check-context/def-var-types gctx]]
           [report-when-not [eq [i32.rem-s n-of-args 3] 0] form expects triplets of arguments]
@@ -642,13 +642,13 @@
                   [has types name-word]
                   [report name-form already defined]
 
-                  [let-do [type-params-list [try-get-list-report gctx [at sub-forms [inc i]]]
+                  [let [type-params-list [try-get-list-report gctx [at sub-forms [inc i]]]
                            param-map [transient-kv-map]
                            type-args [growable-list]]
                     [for-each param type-params-list
                       [when-let [param-word [try-get-word-report gctx param]]
                         [report-when [has param-map param-word] param already defined]
-                        [let-do [tv [generate-fresh-type-var gctx 1]]
+                        [let [tv [generate-fresh-type-var gctx 1]]
                           [set-kv-map param-map param-word tv]
                           [push type-args tv]]]]
                     [set-kv-map types name-word
@@ -659,7 +659,7 @@
           [for-3 i 1 s-form
             [when-let [name-word [try-get-form-word-option [at sub-forms i]]]
               [assert [not [is-builtin-type name-word]] cannot be redefined [at sub-forms i]]
-              [let-do
+              [let
                 [type-prefix [concat-words name-word [word /]]
                  this-type-def [get types name-word]
                  result-type [type-def/result-type this-type-def]
@@ -669,17 +669,17 @@
                   [switch type-def-first-word
                     [[word union]]
                     [for i 1 [size type-def-list]
-                      [let-do [ctor [try-get-list-report gctx [at type-def-list i]]
+                      [let [ctor [try-get-list-report gctx [at type-def-list i]]
                               param-list [list-map param [rest ctor] [instantiate-annotated-type gctx param-map param]]]
                         [when-let [ctor-name [try-get-word-report gctx [first ctor]]]
                           [set-kv-map def-var-types [concat-words type-prefix ctor-name]
                             [generalize-top [type-ctor param-list result-type]]]]]]
 
                     [[word record]]
-                    [let-do
+                    [let
                       [fields [growable-list]]
                       [for i 1 [size type-def-list]
-                        [let-do
+                        [let
                           [field-def [try-get-list-report gctx [at type-def-list i]]
                           inst-field-type [instantiate-annotated-type gctx param-map [second field-def]]]
                           [push fields inst-field-type]
@@ -694,7 +694,7 @@
           type-empty-tuple]
 
         [eq-form first-form [quote match]]
-        [let-do [match-value [second sub-forms]
+        [let [match-value [second sub-forms]
                  match-type [check gctx level lctx match-value]
                  result-type [generate-fresh-type-var gctx level]
                  has-default [is-even n-of-args]]
@@ -703,11 +703,11 @@
                   pattern-list [try-get-list-report gctx pattern]
                   branch [at sub-forms [inc i]]]
               [when-let [first-pattern [try-get-first-report gctx pattern-list]]
-                [let-do
+                [let
                  [destructor-type [check gctx level lctx first-pattern]
                   destructor-opt [try-get-ctor [normalize-type destructor-type]]]
                   [if-let [destructor destructor-opt]
-                    [let-do [destructor-params [func-type/params destructor]
+                    [let [destructor-params [func-type/params destructor]
                               var-values [transient-kv-map]
                               branch-ctx [make-local-context var-values lctx first-form]]
                       [report-when-not [eq [size destructor-params] [dec [size pattern-list]]]
@@ -722,18 +722,18 @@
                       [unify-report gctx [check gctx level branch-ctx branch] result-type branch]]
                     [report first-pattern destructor not found]]]]]]
           [when has-default
-            [let-do [default-form [last sub-forms]]
+            [let [default-form [last sub-forms]]
               [unify-report gctx [check gctx level lctx default-form] result-type default-form]]]
           result-type]
 
         [eq-form first-form [quote switch]]
-        [let-do [match-value [second sub-forms]
+        [let [match-value [second sub-forms]
                  match-type [check gctx level lctx match-value]
                  result-type [generate-fresh-type-var gctx level]
                  has-default [is-even n-of-args]]
           [report-when-not [is-even n-of-args] form expects an even number of arguments]
           [for-pair i 2 [dec s-form]
-            [let-do [case-const [at sub-forms i]
+            [let [case-const [at sub-forms i]
                      case-const-list [try-get-list-report gctx case-const]
                      branch [at sub-forms [inc i]]]
               [when-let [first-case-const [try-get-first-report gctx case-const-list]]
@@ -748,7 +748,7 @@
                     [unify-report gctx match-type [check gctx level lctx case-const] case-const]]]]
               [unify-report gctx [check gctx level lctx branch] result-type branch]]]
           [when has-default
-            [let-do [default-form [last sub-forms]]
+            [let [default-form [last sub-forms]]
               [unify-report gctx [check gctx level lctx default-form] result-type default-form]]]
           result-type]
 
@@ -761,7 +761,7 @@
           type-empty-tuple]
 
         [eq-form first-form [quote let]]
-        [let-do
+        [let
           [var-values [transient-kv-map]
            let-ctx [make-local-context var-values lctx first-form]
            bindings [try-get-list-report gctx [second sub-forms]]
@@ -769,7 +769,7 @@
            level-1 [inc level]]
           [report-when-not [eq n-of-args 2] form expects two arguments]
           [for-pair i 0 [dec n-of-bindings]
-            [let-do
+            [let
               [var [form-to-word [at bindings i]]
                value [at bindings [inc i]]
                val-type [check gctx level-1 let-ctx value]
@@ -788,7 +788,7 @@
         [logq-abort letrec is deprecated]
 
         [eq-form first-form [quote letfn]]
-        [let-do
+        [let
           [var-values [transient-kv-map]
            let-ctx [make-local-context var-values lctx first-form]
            functions [try-get-list-report gctx [second sub-forms]]
@@ -796,14 +796,14 @@
            tmp-types [growable-list]]
           [report-when-not [eq n-of-args 2] form expects two arguments]
           [for-each function-form functions
-            [let-do [func-list [try-get-list-report gctx function-form]
+            [let [func-list [try-get-list-report gctx function-form]
                      fname [form-to-word [second func-list]]
                      tmp-type [generate-fresh-type-var gctx level-1]]
               [push tmp-types tmp-type]
               [set-kv-map var-values fname [mk-empty-type-scheme tmp-type]]]]
           [let [types [clone-growable-to-frozen-list tmp-types]]
             [for i 0 [size types]
-              [let-do
+              [let
                 [value [at functions i]
                  val-type [check gctx level-1 let-ctx value]]
                 [unify-report gctx val-type [at types i] value]]]]
@@ -823,7 +823,7 @@
           [eq-form first-form [quote func]]
           [eq-form first-form [quote defexpr]]
           [eq-form first-form [quote defmacro]]]
-        [let-do
+        [let
           [function-kind
            [if-let [fw [try-get-form-word-option first-form]]
               [switch fw
@@ -848,18 +848,18 @@
           [report-when-not [eq n-of-args 3] form expects 3 arguments]
           [set-kv-map param-ctx func-name func-type-scheme]
           [let [params [try-get-list-report gctx [third sub-forms]]]
-            [let-do
+            [let
               [params-parsed [parse-parameter-list params]]
               [for-each param [parameters/regular-params params-parsed]
-                [let-do [tv [if takes-form-params type-form [generate-fresh-type-var gctx level-1]]]
+                [let [tv [if takes-form-params type-form [generate-fresh-type-var gctx level-1]]]
                   [annotate gctx param tv]
                   [set-kv-map param-ctx [form-to-word param] [mk-empty-type-scheme tv]]
                   [push reg-params tv]]]
               [when-let [rest-param [parameters/rest-param-opt params-parsed]]
-                  [let-do [tv [if takes-form-params type-form [generate-fresh-type-var gctx level-1]]]
+                  [let [tv [if takes-form-params type-form [generate-fresh-type-var gctx level-1]]]
                     [set-kv-map param-ctx [form-to-word rest-param] [mk-empty-type-scheme [type-list tv]]]
                     [atom-set opt-rest-param-atom [some tv]]]]]]
-          [let-do
+          [let
             [frozen-params [clone-growable-to-frozen-list reg-params]
              body [fourth sub-forms]
              return-type [check gctx level-1 func-ctx body]]
@@ -882,7 +882,7 @@
               gen-func-type]]]
 
         [eq-form first-form [quote def]]
-        [let-do
+        [let
           [name [second sub-forms]
            value-form [third sub-forms]
            value-type [check gctx [inc level] lctx value-form]
@@ -930,7 +930,7 @@
               [option/some t] t]]]
 
         [eq-form first-form [quote type-anno]]
-        [let-do
+        [let
           [value-form [second sub-forms]
            annotated-type [third sub-forms]
            value-type [check gctx level lctx value-form]
@@ -951,7 +951,7 @@
 
         [if-let [expanded-form [try-expand-form gctx form]]
           [check gctx level lctx expanded-form]
-          [let-do
+          [let
             [func-type [check gctx level lctx first-form]
              opt-func-kind
               [match [normalize-type func-type]
@@ -978,7 +978,7 @@
                   [if is-fexpr
                     [list-map-fn [func f [-] type-form] args]
                     [list-map-fn [func f [arg] [check gctx level lctx arg]] args]]]
-              [let-do
+              [let
                 [t-res [generate-fresh-type-var gctx level]
                  t-func [type-func arg-types [none] t-res]]
                 [unify-report gctx func-type t-func form]
@@ -988,7 +988,7 @@
   [let [nt internal-type]
     [match nt
       [type/var tv]
-      [let-do [kind [get-type-var-kind tv]]
+      [let [kind [get-type-var-kind tv]]
         [match kind
           [type-var-kind/linked lt] [logq-abort internal-to-present-type expected a non-linked type var]
           [type-var-kind/word w] [form/word w]]]
@@ -1013,7 +1013,7 @@
               [form/word type-name]]]]]]]]
 
 [defn normalize-deep [internal-type]
-  [let-do [nt [normalize-type internal-type]]
+  [let [nt [normalize-type internal-type]]
     [match nt
       [type/var tv]
       [match [get-type-var-kind tv]
@@ -1035,13 +1035,13 @@
 
 [defn normalize-present-type-scheme [internal-type]
   [normalize-deep internal-type]
-  [let-do
+  [let
        [type-vars [free-type-vars internal-type]
         type-var-counter [atom 0]
         subst-assoc-list [list-map tv type-vars [pair tv [generate-fresh-type-var-atom type-var-counter 0]]]
         copied-type [copy-type subst-assoc-list internal-type]
         new-present-type-vars [list-map tv [free-type-vars copied-type]
-          [let-do [kind [get-type-var-kind tv]]
+          [let [kind [get-type-var-kind tv]]
             [match kind
               [type-var-kind/linked lt] [logq-abort internal-to-present-type expected a non-linked type var]
               [type-var-kind/word w] [form/word w]]]]]

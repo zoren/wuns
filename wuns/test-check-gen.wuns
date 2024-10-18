@@ -22,7 +22,7 @@
   [check-test/error expected-type expected-messages forms]]
 
 [defexpr test-errors [expected-type expected-messages-form .. forms]
-  [let-do [expected-messages [form-to-list expected-messages-form]]
+  [let [expected-messages [form-to-list expected-messages-form]]
     [assert [not [is-empty expected-messages]] make-check-test-error expected-messages is empty]
     [assert [not [is-empty forms]] make-check-test-error forms is empty]
     [check-test/error

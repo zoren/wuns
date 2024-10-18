@@ -42,7 +42,7 @@
     [form-concat [list [quote list]] [list-map f forms [mk-quote f]]]]]
 
 [defn test-errors-fn [tests-run-atom expected-type expected-messages forms]
-  [let-do
+  [let
    [gctx [make-global-context]
     res [check-top-forms gctx forms]
     present-type [normalize-present-type-scheme res]
@@ -53,7 +53,7 @@
         [for-each message messages [log-report-message message]]
         [logq-abort test-failed failed expected [size-form expected-messages] messages but found [size-form messages]]]]
     [for i 0 [size messages]
-      [let-do [expected-message [form-to-list [at expected-messages i]]
+      [let [expected-message [form-to-list [at expected-messages i]]
                message [report-message/message [at messages i]]]
         [assert [eq-list-of-forms expected-message message]
           test-failed failed expected message
@@ -70,7 +70,7 @@
     [form-concat [list [quote list]] [list-map f forms [mk-quote f]]]]]
 
 [defn run-unit-tests []
-  [let-do [tests-run-atom [atom 0]]
+  [let [tests-run-atom [atom 0]]
 
 [comment variable]
 [test-errors [type-scheme [a] a] [[not found]] [do not-found]]
@@ -473,7 +473,7 @@
         [logq-abort test-ok-fn-stop-at-error failed there were errors]]]]]
 
 [defn test-ok-files [.. files]
-  [let-do
+  [let
     [gctx [make-global-context]
      before [performance-now]]
     [for-each file files
@@ -482,7 +482,7 @@
 
 [defn test-check []
   [run-unit-tests]
-  [let-do
+  [let
     [file [word test-translator.wuns]]
     [log [word checking] file]
     [test-ok-files file]]]

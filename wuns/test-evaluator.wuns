@@ -42,7 +42,7 @@
       [form-concat [list [quote list]] [list-map f forms [mk-quote f]]]]]]
 
 [defn run-test-suite [mk-evaluator]
-  [let-do [test-assert-count-atom [atom 0]]
+  [let [test-assert-count-atom [atom 0]]
   [comment check if we accidentally allow octal numbers with 00 - result would be 8 in that case]
   [test-ok [i32 10] [i32 0010]]
   [test-ok [i32 16] [i32 0x10]]
@@ -244,7 +244,7 @@
         [last results]]]]]
 
 [defn time-fn [f]
-  [let-do
+  [let
     [before [performance-now]
      res [f]]
   [logq it took [[intrinsic f64.sub] [performance-now] before] ms]
@@ -260,7 +260,7 @@
 
 [defn run-performance-tests [name mk-evaluator]
   [logq running performance tests for [form/word name]]
-  [let-do [test-assert-count-atom [atom 0]]
+  [let [test-assert-count-atom [atom 0]]
 
   [time-fn
     [func go []

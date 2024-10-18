@@ -149,7 +149,7 @@
           [wat-inst/instructions
             [concat
               [list-map f [slice l 1 [dec [size l]]]
-                [let-do [types [get-form-types tctx f]]
+                [let [types [get-form-types tctx f]]
                   [[func go [i]
                     [if i
                       [wat-inst/inst [word drop] [list [go [dec i]]]]
@@ -184,7 +184,7 @@
           [logq-abort not implemented translate-form empty head list]]]]]]
 
 [defn translate-top [tctx output form]
-  [let-do [gctx [translate-context/check-context tctx]]
+  [let [gctx [translate-context/check-context tctx]]
     [check-top gctx form]
     [match [atom-get [check-context/messages gctx]]
       [linked-list/cons m ms] [logq-abort translate-top binding errors found]
@@ -199,14 +199,14 @@
         [if [eq-word w [word def]]
           [do
             [assert [eq [size l] 3] expected 3 elements]
-            [let-do [name [second l]
+            [let [name [second l]
                      body [form-to-list [third l]]
                      head-body [first body]
                      rest-body [rest body]]
               [if [eq-form head-body [quote func]]
                 [do
                   [assert [eq [size rest-body] 3] expected 3 elements found]
-                  [let-do [params [form-to-list [second rest-body]]
+                  [let [params [form-to-list [second rest-body]]
                            func-body [third rest-body]
                            lctx [transient-kv-map]
                            output-params-atom [atom [linked-list/nil]]
@@ -231,7 +231,7 @@
         [logq-abort not implemented]]]]]
 
 [defn translate-intermediate [top-forms]
-  [let-do [o [empty-wat-output]
+  [let [o [empty-wat-output]
            tctx [empty-translate-context]]
     [for-each f top-forms
       [translate-top tctx o f]]
@@ -255,7 +255,7 @@
   [printer [atom [byte-array init-capacity]] [atom 0]]]
 
 [defn printer-to-byte-array [p]
-  [let-do
+  [let
     [ci [atom-get [printer/index p]]
      cb [atom-get [printer/bytes p]]
      trimmed [byte-array ci]]
@@ -264,7 +264,7 @@
     trimmed]]
 
 [defn print-byte [printer byte]
-  [let-do [ia [printer/index printer]
+  [let [ia [printer/index printer]
            i [atom-get ia]
            ba [printer/bytes printer]
            a [atom-get ba]]
@@ -366,11 +366,11 @@
       [wat-inst-to-out [output-func/body of]]]]]
 
 [defn generate-wat [output]
-  [let-do [p [empty-printer [i32 800]]]
+  [let [p [empty-printer [i32 800]]]
     [print-wat p
       [wat/seq [list-map of [clone-growable-to-frozen-list [wat-output/funcs output]]
         [output-func-to-wat of]]]]
-    [let-do [ba [printer-to-byte-array p]]
+    [let [ba [printer-to-byte-array p]]
       [byte-array-log-as-string ba]
       [wasm-instantiate [byte-array-to-wasm-module [wat-to-byte-array ba]]]]]]
 
