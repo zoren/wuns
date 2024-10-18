@@ -477,8 +477,23 @@
                   [flist [quote stdout-print] qform]]]]]
           [list [quote [stdout-write-code-point [i32 10]]]]]]]]]
 
-[defn log-location [form]
+[defn try-get-syntax-node-rec [form]
   [if-let [node [try-get-syntax-node form]]
+    [some node]
+    [match form
+      [form/word w] [none]
+      [form/list l]
+      [[func go [i]
+        [if [lt-s i [size l]]
+          [if-let [node [try-get-syntax-node-rec [at l i]]]
+            [some node]
+            [go [inc i]]]
+          [none]]
+        ] 0
+      ]]]]
+
+[defn log-location [form]
+  [if-let [node [try-get-syntax-node-rec form]]
     [let [loc [get-syntax-node-location node]]
       [stdout-print [syntax-node-content-name node]]
       [stdout-write-code-point [i32 58]]
@@ -486,7 +501,9 @@
       [stdout-write-code-point [i32 58]]
       [stdout-print [inc [syntax-node-location/column loc]]]
       [stdout-write-code-point [i32 10]]]
-    [logq log-location unable to log location no node found]]]
+    [do
+      [log form]
+      [logq log-location unable to log location no node found]]]]
 
 [type byte-array [] [union]]
 [def-extern byte-array [func [i32] byte-array]]
