@@ -71,6 +71,20 @@
         [list [list form]]]]
     form/list
     ]
-
-
+  [test-ok form
+    [type form []
+      [union
+        [word word]
+        [list [list form]]]]
+    [form/word [word a]]
+    ]
+  [test-ok form
+    [type form []
+      [union
+        [word word]
+        [list [list form]]]]
+    [form/word [word a]]
+    ]
+  [test-errors [type-scheme [a] a] [[not unifiable - different types]]
+    [[i32 5] [i32 6]]]
 ]]

@@ -505,6 +505,15 @@
               [logq-abort check type definition not recognized]]]]
           type-empty-tuple]
 
+        [bform/call f args]
+        [let
+          [func-type [go level lctx f]
+           arg-types [list-map-fn [func f [arg] [go level lctx arg]] args]
+           t-res [generate-fresh-type-var gctx level]
+           t-func [type-func arg-types [none] t-res]]
+          [unify-report gctx func-type t-func bform]
+          t-res]
+
         [do
           [log bform]
           [logq-abort check not implemented]]]]]
