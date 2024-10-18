@@ -410,22 +410,28 @@
           [for i 0 [dec [size sub-forms]]
             [go level lctx [at sub-forms i]]]
           [go level lctx [last sub-forms]]]]]
-    [func go-func [level lctx func]
+    [func go-func [level lctx func function-kind]
       [let
         [level-1 [inc level]
          gen-func-type [generate-fresh-type-var gctx level-1]
          func-type-scheme [mk-empty-type-scheme gen-func-type]
          param-ctx [transient-kv-map]
          func-ctx [make-local-context param-ctx lctx]
-         reg-params [growable-list]]
+         reg-params [growable-list]
+         takes-form-params
+           [match function-kind
+             [function-kind/func] false
+             [function-kind/macro] true
+             [function-kind/fexpr] true
+             [logq-abort check function-kind not recognized]]]
         [set-kv-map param-ctx [syntax-word/word [bfunc/name func]] func-type-scheme]
         [for-each param [bfunc/parameters func]
-          [let [tv [generate-fresh-type-var gctx level-1]]
+          [let [tv [if takes-form-params type-form [generate-fresh-type-var gctx level-1]]]
             [set-kv-map param-ctx [syntax-word/word param] [mk-empty-type-scheme tv]]
             [push reg-params tv]]]
         [let [opt-rest
               [if-let [rest-param [bfunc/rest-param func]]
-                [let [tv [generate-fresh-type-var gctx level-1]]
+                [let [tv [if takes-form-params type-form [generate-fresh-type-var gctx level-1]]]
                   [set-kv-map param-ctx [syntax-word/word rest-param] [mk-empty-type-scheme [type-list tv]]]
                   [some tv]]
                 [none]]
@@ -438,8 +444,15 @@
                   [clone-growable-to-frozen-list reg-params]
                   opt-rest
                   return-type
-                  [function-kind/func]]]]
-            func]]
+                  function-kind]]]
+            func]
+          [match function-kind
+            [function-kind/macro]
+            [unify-report gctx return-type type-form [last [bfunc/body func]]]
+
+            [do]]
+        ]
+
         gen-func-type]]
     [func go [level lctx bform]
       [match bform
@@ -542,8 +555,15 @@
               [logq-abort check type definition not recognized]]]]
           type-empty-tuple]
 
+        [bform/defmacro f]
+        [let
+          [func-type [go-func level lctx f [function-kind/macro]]
+           general-val-type [generalize level func-type]]
+          [set-kv-map [check-context/def-var-types gctx] [syntax-word/word [bfunc/name f]] general-val-type]
+          type-empty-tuple]
+
         [bform/func f]
-        [go-func level lctx f]
+        [go-func level lctx f [function-kind/func]]
 
         [bform/call f args]
         [let

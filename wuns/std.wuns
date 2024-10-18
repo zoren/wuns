@@ -21,9 +21,6 @@
 
 [def-extern concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]
 
-[defmacro defn [name params .. bodies]
-  [flist [qword def] name [flist [qword func] name params [form/list [concat [list [qword do]] bodies]]]]]
-
 [defexpr quote [f] f]
 
 [def-extern concat-lists [type-scheme [a] [func [[list [list a]]] [list a]]]]

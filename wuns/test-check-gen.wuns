@@ -138,4 +138,8 @@
     [list i32]
     [[not unifiable - different types]]
     [[func f [.. p] p] [i32 5] [word a]]]
+
+  [test-errors [tuple] [[not unifiable - different types]]
+    [defmacro qword [m]
+      [i32 0]]]
 ]]
