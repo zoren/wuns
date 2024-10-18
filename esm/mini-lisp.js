@@ -31,6 +31,8 @@ import {
   tryGetFormWord,
   makeClosure,
   tryGetClosureKind,
+  makeFormWord,
+  makeFormList,
 } from './core.js'
 
 class EvalError extends Error {
@@ -58,6 +60,9 @@ import { wrapJSFunctionsToObject } from './utils.js'
 
 const instructions = wrapJSFunctionsToObject(instructionFunctions)
 const intrinsics = instructions
+
+const doFormWord = makeFormWord('do')
+const makeDoForm = (forms) => makeFormList(makeList(doFormWord, ...forms))
 
 export const makeEvalForm = (externs, defEnv) => {
   if (!isDefEnv(defEnv)) throw new Error('first argument must be a defEnv')
@@ -97,9 +102,10 @@ export const makeEvalForm = (externs, defEnv) => {
         if (env !== defEnv) throw evalError(`special form '${firstWord}' must be used at the top level`)
       }
       const makeClosureOfKind = (kind) => {
+        if (numOfArgs < 3) throw evalError(`special form '${firstWord}' expected at least three arguments`)
         const name = getFormWord(forms[1])
         const parameters = getFormList(forms[2]).map(getFormWord)
-        const body = forms[3]
+        const body = makeDoForm(forms.slice(3))
         let closure
         const paramEnvMaker = (() => {
           if (parameters.length < 2 || parameters.at(-2) !== '..') {
@@ -173,7 +179,6 @@ export const makeEvalForm = (externs, defEnv) => {
         case 'macro':
           throw evalError('closure macros are not allowed anymore')
         case 'defexpr': {
-          assertNumArgs(3)
           assertTopLevel()
           const name = getFormWord(forms[1])
           const closure = makeClosureOfKind('fexpr')
@@ -181,7 +186,6 @@ export const makeEvalForm = (externs, defEnv) => {
           return langUndefined
         }
         case 'defmacro': {
-          assertNumArgs(3)
           assertTopLevel()
           const name = getFormWord(forms[1])
           const closure = makeClosureOfKind('macro')
@@ -189,10 +193,8 @@ export const makeEvalForm = (externs, defEnv) => {
           return langUndefined
         }
         // constants calculated from environment
-        case 'func': {
-          assertNumArgs(3)
+        case 'func':
           return makeClosureOfKind(firstWord)
-        }
         case 'atom': {
           assertNumArgs(1)
           const initialValue = go(env, forms[1])
@@ -260,7 +262,7 @@ export const makeEvalForm = (externs, defEnv) => {
           form = forms.at(-1)
           continue
         case 'let': {
-          assertNumArgs(2)
+          if (numOfArgs < 1) throw evalError('let expected at least a binding list')
           const bindings = getFormList(forms[1])
           if (bindings.length % 2 !== 0) throw evalError('odd number of bindings')
           const newEnv = makeEnv(env)
@@ -271,13 +273,11 @@ export const makeEvalForm = (externs, defEnv) => {
             throw evalError('error in let bindings', e)
           }
           env = newEnv
-          form = forms[2]
+          form = makeDoForm(forms.slice(2))
           continue
         }
-        case 'letrec':
-          throw evalError('letrec is not allowed anymore')
         case 'letfn': {
-          assertNumArgs(2)
+          if (numOfArgs < 1) throw evalError('letfn expected at least a list of functions')
           const functionsList = getFormList(forms[1])
           const funcs = functionsList.map((funcForm) => {
             const funcList = getFormList(funcForm)
@@ -296,9 +296,11 @@ export const makeEvalForm = (externs, defEnv) => {
             throw evalError('error in let bindings', e)
           }
           env = newEnv
-          form = forms[2]
+          form = makeDoForm(forms.slice(2))
           continue
         }
+        case 'letrec':
+          throw evalError('letrec is deprecated')
         case 'def': {
           assertNumArgs(2)
           assertTopLevel()

@@ -40,6 +40,8 @@ export const makeValueTagger = (tag, arity) => {
 
 const formWordName = 'form/word'
 const formListName = 'form/list'
+export const makeFormWord = (w) => makeTaggedValue(formWordName, w)
+export const makeFormList = (l) => makeTaggedValue(formListName, l)
 export const optionNone = makeTaggedValue('option/none')
 export const makeOptionSome = makeValueTagger('option/some', 1)
 
@@ -144,12 +146,12 @@ export const treeToFormsSafeNoMeta = (tree) => {
   const tryNodeToForm = (node) => {
     const { isError, type } = node
     const mkWord = () => {
-      const formWord = makeTaggedValue(formWordName, node.text)
+      const formWord = makeFormWord(node.text)
       formToNodeMap.set(formWord, node)
       return formWord
     }
     const mkList = () => {
-      const formList = makeTaggedValue(formListName, childrenToList(node))
+      const formList = makeFormList(childrenToList(node))
       formToNodeMap.set(formList, node)
       return formList
     }
