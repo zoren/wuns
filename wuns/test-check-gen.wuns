@@ -52,4 +52,17 @@
   [test-ok word [let [v [word a]] [word a]]]
   [test-ok word [let [v [word a]] v]]
   [test-ok word [let [v [word a] u v] u]]
+
+  [test-ok
+    word
+    [def d [word a]]]
+  [test-ok
+    word
+    [def d [word a]]
+    d]
+  [test-ok i32
+    [def d [i32 5]]
+    [def d2 d]
+    d2]
+
 ]]

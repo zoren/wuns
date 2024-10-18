@@ -441,6 +441,13 @@
               [set-kv-map var-types var general-val-type]]]
           [go-forms level let-ctx bodies]]
 
+        [bform/def var value]
+        [let
+          [value-type [go [inc level] lctx value]
+           general-val-type [generalize level value-type]]
+          [set-kv-map [check-context/def-var-types gctx] var general-val-type]
+          value-type]
+
         [do
           [log bform]
           [logq-abort check not implemented]]]]]
