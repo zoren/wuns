@@ -83,9 +83,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
       }
       const pushToken = (form, tokenType) => pushTokenWithModifier(form, tokenType, 0)
       const emptyList = Object.freeze([])
-      const getListOrEmpty = (form) => {
-        return tryGetFormList(form) || emptyList
-      }
+      const getListOrEmpty = (form) => tryGetFormList(form) || emptyList
       const goType = (form) => {
         if (!form) return
         if (tryGetFormWord(form)) pushToken(form, typeTokenType)
@@ -116,20 +114,19 @@ const makeProvideDocumentSemanticTokensForms = async () => {
             console.error(e)
           }
         }
-        const funcSpecial = (headWord, [name, paramsForm, body]) => {
+        const funcSpecial = (headWord, [name, paramsForm, ...bodies]) => {
           pushToken(name, headWord === 'macro' ? macroTokenType : functionTokenType)
-          const params = tryGetFormList(paramsForm)
-          if (params) for (const param of params) pushToken(param, parameterTokenType)
-          go(body)
+          for (const param of getListOrEmpty(paramsForm)) pushToken(param, parameterTokenType)
+          for (const body of bodies) go(body)
         }
         const letSpecial = () => {
-          const [bindingsForm, body] = tail
+          const [bindingsForm, ...bodies] = tail
           const bindings = getListOrEmpty(bindingsForm)
           for (let i = 0; i < bindings.length - 1; i += 2) {
             pushTokenWithModifier(bindings[i], variableTokenType, declarationModifier)
             go(bindings[i + 1])
           }
-          go(body)
+          for (const body of bodies) go(body)
         }
         const specialForms = {
           i32: () => {
@@ -148,8 +145,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
             go(tail[0])
             for (let i = 1; i < tail.length - 1; i += 2) {
               const constForm = tail[i]
-              const cl = tryGetFormList(constForm)
-              if (cl) for (const form of cl) go(form)
+              for (const form of getListOrEmpty(constForm)) go(form)
               go(tail[i + 1])
             }
             go(tail.at(-1))
