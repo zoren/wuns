@@ -13,7 +13,7 @@
           [when-not [is-empty check-errors]
             [logq test-ok there were errors]
             [for-each message check-errors
-              [log-report-message message]]
+              [log-check-message message]]
             [logq-abort test-ok failed there were errors]]
           [assert [eq-form actual-type expected-type] test-ok failed expected type [identity expected-type] but found [identity actual-type]]
           [inc-atom tests-run-atom]]
@@ -29,7 +29,7 @@
             [logq expected]
             [for-each error expected-errors [log error]]
             [logq actual]
-            [for-each error errors [log-report-message error]]
+            [for-each error errors [log-check-message error]]
             [logq-abort test-error ]]
 
           [assert [eq-form actual-type expected-type] test-ok failed expected type [identity expected-type] but found [identity actual-type]]

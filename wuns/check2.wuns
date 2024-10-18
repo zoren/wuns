@@ -351,7 +351,13 @@
 [type check-message []
   [record
     [message form]
-    [location [option syntax-node]]]]
+    [opt-node [option syntax-node]]]]
+
+[defn log-check-message [error]
+  [if-let [node [check-message/opt-node error]]
+    [log-node-location node]
+    [logq no location]]
+  [log [check-message/message error]]]
 
 [type check-context []
   [record
@@ -404,13 +410,44 @@
           [for i 0 [dec [size sub-forms]]
             [go level lctx [at sub-forms i]]]
           [go level lctx [last sub-forms]]]]]
+    [func go-func [level lctx func]
+      [let
+        [level-1 [inc level]
+         gen-func-type [generate-fresh-type-var gctx level-1]
+         func-type-scheme [mk-empty-type-scheme gen-func-type]
+         param-ctx [transient-kv-map]
+         func-ctx [make-local-context param-ctx lctx]
+         reg-params [growable-list]]
+        [set-kv-map param-ctx [syntax-word/word [bfunc/name func]] func-type-scheme]
+        [for-each param [bfunc/parameters func]
+          [let [tv [generate-fresh-type-var gctx level-1]]
+            [set-kv-map param-ctx [syntax-word/word param] [mk-empty-type-scheme tv]]
+            [push reg-params tv]]]
+        [let [opt-rest
+              [if-let [rest-param [bfunc/rest-param func]]
+                [let [tv [generate-fresh-type-var gctx level-1]]
+                  [set-kv-map param-ctx [syntax-word/word rest-param] [mk-empty-type-scheme [type-list tv]]]
+                  [some tv]]
+                [none]]
+              return-type [go-forms level-1 func-ctx [bfunc/body func]]]
+          [unify-report gctx
+            gen-func-type
+            [ctype/inst
+              [inst-type/func
+                [func-type
+                  [clone-growable-to-frozen-list reg-params]
+                  opt-rest
+                  return-type
+                  [function-kind/func]]]]
+            func]]
+        gen-func-type]]
     [func go [level lctx bform]
       [match bform
         [bform/var w]
         [if-let [type-scheme [try-get-var-type gctx lctx [syntax-word/word w]]]
           [specialize-type-scheme [check-context/type-var-counter gctx] level type-scheme]
           [do
-            [report-fn gctx [quote [check not implemented]] [try-get-node gctx bform]]
+            [report-sword gctx w [quote [variable not found]]]
             [generate-fresh-type-var-atom [check-context/type-var-counter gctx] level]]]
 
         [bform/literal l]
@@ -505,6 +542,9 @@
               [logq-abort check type definition not recognized]]]]
           type-empty-tuple]
 
+        [bform/func f]
+        [go-func level lctx f]
+
         [bform/call f args]
         [let
           [func-type [go level lctx f]
@@ -516,7 +556,7 @@
 
         [do
           [log bform]
-          [logq-abort check not implemented]]]]]
+          [logq-abort check2 not implemented]]]]]
       [go 0 [none] outer-bform]]]
 
 [defn normalize-deep [internal-type]

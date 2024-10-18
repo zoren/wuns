@@ -492,15 +492,18 @@
         ] 0
       ]]]]
 
+[defn log-node-location [node]
+  [let [loc [get-syntax-node-location node]]
+    [stdout-print [syntax-node-content-name node]]
+    [stdout-write-code-point [i32 58]]
+    [stdout-print [inc [syntax-node-location/row loc]]]
+    [stdout-write-code-point [i32 58]]
+    [stdout-print [inc [syntax-node-location/column loc]]]
+    [stdout-write-code-point [i32 10]]]]
+
 [defn log-location [form]
   [if-let [node [try-get-syntax-node-rec form]]
-    [let [loc [get-syntax-node-location node]]
-      [stdout-print [syntax-node-content-name node]]
-      [stdout-write-code-point [i32 58]]
-      [stdout-print [inc [syntax-node-location/row loc]]]
-      [stdout-write-code-point [i32 58]]
-      [stdout-print [inc [syntax-node-location/column loc]]]
-      [stdout-write-code-point [i32 10]]]
+    [log-node-location node]
     [do
       [log form]
       [logq log-location unable to log location no node found]]]]

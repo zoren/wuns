@@ -87,4 +87,55 @@
     ]
   [test-errors [type-scheme [a] a] [[not unifiable - different types]]
     [[i32 5] [i32 6]]]
+
+  [test-ok
+    i32
+    [def f [func id [x] x]]
+    [f [i32 5]]
+    [f [i32 6]]]
+  [test-ok
+    word
+    [def f [func id [x] x]]
+    [f [i32 5]]
+    [f [word a]]]
+  [test-ok [type-scheme [a] [func [[func [i32] a]] a]]
+    [func f [i]
+      [i [i32 5]]]]
+
+  [test-ok
+    [type-scheme [a b] [func [a b] i32]]
+    [func f [x y] [i32 5]]]
+  [test-ok
+    [type-scheme [a] [func [] a]]
+    [func diverge [] [diverge]]]
+  [test-ok
+    [func [i32] i32]
+    [func f [p]
+      [if p
+        [i32 2]
+        [f [i32 1]]]]]
+  [test-ok
+    [type-scheme [a] [func [a] a]]
+    [func id [x] x]]
+  [test-ok
+    [func [i32] i32]
+    [if [i32 5]
+      [func id-i32 [x] [if x x x]]
+      [func id [x] x]]]
+  [test-ok
+    [type-scheme [a] [func [.. a] i32]]
+    [func f [.. p] [i32 0]]]
+  [test-ok
+    [type-scheme [a] [list a]]
+    [[func f [.. p] p]]]
+  [test-ok
+    [list i32]
+    [[func f [.. p] p] [i32 5]]]
+  [test-ok
+    [list i32]
+    [[func f [.. p] p] [i32 5] [i32 6]]]
+  [test-errors
+    [list i32]
+    [[not unifiable - different types]]
+    [[func f [.. p] p] [i32 5] [word a]]]
 ]]
