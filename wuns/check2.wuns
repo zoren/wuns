@@ -394,6 +394,13 @@
 
 [defn check [gctx outer-bform]
   [letfn [
+    [func go-forms [level lctx sub-forms]
+      [if [is-empty sub-forms]
+        type-empty-tuple
+        [do
+          [for i 0 [dec [size sub-forms]]
+            [go level lctx [at sub-forms i]]]
+          [go level lctx [last sub-forms]]]]]
     [func go [level lctx bform]
       [match bform
         [bform/var w]
@@ -419,14 +426,9 @@
           then-type]
 
         [bform/do sub-forms]
-        [if [is-empty sub-forms]
-          type-empty-tuple
-          [do
-            [for i 0 [dec [size sub-forms]]
-              [go level lctx [at sub-forms i]]]
-            [go level lctx [last sub-forms]]]]
+        [go-forms level lctx sub-forms]
 
-        [bform/let bindings body]
+        [bform/let bindings bodies]
         [let
           [var-types [transient-kv-map]
            let-ctx [make-local-context var-types lctx]
@@ -437,7 +439,7 @@
                val-type [go level-1 let-ctx [pair/snd binding]]
                general-val-type [generalize level val-type]]
               [set-kv-map var-types var general-val-type]]]
-          [go level let-ctx body]]
+          [go-forms level let-ctx bodies]]
 
         [do
           [log bform]

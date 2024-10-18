@@ -767,7 +767,6 @@
            bindings [try-get-list-report gctx [second sub-forms]]
            n-of-bindings [size bindings]
            level-1 [inc level]]
-          [report-when-not [eq n-of-args 2] form expects two arguments]
           [for-pair i 0 [dec n-of-bindings]
             [let
               [var [form-to-word [at bindings i]]
@@ -778,11 +777,8 @@
                  [generalize level val-type]
                  [mk-empty-type-scheme val-type]]]
               [set-kv-map var-values var general-val-type]]]
-          [for i 2 [dec s-form]
-            [check gctx level let-ctx [at sub-forms i]]]
-          [if [lt-s 2 s-form]
-            [check gctx level let-ctx [last sub-forms]]
-            type-empty-tuple]]
+          [check gctx level let-ctx
+            [form/list [concat [list [qword do]] [slice sub-forms 2 [size sub-forms]]]]]]
 
         [eq-form first-form [quote letrec]]
         [logq-abort letrec is deprecated]
@@ -794,7 +790,6 @@
            functions [try-get-list-report gctx [second sub-forms]]
            level-1 [inc level]
            tmp-types [growable-list]]
-          [report-when-not [eq n-of-args 2] form expects two arguments]
           [for-each function-form functions
             [let [func-list [try-get-list-report gctx function-form]
                      fname [form-to-word [second func-list]]
@@ -807,11 +802,8 @@
                 [value [at functions i]
                  val-type [check gctx level-1 let-ctx value]]
                 [unify-report gctx val-type [at types i] value]]]]
-          [for i 2 [dec s-form]
-            [check gctx level let-ctx [at sub-forms i]]]
-          [if [lt-s 2 s-form]
-            [check gctx level let-ctx [last sub-forms]]
-            type-empty-tuple]]
+          [check gctx level let-ctx
+            [form/list [concat [list [qword do]] [slice sub-forms 2 [size sub-forms]]]]]]
 
         [eq-form first-form [quote fexpr]]
         [logq-abort check fexpr not allowed here]
@@ -845,7 +837,6 @@
            func-ctx [make-local-context param-ctx lctx first-form]
            reg-params [growable-list]
            opt-rest-param-atom [atom [none]]]
-          [report-when-not [eq n-of-args 3] form expects 3 arguments]
           [set-kv-map param-ctx func-name func-type-scheme]
           [let [params [try-get-list-report gctx [third sub-forms]]]
             [let
@@ -861,8 +852,7 @@
                     [atom-set opt-rest-param-atom [some tv]]]]]]
           [let
             [frozen-params [clone-growable-to-frozen-list reg-params]
-             body [fourth sub-forms]
-             return-type [check gctx level-1 func-ctx body]]
+             return-type [check gctx level-1 func-ctx [form/list [concat [list [qword do]] [slice sub-forms 3 [size sub-forms]]]]]]
             [unify-report gctx
               gen-func-type
               [type/inst [inst-type/func [func-type frozen-params [atom-get opt-rest-param-atom] return-type function-kind]]]
@@ -875,7 +865,7 @@
 
               [function-kind/macro]
               [do
-                [unify-report gctx return-type type-form body]
+                [unify-report gctx return-type type-form [last sub-forms]]
                 [set-kv-map [check-context/def-var-types gctx] func-name func-type-scheme]
                 type-empty-tuple]
 

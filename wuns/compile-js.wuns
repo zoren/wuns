@@ -166,10 +166,10 @@
                     [block
                       [js-stmt/while js-1
                         [block
-                          [cstmt true body]
+                          [cstmt-do true body]
                           [js-stmt/break]]]]]]
 
-                [js-exp/arrow-exp params opt-rest-param [cexp body]]]]
+                [js-exp/arrow-stmt params opt-rest-param [cstmt-do true body]]]]
           [iife
             [block
               [js-stmt/const-decl name js-body]
@@ -208,7 +208,7 @@
                 [js-stmt/const-decl
                   [bfunc/name fn]
                   [cfunc fn]]]
-              [list [js-stmt/return [cexp e]]]]]]
+              [list [cstmt-do true e]]]]]
 
         [bform/func f]
         [cfunc f]
@@ -229,6 +229,16 @@
         [cexp bf]
 
         [iife [block [cstmt true bform]]]]]
+
+      [func cstmt-do [is-tail forms]
+        [if [is-empty forms]
+          [if is-tail
+            [js-stmt/return [js-exp/string [word wuns-undefined]]]
+            [js-stmt/seq [list]]]
+          [js-stmt/block
+            [concat
+              [list-map f [slice forms 0 [dec [size forms]]] [cstmt 0 f]]
+              [list [cstmt is-tail [last forms]]]]]]]
 
       [func cstmt [is-tail bform]
         [match bform
@@ -280,20 +290,13 @@
                   [js-stmt/throw [js-exp/string [word unmatched-match]]]]]]]
 
           [bform/do forms]
-          [if [is-empty forms]
-            [if is-tail
-              [js-stmt/return [js-exp/string [word wuns-undefined]]]
-              [js-stmt/seq [list]]]
-            [js-stmt/block
-              [concat
-                [list-map f [slice forms 0 [dec [size forms]]] [cstmt 0 f]]
-                [list [cstmt is-tail [last forms]]]]]]
+          [cstmt-do is-tail forms]
 
           [bform/let decls e]
           [js-stmt/block
             [concat
               [list-map decl decls [js-stmt/const-decl [pair/fst decl] [cexp [pair/snd decl]]]]
-              [list [cstmt is-tail e]]]]
+              [list [cstmt-do is-tail e]]]]
 
           [bform/def w e]
           [js-stmt/const-decl w [cexp e]]

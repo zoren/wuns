@@ -97,7 +97,6 @@
 [test-ok i32 [do [word a] [i32 3]]]
 
 [comment let]
-[test-errors [tuple] [[expects two arguments]] [let []]]
 [test-ok word [let [] [word a]]]
 [test-ok word [let [v [word a]] v]]
 [test-ok word [let [v [word a] u v] u]]
