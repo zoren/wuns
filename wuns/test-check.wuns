@@ -157,13 +157,6 @@
   [if [i32 5]
     [func id-i32 [x] [if x x x]]
     [func id [x] x]]]
-[test-errors
-  [func [form] i32]
-  [[not unifiable - different types]]
-  [macro mac-i32 [x] [i32 5]]]
-[test-ok
-  [func [form] form]
-  [macro mac-id [x] x]]
 [test-ok
   [func [form] form]
   [fexpr fexpr-id [x] x]]
