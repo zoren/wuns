@@ -38,7 +38,7 @@
     [name word]
     [parameters [list word]]
     [rest-param [option word]]
-    [body bform]]
+    [body [list bform]]]
 
   bform []
   [union
@@ -54,8 +54,8 @@
     [do [list bform]]
     [switch bform [list [pair [list bform] bform]] bform]
     [match bform [list [pair match-pattern bform]] [option bform]]
-    [letfn [list bfunc] bform]
-    [let [list [pair word bform]] bform]
+    [letfn [list bfunc] [list bform]]
+    [let [list [pair word bform]] [list bform]]
     [def word bform]
     [defexpr bfunc]
     [defmacro bfunc]
@@ -286,7 +286,7 @@
       [func form-to-func [lstack form]
         [let
            [form-list [get-list form]
-            - [when-not [eq [size form-list] 4] [push-error form [quote [function-like form expected 4 sub-forms]]]]
+            - [when [lt-s [size form-list] 3] [push-error form [quote [function-like form expected at least 3 elements]]]]
             name [get-word [second form-list]]
             parsed-params [parse-param-list [get-list [third form-list]]]
             regular-param-forms [pair/fst parsed-params]
@@ -305,7 +305,7 @@
               name
               [list-map param regular-param-forms [get-word param]]
               [match opt-rest-param [option/none] [option/none] [option/some v] [option/some [get-word v]]]
-              [form-to-ast new-lstack [fourth form-list]]]]]]
+              [list-map f [slice form-list 3 [size form-list]] [form-to-ast new-lstack f]]]]]]
       [func form-to-ast [lstack form]
         [let
           [report-error [func r [msg] [push-error form msg]]
@@ -402,14 +402,14 @@
                    lvars [transient-kv-map]
                    lctx [local-context lvars form]
                    new-lstack [local-stack/frame lstack lctx]]
-                  [assert-n-args 2]
+                  [when [lt-s n-of-args 2] [report-error [quote [expected at least 2 arguments]]]]
                   [bform/let
                     [list-map p [pairwise bindings]
                       [let [name [first p]
                                be [form-to-ast new-lstack [second p]]]
                         [set-local lvars name [local-var-kind/let]]
                         [pair [get-word name] be]]]
-                    [form-to-ast new-lstack [get-arg 1]]]]
+                    [list-map f [slice l 2 [size l]] [form-to-ast new-lstack f]]]]
 
                 [[word letfn]]
                 [let
@@ -417,7 +417,7 @@
                    lvars [transient-kv-map]
                    lctx [local-context lvars form]
                    new-lstack [local-stack/frame lstack lctx]]
-                  [assert-n-args 2]
+                  [when [lt-s n-of-args 2] [report-error [quote [expected at least 2 arguments]]]]
                   [for-each ff funcs
                     [let [name [second [get-list ff]]]
                       [set-local lvars name [local-var-kind/letfn]]]]
@@ -426,7 +426,7 @@
                       [do
                         [todo check ff starts with func]
                         [form-to-func new-lstack ff]]]
-                    [form-to-ast new-lstack [get-arg 1]]]]
+                    [list-map f [slice l 2 [size l]] [form-to-ast new-lstack f]]]]
 
                 [[word def]]
                 [do
@@ -567,7 +567,7 @@
         [bform/switch c cases d] [logq-abort map-option not implemented switch]
         [bform/match c cases d] [logq-abort map-option not implemented match]
         [bform/letfn l d] [logq-abort map-option not implemented letfn]
-        [bform/let l d] [bform/let [list-map p l [pair [pair/fst p] [go [pair/snd p]]]] [go d]]
+        [bform/let l ds] [bform/let [list-map p l [pair [pair/fst p] [go [pair/snd p]]]] [list-map arg ds [go arg]]]
         [bform/def w d] [bform/def w [go d]]
         [bform/defexpr f] [logq-abort map-option not implemented defexpr]
         [bform/defmacro f] [logq-abort map-option not implemented defmacro]
@@ -616,10 +616,10 @@
 
             [bform/call-fexpr f form-args] [go f]
 
-            [bform/let bindings e]
+            [bform/let bindings es]
             [or
               [exists bindings [func f [b] [go [pair/snd b]]]]
-              [go e]]
+              [exists es go]]
 
             [do
               [log bf]
@@ -672,15 +672,21 @@
             [for i 0 [dec [size l]] [go false [at l i]]]
             [go is-tail [last l]]]
 
-          [bform/let bindings e]
+          [bform/let bindings l]
           [do
             [for-each p bindings [go false [pair/snd p]]]
-            [go is-tail e]]
+            [when-not [is-empty l]
+              [for i 0 [dec [size l]] [go false [at l i]]]
+              [go is-tail [last l]]]]
 
-          [bform/letfn fns e]
+          [bform/letfn fns l]
           [do
-            [for-each fn fns [go false [bfunc/body fn]]]
-            [go is-tail e]]
+            [for-each fn fns
+              [for-each body [bfunc/body fn]
+                [go false body]]]
+            [when-not [is-empty l]
+              [for i 0 [dec [size l]] [go false [at l i]]]
+              [go is-tail [last l]]]]
 
           [bform/call f args]
           [do
@@ -707,7 +713,8 @@
             [do
               [log bf]
               [logq-abort tail-call-analysis not implemented]]]]]
-      [go true [bfunc/body the-func]]
+      [for-each body [bfunc/body the-func]
+        [go true body]]
       [if [atom-get non-tail-rec-calls]
         [tail-call-result/non-tail]
         [if [kv-map-size tail-rec-calls]
