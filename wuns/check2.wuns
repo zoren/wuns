@@ -299,7 +299,7 @@
       [get type-var-env tv]
 
       [btype/apply type-name targs]
-      [switch type-name
+      [switch [syntax-word/word type-name]
         [[word i32]]
         type-i32
 
@@ -309,7 +309,7 @@
         [[word word]]
         type-word
 
-        [make-type-list type-name [list-map ta targs [go ta]]]]
+        [make-type-list [syntax-word/word type-name] [list-map ta targs [go ta]]]]
 
       [btype/func reg-params opt-rest-param result]
       [type-func
@@ -404,7 +404,7 @@
     [func go [level lctx bform]
       [match bform
         [bform/var w]
-        [if-let [type-scheme [try-get-var-type gctx lctx w]]
+        [if-let [type-scheme [try-get-var-type gctx lctx [syntax-word/word w]]]
           [specialize-type-scheme [check-context/type-var-counter gctx] level type-scheme]
           [do
             [report-fn gctx [quote [check not implemented]] [try-get-location gctx bform]]
@@ -414,7 +414,7 @@
         [literal-to-type l]
 
         [bform/intrinsic in]
-        [intrinsic-name-to-type in]
+        [intrinsic-name-to-type [syntax-word/word in]]
 
         [bform/if cond then else]
         [let
@@ -438,14 +438,14 @@
               [var [pair/fst binding]
                val-type [go level-1 let-ctx [pair/snd binding]]
                general-val-type [generalize level val-type]]
-              [set-kv-map var-types var general-val-type]]]
+              [set-kv-map var-types [syntax-word/word var] general-val-type]]]
           [go-forms level let-ctx bodies]]
 
         [bform/def var value]
         [let
           [value-type [go [inc level] lctx value]
            general-val-type [generalize level value-type]]
-          [set-kv-map [check-context/def-var-types gctx] var general-val-type]
+          [set-kv-map [check-context/def-var-types gctx] [syntax-word/word var] general-val-type]
           value-type]
 
         [do

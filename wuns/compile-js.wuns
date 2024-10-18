@@ -150,8 +150,11 @@
     [[func cfunc [f]
       [let
         [name [bfunc/name f]
+         js-name [syntax-word/word name]
          params [bfunc/parameters f]
+         js-params [list-map p params [syntax-word/word p]]
          opt-rest-param [bfunc/rest-param f]
+         js-opt-rest-param [if-let [rp opt-rest-param] [some [syntax-word/word rp]] [none]]
          body [bfunc/body f]
          tail-analysis [tail-call-analysis node-to-ldesc f]]
         [atom-set current-func [option/some f]]
@@ -161,29 +164,29 @@
                 [tail-call-result/only-tail call-to-deps]
                 [do
                   [js-exp/arrow-stmt
-                    params
-                    opt-rest-param
+                    js-params
+                    js-opt-rest-param
                     [block
                       [js-stmt/while js-1
                         [block
                           [cstmt-do true body]
                           [js-stmt/break]]]]]]
 
-                [js-exp/arrow-stmt params opt-rest-param [cstmt-do true body]]]]
+                [js-exp/arrow-stmt js-params js-opt-rest-param [cstmt-do true body]]]]
           [iife
             [block
-              [js-stmt/const-decl name js-body]
-              [js-stmt/return [js-exp/var name]]]]]]]
+              [js-stmt/const-decl js-name js-body]
+              [js-stmt/return [js-exp/var js-name]]]]]]]
      [func cexp [bform]
       [match bform
         [bform/var wf]
-        [js-exp/var wf]
+        [js-exp/var [syntax-word/word wf]]
 
         [bform/literal l]
         [match l
-          [literal/i32 wf] [js-exp/number wf]
-          [literal/f64 wf] [js-exp/number wf]
-          [literal/word wf] [js-exp/string wf]]
+          [literal/i32 wf] [js-exp/number [syntax-word/word wf]]
+          [literal/f64 wf] [js-exp/number [syntax-word/word wf]]
+          [literal/word wf] [js-exp/string [syntax-word/word wf]]]
 
         [bform/atom init-val]
         [js-exp/call [mk-extern [list [word host] [word atom]]] [list [cexp init-val]]]
@@ -195,7 +198,7 @@
         [logq-abort cexp toplevel intrinsic not allowed]
 
         [bform/extern ws]
-        [mk-extern ws]
+        [mk-extern [list-map w ws [syntax-word/word w]]]
 
         [bform/let lpairs e]
         [iife [cstmt true bform]]
@@ -206,7 +209,7 @@
             [concat
               [list-map fn fns
                 [js-stmt/const-decl
-                  [bfunc/name fn]
+                  [syntax-word/word [bfunc/name fn]]
                   [cfunc fn]]]
               [list [cstmt-do true e]]]]]
 
@@ -219,7 +222,7 @@
         [bform/call f args]
         [match f
           [bform/intrinsic i]
-          [instruction-name-and-args-to-js-exp i [list-map arg args [cexp arg]]]
+          [instruction-name-and-args-to-js-exp [syntax-word/word i] [list-map arg args [cexp arg]]]
 
           [if-let [deps [try-get-tail bform]]
             [logq-abort cexp found a tail call not expected]
@@ -262,7 +265,7 @@
 
           [bform/match exp cases opt-default]
           [let [tmp [gen-tmp-word]
-                   tmp-args [gen-tmp-word]]
+                tmp-args [gen-tmp-word]]
             [block
               [js-stmt/const-decl tmp [cexp exp]]
               [js-stmt/const-decl tmp-args [js-exp/subscript [js-exp/var tmp] [js-exp/string [word args]]]]
@@ -272,14 +275,16 @@
                   [list [js-exp/var tmp]]]
                 [list-map case cases
                   [let [mp [pair/fst case]
-                            ctor [match-pattern/ctor mp]
-                            params [match-pattern/params mp]
-                            counter [atom 0]]
+                        ctor [syntax-word/word [match-pattern/ctor mp]]
+                        params [match-pattern/params mp]
+                        counter [atom 0]]
                     [pair [list [js-exp/string ctor]]
                       [js-stmt/block
                         [concat
                           [list-map p params
-                            [js-stmt/const-decl p [js-exp/subscript [js-exp/var tmp-args] [js-exp/number [int-to-word [inc-atom counter]]]]]]
+                            [js-stmt/const-decl
+                              [syntax-word/word p]
+                              [js-exp/subscript [js-exp/var tmp-args] [js-exp/number [int-to-word [inc-atom counter]]]]]]
                           [if is-tail
                             [list [cstmt is-tail [pair/snd case]]]
                             [list
@@ -295,30 +300,30 @@
           [bform/let decls e]
           [js-stmt/block
             [concat
-              [list-map decl decls [js-stmt/const-decl [pair/fst decl] [cexp [pair/snd decl]]]]
+              [list-map decl decls [js-stmt/const-decl [syntax-word/word [pair/fst decl]] [cexp [pair/snd decl]]]]
               [list [cstmt-do is-tail e]]]]
 
           [bform/def w e]
-          [js-stmt/const-decl w [cexp e]]
+          [js-stmt/const-decl [syntax-word/word w] [cexp e]]
 
           [bform/defexpr fexpr-func]
-          [js-stmt/const-decl [bfunc/name fexpr-func] [cfunc fexpr-func]]
+          [js-stmt/const-decl [syntax-word/word [bfunc/name fexpr-func]] [cfunc fexpr-func]]
 
           [bform/defmacro macro-func]
-          [js-stmt/const-decl [bfunc/name macro-func] [cfunc macro-func]]
+          [js-stmt/const-decl [syntax-word/word [bfunc/name macro-func]] [cfunc macro-func]]
 
           [bform/type decls]
           [js-stmt/seq
             [concat-lists
               [list-map decl decls
                 [let [type-name [type-decl/name decl]
-                      type-params [type-decl/type-params decl]
+                      js-type-name [syntax-word/word type-name]
                       kind [type-decl/kind decl]
-                      type-name-prefix [concat-words type-name [word /]]]
+                      type-name-prefix [concat-words js-type-name [word /]]]
                   [match kind
                     [type-decl-kind/union ctors]
                     [list-map ctor ctors
-                      [let [ctor-name [pair/fst ctor]
+                      [let [ctor-name [syntax-word/word [pair/fst ctor]]
                             tag [concat-words type-name-prefix ctor-name]
                             n-atom [atom 0]
                             params [list-map - [pair/snd ctor] [concat-words [word p] [int-to-word [inc-atom n-atom]]]]]
@@ -334,18 +339,18 @@
                                 [js-exp/array [list-map p params [js-exp/var p]]]]]]]]]
 
                     [type-decl-kind/record fields]
-                    [let [field-names [list-map field fields [pair/fst field]]]
+                    [let [field-names [list-map field fields [syntax-word/word [pair/fst field]]]]
                       [concat
                         [list
                           [js-stmt/const-decl
-                            type-name
+                            js-type-name
                             [js-exp/arrow-exp
                               field-names
                               [none]
                               [js-exp/call
                                 [mk-extern [list [word host] [word make-record-from-object]]]
                                 [list
-                                  [js-exp/string type-name]
+                                  [js-exp/string js-type-name]
                                   [js-exp/object
                                     [list-map field-name field-names
                                       [pair
@@ -375,12 +380,13 @@
                         assignments [growable-list]
                         subst [transient-kv-map]]
                 [for i 0 [size args]
-                  [if [set-has deps-set i]
-                    [let [tmp [concat-words [word tmp] [int-to-word i]]]
-                      [push tmp-consts [js-stmt/const-decl tmp [js-exp/var [at params i]]]]
-                      [push assignments [js-stmt/assign [at params i] [cexp [at args i]]]]
-                      [set-kv-map subst [at params i] [bform/var tmp]]]
-                    [push assignments [js-stmt/assign [at params i] [cexp [substitute [at args i] subst]]]]]]
+                  [let [param [syntax-word/word [at params i]]]
+                    [if [set-has deps-set i]
+                      [let [tmp [concat-words [word tmp] [int-to-word i]]]
+                        [push tmp-consts [js-stmt/const-decl tmp [js-exp/var param]]]
+                        [push assignments [js-stmt/assign param [cexp [at args i]]]]
+                        [set-kv-map subst param [bform/var [syntax-word tmp [none]]]]]
+                      [push assignments [js-stmt/assign param [cexp [substitute [at args i] subst]]]]]]]
                 [js-stmt/seq
                   [concat
                     [concat

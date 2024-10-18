@@ -1,51 +1,56 @@
 [load std.wuns]
 [load interpreter-externs.wuns]
 
+[type syntax-word []
+  [record
+    [word word]
+    [node [option syntax-node]]]]
+
 [type btype []
   [union
-    [var word]
+    [var syntax-word]
     [func [list btype] [option btype] btype]
-    [apply word [list btype]]
+    [apply syntax-word [list btype]]
     [error]]]
 
 [type btype-scheme []
   [record
-    [type-params [list word]]
+    [type-params [list syntax-word]]
     [type btype]]]
 
 [type type-decl-kind []
   [union
-    [union [list [pair word [list btype]]]]
-    [record [list [pair word btype]]]]]
+    [union [list [pair syntax-word [list btype]]]]
+    [record [list [pair syntax-word btype]]]]]
 
 [type type-decl []
   [record
-    [name word]
-    [type-params [list word]]
+    [name syntax-word]
+    [type-params [list syntax-word]]
     [kind type-decl-kind]]]
 
-[type match-pattern [] [record [ctor word] [params [list word]]]]
+[type match-pattern [] [record [ctor syntax-word] [params [list syntax-word]]]]
 
 [type literal []
   [union
-    [i32 word]
-    [f64 word]
-    [word word]]]
+    [i32 syntax-word]
+    [f64 syntax-word]
+    [word syntax-word]]]
 
 [type
   bfunc []
   [record
-    [name word]
-    [parameters [list word]]
-    [rest-param [option word]]
+    [name syntax-word]
+    [parameters [list syntax-word]]
+    [rest-param [option syntax-word]]
     [body [list bform]]]
 
   bform []
   [union
-    [var word]
+    [var syntax-word]
     [literal literal]
-    [intrinsic word]
-    [extern [list word]]
+    [intrinsic syntax-word]
+    [extern [list syntax-word]]
     [type [list type-decl]]
 
     [atom bform]
@@ -55,8 +60,8 @@
     [switch bform [list [pair [list bform] bform]] bform]
     [match bform [list [pair match-pattern bform]] [option bform]]
     [letfn [list bfunc] [list bform]]
-    [let [list [pair word bform]] [list bform]]
-    [def word bform]
+    [let [list [pair syntax-word bform]] [list bform]]
+    [def syntax-word bform]
     [defexpr bfunc]
     [defmacro bfunc]
     [call bform [list bform]]
@@ -123,6 +128,13 @@
   [log-location [report-message/form error]]
   [log [report-message/message error]]]
 
+[defn sword [form]
+  [if-let [w [try-get-word form]]
+    [syntax-word
+      w
+      [try-get-syntax-node form]]
+    [logq-abort sword expected word]]]
+
 [defn mk-form-to-ast []
   [let
     [eval-ctx [make-eval-context [current-dir]]
@@ -150,6 +162,11 @@
       [if-let [w [try-get-word-report form]]
         w
         [word ---word-not-found---]]]
+     get-sword
+     [func gw [form]
+      [if-let [w [try-get-word-report form]]
+        [sword form]
+        [syntax-word [word ---word-not-found---] [none]]]]
      get-list
      [func gl [form]
       [match form
@@ -203,17 +220,17 @@
               [do
                 [when-not arity-ok
                   [push-error form [quote [wrong number of type arguments to builtin]]]]
-                [btype/apply w [list]]]
+                [btype/apply [sword form] [list]]]
               [if [has type-param-map w]
-                [btype/var w]
+                [btype/var [sword form]]
                 [if-let [arity [try-get type-ctx w]]
                   [do
                     [when-not [eq 0 arity]
                       [push-error form [quote [wrong number of type arguments]]]]
-                    [btype/apply w [list]]]
+                    [btype/apply [sword form] [list]]]
                   [do
                     [push-error form [quote [undefined type or type param]]]
-                    [btype/var w]]]]]
+                    [btype/var [sword form]]]]]]
 
             [form/list l]
             [if [is-empty l]
@@ -248,7 +265,7 @@
                         [when-not [eq n-of-args arity]
                           [push-error form [quote [wrong number of type arguments]]]]
                         [push-error form [quote [undefined type]]]]]
-                    [btype/apply fw [list-map arg [rest l] [f2t arg]]]]]]]]]]
+                    [btype/apply [sword [first l]] [list-map arg [rest l] [f2t arg]]]]]]]]]]
       [func form-to-type [form] [[mk-form-to-type [transient-kv-map]] form]]
       [func form-to-type-param-list [form]
         [let
@@ -262,7 +279,7 @@
                 [when [is-reserved-type-name tpw]
                   [push-error tpf [quote [reserved types cannot be used as type params]]]]
                 [set-kv-map word-to-form tpw tpf]
-                [push type-param-words tpw]]]]
+                [push type-param-words [sword tpf]]]]]
           [pair
             [clone-growable-to-frozen-list type-param-words]
             word-to-form]]]
@@ -302,9 +319,9 @@
             [set-local lvars rest-param [local-var-kind/param name [inc-atom counter-atom]]]]
           [insert-form form
             [bfunc
-              name
-              [list-map param regular-param-forms [get-word param]]
-              [match opt-rest-param [option/none] [option/none] [option/some v] [option/some [get-word v]]]
+              [sword [second form-list]]
+              [list-map param regular-param-forms [sword param]]
+              [match opt-rest-param [option/none] [option/none] [option/some v] [option/some [sword v]]]
               [list-map f [slice form-list 3 [size form-list]] [form-to-ast new-lstack f]]]]]]
       [func form-to-ast [lstack form]
         [let
@@ -316,7 +333,7 @@
           [insert-form form
           [match form
           [form/word w]
-          [let [bf [bform/var [get-word form]]]
+          [let [bf [bform/var [get-sword form]]]
             [if-let [ldesc [try-get-local lstack w]]
               [set-kv-map node-to-ldesc bf ldesc]
               [if-let [ddesc [try-get def-ctx w]]
@@ -333,22 +350,22 @@
               [form/word first-word]
               [switch first-word
                 [[word i32]]
-                [bform/literal [literal/i32 [get-word [get-arg 0]]]]
+                [bform/literal [literal/i32 [get-sword [get-arg 0]]]]
 
                 [[word f64]]
-                [bform/literal [literal/f64 [get-word [get-arg 0]]]]
+                [bform/literal [literal/f64 [get-sword [get-arg 0]]]]
 
                 [[word i64] [word f32] [word v128]]
                 [logq-abort form-to-ast not implemented [identity first-form]]
 
                 [[word word]]
-                [bform/literal [literal/word [get-word [get-arg 0]]]]
+                [bform/literal [literal/word [get-sword [get-arg 0]]]]
 
                 [[word extern]]
-                [bform/extern [list-map w [rest l] [get-word w]]]
+                [bform/extern [list-map w [rest l] [get-sword w]]]
 
                 [[word intrinsic]]
-                [bform/intrinsic [get-word [get-arg 0]]]
+                [bform/intrinsic [get-sword [get-arg 0]]]
 
                 [[word func]]
                 [bform/func [form-to-func lstack form]]
@@ -383,11 +400,11 @@
                       [assert [not [is-empty pat-list]] match pattern is empty]
                       [pair
                         [match-pattern
-                          [get-word [first pat-list]]
+                          [get-sword [first pat-list]]
                           [list-map param [rest pat-list]
                             [do
                               [set-local lvars param [local-var-kind/match-param]]
-                              [get-word param]]]]
+                              [get-sword param]]]]
                         [form-to-ast new-lstack [second p]]]]]
                   [if [is-odd [size l]]
                     [some [form-to-ast lstack [last l]]]
@@ -406,9 +423,9 @@
                   [bform/let
                     [list-map p [pairwise bindings]
                       [let [name [first p]
-                               be [form-to-ast new-lstack [second p]]]
+                            be [form-to-ast new-lstack [second p]]]
                         [set-local lvars name [local-var-kind/let]]
-                        [pair [get-word name] be]]]
+                        [pair [sword name] be]]]
                     [list-map f [slice l 2 [size l]] [form-to-ast new-lstack f]]]]
 
                 [[word letfn]]
@@ -432,7 +449,7 @@
                 [do
                   [assert-n-args 2]
                   [assert-empty-stack]
-                  [let [bf [bform/def [get-word [get-arg 0]] [form-to-ast lstack [third l]]]]
+                  [let [bf [bform/def [sword [get-arg 0]] [form-to-ast lstack [third l]]]]
                     [set-def [get-arg 0] [def-desc/any]]
                     [eval-form form]
                     bf]]
@@ -474,7 +491,8 @@
                     [bform/type
                       [list-map triple triples
                         [let
-                          [type-name [get-word [first triple]]
+                          [type-name-form [first triple]
+                           type-name [get-word type-name-form]
                            type-prefix [concat-words type-name [word /]]
                            def-prefix
                            [func dp [name desc]
@@ -487,7 +505,7 @@
                            type-params-map [pair/snd param-pair]
                            form-to-type-with-params [mk-form-to-type type-params-map]]
                           [type-decl
-                            type-name
+                            [sword type-name-form]
                             type-params
                             [match [third triple]
                               [form/list l]
@@ -498,11 +516,12 @@
                                   [type-decl-kind/union
                                     [list-map ctor [rest l]
                                       [let [ctor-list [get-list ctor]
-                                              ctor-name [get-word [first ctor-list]]]
+                                            ctor-name-form [first ctor-list]
+                                            ctor-name [get-word ctor-name-form]]
                                         [assert [not [is-empty ctor-list]] type decl kind union ctor is empty]
                                         [def-prefix ctor-name [def-desc/union-ctor]]
                                         [pair
-                                          ctor-name
+                                          [sword ctor-name-form]
                                           [list-map arg [rest ctor-list] [form-to-type-with-params arg]]]]]]
 
                                   [[word record]]
@@ -511,10 +530,11 @@
                                     [type-decl-kind/record
                                       [list-map field [rest l]
                                         [let [field-list [get-list field]
-                                                 field-name [get-word [first field-list]]]
+                                              field-name-form [first field-list]
+                                              field-name [get-word field-name-form]]
                                           [assert [not [is-empty field-list]] type decl kind record field is empty]
                                           [def-prefix field-name [def-desc/record-proj]]
-                                          [pair field-name [form-to-type-with-params [second field-list]]]]]]]
+                                          [pair [sword field-name-form] [form-to-type-with-params [second field-list]]]]]]]
 
                                   [logq-abort unknown type kind]]]
 
@@ -534,7 +554,7 @@
                   [if-let [ddesc [try-get def-ctx first-word]]
                     [match ddesc
                       [def-desc/fexpr]
-                      [bform/call-fexpr [bform/var [get-word first-form]] [rest l]]
+                      [bform/call-fexpr [bform/var [get-sword first-form]] [rest l]]
 
                       [def-desc/macro]
                       [if-let [macro-func [try-get-macro eval-ctx first-word]]
@@ -585,7 +605,7 @@
   [map-option
     [func proc-var [bf]
       [match bf
-        [bform/var w] [try-get subst w]
+        [bform/var w] [try-get subst [syntax-word/word w]]
         [none]]]
     ast]]
 
@@ -696,14 +716,14 @@
             [match f
               [bform/var wf]
               [when [and
-                      [eq-word [bfunc/name the-func] wf]
+                      [eq-word [syntax-word/word [bfunc/name the-func]] [syntax-word/word wf]]
                       [match [get node-to-ldesc f] [local-var-kind/func-internal-self] 1 0]]
                   [if is-tail
                     [let [dependent-args [growable-list]]
                       [for i 0 [size args]
                         [when
                           [exists [slice args [inc i] [size args]]
-                            [func has-dep [arg] [has-dep-on-param node-to-ldesc arg [bfunc/name the-func] i]]]
+                            [func has-dep [arg] [has-dep-on-param node-to-ldesc arg [syntax-word/word [bfunc/name the-func]] i]]]
                           [push dependent-args i]]]
                       [set-kv-map tail-rec-calls bf [clone-growable-to-frozen-list dependent-args]]]
                     [atom-set non-tail-rec-calls true]]]
