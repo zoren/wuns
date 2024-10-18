@@ -286,12 +286,6 @@
     [flist [quote report-fn] [quote gctx] [quote-list lmsg] form]
     [quote [generate-fresh-type-var gctx 0]]]]
 
-[defn unify-call [gctx level func-type arg-types form]
-  [let [t-res [generate-fresh-type-var gctx level]
-        t-func [type-func arg-types [none] t-res]]
-    [unify-report gctx func-type t-func form]
-    t-res]]
-
 [defn mk-empty-type-scheme [type] [check-type-scheme [list] type]]
 
 [defn generalize [current-level type]
