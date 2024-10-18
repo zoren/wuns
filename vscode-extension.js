@@ -23,7 +23,22 @@ let parseDocumentTreeSitter = null
 const wunsLanguageId = 'wuns'
 
 // https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide
-const tokenTypes = ['variable', 'keyword', 'function', 'macro', 'parameter', 'string', 'number', 'comment', 'type']
+const tokenTypes = [
+  'variable',
+  'keyword',
+  'function',
+  'macro',
+  'parameter',
+  'string',
+  'number',
+  'comment',
+  'type',
+
+  'operator',
+  'typeParameter',
+  'enum',
+  'enumMember',
+]
 
 const tokenModifiers = ['declaration', 'definition', 'readonly', 'defaultLibrary', 'modification']
 // https://github.com/microsoft/vscode/blob/70e10d604e1939e9d98f3970f6f19604bfe2852c/src/vs/workbench/api/common/extHostTypes.ts#L3379
@@ -41,6 +56,10 @@ const parameterTokenType = tokenTypesMap.get('parameter')
 const stringTokenType = tokenTypesMap.get('string')
 const typeTokenType = tokenTypesMap.get('type')
 const tokenTypeNumber = tokenTypesMap.get('number')
+const tokenTypeOperator = tokenTypesMap.get('operator')
+const typeParameterTokenType = tokenTypesMap.get('typeParameter')
+const enumTokenType = tokenTypesMap.get('enum') // could be used on union type declarations
+const enumMemberTokenType = tokenTypesMap.get('enumMember')
 
 // from https://github.com/microsoft/vscode-extension-samples/blob/main/semantic-tokens-sample/src/extension.ts#L54
 const encodeTokenModifiers = (...strTokenModifiers) => {
@@ -71,7 +90,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
     const topForms = treeToFormsSafeNoMeta(tree)
     try {
       const pushTokenWithModifier = (form, tokenType, tokenModifiers) => {
-        if (!form) return console.error('no form')
+        if (!form) return
         const word = tryGetFormWord(form)
         if (!word) return console.error('expected word')
         const node = tryGetNodeFromForm(form)
@@ -151,7 +170,15 @@ const makeProvideDocumentSemanticTokensForms = async () => {
             go(tail.at(-1))
           },
           match: () => {
-            for (const form of tail) go(form)
+            go(tail[0])
+            for (let i = 1; i < tail.length - 1; i += 2) {
+              const patternList = getListOrEmpty(tail[i])
+              pushToken(patternList[0], enumMemberTokenType)
+              for (let j = 1; j < patternList.length; j++)
+                pushTokenWithModifier(patternList[j], variableTokenType, declarationModifier)
+              go(tail[i + 1])
+            }
+            if (tail.length % 2 === 0) go(tail.at(-1))
           },
           do: () => {
             for (const form of tail) go(form)
@@ -188,7 +215,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
             for (const form of tail) if (tryGetFormWord(form)) pushToken(form, stringTokenType)
           },
           intrinsic: () => {
-            for (const form of tail) if (tryGetFormWord(form)) pushToken(form, stringTokenType)
+            for (const form of tail) if (tryGetFormWord(form)) pushToken(form, tokenTypeOperator)
           },
           atom: () => {
             go(tail[0])
@@ -200,7 +227,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
           type: () => {
             for (let i = 0; i < tail.length; i += 3) {
               pushTokenWithModifier(tail[i], typeTokenType, declarationModifier)
-              for (const typeParam of getListOrEmpty(tail[i + 1])) pushToken(typeParam, parameterTokenType)
+              for (const typeParam of getListOrEmpty(tail[i + 1])) pushToken(typeParam, typeParameterTokenType)
               goType(tail[i + 2])
             }
             runForm()
