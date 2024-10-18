@@ -63,6 +63,49 @@
   [test-ok
     [type opt [] [union [none]]]
     [opt/none]]
+
+  [test-ok
+[type option [a]
+  [union
+    [none]
+    [some a]]]
+
+[type function-kind []
+  [union
+    [ctor]
+    [func]
+    [macro]
+    [fexpr]]]
+
+[type
+  type-var-kind []
+  [union
+    [linked type]
+    [word word]]
+
+  type-var []
+  [record
+    [kind [atom type-var-kind]]
+    [level [atom i32]]]
+
+  func-type []
+  [record
+    [params [list type]]
+    [rest-param-opt [option type]]
+    [result type]
+    [kind function-kind]]
+
+  inst-type []
+  [union
+    [func func-type]
+    [apply word [list type]]]
+
+  type []
+  [union
+    [var type-var]
+    [inst inst-type]]]
+
+    ]
   [test-ok
     [load m.wuns]
     x]

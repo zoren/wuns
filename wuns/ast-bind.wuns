@@ -466,9 +466,13 @@
 
                 [[word type]]
                 [let
-                  [fb
+                  [triples [triplewise [rest l]]
+                   -
+                   [for-each triple triples
+                     [set-type [first triple] [size [get-list [second triple]]]]]
+                   fb
                     [bform/type
-                      [list-map triple [triplewise [rest l]]
+                      [list-map triple triples
                         [let
                           [type-name [get-word [first triple]]
                            type-prefix [concat-words type-name [word /]]
@@ -482,7 +486,6 @@
                            type-params [pair/fst param-pair]
                            type-params-map [pair/snd param-pair]
                            form-to-type-with-params [mk-form-to-type type-params-map]]
-                          [set-type [first triple] [size type-params]]
                           [type-decl
                             type-name
                             type-params
