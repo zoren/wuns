@@ -197,6 +197,10 @@ const makeProvideDocumentSemanticTokensForms = async () => {
             go(body)
           },
           func: () => funcSpecial(headWord, tail),
+          defn: () => {
+            funcSpecial(headWord, tail)
+            runForm()
+          },
           defexpr: () => {
             funcSpecial(headWord, tail)
             runForm()

@@ -178,6 +178,13 @@ export const makeEvalForm = (externs, defEnv) => {
           throw evalError('closure fexprs are not allowed anymore')
         case 'macro':
           throw evalError('closure macros are not allowed anymore')
+        case 'defn': {
+          assertTopLevel()
+          const name = getFormWord(forms[1])
+          const closure = makeClosureOfKind('func')
+          defEnv.set(name, closure)
+          return langUndefined
+        }
         case 'defexpr': {
           assertTopLevel()
           const name = getFormWord(forms[1])
