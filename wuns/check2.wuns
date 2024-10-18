@@ -138,7 +138,7 @@
   [let-do
     [level [get-type-var-level type-var]
      fvs [free-type-vars type]]
-    [comment todo report instead of assert]
+    [todo report instead of assert]
     [assert [not [member-type-var-list fvs type-var]] type-var occurs in type]
     [prune-level level fvs]
     [set-type-var-kind-to-type type-var type]]]
@@ -348,9 +348,14 @@
 
     [logq-abort intrinsic-name-to-type not implemented]]]
 
+[type check-message []
+  [record
+    [message form]
+    [location [option syntax-node-location]]]]
+
 [type check-context []
   [record
-    [messages [growable-list report-message]]
+    [messages [growable-list check-message]]
     [def-var-types [transient-kv-map word check-type-scheme]]
     [type-var-counter [atom i32]]
     [types [transient-kv-map word type-def]]
@@ -364,6 +369,12 @@
     [transient-kv-map]
     [mk-form-to-ast]]]
 
+[defn report-fn [gctx message opt-location]
+  [push [check-context/messages gctx] [check-message message opt-location]]]
+
+[defn generate-fresh-type-var [gctx level]
+  [generate-fresh-type-var-atom [check-context/type-var-counter gctx] level]]
+
 [defn try-get-var-type [gctx local-ctx-opt var-name]
   [if-let [ltype [if-let [local-ctx local-ctx-opt]
                     [try-get-local-var-type local-ctx var-name]
@@ -371,17 +382,15 @@
     [some ltype]
     [try-get [check-context/def-var-types gctx] var-name]]]
 
-[defn report-fn [gctx message form]
-  [push [check-context/messages gctx] [report-message message form]]]
+[defn try-get-location [gctx bst]
+  [let [converter [check-context/form-to-ast-converter gctx]
+        form [get [form-to-ast-converter/bst-to-form converter] [to-js-value bst]]]
+    [if-let [node [try-get-syntax-node form]] [some [get-syntax-node-location node]] [none]]]]
 
-[defn unify-report [gctx t1 t2 bform]
-  [let [form [get [form-to-ast-converter/bform-to-form [check-context/form-to-ast-converter gctx]] bform]
-        errors [unify t1 t2]]
-    [for-each error errors
-      [report-fn gctx error form]]]]
-
-[defmacro report [form .. lmsg]
-  [flist [quote report-fn] [quote gctx] [flist [quote quote] [form/list lmsg]] form]]
+[defn unify-report [gctx t1 t2 bst]
+  [let [opt-location [try-get-location gctx bst]]
+    [for-each error [unify t1 t2]
+      [report-fn gctx error opt-location]]]]
 
 [defn check [gctx outer-bform]
   [letfn [
@@ -391,7 +400,7 @@
         [if-let [type-scheme [try-get-var-type gctx lctx w]]
           [specialize-type-scheme [check-context/type-var-counter gctx] level type-scheme]
           [do
-            [report bform check not implemented]
+            [report-fn gctx [quote [check not implemented]] [try-get-location gctx bform]]
             [generate-fresh-type-var-atom [check-context/type-var-counter gctx] level]]]
 
         [bform/literal l]
