@@ -7,9 +7,9 @@
       [match test
         [check-test/ok expected-type forms]
         [let [gctx [make-global-context]
-                 res [check-top-forms gctx forms]
-                 check-errors [clone-growable-to-frozen-list [check-context/messages gctx]]
-                 actual-type [normalize-present-type-scheme res]]
+              res [check-top-forms gctx forms]
+              check-errors [clone-growable-to-frozen-list [check-context/messages gctx]]
+              actual-type [normalize-present-type-scheme res]]
           [when-not [is-empty check-errors]
             [logq test-ok there were errors]
             [for-each message check-errors
@@ -20,9 +20,9 @@
 
         [check-test/error expected-type expected-errors forms]
         [let [gctx [make-global-context]
-                 res [check-top-forms gctx forms]
-                 errors [clone-growable-to-frozen-list [check-context/messages gctx]]
-                 actual-type [normalize-present-type-scheme res]]
+              res [check-top-forms gctx forms]
+              errors [clone-growable-to-frozen-list [check-context/messages gctx]]
+              actual-type [normalize-present-type-scheme res]]
           [when-not [eq [size expected-errors] [size errors]]
             [log-location [first forms]]
             [logq different number of errors than expected]
@@ -38,3 +38,15 @@
 
 [defn run-test-suite []
   [run-tests-check2 tests]]
+
+[defn run-file [file-name]
+  [let [gctx [make-global-context]
+        forms [read-file file-name]
+        res [check-top-forms gctx forms]
+        check-errors [clone-growable-to-frozen-list [check-context/messages gctx]]
+        actual-type [normalize-present-type-scheme res]]
+    [when-not [is-empty check-errors]
+      [logq test-ok there were errors]
+      [for-each message check-errors
+        [log-check-message message]]
+      [logq-abort test-ok failed there were errors]]]]
