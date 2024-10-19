@@ -368,7 +368,7 @@
 [defn set-def-var-type [gctx var-name type]
   [let [dvt [check-context/def-var-types gctx]]
     [when [has dvt var-name]
-      [logq-abort var-name already defined]]
+      [logq-abort var-name already defined [identity var-name]]]
     [set-kv-map dvt var-name type]]]
 
 [type parameters []
@@ -694,9 +694,9 @@
 
         [eq-form first-form [quote match]]
         [let [match-value [second sub-forms]
-                 match-type [check gctx level lctx match-value]
-                 result-type [generate-fresh-type-var gctx level]
-                 has-default [is-even n-of-args]]
+              match-type [check gctx level lctx match-value]
+              result-type [generate-fresh-type-var gctx level]
+              has-default [is-even n-of-args]]
           [for-pair i 2 [dec s-form]
             [let [pattern [at sub-forms i]
                   pattern-list [try-get-list-report gctx pattern]
@@ -707,8 +707,8 @@
                   destructor-opt [try-get-ctor [normalize-type destructor-type]]]
                   [if-let [destructor destructor-opt]
                     [let [destructor-params [func-type/params destructor]
-                              var-values [transient-kv-map]
-                              branch-ctx [make-local-context var-values lctx first-form]]
+                          var-values [transient-kv-map]
+                          branch-ctx [make-local-context var-values lctx first-form]]
                       [report-when-not [eq [size destructor-params] [dec [size pattern-list]]]
                         pattern
                         pattern and destructor-params have different sizes]
