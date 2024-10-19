@@ -306,6 +306,9 @@
           [bform/def w e]
           [js-stmt/const-decl [syntax-word/word w] [cexp e]]
 
+          [bform/defn func]
+          [js-stmt/const-decl [syntax-word/word [bfunc/name func]] [cfunc func]]
+
           [bform/defexpr fexpr-func]
           [js-stmt/const-decl [syntax-word/word [bfunc/name fexpr-func]] [cfunc fexpr-func]]
 
