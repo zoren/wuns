@@ -62,6 +62,7 @@
     [letfn [list bfunc] [list bform]]
     [let [list [pair syntax-word bform]] [list bform]]
     [def syntax-word bform]
+    [defn bfunc]
     [defexpr bfunc]
     [defmacro bfunc]
     [call bform [list bform]]
@@ -100,7 +101,12 @@
         [option/none] [try-get-local outer w]
         [option/some kind] [some kind]]]]
 
-[type def-desc [] [union [fexpr] [macro] [any] [union-ctor] [record-ctor] [record-proj]]]
+[type def-desc []
+  [union
+    [func] [fexpr] [macro] [any]
+
+    [type]
+    [union-ctor] [record-ctor] [record-proj]]]
 
 [type form-to-ast-converter []
   [record
@@ -451,6 +457,14 @@
                   [assert-empty-stack]
                   [let [bf [bform/def [sword [get-arg 0]] [form-to-ast lstack [third l]]]]
                     [set-def [get-arg 0] [def-desc/any]]
+                    [eval-form form]
+                    bf]]
+
+                [[word defn]]
+                [do
+                  [assert-empty-stack]
+                  [let [bf [bform/defn [form-to-func lstack form]]]
+                    [set-def [get-arg 0] [def-desc/func]]
                     [eval-form form]
                     bf]]
 
