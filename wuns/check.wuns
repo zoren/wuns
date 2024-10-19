@@ -365,6 +365,12 @@
     [some ltype]
     [try-get [check-context/def-var-types gctx] var-name]]]
 
+[defn set-def-var-type [gctx var-name type]
+  [let [dvt [check-context/def-var-types gctx]]
+    [when [has dvt var-name]
+      [logq-abort var-name already defined]]
+    [set-kv-map dvt var-name type]]]
+
 [type parameters []
   [record
     [regular-params [list form]]
@@ -625,8 +631,7 @@
 
         [eq-form first-form [quote type]]
         [let
-          [types [check-context/types gctx]
-           def-var-types [check-context/def-var-types gctx]]
+          [types [check-context/types gctx]]
           [report-when-not [eq [i32.rem-s n-of-args 3] 0] form expects triplets of arguments]
           [for-3 i 1 s-form
             [let [name-form [at sub-forms i]]
@@ -666,7 +671,7 @@
                       [let [ctor [try-get-list-report gctx [at type-def-list i]]
                               param-list [list-map param [rest ctor] [instantiate-annotated-type gctx param-map param]]]
                         [when-let [ctor-name [try-get-word-report gctx [first ctor]]]
-                          [set-kv-map def-var-types [concat-words type-prefix ctor-name]
+                          [set-def-var-type gctx [concat-words type-prefix ctor-name]
                             [generalize-top [type-ctor param-list result-type]]]]]]
 
                     [[word record]]
@@ -675,13 +680,13 @@
                       [for i 1 [size type-def-list]
                         [let
                           [field-def [try-get-list-report gctx [at type-def-list i]]
-                          inst-field-type [instantiate-annotated-type gctx param-map [second field-def]]]
+                           inst-field-type [instantiate-annotated-type gctx param-map [second field-def]]]
                           [push fields inst-field-type]
                           [when-let [field-name [try-get-word-report gctx [first field-def]]]
-                            [set-kv-map def-var-types [concat-words type-prefix field-name]
+                            [set-def-var-type gctx [concat-words type-prefix field-name]
                               [generalize-top [type-func [list result-type] [none] inst-field-type]]]]]]
-                      [set-kv-map def-var-types name-word
-                        [generalize-top [type-func [clone-growable-to-frozen-list fields] [none] [type-def/result-type this-type-def]]]]]
+                      [set-def-var-type gctx name-word
+                        [generalize-top [type-ctor [clone-growable-to-frozen-list fields] [type-def/result-type this-type-def]]]]]
 
                     [logq-abort check type definition not recognized]]
                   [logq-abort check type definition not recognized]]]]]
@@ -807,19 +812,20 @@
 
         [or
           [eq-form first-form [quote func]]
+          [eq-form first-form [quote defn]]
           [eq-form first-form [quote defexpr]]
           [eq-form first-form [quote defmacro]]]
         [let
-          [function-kind
-           [if-let [fw [try-get-form-word-option first-form]]
-              [switch fw
-                [[word func]] [function-kind/func]
-                [[word defmacro]] [function-kind/macro]
-                [[word defexpr]] [function-kind/fexpr]
-                [logq-abort check function-kind not recognized]]
+          [fw [if-let [fw [try-get-form-word-option first-form]] fw [logq-abort check function-kind not recognized]]
+           function-kind
+           [switch fw
+              [[word func] [word defn]] [function-kind/func]
+              [[word defmacro]] [function-kind/macro]
+              [[word defexpr]] [function-kind/fexpr]
               [logq-abort check function-kind not recognized]]
            takes-form-params
            [match function-kind
+             [function-kind/ctor] 0
              [function-kind/func] 0
              [function-kind/macro] 1
              [function-kind/fexpr] 1]
@@ -851,16 +857,21 @@
               gen-func-type
               [type/inst [inst-type/func [func-type frozen-params [atom-get opt-rest-param-atom] return-type function-kind]]]
               form]
-            [match function-kind
-              [function-kind/fexpr]
-              [do
-                [set-kv-map [check-context/def-var-types gctx] func-name func-type-scheme]
+            [switch fw
+              [[word defn]]
+              [let [general-val-type [generalize level gen-func-type]]
+                [set-def-var-type gctx func-name general-val-type]
                 type-empty-tuple]
 
-              [function-kind/macro]
+              [[word defexpr]]
+              [do
+                [set-def-var-type gctx func-name func-type-scheme]
+                type-empty-tuple]
+
+              [[word defmacro]]
               [do
                 [unify-report gctx return-type type-form [last sub-forms]]
-                [set-kv-map [check-context/def-var-types gctx] func-name func-type-scheme]
+                [set-def-var-type gctx func-name func-type-scheme]
                 type-empty-tuple]
 
               gen-func-type]]]
@@ -872,7 +883,7 @@
            value-type [check gctx [inc level] lctx value-form]
            general-val-type [generalize level value-type]]
           [report-when-not [eq n-of-args 2] form expects 2 arguments]
-          [set-kv-map [check-context/def-var-types gctx] [form-to-word name] general-val-type]
+          [set-def-var-type gctx [form-to-word name] general-val-type]
           value-type]
 
         [eq-form first-form [quote atom]]
@@ -950,13 +961,13 @@
               [match opt-func-kind
                 [option/some fk]
                 [match fk
-                  [function-kind/fexpr] 1
+                  [function-kind/fexpr] true
                   [function-kind/macro]
                   [do
                     [log first-form]
                     [log-location first-form]
                     [logq-abort check unexpected macro]]
-                  0]
+                  false]
                 0]]
             [annotate gctx first-form func-type]
             [let [args [rest sub-forms]
