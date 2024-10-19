@@ -253,4 +253,9 @@
     [push2 glw [word a]]]
   [i32 5]]
 
+[test-ok i32
+  [letfn
+    [[func bla [n] [i32 5]]
+     [func m [] [bla [i32 5]] [bla [f64 5]]]]
+    [i32 4]]]
 ]]

@@ -517,7 +517,7 @@
             [let
               [tmp-type [generate-fresh-type-var gctx level-1]]
               [push gtmp-types tmp-type]
-              [set-kv-map var-types [syntax-word/word [bfunc/name func]] [mk-empty-type-scheme tmp-type]]]]
+              [set-kv-map var-types [syntax-word/word [bfunc/name func]] [generalize level tmp-type]]]]
           [let [tmp-types [clone-growable-to-frozen-list gtmp-types]]
             [for i 0 [size funcs]
             [let
