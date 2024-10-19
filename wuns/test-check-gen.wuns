@@ -194,4 +194,63 @@
     [[i32 1]] [word one]
     [word not-01]]]
 
+[test-errors i32 [[not unifiable - different types]]
+  [def atom-get
+    [type-anno
+      [extern atom-get]
+      [type-scheme [a] [func [[atom a]] a]]]]
+  [def atom-set
+    [type-anno
+      [extern atom-set]
+      [type-scheme [a] [func [[atom a] a] [tuple]]]]]
+  [def add
+    [type-anno
+      [extern add]
+      [func [i32 i32] i32]]]
+  [let [c [atom [func id [x] x]]]
+    [do
+      [atom-set c [func inc [x] [add [i32 1] x]]]
+      [[atom-get c] [word true]]]]]
+[test-errors i32 [[not unifiable - different types]]
+  [def atom-get
+    [type-anno
+      [extern atom-get]
+      [type-scheme [a] [func [[atom a]] a]]]]
+  [def atom-set
+    [type-anno
+      [extern atom-set]
+      [type-scheme [a] [func [[atom a] a] [tuple]]]]]
+  [def add
+    [type-anno
+      [extern add]
+      [func [i32 i32] i32]]]
+  [def mk-atom [func mk-atom [init] [atom init]]]
+  [let [c [mk-atom [func id [x] x]]]
+    [do
+      [atom-set c [func inc [x] [add [i32 1] x]]]
+      [[atom-get c] [word true]]]]]
+[test-ok i32
+  [def atom-get
+    [type-anno
+      [extern atom-get]
+      [type-scheme [a] [func [[atom a]] a]]]]
+  [def atom-set
+    [type-anno
+      [extern atom-set]
+      [type-scheme [a] [func [[atom a] a] [tuple]]]]]
+  [type linked-list [a]
+    [union
+      [nil]
+      [cons a [linked-list a]]]]
+  [def push [func push [list-ref element]
+    [atom-set list-ref [linked-list/cons element [atom-get list-ref]]]]]
+  [let [gli [atom [linked-list/nil]]]
+    [push gli [i32 5]]]
+  [def push2 [func push [list-ref element]
+    [atom-set list-ref [linked-list/cons element [atom-get list-ref]]]]]
+  push2
+  [let [glw [atom [linked-list/nil]]]
+    [push2 glw [word a]]]
+  [i32 5]]
+
 ]]

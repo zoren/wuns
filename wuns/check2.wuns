@@ -403,6 +403,13 @@
     [for-each error [unify t1 t2]
       [report-fn gctx error opt-node]]]]
 
+[defn is-syntactic-value [bform]
+  [match bform
+    [bform/atom a] 0
+    [bform/literal l] 1
+    [bform/func f] 1
+    0]]
+
 [defn check [gctx outer-bform]
   [letfn [
     [func go-forms [level lctx sub-forms]
@@ -491,8 +498,12 @@
           [for-each binding bindings
             [let
               [var [pair/fst binding]
-               val-type [go level-1 let-ctx [pair/snd binding]]
-               general-val-type [generalize level val-type]]
+               value [pair/snd binding]
+               val-type [go level-1 let-ctx value]
+               general-val-type
+               [if [is-syntactic-value value]
+                 [generalize level val-type]
+                 [mk-empty-type-scheme val-type]]]
               [set-kv-map var-types [syntax-word/word var] general-val-type]]]
           [go-forms level let-ctx bodies]]
 
