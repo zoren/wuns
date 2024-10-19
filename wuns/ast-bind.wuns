@@ -101,18 +101,32 @@
         [option/none] [try-get-local outer w]
         [option/some kind] [some kind]]]]
 
+[type record-desc []
+  [record
+    [name syntax-word]
+    [type-params [list syntax-word]]
+    [fields [list [pair syntax-word btype]]]]]
+
+[type union-desc []
+  [record
+    [name syntax-word]
+    [type-params [list syntax-word]]
+    [ctors [list [pair syntax-word [list btype]]]]]]
+
 [type def-desc []
   [union
     [func] [fexpr] [macro] [any]
 
     [type]
-    [union-ctor] [record-ctor] [record-proj]]]
+    [union-ctor union-desc i32]
+    [record-ctor] [record-proj record-desc i32]]]
 
 [type form-to-ast-converter []
   [record
     [form-to-ast [func [form] [result bform [list report-message]]]]
     [errors [growable-list report-message]]
     [node-to-ldesc [transient-kv-map bform local-var-kind]]
+    [node-to-def-desc [transient-kv-map syntax-word def-desc]]
     [bst-to-form [transient-kv-map js-value form]]]]
 
 [defn builtin-type-arity-ok [type-name n-of-type-args]
@@ -156,6 +170,7 @@
         [do]]]
      def-ctx [transient-kv-map]
      node-to-ldesc [transient-kv-map]
+     node-to-def-desc [transient-kv-map]
      try-get-word-report
      [func gw [form]
       [match form
@@ -343,7 +358,7 @@
             [if-let [ldesc [try-get-local lstack w]]
               [set-kv-map node-to-ldesc bf ldesc]
               [if-let [ddesc [try-get def-ctx w]]
-                [do]
+                [set-kv-map node-to-def-desc [get-sword form] ddesc]
                 [report-error [quote [undefined word]]]]]
             bf]
 
@@ -396,25 +411,49 @@
                       [form-to-ast lstack [last l]]]]
 
                 [[word match]]
-                [bform/match
-                  [form-to-ast lstack [get-arg 0]]
-                  [list-map p [pairwise [slice l 2 [size l]]]
-                    [let [pat-list [get-list [first p]]
-                              lvars [transient-kv-map]
-                              lctx [local-context lvars form]
-                              new-lstack [local-stack/frame lstack lctx]]
-                      [assert [not [is-empty pat-list]] match pattern is empty]
-                      [pair
-                        [match-pattern
-                          [get-sword [first pat-list]]
-                          [list-map param [rest pat-list]
+                [let
+                  [union-type-name-atom [atom [none]]
+                   clauses
+                   [list-map p [pairwise-pairs [slice l 2 [size l]]]
+                    [let [pat-list [get-list [pair/fst p]]]
+                      [do
+                        [assert [not [is-empty pat-list]] match pattern is empty]
+                        [let [
+                          ctor-sname [get-sword [first pat-list]]
+                          params [rest pat-list]
+                          lvars [transient-kv-map]
+                          lctx [local-context lvars form]
+                          new-lstack [local-stack/frame lstack lctx]]
+                          [if-let [ddesc [try-get def-ctx [syntax-word/word ctor-sname]]]
                             [do
-                              [set-local lvars param [local-var-kind/match-param]]
-                              [get-sword param]]]]
-                        [form-to-ast new-lstack [second p]]]]]
-                  [if [is-odd [size l]]
-                    [some [form-to-ast lstack [last l]]]
-                    [none]]]
+                              [set-kv-map node-to-def-desc ctor-sname ddesc]
+                              [match ddesc
+                                [def-desc/union-ctor union-desc index]
+                                [let [union-type-name [syntax-word/word [union-desc/name union-desc]]
+                                      ctors [union-desc/ctors union-desc]
+                                      ctor-pair [at ctors index]
+                                      ctor-params [pair/snd ctor-pair]]
+                                  [when-let [prev-union-type-name [atom-get union-type-name-atom]]
+                                    [when-not [eq-word prev-union-type-name union-type-name]
+                                      [report-error [quote [mismatched union types]]]]]
+                                  [atom-set union-type-name-atom [some union-type-name]]
+                                  [when-not [eq [size ctor-params] [size params]]
+                                    [report-error [quote [wrong number of arguments to union ctor]]]]
+                                  [for i 0 [min [size ctor-params] [size params]]
+                                    [set-local lvars [at params i] [local-var-kind/match-param]]]]
+                                [report-error [quote [not bound to a union constructor]]]]]
+                            [report-error [quote [not bound to def at all]]]]
+                          [pair
+                            [match-pattern
+                              ctor-sname
+                              [list-map param params [get-sword param]]]
+                            [form-to-ast new-lstack [pair/snd p]]]]]]]]
+                  [bform/match
+                    [form-to-ast lstack [get-arg 0]]
+                    clauses
+                    [if [is-odd [size l]]
+                      [some [form-to-ast lstack [last l]]]
+                      [none]]]]
 
                 [[word do]]
                 [bform/do [list-map arg [rest l] [form-to-ast lstack arg]]]
@@ -506,20 +545,21 @@
                       [list-map triple triples
                         [let
                           [type-name-form [first triple]
-                           type-name [get-word type-name-form]
+                           stype-name [get-sword type-name-form]
+                           type-name [syntax-word/word stype-name]
                            type-prefix [concat-words type-name [word /]]
                            def-prefix
                            [func dp [name desc]
                             [let [full-name [concat-words type-prefix name]]
                               [when [has def-ctx full-name]
-                                [report-error [quote [redefining type]]]]
-                              [set-kv-map def-ctx full-name [def-desc/record-proj]]]]
+                                [report-error [quote [redefining type thing]]]]
+                              [set-kv-map def-ctx full-name desc]]]
                            param-pair [form-to-type-param-list [second triple]]
                            type-params [pair/fst param-pair]
                            type-params-map [pair/snd param-pair]
                            form-to-type-with-params [mk-form-to-type type-params-map]]
                           [type-decl
-                            [sword type-name-form]
+                            stype-name
                             type-params
                             [match [third triple]
                               [form/list l]
@@ -527,28 +567,37 @@
                                 [assert [not [is-empty l]] type decl kind form is empty]
                                 [switch [get-word [first l]]
                                   [[word union]]
-                                  [type-decl-kind/union
-                                    [list-map ctor [rest l]
-                                      [let [ctor-list [get-list ctor]
-                                            ctor-name-form [first ctor-list]
-                                            ctor-name [get-word ctor-name-form]]
-                                        [assert [not [is-empty ctor-list]] type decl kind union ctor is empty]
-                                        [def-prefix ctor-name [def-desc/union-ctor]]
-                                        [pair
-                                          [sword ctor-name-form]
-                                          [list-map arg [rest ctor-list] [form-to-type-with-params arg]]]]]]
+                                  [let
+                                    [ctors
+                                      [list-map ctor [rest l]
+                                        [let [ctor-list [get-list ctor]
+                                              ctor-name-form [first ctor-list]]
+                                          [assert [not [is-empty ctor-list]] type decl kind union ctor is empty]
+                                          [pair
+                                            [sword ctor-name-form]
+                                            [list-map arg [rest ctor-list] [form-to-type-with-params arg]]]]]
+                                     union-desc [union-desc stype-name type-params ctors]]
+                                    [for i 0 [size ctors]
+                                      [def-prefix
+                                        [syntax-word/word [pair/fst [at ctors i]]]
+                                        [def-desc/union-ctor union-desc i]]]
+                                    [type-decl-kind/union ctors]]
 
                                   [[word record]]
-                                  [do
+                                  [let [fields
+                                        [list-map field [rest l]
+                                          [let [field-list [get-list field]
+                                                field-name-form [first field-list]
+                                                field-name [get-word field-name-form]]
+                                            [assert [not [is-empty field-list]] type decl kind record field is empty]
+                                            [pair [sword field-name-form] [form-to-type-with-params [second field-list]]]]]
+                                        record-desc [record-desc stype-name type-params fields]]
+                                    [for i 0 [size fields]
+                                      [def-prefix
+                                        [syntax-word/word [pair/fst [at fields i]]]
+                                        [def-desc/record-proj record-desc i]]]
                                     [set-def [first triple] [def-desc/record-ctor]]
-                                    [type-decl-kind/record
-                                      [list-map field [rest l]
-                                        [let [field-list [get-list field]
-                                              field-name-form [first field-list]
-                                              field-name [get-word field-name-form]]
-                                          [assert [not [is-empty field-list]] type decl kind record field is empty]
-                                          [def-prefix field-name [def-desc/record-proj]]
-                                          [pair [sword field-name-form] [form-to-type-with-params [second field-list]]]]]]]
+                                    [type-decl-kind/record fields]]
 
                                   [logq-abort unknown type kind]]]
 
@@ -566,16 +615,18 @@
                 [if-let [ldesc [try-get-local lstack first-word]]
                   [bform/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]
                   [if-let [ddesc [try-get def-ctx first-word]]
-                    [match ddesc
-                      [def-desc/fexpr]
-                      [bform/call-fexpr [bform/var [get-sword first-form]] [rest l]]
+                    [do
+                      [set-kv-map node-to-def-desc [get-sword first-form] ddesc]
+                      [match ddesc
+                        [def-desc/fexpr]
+                        [bform/call-fexpr [bform/var [get-sword first-form]] [rest l]]
 
-                      [def-desc/macro]
-                      [if-let [macro-func [try-get-macro eval-ctx first-word]]
-                        [form-to-ast lstack [interpreter-apply macro-func [rest l]]]
-                        [logq-abort form-to-ast macro not found]]
+                        [def-desc/macro]
+                        [if-let [macro-func [try-get-macro eval-ctx first-word]]
+                          [form-to-ast lstack [interpreter-apply macro-func [rest l]]]
+                          [logq-abort form-to-ast macro not found]]
 
-                      [bform/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]]
+                        [bform/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]]]
                     [do
                       [report-error [quote [undefined word]]]
                       [bform/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]]]]]
@@ -591,6 +642,7 @@
             [result/error errors]]]]
       errors
       node-to-ldesc
+      node-to-def-desc
       bst-to-form]]]]
 
 [defn map-option [f ast]

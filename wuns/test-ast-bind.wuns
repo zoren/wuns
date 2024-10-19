@@ -131,6 +131,35 @@
   [test-error [[duplicate type param]] [type t [a a] [union]]]
   [test-error [[reserved types cannot be used as type params]] [type t [i32] [union]]]
 
+  [test-error [[not bound to def at all]]
+    [type option [a] [union [none] [some a]]]
+    [defn f [opt]
+      [match opt
+        [opt p] [i32 5]
+        [i32 3]]]]
+
+  [test-error [[not bound to a union constructor]]
+    [type option [a] [union [none] [some a]]]
+    [def opt-none option/none]
+    [defn f [opt]
+      [match opt
+        [opt-none p] [i32 5]
+        [i32 3]]]]
+
+  [test-error [[mismatched union types]]
+    [type option [a] [union [none] [some a]]]
+    [type result [o e] [union [ok o] [error e]]]
+    [match [option/none]
+      [option/none] [i32 5]
+      [result/ok v] [i32 6]
+      [word a]]]
+
+  [test-error [[wrong number of arguments to union ctor]]
+    [type option [a] [union [none] [some a]]]
+    [defn f [opt] [match opt
+      [option/none p] [i32 5]
+      [i32 3]]]]
+
   [test-ok [let [] [i32 4] [i32 5]]]
   [test-ok [letfn [] [i32 4] [i32 5]]]
   [test-ok [func f [] [i32 4] [i32 5]]]

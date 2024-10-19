@@ -32,7 +32,13 @@
             [for-each error errors [log-check-message error]]
             [logq-abort test-error ]]
 
-          [assert [eq-form actual-type expected-type] test-ok failed expected type [identity expected-type] but found [identity actual-type]]
+          [when-not [eq-form actual-type expected-type]
+            [logq test-error failed]
+            [log forms]
+            [logq expected type]
+            [log expected-type]
+            [logq but found]
+            [log actual-type]]
           [inc-atom tests-run-atom]]]]
     [logq tests-run [atom-get tests-run-atom]]]]
 

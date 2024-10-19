@@ -30,6 +30,8 @@
       expected-messages
       forms]]]
 
+[todo record tests]
+
 [def tests [list
   [test-ok i32 [i32 5]]
   [test-ok f64 [f64 1.5]]
@@ -142,4 +144,54 @@
   [test-errors [tuple] [[not unifiable - different types]]
     [defmacro qword [m]
       [i32 0]]]
+
+[test-errors word [[not unifiable - different types]]
+  [type option [a] [union [none] [some a]]]
+  [type result [o e] [union [ok o] [error e]]]
+  [match [option/none]
+    [result/ok v] v
+    [word a]]]
+[test-errors i32 [[not unifiable - different types]]
+  [type option [a] [union [none] [some a]]]
+  [match [option/some [i32 5]]
+    [option/some v] v
+    [option/some v] [word a]
+    ]]
+
+[test-errors i32 [[not unifiable - different types]]
+  [type option [a] [union [none] [some a]]]
+  [match [option/none]
+    [option/none] [i32 5]
+    [word a]]]
+[test-ok i32
+  [type option [a] [union [none] [some a]]]
+  [match [option/none] [option/none] [i32 5]]]
+
+[test-errors word [[not unifiable - different types]]
+  [switch [i32 0]
+    [[i32 0]] [word zero]
+    [[word a]] [word one]
+    [word not-01]]]
+[test-errors word [[not unifiable - different types]]
+  [switch [i32 0]
+[
+      [i32 0]
+      [word a]
+      ] [word zero-a]
+    [word not-01]]]
+[test-errors word [[not unifiable - different types]]
+  [switch [i32 0]
+    [[i32 0]] [word zero]
+    [[i32 1]] [word one]
+    [i32 1337]]]
+[test-ok word
+  [switch [i32 0]
+    [[i32 0] [i32 1]] [word zero-or-one]
+    [word not-01]]]
+[test-ok word
+  [switch [i32 0]
+    [[i32 0]] [word zero]
+    [[i32 1]] [word one]
+    [word not-01]]]
+
 ]]
