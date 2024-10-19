@@ -33,6 +33,7 @@ import {
   tryGetClosureKind,
   makeFormWord,
   makeFormList,
+  tryGetNodeFromForm,
 } from './core.js'
 
 class EvalError extends Error {
@@ -423,6 +424,16 @@ export const catchErrors = (f) => {
   try {
     return f()
   } catch (e) {
+    const treeSitterNode = tryGetNodeFromForm(e.form)
+    if (treeSitterNode) {
+      const contentName = treeSitterNode.tree.contentName
+      const { startPosition, endPosition } = treeSitterNode
+      const { row, column} = startPosition
+      const location = `${contentName}:${row + 1}:${column + 1}`
+      console.error('catchErrors node location', e.message, location)
+    }else {
+      console.error('catchErrors no location', e.message, print(e.form))
+    }
     console.log('catchErrors', e.message, e.form, e.innerError ? 'has inner' : '')
     let curErr = e
     while (curErr) {
