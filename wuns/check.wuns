@@ -876,7 +876,9 @@
           value-type]
 
         [eq-form first-form [quote atom]]
-        [type-atom [check gctx level lctx [second sub-forms]]]
+        [do
+          [report-when-not [eq n-of-args 1] form expects 1 argument]
+          [type-atom [check gctx level lctx [second sub-forms]]]]
 
         [eq-form first-form [quote extern]]
         [do
