@@ -149,34 +149,27 @@
     [letfn
     [[func cfunc [f]
       [let
-        [name [bfunc/name f]
-         js-name [syntax-word/word name]
+        [js-name [syntax-word/word [bfunc/name f]]
          params [bfunc/parameters f]
          js-params [list-map p params [syntax-word/word p]]
-         opt-rest-param [bfunc/rest-param f]
-         js-opt-rest-param [if-let [rp opt-rest-param] [some [syntax-word/word rp]] [none]]
+         js-opt-rest-param [if-let [rp [bfunc/rest-param f]] [some [syntax-word/word rp]] [none]]
          body [bfunc/body f]
          tail-analysis [tail-call-analysis node-to-ldesc f]]
         [atom-set current-func [option/some f]]
         [atom-set current-tail-calls [option/some tail-analysis]]
-        [let [js-body
-              [match tail-analysis
-                [tail-call-result/only-tail call-to-deps]
-                [do
-                  [js-exp/arrow-stmt
-                    js-params
-                    js-opt-rest-param
-                    [block
-                      [js-stmt/while js-1
-                        [block
-                          [cstmt-do true body]
-                          [js-stmt/break]]]]]]
+        [match tail-analysis
+          [tail-call-result/only-tail call-to-deps]
+          [do
+            [js-exp/arrow-stmt
+              js-params
+              js-opt-rest-param
+              [block
+                [js-stmt/while js-1
+                  [block
+                    [cstmt-do true body]
+                    [js-stmt/break]]]]]]
 
-                [js-exp/arrow-stmt js-params js-opt-rest-param [cstmt-do true body]]]]
-          [iife
-            [block
-              [js-stmt/const-decl js-name js-body]
-              [js-stmt/return [js-exp/var js-name]]]]]]]
+          [js-exp/arrow-stmt js-params js-opt-rest-param [cstmt-do true body]]]]]
      [func cexp [bform]
       [match bform
         [bform/var wf]
@@ -214,7 +207,11 @@
               [list [cstmt-do true e]]]]]
 
         [bform/func f]
-        [cfunc f]
+        [let [js-name [syntax-word/word [bfunc/name f]]]
+          [iife
+              [block
+                [js-stmt/const-decl js-name [cfunc f]]
+                [js-stmt/return [js-exp/var js-name]]]]]
 
         [bform/call-fexpr fexpr arg-forms]
         [js-exp/call [cexp fexpr] [list-map arg arg-forms [form-to-quoted-js arg]]]
