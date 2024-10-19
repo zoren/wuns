@@ -6,10 +6,6 @@
     [map-result forms
       [func f [form] [f2a form]]]]]
 
-[defn log-report-message [error]
-  [log-location [report-message/form error]]
-  [log [report-message/message error]]]
-
 [defn test-ok-fn [forms]
   [let [converter [mk-form-to-ast]
         f2a [form-to-ast-converter/form-to-ast converter]]
@@ -142,6 +138,9 @@
   [word done]
   ]
 
+[defn test-file-ok [file-name]
+  [test-ok-fn [read-file file-name]]
+  [word done]]
 
 [defn test-tail [form]
   [let [converter [mk-form-to-ast]
