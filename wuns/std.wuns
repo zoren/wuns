@@ -3,9 +3,9 @@
     [word word]
     [list [list form]]]]
 
-[def flist [func flist [.. elements] [form/list elements]]]
+[defn flist [.. elements] [form/list elements]]
 
-[def list [func list [.. entries] entries]]
+[defn list [.. entries] entries]
 
 [defmacro qword [m]
   [match m
@@ -537,14 +537,6 @@
   [word-list-contains w2
     [word f64.eq] [word f64.lt] [word f64.le]]]
 
-[type pair [a b] [record [fst a] [snd b]]]
-
-[defn pairwise-pairs [l]
-  [let [gl [growable-list]]
-    [for-pair i 0 [dec [size l]]
-      [push gl [pair [at l i] [at l [inc i]]]]]
-    [clone-growable-to-frozen-list gl]]]
-
 [def-extern pairwise [type-scheme [a] [func [[list a]] [list [list a]]]]]
 [def-extern triplewise [type-scheme [a] [func [[list a]] [list [list a]]]]]
 
@@ -574,6 +566,14 @@
 [def-extern growable-list [type-scheme [a] [func [] [growable-list a]]]]
 [def-extern push [type-scheme [a] [func [[growable-list a] a] [tuple]]]]
 [def-extern clone-growable-to-frozen-list [type-scheme [a] [func [[growable-list a]] [list a]]]]
+
+[type pair [a b] [record [fst a] [snd b]]]
+
+[defn pairwise-pairs [l]
+  [let [gl [growable-list]]
+    [for-pair i 0 [dec [size l]]
+      [push gl [pair [at l i] [at l [inc i]]]]]
+    [clone-growable-to-frozen-list gl]]]
 
 [type set [a] [union]]
 
