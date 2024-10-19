@@ -539,6 +539,12 @@
 
 [type pair [a b] [record [fst a] [snd b]]]
 
+[defn pairwise-pairs [l]
+  [let [gl [growable-list]]
+    [for-pair i 0 [dec [size l]]
+      [push gl [pair [at l i] [at l [inc i]]]]]
+    [clone-growable-to-frozen-list gl]]]
+
 [def-extern pairwise [type-scheme [a] [func [[list a]] [list [list a]]]]]
 [def-extern triplewise [type-scheme [a] [func [[list a]] [list [list a]]]]]
 
