@@ -345,8 +345,10 @@ export const makeEvalForm = (externs, defEnv) => {
                   fieldNames.push(fieldName)
                   const projecterName = `${type}/${fieldName}`
                   const projecter = (record) => {
-                    if (getRecordType(record) !== type)
-                      throw evalError(`field projecter ${projecterName} not a ${type}`)
+                    const recordType = getRecordType(record)
+                    if (!recordType) throw evalError(`field projecter ${projecterName} not a record ${type}`)
+                    if (recordType !== type)
+                      throw evalError(`field projecter ${projecterName} on wrong type ${recordType}`)
                     return record[fieldName]
                   }
                   defEnv.set(projecterName, projecter)
