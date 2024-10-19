@@ -530,7 +530,10 @@
         [bform/def var value]
         [let
           [value-type [go [inc level] lctx value]
-           general-val-type [generalize level value-type]]
+           general-val-type
+           [if [is-syntactic-value value]
+            [generalize level value-type]
+            [mk-empty-type-scheme value-type]]]
           [set-kv-map [check-context/def-var-types gctx] [syntax-word/word var] general-val-type]
           value-type]
 
