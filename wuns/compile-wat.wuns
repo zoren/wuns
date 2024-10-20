@@ -12,10 +12,13 @@
     [i32.const word]
     [f64.const word]
     [local.get word]
+    [local.set word wat-inst]
     [inst word [list wat-inst]]
     [if [list wat-type-basic] wat-inst wat-inst wat-inst]
     [call word [list wat-inst]]
-    [instructions [list wat-inst]]]]
+    [instructions [list wat-inst]]
+    [loop [list wat-type-basic] wat-inst]
+    [br word]]]
 
 [type output-func []
   [record
@@ -100,49 +103,63 @@
       [log inst-name]
       [logq-abort instruction-name-and-args-to-inst not implemented]]]]
 
-[defn translate-form [tctx form]
-  [match form
-    [bform/var w]
-    [wat-inst/local.get [syntax-word/word w]]
-
-    [bform/literal l]
-    [match l
-      [literal/i32 i] [wat-inst/i32.const [syntax-word/word i]]
-      [literal/f64 f] [wat-inst/f64.const [syntax-word/word f]]
-      [literal/word w] [logq-abort not implemented translate-form literal/word]]
-
-    [bform/do forms]
-    [if [is-empty forms]
-      [wat-inst/instructions [list]]
-      [wat-inst/instructions
-        [concat
-          [list-map form [slice forms 0 [dec [size forms]]]
-            [let [types [get-form-types tctx form]]
-              [[func go [i]
-                [if i
-                  [wat-inst/inst [word drop] [list [go [dec i]]]]
-                  [translate-form tctx form]]]
-                [size types]]]]
-          [list [translate-form tctx [last forms]]]]]]
-
-    [bform/if cond true false]
-    [wat-inst/if
-      [get-form-types tctx form]
-      [translate-form tctx cond]
-      [translate-form tctx true]
-      [translate-form tctx false]]
-
-    [bform/call f args]
-    [match f
-      [bform/intrinsic i]
-      [instruction-name-and-args-to-inst [syntax-word/word i]
-        [list-map arg args [translate-form tctx arg]]]
-
+[defn mk-translate-form [tctx tail-analysis func]
+  [func go [form]
+    [match form
       [bform/var w]
-      [wat-inst/call [syntax-word/word w] [list-map a args [translate-form tctx a]]]
-      [logq-abort translate-form call not implemented]]
+      [wat-inst/local.get [syntax-word/word w]]
 
-    [logq-abort not implemented translate-form bform]]]
+      [bform/literal l]
+      [match l
+        [literal/i32 i] [wat-inst/i32.const [syntax-word/word i]]
+        [literal/f64 f] [wat-inst/f64.const [syntax-word/word f]]
+        [literal/word w] [logq-abort not implemented translate-form literal/word]]
+
+      [bform/do forms]
+      [if [is-empty forms]
+        [wat-inst/instructions [list]]
+        [wat-inst/instructions
+          [concat
+            [list-map form [slice forms 0 [dec [size forms]]]
+              [let [types [get-form-types tctx form]]
+                [[func loop [i]
+                  [if i
+                    [wat-inst/inst [word drop] [list [loop [dec i]]]]
+                    [go form]]]
+                  [size types]]]]
+            [list [go [last forms]]]]]]
+
+      [bform/if cond true false]
+      [wat-inst/if
+        [get-form-types tctx form]
+        [go cond]
+        [go true]
+        [go false]]
+
+      [bform/call f args]
+      [match f
+        [bform/intrinsic i]
+        [instruction-name-and-args-to-inst [syntax-word/word i]
+          [list-map arg args [go arg]]]
+
+        [bform/var w]
+        [match tail-analysis
+          [tail-call-result/only-tail call-to-deps]
+          [if-let [dependencies [try-get call-to-deps form]]
+            [let [params [bfunc/parameters func]
+                  assignments [growable-list]]
+              [for i 0 [size args]
+                [push assignments [wat-inst/local.set [syntax-word/word [at params i]] [go [at args i]]]]]
+              [wat-inst/instructions
+                [concat
+                  [clone-growable-to-frozen-list assignments]
+                  [list [wat-inst/br [word 1]]]]]]
+            [logq-abort mk-translate-form expected a tail call]]
+
+          [wat-inst/call [syntax-word/word w] [list-map a args [go a]]]]
+        [logq-abort translate-form call not implemented]]
+
+      [logq-abort not implemented translate-form bform]]]]
 
 [defn get-func-type [t]
   [match [normalize-type t]
@@ -163,7 +180,11 @@
           param-types [func-type/params ft]
           params [bfunc/parameters f]
           bodies [bfunc/body f]
-          gparams [growable-list]]
+          gparams [growable-list]
+          cctx [translate-context/check-context tctx]
+          f2a-conv [check-context/form-to-ast-converter cctx]
+          node-to-ldesc [form-to-ast-converter/node-to-ldesc f2a-conv]
+          tail-analysis [tail-call-analysis node-to-ldesc f]]
       [assert [eq [size bodies] 1] expected one body]
       [assert [eq [size params] [size param-types]] expected matching number of parameters and types]
       [for i 0 [size params]
@@ -175,7 +196,13 @@
           [syntax-word/word [bfunc/name f]]
           [clone-growable-to-frozen-list gparams]
           [translate-types [func-type/result ft]]
-          [translate-form tctx [last bodies]]]]]
+          [match tail-analysis
+            [tail-call-result/only-tail call-to-deps]
+            [wat-inst/loop
+              [get-form-types tctx [last bodies]]
+              [[mk-translate-form tctx tail-analysis f] [last bodies]]
+              ]
+            [[mk-translate-form tctx tail-analysis f] [last bodies]]]]]]
 
     [logq-abort not implemented translate-top-form bform]]]
 
@@ -284,6 +311,9 @@
     [wat-inst/local.get w]
     [wat-list [wat/word [word local.get]] [wat/dollar w]]
 
+    [wat-inst/local.set w e]
+    [wat-list [wat/word [word local.set]] [wat/dollar w] [wat-inst-to-out e]]
+
     [wat-inst/instructions insts]
     [wat/seq [list-map inst insts [wat-inst-to-out inst]]]
 
@@ -300,6 +330,17 @@
     [wat-concat
       [list [wat/word [word call]] [wat/dollar w]]
       [list-map a args [wat-inst-to-out a]]]
+
+    [wat-inst/loop result-types body]
+    [wat-list
+      [wat/word [word loop]]
+      [wat/list
+        [concat [list [wat/word [word result]]]
+          [list-map rt result-types [wat/word [wat-type-basic-to-word rt]]]]]
+      [wat-inst-to-out body]]
+
+    [wat-inst/br w]
+    [wat-list [wat/word [word br]] [wat/word w]]
 
     [logq-abort wat-inst-to-out unknown instruction]]]
 
@@ -438,4 +479,44 @@
   [test-assert-eq [f64 1] [js-call g]]
   ]
 
+  [comment recursion]
+  [let [m [module
+    [defn gauss-direct [n]
+      [if n
+        [[intrinsic i32.add] n [gauss-direct [[intrinsic i32.sub] n [i32 1]]]]
+        [i32 0]]]]
+        i [wasm-instantiate m empty-object]
+        gauss-direct [get-export i [word gauss-direct]]]
+    [test-assert-eq [i32 0] [js-call gauss-direct 0]]
+    [test-assert-eq [i32 55] [js-call gauss-direct 10]]
+    [test-assert-eq [i32 5050] [js-call gauss-direct 100]]
+    [test-assert-eq [i32 500500] [js-call gauss-direct 1000]]
+    [test-assert-eq [i32 50005000] [js-call gauss-direct 10000]]
+    [comment this one breaks the stack
+      [test-assert-eq [i32 200010000] [js-call gauss-direct 20000]]]
+    ]
+  [let [m [module
+    [defn go [res n]
+      [if n
+        [go [[intrinsic i32.add] res n] [[intrinsic i32.sub] n [i32 1]]]
+        res]]
+    [defn gauss-tail [n] [go [i32 0] n]]]
+        i [wasm-instantiate m empty-object]
+        gauss-tail [get-export i [word gauss-tail]]]
+    [test-assert-eq [i32 0] [js-call gauss-tail 0]]
+    [test-assert-eq [i32 55] [js-call gauss-tail 10]]
+    [test-assert-eq [i32 5050] [js-call gauss-tail 100]]
+    [comment here tail recursion allows us to calculate larger values]
+    [test-assert-eq [i32 200010000] [js-call gauss-tail 20000]]
+    [test-assert-eq [i32 2147450880] [js-call gauss-tail 65535]]]
 ]
+
+[defn smart-gauss [n]
+  [ifs
+    [or [lt-s n [i32 0]] [lt-s [i32 65535] n]]
+    [i32 -1]
+
+    [is-odd n]
+    [mul [i32.div-s [inc n] [i32 2]] n]
+
+    [mul [i32.div-s n [i32 2]] [inc n]]]]
