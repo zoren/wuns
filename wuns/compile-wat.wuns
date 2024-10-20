@@ -33,20 +33,32 @@
     [output wat-output]
     [check-context check-context]]]
 
+[defn translate-type [it]
+  [match [normalize-type it]
+    [ctype/inst inst-type]
+    [match inst-type
+      [inst-type/apply type-name type-args]
+      [switch type-name
+        [[word i32]] [wat-type-basic/i32]
+        [[word f64]] [wat-type-basic/f64]
+        [do [log it] [logq-abort not implemented translate-type inst-type/apply]]]
+
+      [do [log it] [logq-abort not implemented translate-type inst-type/apply]]]
+    [do [log it] [logq-abort not implemented translate-type inst-type/apply]]]]
+
 [defn translate-types [it]
-  [match it
+  [match [normalize-type it]
     [ctype/inst inst-type]
     [match inst-type
       [inst-type/apply type-name type-args]
       [switch type-name
         [[word i32]] [list [wat-type-basic/i32]]
         [[word f64]] [list [wat-type-basic/f64]]
-        [[word tuple]] [list-map ta type-args [logq-abort f [identity ta]]]
+        [[word tuple]] [list-map ta type-args [translate-type ta]]
 
-        [logq-abort not implemented translate-type inst-type/apply]]
-
-      [logq-abort not implemented translate-type inst-type/apply]]
-    [logq-abort not implemented translate-type inst-type/apply]]]
+        [do [log it] [logq-abort not implemented translate-types inst-type/apply]]]
+      [do [log it] [logq-abort not implemented translate-types inst-type/apply]]]
+    [do [log it] [logq-abort not implemented translate-types inst-type/apply]]]]
 
 [defn get-annotation [tctx bst]
   [get [check-context/type-annotations [translate-context/check-context tctx]] [to-js-value bst]]]
@@ -68,8 +80,31 @@
       [get-annotation tctx [to-js-value bform]]]
     ]]
 
+[comment
+      [[word i32.div-s]] [bin-0 [binop/div]]
+      [[word i32.rem-s]] [bin-0 [binop/rem]]
+      [[word i32.lt-s]]  [bin-0 [binop/lt]]
+      [[word i32.le-s]]  [bin-0 [binop/le]]
+      [[word i32.gt-s]]  [bin-0 [binop/gt]]
+      [[word i32.ge-s]]  [bin-0 [binop/ge]]
+ ]
+
+[defn instruction-name-and-args-to-inst [inst-name cargs]
+  [assert [eq [size cargs] 2] instruction-name-and-args-to-inst expects 2 arguments]
+  [switch inst-name
+    [[word i32.add] [word i32.sub] [word i32.mul] [word i32.eq] [word i32.ne]
+      [word i32.and] [word i32.or]
+      [word f64.add] [word f64.sub] [word f64.mul]] [wat-inst/inst inst-name cargs]
+
+    [do
+      [log inst-name]
+      [logq-abort instruction-name-and-args-to-inst not implemented]]]]
+
 [defn translate-form [tctx form]
   [match form
+    [bform/var w]
+    [wat-inst/local.get [syntax-word/word w]]
+
     [bform/literal l]
     [match l
       [literal/i32 i] [wat-inst/i32.const [syntax-word/word i]]
@@ -97,6 +132,16 @@
       [translate-form tctx true]
       [translate-form tctx false]]
 
+    [bform/call f args]
+    [match f
+      [bform/intrinsic i]
+      [instruction-name-and-args-to-inst [syntax-word/word i]
+        [list-map arg args [translate-form tctx arg]]]
+
+      [bform/var w]
+      [wat-inst/call [syntax-word/word w] [list-map a args [translate-form tctx a]]]
+      [logq-abort translate-form call not implemented]]
+
     [logq-abort not implemented translate-form bform]]]
 
 [defn get-func-type [t]
@@ -115,13 +160,20 @@
     [bform/defn f]
     [let [t [get [check-context/type-annotations [translate-context/check-context tctx]] [to-js-value f]]
           ft [get-func-type t]
-          bodies [bfunc/body f]]
+          param-types [func-type/params ft]
+          params [bfunc/parameters f]
+          bodies [bfunc/body f]
+          gparams [growable-list]]
       [assert [eq [size bodies] 1] expected one body]
+      [assert [eq [size params] [size param-types]] expected matching number of parameters and types]
+      [for i 0 [size params]
+        [push gparams
+          [pair [syntax-word/word [at params i]] [translate-type [at param-types i]]]]]
       [push
         [wat-output/funcs [translate-context/output tctx]]
         [output-func
           [syntax-word/word [bfunc/name f]]
-          [list]
+          [clone-growable-to-frozen-list gparams]
           [translate-types [func-type/result ft]]
           [translate-form tctx [last bodies]]]]]
 
@@ -304,47 +356,86 @@
 [defexpr module [.. forms]
   [output-to-module [translate-top-forms forms]]]
 
+[def empty-object [kv-map-to-object [transient-kv-map]]]
+
 [defn get-export [wasm-inst export-name]
   [get [object-to-kv-map [wasm-get-export-object wasm-inst]] export-name]]
 
+[defexpr trans-eval-form [form]
+  [let
+    [m [output-to-module [translate-top-forms [list [flist [quote defn] [quote f] [quote []] form]]]]
+     i [wasm-instantiate m empty-object]
+     f [get-export i [word f]]]
+  [js-apply f [list]]]]
+
 [defn test-assert-eq [expected actual]
-  [when-not [is-identical [to-js-value expected] actual]
+  [let [js-expected [to-js-value expected]]
+    [when-not [is-identical js-expected actual]
     [logq test failed]
-    [log expected]
-    [log actual]]]
+    [log js-expected]
+    [log actual]
+    ]]]
 
 [defn test-assert-undefined [actual]
   [when-not [is-undefined actual]
     [logq test failed]
     [log actual]]]
 
-[def empty-object [kv-map-to-object [transient-kv-map]]]
+[defmacro js-vals [.. forms]
+  [form-concat [list [quote list]] [list-map form forms [flist [quote to-js-value] [flist [quote f64] form]]]]]
+
+[defmacro js-call [f .. forms]
+  [flist
+    [quote js-apply]
+    f
+    [form-concat [list [quote list]] [list-map form forms [flist [quote to-js-value] [flist [quote f64] form]]]]]]
 
 [defn test []
-  [let [m [module [defn f [] [i32 1]]]
-        i [wasm-instantiate m empty-object]
-        f [get-export i [word f]]]
-    [test-assert-eq [i32 1] [js-apply f [list]]]]
-  [let [m [module [defn f [] [f64 1.5]]]
-        i [wasm-instantiate m empty-object]
-        f [get-export i [word f]]]
-    [test-assert-eq [f64 1.5] [js-apply f [list]]]]
-  [let [m [module [defn f [] [do [i32 5]]]]
-        i [wasm-instantiate m empty-object]
-        f [get-export i [word f]]]
-    [test-assert-eq [i32 5] [js-apply f [list]]]]
+  [test-assert-eq [i32 1] [trans-eval-form [i32 1]]]
+  [test-assert-eq [f64 1.5] [trans-eval-form [f64 1.5]]]
+  [test-assert-eq [i32 5] [trans-eval-form [i32 5]]]
 
   [comment if]
-  [let [m [module [defn f [] [if [i32 0] [i32 7] [i32 5]]]]
+  [test-assert-eq [i32 5] [trans-eval-form [if [i32 0] [i32 7] [i32 5]]]]
+  [test-assert-eq [i32 5] [trans-eval-form [if [i32 1] [i32 5] [i32 9]]]]
+  [test-assert-undefined [trans-eval-form [if [i32 1] [do] [do]]]]
+
+  [comment intrinsics]
+  [test-assert-eq [i32 5] [trans-eval-form [[intrinsic i32.add] [i32 2] [i32 3]]]]
+  [test-assert-eq [i32 5] [trans-eval-form [[intrinsic i32.sub] [i32 8] [i32 3]]]]
+  [test-assert-eq [i32 15] [trans-eval-form [[intrinsic i32.mul] [i32 5] [i32 3]]]]
+
+  [comment parameters]
+  [let [m [module [defn not [b] [if b [i32 0] [i32 1]]]]
         i [wasm-instantiate m empty-object]
-        f [get-export i [word f]]]
-    [test-assert-eq [i32 5] [js-apply f [list]]]]
-  [let [m [module [defn f [] [if [i32 1] [i32 5] [i32 9]]]]
+        f [get-export i [word not]]]
+    [test-assert-eq [i32 1] [js-apply f [list [to-js-value [i32 0]]]]]
+    [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1]]]]]
+    [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1337]]]]]]
+  [let [m [module [defn not2 [b] [[intrinsic i32.eq] b [i32 0]]]]
         i [wasm-instantiate m empty-object]
-        f [get-export i [word f]]]
-    [test-assert-eq [i32 5] [js-apply f [list]]]]
-  [let [m [module [defn f [] [if [i32 1] [do] [do]]]]
+        f [get-export i [word not2]]]
+    [test-assert-eq [i32 1] [js-apply f [list [to-js-value [i32 0]]]]]
+    [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1]]]]]
+    [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1337]]]]]]
+  [let [m [module [defn twop [i f] [if i f [f64 1.5]]]]
         i [wasm-instantiate m empty-object]
-        f [get-export i [word f]]]
-    [test-assert-undefined [js-apply f [list]]]]
+        twop [get-export i [word twop]]]
+    [test-assert-eq [f64 1.5] [js-call twop 0 0]]
+    [test-assert-eq [f64 1.5] [js-call twop 0 0.25]]
+    [test-assert-eq [f64 0] [js-call twop 1 0]]
+    [test-assert-eq [f64 0.25] [js-call twop 13.0 0.25]]
+    [test-assert-eq [f64 0.1337] [js-call twop 13.0 0.1337]]]
+
+  [comment calls]
+  [let [m [module
+            [defn f [] [i32 1]]
+            [defn g [] [f]]]
+        i [wasm-instantiate m empty-object]
+        f [get-export i [word f]]
+        g [get-export i [word g]]]
+  [test-assert-eq [f64 1] [js-call f]]
+  [test-assert-eq [f64 1] [js-call g]]
+  ]
+
 ]
