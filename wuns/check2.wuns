@@ -294,7 +294,7 @@
         [go outer]
         [none]]]] local-ctx]]
 
-[defn instantiate-annotated-type [type-var-env outer-syntax-type]
+[defn instantiate-syntax-type [type-var-env outer-syntax-type]
   [[func go [syntax-type]
     [match syntax-type
       [btype/var tv]
@@ -322,11 +322,11 @@
         [go result]]]]
     outer-syntax-type]]
 
-[defn instantiate-annotated-type-scheme [counter-atom level syntax-type-scheme]
+[defn instantiate-syntax-type-scheme [counter-atom level syntax-type-scheme]
   [let [type-var-env [transient-kv-map]]
     [for-each tv [btype-scheme/type-params syntax-type-scheme]
       [set-kv-map type-var-env [syntax-word/word tv] [generate-fresh-type-var-atom counter-atom level]]]
-    [instantiate-annotated-type type-var-env [btype-scheme/type syntax-type-scheme]]]]
+    [instantiate-syntax-type type-var-env [btype-scheme/type syntax-type-scheme]]]]
 
 [defn literal-to-type [l]
   [match l
@@ -570,7 +570,7 @@
             [match [type-decl/kind decl]
               [type-decl-kind/union ctors]
               [for-each ctor ctors
-                [let [param-list [list-map param [pair/snd ctor] [instantiate-annotated-type param-map param]]
+                [let [param-list [list-map param [pair/snd ctor] [instantiate-syntax-type param-map param]]
                       tctor [type-ctor param-list result-type]]
                   [set-kv-map def-var-types
                     [concat-words type-prefix [syntax-word/word [pair/fst ctor]]]
@@ -581,7 +581,7 @@
                 [fields [growable-list]]
                 [for-each field field-decls
                   [let
-                    [inst-field-type [instantiate-annotated-type param-map [pair/snd field]]]
+                    [inst-field-type [instantiate-syntax-type param-map [pair/snd field]]]
                     [push fields inst-field-type]
                     [set-kv-map def-var-types [concat-words type-prefix [syntax-word/word [pair/fst field]]]
                         [generalize-top [type-func [list result-type] [none] inst-field-type]]]]]
@@ -728,7 +728,7 @@
         [bform/type-anno bf bts]
         [do
           [go level lctx bf]
-          [instantiate-annotated-type-scheme [check-context/type-var-counter gctx] level bts]]
+          [instantiate-syntax-type-scheme [check-context/type-var-counter gctx] level bts]]
 
         [do
           [log bform]
