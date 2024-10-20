@@ -185,3 +185,14 @@ export const write_js_stmt = (file_name, stmt) => {
 }
 
 export const identity = (v) => v
+export const is_undefined = (v) => v === undefined
+export const object_to_kv_map = (obj) => {
+  if (typeof obj !== 'object') throw new Error('expects object')
+  return new Map(Object.entries(obj))
+}
+
+export const kv_map_to_object = (map) => {
+  if (!(map instanceof Map)) throw new Error('expects map')
+  for (const [k] of map) if (typeof k !== 'string') throw new Error('expects string keys')
+  return Object.fromEntries(map)
+}

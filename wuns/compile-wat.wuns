@@ -1,0 +1,350 @@
+[load check2.wuns]
+
+[type wat-type-basic []
+  [union
+    [i32]
+    [i64]
+    [f32]
+    [f64]]]
+
+[type wat-inst []
+  [union
+    [i32.const word]
+    [f64.const word]
+    [local.get word]
+    [inst word [list wat-inst]]
+    [if [list wat-type-basic] wat-inst wat-inst wat-inst]
+    [call word [list wat-inst]]
+    [instructions [list wat-inst]]]]
+
+[type output-func []
+  [record
+    [name word]
+    [parameters [list [pair word wat-type-basic]]]
+    [result [list wat-type-basic]]
+    [body wat-inst]]]
+
+[type wat-output []
+  [record
+    [funcs [growable-list output-func]]]]
+
+[type translate-context []
+  [record
+    [output wat-output]
+    [check-context check-context]]]
+
+[defn translate-types [it]
+  [match it
+    [ctype/inst inst-type]
+    [match inst-type
+      [inst-type/apply type-name type-args]
+      [switch type-name
+        [[word i32]] [list [wat-type-basic/i32]]
+        [[word f64]] [list [wat-type-basic/f64]]
+        [[word tuple]] [list-map ta type-args [logq-abort f [identity ta]]]
+
+        [logq-abort not implemented translate-type inst-type/apply]]
+
+      [logq-abort not implemented translate-type inst-type/apply]]
+    [logq-abort not implemented translate-type inst-type/apply]]]
+
+[defn get-annotation [tctx bst]
+  [get [check-context/type-annotations [translate-context/check-context tctx]] [to-js-value bst]]]
+
+[defn get-form-types [tctx bform]
+  [match bform
+    [bform/literal l]
+    [match l
+      [literal/i32 i] [list [wat-type-basic/i32]]
+      [literal/f64 f] [list [wat-type-basic/f64]]
+      [literal/word w] [logq-abort not implemented get-form-types literal/word]]
+
+    [bform/do forms]
+    [if [is-empty forms]
+      [list]
+      [get-form-types tctx [last forms]]]
+
+    [translate-types
+      [get-annotation tctx [to-js-value bform]]]
+    ]]
+
+[defn translate-form [tctx form]
+  [match form
+    [bform/literal l]
+    [match l
+      [literal/i32 i] [wat-inst/i32.const [syntax-word/word i]]
+      [literal/f64 f] [wat-inst/f64.const [syntax-word/word f]]
+      [literal/word w] [logq-abort not implemented translate-form literal/word]]
+
+    [bform/do forms]
+    [if [is-empty forms]
+      [wat-inst/instructions [list]]
+      [wat-inst/instructions
+        [concat
+          [list-map form [slice forms 0 [dec [size forms]]]
+            [let [types [get-form-types tctx form]]
+              [[func go [i]
+                [if i
+                  [wat-inst/inst [word drop] [list [go [dec i]]]]
+                  [translate-form tctx form]]]
+                [size types]]]]
+          [list [translate-form tctx [last forms]]]]]]
+
+    [bform/if cond true false]
+    [wat-inst/if
+      [get-form-types tctx form]
+      [translate-form tctx cond]
+      [translate-form tctx true]
+      [translate-form tctx false]]
+
+    [logq-abort not implemented translate-form bform]]]
+
+[defn get-func-type [t]
+  [match [normalize-type t]
+    [ctype/inst inst-type]
+    [match inst-type
+      [inst-type/func func-type]
+      func-type
+
+      [logq-abort get-func-type expected a func type]]
+
+    [logq-abort get-func-type expected a func type]]]
+
+[defn translate-top-form [tctx bform]
+  [match bform
+    [bform/defn f]
+    [let [t [get [check-context/type-annotations [translate-context/check-context tctx]] [to-js-value f]]
+          ft [get-func-type t]
+          bodies [bfunc/body f]]
+      [assert [eq [size bodies] 1] expected one body]
+      [push
+        [wat-output/funcs [translate-context/output tctx]]
+        [output-func
+          [syntax-word/word [bfunc/name f]]
+          [list]
+          [translate-types [func-type/result ft]]
+          [translate-form tctx [last bodies]]]]]
+
+    [logq-abort not implemented translate-top-form bform]]]
+
+[defn translate-top-forms [forms]
+  [let [output [wat-output [growable-list]]
+        check-ctx [make-global-context]
+        bforms [check-top-forms check-ctx forms]
+        tctx [translate-context output check-ctx]]
+    [for-each bform bforms
+      [translate-top-form tctx bform]]
+    output]]
+
+[def ascii-line-feed [i32 10]]
+[def ascii-space [i32 32]]
+[def ascii-double-quote [i32 34]]
+[def ascii-dollar [i32 36]]
+[def ascii-left-paren [i32 40]]
+[def ascii-right-paren [i32 41]]
+[def ascii-equal [i32 61]]
+[def ascii-backslash [i32 92]]
+
+[type printer []
+  [record
+    [bytes [atom byte-array]]
+    [index [atom i32]]]]
+
+[defn empty-printer [init-capacity]
+  [printer [atom [byte-array init-capacity]] [atom 0]]]
+
+[defn printer-to-byte-array [p]
+  [let
+    [ci [atom-get [printer/index p]]
+     cb [atom-get [printer/bytes p]]
+     trimmed [byte-array ci]]
+    [for i 0 ci
+      [byte-array-set trimmed i [byte-array-get cb i]]]
+    trimmed]]
+
+[defn print-byte [printer byte]
+  [let [ia [printer/index printer]
+        i [atom-get ia]
+        ba [printer/bytes printer]
+        a [atom-get ba]]
+    [assert [lt-s i [byte-array-size a]] printer buffer overflow]
+    [byte-array-set a i byte]
+    [atom-set [printer/index printer] [inc i]]]]
+
+[defn print-word [printer word]
+  [for i 0 [word-byte-size word]
+    [print-byte printer [char-code-at word i]]]]
+
+[type wat []
+  [union
+    [word word]
+    [dollar word]
+    [dqstring word]
+    [seq [list wat]]
+    [list [list wat]]]]
+
+[defn print-wat [printer wat]
+  [match wat
+    [wat/word w] [print-word printer w]
+    [wat/dollar w] [do [print-byte printer ascii-dollar] [print-word printer w]]
+    [wat/dqstring w] [do [print-byte printer ascii-double-quote] [print-word printer w] [print-byte printer ascii-double-quote]]
+    [wat/seq l]
+      [do
+        [when-not [is-empty l]
+          [print-wat printer [first l]]
+          [for i 1 [size l]
+            [print-byte printer ascii-space]
+            [print-wat printer [at l i]]]]]
+    [wat/list l]
+      [do
+        [print-byte printer ascii-left-paren]
+        [when-not [is-empty l]
+          [print-wat printer [first l]]
+          [for i 1 [size l]
+            [print-byte printer ascii-space]
+            [print-wat printer [at l i]]]]
+        [print-byte printer ascii-right-paren]]
+      ]]
+
+[defn wat-list [.. l] [wat/list l]]
+
+[defn wat-type-basic-to-word [t]
+  [match t
+    [wat-type-basic/i32] [word i32]
+    [wat-type-basic/f64] [word f64]]]
+
+[defn wat-concat [.. l] [wat/list [concat-lists l]]]
+
+[defn wat-inst-to-out [i]
+  [match i
+    [wat-inst/i32.const w]
+    [wat-concat
+      [list [wat/word [word i32.const]] [wat/word w]]]
+
+    [wat-inst/f64.const w]
+    [wat-concat
+      [list [wat/word [word f64.const]] [wat/word w]]]
+
+    [wat-inst/inst w args]
+    [wat-concat
+      [list [wat/word w]] [list-map a args [wat-inst-to-out a]]]
+
+    [wat-inst/local.get w]
+    [wat-list [wat/word [word local.get]] [wat/dollar w]]
+
+    [wat-inst/instructions insts]
+    [wat/seq [list-map inst insts [wat-inst-to-out inst]]]
+
+    [wat-inst/if result-types cond true false]
+    [wat-list [wat/word [word if]]
+      [wat/list
+        [concat [list [wat/word [word result]]]
+          [list-map rt result-types [wat/word [wat-type-basic-to-word rt]]]]]
+      [wat-inst-to-out cond]
+      [wat-list [wat/word [word then]] [wat-inst-to-out true]]
+      [wat-list [wat/word [word else]]  [wat-inst-to-out false]]]
+
+    [wat-inst/call w args]
+    [wat-concat
+      [list [wat/word [word call]] [wat/dollar w]]
+      [list-map a args [wat-inst-to-out a]]]
+
+    [logq-abort wat-inst-to-out unknown instruction]]]
+
+[defn output-func-to-wat [of]
+  [wat-concat
+    [list
+      [wat/word [word func]]
+      [wat/dollar [output-func/name of]]
+      [wat-list [wat/word [word export]] [wat/dqstring [output-func/name of]]]]
+    [list-map p [output-func/parameters of]
+      [wat-list [wat/word [word param]] [wat/dollar [pair/fst p]] [wat/word [wat-type-basic-to-word [pair/snd p]]]]]
+    [list
+      [wat-concat
+        [list [wat/word [word result]]]
+        [list-map rt [output-func/result of] [wat/word [wat-type-basic-to-word rt]]]]]
+    [list
+      [wat-inst-to-out [output-func/body of]]]]]
+
+[defmacro def-wasm-extern [name type]
+  [flist [qword def] name
+    [flist [qword type-anno]
+      [flist [qword extern] [qword wasm] name]
+      type]]]
+
+[def-wasm-extern wat-to-byte-array [func [byte-array] byte-array]]
+
+[type wasm-module [] [union]]
+
+[def-wasm-extern byte-array-to-wasm-module [func [byte-array] wasm-module]]
+
+[type wasm-instance [] [union]]
+
+[def-wasm-extern wasm-instantiate [func [wasm-module [object js-value]] wasm-instance]]
+[def-wasm-extern wasm-call-export [type-scheme [a] [func [wasm-instance word [list a]] [list a]]]]
+[type export-func [] [union]]
+
+[def-wasm-extern wasm-get-export-object [func [wasm-instance] [object export-func]]]
+
+[defn output-to-module [output]
+  [let [p [empty-printer [i32 800]]]
+    [print-wat p
+      [wat/seq [list-map of [clone-growable-to-frozen-list [wat-output/funcs output]]
+        [output-func-to-wat of]]]]
+    [let [ba [printer-to-byte-array p]
+          module [byte-array-to-wasm-module [wat-to-byte-array ba]]]
+      [byte-array-log-as-string ba]
+      module]]]
+
+[def js-apply
+  [type-anno
+    [extern interpreter apply]
+    [func [export-func [list js-value]] js-value]]]
+
+[defexpr module [.. forms]
+  [output-to-module [translate-top-forms forms]]]
+
+[defn get-export [wasm-inst export-name]
+  [get [object-to-kv-map [wasm-get-export-object wasm-inst]] export-name]]
+
+[defn test-assert-eq [expected actual]
+  [when-not [is-identical [to-js-value expected] actual]
+    [logq test failed]
+    [log expected]
+    [log actual]]]
+
+[defn test-assert-undefined [actual]
+  [when-not [is-undefined actual]
+    [logq test failed]
+    [log actual]]]
+
+[def empty-object [kv-map-to-object [transient-kv-map]]]
+
+[defn test []
+  [let [m [module [defn f [] [i32 1]]]
+        i [wasm-instantiate m empty-object]
+        f [get-export i [word f]]]
+    [test-assert-eq [i32 1] [js-apply f [list]]]]
+  [let [m [module [defn f [] [f64 1.5]]]
+        i [wasm-instantiate m empty-object]
+        f [get-export i [word f]]]
+    [test-assert-eq [f64 1.5] [js-apply f [list]]]]
+  [let [m [module [defn f [] [do [i32 5]]]]
+        i [wasm-instantiate m empty-object]
+        f [get-export i [word f]]]
+    [test-assert-eq [i32 5] [js-apply f [list]]]]
+
+  [comment if]
+  [let [m [module [defn f [] [if [i32 0] [i32 7] [i32 5]]]]
+        i [wasm-instantiate m empty-object]
+        f [get-export i [word f]]]
+    [test-assert-eq [i32 5] [js-apply f [list]]]]
+  [let [m [module [defn f [] [if [i32 1] [i32 5] [i32 9]]]]
+        i [wasm-instantiate m empty-object]
+        f [get-export i [word f]]]
+    [test-assert-eq [i32 5] [js-apply f [list]]]]
+  [let [m [module [defn f [] [if [i32 1] [do] [do]]]]
+        i [wasm-instantiate m empty-object]
+        f [get-export i [word f]]]
+    [test-assert-undefined [js-apply f [list]]]]
+]

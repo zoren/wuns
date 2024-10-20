@@ -367,7 +367,8 @@
     [def-var-types [transient-kv-map word check-type-scheme]]
     [type-var-counter [atom i32]]
     [types [transient-kv-map word type-def]]
-    [form-to-ast-converter form-to-ast-converter]]]
+    [form-to-ast-converter form-to-ast-converter]
+    [type-annotations [transient-kv-map js-value ctype]]]]
 
 [defn make-global-context []
   [check-context
@@ -375,7 +376,8 @@
     [transient-kv-map]
     [atom 0]
     [transient-kv-map]
-    [mk-form-to-ast]]]
+    [mk-form-to-ast]
+    [transient-kv-map]]]
 
 [defn report-fn [gctx message opt-location]
   [push [check-context/messages gctx] [check-message message opt-location]]]
@@ -409,6 +411,10 @@
     [bform/literal l] 1
     [bform/func f] 1
     0]]
+
+[defn annotate [gctx bst type]
+  [set-kv-map [check-context/type-annotations gctx] [to-js-value bst] type]
+  type]
 
 [defn check [gctx outer-bform]
   [letfn [
@@ -459,10 +465,8 @@
             [function-kind/macro]
             [unify-report gctx return-type type-form [last [bfunc/body func]]]
 
-            [do]]
-        ]
-
-        gen-func-type]]
+            [do]]]
+        [annotate gctx func gen-func-type]]]
     [func go [level lctx bform]
       [match bform
         [bform/var w]
@@ -485,7 +489,7 @@
            else-type [go level lctx else]]
           [unify-report gctx type-i32 cond-type cond]
           [unify-report gctx then-type else-type then]
-          then-type]
+          [annotate gctx bform then-type]]
 
         [bform/do sub-forms]
         [go-forms level lctx sub-forms]
@@ -609,6 +613,7 @@
         [let
           [value-type [go-func level lctx f [function-kind/func]]
            general-val-type [generalize level value-type]]
+          [annotate gctx f value-type]
           [set-kv-map [check-context/def-var-types gctx] [syntax-word/word [bfunc/name f]] general-val-type]
           type-empty-tuple]
 
@@ -806,12 +811,9 @@
   [assert [size forms] check-top-forms expects at least one form]
   [let
     [converter [check-context/form-to-ast-converter gctx]
-     f2a [form-to-ast-converter/form-to-ast converter]
-     node-to-ldesc [form-to-ast-converter/node-to-ldesc converter]
-     node-to-def-desc [form-to-ast-converter/node-to-def-desc converter]
-     check-top
-      [func ct [form]
-        [match [f2a form]
+     f2a [form-to-ast-converter/form-to-ast converter]]
+    [list-map form forms
+      [match [f2a form]
           [result/error f2a-errors]
           [do
             [assert [not [is-empty f2a-errors]] run-forms error but no messages]
@@ -820,10 +822,6 @@
             [logq-abort check-top-forms failed there were errors]]
 
           [result/ok bform]
-          [check gctx bform]]]]
-    [[func check-top-forms-go [i]
-      [if [lt-s i [dec [size forms]]]
-        [do
-          [check-top [at forms i]]
-          [check-top-forms-go [inc i]]]
-        [check-top [at forms i]]]] 0]]]
+          [do
+            [check gctx bform]
+            bform]]]]]

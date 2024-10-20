@@ -14,7 +14,7 @@ export const wat_to_byte_array = (inputBuffer) => {
   return buffer
 }
 export const byte_array_to_wasm_module = (buf) => new WebAssembly.Module(buf)
-export const wasm_instantiate = (module) => new WebAssembly.Instance(module, {})
+export const wasm_instantiate = (module, import_object) => new WebAssembly.Instance(module, import_object)
 const emptyTuple = Object.freeze([])
 export const wasm_call_export = (instance, export_name, args) => {
   if (!(instance instanceof WebAssembly.Instance)) throw new Error('expects instance')
@@ -30,4 +30,25 @@ export const wasm_call_export = (instance, export_name, args) => {
   if (res === undefined) return emptyTuple
   if (!Array.isArray(res)) return Object.freeze([res])
   return Object.freeze(res)
+}
+
+export const wasm_get_export = (instance, export_name) => {
+  if (!(instance instanceof WebAssembly.Instance)) throw new Error('expects instance')
+  if (typeof export_name !== 'string') throw new Error('expects string')
+  const { exports } = instance
+  if (!(export_name in exports)) throw new Error('export not found: ' + export_name)
+  return exports[export_name]
+}
+
+export const wasm_get_export_object = (instance) => {
+  if (!(instance instanceof WebAssembly.Instance)) throw new Error('expects instance')
+  return instance.exports
+}
+
+export const wasm_list_export_names = (instance, export_name) => {
+  if (!(instance instanceof WebAssembly.Instance)) throw new Error('expects instance')
+  if (typeof export_name !== 'string') throw new Error('expects string')
+  const { exports } = instance
+  if (!(export_name in exports)) throw new Error('export not found: ' + export_name)
+  return Object.freeze(Object.keys(exports))
 }

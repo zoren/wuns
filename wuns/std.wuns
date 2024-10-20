@@ -400,6 +400,7 @@
 [def-extern transient-kv-map [type-scheme [k v] [func [] [transient-kv-map k v]]]]
 [def-extern set-kv-map [type-scheme [k v] [func [[transient-kv-map k v] k v] [tuple]]]]
 [def-extern kv-map-size [type-scheme [k v] [func [[transient-kv-map k v]] i32]]]
+[todo remove kv-map-values as it relies on the order of the map]
 [def-extern kv-map-values [type-scheme [k v] [func [[transient-kv-map k v]] [list v]]]]
 
 [defn mk-word [w] [flist [quote word] w]]
@@ -623,3 +624,19 @@
   [type-anno
     [extern js identity]
     [type-scheme [a] [func [a] js-value]]]]
+
+[def is-undefined
+  [type-anno
+    [extern js is-undefined]
+    [func [js-value] i32]]]
+
+[type object [v] [union]]
+
+[def object-to-kv-map
+  [type-anno
+    [extern js object-to-kv-map]
+    [type-scheme [v] [func [[object v]] [transient-kv-map word v]]]]]
+[def kv-map-to-object
+  [type-anno
+    [extern js kv-map-to-object]
+    [type-scheme [v] [func [[transient-kv-map word v]] [object v]]]]]

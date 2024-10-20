@@ -112,6 +112,7 @@ export const print = (ox) => {
     if (t === 'function') return `[fn ${x.name}]`
     if (x instanceof Map) return `[transient-kv-map${[...x].map(([k, v]) => ` ${go(k)} ${go(v)}`).join('')}]`
     if (x instanceof Set) return `[set${[...x].map((e) => ` ${go(e)}`).join('')}]`
+    if (Object.getPrototypeOf(x) === null) return `[object-null-prototype${Object.entries(x).map(([k, v]) => ` ${k} ${go(v)}`).join('')}]`
     if (!isPlainObject(x)) return String(x)
     if (Object.isFrozen(x))
       return `[kv-map${Object.entries(x)
