@@ -12,3 +12,7 @@
   (local.get 0))
 (func $id_f64 (export "id_f64") (param f64) (result f64)
   (local.get 0))
+
+(global $1 (export "1") i32 (i32.const 1))
+
+(export "number1" (global $1))
