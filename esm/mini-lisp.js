@@ -428,11 +428,11 @@ export const catchErrors = (f) => {
     if (treeSitterNode) {
       const contentName = treeSitterNode.tree.contentName
       const { startPosition, endPosition } = treeSitterNode
-      const { row, column} = startPosition
+      const { row, column } = startPosition
       const location = `${contentName}:${row + 1}:${column + 1}`
       console.error('catchErrors node location', e.message, location)
-    }else {
-      console.error('catchErrors no location', e.message, print(e.form))
+    } else {
+      console.error('catchErrors no ', e.message, print(e.form))
     }
     console.log('catchErrors', e.message, e.form, e.innerError ? 'has inner' : '')
     let curErr = e
