@@ -78,7 +78,7 @@ const modificationModifier = encodeTokenModifiers('modification')
 const makeProvideDocumentSemanticTokensForms = async () => {
   const { makeDefEnv, tryGetClosureKind, tryGetFormWord, tryGetFormList, treeToFormsSafeNoMeta, tryGetNodeFromForm } =
     await import('./esm/core.js')
-  const { makeEvalForm } = await import('./esm/mini-lisp.js')
+  const { makeEvalForm } = await import('./esm/interpreter.js')
   const { default: externs } = await import('./esm/runtime-lib/externs.js')
   const provideDocumentSemanticTokens = (document) => {
     const { fileName } = document
