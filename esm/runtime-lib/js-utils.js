@@ -120,7 +120,13 @@ const jsStmtToString = (js) => {
     case 'js-stmt/import':
       return `import ${arg(0)} from '${arg(1)}'`
     case 'js-stmt/export':
+      // export { name1, /* …, */ nameN };
       return `export { ${arg(0).map(escapeIdentifier).join(', ')} }`
+    case 'js-stmt/export-as-string': {
+      // export { variable1 as "string name" };
+      const exports = arg(0).map(({ fst, snd }) => `${escapeIdentifier(fst)} as '${snd}'`)
+      return `export { ${exports.join(', ')} }`
+    }
 
     default:
       throw new Error(`unknown js stmt tag: ${tag}`)

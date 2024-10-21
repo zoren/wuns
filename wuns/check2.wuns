@@ -735,6 +735,14 @@
           [go level lctx bf]
           [instantiate-syntax-type-scheme [check-context/type-var-counter gctx] level bts]]
 
+        [bform/export es]
+        [do
+          [for-each e es
+            [let [type-scheme [get [check-context/def-var-types gctx] [syntax-word/word e]]
+                  t [specialize-type-scheme [check-context/type-var-counter gctx] level type-scheme]]
+              [annotate gctx e t]]]
+          type-empty-tuple]
+
         [do
           [log bform]
           [logq-abort check2 not implemented]]]]]

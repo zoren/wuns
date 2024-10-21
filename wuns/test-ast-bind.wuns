@@ -164,6 +164,9 @@
   [test-ok [letfn [] [i32 4] [i32 5]]]
   [test-ok [func f [] [i32 4] [i32 5]]]
 
+  [test-error [[not a defined name]] [let [f [func f [x] x]] [export f]]]
+  [test-ok [defn f [x] x] [export f]]
+
   [word done]
   ]
 

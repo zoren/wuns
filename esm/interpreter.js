@@ -153,7 +153,7 @@ export const makeEvalForm = (externs, defEnv) => {
           if (curEnv.has(word)) return curEnv.get(word)
           curEnv = curEnv.outer
         }
-        throw evalError('undefined variable: ' + word)
+        throw evalError('undefined variable')
       }
       const forms = tryGetFormList(form)
       if (!forms) {
@@ -426,6 +426,12 @@ export const makeEvalForm = (externs, defEnv) => {
           for (const fileForm of fileForms) result = go(defEnv, fileForm)
           return result
         }
+        case 'export':
+          for (let i = 1; i < forms.length; i++) {
+            const exportWord = getFormWord(forms[i])
+            if (!defEnv.has(exportWord)) throw evalError('exported def variable not found: ' + exportWord)
+          }
+          return langUndefined
       }
       const func = go(env, firstForm)
       const args = forms.slice(1)

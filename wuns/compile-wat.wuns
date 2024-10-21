@@ -27,9 +27,16 @@
     [result [list wat-type-basic]]
     [body wat-inst]]]
 
+[type export-kind []
+  [union [func]]]
+
 [type wat-output []
   [record
-    [funcs [growable-list output-func]]]]
+    [funcs [growable-list output-func]]
+    [exports [growable-list [pair word [pair export-kind word]]]]]]
+
+[defn make-wat-output []
+  [wat-output [growable-list] [growable-list]]]
 
 [type translate-context []
   [record
@@ -204,10 +211,28 @@
               ]
             [[mk-translate-form tctx tail-analysis f] [last bodies]]]]]]
 
-    [logq-abort not implemented translate-top-form bform]]]
+    [bform/export snames]
+    [for-each sname snames
+      [let [export-kind
+            [match [normalize-type [get-annotation tctx [to-js-value sname]]]
+              [ctype/inst inst-type]
+              [match inst-type
+                [inst-type/func func-type]
+                [export-kind/func]
+
+                [export-kind/global]]
+
+              [logq-abort get-func-type expected a func type]]]
+      [push
+        [wat-output/exports [translate-context/output tctx]]
+        [pair [syntax-word/word sname] [pair export-kind [syntax-word/word sname]]]]]]
+
+    [do
+      [log bform]
+      [logq-abort not implemented translate-top-form bform]]]]
 
 [defn translate-top-forms [forms]
-  [let [output [wat-output [growable-list]]
+  [let [output [make-wat-output]
         check-ctx [make-global-context]
         bforms [check-top-forms check-ctx forms]
         tctx [translate-context output check-ctx]]
@@ -324,7 +349,7 @@
           [list-map rt result-types [wat/word [wat-type-basic-to-word rt]]]]]
       [wat-inst-to-out cond]
       [wat-list [wat/word [word then]] [wat-inst-to-out true]]
-      [wat-list [wat/word [word else]]  [wat-inst-to-out false]]]
+      [wat-list [wat/word [word else]] [wat-inst-to-out false]]]
 
     [wat-inst/call w args]
     [wat-concat
@@ -348,8 +373,7 @@
   [wat-concat
     [list
       [wat/word [word func]]
-      [wat/dollar [output-func/name of]]
-      [wat-list [wat/word [word export]] [wat/dqstring [output-func/name of]]]]
+      [wat/dollar [output-func/name of]]]
     [list-map p [output-func/parameters of]
       [wat-list [wat/word [word param]] [wat/dollar [pair/fst p]] [wat/word [wat-type-basic-to-word [pair/snd p]]]]]
     [list
@@ -358,6 +382,19 @@
         [list-map rt [output-func/result of] [wat/word [wat-type-basic-to-word rt]]]]]
     [list
       [wat-inst-to-out [output-func/body of]]]]]
+
+[defn export-to-wat [p]
+  [wat-concat
+    [list
+      [wat/word [word export]]
+      [wat/dqstring [pair/fst p]]
+      [let [kind-pair [pair/snd p]]
+        [wat-list
+          [wat/word
+            [match [pair/fst kind-pair]
+              [export-kind/func] [word func]
+              [logq-abort export-to-wat unknown export kind]]]
+          [wat/dollar [pair/snd kind-pair]]]]]]]
 
 [defmacro def-wasm-extern [name type]
   [flist [qword def] name
@@ -382,8 +419,10 @@
 [defn output-to-module [output]
   [let [p [empty-printer [i32 800]]]
     [print-wat p
-      [wat/seq [list-map of [clone-growable-to-frozen-list [wat-output/funcs output]]
-        [output-func-to-wat of]]]]
+      [wat/seq
+        [concat
+          [list-map of [clone-growable-to-frozen-list [wat-output/funcs output]] [output-func-to-wat of]]
+          [list-map e [clone-growable-to-frozen-list [wat-output/exports output]] [export-to-wat e]]]]]
     [let [ba [printer-to-byte-array p]
           module [byte-array-to-wasm-module [wat-to-byte-array ba]]]
       [byte-array-log-as-string ba]
@@ -404,7 +443,11 @@
 
 [defexpr trans-eval-form [form]
   [let
-    [m [output-to-module [translate-top-forms [list [flist [quote defn] [quote f] [quote []] form]]]]
+    [m [output-to-module
+        [translate-top-forms
+          [list
+            [flist [quote defn] [quote f] [quote []] form]
+            [quote [export f]]]]]
      i [wasm-instantiate m empty-object]
      f [get-export i [word f]]]
   [js-apply f [list]]]]
@@ -447,19 +490,19 @@
   [test-assert-eq [i32 15] [trans-eval-form [[intrinsic i32.mul] [i32 5] [i32 3]]]]
 
   [comment parameters]
-  [let [m [module [defn not [b] [if b [i32 0] [i32 1]]]]
+  [let [m [module [defn not [b] [if b [i32 0] [i32 1]]] [export not]]
         i [wasm-instantiate m empty-object]
         f [get-export i [word not]]]
     [test-assert-eq [i32 1] [js-apply f [list [to-js-value [i32 0]]]]]
     [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1]]]]]
     [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1337]]]]]]
-  [let [m [module [defn not2 [b] [[intrinsic i32.eq] b [i32 0]]]]
+  [let [m [module [defn not2 [b] [[intrinsic i32.eq] b [i32 0]]] [export not2]]
         i [wasm-instantiate m empty-object]
         f [get-export i [word not2]]]
     [test-assert-eq [i32 1] [js-apply f [list [to-js-value [i32 0]]]]]
     [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1]]]]]
     [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1337]]]]]]
-  [let [m [module [defn twop [i f] [if i f [f64 1.5]]]]
+  [let [m [module [defn twop [i f] [if i f [f64 1.5]]] [export twop]]
         i [wasm-instantiate m empty-object]
         twop [get-export i [word twop]]]
     [test-assert-eq [f64 1.5] [js-call twop 0 0]]
@@ -471,7 +514,9 @@
   [comment calls]
   [let [m [module
             [defn f [] [i32 1]]
-            [defn g [] [f]]]
+            [export f]
+            [defn g [] [f]]
+            [export g]]
         i [wasm-instantiate m empty-object]
         f [get-export i [word f]]
         g [get-export i [word g]]]
@@ -484,7 +529,8 @@
     [defn gauss-direct [n]
       [if n
         [[intrinsic i32.add] n [gauss-direct [[intrinsic i32.sub] n [i32 1]]]]
-        [i32 0]]]]
+        [i32 0]]]
+    [export gauss-direct]]
         i [wasm-instantiate m empty-object]
         gauss-direct [get-export i [word gauss-direct]]]
     [test-assert-eq [i32 0] [js-call gauss-direct 0]]
@@ -493,14 +539,14 @@
     [test-assert-eq [i32 500500] [js-call gauss-direct 1000]]
     [test-assert-eq [i32 50005000] [js-call gauss-direct 10000]]
     [comment this one breaks the stack
-      [test-assert-eq [i32 200010000] [js-call gauss-direct 20000]]]
-    ]
+      [test-assert-eq [i32 200010000] [js-call gauss-direct 20000]]]]
   [let [m [module
     [defn go [res n]
       [if n
         [go [[intrinsic i32.add] res n] [[intrinsic i32.sub] n [i32 1]]]
         res]]
-    [defn gauss-tail [n] [go [i32 0] n]]]
+    [defn gauss-tail [n] [go [i32 0] n]]
+    [export gauss-tail]]
         i [wasm-instantiate m empty-object]
         gauss-tail [get-export i [word gauss-tail]]]
     [test-assert-eq [i32 0] [js-call gauss-tail 0]]
@@ -509,6 +555,33 @@
     [comment here tail recursion allows us to calculate larger values]
     [test-assert-eq [i32 200010000] [js-call gauss-tail 20000]]
     [test-assert-eq [i32 2147450880] [js-call gauss-tail 65535]]]
+
+[comment this requires temp vars for args dependent on parameters
+  [let [m [module
+    [defn go-rev [n res]
+      [if n
+        [go-rev [[intrinsic i32.sub] n [i32 1]] [[intrinsic i32.add] res n]]
+        res]]
+    [defn gauss-tail [n] [go-rev n [i32 0]]]]
+        i [wasm-instantiate m empty-object]
+        gauss-tail [get-export i [word gauss-tail]]]
+    [test-assert-eq [i32 0] [js-call gauss-tail 0]]
+    [test-assert-eq [i32 55] [js-call gauss-tail 10]]
+    [test-assert-eq [i32 5050] [js-call gauss-tail 100]]
+    [comment here tail recursion allows us to calculate larger values]
+    [test-assert-eq [i32 200010000] [js-call gauss-tail 20000]]
+    [test-assert-eq [i32 2147450880] [js-call gauss-tail 65535]]] ]
+
+
+  [comment type]
+[todo
+    [let [m [module
+    [type r [] [record [i i32]]]
+    [defn f [] [r/i [r [i32 5]]]]]
+      i [wasm-instantiate m empty-object]
+      f [get-export i [word f]]]
+    [test-assert-eq [i32 0] [js-call f]]
+    ]]
 ]
 
 [defn smart-gauss [n]

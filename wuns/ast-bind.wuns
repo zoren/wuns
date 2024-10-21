@@ -68,6 +68,7 @@
     [call bform [list bform]]
     [call-fexpr bform [list form]]
     [type-anno bform btype-scheme]
+    [export [list syntax-word]]
     ]]
 
 [type report-message []
@@ -611,6 +612,15 @@
                   [bform/type-anno
                     [form-to-ast lstack [get-arg 0]]
                     [form-to-type-scheme [get-arg 1]]]]
+
+                [[word export]]
+                [bform/export
+                  [list-map f [rest l]
+                    [let [sw [get-sword f]]
+                      [if-let [ddesc [try-get def-ctx [syntax-word/word sw]]]
+                        [set-kv-map node-to-def-desc sw ddesc]
+                        [push-error f [quote [not a defined name]]]]
+                      sw]]]
 
                 [if-let [ldesc [try-get-local lstack first-word]]
                   [bform/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]

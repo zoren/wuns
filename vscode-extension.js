@@ -184,7 +184,6 @@ const makeProvideDocumentSemanticTokensForms = async () => {
             for (const form of tail) go(form)
           },
           let: letSpecial,
-          letrec: letSpecial,
           letfn: () => {
             const [functionsForm, body] = tail
             for (const func of getListOrEmpty(functionsForm)) {
@@ -216,10 +215,10 @@ const makeProvideDocumentSemanticTokensForms = async () => {
             runForm()
           },
           extern: () => {
-            for (const form of tail) if (tryGetFormWord(form)) pushToken(form, stringTokenType)
+            for (const form of tail) pushToken(form, stringTokenType)
           },
           intrinsic: () => {
-            for (const form of tail) if (tryGetFormWord(form)) pushToken(form, tokenTypeOperator)
+            pushToken(form[0], tokenTypeOperator)
           },
           atom: () => {
             go(tail[0])
@@ -240,6 +239,9 @@ const makeProvideDocumentSemanticTokensForms = async () => {
             if (tail.length === 1 && tryGetFormWord(tail[0])) pushToken(tail[0], stringTokenType)
             runForm()
           },
+          export: () => {
+            for (const form of tail) pushToken(form, variableTokenType)
+          }
         }
         if (headWord) {
           const specialHandler = specialForms[headWord]

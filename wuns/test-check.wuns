@@ -472,6 +472,8 @@
       [test-ok-fn-stop-at-error gctx [read-file file]]]
     [logq it took [[intrinsic f64.sub] [performance-now] before] ms]]]
 
+[export test-ok-files]
+
 [defn test-check []
   [run-unit-tests]
   [let

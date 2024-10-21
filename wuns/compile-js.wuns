@@ -52,6 +52,7 @@
     [while js-exp js-stmt]
     [import word word]
     [export [list word]]
+    [export-as-string [list [pair word word]]]
   ]
 ]
 
@@ -370,6 +371,9 @@
 
                     [logq-abort cstmt unknown type kind]]]]]]
 
+          [bform/export snames]
+          [js-stmt/export-as-string [list-map sname snames [let [name [syntax-word/word sname]] [pair name name]]]]
+
           [bform/call f args]
           [if-let [deps [try-get-tail bform]]
             [let
@@ -441,7 +445,7 @@
         [result/ok v]
         [result/ok v]]]]]
 
-[defn compile-file-to-file [wuns-file-name js-file-name exports]
+[defn compile-file-to-file [wuns-file-name js-file-name]
   [let
     [converter [mk-form-to-ast]
      f2a [form-to-ast-converter/form-to-ast converter]
@@ -463,13 +467,6 @@
       [log e]
 
       [result/ok stmts]
-      [let [
-          prologue [list [js-stmt/import [word externs] [word ../runtime-lib/externs.js]]]
-          epilogue [list [js-stmt/export exports]]]
+      [let [prologue [list [js-stmt/import [word externs] [word ../runtime-lib/externs.js]]]]
         [write-js-stmt js-file-name
-          [js-stmt/seq
-            [concat
-              [concat prologue stmts]
-              epilogue]]
-        ]
-      ]]]]
+          [js-stmt/seq [concat prologue stmts]]]]]]]
