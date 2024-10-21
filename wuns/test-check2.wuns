@@ -1,5 +1,301 @@
 [load check2.wuns]
-[load test-check-gen.wuns]
+
+[type check-test []
+  [union
+    [ok form [list form]]
+    [error form [list form] [list form]]]]
+
+[defn make-check-test-ok [expected-type forms]
+  [assert [not [is-empty forms]] make-check-test-error forms is empty]
+  [check-test/ok expected-type forms]]
+
+[defexpr test-ok [expected-type .. forms]
+  [do
+    [assert [not [is-empty forms]] make-check-test-error forms is empty]
+    [make-check-test-ok
+      expected-type
+      forms]]]
+
+[defn make-check-test-error [expected-type expected-messages forms]
+  [assert [not [is-empty expected-messages]] make-check-test-error expected-messages is empty]
+  [assert [not [is-empty forms]] make-check-test-error forms is empty]
+  [check-test/error expected-type expected-messages forms]]
+
+[defexpr test-errors [expected-type expected-messages-form .. forms]
+  [let [expected-messages [form-to-list expected-messages-form]]
+    [assert [not [is-empty expected-messages]] make-check-test-error expected-messages is empty]
+    [assert [not [is-empty forms]] make-check-test-error forms is empty]
+    [check-test/error
+      expected-type
+      expected-messages
+      forms]]]
+
+[todo record tests]
+
+[def tests [list
+
+[test-ok i32
+  [def my-abort
+    [type-anno
+      [extern host abort]
+      [type-scheme [a] [func [] a]]]]
+
+  [defn test-generalization [c]
+    [if c
+      [my-abort]
+      [word w]]
+    [if c
+      [my-abort]
+      [i32 1]]]
+    [test-generalization [i32 1]]
+    ]
+
+  [test-ok i32 [i32 5]]
+  [test-ok f64 [f64 1.5]]
+  [test-ok word [word a]]
+
+  [test-ok [func [i32 i32] i32] [intrinsic i32.add]]
+  [test-ok [func [f64 f64] f64] [intrinsic f64.add]]
+
+  [test-errors i32 [[not unifiable - different types]] [if [word ok] [i32 5] [i32 5]]]
+  [test-errors i32 [[not unifiable - different types]] [if [i32 5] [i32 5] [word a]]]
+  [test-errors word [[not unifiable - different types]] [if [i32 5] [word a] [i32 5]]]
+  [test-ok i32 [if [i32 5] [i32 6] [i32 7]]]
+  [test-ok word [if [i32 5] [word a] [word b]]]
+
+  [test-ok [tuple] [do]]
+  [test-ok word [do [word a]]]
+  [test-ok i32 [do [word a] [i32 3]]]
+
+  [test-ok word [let [] [word a]]]
+  [test-ok word [let [v [word a]] [word a]]]
+  [test-ok word [let [v [word a]] v]]
+  [test-ok word [let [v [word a] u v] u]]
+
+  [test-ok
+    word
+    [def d [word a]]]
+  [test-ok
+    word
+    [def d [word a]]
+    d]
+  [test-ok i32
+    [def d [i32 5]]
+    [def d2 d]
+    d2]
+  [test-ok [func [[list form]] form]
+    [type form []
+      [union
+        [word word]
+        [list [list form]]]]
+    form/list
+    ]
+  [test-ok form
+    [type form []
+      [union
+        [word word]
+        [list [list form]]]]
+    [form/word [word a]]
+    ]
+  [test-ok form
+    [type form []
+      [union
+        [word word]
+        [list [list form]]]]
+    [form/word [word a]]
+    ]
+  [test-errors [type-scheme [a] a] [[not unifiable - different types]]
+    [[i32 5] [i32 6]]]
+
+  [test-ok
+    i32
+    [def f [func id [x] x]]
+    [f [i32 5]]
+    [f [i32 6]]]
+  [test-ok
+    word
+    [def f [func id [x] x]]
+    [f [i32 5]]
+    [f [word a]]]
+  [test-ok [type-scheme [a] [func [[func [i32] a]] a]]
+    [func f [i]
+      [i [i32 5]]]]
+
+  [test-ok
+    [type-scheme [a b] [func [a b] i32]]
+    [func f [x y] [i32 5]]]
+  [test-ok
+    [type-scheme [a] [func [] a]]
+    [func diverge [] [diverge]]]
+  [test-ok
+    [func [i32] i32]
+    [func f [p]
+      [if p
+        [i32 2]
+        [f [i32 1]]]]]
+  [test-ok
+    [type-scheme [a] [func [a] a]]
+    [func id [x] x]]
+  [test-ok
+    [func [i32] i32]
+    [if [i32 5]
+      [func id-i32 [x] [if x x x]]
+      [func id [x] x]]]
+  [test-ok
+    [type-scheme [a] [func [.. a] i32]]
+    [func f [.. p] [i32 0]]]
+  [test-ok
+    [type-scheme [a] [list a]]
+    [[func f [.. p] p]]]
+  [test-ok
+    [list i32]
+    [[func f [.. p] p] [i32 5]]]
+  [test-ok
+    [list i32]
+    [[func f [.. p] p] [i32 5] [i32 6]]]
+  [test-errors
+    [list i32]
+    [[not unifiable - different types]]
+    [[func f [.. p] p] [i32 5] [word a]]]
+
+  [test-errors [tuple] [[not unifiable - different types]]
+    [defmacro qword [m]
+      [i32 0]]]
+
+[test-errors word [[not unifiable - different types]]
+  [type option [a] [union [none] [some a]]]
+  [type result [o e] [union [ok o] [error e]]]
+  [match [option/none]
+    [result/ok v] v
+    [word a]]]
+[test-errors i32 [[not unifiable - different types]]
+  [type option [a] [union [none] [some a]]]
+  [match [option/some [i32 5]]
+    [option/some v] v
+    [option/some v] [word a]
+    ]]
+
+[test-errors i32 [[not unifiable - different types]]
+  [type option [a] [union [none] [some a]]]
+  [match [option/none]
+    [option/none] [i32 5]
+    [word a]]]
+[test-ok i32
+  [type option [a] [union [none] [some a]]]
+  [match [option/none] [option/none] [i32 5]]]
+
+[test-errors word [[not unifiable - different types]]
+  [switch [i32 0]
+    [[i32 0]] [word zero]
+    [[word a]] [word one]
+    [word not-01]]]
+[test-errors word [[not unifiable - different types]]
+  [switch [i32 0]
+[
+      [i32 0]
+      [word a]
+      ] [word zero-a]
+    [word not-01]]]
+[test-errors word [[not unifiable - different types]]
+  [switch [i32 0]
+    [[i32 0]] [word zero]
+    [[i32 1]] [word one]
+    [i32 1337]]]
+[test-ok word
+  [switch [i32 0]
+    [[i32 0] [i32 1]] [word zero-or-one]
+    [word not-01]]]
+[test-ok word
+  [switch [i32 0]
+    [[i32 0]] [word zero]
+    [[i32 1]] [word one]
+    [word not-01]]]
+
+[test-errors i32 [[not unifiable - different types]]
+  [def atom-get
+    [type-anno
+      [extern atom-get]
+      [type-scheme [a] [func [[atom a]] a]]]]
+  [def atom-set
+    [type-anno
+      [extern atom-set]
+      [type-scheme [a] [func [[atom a] a] [tuple]]]]]
+  [def add
+    [type-anno
+      [extern add]
+      [func [i32 i32] i32]]]
+  [let [c [atom [func id [x] x]]]
+    [do
+      [atom-set c [func inc [x] [add [i32 1] x]]]
+      [[atom-get c] [word true]]]]]
+[test-errors i32 [[not unifiable - different types]]
+  [def atom-get
+    [type-anno
+      [extern atom-get]
+      [type-scheme [a] [func [[atom a]] a]]]]
+  [def atom-set
+    [type-anno
+      [extern atom-set]
+      [type-scheme [a] [func [[atom a] a] [tuple]]]]]
+  [def add
+    [type-anno
+      [extern add]
+      [func [i32 i32] i32]]]
+  [def mk-atom [func mk-atom [init] [atom init]]]
+  [let [c [mk-atom [func id [x] x]]]
+    [do
+      [atom-set c [func inc [x] [add [i32 1] x]]]
+      [[atom-get c] [word true]]]]]
+
+[test-errors i32 [[not unifiable - different types]]
+  [def atom-get
+    [type-anno
+      [extern atom-get]
+      [type-scheme [a] [func [[atom a]] a]]]]
+  [def atom-set
+    [type-anno
+      [extern atom-set]
+      [type-scheme [a] [func [[atom a] a] [tuple]]]]]
+  [def add
+    [type-anno
+      [extern add]
+      [func [i32 i32] i32]]]
+  [def mk-atom [func mk-atom [init] [atom init]]]
+  [def c [mk-atom [func id [x] x]]]
+  [atom-set c [func inc [x] [add [i32 1] x]]]
+  [[atom-get c] [word true]]]
+
+[test-ok i32
+  [def atom-get
+    [type-anno
+      [extern atom-get]
+      [type-scheme [a] [func [[atom a]] a]]]]
+  [def atom-set
+    [type-anno
+      [extern atom-set]
+      [type-scheme [a] [func [[atom a] a] [tuple]]]]]
+  [type linked-list [a]
+    [union
+      [nil]
+      [cons a [linked-list a]]]]
+  [def push [func push [list-ref element]
+    [atom-set list-ref [linked-list/cons element [atom-get list-ref]]]]]
+  [let [gli [atom [linked-list/nil]]]
+    [push gli [i32 5]]]
+  [def push2 [func push [list-ref element]
+    [atom-set list-ref [linked-list/cons element [atom-get list-ref]]]]]
+  push2
+  [let [glw [atom [linked-list/nil]]]
+    [push2 glw [word a]]]
+  [i32 5]]
+
+[test-ok i32
+  [letfn
+    [[func bla [n] [i32 5]]
+     [func m [] [bla [i32 5]] [bla [f64 5]]]]
+    [i32 4]]]
+
+]]
 
 [defn run-tests-check2 [tests]
   [let [tests-run-atom [atom 0]]
@@ -7,7 +303,8 @@
       [match test
         [check-test/ok expected-type forms]
         [let [gctx [make-global-context]
-              res [check-top-forms gctx forms]
+              results [check-top-forms gctx forms]
+              res [last results]
               check-errors [clone-growable-to-frozen-list [check-context/messages gctx]]
               actual-type [normalize-present-type-scheme res]]
           [todo check-top-forms now returns list]
@@ -21,7 +318,8 @@
 
         [check-test/error expected-type expected-errors forms]
         [let [gctx [make-global-context]
-              res [check-top-forms gctx forms]
+              results [check-top-forms gctx forms]
+              res [last results]
               errors [clone-growable-to-frozen-list [check-context/messages gctx]]
               actual-type [normalize-present-type-scheme res]]
           [when-not [eq [size expected-errors] [size errors]]
@@ -49,7 +347,8 @@
 [defn run-file [file-name]
   [let [gctx [make-global-context]
         forms [read-file file-name]
-        res [check-top-forms gctx forms]
+        results [check-top-forms gctx forms]
+        res [last results]
         check-errors [clone-growable-to-frozen-list [check-context/messages gctx]]
         actual-type [normalize-present-type-scheme res]]
     [when-not [is-empty check-errors]

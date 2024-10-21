@@ -410,6 +410,9 @@
     [bform/atom a] 0
     [bform/literal l] 1
     [bform/func f] 1
+    [bform/var f] 1
+    [bform/extern f] 1
+    [bform/type-anno f ts] [is-syntactic-value f]
     0]]
 
 [defn annotate [gctx bst type]
@@ -731,9 +734,11 @@
           [generate-fresh-type-var gctx level]]
 
         [bform/type-anno bf bts]
-        [do
-          [go level lctx bf]
-          [instantiate-syntax-type-scheme [check-context/type-var-counter gctx] level bts]]
+        [let
+          [value-type [go level lctx bf]
+           inst-anno-type [instantiate-syntax-type-scheme [check-context/type-var-counter gctx] level bts]]
+          [unify-report gctx value-type inst-anno-type bf]
+          value-type]
 
         [bform/export es]
         [do
@@ -822,14 +827,14 @@
      f2a [form-to-ast-converter/form-to-ast converter]]
     [list-map form forms
       [match [f2a form]
-          [result/error f2a-errors]
-          [do
-            [assert [not [is-empty f2a-errors]] run-forms error but no messages]
-            [logq run-forms form to bound syntax had errors]
-            [for-each f2a-error f2a-errors [log-report-message f2a-error]]
-            [logq-abort check-top-forms failed there were errors]]
+        [result/error f2a-errors]
+        [do
+          [assert [not [is-empty f2a-errors]] run-forms error but no messages]
+          [logq run-forms form to bound syntax had errors]
+          [for-each f2a-error f2a-errors [log-report-message f2a-error]]
+          [logq-abort check-top-forms failed there were errors]]
 
-          [result/ok bform]
-          [do
-            [check gctx bform]
-            bform]]]]]
+        [result/ok bform]
+        [do
+          [check gctx bform]
+          ]]]]]

@@ -234,7 +234,7 @@
 [defn translate-top-forms [forms]
   [let [output [make-wat-output]
         check-ctx [make-global-context]
-        bforms [check-top-forms check-ctx forms]
+        types [check-top-forms check-ctx forms]
         tctx [translate-context output check-ctx]]
     [for-each bform bforms
       [translate-top-form tctx bform]]
