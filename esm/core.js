@@ -127,7 +127,25 @@ export const print = (ox) => {
 
 import fs from 'node:fs'
 
-import { parse } from './parseTreeSitter.js'
+import TSParser from 'tree-sitter'
+const parser = new TSParser()
+
+import Wuns from 'tree-sitter-wuns'
+parser.setLanguage(Wuns)
+
+const parse = (content, oldTree) => {
+  // workaround for https://github.com/tree-sitter/node-tree-sitter/issues/199
+  // without it we cannot parse strings longer than 32768 bytes
+  const bufferSize = content.length + 1
+  return parser.parse(content, oldTree, { bufferSize })
+}
+
+export const parseTagTreeSitter = (content, contentName) => {
+  const tree = parse(content)
+  tree.contentName = contentName
+  return tree
+}
+
 /**
  * @typedef {import('tree-sitter').TSParser} TSParser
  */
@@ -179,12 +197,6 @@ export const treeToFormsSafeNoMeta = (tree) => {
     return Object.freeze(childForms)
   }
   return childrenToList(tree.rootNode)
-}
-
-export const parseTagTreeSitter = (content, contentName) => {
-  const tree = parse(content)
-  tree.contentName = contentName
-  return tree
 }
 
 export const readString = (content, contentName) => {
