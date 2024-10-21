@@ -412,11 +412,10 @@ export const makeEvalForm = (externs, defEnv) => {
           }
           return langUndefined
         }
-        case 'type-anno': {
+        case 'type-anno':
           assertNumArgs(2)
           form = forms[1]
           continue
-        }
         case 'load': {
           assertNumArgs(1)
           assertTopLevel()
