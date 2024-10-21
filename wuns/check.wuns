@@ -371,6 +371,13 @@
       [logq-abort var-name already defined [identity var-name]]]
     [set-kv-map dvt var-name type]]]
 
+[defn set-def-var-type-form [gctx var type]
+  [when-let [var-name [try-get-word var]]
+    [let [dvt [check-context/def-var-types gctx]]
+      [when [has dvt var-name]
+        [report var already defined]]
+      [set-kv-map dvt var-name type]]]]
+
 [type parameters []
   [record
     [regular-params [list form]]
@@ -381,6 +388,7 @@
     [parameters [slice params 0 [sub [size params] 2]] [some [last params]]]
     [parameters params [none]]]]
 
+[todo replace with try-get-word from std.wuns]
 [defn try-get-form-word-option [form]
   [match form
     [form/word w] [some w]
@@ -685,7 +693,7 @@
                           [when-let [field-name [try-get-word-report gctx [first field-def]]]
                             [set-def-var-type gctx [concat-words type-prefix field-name]
                               [generalize-top [type-func [list result-type] [none] inst-field-type]]]]]]
-                      [set-def-var-type gctx name-word
+                      [set-def-var-type-form gctx [at sub-forms i]
                         [generalize-top [type-ctor [clone-growable-to-frozen-list fields] [type-def/result-type this-type-def]]]]]
 
                     [logq-abort check type definition not recognized]]
@@ -804,12 +812,6 @@
           [check gctx level let-ctx
             [form/list [concat [list [qword do]] [slice sub-forms 2 [size sub-forms]]]]]]
 
-        [eq-form first-form [quote fexpr]]
-        [logq-abort check fexpr not allowed here]
-
-        [eq-form first-form [quote macro]]
-        [logq-abort check macro not allowed here]
-
         [or
           [eq-form first-form [quote func]]
           [eq-form first-form [quote defn]]
@@ -830,7 +832,8 @@
              [function-kind/macro] 1
              [function-kind/fexpr] 1]
            level-1 [inc level]
-           func-name [form-to-word [second sub-forms]]
+           func-name-form [second sub-forms]
+           func-name [form-to-word func-name-form]
            param-ctx [transient-kv-map]
            gen-func-type [generate-fresh-type-var gctx level-1]
            func-type-scheme [mk-empty-type-scheme gen-func-type]
@@ -860,18 +863,18 @@
             [switch fw
               [[word defn]]
               [let [general-val-type [generalize level gen-func-type]]
-                [set-def-var-type gctx func-name general-val-type]
+                [set-def-var-type-form gctx func-name-form general-val-type]
                 type-empty-tuple]
 
               [[word defexpr]]
               [do
-                [set-def-var-type gctx func-name func-type-scheme]
+                [set-def-var-type-form gctx func-name-form func-type-scheme]
                 type-empty-tuple]
 
               [[word defmacro]]
               [do
                 [unify-report gctx return-type type-form [last sub-forms]]
-                [set-def-var-type gctx func-name func-type-scheme]
+                [set-def-var-type-form gctx func-name-form func-type-scheme]
                 type-empty-tuple]
 
               gen-func-type]]]
@@ -883,7 +886,7 @@
            value-type [check gctx [inc level] lctx value-form]
            general-val-type [generalize level value-type]]
           [report-when-not [eq n-of-args 2] form expects 2 arguments]
-          [set-def-var-type gctx [form-to-word name] general-val-type]
+          [set-def-var-type-form gctx name general-val-type]
           value-type]
 
         [eq-form first-form [quote atom]]

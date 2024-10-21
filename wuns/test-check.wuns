@@ -29,9 +29,10 @@
         messages [get-messages-list gctx]]
     [do
       [when-not [is-empty messages]
+        [logq test-ok failed there were errors listing start]
         [for-each message messages
           [log-report-message message]]
-        [logq-abort test-ok failed there were errors]]
+        [logq-abort test-ok failed there were errors listing end]]
       [assert [eq-form present-type expected-type] test-ok failed expected type [identity expected-type] but found [identity present-type]]
       [inc-atom tests-run-atom]]]]
 
@@ -159,14 +160,17 @@
     [func id [x] x]]]
 [test-ok
   [func [form] form]
-  [fexpr fexpr-id [x] x]]
+  [defexpr fexpr-id [x] x]
+  fexpr-id]
 [test-ok
   [func [form] i32]
-  [fexpr fexpr-i32 [x] [i32 5]]]
+  [defexpr fexpr-i32 [x] [i32 5]]
+  fexpr-i32]
 
 [test-ok
   i32
-  [[fexpr fexpr-i32 [x] [i32 5]] [this is not evaluated]]]
+  [defexpr fexpr-i32 [x] [i32 5]]
+  [fexpr-i32 [this is not evaluated]]]
 
 [comment call]
 [test-errors i32 [[not unifiable - different number of parameters]]
@@ -205,7 +209,7 @@
   [def list [func list [.. entries] entries]]
   [def test [list [i32 1] [i32 2]]]
   test]
-[test-ok word
+[test-errors word [[already defined]]
   [def d [word a]]
   [def d [word b]]]
 [test-ok [type-scheme [a] [func [.. a] [list a]]]
@@ -221,7 +225,7 @@
       [word word]
       [list [list form]]]]
   [def flist [func flist [.. elements] [form/list elements]]]
-  [def m [macro m [] [flist [form/word [word i32]] [form/word [word 5]]]]]
+  [defmacro m [] [flist [form/word [word i32]] [form/word [word 5]]]]
   [m]]
 
 [comment type annotations]
@@ -450,6 +454,22 @@
   [let [glw [atom [linked-list/nil]]]
     [push2 glw [word a]]]
   [i32 5]]
+
+  [test-ok i32
+  [def my-abort
+    [type-anno
+      [extern host abort]
+      [type-scheme [a] [func [] a]]]]
+
+  [defn test-generalization [c]
+    [if c
+      [my-abort]
+      [word w]]
+    [if c
+      [my-abort]
+      [i32 1]]]
+    [test-generalization [i32 1]]
+    ]
 
 [logq tests-run [i32-form [atom-get tests-run-atom]]]
   ]]
