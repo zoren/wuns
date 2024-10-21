@@ -238,39 +238,29 @@ export const makeEvalForm = (externs, defEnv) => {
         case 'intrinsic':
           assertNumArgs(1)
           return intrinsics[getFormWord(forms[1])]
-        case 'fexpr':
-          throw evalError('closure fexprs are not allowed anymore')
-        case 'macro':
-          throw evalError('closure macros are not allowed anymore')
-        case 'defn': {
+        case 'def':
+          assertNumArgs(2)
           assertTopLevel()
-          const name = getFormWord(forms[1])
-          const closure = makeClosureOfKind('func')
-          defEnv.set(name, closure)
-          return langUndefined
-        }
-        case 'defexpr': {
+          defEnv.set(getFormWord(forms[1]), go(env, forms[2]))
+          return go(env, forms[2])
+        case 'defn':
           assertTopLevel()
-          const name = getFormWord(forms[1])
-          const closure = makeClosureOfKind('fexpr')
-          defEnv.set(name, closure)
+          defEnv.set(getFormWord(forms[1]), makeClosureOfKind('func'))
           return langUndefined
-        }
-        case 'defmacro': {
+        case 'defexpr':
           assertTopLevel()
-          const name = getFormWord(forms[1])
-          const closure = makeClosureOfKind('macro')
-          defEnv.set(name, closure)
+          defEnv.set(getFormWord(forms[1]), makeClosureOfKind('fexpr'))
           return langUndefined
-        }
+        case 'defmacro':
+          assertTopLevel()
+          defEnv.set(getFormWord(forms[1]), makeClosureOfKind('macro'))
+          return langUndefined
         // constants calculated from environment
         case 'func':
           return makeClosureOfKind(firstWord)
-        case 'atom': {
+        case 'atom':
           assertNumArgs(1)
-          const initialValue = go(env, forms[1])
-          return atom(initialValue)
-        }
+          return atom(go(env, forms[1]))
         // control flow
         case 'if':
           assertNumArgs(3)
@@ -369,16 +359,6 @@ export const makeEvalForm = (externs, defEnv) => {
           env = newEnv
           form = makeDoForm(forms.slice(2))
           continue
-        }
-        case 'letrec':
-          throw evalError('letrec is deprecated')
-        case 'def': {
-          assertNumArgs(2)
-          assertTopLevel()
-          const name = getFormWord(forms[1])
-          const value = go(env, forms[2])
-          defEnv.set(name, value)
-          return value
         }
         // types
         case 'type': {
