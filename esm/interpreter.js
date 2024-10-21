@@ -235,16 +235,9 @@ export const makeEvalForm = (externs, defEnv) => {
           }
           return ext
         }
-        case 'intrinsic': {
-          let intrinsic = intrinsics
-          for (let i = 1; i < forms.length; i++) {
-            const prop = getFormWord(forms[i])
-            const intrinsicProperty = intrinsic[prop]
-            if (intrinsicProperty === undefined) throw evalError('undefined intrinsic: ' + prop + ' in ' + intrinsic)
-            intrinsic = intrinsicProperty
-          }
-          return intrinsic
-        }
+        case 'intrinsic':
+          assertNumArgs(1)
+          return intrinsics[getFormWord(forms[1])]
         case 'fexpr':
           throw evalError('closure fexprs are not allowed anymore')
         case 'macro':
