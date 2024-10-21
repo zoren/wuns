@@ -1,6 +1,6 @@
 import externs from './runtime-lib/externs.js'
 import { makeDefEnv, print, readString, readFile, langUndefined } from './core.js'
-import { makeEvalForm, catchErrors } from './mini-lisp.js'
+import { makeEvalForm, catchErrors } from './interpreter.js'
 
 const specialForms = [
   'i32',
@@ -56,5 +56,5 @@ if (!endsWithDashFlag) {
     return [defs, currentWord]
   }
   const lastWunsFile = files.at(-1) || 'top'
-  startRepl(`repl-histories/${lastWunsFile}-history.json`, 'mini-lisp> ', evalLine, completer)
+  startRepl(`repl-histories/${lastWunsFile}-history.json`, 'wuns> ', evalLine, completer)
 }

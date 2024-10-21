@@ -1,5 +1,5 @@
 import { isDefEnv, isForm, langUndefined, resultError, resultOk } from '../core.js'
-import { makeEvalForm } from '../mini-lisp.js'
+import { makeEvalForm } from '../interpreter.js'
 
 export const make_evaluator = (externs, def_env) => {
   if (!isDefEnv(def_env)) throw new Error('make-evaluator expects context')
