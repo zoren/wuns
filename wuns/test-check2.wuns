@@ -10,6 +10,7 @@
               res [check-top-forms gctx forms]
               check-errors [clone-growable-to-frozen-list [check-context/messages gctx]]
               actual-type [normalize-present-type-scheme res]]
+          [todo check-top-forms now returns list]
           [when-not [is-empty check-errors]
             [logq test-ok there were errors]
             [for-each message check-errors

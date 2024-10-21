@@ -786,6 +786,7 @@
                       [match [get node-to-ldesc f] [local-var-kind/func-internal-self] 1 0]]
                   [if is-tail
                     [let [dependent-args [growable-list]]
+                      [todo be more clever here, also make it easy to know what temp local vars to create for args dependent on parameters at the top level]
                       [for i 0 [size args]
                         [when
                           [exists [slice args [inc i] [size args]]
@@ -799,9 +800,9 @@
           [bform/call-fexpr f form-args]
           [go false f]
 
-            [do
-              [log bf]
-              [logq-abort tail-call-analysis not implemented]]]]]
+          [do
+            [log bf]
+            [logq-abort tail-call-analysis not implemented]]]]]
       [for-each body [bfunc/body the-func]
         [go true body]]
       [if [atom-get non-tail-rec-calls]

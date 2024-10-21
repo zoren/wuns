@@ -160,6 +160,7 @@
         [match tail-analysis
           [tail-call-result/only-tail call-to-deps]
           [do
+            [todo check if the break is needed]
             [js-exp/arrow-stmt
               js-params
               js-opt-rest-param
@@ -340,6 +341,7 @@
 
                     [type-decl-kind/record fields]
                     [let [field-names [list-map field fields [syntax-word/word [pair/fst field]]]]
+                      [todo add check for type of record]
                       [concat
                         [list
                           [js-stmt/const-decl
@@ -377,8 +379,8 @@
               [assert is-tail tail call must be tail]
 
               [let [tmp-consts [growable-list]
-                        assignments [growable-list]
-                        subst [transient-kv-map]]
+                    assignments [growable-list]
+                    subst [transient-kv-map]]
                 [for i 0 [size args]
                   [let [param [syntax-word/word [at params i]]]
                     [if [set-has deps-set i]
