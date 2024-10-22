@@ -416,7 +416,8 @@
                       [do
                         [assert [not [is-empty pat-list]] match pattern is empty]
                         [let [
-                          ctor-sname [get-sword [first pat-list]]
+                          ctor-form [first pat-list]
+                          ctor-sname [get-sword ctor-form]
                           params [rest pat-list]
                           lvars [transient-kv-map]
                           lctx [local-context lvars form]
@@ -432,14 +433,14 @@
                                       ctor-params [pair/snd ctor-pair]]
                                   [when-let [prev-union-type-name [atom-get union-type-name-atom]]
                                     [when-not [eq-word prev-union-type-name union-type-name]
-                                      [report-error [quote [mismatched union types]]]]]
+                                      [push-error ctor-form [quote [mismatched union types]]]]]
                                   [atom-set union-type-name-atom [some union-type-name]]
                                   [when-not [eq [size ctor-params] [size params]]
-                                    [report-error [quote [wrong number of arguments to union ctor]]]]
+                                    [push-error [pair/fst p] [quote [wrong number of arguments to union ctor]]]]
                                   [for i 0 [min [size ctor-params] [size params]]
                                     [set-local lvars [at params i] [local-var-kind/match-param]]]]
-                                [report-error [quote [not bound to a union constructor]]]]]
-                            [report-error [quote [not bound to def at all]]]]
+                                [push-error ctor-form [quote [not bound to a union constructor]]]]]
+                            [push-error ctor-form [quote [not bound to def at all]]]]
                           [pair
                             [match-pattern
                               ctor-sname
