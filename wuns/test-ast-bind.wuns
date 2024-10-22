@@ -61,6 +61,8 @@
     [opt/none]]
 
   [test-ok
+[type atom [v] [union]]
+
 [type option [a]
   [union
     [none]

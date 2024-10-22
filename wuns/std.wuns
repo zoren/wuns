@@ -192,6 +192,9 @@
          [dec s]
          [at clauses -1]]]]]
 
+[type atom [v] [union]]
+
+[def-extern atom [type-scheme [a] [func [a] [atom a]]]]
 [def-extern atom-get [type-scheme [a] [func [[atom a]] a]]]
 [def-extern atom-set [type-scheme [a] [func [[atom a] a] [tuple]]]]
 

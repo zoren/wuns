@@ -53,7 +53,6 @@
     [extern [list syntax-word]]
     [type [list type-decl]]
 
-    [atom bform]
     [func bfunc]
     [if bform bform bform]
     [do [list bform]]
@@ -134,7 +133,7 @@
   [switch type-name
     [[word tuple]] [some true]
     [[word i32] [word f64] [word word]] [some [eq n-of-type-args 0]]
-    [[word list] [word atom]] [some [eq n-of-type-args 1]]
+    [[word list]] [some [eq n-of-type-args 1]]
     [none]]]
 
 [defn is-reserved-type-name [type-name]
@@ -391,9 +390,6 @@
 
                 [[word func]]
                 [bform/func [form-to-func lstack form]]
-
-                [[word atom]]
-                [bform/atom [form-to-ast lstack [get-arg 0]]]
 
                 [[word if]]
                 [do
@@ -744,7 +740,6 @@
           [bform/intrinsic w] [do]
           [bform/extern l] [do]
           [bform/type l] [do]
-          [bform/atom v] [do]
 
           [bform/func f] [do]
           [bform/if c t e]

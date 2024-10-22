@@ -258,9 +258,6 @@ export const makeEvalForm = (externs, defEnv) => {
         // constants calculated from environment
         case 'func':
           return makeClosureOfKind(firstWord)
-        case 'atom':
-          assertNumArgs(1)
-          return atom(go(env, forms[1]))
         // control flow
         case 'if':
           assertNumArgs(3)

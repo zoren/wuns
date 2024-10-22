@@ -531,7 +531,6 @@
       [eq-word word [word tuple]]
 
       [eq-word word [word list]]
-      [eq-word word [word atom]]
 
       [eq-word word [word func]]
       [eq-word word [word type-scheme]]]]

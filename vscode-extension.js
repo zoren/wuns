@@ -220,9 +220,6 @@ const makeProvideDocumentSemanticTokensForms = async () => {
           intrinsic: () => {
             pushToken(form[0], tokenTypeOperator)
           },
-          atom: () => {
-            go(tail[0])
-          },
           'type-anno': () => {
             go(tail[0])
             goType(tail[1])

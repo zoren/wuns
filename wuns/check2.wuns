@@ -407,7 +407,6 @@
 
 [defn is-syntactic-value [bform]
   [match bform
-    [bform/atom a] 0
     [bform/literal l] 1
     [bform/func f] 1
     [bform/var f] 1
@@ -724,14 +723,8 @@
           [unify-report gctx func-type t-func bform]
           t-res]
 
-        [bform/atom init-val]
-        [let
-          [t [go level lctx init-val]]
-          [type-atom t]]
-
         [bform/extern es]
-        [do
-          [generate-fresh-type-var gctx level]]
+        [generate-fresh-type-var gctx level]
 
         [bform/type-anno bf bts]
         [let

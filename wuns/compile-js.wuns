@@ -183,9 +183,6 @@
           [literal/f64 wf] [js-exp/number [syntax-word/word wf]]
           [literal/word wf] [js-exp/string [syntax-word/word wf]]]
 
-        [bform/atom init-val]
-        [js-exp/call [mk-extern [list [word host] [word atom]]] [list [cexp init-val]]]
-
         [bform/if c t e]
         [js-exp/ternary [cexp c] [cexp t] [cexp e]]
 
