@@ -18,7 +18,6 @@ const getPathRelativeToCurrentDir = (defEnv, relativeFilePath) => {
 }
 
 import {
-  atom,
   getRecordType,
   isDefEnv,
   isTaggedValue,
@@ -183,6 +182,7 @@ export const makeEvalForm = (externs, defEnv) => {
             const arity = parameters.length
             return (eargs) => {
               const paramEnv = makeEnv(env)
+              paramEnv.isClosureEnv = true
               setEnv(paramEnv, name, closure)
               if (eargs.length !== arity)
                 throw new EvalError(`${name} expected ${arity} arguments, got ${eargs.length}`)
@@ -195,6 +195,7 @@ export const makeEvalForm = (externs, defEnv) => {
           const arity = regularParameters.length
           return (eargs) => {
             const paramEnv = makeEnv(env)
+            paramEnv.isClosureEnv = true
             setEnv(paramEnv, name, closure)
             if (eargs.length < arity)
               throw new EvalError(`${name} expected at least ${arity} arguments, got ${eargs.length}`)
@@ -332,6 +333,44 @@ export const makeEvalForm = (externs, defEnv) => {
           }
           env = newEnv
           form = makeDoForm(forms.slice(2))
+          continue
+        }
+        case 'loop': {
+          if (numOfArgs < 1) throw evalError('loop expected at least a binding list')
+          const bindings = getFormList(forms[1])
+          if (bindings.length % 2 !== 0) throw evalError('odd number of bindings')
+          const loopBodyForm = makeDoForm(forms.slice(2))
+          const loopEnv = makeEnv(env)
+          loopEnv.loopBody = loopBodyForm
+          try {
+            for (let i = 0; i < bindings.length - 1; i += 2) {
+              const variableName = getFormWord(bindings[i])
+              setEnv(loopEnv, variableName, go(loopEnv, bindings[i + 1]))
+            }
+          } catch (e) {
+            throw evalError('error in loop bindings', e)
+          }
+          env = loopEnv
+          form = loopBodyForm
+          continue
+        }
+        case 'continue': {
+          let loopEnv = env
+          while (loopEnv) {
+            if (loopEnv.loopBody) break
+            if (loopEnv.isClosureEnv) throw evalError('continue not in loop')
+            const { outer } = loopEnv
+            loopEnv = outer
+          }
+          if (!loopEnv) throw evalError('continue not in loop')
+          for (let i = 1; i < forms.length; i += 2) {
+            const variableForm = forms[i]
+            const variableName = getFormWord(variableForm)
+            if (!loopEnv.has(variableName)) throw new EvalError('continue, not a loop variable', variableForm)
+            setEnv(loopEnv, variableName, go(env, forms[i + 1]))
+          }
+          env = loopEnv
+          form = loopEnv.loopBody
           continue
         }
         case 'letfn': {
