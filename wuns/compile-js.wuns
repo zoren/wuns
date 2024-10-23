@@ -149,28 +149,28 @@
           ]]
      [func cexp [bform]
       [match bform
-        [bform/var wf]
+        [bexp/var wf]
         [js-exp/var [syntax-word/word wf]]
 
-        [bform/literal l]
+        [bexp/literal l]
         [match l
           [literal/i32 wf] [js-exp/number [syntax-word/word wf]]
           [literal/f64 wf] [js-exp/number [syntax-word/word wf]]
           [literal/word wf] [js-exp/string [syntax-word/word wf]]]
 
-        [bform/if c t e]
+        [bexp/if c t e]
         [js-exp/ternary [cexp c] [cexp t] [cexp e]]
 
-        [bform/intrinsic i]
+        [bexp/intrinsic i]
         [logq-abort cexp toplevel intrinsic not allowed]
 
-        [bform/extern ws]
+        [bexp/extern ws]
         [mk-extern [list-map w ws [syntax-word/word w]]]
 
-        [bform/let lpairs e]
+        [bexp/let lpairs e]
         [iife [cstmt true bform]]
 
-        [bform/letfn fns e]
+        [bexp/letfn fns e]
         [iife
           [js-stmt/block
             [concat
@@ -180,24 +180,24 @@
                   [cfunc fn]]]
               [list [cstmt-do true e]]]]]
 
-        [bform/func f]
+        [bexp/func f]
         [let [js-name [syntax-word/word [bfunc/name f]]]
           [iife
               [block
                 [js-stmt/const-decl js-name [cfunc f]]
                 [js-stmt/return [js-exp/var js-name]]]]]
 
-        [bform/call-fexpr fexpr arg-forms]
+        [bexp/call-fexpr fexpr arg-forms]
         [js-exp/call [cexp fexpr] [list-map arg arg-forms [form-to-quoted-js arg]]]
 
-        [bform/call f args]
+        [bexp/call f args]
         [match f
-          [bform/intrinsic i]
+          [bexp/intrinsic i]
           [instruction-name-and-args-to-js-exp [syntax-word/word i] [list-map arg args [cexp arg]]]
 
           [js-exp/call [cexp f] [list-map arg args [cexp arg]]]]
 
-        [bform/type-anno bf t]
+        [bexp/type-anno bf t]
         [cexp bf]
 
         [iife [block [cstmt true bform]]]]]
@@ -212,79 +212,15 @@
               [list-map f [slice forms 0 [dec [size forms]]] [cstmt 0 f]]
               [list [cstmt is-tail [last forms]]]]]]]
 
-      [func cstmt [is-tail bform]
+      [func ctop [bform]
         [match bform
-          [bform/if cond t f]
-          [js-stmt/if [cexp cond]
-            [block [cstmt is-tail t]]
-            [block [cstmt is-tail f]]]
-
-          [bform/switch exp cases default]
-          [js-stmt/switch
-            [cexp exp]
-            [list-map case cases
-              [pair
-                [list-map lit [pair/fst case] [cexp lit]]
-                [if is-tail
-                  [cstmt is-tail [pair/snd case]]
-                  [block
-                    [cstmt is-tail [pair/snd case]]
-                    [js-stmt/break]]]]]
-            [cstmt is-tail default]]
-
-          [bform/match exp cases opt-default]
-          [let [tmp [gen-tmp-word]
-                tmp-args [gen-tmp-word]]
-            [block
-              [js-stmt/const-decl tmp [cexp exp]]
-              [js-stmt/const-decl tmp-args [js-exp/subscript [js-exp/var tmp] [js-exp/string [word args]]]]
-              [js-stmt/switch
-                [js-exp/call
-                  [mk-extern [list [word host] [word get-tag]]]
-                  [list [js-exp/var tmp]]]
-                [list-map case cases
-                  [let [mp [pair/fst case]
-                        ctor [syntax-word/word [match-pattern/ctor mp]]
-                        params [match-pattern/params mp]
-                        counter [atom 0]]
-                    [pair [list [js-exp/string ctor]]
-                      [js-stmt/block
-                        [concat
-                          [list-map p params
-                            [js-stmt/const-decl
-                              [syntax-word/word p]
-                              [js-exp/subscript [js-exp/var tmp-args] [js-exp/number [int-to-word [inc-atom counter]]]]]]
-                          [if is-tail
-                            [list [cstmt is-tail [pair/snd case]]]
-                            [list
-                              [cstmt is-tail [pair/snd case]]
-                              [js-stmt/break]]]]]]]]
-                [if-let [default-case opt-default]
-                  [cstmt is-tail default-case]
-                  [js-stmt/throw [js-exp/string [word unmatched-match]]]]]]]
-
-          [bform/do forms]
-          [cstmt-do is-tail forms]
-
-          [bform/let decls e]
-          [js-stmt/block
-            [concat
-              [list-map decl decls [js-stmt/const-decl [syntax-word/word [pair/fst decl]] [cexp [pair/snd decl]]]]
-              [list [cstmt-do is-tail e]]]]
-
-          [bform/def w e]
+          [btop/def w e]
           [js-stmt/const-decl [syntax-word/word w] [cexp e]]
 
-          [bform/defn func]
+          [btop/defunc kind func]
           [js-stmt/const-decl [syntax-word/word [bfunc/name func]] [cfunc func]]
 
-          [bform/defexpr fexpr-func]
-          [js-stmt/const-decl [syntax-word/word [bfunc/name fexpr-func]] [cfunc fexpr-func]]
-
-          [bform/defmacro macro-func]
-          [js-stmt/const-decl [syntax-word/word [bfunc/name macro-func]] [cfunc macro-func]]
-
-          [bform/type decls]
+          [btop/type decls]
           [js-stmt/seq
             [concat-lists
               [list-map decl decls
@@ -341,10 +277,75 @@
 
                     [logq-abort cstmt unknown type kind]]]]]]
 
-          [bform/export snames]
+          [btop/export snames]
           [js-stmt/export-as-string [list-map sname snames [let [name [syntax-word/word sname]] [pair name name]]]]
 
-          [bform/call f args]
+          [btop/do top-forms]
+          [js-stmt/seq [list-map f top-forms [ctop f]]]
+
+          [logq-abort cstmt unknown top form]]]
+
+      [func cstmt [is-tail bform]
+        [match bform
+          [bexp/if cond t f]
+          [js-stmt/if [cexp cond]
+            [block [cstmt is-tail t]]
+            [block [cstmt is-tail f]]]
+
+          [bexp/switch exp cases default]
+          [js-stmt/switch
+            [cexp exp]
+            [list-map case cases
+              [pair
+                [list-map lit [pair/fst case] [cexp lit]]
+                [if is-tail
+                  [cstmt is-tail [pair/snd case]]
+                  [block
+                    [cstmt is-tail [pair/snd case]]
+                    [js-stmt/break]]]]]
+            [cstmt is-tail default]]
+
+          [bexp/match exp cases opt-default]
+          [let [tmp [gen-tmp-word]
+                tmp-args [gen-tmp-word]]
+            [block
+              [js-stmt/const-decl tmp [cexp exp]]
+              [js-stmt/const-decl tmp-args [js-exp/subscript [js-exp/var tmp] [js-exp/string [word args]]]]
+              [js-stmt/switch
+                [js-exp/call
+                  [mk-extern [list [word host] [word get-tag]]]
+                  [list [js-exp/var tmp]]]
+                [list-map case cases
+                  [let [mp [pair/fst case]
+                        ctor [syntax-word/word [match-pattern/ctor mp]]
+                        params [match-pattern/params mp]
+                        counter [atom 0]]
+                    [pair [list [js-exp/string ctor]]
+                      [js-stmt/block
+                        [concat
+                          [list-map p params
+                            [js-stmt/const-decl
+                              [syntax-word/word p]
+                              [js-exp/subscript [js-exp/var tmp-args] [js-exp/number [int-to-word [inc-atom counter]]]]]]
+                          [if is-tail
+                            [list [cstmt is-tail [pair/snd case]]]
+                            [list
+                              [cstmt is-tail [pair/snd case]]
+                              [js-stmt/break]]]]]]]]
+                [if-let [default-case opt-default]
+                  [cstmt is-tail default-case]
+                  [js-stmt/throw [js-exp/string [word unmatched-match]]]]]]]
+
+          [bexp/do forms]
+          [cstmt-do is-tail forms]
+
+          [bexp/let decls e]
+          [js-stmt/block
+            [concat
+              [list-map decl decls [js-stmt/const-decl [syntax-word/word [pair/fst decl]] [cexp [pair/snd decl]]]]
+              [list [cstmt-do is-tail e]]]]
+
+          [bexp/call f args]
           [if is-tail
             [js-stmt/return [cexp bform]]
             [js-stmt/exp [cexp bform]]]
@@ -353,10 +354,10 @@
             [js-stmt/return [cexp bform]]
             [js-stmt/exp [cexp bform]]]]]]
     [match top-form
-      [bform/do forms]
+      [btop/do forms]
       [js-stmt/seq [list-map f forms [compile-top-form outer-is-tail f]]]
 
-      [cstmt outer-is-tail top-form]]]]]
+      [ctop top-form]]]]]
 
 [type compile-run-error []
   [union
@@ -368,6 +369,7 @@
   [let
     [converter [mk-form-to-ast]
      f2a [form-to-ast-converter/form-to-ast converter]
+     but-last-forms [slice forms 0 [dec [size forms]]]
      comp-run
      [func comp-run [form]
       [match [f2a form]
@@ -375,17 +377,21 @@
         [result/error [compile-run-error/form-to-ast-errors f2a-errors]]
 
         [result/ok bform]
-        [let [stmt [compile-top-form true bform]]
-          [result/ok stmt]]]]]
-    [match [map-result forms comp-run]
+        [result/ok [compile-top-form true bform]]]]]
+    [match [map-result but-last-forms comp-run]
       [result/error e] [result/error e]
-      [result/ok stmts]
-      [match [run-js-stmt [js-stmt/seq stmts] externs-object-value]
-        [result/error jsval-err]
-        [result/error [compile-run-error/eval-error jsval-err]]
+      [result/ok bl-stmts]
+      [match [comp-run
+                [flist [quote defn] [quote main] [flist] [last forms]]]
+        [result/error e] [result/error e]
 
-        [result/ok v]
-        [result/ok v]]]]]
+        [result/ok last-stmt]
+        [match [run-js-stmt [js-stmt/seq [concat bl-stmts [list last-stmt [js-stmt/return [js-exp/call [js-exp/var [word main]] [list]]]]]] externs-object-value]
+          [result/error jsval-err]
+          [result/error [compile-run-error/eval-error jsval-err]]
+
+          [result/ok v]
+          [result/ok v]]]]]]
 
 [defn compile-file-to-file [wuns-file-name js-file-name]
   [let

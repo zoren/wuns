@@ -44,82 +44,84 @@
     [name syntax-word]
     [parameters [list syntax-word]]
     [rest-param [option syntax-word]]
-    [body [list bform]]]
+    [body [list bexp]]]
 
-  bform []
+  bexp []
   [union
     [var syntax-word]
     [literal literal]
     [intrinsic syntax-word]
     [extern [list syntax-word]]
-    [type [list type-decl]]
 
     [func bfunc]
-    [if bform bform bform]
-    [do [list bform]]
-    [switch bform [list [pair [list bform] bform]] bform]
-    [match bform [list [pair match-pattern bform]] [option bform]]
-    [letfn [list bfunc] [list bform]]
-    [let [list [pair syntax-word bform]] [list bform]]
-    [loop [list [pair syntax-word bform]] [list bform]]
-    [continue [list [pair syntax-word bform]]]
-    [def syntax-word bform]
-    [defn bfunc]
-    [defexpr bfunc]
-    [defmacro bfunc]
-    [call bform [list bform]]
-    [call-fexpr bform [list form]]
-    [type-anno bform btype-scheme]
+
+    [if bexp bexp bexp]
+    [do [list bexp]]
+    [switch bexp [list [pair [list bexp] bexp]] bexp]
+    [match bexp [list [pair match-pattern bexp]] [option bexp]]
+    [letfn [list bfunc] [list bexp]]
+    [let [list [pair syntax-word bexp]] [list bexp]]
+    [loop [list [pair syntax-word bexp]] [list bexp]]
+    [continue [list [pair syntax-word bexp]]]
+    [call bexp [list bexp]]
+    [call-fexpr bexp [list form]]
+    [type-anno bexp btype-scheme]
+    ]]
+
+[type bdefunc-kind []
+  [union [func] [fexpr] [macro]]]
+
+[type btop []
+  [union
+    [defunc bdefunc-kind bfunc]
+    [type [list type-decl]]
+    [def syntax-word bexp]
+    [do [list btop]]
     [export [list syntax-word]]
     ]]
 
-[defn bform-recur [f]
+[defn bexp-recur [f]
   [func go [bform]
     [when
       [f bform]
       [match bform
-        [bform/var sw]
+        [bexp/var sw]
         [do]
 
-        [bform/literal l]
+        [bexp/literal l]
         [do]
 
-        [bform/intrinsic i]
+        [bexp/intrinsic i]
         [do]
 
-        [bform/call f args]
+        [bexp/call f args]
         [do
           [go f]
           [for-each a args [go a]]]
 
-        [bform/if c t e]
+        [bexp/if c t e]
         [do [go c] [go t] [go e]]
 
-        [bform/do bs]
+        [bexp/do bs]
         [for-each b bs [go b]]
 
-        [bform/let bs body]
+        [bexp/let bs body]
         [do
           [for-each b bs [go [pair/snd b]]]
           [for-each b body [go b]]]
 
-        [bform/loop bs body]
+        [bexp/loop bs body]
         [do
           [for-each b bs [go [pair/snd b]]]
           [for-each b body [go b]]]
 
-        [bform/continue ass]
+        [bexp/continue ass]
         [for-each as ass
           [go [pair/snd as]]]
 
         [do
           [log bform]
           [logq-abort bform-recur not implemented]]]]]]
-
-[type report-message []
-  [record
-    [message form]
-    [form form]]]
 
 [type local-var-kind []
   [union
@@ -170,15 +172,21 @@
 
 [type def-desc []
   [union
-    [func] [fexpr] [macro] [any]
+    [defunc bdefunc-kind]
+    [any]
 
     [type]
     [union-ctor union-desc i32]
     [record-ctor] [record-proj record-desc i32]]]
 
+[type report-message []
+  [record
+    [message form]
+    [form form]]]
+
 [type form-to-ast-converter []
   [record
-    [form-to-ast [func [form] [result bform [list report-message]]]]
+    [form-to-ast [func [form] [result btop [list report-message]]]]
     [errors [growable-list report-message]]
     [node-to-ldesc [transient-kv-map syntax-word local-var-kind]]
     [node-to-def-desc [transient-kv-map syntax-word def-desc]]
@@ -409,24 +417,13 @@
               [list-map param regular-param-forms [sword param]]
               [match opt-rest-param [option/none] [option/none] [option/some v] [option/some [sword v]]]
               [list-map f [slice form-list 3 [size form-list]] [form-to-ast new-lstack f]]]]]]
-      [func form-to-ast [lstack form]
+      [func form-to-top [form]
         [let
-          [report-error [func r [msg] [push-error form msg]]
-           assert-empty-stack [func aes []
-            [match lstack
-              [local-stack/empty] [do]
-              [local-stack/frame lvars lctx] [report-error [quote [not allowed in local context]]]]]]
+          [report-error [func r [msg] [push-error form msg]]]
           [insert-form form
           [match form
           [form/word w]
-          [let [sname [get-sword form]
-                bf [bform/var sname]]
-            [if-let [ldesc [try-get-local lstack w]]
-              [set-kv-map node-to-ldesc sname ldesc]
-              [if-let [ddesc [try-get def-ctx w]]
-                [set-kv-map node-to-def-desc [get-sword form] ddesc]
-                [report-error [quote [undefined word]]]]]
-            bf]
+          [logq-abort form-to-top word form not implemented]
 
           [form/list l]
           [let [n-of-args [dec [size l]]
@@ -436,210 +433,35 @@
             [match first-form
               [form/word first-word]
               [switch first-word
-                [[word i32]]
-                [bform/literal [literal/i32 [get-sword [get-arg 0]]]]
-
-                [[word f64]]
-                [bform/literal [literal/f64 [get-sword [get-arg 0]]]]
-
-                [[word i64] [word f32] [word v128]]
-                [logq-abort form-to-ast not implemented [identity first-form]]
-
-                [[word word]]
-                [bform/literal [literal/word [get-sword [get-arg 0]]]]
-
-                [[word extern]]
-                [bform/extern [list-map w [rest l] [get-sword w]]]
-
-                [[word intrinsic]]
-                [bform/intrinsic [get-sword [get-arg 0]]]
-
-                [[word func]]
-                [bform/func [form-to-func lstack form]]
-
-                [[word if]]
-                [do
-                  [assert-n-args 3]
-                  [bform/if [form-to-ast lstack [get-arg 0]] [form-to-ast lstack [get-arg 1]] [form-to-ast lstack [get-arg 2]]]]
-
-                [[word switch]]
-                [do
-                  [when-not [is-odd [size l]] [report-error [quote [expected even number of arguments]]]]
-                  [bform/switch
-                    [form-to-ast lstack [get-arg 0]]
-                    [list-map p [pairwise [slice l 2 [dec [size l]]]]
-                      [pair
-                        [list-map v [get-list [first p]] [form-to-ast lstack v]]
-                        [form-to-ast lstack [second p]]]]
-                      [form-to-ast lstack [last l]]]]
-
-                [[word match]]
-                [let
-                  [union-type-name-atom [atom [none]]
-                   clauses
-                   [list-map p [pairwise-pairs [slice l 2 [size l]]]
-                    [let [pat-list [get-list [pair/fst p]]]
-                      [do
-                        [assert [not [is-empty pat-list]] match pattern is empty]
-                        [let [
-                          ctor-form [first pat-list]
-                          ctor-sname [get-sword ctor-form]
-                          params [rest pat-list]
-                          lvars [transient-kv-map]
-                          lctx [local-context lvars [local-context-kind/match]]
-                          new-lstack [local-stack/frame lstack lctx]]
-                          [if-let [ddesc [try-get def-ctx [syntax-word/word ctor-sname]]]
-                            [do
-                              [set-kv-map node-to-def-desc ctor-sname ddesc]
-                              [match ddesc
-                                [def-desc/union-ctor union-desc index]
-                                [let [union-type-name [syntax-word/word [union-desc/name union-desc]]
-                                      ctors [union-desc/ctors union-desc]
-                                      ctor-pair [at ctors index]
-                                      ctor-params [pair/snd ctor-pair]]
-                                  [when-let [prev-union-type-name [atom-get union-type-name-atom]]
-                                    [when-not [eq-word prev-union-type-name union-type-name]
-                                      [push-error ctor-form [quote [mismatched union types]]]]]
-                                  [atom-set union-type-name-atom [some union-type-name]]
-                                  [when-not [eq [size ctor-params] [size params]]
-                                    [push-error [pair/fst p] [quote [wrong number of arguments to union ctor]]]]
-                                  [for i 0 [min [size ctor-params] [size params]]
-                                    [set-local lvars [at params i] [local-var-kind/match-param]]]]
-                                [push-error ctor-form [quote [not bound to a union constructor]]]]]
-                            [push-error ctor-form [quote [not bound to def at all]]]]
-                          [pair
-                            [match-pattern
-                              ctor-sname
-                              [list-map param params [get-sword param]]]
-                            [form-to-ast new-lstack [pair/snd p]]]]]]]]
-                  [bform/match
-                    [form-to-ast lstack [get-arg 0]]
-                    clauses
-                    [if [is-odd [size l]]
-                      [some [form-to-ast lstack [last l]]]
-                      [none]]]]
-
                 [[word do]]
-                [bform/do [list-map arg [rest l] [form-to-ast lstack arg]]]
-
-                [[word loop]]
-                [let
-                  [bindings [get-list [get-arg 0]]
-                   lvars [transient-kv-map]
-                   lctx [local-context lvars [local-context-kind/loop]]
-                   new-lstack [local-stack/frame lstack lctx]]
-                  [when [lt-s n-of-args 2] [report-error [quote [expected at least 2 arguments]]]]
-                  [bform/loop
-                    [list-map p [pairwise bindings]
-                      [let [name [first p]
-                            name-word [get-word name]
-                            be [form-to-ast new-lstack [second p]]]
-                        [if-let [ldesc [try-get-local lstack name-word]]
-                          [push-error name [quote [let var shadows local]]]
-                          [when-let [ddesc [try-get def-ctx name-word]]
-                            [push-error name [quote [let var shadows def]]]]]
-                        [set-local lvars name [local-var-kind/loop]]
-                        [pair [sword name] be]]]
-                    [list-map f [slice l 2 [size l]] [form-to-ast new-lstack f]]]]
-
-                [[word continue]]
-                [let [loop-vars
-                        [if-let [loop-context [try-get-enclosing-loop-context lstack]]
-                          [local-context/vars loop-context]
-                          [do
-                            [push-error form [quote [not in a loop context]]]
-                            [transient-kv-map]]]]
-                  [bform/continue
-                    [list-map p [pairwise-pairs [rest l]]
-                      [let [name [pair/fst p]
-                            sname [sword name]
-                            name-word [get-word name]
-                            be [form-to-ast lstack [pair/snd p]]]
-                        [if-let [ldesc [try-get loop-vars name-word]]
-                          [set-kv-map node-to-ldesc sname ldesc]
-                          [push-error name [quote [not a loop var of the current loop]]]]
-                        [pair sname be]]]]]
-
-                [[word let]]
-                [let
-                  [bindings [get-list [get-arg 0]]
-                   lvars [transient-kv-map]
-                   lctx [local-context lvars [local-context-kind/let]]
-                   new-lstack [local-stack/frame lstack lctx]]
-                  [when [lt-s n-of-args 2] [report-error [quote [expected at least 2 arguments]]]]
-                  [bform/let
-                    [list-map p [pairwise bindings]
-                      [let [name [first p]
-                            name-word [get-word name]
-                            be [form-to-ast new-lstack [second p]]]
-                        [if-let [ldesc [try-get-local lstack name-word]]
-                          [push-error name [quote [let var shadows local]]]
-                          [when-let [ddesc [try-get def-ctx name-word]]
-                            [push-error name [quote [let var shadows def]]]]]
-                        [set-local lvars name [local-var-kind/let]]
-                        [pair [sword name] be]]]
-                    [list-map f [slice l 2 [size l]] [form-to-ast new-lstack f]]]]
-
-                [[word letfn]]
-                [let
-                  [funcs [get-list [get-arg 0]]
-                   lvars [transient-kv-map]
-                   lctx [local-context lvars [local-context-kind/letfn]]
-                   new-lstack [local-stack/frame lstack lctx]]
-                  [when [lt-s n-of-args 2] [report-error [quote [expected at least 2 arguments]]]]
-                  [for-each ff funcs
-                    [let [name [second [get-list ff]]]
-                      [set-local lvars name [local-var-kind/letfn]]]]
-                  [bform/letfn
-                    [list-map ff funcs
-                      [do
-                        [todo check ff starts with func]
-                        [form-to-func new-lstack ff]]]
-                    [list-map f [slice l 2 [size l]] [form-to-ast new-lstack f]]]]
+                [btop/do [list-map arg [rest l] [form-to-top arg]]]
 
                 [[word def]]
                 [do
                   [assert-n-args 2]
-                  [assert-empty-stack]
-                  [let [bf [bform/def [sword [get-arg 0]] [form-to-ast lstack [third l]]]]
+                  [let [bf [btop/def [sword [get-arg 0]] [form-to-ast [local-stack/empty] [third l]]]]
                     [set-def [get-arg 0] [def-desc/any]]
                     [eval-form form]
                     bf]]
 
-                [[word defn]]
-                [do
-                  [assert-empty-stack]
-                  [let [bf [bform/defn [form-to-func lstack form]]]
-                    [set-def [get-arg 0] [def-desc/func]]
-                    [eval-form form]
-                    bf]]
-
-                [[word defexpr]]
-                [do
-                  [assert-empty-stack]
-                  [let [bf [bform/defexpr [form-to-func lstack form]]]
-                    [set-def [get-arg 0] [def-desc/fexpr]]
-                    [eval-form form]
-                    bf]]
-
-                [[word defmacro]]
-                [do
-                  [assert-empty-stack]
-                  [let [bf [bform/defmacro [form-to-func lstack form]]]
-                    [set-def [get-arg 0] [def-desc/macro]]
-                    [eval-form form]
-                    bf]]
-
-                [[word fexpr] [word macro] [word letrec]]
-                [logq-abort form-to-ast [identity first-form] deprecated]
+                [[word defn] [word defexpr] [word defmacro]]
+                [let [f [form-to-func [local-stack/empty] form]
+                      def-desc
+                      [switch first-word
+                        [[word defn]] [bdefunc-kind/func]
+                        [[word defexpr]] [bdefunc-kind/fexpr]
+                        [[word defmacro]] [bdefunc-kind/macro]
+                        [logq-abort form-to-top def kind not recognized]]]
+                  [set-def [get-arg 0] [def-desc/defunc def-desc]]
+                  [eval-form form]
+                  [btop/defunc def-desc f]]
 
                 [[word load]]
                 [do
-                  [assert-empty-stack]
                   [assert-n-args 1]
-                  [let [bforms [list-map bf [read-file [get-word [get-arg 0]]] [form-to-ast lstack bf]]]
+                  [let [bforms [list-map bf [read-file [get-word [get-arg 0]]] [form-to-top bf]]]
                     [eval-form form]
-                    [bform/do bforms]]]
+                    [btop/do bforms]]]
 
                 [[word type]]
                 [let
@@ -648,7 +470,7 @@
                    [for-each triple triples
                      [set-type [first triple] [size [get-list [second triple]]]]]
                    fb
-                    [bform/type
+                    [btop/type
                       [list-map triple triples
                         [let
                           [type-name-form [first triple]
@@ -712,15 +534,8 @@
                   [eval-form form]
                   fb]
 
-                [[word type-anno]]
-                [do
-                  [assert-n-args 2]
-                  [bform/type-anno
-                    [form-to-ast lstack [get-arg 0]]
-                    [form-to-type-scheme [get-arg 1]]]]
-
                 [[word export]]
-                [bform/export
+                [btop/export
                   [list-map f [rest l]
                     [let [sw [get-sword f]]
                       [if-let [ddesc [try-get def-ctx [syntax-word/word sw]]]
@@ -728,30 +543,252 @@
                         [push-error f [quote [not a defined name]]]]
                       sw]]]
 
+                [if-let [ddesc [try-get def-ctx first-word]]
+                  [do
+                    [set-kv-map node-to-def-desc [get-sword first-form] ddesc]
+                    [match ddesc
+                      [def-desc/defunc defunc-desc]
+                      [match defunc-desc
+                        [bdefunc-kind/macro]
+                        [if-let [macro-func [try-get-macro eval-ctx first-word]]
+                          [form-to-top [interpreter-apply macro-func [rest l]]]
+                          [logq-abort form-to-top macro not found]]
+
+                        [logq-abort form-to-top func/fexpr call at top level not supported]]
+
+                      [do
+                        [log form]
+                        [logq-abort form-to-top any call at top level not supported]]]]
+                  [do
+                    [report-error [quote [undefined word]]]
+                    [btop/do [list]]]]]
+
+              [form/list fl]
+              [logq-abort direct call at top not supported]]]]]]]
+      [func form-to-ast [lstack form]
+        [let
+          [report-error [func r [msg] [push-error form msg]]
+           assert-empty-stack [func aes []
+            [match lstack
+              [local-stack/empty] [do]
+              [local-stack/frame lvars lctx] [report-error [quote [not allowed in local context]]]]]]
+          [insert-form form
+          [match form
+          [form/word w]
+          [let [sname [get-sword form]
+                bf [bexp/var sname]]
+            [if-let [ldesc [try-get-local lstack w]]
+              [set-kv-map node-to-ldesc sname ldesc]
+              [if-let [ddesc [try-get def-ctx w]]
+                [set-kv-map node-to-def-desc [get-sword form] ddesc]
+                [report-error [quote [undefined word]]]]]
+            bf]
+
+          [form/list l]
+          [let [n-of-args [dec [size l]]
+                assert-n-args [func ana [n] [when-not [eq n-of-args n] [report-error [quote [expected n-of-args arguments]]]]]
+                get-arg [func get-arg [i] [if [lt-s i n-of-args] [at l [inc i]] [quote 0]]]
+                first-form [first l]]
+            [match first-form
+              [form/word first-word]
+              [switch first-word
+                [[word i32]]
+                [bexp/literal [literal/i32 [get-sword [get-arg 0]]]]
+
+                [[word f64]]
+                [bexp/literal [literal/f64 [get-sword [get-arg 0]]]]
+
+                [[word i64] [word f32] [word v128]]
+                [logq-abort form-to-ast not implemented [identity first-form]]
+
+                [[word word]]
+                [bexp/literal [literal/word [get-sword [get-arg 0]]]]
+
+                [[word extern]]
+                [bexp/extern [list-map w [rest l] [get-sword w]]]
+
+                [[word intrinsic]]
+                [bexp/intrinsic [get-sword [get-arg 0]]]
+
+                [[word func]]
+                [bexp/func [form-to-func lstack form]]
+
+                [[word if]]
+                [do
+                  [assert-n-args 3]
+                  [bexp/if [form-to-ast lstack [get-arg 0]] [form-to-ast lstack [get-arg 1]] [form-to-ast lstack [get-arg 2]]]]
+
+                [[word switch]]
+                [do
+                  [when-not [is-odd [size l]] [report-error [quote [expected even number of arguments]]]]
+                  [bexp/switch
+                    [form-to-ast lstack [get-arg 0]]
+                    [list-map p [pairwise [slice l 2 [dec [size l]]]]
+                      [pair
+                        [list-map v [get-list [first p]] [form-to-ast lstack v]]
+                        [form-to-ast lstack [second p]]]]
+                      [form-to-ast lstack [last l]]]]
+
+                [[word match]]
+                [let
+                  [union-type-name-atom [atom [none]]
+                   clauses
+                   [list-map p [pairwise-pairs [slice l 2 [size l]]]
+                    [let [pat-list [get-list [pair/fst p]]]
+                      [do
+                        [assert [not [is-empty pat-list]] match pattern is empty]
+                        [let [
+                          ctor-form [first pat-list]
+                          ctor-sname [get-sword ctor-form]
+                          params [rest pat-list]
+                          lvars [transient-kv-map]
+                          lctx [local-context lvars [local-context-kind/match]]
+                          new-lstack [local-stack/frame lstack lctx]]
+                          [if-let [ddesc [try-get def-ctx [syntax-word/word ctor-sname]]]
+                            [do
+                              [set-kv-map node-to-def-desc ctor-sname ddesc]
+                              [match ddesc
+                                [def-desc/union-ctor union-desc index]
+                                [let [union-type-name [syntax-word/word [union-desc/name union-desc]]
+                                      ctors [union-desc/ctors union-desc]
+                                      ctor-pair [at ctors index]
+                                      ctor-params [pair/snd ctor-pair]]
+                                  [when-let [prev-union-type-name [atom-get union-type-name-atom]]
+                                    [when-not [eq-word prev-union-type-name union-type-name]
+                                      [push-error ctor-form [quote [mismatched union types]]]]]
+                                  [atom-set union-type-name-atom [some union-type-name]]
+                                  [when-not [eq [size ctor-params] [size params]]
+                                    [push-error [pair/fst p] [quote [wrong number of arguments to union ctor]]]]
+                                  [for i 0 [min [size ctor-params] [size params]]
+                                    [set-local lvars [at params i] [local-var-kind/match-param]]]]
+                                [push-error ctor-form [quote [not bound to a union constructor]]]]]
+                            [push-error ctor-form [quote [not bound to def at all]]]]
+                          [pair
+                            [match-pattern
+                              ctor-sname
+                              [list-map param params [get-sword param]]]
+                            [form-to-ast new-lstack [pair/snd p]]]]]]]]
+                  [bexp/match
+                    [form-to-ast lstack [get-arg 0]]
+                    clauses
+                    [if [is-odd [size l]]
+                      [some [form-to-ast lstack [last l]]]
+                      [none]]]]
+
+                [[word do]]
+                [bexp/do [list-map arg [rest l] [form-to-ast lstack arg]]]
+
+                [[word loop]]
+                [let
+                  [bindings [get-list [get-arg 0]]
+                   lvars [transient-kv-map]
+                   lctx [local-context lvars [local-context-kind/loop]]
+                   new-lstack [local-stack/frame lstack lctx]]
+                  [when [lt-s n-of-args 2] [report-error [quote [expected at least 2 arguments]]]]
+                  [bexp/loop
+                    [list-map p [pairwise bindings]
+                      [let [name [first p]
+                            name-word [get-word name]
+                            be [form-to-ast new-lstack [second p]]]
+                        [if-let [ldesc [try-get-local lstack name-word]]
+                          [push-error name [quote [let var shadows local]]]
+                          [when-let [ddesc [try-get def-ctx name-word]]
+                            [push-error name [quote [let var shadows def]]]]]
+                        [set-local lvars name [local-var-kind/loop]]
+                        [pair [sword name] be]]]
+                    [list-map f [slice l 2 [size l]] [form-to-ast new-lstack f]]]]
+
+                [[word continue]]
+                [let [loop-vars
+                        [if-let [loop-context [try-get-enclosing-loop-context lstack]]
+                          [local-context/vars loop-context]
+                          [do
+                            [push-error form [quote [not in a loop context]]]
+                            [transient-kv-map]]]]
+                  [bexp/continue
+                    [list-map p [pairwise-pairs [rest l]]
+                      [let [name [pair/fst p]
+                            sname [sword name]
+                            name-word [get-word name]
+                            be [form-to-ast lstack [pair/snd p]]]
+                        [if-let [ldesc [try-get loop-vars name-word]]
+                          [set-kv-map node-to-ldesc sname ldesc]
+                          [push-error name [quote [not a loop var of the current loop]]]]
+                        [pair sname be]]]]]
+
+                [[word let]]
+                [let
+                  [bindings [get-list [get-arg 0]]
+                   lvars [transient-kv-map]
+                   lctx [local-context lvars [local-context-kind/let]]
+                   new-lstack [local-stack/frame lstack lctx]]
+                  [when [lt-s n-of-args 2] [report-error [quote [expected at least 2 arguments]]]]
+                  [bexp/let
+                    [list-map p [pairwise bindings]
+                      [let [name [first p]
+                            name-word [get-word name]
+                            be [form-to-ast new-lstack [second p]]]
+                        [if-let [ldesc [try-get-local lstack name-word]]
+                          [push-error name [quote [let var shadows local]]]
+                          [when-let [ddesc [try-get def-ctx name-word]]
+                            [push-error name [quote [let var shadows def]]]]]
+                        [set-local lvars name [local-var-kind/let]]
+                        [pair [sword name] be]]]
+                    [list-map f [slice l 2 [size l]] [form-to-ast new-lstack f]]]]
+
+                [[word letfn]]
+                [let
+                  [funcs [get-list [get-arg 0]]
+                   lvars [transient-kv-map]
+                   lctx [local-context lvars [local-context-kind/letfn]]
+                   new-lstack [local-stack/frame lstack lctx]]
+                  [when [lt-s n-of-args 2] [report-error [quote [expected at least 2 arguments]]]]
+                  [for-each ff funcs
+                    [let [name [second [get-list ff]]]
+                      [set-local lvars name [local-var-kind/letfn]]]]
+                  [bexp/letfn
+                    [list-map ff funcs
+                      [do
+                        [todo check ff starts with func]
+                        [form-to-func new-lstack ff]]]
+                    [list-map f [slice l 2 [size l]] [form-to-ast new-lstack f]]]]
+
+                [[word type-anno]]
+                [do
+                  [assert-n-args 2]
+                  [bexp/type-anno
+                    [form-to-ast lstack [get-arg 0]]
+                    [form-to-type-scheme [get-arg 1]]]]
+
                 [if-let [ldesc [try-get-local lstack first-word]]
-                  [bform/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]
+                  [bexp/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]
                   [if-let [ddesc [try-get def-ctx first-word]]
                     [do
                       [set-kv-map node-to-def-desc [get-sword first-form] ddesc]
                       [match ddesc
-                        [def-desc/fexpr]
-                        [bform/call-fexpr [bform/var [get-sword first-form]] [rest l]]
+                        [def-desc/defunc defunc-desc]
+                        [match defunc-desc
+                          [bdefunc-kind/fexpr]
+                          [bexp/call-fexpr [bexp/var [get-sword first-form]] [rest l]]
 
-                        [def-desc/macro]
-                        [if-let [macro-func [try-get-macro eval-ctx first-word]]
-                          [form-to-ast lstack [interpreter-apply macro-func [rest l]]]
-                          [logq-abort form-to-ast macro not found]]
+                          [bdefunc-kind/macro]
+                          [if-let [macro-func [try-get-macro eval-ctx first-word]]
+                            [form-to-ast lstack [interpreter-apply macro-func [rest l]]]
+                            [logq-abort form-to-top macro not found]]
 
-                        [bform/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]]]
+                          [bexp/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]]
+
+                        [bexp/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]]]
                     [do
                       [report-error [quote [undefined word]]]
-                      [bform/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]]]]]
+                      [bexp/do [list]]]
+                    ]]]
 
               [form/list fl]
-              [bform/call [form-to-ast lstack [first l]] [list-map arg [rest l] [form-to-ast lstack arg]]]]]]]]]]
+              [bexp/call [form-to-ast lstack [first l]] [list-map arg [rest l] [form-to-ast lstack arg]]]]]]]]]]
     [form-to-ast-converter
       [func f2a [top-form]
-        [let [bform [form-to-ast [local-stack/empty] top-form]
+        [let [bform [form-to-top top-form]
               lerrors [clone-growable-to-frozen-list errors]]
           [if [is-empty lerrors]
             [result/ok bform]

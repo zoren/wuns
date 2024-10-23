@@ -9,8 +9,10 @@
     [do]
 
     [result/ok actual]
-    [logq for the forms [identity forms] we expected error]
-    [logq-abort test-error-fn found no error]]]
+    [do
+      [logq for the forms [identity forms] we expected error]
+      [logq-abort test-error-fn found no error]]
+    ]]
 
 [defmacro test-error [.. forms]
   [flist [quote do]
@@ -102,11 +104,19 @@
   [test-ok [i32 5] [[func id [p] p] [i32 5]]]
   [test-ok [i32 5] [[func sub [p q] [[intrinsic i32.sub] p q]] [i32 8] [i32 3]]]
 
-  [test-ok [i32 5]
+[comment    [test-ok [i32 5]
     [do
       [def x [i32 5]]
       [def y x]
-      y]]
+      y]] ]
+[comment these should fail because shadowing sucks to compile to js
+  [test-error
+    [def x [i32 5]]
+    [let [x x] [i32 5]]]
+  [test-error
+    [def x [i32 5]]
+    [def x [i32 5]]]
+     ]
 
   [test-ok [i32 5]
     [def inc [func inc [x] [[intrinsic i32.add] [i32 1] x]]]
@@ -118,14 +128,10 @@
     [def g [func g [x] [inc x]]]
     [g [i32 4]]]
 
-  [test-ok [i32 6]
-    [type form []
-      [union
-        [word word]
-        [list [list form]]]]
+[comment    [test-ok [i32 6]
     [defexpr my-fexpr [.. xs] [[extern host size] xs]]
     [my-fexpr these arguments are interpreted as forms]]
-
+ ]
   [test-ok [i32 5]
     [type form [] [union [word word] [list [list form]]]]
     [def list [func l [.. es] es]]
@@ -160,13 +166,19 @@
 
   [test-ok [i32 5]
     [do
-      [if [i32 0] [i32 4] [i32 5]]]
-      [i32 5]]
+      [if [i32 0] [i32 4] [i32 5]]
+      [i32 5]]]
 
-  [test-ok [i32 5]
+[comment    [test-ok [i32 5]
     [do
       [switch [i32 0] [[i32 0]] [word a] [word b]]
+      [i32 5]]] ]
+  [test-ok [i32 5]
+    [defn f []
+      [do
+      [switch [i32 0] [[i32 0]] [word a] [word b]]
       [i32 5]]]
+    [f]]
 
     [test-ok [i32 1]
 [type form [] [union [word word] [list [list form]]]]
@@ -328,26 +340,3 @@
   [run-performance-tests [word evaluator] mk-eval-forms]
   [run-performance-tests [word compiler] [func const [] compile-run-forms]]
   ]
-
-[def gauss-tail-res-n
-  [func gauss-tail [nn]
-    [[func go [res n]
-      [if n
-        [go [[intrinsic i32.add] res n] [[intrinsic i32.sub] n [i32 1]]]
-        res]] [i32 0] nn]]]
-
-[comment this version has a data dependency between parameters
-  when tail calling does destructive updates we need a temporary variable
-  for the new value of res - otherwise we would use the new value of n when calculating res]
-[def gauss-tail-n-res
-  [func gauss-tail [nn]
-    [[func go [n res]
-      [if n
-        [go [[intrinsic i32.sub] n [i32 1]] [[intrinsic i32.add] res n]]
-        res]] nn [i32 0]]]]
-[def gauss-tail-rev
-          [func gauss-tail-rev [nn]
-            [[func go [n res]
-              [if n
-                [go [[intrinsic i32.sub] n [i32 1]] [[intrinsic i32.add] res n]]
-                res]] nn [i32 0]]]]

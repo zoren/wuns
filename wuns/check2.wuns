@@ -396,18 +396,18 @@
 
 [defn is-syntactic-value [bform]
   [match bform
-    [bform/literal l] 1
-    [bform/func f] 1
-    [bform/var f] 1
-    [bform/extern f] 1
-    [bform/type-anno f ts] [is-syntactic-value f]
+    [bexp/literal l] 1
+    [bexp/func f] 1
+    [bexp/var f] 1
+    [bexp/extern f] 1
+    [bexp/type-anno f ts] [is-syntactic-value f]
     0]]
 
 [defn annotate [gctx bst type]
   [set-kv-map [check-context/type-annotations gctx] [to-js-value bst] type]
   type]
 
-[defn check [gctx outer-bform]
+[defn check [gctx outer-top-bform]
   [letfn [
     [func go-forms [level lctx sub-forms]
       [if [is-empty sub-forms]
@@ -460,20 +460,20 @@
         [annotate gctx func gen-func-type]]]
     [func go [level lctx bform]
       [match bform
-        [bform/var w]
+        [bexp/var w]
         [if-let [type-scheme [try-get-var-type gctx lctx [syntax-word/word w]]]
           [specialize-type-scheme [check-context/type-var-counter gctx] level type-scheme]
           [do
             [report-sword gctx w [quote [variable not found]]]
             [generate-fresh-type-var-atom [check-context/type-var-counter gctx] level]]]
 
-        [bform/literal l]
+        [bexp/literal l]
         [literal-to-type l]
 
-        [bform/intrinsic in]
+        [bexp/intrinsic in]
         [intrinsic-name-to-type [syntax-word/word in]]
 
-        [bform/if cond then else]
+        [bexp/if cond then else]
         [let
           [cond-type [go level lctx cond]
            then-type [go level lctx then]
@@ -482,10 +482,10 @@
           [unify-report gctx then-type else-type then]
           [annotate gctx bform then-type]]
 
-        [bform/do sub-forms]
+        [bexp/do sub-forms]
         [go-forms level lctx sub-forms]
 
-        [bform/let bindings bodies]
+        [bexp/let bindings bodies]
         [let
           [var-types [transient-kv-map]
            let-ctx [make-local-context var-types lctx [local-context-kind/let]]
@@ -502,7 +502,7 @@
               [set-kv-map var-types [syntax-word/word var] general-val-type]]]
           [go-forms level let-ctx bodies]]
 
-        [bform/loop bindings bodies]
+        [bexp/loop bindings bodies]
         [let
           [var-types [transient-kv-map]
            loop-ctx [make-local-context var-types lctx [local-context-kind/loop]]
@@ -518,7 +518,7 @@
 
           [annotate gctx bform [go-forms level loop-ctx bodies]]]
 
-        [bform/continue assignments]
+        [bexp/continue assignments]
         [do
           [when-let [loop-context [try-get-enclosing-loop-context lctx]]
             [for-each assignment assignments
@@ -530,7 +530,7 @@
                 [unify-report gctx [check-type-scheme/type loop-var-type-scheme] val-type value]]]]
           [generate-fresh-type-var gctx level]]
 
-        [bform/letfn funcs bodies]
+        [bexp/letfn funcs bodies]
         [let
           [var-types [transient-kv-map]
            letfn-ctx [make-local-context var-types lctx [local-context-kind/letfn]]
@@ -550,96 +550,10 @@
               [unify-report gctx tmp-type ft func]]]]
           [go-forms level letfn-ctx bodies]]
 
-        [bform/def var value]
-        [let
-          [value-type [go [inc level] lctx value]
-           general-val-type
-           [if [is-syntactic-value value]
-            [generalize level value-type]
-            [mk-empty-type-scheme value-type]]]
-          [set-kv-map [check-context/def-var-types gctx] [syntax-word/word var] general-val-type]
-          value-type]
-
-        [bform/type decls]
-        [let
-          [types [check-context/types gctx]
-           def-var-types [check-context/def-var-types gctx]]
-          [for-each decl decls
-            [let [sname [type-decl/name decl]
-                  name-word [syntax-word/word sname]]
-              [if [has types name-word]
-                [report-sword gctx sname [quote [already defined]]]
-                [let [type-params-list [type-decl/type-params decl]
-                      param-map [transient-kv-map]
-                      type-args [growable-list]]
-                  [for-each param-word type-params-list
-                    [when [has param-map [syntax-word/word param-word]]
-                      [report-sword gctx param-word [quote [already defined]]]]
-                    [let [tv [generate-fresh-type-var gctx 1]]
-                      [set-kv-map param-map [syntax-word/word param-word] tv]
-                      [push type-args tv]]]
-                  [set-kv-map types name-word
-                    [type-def
-                      [size type-params-list]
-                      param-map
-                      [make-type-list name-word [clone-growable-to-frozen-list type-args]]]]]]]]
-          [for-each decl decls
-            [let
-             [sname [type-decl/name decl]
-              name-word [syntax-word/word sname]type-prefix [concat-words name-word [word /]]
-              this-type-def [get types name-word]
-              result-type [type-def/result-type this-type-def]
-              param-map [type-def/param-map this-type-def]]
-            [match [type-decl/kind decl]
-              [type-decl-kind/union ctors]
-              [for-each ctor ctors
-                [let [param-list [list-map param [pair/snd ctor] [instantiate-syntax-type param-map param]]
-                      tctor [type-ctor param-list result-type]]
-                  [set-kv-map def-var-types
-                    [concat-words type-prefix [syntax-word/word [pair/fst ctor]]]
-                    [generalize-top tctor]]]]
-
-              [type-decl-kind/record field-decls]
-              [let
-                [fields [growable-list]]
-                [for-each field field-decls
-                  [let
-                    [inst-field-type [instantiate-syntax-type param-map [pair/snd field]]]
-                    [push fields inst-field-type]
-                    [set-kv-map def-var-types [concat-words type-prefix [syntax-word/word [pair/fst field]]]
-                        [generalize-top [type-func-no-rest [list result-type] inst-field-type]]]]]
-                [set-kv-map def-var-types name-word
-                  [generalize-top [type-func-no-rest [clone-growable-to-frozen-list fields] [type-def/result-type this-type-def]]]]]
-
-              [logq-abort check type definition not recognized]]]]
-          type-empty-tuple]
-
-        [bform/defmacro f]
-        [let
-          [ft [go-func level lctx f [function-kind/macro]]
-           general-val-type [generalize level ft]]
-          [set-kv-map [check-context/def-var-types gctx] [syntax-word/word [bfunc/name f]] general-val-type]
-          type-empty-tuple]
-
-        [bform/defexpr f]
-        [let
-          [ft [go-func level lctx f [function-kind/fexpr]]
-           general-val-type [generalize level ft]]
-          [set-kv-map [check-context/def-var-types gctx] [syntax-word/word [bfunc/name f]] general-val-type]
-          type-empty-tuple]
-
-        [bform/defn f]
-        [let
-          [value-type [go-func level lctx f [function-kind/func]]
-           general-val-type [generalize level value-type]]
-          [annotate gctx f value-type]
-          [set-kv-map [check-context/def-var-types gctx] [syntax-word/word [bfunc/name f]] general-val-type]
-          type-empty-tuple]
-
-        [bform/func f]
+        [bexp/func f]
         [go-func level lctx f [function-kind/func]]
 
-        [bform/switch switch-value clauses default]
+        [bexp/switch switch-value clauses default]
         [let [switch-type [go level lctx switch-value]
               result-type [generate-fresh-type-var gctx level]]
           [for-each clause clauses
@@ -651,7 +565,7 @@
           [unify-report gctx [go level lctx default] result-type default]
           result-type]
 
-        [bform/match match-value clauses opt-default]
+        [bexp/match match-value clauses opt-default]
         [let [match-type [go level lctx match-value]
               mresult-type [generate-fresh-type-var gctx level]
               converter [check-context/form-to-ast-converter gctx]
@@ -722,7 +636,7 @@
             [unify-report gctx [go level lctx default-form] mresult-type default-form]]
           mresult-type]
 
-        [bform/call f args]
+        [bexp/call f args]
         [let
           [ft [go level lctx f]
            arg-types [list-map-fn [func f [arg] [go level lctx arg]] args]
@@ -731,7 +645,7 @@
           [unify-report gctx ft t-func bform]
           t-res]
 
-        [bform/call-fexpr f form-args]
+        [bexp/call-fexpr f form-args]
         [let
           [ft [go level lctx f]
            arg-types [list-map-fn [func f [arg] type-form] form-args]
@@ -740,29 +654,102 @@
           [unify-report gctx ft t-func bform]
           t-res]
 
-        [bform/extern es]
+        [bexp/extern es]
         [generate-fresh-type-var gctx level]
 
-        [bform/type-anno bf bts]
+        [bexp/type-anno bf bts]
         [let
           [value-type [go level lctx bf]
            inst-anno-type [instantiate-syntax-type-scheme [check-context/type-var-counter gctx] level bts]]
           [unify-report gctx value-type inst-anno-type bf]
           value-type]
 
-        [bform/export es]
-        [do
-          [for-each e es
-            [let [type-scheme [get [check-context/def-var-types gctx] [syntax-word/word e]]
-                  t [specialize-type-scheme [check-context/type-var-counter gctx] level type-scheme]]
-              [annotate gctx e t]]]
-          type-empty-tuple]
-
         [do
           [log bform]
           [logq-abort check2 not implemented]]]]
-      ]
-      [go 0 [local-stack/empty] outer-bform]]]
+      [func check-top [form]
+        [match form
+          [btop/type decls]
+          [let
+            [types [check-context/types gctx]
+            def-var-types [check-context/def-var-types gctx]]
+            [for-each decl decls
+              [let [sname [type-decl/name decl]
+                    name-word [syntax-word/word sname]]
+                [if [has types name-word]
+                  [report-sword gctx sname [quote [already defined]]]
+                  [let [type-params-list [type-decl/type-params decl]
+                        param-map [transient-kv-map]
+                        type-args [growable-list]]
+                    [for-each param-word type-params-list
+                      [when [has param-map [syntax-word/word param-word]]
+                        [report-sword gctx param-word [quote [already defined]]]]
+                      [let [tv [generate-fresh-type-var gctx 1]]
+                        [set-kv-map param-map [syntax-word/word param-word] tv]
+                        [push type-args tv]]]
+                    [set-kv-map types name-word
+                      [type-def
+                        [size type-params-list]
+                        param-map
+                        [make-type-list name-word [clone-growable-to-frozen-list type-args]]]]]]]]
+            [for-each decl decls
+              [let
+              [sname [type-decl/name decl]
+                name-word [syntax-word/word sname]type-prefix [concat-words name-word [word /]]
+                this-type-def [get types name-word]
+                result-type [type-def/result-type this-type-def]
+                param-map [type-def/param-map this-type-def]]
+              [match [type-decl/kind decl]
+                [type-decl-kind/union ctors]
+                [for-each ctor ctors
+                  [let [param-list [list-map param [pair/snd ctor] [instantiate-syntax-type param-map param]]
+                        tctor [type-ctor param-list result-type]]
+                    [set-kv-map def-var-types
+                      [concat-words type-prefix [syntax-word/word [pair/fst ctor]]]
+                      [generalize-top tctor]]]]
+
+                [type-decl-kind/record field-decls]
+                [let
+                  [fields [growable-list]]
+                  [for-each field field-decls
+                    [let
+                      [inst-field-type [instantiate-syntax-type param-map [pair/snd field]]]
+                      [push fields inst-field-type]
+                      [set-kv-map def-var-types [concat-words type-prefix [syntax-word/word [pair/fst field]]]
+                          [generalize-top [type-func-no-rest [list result-type] inst-field-type]]]]]
+                  [set-kv-map def-var-types name-word
+                    [generalize-top [type-func-no-rest [clone-growable-to-frozen-list fields] [type-def/result-type this-type-def]]]]]
+
+                [logq-abort check type definition not recognized]]]]
+            ]
+
+          [btop/def var value]
+          [let
+            [value-type [go 0 [local-stack/empty] value]
+             general-val-type
+              [if [is-syntactic-value value]
+                [generalize 0 value-type]
+                [mk-empty-type-scheme value-type]]]
+              [set-kv-map [check-context/def-var-types gctx] [syntax-word/word var] general-val-type]]
+
+          [btop/defunc kind f]
+          [let
+            [fkind
+             [match kind
+              [bdefunc-kind/func] [function-kind/func]
+              [bdefunc-kind/macro] [function-kind/macro]
+              [bdefunc-kind/fexpr] [function-kind/fexpr]]
+             ft [go-func 0 [local-stack/empty] f fkind]
+             general-val-type [generalize 0 ft]]
+            [set-kv-map [check-context/def-var-types gctx] [syntax-word/word [bfunc/name f]] general-val-type]]
+
+          [btop/export es]
+          [do
+            [for-each e es
+              [let [type-scheme [get [check-context/def-var-types gctx] [syntax-word/word e]]
+                    t [specialize-type-scheme [check-context/type-var-counter gctx] 0 type-scheme]]
+                [annotate gctx e t]]]]]]]
+      [check-top outer-top-bform]]]
 
 [defn normalize-deep [internal-type]
   [let [nt [normalize-type internal-type]]

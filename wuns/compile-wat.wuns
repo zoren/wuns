@@ -76,13 +76,13 @@
 
 [defn get-form-types [tctx bform]
   [match bform
-    [bform/literal l]
+    [bexp/literal l]
     [match l
       [literal/i32 i] [list [wat-type-basic/i32]]
       [literal/f64 f] [list [wat-type-basic/f64]]
       [literal/word w] [logq-abort not implemented get-form-types literal/word]]
 
-    [bform/do forms]
+    [bexp/do forms]
     [if [is-empty forms]
       [list]
       [get-form-types tctx [last forms]]]
@@ -114,16 +114,16 @@
 [defn mk-translate-form [tctx]
   [func go [form]
     [match form
-      [bform/var w]
+      [bexp/var w]
       [wat-inst/local.get [syntax-word/word w]]
 
-      [bform/literal l]
+      [bexp/literal l]
       [match l
         [literal/i32 i] [wat-inst/i32.const [syntax-word/word i]]
         [literal/f64 f] [wat-inst/f64.const [syntax-word/word f]]
         [literal/word w] [logq-abort not implemented translate-form literal/word]]
 
-      [bform/do forms]
+      [bexp/do forms]
       [if [is-empty forms]
         [wat-inst/instructions [list]]
         [wat-inst/instructions
@@ -143,25 +143,25 @@
                   [size types]]]]
             [list [go [last forms]]]]]]
 
-      [bform/if cond true false]
+      [bexp/if cond true false]
       [wat-inst/if
         [get-form-types tctx form]
         [go cond]
         [go true]
         [go false]]
 
-      [bform/call f args]
+      [bexp/call f args]
       [match f
-        [bform/intrinsic i]
+        [bexp/intrinsic i]
         [instruction-name-and-args-to-inst [syntax-word/word i]
           [list-map arg args [go arg]]]
 
-        [bform/var w]
+        [bexp/var w]
         [wat-inst/call [syntax-word/word w] [list-map a args [go a]]]
 
         [logq-abort translate-form call not implemented]]
 
-      [bform/loop bindings body]
+      [bexp/loop bindings body]
       [do
         [assert [eq [size body] 1] expected one body]
         [wat-inst/instructions
@@ -174,7 +174,7 @@
                 [wat-inst/instructions
                   [list-map b body [go b]]]]]]]]
 
-      [bform/continue assignments]
+      [bexp/continue assignments]
       [wat-inst/instructions
         [concat
           [list-map a assignments [wat-inst/local.set [syntax-word/word [pair/fst a]] [go [pair/snd a]]]]
@@ -197,7 +197,7 @@
 
 [defn translate-top-form [tctx bform]
   [match bform
-    [bform/defn f]
+    [btop/defunc kind f]
     [let [t [get [check-context/type-annotations [translate-context/check-context tctx]] [to-js-value f]]
           ft [get-func-type t]
           param-types [func-type/params ft]
@@ -213,14 +213,14 @@
         [push gparams
           [pair [syntax-word/word [at params i]] [translate-type [at param-types i]]]]]
       [let [proc
-            [bform-recur
+            [bexp-recur
               [func f [bform]
                 [match bform
-                  [bform/let bs body]
+                  [bexp/let bs body]
                   [for-each b bs
                     [push glocals [pair [syntax-word/word [pair/fst b]] [translate-type [get-annotation tctx [pair/snd b]]]]]]
 
-                  [bform/loop bs body]
+                  [bexp/loop bs body]
                   [for-each b bs
                     [push glocals [pair [syntax-word/word [pair/fst b]] [translate-type [get-annotation tctx [pair/snd b]]]]]]
 
@@ -241,7 +241,7 @@
           [translate-types [func-type/result ft]]
           [wat-inst/instructions wat-bodies]]]]]
 
-    [bform/export snames]
+    [btop/export snames]
     [for-each sname snames
       [let [export-kind
             [match [normalize-type [get-annotation tctx sname]]
