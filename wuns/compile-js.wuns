@@ -134,8 +134,7 @@
     [js-exp/call [js-exp/var [word form/list]]
       [list [js-exp/array [list-map e l [form-to-quoted-js e]]]]]]]
 
-[todo are we even using node-to-desc?? it's a var -> ldesc now, not form -> ldesc]
-[defn compile-top-form [node-to-ldesc outer-is-tail top-form]
+[defn compile-top-form [outer-is-tail top-form]
   [let
     []
     [letfn
@@ -355,7 +354,7 @@
             [js-stmt/exp [cexp bform]]]]]]
     [match top-form
       [bform/do forms]
-      [js-stmt/seq [list-map f forms [compile-top-form node-to-ldesc outer-is-tail f]]]
+      [js-stmt/seq [list-map f forms [compile-top-form outer-is-tail f]]]
 
       [cstmt outer-is-tail top-form]]]]]
 
@@ -369,7 +368,6 @@
   [let
     [converter [mk-form-to-ast]
      f2a [form-to-ast-converter/form-to-ast converter]
-     node-to-ldesc [form-to-ast-converter/node-to-ldesc converter]
      comp-run
      [func comp-run [form]
       [match [f2a form]
@@ -377,7 +375,7 @@
         [result/error [compile-run-error/form-to-ast-errors f2a-errors]]
 
         [result/ok bform]
-        [let [stmt [compile-top-form node-to-ldesc true bform]]
+        [let [stmt [compile-top-form true bform]]
           [result/ok stmt]]]]]
     [match [map-result forms comp-run]
       [result/error e] [result/error e]
@@ -393,7 +391,6 @@
   [let
     [converter [mk-form-to-ast]
      f2a [form-to-ast-converter/form-to-ast converter]
-     node-to-ldesc [form-to-ast-converter/node-to-ldesc converter]
      comp-run
      [func comp-run [form]
       [match [f2a form]
@@ -404,7 +401,7 @@
           [result/error [compile-run-error/form-to-ast-errors f2a-errors]]]
 
         [result/ok bform]
-        [let [stmt [compile-top-form node-to-ldesc false bform]]
+        [let [stmt [compile-top-form false bform]]
           [result/ok stmt]]]]]
     [match [map-result [read-file wuns-file-name] comp-run]
       [result/error e]
