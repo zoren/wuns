@@ -290,14 +290,14 @@
 
 [defn generalize [current-level type]
   [let [tvs [growable-list]
-           ftvs [free-type-vars type]]
+        ftvs [free-type-vars type]]
     [for-each tv ftvs
       [if [lt-s current-level [get-type-var-level tv]]
         [push tvs tv]
         [comment [logq tv not generalized [identity tv]]]
         ]]
-    [let [ftvs [clone-growable-to-frozen-list tvs]]
-      [check-type-scheme ftvs type]]]]
+    [let [fftvs [clone-growable-to-frozen-list tvs]]
+      [check-type-scheme fftvs type]]]]
 
 [defn generalize-top [type] [generalize 0 type]]
 
@@ -624,7 +624,7 @@
 
         [eq-form first-form [quote if]]
         [let
-          [- [assert [eq n-of-args 3] form expects 3 arguments]
+          [-- [assert [eq n-of-args 3] form expects 3 arguments]
            cond [second sub-forms]
            then-branch [third sub-forms]
            else-branch [fourth sub-forms]
@@ -740,8 +740,8 @@
           [report-when-not [is-even n-of-args] form expects an even number of arguments]
           [for-pair i 2 [dec s-form]
             [let [case-const [at sub-forms i]
-                     case-const-list [try-get-list-report gctx case-const]
-                     branch [at sub-forms [inc i]]]
+                  case-const-list [try-get-list-report gctx case-const]
+                  branch [at sub-forms [inc i]]]
               [when-let [first-case-const [try-get-first-report gctx case-const-list]]
                 [match first-case-const
                   [form/word -]
@@ -749,9 +749,9 @@
                     [report-non-literal gctx case-const]
                     [unify-report gctx match-type [check gctx level lctx case-const] case-const]]
                   [form/list -]
-                  [for-each case-const case-const-list
-                    [report-non-literal gctx case-const]
-                    [unify-report gctx match-type [check gctx level lctx case-const] case-const]]]]
+                  [for-each cc case-const-list
+                    [report-non-literal gctx cc]
+                    [unify-report gctx match-type [check gctx level lctx cc] cc]]]]
               [unify-report gctx [check gctx level lctx branch] result-type branch]]]
           [when has-default
             [let [default-form [last sub-forms]]
@@ -943,17 +943,17 @@
           [if-not [eq n-of-args 1]
             [report form expects 1 argument]
             [when-let [file-word [try-get-word-report gctx [second sub-forms]]]
-              [for-each form [read-file file-word]
-                [evaluate [check-context/evaluator gctx] form]
-                [check gctx 0 [none] form]]]]
+              [for-each file-form [read-file file-word]
+                [evaluate [check-context/evaluator gctx] file-form]
+                [check gctx 0 [none] file-form]]]]
           type-empty-tuple]
 
         [if-let [expanded-form [try-expand-form gctx form]]
           [check gctx level lctx expanded-form]
           [let
-            [func-type [check gctx level lctx first-form]
+            [ft [check gctx level lctx first-form]
              opt-func-kind
-              [match [normalize-type func-type]
+              [match [normalize-type ft]
                 [type/inst inst-type]
                 [match inst-type
                   [inst-type/func ft] [some [func-type/kind ft]]
@@ -971,7 +971,7 @@
                     [logq-abort check unexpected macro]]
                   false]
                 0]]
-            [annotate gctx first-form func-type]
+            [annotate gctx first-form ft]
             [let [args [rest sub-forms]
                   arg-types
                   [if is-fexpr
@@ -980,7 +980,7 @@
               [let
                 [t-res [generate-fresh-type-var gctx level]
                  t-func [type-func arg-types [none] t-res]]
-                [unify-report gctx func-type t-func form]
+                [unify-report gctx ft t-func form]
                 [annotate gctx form t-res]]]]]]]]]
 
 [defn internal-to-present-type [internal-type]

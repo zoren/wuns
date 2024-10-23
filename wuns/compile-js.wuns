@@ -134,19 +134,10 @@
     [js-exp/call [js-exp/var [word form/list]]
       [list [js-exp/array [list-map e l [form-to-quoted-js e]]]]]]]
 
+[todo are we even using node-to-desc?? it's a var -> ldesc now, not form -> ldesc]
 [defn compile-top-form [node-to-ldesc outer-is-tail top-form]
   [let
-    [current-func [atom [option/none]]
-     current-tail-calls [atom [option/none]]
-     try-get-tail
-     [func tgt [call-form]
-        [if-let [ctc [atom-get current-tail-calls]]
-          [match ctc
-            [tail-call-result/only-tail call-to-deps]
-            [try-get call-to-deps call-form]
-
-            [none]]
-          [none]]]]
+    []
     [letfn
     [[func cfunc [f]
       [let
@@ -154,24 +145,9 @@
          params [bfunc/parameters f]
          js-params [list-map p params [syntax-word/word p]]
          js-opt-rest-param [if-let [rp [bfunc/rest-param f]] [some [syntax-word/word rp]] [none]]
-         body [bfunc/body f]
-         tail-analysis [tail-call-analysis node-to-ldesc f]]
-        [atom-set current-func [option/some f]]
-        [atom-set current-tail-calls [option/some tail-analysis]]
-        [match tail-analysis
-          [tail-call-result/only-tail call-to-deps]
-          [do
-            [todo check if the break is needed]
-            [js-exp/arrow-stmt
-              js-params
-              js-opt-rest-param
-              [block
-                [js-stmt/while js-1
-                  [block
-                    [cstmt-do true body]
-                    [js-stmt/break]]]]]]
-
-          [js-exp/arrow-stmt js-params js-opt-rest-param [cstmt-do true body]]]]]
+         body [bfunc/body f]]
+        [js-exp/arrow-stmt js-params js-opt-rest-param [cstmt-do true body]]
+          ]]
      [func cexp [bform]
       [match bform
         [bform/var wf]
@@ -220,9 +196,7 @@
           [bform/intrinsic i]
           [instruction-name-and-args-to-js-exp [syntax-word/word i] [list-map arg args [cexp arg]]]
 
-          [if-let [deps [try-get-tail bform]]
-            [logq-abort cexp found a tail call not expected]
-            [js-exp/call [cexp f] [list-map arg args [cexp arg]]]]]
+          [js-exp/call [cexp f] [list-map arg args [cexp arg]]]]
 
         [bform/type-anno bf t]
         [cexp bf]
@@ -372,33 +346,9 @@
           [js-stmt/export-as-string [list-map sname snames [let [name [syntax-word/word sname]] [pair name name]]]]
 
           [bform/call f args]
-          [if-let [deps [try-get-tail bform]]
-            [let
-              [params [if-let [cf [atom-get current-func]] [bfunc/parameters cf] [logq-abort cstmt]]
-               deps-set [set]]
-              [for-each i deps [set-add deps-set i]]
-              [assert is-tail tail call must be tail]
-
-              [let [tmp-consts [growable-list]
-                    assignments [growable-list]
-                    subst [transient-kv-map]]
-                [for i 0 [size args]
-                  [let [param [syntax-word/word [at params i]]]
-                    [if [set-has deps-set i]
-                      [let [tmp [concat-words [word tmp] [int-to-word i]]]
-                        [push tmp-consts [js-stmt/const-decl tmp [js-exp/var param]]]
-                        [push assignments [js-stmt/assign param [cexp [at args i]]]]
-                        [set-kv-map subst param [bform/var [syntax-word tmp [none]]]]]
-                      [push assignments [js-stmt/assign param [cexp [substitute [at args i] subst]]]]]]]
-                [js-stmt/seq
-                  [concat
-                    [concat
-                      [clone-growable-to-frozen-list tmp-consts]
-                      [clone-growable-to-frozen-list assignments]]
-                    [list [js-stmt/continue]]]]]]
-            [if is-tail
-              [js-stmt/return [cexp bform]]
-              [js-stmt/exp [cexp bform]]]]
+          [if is-tail
+            [js-stmt/return [cexp bform]]
+            [js-stmt/exp [cexp bform]]]
 
           [if is-tail
             [js-stmt/return [cexp bform]]
@@ -424,10 +374,7 @@
      [func comp-run [form]
       [match [f2a form]
         [result/error f2a-errors]
-        [do
-          [for-each error f2a-errors
-            [log-report-message error]]
-          [result/error [compile-run-error/form-to-ast-errors f2a-errors]]]
+        [result/error [compile-run-error/form-to-ast-errors f2a-errors]]
 
         [result/ok bform]
         [let [stmt [compile-top-form node-to-ldesc true bform]]
@@ -467,3 +414,5 @@
       [let [prologue [list [js-stmt/import [word externs] [word ../runtime-lib/externs.js]]]]
         [write-js-stmt js-file-name
           [js-stmt/seq [concat prologue stmts]]]]]]]
+
+[export compile-file-to-file]

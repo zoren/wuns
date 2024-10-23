@@ -1,0 +1,170 @@
+[load ast-bind.wuns]
+
+[defn map-option [f ast]
+  [[func go [ast]
+    [if-let [new-ast [f ast]]
+      new-ast
+      [match ast
+        [bform/func f] [logq-abort map-option not implemented func]
+        [bform/if c t e] [bform/if [go c] [go t] [go e]]
+        [bform/do l] [bform/do [list-map arg l [go arg]]]
+        [bform/switch c cases d] [logq-abort map-option not implemented switch]
+        [bform/match c cases d] [logq-abort map-option not implemented match]
+        [bform/letfn l d] [logq-abort map-option not implemented letfn]
+        [bform/let l ds] [bform/let [list-map p l [pair [pair/fst p] [go [pair/snd p]]]] [list-map arg ds [go arg]]]
+        [bform/def w d] [bform/def w [go d]]
+        [bform/defexpr f] [logq-abort map-option not implemented defexpr]
+        [bform/defmacro f] [logq-abort map-option not implemented defmacro]
+        [bform/call f args] [bform/call [go f] [list-map arg args [go arg]]]
+        [bform/call-fexpr f form-args] [bform/call-fexpr [go f] form-args]
+        [bform/type-anno f t] [bform/type-anno [go f] t]
+
+        ast]]]
+    ast]]
+
+[defn substitute [ast subst]
+  [map-option
+    [func proc-var [bf]
+      [match bf
+        [bform/var w] [try-get subst [syntax-word/word w]]
+        [none]]]
+    ast]]
+
+[defn has-dep-on-param [node-to-ldesc arg fname param-i]
+  [letfn
+    [[func go [bf]
+      [let [has-dep
+            [if-let [ldesc [try-get node-to-ldesc bf]]
+              [match ldesc
+                [local-var-kind/param desc-fname desc-param-i]
+                [and [eq-word fname desc-fname] [eq param-i desc-param-i]]
+                false]
+              false]]
+        [if has-dep
+          true
+          [match bf
+            [bform/var w] false
+            [bform/literal l] false
+            [bform/intrinsic w] false
+            [bform/extern l] false
+            [bform/type l] false
+
+            [bform/if c t e] [or [go c] [go t] [go e]]
+
+            [bform/do l] [exists l go]
+
+            [bform/call f args]
+            [or
+              [go f]
+              [exists args go]]
+
+            [bform/call-fexpr f form-args] [go f]
+
+            [bform/let bindings es]
+            [or
+              [exists bindings [func f [b] [go [pair/snd b]]]]
+              [exists es go]]
+
+            [do
+              [log bf]
+              [logq-abort has-dep-on-param not implemented]]]]]]]
+    [go arg]]]
+
+[type tail-call-result []
+  [union
+    [no-rec-calls]
+    [non-tail]
+    [only-tail [transient-kv-map bform [list i32]]]]]
+
+[defn tail-call-analysis [node-to-ldesc the-func]
+  [comment also returns a map of the tail calls so a compiler knows names of parameters to bind before continuing in a loop]
+  [let
+    [tail-rec-calls [transient-kv-map]
+     non-tail-rec-calls [atom false]
+     go
+      [func go [is-tail bf]
+        [match bf
+          [bform/var w] [do]
+          [bform/literal l] [do]
+          [bform/intrinsic w] [do]
+          [bform/extern l] [do]
+          [bform/type l] [do]
+
+          [bform/func f] [do]
+          [bform/if c t e]
+          [do
+            [go false c]
+            [go is-tail t]
+            [go is-tail e]]
+
+          [bform/switch e cases default]
+          [do
+            [go false e]
+            [for-each p cases [go is-tail [pair/snd p]]]
+            [go is-tail default]]
+
+          [bform/match e cases opt-default]
+          [do
+            [go false e]
+            [for-each p cases [go is-tail [pair/snd p]]]
+            [when-let [default opt-default]
+              [go is-tail default]]]
+
+          [bform/do l]
+          [when-not [is-empty l]
+            [for i 0 [dec [size l]] [go false [at l i]]]
+            [go is-tail [last l]]]
+
+          [bform/let bindings l]
+          [do
+            [for-each p bindings [go false [pair/snd p]]]
+            [when-not [is-empty l]
+              [for i 0 [dec [size l]] [go false [at l i]]]
+              [go is-tail [last l]]]]
+
+          [bform/letfn fns l]
+          [do
+            [for-each fn fns
+              [for-each body [bfunc/body fn]
+                [go false body]]]
+            [when-not [is-empty l]
+              [for i 0 [dec [size l]] [go false [at l i]]]
+              [go is-tail [last l]]]]
+
+          [bform/call f args]
+          [do
+            [match f
+              [bform/var wf]
+              [if is-tail
+                [let [is-current [eq-word [syntax-word/word [bfunc/name the-func]] [syntax-word/word wf]]
+                      is-local
+                      [if-let [fd [try-get node-to-ldesc f]]
+                        [match fd [local-var-kind/func-internal-self] 1 0]
+                        0]]
+                  [when [and is-current is-local]
+                    [let [dependent-args [growable-list]]
+                      [todo be more clever here - also make it easy to know what temp local vars to create for args dependent on parameters at the top level]
+                      [for i 0 [size args]
+                        [when
+                          [exists [slice args [inc i] [size args]]
+                            [func has-dep [arg] [has-dep-on-param node-to-ldesc arg [syntax-word/word [bfunc/name the-func]] i]]]
+                          [push dependent-args i]]]
+                      [set-kv-map tail-rec-calls bf [clone-growable-to-frozen-list dependent-args]]]]]
+
+                  [atom-set non-tail-rec-calls true]]
+              [do]]
+            [for-each arg args [go false arg]]]
+
+          [bform/call-fexpr f form-args]
+          [go false f]
+
+          [do
+            [log bf]
+            [logq-abort tail-call-analysis not implemented]]]]]
+      [for-each body [bfunc/body the-func]
+        [go true body]]
+      [if [atom-get non-tail-rec-calls]
+        [tail-call-result/non-tail]
+        [if [kv-map-size tail-rec-calls]
+          [tail-call-result/only-tail tail-rec-calls]
+          [tail-call-result/no-rec-calls]]]]]

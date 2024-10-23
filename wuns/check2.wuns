@@ -65,9 +65,11 @@
 [defn type-func [params opt-rest-param result]
   [ctype/inst [inst-type/func [func-type params opt-rest-param result [function-kind/func]]]]]
 
-[def i32i32-to-i32 [type-func [list type-i32 type-i32] [none] type-i32]]
-[def f64f64-to-f64 [type-func [list type-f64 type-f64] [none] type-f64]]
-[def f64f64-to-i32 [type-func [list type-f64 type-f64] [none] type-i32]]
+[defn type-func-no-rest [params result] [type-func params [none] result]]
+
+[def i32i32-to-i32 [type-func-no-rest [list type-i32 type-i32] type-i32]]
+[def f64f64-to-f64 [type-func-no-rest [list type-f64 type-f64] type-f64]]
+[def f64f64-to-i32 [type-func-no-rest [list type-f64 type-f64] type-i32]]
 
 [defn type-ctor [params result]
   [ctype/inst [inst-type/func [func-type params [none] result [function-kind/ctor]]]]]
@@ -225,14 +227,14 @@
 
 [defn generalize [current-level type]
   [let [tvs [growable-list]
-           ftvs [free-type-vars type]]
+        ftvs [free-type-vars type]]
     [for-each tv ftvs
       [if [lt-s current-level [get-type-var-level tv]]
         [push tvs tv]
         [comment [logq tv not generalized [identity tv]]]
         ]]
-    [let [ftvs [clone-growable-to-frozen-list tvs]]
-      [check-type-scheme ftvs type]]]]
+    [let [fftvs [clone-growable-to-frozen-list tvs]]
+      [check-type-scheme fftvs type]]]]
 
 [defn generalize-top [type] [generalize 0 type]]
 
@@ -277,22 +279,11 @@
           [pair tv [generate-fresh-type-var-atom counter-atom level]]]]
     [copy-type subst-assoc-list [check-type-scheme/type scheme]]]]
 
-[type
-  clocal-context []
-  [record
-    [vars [transient-kv-map word check-type-scheme]]
-    [outer [option clocal-context]]]]
-
-[defn make-local-context [var-values lctx-opt]
-  [some [clocal-context var-values lctx-opt]]]
+[defn make-local-context [var-values lstack kind]
+  [local-stack/frame lstack [local-context var-values kind]]]
 
 [defn try-get-local-var-type [local-ctx var-name]
-  [[func go [cur-ctx]
-    [if-let [type [try-get [clocal-context/vars cur-ctx] var-name]]
-      [some type]
-      [if-let [outer [clocal-context/outer cur-ctx]]
-        [go outer]
-        [none]]]] local-ctx]]
+  [try-get-local local-ctx var-name]]
 
 [defn instantiate-syntax-type [type-var-env outer-syntax-type]
   [[func go [syntax-type]
@@ -388,17 +379,15 @@
 [defn generate-fresh-type-var [gctx level]
   [generate-fresh-type-var-atom [check-context/type-var-counter gctx] level]]
 
-[defn try-get-var-type [gctx local-ctx-opt var-name]
-  [if-let [ltype [if-let [local-ctx local-ctx-opt]
-                    [try-get-local-var-type local-ctx var-name]
-                    [none]]]
+[defn try-get-var-type [gctx local-ctx var-name]
+  [if-let [ltype [try-get-local-var-type local-ctx var-name]]
     [some ltype]
     [try-get [check-context/def-var-types gctx] var-name]]]
 
 [defn try-get-node [gctx bst]
   [let [converter [check-context/form-to-ast-converter gctx]
         form [get [form-to-ast-converter/bst-to-form converter] [to-js-value bst]]]
-    [if-let [node [try-get-syntax-node form]] [some node] [none]]]]
+    [try-get-syntax-node form]]]
 
 [defn unify-report [gctx t1 t2 bst]
   [let [opt-node [try-get-node gctx bst]]
@@ -433,7 +422,7 @@
          gen-func-type [generate-fresh-type-var gctx level-1]
          func-type-scheme [mk-empty-type-scheme gen-func-type]
          param-ctx [transient-kv-map]
-         func-ctx [make-local-context param-ctx lctx]
+         func-ctx [make-local-context param-ctx lctx [local-context-kind/func]]
          reg-params [growable-list]
          takes-form-params
            [match function-kind
@@ -499,7 +488,7 @@
         [bform/let bindings bodies]
         [let
           [var-types [transient-kv-map]
-           let-ctx [make-local-context var-types lctx]
+           let-ctx [make-local-context var-types lctx [local-context-kind/let]]
            level-1 [inc level]]
           [for-each binding bindings
             [let
@@ -513,10 +502,38 @@
               [set-kv-map var-types [syntax-word/word var] general-val-type]]]
           [go-forms level let-ctx bodies]]
 
+        [bform/loop bindings bodies]
+        [let
+          [var-types [transient-kv-map]
+           loop-ctx [make-local-context var-types lctx [local-context-kind/loop]]
+           level-1 [inc level]]
+          [for-each binding bindings
+            [let
+              [var [pair/fst binding]
+               value [pair/snd binding]
+               val-type [go level-1 loop-ctx value]
+               general-val-type [mk-empty-type-scheme val-type]]
+              [annotate gctx value val-type]
+              [set-kv-map var-types [syntax-word/word var] general-val-type]]]
+
+          [annotate gctx bform [go-forms level loop-ctx bodies]]]
+
+        [bform/continue assignments]
+        [do
+          [when-let [loop-context [try-get-enclosing-loop-context lctx]]
+            [for-each assignment assignments
+              [let
+                [loop-vars [local-context/vars loop-context]
+                 loop-var-type-scheme [get loop-vars [syntax-word/word [pair/fst assignment]]]
+                 value [pair/snd assignment]
+                 val-type [go level lctx value]]
+                [unify-report gctx [check-type-scheme/type loop-var-type-scheme] val-type value]]]]
+          [generate-fresh-type-var gctx level]]
+
         [bform/letfn funcs bodies]
         [let
           [var-types [transient-kv-map]
-           letfn-ctx [make-local-context var-types lctx]
+           letfn-ctx [make-local-context var-types lctx [local-context-kind/letfn]]
            level-1 [inc level]
            gtmp-types [growable-list]]
           [for-each func funcs
@@ -529,8 +546,8 @@
             [let
               [tmp-type [at tmp-types i]
                func [at funcs i]
-               func-type [go-func level letfn-ctx func [function-kind/func]]]
-              [unify-report gctx tmp-type func-type func]]]]
+               ft [go-func level letfn-ctx func [function-kind/func]]]
+              [unify-report gctx tmp-type ft func]]]]
           [go-forms level letfn-ctx bodies]]
 
         [bform/def var value]
@@ -590,24 +607,24 @@
                     [inst-field-type [instantiate-syntax-type param-map [pair/snd field]]]
                     [push fields inst-field-type]
                     [set-kv-map def-var-types [concat-words type-prefix [syntax-word/word [pair/fst field]]]
-                        [generalize-top [type-func [list result-type] [none] inst-field-type]]]]]
+                        [generalize-top [type-func-no-rest [list result-type] inst-field-type]]]]]
                 [set-kv-map def-var-types name-word
-                  [generalize-top [type-func [clone-growable-to-frozen-list fields] [none] [type-def/result-type this-type-def]]]]]
+                  [generalize-top [type-func-no-rest [clone-growable-to-frozen-list fields] [type-def/result-type this-type-def]]]]]
 
               [logq-abort check type definition not recognized]]]]
           type-empty-tuple]
 
         [bform/defmacro f]
         [let
-          [func-type [go-func level lctx f [function-kind/macro]]
-           general-val-type [generalize level func-type]]
+          [ft [go-func level lctx f [function-kind/macro]]
+           general-val-type [generalize level ft]]
           [set-kv-map [check-context/def-var-types gctx] [syntax-word/word [bfunc/name f]] general-val-type]
           type-empty-tuple]
 
         [bform/defexpr f]
         [let
-          [func-type [go-func level lctx f [function-kind/fexpr]]
-           general-val-type [generalize level func-type]]
+          [ft [go-func level lctx f [function-kind/fexpr]]
+           general-val-type [generalize level ft]]
           [set-kv-map [check-context/def-var-types gctx] [syntax-word/word [bfunc/name f]] general-val-type]
           type-empty-tuple]
 
@@ -636,7 +653,7 @@
 
         [bform/match match-value clauses opt-default]
         [let [match-type [go level lctx match-value]
-              result-type [generate-fresh-type-var gctx level]
+              mresult-type [generate-fresh-type-var gctx level]
               converter [check-context/form-to-ast-converter gctx]
               node-to-def-desc [form-to-ast-converter/node-to-def-desc converter]]
 [quote            [for-each clause clauses
@@ -675,15 +692,15 @@
                   match-params [match-pattern/params mpattern]
                   dvts [get [check-context/def-var-types gctx] [syntax-word/word ctor-sname]]
                   var-types [transient-kv-map]
-                  branch-ctx [make-local-context var-types lctx]]
+                  branch-ctx [make-local-context var-types lctx [local-context-kind/match]]]
                   [match [get node-to-def-desc ctor-sname]
                     [def-desc/union-ctor union-desc index]
                     [let [type-name [union-desc/name union-desc]
                           type-params [union-desc/type-params union-desc]
                           ctor [at [union-desc/ctors union-desc] index]
-                          type-def [get [check-context/types gctx] [syntax-word/word type-name]]
-                          result-type [type-def/result-type type-def]
-                          param-map [type-def/param-map type-def]
+                          t-def [get [check-context/types gctx] [syntax-word/word type-name]]
+                          rt [type-def/result-type t-def]
+                          param-map [type-def/param-map t-def]
                           param-types [pair/snd ctor]
                           growable-params [growable-list]]
                       [assert [eq [size param-types] [size match-params]] match pattern and union ctor arity mismatch]
@@ -699,28 +716,28 @@
                         branch]]
 
                     [logq-abort match not bound to union ctor]]
-              [unify-report gctx [go level branch-ctx branch] result-type branch]
+              [unify-report gctx [go level branch-ctx branch] mresult-type branch]
               ]]
           [when-let [default-form opt-default]
-            [unify-report gctx [go level lctx default-form] result-type default-form]]
-          result-type]
+            [unify-report gctx [go level lctx default-form] mresult-type default-form]]
+          mresult-type]
 
         [bform/call f args]
         [let
-          [func-type [go level lctx f]
+          [ft [go level lctx f]
            arg-types [list-map-fn [func f [arg] [go level lctx arg]] args]
            t-res [generate-fresh-type-var gctx level]
-           t-func [type-func arg-types [none] t-res]]
-          [unify-report gctx func-type t-func bform]
+           t-func [type-func-no-rest arg-types t-res]]
+          [unify-report gctx ft t-func bform]
           t-res]
 
         [bform/call-fexpr f form-args]
         [let
-          [func-type [go level lctx f]
+          [ft [go level lctx f]
            arg-types [list-map-fn [func f [arg] type-form] form-args]
            t-res [generate-fresh-type-var gctx level]
-           t-func [type-func arg-types [none] t-res]]
-          [unify-report gctx func-type t-func bform]
+           t-func [type-func-no-rest arg-types t-res]]
+          [unify-report gctx ft t-func bform]
           t-res]
 
         [bform/extern es]
@@ -743,8 +760,9 @@
 
         [do
           [log bform]
-          [logq-abort check2 not implemented]]]]]
-      [go 0 [none] outer-bform]]]
+          [logq-abort check2 not implemented]]]]
+      ]
+      [go 0 [local-stack/empty] outer-bform]]]
 
 [defn normalize-deep [internal-type]
   [let [nt [normalize-type internal-type]]

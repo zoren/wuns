@@ -356,3 +356,5 @@
       [for-each message check-errors
         [log-check-message message]]
       [logq-abort test-ok failed there were errors]]]]
+
+[export run-file]

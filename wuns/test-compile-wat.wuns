@@ -1,0 +1,233 @@
+[load compile-wat.wuns]
+
+[defmacro def-wasm-extern [name type]
+  [flist [qword def] name
+    [flist [qword type-anno]
+      [flist [qword extern] [qword wasm] name]
+      type]]]
+
+[def-wasm-extern wat-to-byte-array [func [byte-array] byte-array]]
+
+[type wasm-module [] [union]]
+
+[def-wasm-extern byte-array-to-wasm-module [func [byte-array] wasm-module]]
+
+[type wasm-instance [] [union]]
+
+[def-wasm-extern wasm-instantiate [func [wasm-module [object js-value]] wasm-instance]]
+[def-wasm-extern wasm-call-export [type-scheme [a] [func [wasm-instance word [list a]] [list a]]]]
+[type export-func [] [union]]
+
+[def-wasm-extern wasm-get-export-object [func [wasm-instance] [object export-func]]]
+
+[defn output-to-module [output]
+  [let [p [empty-printer [i32 800]]]
+    [print-wat p
+      [wat/seq
+        [concat
+          [list-map of [clone-growable-to-frozen-list [wat-output/funcs output]] [output-func-to-wat of]]
+          [list-map e [clone-growable-to-frozen-list [wat-output/exports output]] [export-to-wat e]]]]]
+    [let [ba [printer-to-byte-array p]
+          module [byte-array-to-wasm-module [wat-to-byte-array ba]]]
+      [byte-array-log-as-string ba]
+      module]]]
+
+[def js-apply
+  [type-anno
+    [extern interpreter apply]
+    [func [export-func [list js-value]] js-value]]]
+
+[defexpr module [.. forms]
+  [output-to-module [translate-top-forms forms]]]
+
+[def empty-object [kv-map-to-object [transient-kv-map]]]
+
+[defn get-export [wasm-inst export-name]
+  [get [object-to-kv-map [wasm-get-export-object wasm-inst]] export-name]]
+
+[defexpr trans-eval-form [form]
+  [let
+    [m [output-to-module
+        [translate-top-forms
+          [list
+            [flist [quote defn] [quote f] [quote []] form]
+            [quote [export f]]]]]
+     i [wasm-instantiate m empty-object]
+     f [get-export i [word f]]]
+  [js-apply f [list]]]]
+
+[defn test-assert-eq [expected actual]
+  [let [js-expected [to-js-value expected]]
+    [when-not [is-identical js-expected actual]
+    [logq test failed]
+    [log js-expected]
+    [log actual]
+    ]]]
+
+[defn test-assert-undefined [actual]
+  [when-not [is-undefined actual]
+    [logq test failed]
+    [log actual]]]
+
+[defmacro js-vals [.. forms]
+  [form-concat [list [quote list]] [list-map form forms [flist [quote to-js-value] [flist [quote f64] form]]]]]
+
+[defmacro js-call [f .. forms]
+  [flist
+    [quote js-apply]
+    f
+    [form-concat [list [quote list]] [list-map form forms [flist [quote to-js-value] [flist [quote f64] form]]]]]]
+
+[defn test []
+  [test-assert-eq [i32 1] [trans-eval-form [i32 1]]]
+  [test-assert-eq [f64 1.5] [trans-eval-form [f64 1.5]]]
+  [test-assert-eq [i32 5] [trans-eval-form [i32 5]]]
+
+  [comment if]
+  [test-assert-eq [i32 5] [trans-eval-form [if [i32 0] [i32 7] [i32 5]]]]
+  [test-assert-eq [i32 5] [trans-eval-form [if [i32 1] [i32 5] [i32 9]]]]
+  [test-assert-undefined [trans-eval-form [if [i32 1] [do] [do]]]]
+
+  [comment intrinsics]
+  [test-assert-eq [i32 5] [trans-eval-form [[intrinsic i32.add] [i32 2] [i32 3]]]]
+  [test-assert-eq [i32 5] [trans-eval-form [[intrinsic i32.sub] [i32 8] [i32 3]]]]
+  [test-assert-eq [i32 15] [trans-eval-form [[intrinsic i32.mul] [i32 5] [i32 3]]]]
+
+  [comment parameters]
+  [let [m [module [defn not [b] [if b [i32 0] [i32 1]]] [export not]]
+        i [wasm-instantiate m empty-object]
+        f [get-export i [word not]]]
+    [test-assert-eq [i32 1] [js-apply f [list [to-js-value [i32 0]]]]]
+    [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1]]]]]
+    [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1337]]]]]]
+  [let [m [module [defn not2 [b] [[intrinsic i32.eq] b [i32 0]]] [export not2]]
+        i [wasm-instantiate m empty-object]
+        f [get-export i [word not2]]]
+    [test-assert-eq [i32 1] [js-apply f [list [to-js-value [i32 0]]]]]
+    [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1]]]]]
+    [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1337]]]]]]
+  [let [m [module [defn twop [i f] [if i f [f64 1.5]]] [export twop]]
+        i [wasm-instantiate m empty-object]
+        twop [get-export i [word twop]]]
+    [test-assert-eq [f64 1.5] [js-call twop 0 0]]
+    [test-assert-eq [f64 1.5] [js-call twop 0 0.25]]
+    [test-assert-eq [f64 0] [js-call twop 1 0]]
+    [test-assert-eq [f64 0.25] [js-call twop 13.0 0.25]]
+    [test-assert-eq [f64 0.1337] [js-call twop 13.0 0.1337]]]
+
+  [comment calls]
+  [let [m [module
+            [defn f [] [i32 1]]
+            [export f]
+            [defn g [] [f]]
+            [export g]]
+        i [wasm-instantiate m empty-object]
+        f [get-export i [word f]]
+        g [get-export i [word g]]]
+  [test-assert-eq [f64 1] [js-call f]]
+  [test-assert-eq [f64 1] [js-call g]]
+  ]
+
+  [comment recursion]
+  [let [m [module
+    [defn gauss-direct [n]
+      [if n
+        [[intrinsic i32.add] n [gauss-direct [[intrinsic i32.sub] n [i32 1]]]]
+        [i32 0]]]
+    [export gauss-direct]]
+        i [wasm-instantiate m empty-object]
+        gauss-direct [get-export i [word gauss-direct]]]
+    [test-assert-eq [i32 0] [js-call gauss-direct 0]]
+    [test-assert-eq [i32 55] [js-call gauss-direct 10]]
+    [test-assert-eq [i32 5050] [js-call gauss-direct 100]]
+    [test-assert-eq [i32 500500] [js-call gauss-direct 1000]]
+    [test-assert-eq [i32 50005000] [js-call gauss-direct 10000]]
+    [comment this one breaks the stack
+      [test-assert-eq [i32 200010000] [js-call gauss-direct 20000]]]]
+  [let [m [module
+    [defn go [res n]
+      [if n
+        [go [[intrinsic i32.add] res n] [[intrinsic i32.sub] n [i32 1]]]
+        res]]
+    [defn gauss-tail [n] [go [i32 0] n]]
+    [export gauss-tail]]
+        i [wasm-instantiate m empty-object]
+        gauss-tail [get-export i [word gauss-tail]]]
+    [test-assert-eq [i32 0] [js-call gauss-tail 0]]
+    [test-assert-eq [i32 55] [js-call gauss-tail 10]]
+    [test-assert-eq [i32 5050] [js-call gauss-tail 100]]
+    [comment here tail recursion allows us to calculate larger values]
+[comment      [test-assert-eq [i32 200010000] [js-call gauss-tail 20000]]
+    [test-assert-eq [i32 2147450880] [js-call gauss-tail 65535]] ]
+    ]
+  [let [m [module
+    [defn gauss-loop [n]
+      [loop [res [i32 0] i n]
+        [if i
+          [continue
+            res [[intrinsic i32.add] res i]
+            i [[intrinsic i32.sub] i [i32 1]]]
+          res]]]
+    [export gauss-loop]]
+        i [wasm-instantiate m empty-object]
+        gauss-loop [get-export i [word gauss-loop]]]
+    [test-assert-eq [i32 0] [js-call gauss-loop 0]]
+    [test-assert-eq [i32 55] [js-call gauss-loop 10]]
+    [test-assert-eq [i32 5050] [js-call gauss-loop 100]]
+    [test-assert-eq [i32 200010000] [js-call gauss-loop 20000]]
+    [test-assert-eq [i32 2147450880] [js-call gauss-loop 65535]]
+    ]
+
+
+[comment this requires temp vars for args dependent on parameters
+  [let [m [module
+    [defn go-rev [n res]
+      [if n
+        [go-rev [[intrinsic i32.sub] n [i32 1]] [[intrinsic i32.add] res n]]
+        res]]
+    [defn gauss-tail [n] [go-rev n [i32 0]]]]
+        i [wasm-instantiate m empty-object]
+        gauss-tail [get-export i [word gauss-tail]]]
+    [test-assert-eq [i32 0] [js-call gauss-tail 0]]
+    [test-assert-eq [i32 55] [js-call gauss-tail 10]]
+    [test-assert-eq [i32 5050] [js-call gauss-tail 100]]
+    [comment here tail recursion allows us to calculate larger values]
+    [test-assert-eq [i32 200010000] [js-call gauss-tail 20000]]
+    [test-assert-eq [i32 2147450880] [js-call gauss-tail 65535]]] ]
+
+
+  [comment type]
+[todo
+    [let [m [module
+    [type r [] [record [i i32]]]
+    [defn f [] [r/i [r [i32 5]]]]]
+      i [wasm-instantiate m empty-object]
+      f [get-export i [word f]]]
+    [test-assert-eq [i32 0] [js-call f]]
+    ]]
+]
+
+[defn smart-gauss [n]
+  [ifs
+    [or [lt-s n [i32 0]] [lt-s [i32 65535] n]]
+    [i32 -1]
+
+    [is-odd n]
+    [mul [i32.div-s [inc n] [i32 2]] n]
+
+    [mul [i32.div-s n [i32 2]] [inc n]]]]
+[comment
+[defn go-rev [n res]
+  [if n
+    [go-rev [[intrinsic i32.sub] n [i32 1]] [[intrinsic i32.add] res n]]
+    res]]
+[defn gauss-tail [n] [go-rev n [i32 0]]]
+
+[defn gauss [n]
+  [loop [i [i32 0] result [i32 0]]
+    [if [lt-s i n]
+      [continue
+        i [inc i]
+        result [add result i]]
+      result]]]
+ ]
