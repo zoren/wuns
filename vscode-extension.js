@@ -108,8 +108,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
     }
     const go = (form) => {
       if (!form) return
-      const word = tryGetFormWord(form)
-      if (word) {
+      if (tryGetFormWord(form)) {
         pushToken(form, variableTokenType)
         return
       }
@@ -121,6 +120,11 @@ const makeProvideDocumentSemanticTokensForms = async () => {
       if (list.length === 0) return
       const [head, ...tail] = list
       const headWord = tryGetFormWord(head)
+      if (!headWord) {
+        go(head)
+        for (const form of tail) go(form)
+        return
+      }
       const runForm = () => {
         try {
           // eval for side effects so macros are defined and can be expanded
@@ -171,6 +175,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
         },
         do: () => {
           for (const form of tail) go(form)
+          // if at top level or inside a do at top level we need to eval def forms
         },
         let: () => {
           const [bindingsForm, ...bodies] = tail
@@ -237,43 +242,38 @@ const makeProvideDocumentSemanticTokensForms = async () => {
           for (const form of tail) pushToken(form, variableTokenType)
         },
       }
-      if (headWord) {
-        const specialHandler = specialForms[headWord]
-        if (specialHandler) {
-          // console.log('special form', headWord)
-          pushToken(head, keywordTokenType)
-          specialHandler(tail)
-          return
-        }
-        // check if headWord is a defed macro or fexpr, or a func
-        const headValue = defEnv.get(headWord)
-        switch (tryGetClosureKind(headValue)) {
-          case 'macro':
-            pushToken(head, macroTokenType)
-            go(headValue(...tail))
-            return
-          case 'fexpr':
-            pushToken(head, functionTokenType)
-            const goQuote = (form) => {
-              if (tryGetFormWord(form)) pushToken(form, stringTokenType)
-              else getListOrEmpty(form).forEach(goQuote)
-            }
-            for (const form of tail) goQuote(form)
-            return
-          case 'func':
-            pushToken(head, functionTokenType)
-            for (const form of tail) go(form)
-            return
-          case null:
-            break
-          default:
-            throw new Error('unexpected closure kind')
-        }
-        pushToken(head, functionTokenType)
-        for (const form of tail) go(form)
+      const specialHandler = specialForms[headWord]
+      if (specialHandler) {
+        // console.log('special form', headWord)
+        pushToken(head, keywordTokenType)
+        specialHandler(tail)
         return
       }
-      go(head)
+      // check if headWord is a defed macro or fexpr, or a func
+      const headValue = defEnv.get(headWord)
+      switch (tryGetClosureKind(headValue)) {
+        case 'macro':
+          pushToken(head, macroTokenType)
+          go(headValue(...tail))
+          return
+        case 'fexpr':
+          pushToken(head, functionTokenType)
+          const goQuote = (form) => {
+            if (tryGetFormWord(form)) pushToken(form, stringTokenType)
+            else getListOrEmpty(form).forEach(goQuote)
+          }
+          for (const form of tail) goQuote(form)
+          return
+        case 'func':
+          pushToken(head, functionTokenType)
+          for (const form of tail) go(form)
+          return
+        case null:
+          break
+        default:
+          throw new Error('unexpected closure kind')
+      }
+      pushToken(head, functionTokenType)
       for (const form of tail) go(form)
     }
     try {
