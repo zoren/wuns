@@ -226,8 +226,8 @@
     [form-expansions [transient-kv-map form form]]
     [type-annotations [transient-kv-map form type]]]]
 
-[defn make-global-context []
-  [let [eval-context [make-eval-context [current-dir]]
+[defn make-global-context [current-directory]
+  [let [eval-context [make-eval-context current-directory]
         evaluator [make-evaluator externs-object-value eval-context]]
     [check-context
       [growable-list]

@@ -23,7 +23,7 @@
   [i32-form [size l]]]
 
 [defn test-ok-fn [tests-run-atom expected-type forms]
-  [let [gctx [make-global-context]
+  [let [gctx [make-global-context [word dummy-current-directory]]
         res [check-top-forms gctx forms]
         present-type [normalize-present-type-scheme res]
         messages [get-messages-list gctx]]
@@ -44,7 +44,7 @@
 
 [defn test-errors-fn [tests-run-atom expected-type expected-messages forms]
   [let
-   [gctx [make-global-context]
+   [gctx [make-global-context [word dummy-current-directory]]
     res [check-top-forms gctx forms]
     present-type [normalize-present-type-scheme res]
     messages [get-messages-list gctx]]
@@ -484,15 +484,14 @@
         [log-location form]
         [logq-abort test-ok-fn-stop-at-error failed there were errors]]]]]
 
-[defn test-ok-files [.. files]
+[defn test-ok-file [file]
   [let
-    [gctx [make-global-context]
+    [gctx [make-global-context [path-dirname file]]
      before [performance-now]]
-    [for-each file files
-      [test-ok-fn-stop-at-error gctx [read-file file]]]
+    [test-ok-fn-stop-at-error gctx [read-file file]]
     [logq it took [[intrinsic f64.sub] [performance-now] before] ms]]]
 
-[export test-ok-files]
+[export test-ok-file]
 
 [defn test-check []
   [run-unit-tests]
