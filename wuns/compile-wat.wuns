@@ -136,9 +136,9 @@
                       res [wat-inst/inst [word drop] [list res]]
                       i [dec i]]
                     res]] ]
-                [[func loop [i]
+                [[func loopi [i]
                   [if i
-                    [wat-inst/inst [word drop] [list [loop [dec i]]]]
+                    [wat-inst/inst [word drop] [list [loopi [dec i]]]]
                     [go form]]]
                   [size types]]]]
             [list [go [last forms]]]]]]

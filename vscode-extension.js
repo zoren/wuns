@@ -378,46 +378,36 @@ const addCheckActiveDocumentCommand = async (context) => {
     const tree = parseDocumentTreeSitter(doc)
     const converter = makeFormToAstConverter(path.dirname(doc.fileName))
     const formToTop = converter['form-to-top']
+    const bindErrors = converter.errors
     const syntaxInfo = converter['syntax-info']
     const checkContext = mkGlobal(syntaxInfo)
     const checker = mkChecker(checkContext)
     const checkTop = checker['check-top']
-    // make-global-context-from-syntax-info
     const diagnosticsForFile = []
     for (const form of treeToFormsSafeNoMeta(tree)) {
-      const { tag, args } = formToTop(form)
-      switch (tag) {
-        case 'result/ok': {
-          const topForm = args[0]
-          checkTop(topForm)
-          break
-        }
-        case 'result/error': {
-          for (const error of args[0]) {
-            const { form, message, severity } = error
-            const node = tryGetNodeFromForm(form)
-            if (!node) {
-              console.error('diagnose error no node', error, form)
-              continue
-            }
-            const nodeTree = node.tree
-            if (nodeTree !== tree) {
-              console.error('diagnose error different tree', error, form)
-              continue
-            }
-            diagnosticsForFile.push(
-              new vscode.Diagnostic(
-                rangeFromNode(node),
-                'binding: ' + printFormMessage(message),
-                serverityToDiagnosticSeverity(severity),
-              ),
-            )
-          }
-          break
-        }
-        default:
-          throw new Error('unexpected tag')
+      const topForm = formToTop(form)
+      if (bindErrors.length) continue
+      checkTop(topForm)
+    }
+    for (const error of bindErrors) {
+      const { form, message, severity } = error
+      const node = tryGetNodeFromForm(form)
+      if (!node) {
+        console.error('diagnose error no node', error, form)
+        continue
       }
+      const nodeTree = node.tree
+      if (nodeTree !== tree) {
+        console.error('diagnose error different tree', error, form)
+        continue
+      }
+      diagnosticsForFile.push(
+        new vscode.Diagnostic(
+          rangeFromNode(node),
+          'binding: ' + printFormMessage(message),
+          serverityToDiagnosticSeverity(severity),
+        ),
+      )
     }
     for (const error of checkContext.messages) {
       const { message, severity } = error

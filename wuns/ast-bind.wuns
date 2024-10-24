@@ -233,8 +233,8 @@
 
 [type form-to-ast-converter []
   [record
-    [form-to-top [func [form] [result btop [list report-message]]]]
-    [form-to-exp [func [form] [result bexp [list report-message]]]]
+    [form-to-top [func [form] btop]]
+    [form-to-exp [func [form] bexp]]
     [errors [growable-list report-message]]
     [syntax-info syntax-info]]]
 
@@ -797,18 +797,8 @@
               [form/list fl]
               [bexp/call [form-to-ast lstack [first l]] [list-map arg [rest l] [form-to-ast lstack arg]]]]]]]]]]
     [form-to-ast-converter
-      [func f2t [top-form]
-        [let [btop [form-to-top top-form]
-              lerrors [clone-growable-to-frozen-list errors]]
-          [if [is-empty lerrors]
-            [result/ok btop]
-            [result/error lerrors]]]]
-      [func f2e [exp-form]
-        [let [bexp [form-to-ast [local-stack/empty] exp-form]
-              lerrors [clone-growable-to-frozen-list errors]]
-          [if [is-empty lerrors]
-            [result/ok bexp]
-            [result/error lerrors]]]]
+      form-to-top
+      [func f2e [exp-form] [form-to-ast [local-stack/empty] exp-form]]
       errors
       [syntax-info
         [func try-get-ldesc [n] [try-get node-to-ldesc n]]

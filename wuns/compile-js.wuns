@@ -369,25 +369,14 @@
     [file-dir [path-dirname wuns-file-name]
      converter [mk-form-to-ast file-dir]
      f2a [form-to-ast-converter/form-to-top converter]
-     comp-run
-     [func comp-run [form]
-      [match [f2a form]
-        [result/error f2a-errors]
-        [do
-          [for-each error f2a-errors
-            [log-report-message error]]
-          [result/error [compile-run-error/form-to-ast-errors f2a-errors]]]
-
-        [result/ok bform]
-        [let [stmt [compile-top-form false bform]]
-          [result/ok stmt]]]]]
-    [match [map-result [read-file wuns-file-name] comp-run]
-      [result/error e]
-      [log e]
-
-      [result/ok stmts]
+     stmts [list-map form [read-file wuns-file-name] [compile-top-form false [f2a form]]]
+     errors [clone-growable-to-frozen-list [form-to-ast-converter/errors converter]]]
+    [if [is-empty errors]
       [let [prologue [list [js-stmt/import [word externs] [word ../runtime-lib/externs.js]]]]
         [write-js-stmt js-file-name
-          [js-stmt/seq [concat prologue stmts]]]]]]]
+          [js-stmt/seq [concat prologue stmts]]]]
+      [do
+        [log errors]
+        [logq-abort compile-file-to-file errors]]]]]
 
 [export compile-file-to-file]

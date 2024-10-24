@@ -4143,35 +4143,10 @@ const mk_form_to_ast = (current_directory) => {
         }
         {
           return form_to_ast_converter(
-            (() => {
-              const f2t = (top_form) => {
-                {
-                  const btop = form_to_top(top_form)
-                  const lerrors = clone_growable_to_frozen_list(errors)
-                  {
-                    if (is_empty(lerrors)) {
-                      return result_slash_ok(btop)
-                    } else {
-                      return result_slash_error(lerrors)
-                    }
-                  }
-                }
-              }
-              return f2t
-            })(),
+            form_to_top,
             (() => {
               const f2e = (exp_form) => {
-                {
-                  const bexp = form_to_ast(local_stack_slash_empty(), exp_form)
-                  const lerrors = clone_growable_to_frozen_list(errors)
-                  {
-                    if (is_empty(lerrors)) {
-                      return result_slash_ok(bexp)
-                    } else {
-                      return result_slash_error(lerrors)
-                    }
-                  }
-                }
+                return form_to_ast(local_stack_slash_empty(), exp_form)
               }
               return f2e
             })(),
