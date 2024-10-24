@@ -1371,12 +1371,13 @@ const map_result = (l, f) => {
   }
 }
 const current_dir = externs['current-dir']
+const path_join = externs['path']['join']
+const path_dirname = externs['path']['dirname']
 const performance_now = externs['performance-now']
 const to_js_value = externs['js']['identity']
 const is_undefined = externs['js']['is-undefined']
 const object_to_kv_map = externs['js']['object-to-kv-map']
 const kv_map_to_object = externs['js']['kv-map-to-object']
-const f = n0
 const make_eval_context = externs['interpreter']['make-context']
 const macro_expand = externs['interpreter']['macro-expand']
 const try_get_macro = externs['interpreter']['try-get-macro']
@@ -1860,9 +1861,9 @@ const form_to_ast_converter_slash_errors = (record) => record['errors']
 const form_to_ast_converter_slash_node_to_ldesc = (record) => record['node-to-ldesc']
 const form_to_ast_converter_slash_node_to_def_desc = (record) => record['node-to-def-desc']
 const form_to_ast_converter_slash_bst_to_form = (record) => record['bst-to-form']
-const mk_form_to_ast = () => {
+const mk_form_to_ast = (current_directory) => {
   {
-    const eval_ctx = make_eval_context(current_dir())
+    const eval_ctx = make_eval_context(current_directory)
     const evaluator = make_evaluator(externs_object_value, eval_ctx)
     const errors = growable_list()
     const push_error = (() => {
@@ -2737,6 +2738,7 @@ const mk_form_to_ast = () => {
                                     case 'load': {
                                       assert_n_args(n1)
                                       {
+                                        const file_path = path_join(current_directory, get_word(get_arg(n0)))
                                         const bforms = list_map_fn(
                                           (() => {
                                             const genword41 = (bf) => {
@@ -2744,7 +2746,7 @@ const mk_form_to_ast = () => {
                                             }
                                             return genword41
                                           })(),
-                                          read_file(get_word(get_arg(n0))),
+                                          read_file(file_path),
                                         )
                                         {
                                           eval_form(form)

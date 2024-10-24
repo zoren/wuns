@@ -10,6 +10,7 @@ const js = await wrap('./js-utils.js')
 const wasm = await wrap('./wasm-utils.js')
 const interpreter = await wrap('./interpreter.js')
 const evaluation = await wrap('./evaluation.js')
+const path = await wrap('./path.js')
 
 const externs = {
   host,
@@ -18,7 +19,7 @@ const externs = {
   wasm,
   interpreter,
   evaluation,
-  'current-dir': () => process.cwd(),
+  path
 }
 
 export default externs

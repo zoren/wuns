@@ -618,6 +618,16 @@
     [extern current-dir]
     [func [] [word]]]]
 
+[def path-join
+  [type-anno
+    [extern path join]
+    [func [word word] [word]]]]
+
+[def path-dirname
+  [type-anno
+    [extern path dirname]
+    [func [word] [word]]]]
+
 [def performance-now
   [type-anno
     [extern performance-now]

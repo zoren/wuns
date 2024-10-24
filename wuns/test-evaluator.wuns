@@ -262,6 +262,36 @@
   [logq it took [[intrinsic f64.sub] [performance-now] before] ms]
   res]]
 
+[defn compile-run-forms [forms]
+  [assert [not [is-empty forms]] run-forms must not be empty]
+  [todo this is broken now]
+  [let
+    [converter [mk-form-to-ast [word dummy-path]]
+     f2a [form-to-ast-converter/form-to-ast converter]
+     but-last-forms [slice forms 0 [dec [size forms]]]
+     comp-run
+     [func comp-run [form]
+      [match [f2a form]
+        [result/error f2a-errors]
+        [result/error [compile-run-error/form-to-ast-errors f2a-errors]]
+
+        [result/ok bform]
+        [result/ok [compile-top-form true bform]]]]]
+    [match [map-result but-last-forms comp-run]
+      [result/error e] [result/error e]
+      [result/ok bl-stmts]
+      [match [comp-run
+                [flist [quote defn] [quote main] [flist] [last forms]]]
+        [result/error e] [result/error e]
+
+        [result/ok last-stmt]
+        [match [run-js-stmt [js-stmt/seq [concat bl-stmts [list last-stmt [js-stmt/return [js-exp/call [js-exp/var [word main]] [list]]]]]] externs-object-value]
+          [result/error jsval-err]
+          [result/error [compile-run-error/eval-error jsval-err]]
+
+          [result/ok v]
+          [result/ok v]]]]]]
+
 [defn run-tests []
   [logq running self eval tests]
   [time-fn [func go [] [run-test-suite mk-eval-forms]]]

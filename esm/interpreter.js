@@ -10,13 +10,6 @@ const setEnv = (env, varName, value) => {
 
 import path from 'node:path'
 
-const getPathRelativeToCurrentDir = (defEnv, relativeFilePath) => {
-  const { currentDir } = defEnv
-  if (!currentDir) throw new Error('load expects currentDir')
-  if (typeof currentDir !== 'string') throw new Error('currentDir must be a string')
-  return path.join(currentDir, relativeFilePath)
-}
-
 import {
   getRecordType,
   isDefEnv,
@@ -136,10 +129,9 @@ const makeDoForm = (forms) => makeFormList(makeList(doFormWord, ...forms))
 
 export const makeEvalForm = (externs, defEnv) => {
   if (!isDefEnv(defEnv)) throw new Error('first argument must be a defEnv')
-  // we need an extern func that gives access to the current directory or the file path of the current dir
-  // this allows writing load as a macro also we can make
-  // this function is not pure as it needs access to a non-variable on defEnv
-  const externCurrentDir = () => defEnv.currentDir
+  const { currentDir } = defEnv
+  if (typeof currentDir !== 'string') throw new Error('defEnv.currentDir must be a string')
+  const externCurrentDir = () => currentDir
 
   const instanceExterns = { ...externs, 'current-dir': externCurrentDir }
   const go = (env, form) => {
@@ -456,7 +448,7 @@ export const makeEvalForm = (externs, defEnv) => {
           assertNumArgs(1)
           assertTopLevel()
           const relativeFilePath = getFormWord(forms[1])
-          const resolvedPath = getPathRelativeToCurrentDir(defEnv, relativeFilePath)
+          const resolvedPath = path.join(currentDir, relativeFilePath)
           const fileForms = readFile(resolvedPath)
           let result = langUndefined
           for (const fileForm of fileForms) result = go(defEnv, fileForm)

@@ -358,12 +358,11 @@ const addCheckActiveDocumentCommand = async (context) => {
     const doc = getActiveTextEditorDocument()
     if (!doc) return console.error('no active text editor')
     const tree = parseDocumentTreeSitter(doc)
-    const converter = makeFormToAstConverter()
+    const converter = makeFormToAstConverter(path.dirname(doc.fileName))
     const formToAST = converter['form-to-ast']
     const diagnosticsForFile = []
     for (const form of treeToFormsSafeNoMeta(tree)) {
-      const result = formToAST(form)
-      const { tag, args } = result
+      const { tag, args } = formToAST(form)
       switch (tag) {
         case 'result/ok':
           break

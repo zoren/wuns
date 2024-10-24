@@ -361,14 +361,17 @@
     [form-to-ast-converter form-to-ast-converter]
     [type-annotations [transient-kv-map js-value ctype]]]]
 
-[defn make-global-context []
+[defn make-global-context-from-converter [converter]
   [check-context
     [growable-list]
     [transient-kv-map]
     [atom 0]
     [transient-kv-map]
-    [mk-form-to-ast]
+    converter
     [transient-kv-map]]]
+
+[defn make-global-context []
+  [make-global-context-from-converter [mk-form-to-ast [word dummy-current-dir]]]]
 
 [defn report-fn [gctx message opt-location]
   [push [check-context/messages gctx] [check-message message opt-location]]]
@@ -407,7 +410,12 @@
   [set-kv-map [check-context/type-annotations gctx] [to-js-value bst] type]
   type]
 
-[defn check [gctx outer-top-bform]
+[type checker []
+  [record
+    [check-exp [func [bexp] ctype]]
+    [check-top [func [btop] [tuple]]]]]
+
+[defn make-checker [gctx]
   [letfn [
     [func go-forms [level lctx sub-forms]
       [if [is-empty sub-forms]
@@ -725,7 +733,7 @@
 
           [btop/def var value]
           [let
-            [value-type [go 0 [local-stack/empty] value]
+            [value-type [go 1 [local-stack/empty] value]
              general-val-type
               [if [is-syntactic-value value]
                 [generalize 0 value-type]
@@ -748,8 +756,14 @@
             [for-each e es
               [let [type-scheme [get [check-context/def-var-types gctx] [syntax-word/word e]]
                     t [specialize-type-scheme [check-context/type-var-counter gctx] 0 type-scheme]]
-                [annotate gctx e t]]]]]]]
-      [check-top outer-top-bform]]]
+                [annotate gctx e t]]]]
+
+          [btop/do btops]
+          [for-each btop btops
+            [check-top btop]]]]]
+      [checker
+        [func check-exp [bexp] [go 0 [local-stack/empty] bexp]]
+        check-top]]]
 
 [defn normalize-deep [internal-type]
   [let [nt [normalize-type internal-type]]
@@ -817,22 +831,3 @@
       [flist [quote type-scheme]
         [form/list new-present-type-vars]
         [internal-to-present-type copied-type]]]]]
-
-[defn check-top-forms [gctx forms]
-  [assert [size forms] check-top-forms expects at least one form]
-  [let
-    [converter [check-context/form-to-ast-converter gctx]
-     f2a [form-to-ast-converter/form-to-ast converter]]
-    [list-map form forms
-      [match [f2a form]
-        [result/error f2a-errors]
-        [do
-          [assert [not [is-empty f2a-errors]] run-forms error but no messages]
-          [logq run-forms form to bound syntax had errors]
-          [for-each f2a-error f2a-errors [log-report-message f2a-error]]
-          [logq-abort check-top-forms failed there were errors]]
-
-        [result/ok bform]
-        [do
-          [check gctx bform]
-          ]]]]]

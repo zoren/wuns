@@ -74,9 +74,6 @@
 
   [test-ok
     word
-    [def d [word a]]]
-  [test-ok
-    word
     [def d [word a]]
     d]
   [test-ok i32
@@ -110,13 +107,15 @@
   [test-ok
     i32
     [def f [func id [x] x]]
-    [f [i32 5]]
-    [f [i32 6]]]
+    [do
+      [f [i32 5]]
+      [f [i32 6]]]]
   [test-ok
     word
     [def f [func id [x] x]]
-    [f [i32 5]]
-    [f [word a]]]
+    [do
+      [f [i32 5]]
+      [f [word a]]]]
   [test-ok [type-scheme [a] [func [[func [i32] a]] a]]
     [func f [i]
       [i [i32 5]]]]
@@ -158,9 +157,10 @@
     [[not unifiable - different types]]
     [[func f [.. p] p] [i32 5] [word a]]]
 
-  [test-errors [tuple] [[not unifiable - different types]]
+  [test-errors i32 [[not unifiable - different types]]
     [defmacro qword [m]
-      [i32 0]]]
+      [i32 0]]
+    [i32 0]]
 
 [test-errors word [[not unifiable - different types]]
   [type option [a] [union [none] [some a]]]
@@ -212,6 +212,11 @@
     [word not-01]]]
 
 [test-errors i32 [[not unifiable - different types]]
+  [type atom [v] [union]]
+  [def atom
+    [type-anno
+      [extern atom]
+      [type-scheme [a] [func [a] [atom a]]]]]
   [def atom-get
     [type-anno
       [extern atom-get]
@@ -229,6 +234,11 @@
       [atom-set c [func inc [x] [add [i32 1] x]]]
       [[atom-get c] [word true]]]]]
 [test-errors i32 [[not unifiable - different types]]
+  [type atom [v] [union]]
+  [def atom
+    [type-anno
+      [extern atom]
+      [type-scheme [a] [func [a] [atom a]]]]]
   [def atom-get
     [type-anno
       [extern atom-get]
@@ -248,24 +258,31 @@
       [[atom-get c] [word true]]]]]
 
 [test-errors i32 [[not unifiable - different types]]
+  [type atom [v] [union]]
+  [def atom
+    [type-anno
+      [extern host atom]
+      [type-scheme [a] [func [a] [atom a]]]]]
   [def atom-get
     [type-anno
-      [extern atom-get]
+      [extern host atom-get]
       [type-scheme [a] [func [[atom a]] a]]]]
   [def atom-set
     [type-anno
-      [extern atom-set]
+      [extern host atom-set]
       [type-scheme [a] [func [[atom a] a] [tuple]]]]]
-  [def add
-    [type-anno
-      [extern add]
-      [func [i32 i32] i32]]]
   [def mk-atom [func mk-atom [init] [atom init]]]
   [def c [mk-atom [func id [x] x]]]
-  [atom-set c [func inc [x] [add [i32 1] x]]]
-  [[atom-get c] [word true]]]
+  [do
+    [atom-set c [func inc [x] [[intrinsic i32.add] [i32 1] x]]]
+    [[atom-get c] [word true]]]]
 
 [test-ok i32
+  [type atom [v] [union]]
+  [def atom
+    [type-anno
+      [extern host atom]
+      [type-scheme [a] [func [a] [atom a]]]]]
   [def atom-get
     [type-anno
       [extern atom-get]
@@ -280,14 +297,15 @@
       [cons a [linked-list a]]]]
   [def push [func push [list-ref element]
     [atom-set list-ref [linked-list/cons element [atom-get list-ref]]]]]
-  [let [gli [atom [linked-list/nil]]]
-    [push gli [i32 5]]]
   [def push2 [func push [list-ref element]
     [atom-set list-ref [linked-list/cons element [atom-get list-ref]]]]]
-  push2
-  [let [glw [atom [linked-list/nil]]]
-    [push2 glw [word a]]]
-  [i32 5]]
+  [do
+    [let [gli [atom [linked-list/nil]]]
+      [push gli [i32 5]]]
+    push2
+    [let [glw [atom [linked-list/nil]]]
+      [push2 glw [word a]]]
+    [i32 5]]]
 
 [test-ok i32
   [letfn
@@ -297,17 +315,39 @@
 
 ]]
 
+[defn get-ok-result [result]
+  [match result
+    [result/error f2a-errors]
+    [do
+      [logq form to bound syntax had errors start]
+      [for-each f2a-error f2a-errors [log-report-message f2a-error]]
+      [logq-abort form to bound syntax had errors end]]
+
+    [result/ok o]
+    o]]
+
+[defn check-top-and-exp-forms [gctx forms]
+  [assert [not [is-empty forms]] check-top-and-exp-forms expects at least one form]
+  [let
+    [converter [check-context/form-to-ast-converter gctx]
+     f2e [form-to-ast-converter/form-to-exp converter]
+     f2t [form-to-ast-converter/form-to-top converter]
+     checker [make-checker gctx]
+     check-top [checker/check-top checker]
+     check-exp [checker/check-exp checker]]
+    [for-each form [slice forms 0 [dec [size forms]]]
+      [check-top [get-ok-result [f2t form]]]]
+    [check-exp [get-ok-result [f2e [last forms]]]]]]]
+
 [defn run-tests-check2 [tests]
   [let [tests-run-atom [atom 0]]
     [for-each test tests
       [match test
         [check-test/ok expected-type forms]
         [let [gctx [make-global-context]
-              results [check-top-forms gctx forms]
-              res [last results]
+              res [check-top-and-exp-forms gctx forms]
               check-errors [clone-growable-to-frozen-list [check-context/messages gctx]]
               actual-type [normalize-present-type-scheme res]]
-          [todo check-top-forms now returns list]
           [when-not [is-empty check-errors]
             [logq test-ok there were errors]
             [for-each message check-errors
@@ -318,8 +358,7 @@
 
         [check-test/error expected-type expected-errors forms]
         [let [gctx [make-global-context]
-              results [check-top-forms gctx forms]
-              res [last results]
+              res [check-top-and-exp-forms gctx forms]
               errors [clone-growable-to-frozen-list [check-context/messages gctx]]
               actual-type [normalize-present-type-scheme res]]
           [when-not [eq [size expected-errors] [size errors]]
@@ -345,16 +384,19 @@
   [run-tests-check2 tests]]
 
 [defn run-file [file-name]
-  [let [gctx [make-global-context]
-        forms [read-file file-name]
-        results [check-top-forms gctx forms]
-        res [last results]
-        check-errors [clone-growable-to-frozen-list [check-context/messages gctx]]
-        actual-type [normalize-present-type-scheme res]]
-    [when-not [is-empty check-errors]
-      [logq test-ok there were errors]
-      [for-each message check-errors
-        [log-check-message message]]
-      [logq-abort test-ok failed there were errors]]]]
+  [let
+    [dir-name [path-dirname file-name]
+     gctx [make-global-context-from-converter [mk-form-to-ast dir-name]]
+     converter [check-context/form-to-ast-converter gctx]
+     f2t [form-to-ast-converter/form-to-top converter]
+     check-top [checker/check-top [make-checker gctx]]]
+    [for-each form [read-file file-name]
+      [check-top [get-ok-result [f2t form]]]
+      [let [check-errors [clone-growable-to-frozen-list [check-context/messages gctx]]]
+        [when-not [is-empty check-errors]
+          [logq test-ok there were errors]
+          [for-each message check-errors
+            [log-check-message message]]
+          [logq-abort test-ok failed there were errors]]]]]]
 
 [export run-file]
