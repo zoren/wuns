@@ -46,8 +46,6 @@ const legend = new SemanticTokensLegend(tokenTypes, tokenModifiers)
 
 const tokenTypesMap = new Map(tokenTypes.map((type, index) => [type, index]))
 
-const tokenModifiersMap = new Map(tokenModifiers.map((mod, index) => [mod, index]))
-
 const variableTokenType = tokenTypesMap.get('variable')
 const keywordTokenType = tokenTypesMap.get('keyword')
 const functionTokenType = tokenTypesMap.get('function')
@@ -60,6 +58,8 @@ const tokenTypeOperator = tokenTypesMap.get('operator')
 const typeParameterTokenType = tokenTypesMap.get('typeParameter')
 const enumTokenType = tokenTypesMap.get('enum') // could be used on union type declarations
 const enumMemberTokenType = tokenTypesMap.get('enumMember')
+
+const tokenModifiersMap = new Map(tokenModifiers.map((mod, index) => [mod, index]))
 
 // from https://github.com/microsoft/vscode-extension-samples/blob/main/semantic-tokens-sample/src/extension.ts#L54
 const encodeTokenModifiers = (...strTokenModifiers) => {
@@ -135,6 +135,15 @@ const makeProvideDocumentSemanticTokensForms = async () => {
           console.error(e)
         }
       }
+      const letLoopSpecial = () => {
+        const [bindingsForm, ...bodies] = tail
+        const bindings = getListOrEmpty(bindingsForm)
+        for (let i = 0; i < bindings.length - 1; i += 2) {
+          pushTokenWithModifier(bindings[i], variableTokenType, declarationModifier)
+          go(bindings[i + 1])
+        }
+        for (const body of bodies) go(body)
+      }
       const funcSpecial = (headWord, [name, paramsForm, ...bodies]) => {
         pushToken(name, headWord === 'macro' ? macroTokenType : functionTokenType)
         for (const param of getListOrEmpty(paramsForm)) pushToken(param, parameterTokenType)
@@ -177,14 +186,13 @@ const makeProvideDocumentSemanticTokensForms = async () => {
           for (const form of tail) go(form)
           // if at top level or inside a do at top level we need to eval def forms
         },
-        let: () => {
-          const [bindingsForm, ...bodies] = tail
-          const bindings = getListOrEmpty(bindingsForm)
-          for (let i = 0; i < bindings.length - 1; i += 2) {
-            pushTokenWithModifier(bindings[i], variableTokenType, declarationModifier)
-            go(bindings[i + 1])
+        let: letLoopSpecial,
+        loop: letLoopSpecial,
+        continue: () => {
+          for (let i = 0; i < tail.length; i += 2) {
+            pushTokenWithModifier(tail[i], variableTokenType, modificationModifier)
+            go(tail[i + 1])
           }
-          for (const body of bodies) go(body)
         },
         letfn: () => {
           const [functionsForm, body] = tail
