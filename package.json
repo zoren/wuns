@@ -9,7 +9,7 @@
     "commands": [
       {
         "command": "wunslang.check",
-        "title": "Check current file"
+        "title": "Check current wuns file"
       },
       {
         "command": "wunslang.interpret",

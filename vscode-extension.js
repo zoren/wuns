@@ -252,7 +252,6 @@ const makeProvideDocumentSemanticTokensForms = async () => {
       }
       const specialHandler = specialForms[headWord]
       if (specialHandler) {
-        // console.log('special form', headWord)
         pushToken(head, keywordTokenType)
         specialHandler(tail)
         return
@@ -296,8 +295,6 @@ const makeProvideDocumentSemanticTokensForms = async () => {
   }
 }
 
-const { languages } = vscode
-
 const pointToPosition = ({ row, column }) => new Position(row, column)
 
 const rangeFromNode = ({ startPosition, endPosition }) =>
@@ -339,6 +336,71 @@ const provideSelectionRanges = (document, positions) => {
   return selRanges
 }
 
+const { languages, workspace, window, commands } = vscode
+
+/**
+ * @returns {vscode.TextDocument}
+ */
+const getActiveTextEditorDocument = () => {
+  const { activeTextEditor } = window
+  if (!activeTextEditor) return null
+  return activeTextEditor.document
+}
+
+const addCheckActiveDocumentCommand = async (context) => {
+  const { treeToFormsSafeNoMeta, tryGetNodeFromForm, printFormMessage } = await import(
+    './esm/core.js'
+  )
+  const astBind = await import('./esm/artifacts/ast-bind.formatted.js')
+  const makeFormToAstConverter = astBind['mk-form-to-ast']
+  const diagnosticCollection = languages.createDiagnosticCollection('wuns')
+  const diagnose = () => {
+    const doc = getActiveTextEditorDocument()
+    if (!doc) return console.error('no active text editor')
+    const tree = parseDocumentTreeSitter(doc)
+    const converter = makeFormToAstConverter()
+    const formToAST = converter['form-to-ast']
+    const diagnosticsForFile = []
+    for (const form of treeToFormsSafeNoMeta(tree)) {
+      const result = formToAST(form)
+      const { tag, args } = result
+      switch (tag) {
+        case 'result/ok':
+          break
+        case 'result/error': {
+          const errors = args[0]
+          for (const error of errors) {
+            const { form, message } = error
+            const node = tryGetNodeFromForm(form)
+            if (!node) {
+              console.error('diagnose error no node', error, form)
+              continue
+            }
+            const nodeTree = node.tree
+            if (nodeTree !== tree) {
+              console.error('diagnose error different tree', error, form)
+              continue
+            }
+            const range = rangeFromNode(node)
+            diagnosticsForFile.push(
+              new vscode.Diagnostic(range, printFormMessage(message), vscode.DiagnosticSeverity.Error),
+            )
+          }
+          break
+        }
+        default:
+          throw new Error('unexpected tag')
+      }
+    }
+    diagnosticCollection.clear()
+    diagnosticCollection.set(doc.uri, diagnosticsForFile)
+  }
+  context.subscriptions.push(
+    diagnosticCollection,
+    commands.registerCommand('wunslang.check', diagnose),
+  )
+}
+
 /**
  * @param {vscode.ExtensionContext} context
  */
@@ -359,6 +421,7 @@ async function activate(context) {
     languages.registerDocumentSemanticTokensProvider(selector, documentSemanticTokensProvider, legend),
     languages.registerSelectionRangeProvider(selector, { provideSelectionRanges }),
   )
+  await addCheckActiveDocumentCommand(context)
   console.log('Congratulations, your extension "wunslang" is now active!')
 }
 

@@ -184,14 +184,6 @@
     [message form]
     [form form]]]
 
-[type form-to-ast-converter []
-  [record
-    [form-to-ast [func [form] [result btop [list report-message]]]]
-    [errors [growable-list report-message]]
-    [node-to-ldesc [transient-kv-map syntax-word local-var-kind]]
-    [node-to-def-desc [transient-kv-map syntax-word def-desc]]
-    [bst-to-form [transient-kv-map js-value form]]]]
-
 [defn builtin-type-arity-ok [type-name n-of-type-args]
   [switch type-name
     [[word tuple]] [some true]
@@ -228,6 +220,14 @@
       [local-context-kind/func] [none]
 
       [try-get-enclosing-loop-context outer]]]]
+
+[type form-to-ast-converter []
+  [record
+    [form-to-ast [func [form] [result btop [list report-message]]]]
+    [errors [growable-list report-message]]
+    [node-to-ldesc [transient-kv-map syntax-word local-var-kind]]
+    [node-to-def-desc [transient-kv-map syntax-word def-desc]]
+    [bst-to-form [transient-kv-map js-value form]]]]
 
 [defn mk-form-to-ast []
   [let
@@ -445,7 +445,7 @@
                     bf]]
 
                 [[word defn] [word defexpr] [word defmacro]]
-                [let [f [form-to-func [local-stack/empty] form]
+                [let [f2f [form-to-func [local-stack/empty] form]
                       def-desc
                       [switch first-word
                         [[word defn]] [bdefunc-kind/func]
@@ -454,7 +454,7 @@
                         [logq-abort form-to-top def kind not recognized]]]
                   [set-def [get-arg 0] [def-desc/defunc def-desc]]
                   [eval-form form]
-                  [btop/defunc def-desc f]]
+                  [btop/defunc def-desc f2f]]
 
                 [[word load]]
                 [do
@@ -797,3 +797,5 @@
       node-to-ldesc
       node-to-def-desc
       bst-to-form]]]]
+
+[export mk-form-to-ast]

@@ -125,6 +125,14 @@ export const print = (ox) => {
   return go(ox)
 }
 
+export const printFormMessage = (message) => {
+  const word = tryGetFormWord(message)
+  if (word) return print(word)
+  const list = tryGetFormList(message)
+  if (list) return list.map(print).join(' ')
+  throw new Error('printMessage expects a form')
+}
+
 import fs from 'node:fs'
 
 import TSParser from 'tree-sitter'
