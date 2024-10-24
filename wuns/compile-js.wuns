@@ -368,7 +368,7 @@
   [let
     [file-dir [path-dirname wuns-file-name]
      converter [mk-form-to-ast file-dir]
-     f2a [form-to-ast-converter/form-to-ast converter]
+     f2a [form-to-ast-converter/form-to-top converter]
      comp-run
      [func comp-run [form]
       [match [f2a form]

@@ -221,14 +221,18 @@
 
       [try-get-enclosing-loop-context outer]]]]
 
+[type syntax-info []
+  [record
+    [try-get-ldesc [func [syntax-word] [option local-var-kind]]]
+    [try-get-def-desc [func [syntax-word] [option def-desc]]]
+    [try-get-form [func [js-value] [option form]]]]]
+
 [type form-to-ast-converter []
   [record
     [form-to-top [func [form] [result btop [list report-message]]]]
     [form-to-exp [func [form] [result bexp [list report-message]]]]
     [errors [growable-list report-message]]
-    [node-to-ldesc [transient-kv-map syntax-word local-var-kind]]
-    [node-to-def-desc [transient-kv-map syntax-word def-desc]]
-    [bst-to-form [transient-kv-map js-value form]]]]
+    [syntax-info syntax-info]]]
 
 [defn mk-form-to-ast [current-directory]
   [let
@@ -802,6 +806,7 @@
             [result/ok bexp]
             [result/error lerrors]]]]
       errors
-      node-to-ldesc
-      node-to-def-desc
-      bst-to-form]]]]
+      [syntax-info
+        [func try-get-ldesc [n] [try-get node-to-ldesc n]]
+        [func try-get-def-desc [n] [try-get node-to-def-desc n]]
+        [func try-get-form [n] [try-get bst-to-form n]]]]]]]
