@@ -1848,19 +1848,26 @@ const try_get_enclosing_loop_context = (lstack) => {
     }
   }
 }
-const form_to_ast_converter = (form_to_ast, errors, node_to_ldesc, node_to_def_desc, bst_to_form) =>
-  externs['host']['make-record-from-object']('form-to-ast-converter', {
-    'form-to-ast': form_to_ast,
-    errors: errors,
-    'node-to-ldesc': node_to_ldesc,
-    'node-to-def-desc': node_to_def_desc,
-    'bst-to-form': bst_to_form,
+const syntax_info = (try_get_ldesc, try_get_def_desc, try_get_form) =>
+  externs['host']['make-record-from-object']('syntax-info', {
+    'try-get-ldesc': try_get_ldesc,
+    'try-get-def-desc': try_get_def_desc,
+    'try-get-form': try_get_form,
   })
-const form_to_ast_converter_slash_form_to_ast = (record) => record['form-to-ast']
+const syntax_info_slash_try_get_ldesc = (record) => record['try-get-ldesc']
+const syntax_info_slash_try_get_def_desc = (record) => record['try-get-def-desc']
+const syntax_info_slash_try_get_form = (record) => record['try-get-form']
+const form_to_ast_converter = (form_to_top, form_to_exp, errors, syntax_info) =>
+  externs['host']['make-record-from-object']('form-to-ast-converter', {
+    'form-to-top': form_to_top,
+    'form-to-exp': form_to_exp,
+    errors: errors,
+    'syntax-info': syntax_info,
+  })
+const form_to_ast_converter_slash_form_to_top = (record) => record['form-to-top']
+const form_to_ast_converter_slash_form_to_exp = (record) => record['form-to-exp']
 const form_to_ast_converter_slash_errors = (record) => record['errors']
-const form_to_ast_converter_slash_node_to_ldesc = (record) => record['node-to-ldesc']
-const form_to_ast_converter_slash_node_to_def_desc = (record) => record['node-to-def-desc']
-const form_to_ast_converter_slash_bst_to_form = (record) => record['bst-to-form']
+const form_to_ast_converter_slash_syntax_info = (record) => record['syntax-info']
 const mk_form_to_ast = (current_directory) => {
   {
     const eval_ctx = make_eval_context(current_directory)
@@ -3134,21 +3141,19 @@ const mk_form_to_ast = (current_directory) => {
                                                   }
                                                 }
                                                 default: {
-                                                  log_fn(list(form))
-                                                  {
-                                                    return abort(
-                                                      list(
-                                                        quote(form_slash_word('form-to-top')),
-                                                        quote(form_slash_word('any')),
-                                                        quote(form_slash_word('call')),
-                                                        quote(form_slash_word('at')),
-                                                        quote(form_slash_word('top')),
-                                                        quote(form_slash_word('level')),
-                                                        quote(form_slash_word('not')),
-                                                        quote(form_slash_word('supported')),
-                                                      ),
-                                                    )
-                                                  }
+                                                  report_error(
+                                                    quote(
+                                                      form_slash_list([
+                                                        form_slash_word('call'),
+                                                        form_slash_word('at'),
+                                                        form_slash_word('top'),
+                                                        form_slash_word('level'),
+                                                        form_slash_word('not'),
+                                                        form_slash_word('supported'),
+                                                      ]),
+                                                    ),
+                                                  )
+                                                  return btop_slash_do(list())
                                                 }
                                               }
                                             }
@@ -4133,25 +4138,58 @@ const mk_form_to_ast = (current_directory) => {
         {
           return form_to_ast_converter(
             (() => {
-              const f2a = (top_form) => {
+              const f2t = (top_form) => {
                 {
-                  const bform = form_to_top(top_form)
+                  const btop = form_to_top(top_form)
                   const lerrors = clone_growable_to_frozen_list(errors)
                   {
                     if (is_empty(lerrors)) {
-                      return result_slash_ok(bform)
+                      return result_slash_ok(btop)
                     } else {
                       return result_slash_error(lerrors)
                     }
                   }
                 }
               }
-              return f2a
+              return f2t
+            })(),
+            (() => {
+              const f2e = (exp_form) => {
+                {
+                  const bexp = form_to_ast(local_stack_slash_empty(), exp_form)
+                  const lerrors = clone_growable_to_frozen_list(errors)
+                  {
+                    if (is_empty(lerrors)) {
+                      return result_slash_ok(bexp)
+                    } else {
+                      return result_slash_error(lerrors)
+                    }
+                  }
+                }
+              }
+              return f2e
             })(),
             errors,
-            node_to_ldesc,
-            node_to_def_desc,
-            bst_to_form,
+            syntax_info(
+              (() => {
+                const try_get_ldesc = (n) => {
+                  return try_get(node_to_ldesc, n)
+                }
+                return try_get_ldesc
+              })(),
+              (() => {
+                const try_get_def_desc = (n) => {
+                  return try_get(node_to_def_desc, n)
+                }
+                return try_get_def_desc
+              })(),
+              (() => {
+                const try_get_form = (n) => {
+                  return try_get(bst_to_form, n)
+                }
+                return try_get_form
+              })(),
+            ),
           )
         }
       })()
@@ -4159,3 +4197,2682 @@ const mk_form_to_ast = (current_directory) => {
   }
 }
 export { mk_form_to_ast as 'mk-form-to-ast' }
+const function_kind_slash_ctor = () => externs['host']['make-tagged-value']('function-kind/ctor', [])
+const function_kind_slash_func = () => externs['host']['make-tagged-value']('function-kind/func', [])
+const function_kind_slash_macro = () => externs['host']['make-tagged-value']('function-kind/macro', [])
+const function_kind_slash_fexpr = () => externs['host']['make-tagged-value']('function-kind/fexpr', [])
+const type_var_kind_slash_linked = (p0) => externs['host']['make-tagged-value']('type-var-kind/linked', [p0])
+const type_var_kind_slash_word = (p0) => externs['host']['make-tagged-value']('type-var-kind/word', [p0])
+const type_var = (kind, level) => externs['host']['make-record-from-object']('type-var', { kind: kind, level: level })
+const type_var_slash_kind = (record) => record['kind']
+const type_var_slash_level = (record) => record['level']
+const func_type = (params, rest_param_opt, result, kind) =>
+  externs['host']['make-record-from-object']('func-type', {
+    params: params,
+    'rest-param-opt': rest_param_opt,
+    result: result,
+    kind: kind,
+  })
+const func_type_slash_params = (record) => record['params']
+const func_type_slash_rest_param_opt = (record) => record['rest-param-opt']
+const func_type_slash_result = (record) => record['result']
+const func_type_slash_kind = (record) => record['kind']
+const inst_type_slash_func = (p0) => externs['host']['make-tagged-value']('inst-type/func', [p0])
+const inst_type_slash_apply = (p0, p1) => externs['host']['make-tagged-value']('inst-type/apply', [p0, p1])
+const ctype_slash_var = (p0) => externs['host']['make-tagged-value']('ctype/var', [p0])
+const ctype_slash_inst = (p0) => externs['host']['make-tagged-value']('ctype/inst', [p0])
+const type_def = (arity, param_map, result_type) =>
+  externs['host']['make-record-from-object']('type-def', {
+    arity: arity,
+    'param-map': param_map,
+    'result-type': result_type,
+  })
+const type_def_slash_arity = (record) => record['arity']
+const type_def_slash_param_map = (record) => record['param-map']
+const type_def_slash_result_type = (record) => record['result-type']
+const check_type_scheme = (type_vars, type) =>
+  externs['host']['make-record-from-object']('check-type-scheme', { 'type-vars': type_vars, type: type })
+const check_type_scheme_slash_type_vars = (record) => record['type-vars']
+const check_type_scheme_slash_type = (record) => record['type']
+const make_type_list = (type_name, type_args) => {
+  return ctype_slash_inst(inst_type_slash_apply(type_name, type_args))
+}
+const make_type = (type_name, ...type_args) => {
+  return make_type_list(type_name, type_args)
+}
+const type_i32 = make_type('i32')
+const type_f64 = make_type('f64')
+const type_word = make_type('word')
+const type_form = make_type('form')
+const type_list = (elem_type) => {
+  return make_type('list', elem_type)
+}
+const type_atom = (elem_type) => {
+  return make_type('atom', elem_type)
+}
+const type_empty_tuple = make_type('tuple')
+const type_func = (params, opt_rest_param, result) => {
+  return ctype_slash_inst(inst_type_slash_func(func_type(params, opt_rest_param, result, function_kind_slash_func())))
+}
+const type_func_no_rest = (params, result) => {
+  return type_func(params, none(), result)
+}
+const i32i32_to_i32 = type_func_no_rest(list(type_i32, type_i32), type_i32)
+const f64f64_to_f64 = type_func_no_rest(list(type_f64, type_f64), type_f64)
+const f64f64_to_i32 = type_func_no_rest(list(type_f64, type_f64), type_i32)
+const type_ctor = (params, result) => {
+  return ctype_slash_inst(inst_type_slash_func(func_type(params, none(), result, function_kind_slash_ctor())))
+}
+const get_type_var_kind = (type_var) => {
+  return atom_get(type_var_slash_kind(type_var))
+}
+const set_type_var_kind_to_type = (type_var, type) => {
+  return atom_set(type_var_slash_kind(type_var), type_var_kind_slash_linked(type))
+}
+const normalize_type = (t0) => {
+  {
+    const tmp136 = t0
+    const tmp137 = tmp136['args']
+    switch (externs['host']['get-tag'](tmp136)) {
+      case 'ctype/var': {
+        const tv = tmp137[0]
+        {
+          const tmp138 = get_type_var_kind(tv)
+          const tmp139 = tmp138['args']
+          switch (externs['host']['get-tag'](tmp138)) {
+            case 'type-var-kind/word': {
+              const w = tmp139[0]
+              return t0
+            }
+            case 'type-var-kind/linked': {
+              const linked_t = tmp139[0]
+              {
+                const t2 = normalize_type(linked_t)
+                {
+                  set_type_var_kind_to_type(tv, t2)
+                  return t2
+                }
+              }
+            }
+            default:
+              throw 'unmatched-match'
+          }
+        }
+      }
+      default:
+        return t0
+    }
+  }
+}
+const member_type_var_list = (set, t) => {
+  return (() => {
+    const member_type_var_list_go = (i) => {
+      if (lt_s(i, size(set))) {
+        if (is_identical(at(set, i), t)) {
+          return n1
+        } else {
+          return member_type_var_list_go(inc(i))
+        }
+      } else {
+        return n0
+      }
+    }
+    return member_type_var_list_go
+  })()(n0)
+}
+const free_type_vars = (t) => {
+  {
+    const ftvs = set()
+    const go = (() => {
+      const go = (t) => {
+        {
+          const nt = normalize_type(t)
+          {
+            {
+              const tmp140 = nt
+              const tmp141 = tmp140['args']
+              switch (externs['host']['get-tag'](tmp140)) {
+                case 'ctype/var': {
+                  const tv = tmp141[0]
+                  if (set_has(ftvs, tv)) {
+                    return 'wuns-undefined'
+                  } else {
+                    {
+                      return set_add(ftvs, tv)
+                    }
+                  }
+                }
+                case 'ctype/inst': {
+                  const inst_type = tmp141[0]
+                  {
+                    const tmp142 = inst_type
+                    const tmp143 = tmp142['args']
+                    switch (externs['host']['get-tag'](tmp142)) {
+                      case 'inst-type/func': {
+                        const ft = tmp143[0]
+                        {
+                          {
+                            const gencol1 = func_type_slash_params(ft)
+                            const gencol_size2 = size(gencol1)
+                            {
+                              ;(() => {
+                                const genloop_fun3 = (genit0) => {
+                                  if (lt_s(genit0, gencol_size2)) {
+                                    {
+                                      const param = at(gencol1, genit0)
+                                      {
+                                        {
+                                          go(param)
+                                          return genloop_fun3(add(genit0, 1))
+                                        }
+                                      }
+                                    }
+                                  } else {
+                                    return 'wuns-undefined'
+                                  }
+                                }
+                                return genloop_fun3
+                              })()(0)
+                            }
+                          }
+                          {
+                            const tmp144 = func_type_slash_rest_param_opt(ft)
+                            const tmp145 = tmp144['args']
+                            switch (externs['host']['get-tag'](tmp144)) {
+                              case 'option/some': {
+                                const rest = tmp145[0]
+                                {
+                                  go(rest)
+                                }
+                                break
+                              }
+                              default:
+                            }
+                          }
+                          return go(func_type_slash_result(ft))
+                        }
+                      }
+                      case 'inst-type/apply': {
+                        const type_name = tmp143[0]
+                        const type_args = tmp143[1]
+                        {
+                          const gencol5 = type_args
+                          const gencol_size6 = size(gencol5)
+                          {
+                            return (() => {
+                              const genloop_fun7 = (genit4) => {
+                                if (lt_s(genit4, gencol_size6)) {
+                                  {
+                                    const arg = at(gencol5, genit4)
+                                    {
+                                      {
+                                        go(arg)
+                                        return genloop_fun7(add(genit4, 1))
+                                      }
+                                    }
+                                  }
+                                } else {
+                                  return 'wuns-undefined'
+                                }
+                              }
+                              return genloop_fun7
+                            })()(0)
+                          }
+                        }
+                      }
+                      default:
+                        throw 'unmatched-match'
+                    }
+                  }
+                }
+                default:
+                  throw 'unmatched-match'
+              }
+            }
+          }
+        }
+      }
+      return go
+    })()
+    {
+      go(t)
+      return set_to_list(ftvs)
+    }
+  }
+}
+const prune_level = (max_level, tvs) => {
+  {
+    const gencol9 = tvs
+    const gencol_size10 = size(gencol9)
+    {
+      return (() => {
+        const genloop_fun11 = (genit8) => {
+          if (lt_s(genit8, gencol_size10)) {
+            {
+              const tv = at(gencol9, genit8)
+              {
+                {
+                  {
+                    const tvla = type_var_slash_level(tv)
+                    {
+                      atom_set(tvla, min(atom_get(tvla), max_level))
+                    }
+                  }
+                  return genloop_fun11(add(genit8, 1))
+                }
+              }
+            }
+          } else {
+            return 'wuns-undefined'
+          }
+        }
+        return genloop_fun11
+      })()(0)
+    }
+  }
+}
+const get_type_var_level = (tv) => {
+  return atom_get(type_var_slash_level(tv))
+}
+const link_var_to_type = (type_var, type) => {
+  {
+    const level = get_type_var_level(type_var)
+    const fvs = free_type_vars(type)
+    {
+      if (not(member_type_var_list(fvs, type_var))) {
+      } else {
+        {
+          abort(
+            list(
+              quote(form_slash_word('type-var')),
+              quote(form_slash_word('occurs')),
+              quote(form_slash_word('in')),
+              quote(form_slash_word('type')),
+            ),
+          )
+        }
+      }
+      prune_level(level, fvs)
+      return set_type_var_kind_to_type(type_var, type)
+    }
+  }
+}
+const unify = (outer_t1, outer_t2) => {
+  {
+    const errors = growable_list()
+    const push_unify_error = (() => {
+      const push_unify_error = (msg) => {
+        return push(errors, msg)
+      }
+      return push_unify_error
+    })()
+    const go = (() => {
+      const go = (t1, t2) => {
+        {
+          const nt1 = normalize_type(t1)
+          const nt2 = normalize_type(t2)
+          {
+            {
+              const tmp146 = nt1
+              const tmp147 = tmp146['args']
+              switch (externs['host']['get-tag'](tmp146)) {
+                case 'ctype/var': {
+                  const tv1 = tmp147[0]
+                  {
+                    const tmp148 = nt2
+                    const tmp149 = tmp148['args']
+                    switch (externs['host']['get-tag'](tmp148)) {
+                      case 'ctype/var': {
+                        const tv2 = tmp149[0]
+                        if (is_identical(tv1, tv2)) {
+                          return 'wuns-undefined'
+                        } else {
+                          {
+                            if (lt_s(get_type_var_level(tv1), get_type_var_level(tv2))) {
+                              return link_var_to_type(tv1, nt2)
+                            } else {
+                              return link_var_to_type(tv2, nt1)
+                            }
+                          }
+                        }
+                      }
+                      case 'ctype/inst': {
+                        const inst_type2 = tmp149[0]
+                        return link_var_to_type(tv1, nt2)
+                      }
+                      default:
+                        throw 'unmatched-match'
+                    }
+                  }
+                }
+                case 'ctype/inst': {
+                  const inst_type1 = tmp147[0]
+                  {
+                    const tmp150 = nt2
+                    const tmp151 = tmp150['args']
+                    switch (externs['host']['get-tag'](tmp150)) {
+                      case 'ctype/var': {
+                        const tv2 = tmp151[0]
+                        return link_var_to_type(tv2, nt1)
+                      }
+                      case 'ctype/inst': {
+                        const inst_type2 = tmp151[0]
+                        {
+                          const tmp152 = inst_type1
+                          const tmp153 = tmp152['args']
+                          switch (externs['host']['get-tag'](tmp152)) {
+                            case 'inst-type/func': {
+                              const ft1 = tmp153[0]
+                              {
+                                const tmp154 = inst_type2
+                                const tmp155 = tmp154['args']
+                                switch (externs['host']['get-tag'](tmp154)) {
+                                  case 'inst-type/func': {
+                                    const ft2 = tmp155[0]
+                                    {
+                                      const type_args1 = func_type_slash_params(ft1)
+                                      const type_args2 = func_type_slash_params(ft2)
+                                      const s1 = size(type_args1)
+                                      const s2 = size(type_args2)
+                                      {
+                                        {
+                                          const genword12 = min(s1, s2)
+                                          {
+                                            ;(() => {
+                                              const genword13 = (i) => {
+                                                if (lt_s(i, genword12)) {
+                                                  {
+                                                    go(at(type_args1, i), at(type_args2, i))
+                                                    return genword13(add(i, 1))
+                                                  }
+                                                } else {
+                                                  return 'wuns-undefined'
+                                                }
+                                              }
+                                              return genword13
+                                            })()(n0)
+                                          }
+                                        }
+                                        if (not(eq(s1, s2))) {
+                                          {
+                                            if (lt_s(s1, s2)) {
+                                              {
+                                                const tmp156 = func_type_slash_rest_param_opt(ft1)
+                                                const tmp157 = tmp156['args']
+                                                switch (externs['host']['get-tag'](tmp156)) {
+                                                  case 'option/some': {
+                                                    const rest1 = tmp157[0]
+                                                    {
+                                                      const genword14 = s2
+                                                      {
+                                                        ;(() => {
+                                                          const genword15 = (i) => {
+                                                            if (lt_s(i, genword14)) {
+                                                              {
+                                                                go(rest1, at(type_args2, i))
+                                                                return genword15(add(i, 1))
+                                                              }
+                                                            } else {
+                                                              return 'wuns-undefined'
+                                                            }
+                                                          }
+                                                          return genword15
+                                                        })()(s1)
+                                                      }
+                                                    }
+                                                    break
+                                                  }
+                                                  default:
+                                                    push_unify_error(
+                                                      quote(
+                                                        form_slash_list([
+                                                          form_slash_word('not'),
+                                                          form_slash_word('unifiable'),
+                                                          form_slash_word('-'),
+                                                          form_slash_word('different'),
+                                                          form_slash_word('number'),
+                                                          form_slash_word('of'),
+                                                          form_slash_word('parameters'),
+                                                        ]),
+                                                      ),
+                                                    )
+                                                }
+                                              }
+                                            } else {
+                                              {
+                                                const tmp158 = func_type_slash_rest_param_opt(ft2)
+                                                const tmp159 = tmp158['args']
+                                                switch (externs['host']['get-tag'](tmp158)) {
+                                                  case 'option/some': {
+                                                    const rest2 = tmp159[0]
+                                                    {
+                                                      const genword16 = s1
+                                                      {
+                                                        ;(() => {
+                                                          const genword17 = (i) => {
+                                                            if (lt_s(i, genword16)) {
+                                                              {
+                                                                go(at(type_args1, i), rest2)
+                                                                return genword17(add(i, 1))
+                                                              }
+                                                            } else {
+                                                              return 'wuns-undefined'
+                                                            }
+                                                          }
+                                                          return genword17
+                                                        })()(s2)
+                                                      }
+                                                    }
+                                                    break
+                                                  }
+                                                  default:
+                                                    push_unify_error(
+                                                      quote(
+                                                        form_slash_list([
+                                                          form_slash_word('not'),
+                                                          form_slash_word('unifiable'),
+                                                          form_slash_word('-'),
+                                                          form_slash_word('different'),
+                                                          form_slash_word('number'),
+                                                          form_slash_word('of'),
+                                                          form_slash_word('parameters'),
+                                                        ]),
+                                                      ),
+                                                    )
+                                                }
+                                              }
+                                            }
+                                          }
+                                        } else {
+                                        }
+                                        return go(func_type_slash_result(ft1), func_type_slash_result(ft2))
+                                      }
+                                    }
+                                  }
+                                  default:
+                                    return push_unify_error(
+                                      quote(
+                                        form_slash_list([
+                                          form_slash_word('not'),
+                                          form_slash_word('unifiable'),
+                                          form_slash_word('-'),
+                                          form_slash_word('different'),
+                                          form_slash_word('types'),
+                                          form_slash_word('0'),
+                                        ]),
+                                      ),
+                                    )
+                                }
+                              }
+                            }
+                            case 'inst-type/apply': {
+                              const type_name1 = tmp153[0]
+                              const type_args1 = tmp153[1]
+                              {
+                                const tmp160 = inst_type2
+                                const tmp161 = tmp160['args']
+                                switch (externs['host']['get-tag'](tmp160)) {
+                                  case 'inst-type/apply': {
+                                    const type_name2 = tmp161[0]
+                                    const type_args2 = tmp161[1]
+                                    if (eq_word(type_name1, type_name2)) {
+                                      if (eq(size(type_args1), size(type_args2))) {
+                                        {
+                                          const genword18 = size(type_args1)
+                                          {
+                                            return (() => {
+                                              const genword19 = (i) => {
+                                                if (lt_s(i, genword18)) {
+                                                  {
+                                                    go(at(type_args1, i), at(type_args2, i))
+                                                    return genword19(add(i, 1))
+                                                  }
+                                                } else {
+                                                  return 'wuns-undefined'
+                                                }
+                                              }
+                                              return genword19
+                                            })()(n0)
+                                          }
+                                        }
+                                      } else {
+                                        return push_unify_error(
+                                          quote(
+                                            form_slash_list([
+                                              form_slash_word('not'),
+                                              form_slash_word('unifiable'),
+                                              form_slash_word('-'),
+                                              form_slash_word('different'),
+                                              form_slash_word('number'),
+                                              form_slash_word('of'),
+                                              form_slash_word('type'),
+                                              form_slash_word('arguments'),
+                                            ]),
+                                          ),
+                                        )
+                                      }
+                                    } else {
+                                      {
+                                        return push_unify_error(
+                                          quote(
+                                            form_slash_list([
+                                              form_slash_word('not'),
+                                              form_slash_word('unifiable'),
+                                              form_slash_word('-'),
+                                              form_slash_word('different'),
+                                              form_slash_word('types'),
+                                            ]),
+                                          ),
+                                        )
+                                      }
+                                    }
+                                  }
+                                  default: {
+                                    return push_unify_error(
+                                      quote(
+                                        form_slash_list([
+                                          form_slash_word('not'),
+                                          form_slash_word('unifiable'),
+                                          form_slash_word('-'),
+                                          form_slash_word('different'),
+                                          form_slash_word('types'),
+                                        ]),
+                                      ),
+                                    )
+                                  }
+                                }
+                              }
+                            }
+                            default:
+                              throw 'unmatched-match'
+                          }
+                        }
+                      }
+                      default:
+                        throw 'unmatched-match'
+                    }
+                  }
+                }
+                default:
+                  throw 'unmatched-match'
+              }
+            }
+          }
+        }
+      }
+      return go
+    })()
+    {
+      go(outer_t1, outer_t2)
+      return clone_growable_to_frozen_list(errors)
+    }
+  }
+}
+const int_to_type_var_name = (i) => {
+  if (lt_s(i, 26)) {
+    return char_code_to_word(add(97, i))
+  } else {
+    return concat_words(int_to_type_var_name(i32_dot_div_s(i, 26)), char_code_to_word(add(97, i32_dot_rem_s(i, 26))))
+  }
+}
+const make_type_var = (kind, level) => {
+  return type_var(atom(kind), atom(level))
+}
+const generate_fresh_type_var_atom = (counter_atom, level) => {
+  return ctype_slash_var(make_type_var(type_var_kind_slash_word(int_to_type_var_name(inc_atom(counter_atom))), level))
+}
+const mk_empty_type_scheme = (type) => {
+  return check_type_scheme(list(), type)
+}
+const generalize = (current_level, type) => {
+  {
+    const tvs = growable_list()
+    const ftvs = free_type_vars(type)
+    {
+      {
+        const gencol21 = ftvs
+        const gencol_size22 = size(gencol21)
+        {
+          ;(() => {
+            const genloop_fun23 = (genit20) => {
+              if (lt_s(genit20, gencol_size22)) {
+                {
+                  const tv = at(gencol21, genit20)
+                  {
+                    {
+                      if (lt_s(current_level, get_type_var_level(tv))) {
+                        push(tvs, tv)
+                      } else {
+                      }
+                      return genloop_fun23(add(genit20, 1))
+                    }
+                  }
+                }
+              } else {
+                return 'wuns-undefined'
+              }
+            }
+            return genloop_fun23
+          })()(0)
+        }
+      }
+      {
+        const fftvs = clone_growable_to_frozen_list(tvs)
+        {
+          return check_type_scheme(fftvs, type)
+        }
+      }
+    }
+  }
+}
+const generalize_top = (type) => {
+  return generalize(n0, type)
+}
+const try_get_assoc_identical = (assoc_list, _var) => {
+  return (() => {
+    const try_get_assoc_identical_go = (i) => {
+      if (lt_s(i, size(assoc_list))) {
+        {
+          const p = at(assoc_list, i)
+          {
+            if (is_identical(_var, pair_slash_fst(p))) {
+              return some(pair_slash_snd(p))
+            } else {
+              return try_get_assoc_identical_go(inc(i))
+            }
+          }
+        }
+      } else {
+        return none()
+      }
+    }
+    return try_get_assoc_identical_go
+  })()(n0)
+}
+const copy_type = (subst_map, t) => {
+  {
+    const tmp162 = t
+    const tmp163 = tmp162['args']
+    switch (externs['host']['get-tag'](tmp162)) {
+      case 'ctype/var': {
+        const tv = tmp163[0]
+        {
+          const tmp164 = try_get_assoc_identical(subst_map, tv)
+          const tmp165 = tmp164['args']
+          switch (externs['host']['get-tag'](tmp164)) {
+            case 'option/some': {
+              const subst_type = tmp165[0]
+              return subst_type
+            }
+            default: {
+              const tmp166 = get_type_var_kind(tv)
+              const tmp167 = tmp166['args']
+              switch (externs['host']['get-tag'](tmp166)) {
+                case 'type-var-kind/word': {
+                  const w = tmp167[0]
+                  return t
+                }
+                case 'type-var-kind/linked': {
+                  const linked_t = tmp167[0]
+                  return copy_type(subst_map, linked_t)
+                }
+                default:
+                  throw 'unmatched-match'
+              }
+            }
+          }
+        }
+      }
+      case 'ctype/inst': {
+        const inst_type = tmp163[0]
+        {
+          const tmp168 = inst_type
+          const tmp169 = tmp168['args']
+          switch (externs['host']['get-tag'](tmp168)) {
+            case 'inst-type/func': {
+              const ft = tmp169[0]
+              return ctype_slash_inst(
+                inst_type_slash_func(
+                  func_type(
+                    list_map_fn(
+                      (() => {
+                        const genword24 = (param) => {
+                          return copy_type(subst_map, param)
+                        }
+                        return genword24
+                      })(),
+                      func_type_slash_params(ft),
+                    ),
+                    (() => {
+                      {
+                        const tmp170 = func_type_slash_rest_param_opt(ft)
+                        const tmp171 = tmp170['args']
+                        switch (externs['host']['get-tag'](tmp170)) {
+                          case 'option/some': {
+                            const rest = tmp171[0]
+                            return some(copy_type(subst_map, rest))
+                          }
+                          default:
+                            return none()
+                        }
+                      }
+                    })(),
+                    copy_type(subst_map, func_type_slash_result(ft)),
+                    func_type_slash_kind(ft),
+                  ),
+                ),
+              )
+            }
+            case 'inst-type/apply': {
+              const type_name = tmp169[0]
+              const type_args = tmp169[1]
+              return ctype_slash_inst(
+                inst_type_slash_apply(
+                  type_name,
+                  list_map_fn(
+                    (() => {
+                      const genword25 = (arg) => {
+                        return copy_type(subst_map, arg)
+                      }
+                      return genword25
+                    })(),
+                    type_args,
+                  ),
+                ),
+              )
+            }
+            default:
+              throw 'unmatched-match'
+          }
+        }
+      }
+      default:
+        throw 'unmatched-match'
+    }
+  }
+}
+const specialize_type_scheme = (counter_atom, level, scheme) => {
+  {
+    const subst_assoc_list = list_map_fn(
+      (() => {
+        const genword26 = (tv) => {
+          return pair(tv, generate_fresh_type_var_atom(counter_atom, level))
+        }
+        return genword26
+      })(),
+      check_type_scheme_slash_type_vars(scheme),
+    )
+    {
+      return copy_type(subst_assoc_list, check_type_scheme_slash_type(scheme))
+    }
+  }
+}
+const make_local_context = (var_values, lstack, kind) => {
+  return local_stack_slash_frame(lstack, local_context(var_values, kind))
+}
+const try_get_local_var_type = (local_ctx, var_name) => {
+  return try_get_local(local_ctx, var_name)
+}
+const instantiate_syntax_type = (type_var_env, outer_syntax_type) => {
+  return (() => {
+    const go = (syntax_type) => {
+      {
+        const tmp172 = syntax_type
+        const tmp173 = tmp172['args']
+        switch (externs['host']['get-tag'](tmp172)) {
+          case 'btype/var': {
+            const tv = tmp173[0]
+            return get(type_var_env, syntax_word_slash_word(tv))
+          }
+          case 'btype/apply': {
+            const type_name = tmp173[0]
+            const targs = tmp173[1]
+            switch (syntax_word_slash_word(type_name)) {
+              case 'i32':
+                return type_i32
+              case 'f64':
+                return type_f64
+              case 'word':
+                return type_word
+              default:
+                return make_type_list(
+                  syntax_word_slash_word(type_name),
+                  list_map_fn(
+                    (() => {
+                      const genword27 = (ta) => {
+                        return go(ta)
+                      }
+                      return genword27
+                    })(),
+                    targs,
+                  ),
+                )
+            }
+          }
+          case 'btype/func': {
+            const reg_params = tmp173[0]
+            const opt_rest_param = tmp173[1]
+            const result = tmp173[2]
+            return type_func(
+              list_map_fn(
+                (() => {
+                  const genword28 = (param) => {
+                    return go(param)
+                  }
+                  return genword28
+                })(),
+                reg_params,
+              ),
+              (() => {
+                {
+                  const tmp174 = opt_rest_param
+                  const tmp175 = tmp174['args']
+                  switch (externs['host']['get-tag'](tmp174)) {
+                    case 'option/some': {
+                      const rest_param = tmp175[0]
+                      return some(go(rest_param))
+                    }
+                    default:
+                      return none()
+                  }
+                }
+              })(),
+              go(result),
+            )
+          }
+          default:
+            throw 'unmatched-match'
+        }
+      }
+    }
+    return go
+  })()(outer_syntax_type)
+}
+const instantiate_syntax_type_scheme = (counter_atom, level, syntax_type_scheme) => {
+  {
+    const type_var_env = transient_kv_map()
+    {
+      {
+        const gencol30 = btype_scheme_slash_type_params(syntax_type_scheme)
+        const gencol_size31 = size(gencol30)
+        {
+          ;(() => {
+            const genloop_fun32 = (genit29) => {
+              if (lt_s(genit29, gencol_size31)) {
+                {
+                  const tv = at(gencol30, genit29)
+                  {
+                    {
+                      set_kv_map(
+                        type_var_env,
+                        syntax_word_slash_word(tv),
+                        generate_fresh_type_var_atom(counter_atom, level),
+                      )
+                      return genloop_fun32(add(genit29, 1))
+                    }
+                  }
+                }
+              } else {
+                return 'wuns-undefined'
+              }
+            }
+            return genloop_fun32
+          })()(0)
+        }
+      }
+      return instantiate_syntax_type(type_var_env, btype_scheme_slash_type(syntax_type_scheme))
+    }
+  }
+}
+const literal_to_type = (l) => {
+  {
+    const tmp176 = l
+    const tmp177 = tmp176['args']
+    switch (externs['host']['get-tag'](tmp176)) {
+      case 'literal/i32': {
+        const _ = tmp177[0]
+        return type_i32
+      }
+      case 'literal/f64': {
+        const _ = tmp177[0]
+        return type_f64
+      }
+      case 'literal/word': {
+        const _ = tmp177[0]
+        return type_word
+      }
+      default:
+        throw 'unmatched-match'
+    }
+  }
+}
+const intrinsic_name_to_type = (name) => {
+  if (is_i32_bin_inst(name)) {
+    return i32i32_to_i32
+  } else {
+    if (is_f64_bin_inst(name)) {
+      return f64f64_to_f64
+    } else {
+      if (is_f64_comp_inst(name)) {
+        return f64f64_to_i32
+      } else {
+        if (eq_word(name, 'unreachable')) {
+          {
+            return abort(
+              list(
+                quote(form_slash_word('unreachable')),
+                quote(form_slash_word('not')),
+                quote(form_slash_word('implemented')),
+              ),
+            )
+          }
+        } else {
+          {
+            return abort(
+              list(
+                quote(form_slash_word('intrinsic-name-to-type')),
+                quote(form_slash_word('not')),
+                quote(form_slash_word('implemented')),
+              ),
+            )
+          }
+        }
+      }
+    }
+  }
+}
+const check_message = (message, opt_node) =>
+  externs['host']['make-record-from-object']('check-message', { message: message, 'opt-node': opt_node })
+const check_message_slash_message = (record) => record['message']
+const check_message_slash_opt_node = (record) => record['opt-node']
+const log_check_message = (error) => {
+  {
+    const tmp178 = check_message_slash_opt_node(error)
+    const tmp179 = tmp178['args']
+    switch (externs['host']['get-tag'](tmp178)) {
+      case 'option/some': {
+        const node = tmp179[0]
+        log_node_location(node)
+        break
+      }
+      default: {
+        stdout_print(quote(form_slash_word('no')))
+        {
+          stdout_write_code_point(32)
+          stdout_print(quote(form_slash_word('location')))
+        }
+        stdout_write_code_point(10)
+      }
+    }
+  }
+  return log_fn(list(check_message_slash_message(error)))
+}
+const check_context = (messages, def_var_types, type_var_counter, types, syntax_info, type_annotations) =>
+  externs['host']['make-record-from-object']('check-context', {
+    messages: messages,
+    'def-var-types': def_var_types,
+    'type-var-counter': type_var_counter,
+    types: types,
+    'syntax-info': syntax_info,
+    'type-annotations': type_annotations,
+  })
+const check_context_slash_messages = (record) => record['messages']
+const check_context_slash_def_var_types = (record) => record['def-var-types']
+const check_context_slash_type_var_counter = (record) => record['type-var-counter']
+const check_context_slash_types = (record) => record['types']
+const check_context_slash_syntax_info = (record) => record['syntax-info']
+const check_context_slash_type_annotations = (record) => record['type-annotations']
+const make_global_context_from_syntax_info = (syntax_info) => {
+  return check_context(
+    growable_list(),
+    transient_kv_map(),
+    atom(n0),
+    transient_kv_map(),
+    syntax_info,
+    transient_kv_map(),
+  )
+}
+const report_fn = (gctx, message, opt_location) => {
+  return push(check_context_slash_messages(gctx), check_message(message, opt_location))
+}
+const report_sword = (gctx, sw, message) => {
+  return push(check_context_slash_messages(gctx), check_message(message, syntax_word_slash_node(sw)))
+}
+const generate_fresh_type_var = (gctx, level) => {
+  return generate_fresh_type_var_atom(check_context_slash_type_var_counter(gctx), level)
+}
+const try_get_var_type = (gctx, local_ctx, var_name) => {
+  {
+    const tmp180 = try_get_local_var_type(local_ctx, var_name)
+    const tmp181 = tmp180['args']
+    switch (externs['host']['get-tag'](tmp180)) {
+      case 'option/some': {
+        const ltype = tmp181[0]
+        return some(ltype)
+      }
+      default:
+        return try_get(check_context_slash_def_var_types(gctx), var_name)
+    }
+  }
+}
+const try_get_node = (gctx, bst) => {
+  {
+    const info = check_context_slash_syntax_info(gctx)
+    const opt_form = syntax_info_slash_try_get_form(info)(to_js_value(bst))
+    {
+      {
+        const tmp182 = opt_form
+        const tmp183 = tmp182['args']
+        switch (externs['host']['get-tag'](tmp182)) {
+          case 'option/some': {
+            const form = tmp183[0]
+            return try_get_syntax_node(form)
+          }
+          default: {
+            return abort(
+              list(
+                quote(form_slash_word('try-get-node')),
+                quote(form_slash_word('no')),
+                quote(form_slash_word('form')),
+              ),
+            )
+          }
+        }
+      }
+    }
+  }
+}
+const unify_report = (gctx, t1, t2, bst) => {
+  {
+    const opt_node = try_get_node(gctx, bst)
+    {
+      {
+        const gencol36 = unify(t1, t2)
+        const gencol_size37 = size(gencol36)
+        {
+          return (() => {
+            const genloop_fun38 = (genit35) => {
+              if (lt_s(genit35, gencol_size37)) {
+                {
+                  const error = at(gencol36, genit35)
+                  {
+                    {
+                      report_fn(gctx, error, opt_node)
+                      return genloop_fun38(add(genit35, 1))
+                    }
+                  }
+                }
+              } else {
+                return 'wuns-undefined'
+              }
+            }
+            return genloop_fun38
+          })()(0)
+        }
+      }
+    }
+  }
+}
+const is_syntactic_value = (bform) => {
+  {
+    const tmp184 = bform
+    const tmp185 = tmp184['args']
+    switch (externs['host']['get-tag'](tmp184)) {
+      case 'bexp/literal': {
+        const l = tmp185[0]
+        return n1
+      }
+      case 'bexp/func': {
+        const f = tmp185[0]
+        return n1
+      }
+      case 'bexp/var': {
+        const f = tmp185[0]
+        return n1
+      }
+      case 'bexp/extern': {
+        const f = tmp185[0]
+        return n1
+      }
+      case 'bexp/type-anno': {
+        const f = tmp185[0]
+        const ts = tmp185[1]
+        return is_syntactic_value(f)
+      }
+      default:
+        return n0
+    }
+  }
+}
+const annotate = (gctx, bst, type) => {
+  set_kv_map(check_context_slash_type_annotations(gctx), to_js_value(bst), type)
+  return type
+}
+const checker = (check_exp, check_top) =>
+  externs['host']['make-record-from-object']('checker', { 'check-exp': check_exp, 'check-top': check_top })
+const checker_slash_check_exp = (record) => record['check-exp']
+const checker_slash_check_top = (record) => record['check-top']
+const make_checker = (gctx) => {
+  return (() => {
+    const go_forms = (level, lctx, sub_forms) => {
+      if (is_empty(sub_forms)) {
+        return type_empty_tuple
+      } else {
+        {
+          {
+            const genword39 = dec(size(sub_forms))
+            {
+              ;(() => {
+                const genword40 = (i) => {
+                  if (lt_s(i, genword39)) {
+                    {
+                      go(level, lctx, at(sub_forms, i))
+                      return genword40(add(i, 1))
+                    }
+                  } else {
+                    return 'wuns-undefined'
+                  }
+                }
+                return genword40
+              })()(n0)
+            }
+          }
+          return go(level, lctx, last(sub_forms))
+        }
+      }
+    }
+    const go_func = (level, lctx, func, function_kind) => {
+      {
+        const level_1 = inc(level)
+        const gen_func_type = generate_fresh_type_var(gctx, level_1)
+        const func_type_scheme = mk_empty_type_scheme(gen_func_type)
+        const param_ctx = transient_kv_map()
+        const func_ctx = make_local_context(param_ctx, lctx, local_context_kind_slash_func())
+        const reg_params = growable_list()
+        const takes_form_params = (() => {
+          {
+            const tmp186 = function_kind
+            const tmp187 = tmp186['args']
+            switch (externs['host']['get-tag'](tmp186)) {
+              case 'function-kind/func': {
+                return _false
+              }
+              case 'function-kind/macro': {
+                return _true
+              }
+              case 'function-kind/fexpr': {
+                return _true
+              }
+              default: {
+                return abort(
+                  list(
+                    quote(form_slash_word('check')),
+                    quote(form_slash_word('function-kind')),
+                    quote(form_slash_word('not')),
+                    quote(form_slash_word('recognized')),
+                  ),
+                )
+              }
+            }
+          }
+        })()
+        {
+          set_kv_map(param_ctx, syntax_word_slash_word(bfunc_slash_name(func)), func_type_scheme)
+          {
+            const gencol42 = bfunc_slash_parameters(func)
+            const gencol_size43 = size(gencol42)
+            {
+              ;(() => {
+                const genloop_fun44 = (genit41) => {
+                  if (lt_s(genit41, gencol_size43)) {
+                    {
+                      const param = at(gencol42, genit41)
+                      {
+                        {
+                          {
+                            const tv = takes_form_params ? type_form : generate_fresh_type_var(gctx, level_1)
+                            {
+                              set_kv_map(param_ctx, syntax_word_slash_word(param), mk_empty_type_scheme(tv))
+                              push(reg_params, tv)
+                            }
+                          }
+                          return genloop_fun44(add(genit41, 1))
+                        }
+                      }
+                    }
+                  } else {
+                    return 'wuns-undefined'
+                  }
+                }
+                return genloop_fun44
+              })()(0)
+            }
+          }
+          {
+            const opt_rest = (() => {
+              {
+                const tmp188 = bfunc_slash_rest_param(func)
+                const tmp189 = tmp188['args']
+                switch (externs['host']['get-tag'](tmp188)) {
+                  case 'option/some': {
+                    const rest_param = tmp189[0]
+                    {
+                      const tv = takes_form_params ? type_form : generate_fresh_type_var(gctx, level_1)
+                      {
+                        set_kv_map(param_ctx, syntax_word_slash_word(rest_param), mk_empty_type_scheme(type_list(tv)))
+                        return some(tv)
+                      }
+                    }
+                  }
+                  default:
+                    return none()
+                }
+              }
+            })()
+            const return_type = go_forms(level_1, func_ctx, bfunc_slash_body(func))
+            {
+              unify_report(
+                gctx,
+                gen_func_type,
+                ctype_slash_inst(
+                  inst_type_slash_func(
+                    func_type(clone_growable_to_frozen_list(reg_params), opt_rest, return_type, function_kind),
+                  ),
+                ),
+                func,
+              )
+              {
+                const tmp190 = function_kind
+                const tmp191 = tmp190['args']
+                switch (externs['host']['get-tag'](tmp190)) {
+                  case 'function-kind/macro': {
+                    unify_report(gctx, return_type, type_form, last(bfunc_slash_body(func)))
+                    break
+                  }
+                  default:
+                }
+              }
+            }
+          }
+          return annotate(gctx, func, gen_func_type)
+        }
+      }
+    }
+    const go = (level, lctx, bform) => {
+      {
+        const tmp192 = bform
+        const tmp193 = tmp192['args']
+        switch (externs['host']['get-tag'](tmp192)) {
+          case 'bexp/var': {
+            const w = tmp193[0]
+            {
+              const tmp194 = try_get_var_type(gctx, lctx, syntax_word_slash_word(w))
+              const tmp195 = tmp194['args']
+              switch (externs['host']['get-tag'](tmp194)) {
+                case 'option/some': {
+                  const type_scheme = tmp195[0]
+                  return specialize_type_scheme(check_context_slash_type_var_counter(gctx), level, type_scheme)
+                }
+                default: {
+                  report_sword(
+                    gctx,
+                    w,
+                    quote(
+                      form_slash_list([form_slash_word('variable'), form_slash_word('not'), form_slash_word('found')]),
+                    ),
+                  )
+                  return generate_fresh_type_var_atom(check_context_slash_type_var_counter(gctx), level)
+                }
+              }
+            }
+          }
+          case 'bexp/literal': {
+            const l = tmp193[0]
+            return literal_to_type(l)
+          }
+          case 'bexp/intrinsic': {
+            const _in = tmp193[0]
+            return intrinsic_name_to_type(syntax_word_slash_word(_in))
+          }
+          case 'bexp/if': {
+            const cond = tmp193[0]
+            const then = tmp193[1]
+            const _else = tmp193[2]
+            {
+              const cond_type = go(level, lctx, cond)
+              const then_type = go(level, lctx, then)
+              const else_type = go(level, lctx, _else)
+              {
+                unify_report(gctx, type_i32, cond_type, cond)
+                unify_report(gctx, then_type, else_type, then)
+                return annotate(gctx, bform, then_type)
+              }
+            }
+          }
+          case 'bexp/do': {
+            const sub_forms = tmp193[0]
+            return go_forms(level, lctx, sub_forms)
+          }
+          case 'bexp/let': {
+            const bindings = tmp193[0]
+            const bodies = tmp193[1]
+            {
+              const var_types = transient_kv_map()
+              const let_ctx = make_local_context(var_types, lctx, local_context_kind_slash_let())
+              const level_1 = inc(level)
+              {
+                {
+                  const gencol46 = bindings
+                  const gencol_size47 = size(gencol46)
+                  {
+                    ;(() => {
+                      const genloop_fun48 = (genit45) => {
+                        if (lt_s(genit45, gencol_size47)) {
+                          {
+                            const binding = at(gencol46, genit45)
+                            {
+                              {
+                                {
+                                  const _var = pair_slash_fst(binding)
+                                  const value = pair_slash_snd(binding)
+                                  const val_type = go(level_1, let_ctx, value)
+                                  const general_val_type = is_syntactic_value(value)
+                                    ? generalize(level, val_type)
+                                    : mk_empty_type_scheme(val_type)
+                                  {
+                                    set_kv_map(var_types, syntax_word_slash_word(_var), general_val_type)
+                                  }
+                                }
+                                return genloop_fun48(add(genit45, 1))
+                              }
+                            }
+                          }
+                        } else {
+                          return 'wuns-undefined'
+                        }
+                      }
+                      return genloop_fun48
+                    })()(0)
+                  }
+                }
+                return go_forms(level, let_ctx, bodies)
+              }
+            }
+          }
+          case 'bexp/loop': {
+            const bindings = tmp193[0]
+            const bodies = tmp193[1]
+            {
+              const var_types = transient_kv_map()
+              const loop_ctx = make_local_context(var_types, lctx, local_context_kind_slash_loop())
+              const level_1 = inc(level)
+              {
+                {
+                  const gencol50 = bindings
+                  const gencol_size51 = size(gencol50)
+                  {
+                    ;(() => {
+                      const genloop_fun52 = (genit49) => {
+                        if (lt_s(genit49, gencol_size51)) {
+                          {
+                            const binding = at(gencol50, genit49)
+                            {
+                              {
+                                {
+                                  const _var = pair_slash_fst(binding)
+                                  const value = pair_slash_snd(binding)
+                                  const val_type = go(level_1, loop_ctx, value)
+                                  const general_val_type = mk_empty_type_scheme(val_type)
+                                  {
+                                    annotate(gctx, value, val_type)
+                                    set_kv_map(var_types, syntax_word_slash_word(_var), general_val_type)
+                                  }
+                                }
+                                return genloop_fun52(add(genit49, 1))
+                              }
+                            }
+                          }
+                        } else {
+                          return 'wuns-undefined'
+                        }
+                      }
+                      return genloop_fun52
+                    })()(0)
+                  }
+                }
+                return annotate(gctx, bform, go_forms(level, loop_ctx, bodies))
+              }
+            }
+          }
+          case 'bexp/continue': {
+            const assignments = tmp193[0]
+            {
+              {
+                const tmp196 = try_get_enclosing_loop_context(lctx)
+                const tmp197 = tmp196['args']
+                switch (externs['host']['get-tag'](tmp196)) {
+                  case 'option/some': {
+                    const loop_context = tmp197[0]
+                    {
+                      {
+                        const gencol54 = assignments
+                        const gencol_size55 = size(gencol54)
+                        {
+                          ;(() => {
+                            const genloop_fun56 = (genit53) => {
+                              if (lt_s(genit53, gencol_size55)) {
+                                {
+                                  const assignment = at(gencol54, genit53)
+                                  {
+                                    {
+                                      {
+                                        const loop_vars = local_context_slash_vars(loop_context)
+                                        const loop_var_type_scheme = get(
+                                          loop_vars,
+                                          syntax_word_slash_word(pair_slash_fst(assignment)),
+                                        )
+                                        const value = pair_slash_snd(assignment)
+                                        const val_type = go(level, lctx, value)
+                                        {
+                                          unify_report(
+                                            gctx,
+                                            check_type_scheme_slash_type(loop_var_type_scheme),
+                                            val_type,
+                                            value,
+                                          )
+                                        }
+                                      }
+                                      return genloop_fun56(add(genit53, 1))
+                                    }
+                                  }
+                                }
+                              } else {
+                                return 'wuns-undefined'
+                              }
+                            }
+                            return genloop_fun56
+                          })()(0)
+                        }
+                      }
+                    }
+                    break
+                  }
+                  default:
+                }
+              }
+              return generate_fresh_type_var(gctx, level)
+            }
+          }
+          case 'bexp/letfn': {
+            const funcs = tmp193[0]
+            const bodies = tmp193[1]
+            {
+              const var_types = transient_kv_map()
+              const letfn_ctx = make_local_context(var_types, lctx, local_context_kind_slash_letfn())
+              const level_1 = inc(level)
+              const gtmp_types = growable_list()
+              {
+                {
+                  const gencol58 = funcs
+                  const gencol_size59 = size(gencol58)
+                  {
+                    ;(() => {
+                      const genloop_fun60 = (genit57) => {
+                        if (lt_s(genit57, gencol_size59)) {
+                          {
+                            const func = at(gencol58, genit57)
+                            {
+                              {
+                                {
+                                  const tmp_type = generate_fresh_type_var(gctx, level_1)
+                                  {
+                                    push(gtmp_types, tmp_type)
+                                    set_kv_map(
+                                      var_types,
+                                      syntax_word_slash_word(bfunc_slash_name(func)),
+                                      generalize(level, tmp_type),
+                                    )
+                                  }
+                                }
+                                return genloop_fun60(add(genit57, 1))
+                              }
+                            }
+                          }
+                        } else {
+                          return 'wuns-undefined'
+                        }
+                      }
+                      return genloop_fun60
+                    })()(0)
+                  }
+                }
+                {
+                  const tmp_types = clone_growable_to_frozen_list(gtmp_types)
+                  {
+                    {
+                      const genword61 = size(funcs)
+                      {
+                        ;(() => {
+                          const genword62 = (i) => {
+                            if (lt_s(i, genword61)) {
+                              {
+                                {
+                                  const tmp_type = at(tmp_types, i)
+                                  const func = at(funcs, i)
+                                  const ft = go_func(level, letfn_ctx, func, function_kind_slash_func())
+                                  {
+                                    unify_report(gctx, tmp_type, ft, func)
+                                  }
+                                }
+                                return genword62(add(i, 1))
+                              }
+                            } else {
+                              return 'wuns-undefined'
+                            }
+                          }
+                          return genword62
+                        })()(n0)
+                      }
+                    }
+                  }
+                }
+                return go_forms(level, letfn_ctx, bodies)
+              }
+            }
+          }
+          case 'bexp/func': {
+            const f = tmp193[0]
+            return go_func(level, lctx, f, function_kind_slash_func())
+          }
+          case 'bexp/switch': {
+            const switch_value = tmp193[0]
+            const clauses = tmp193[1]
+            const _default = tmp193[2]
+            {
+              const switch_type = go(level, lctx, switch_value)
+              const result_type = generate_fresh_type_var(gctx, level)
+              {
+                {
+                  const gencol64 = clauses
+                  const gencol_size65 = size(gencol64)
+                  {
+                    ;(() => {
+                      const genloop_fun66 = (genit63) => {
+                        if (lt_s(genit63, gencol_size65)) {
+                          {
+                            const clause = at(gencol64, genit63)
+                            {
+                              {
+                                {
+                                  const values = pair_slash_fst(clause)
+                                  const branch = pair_slash_snd(clause)
+                                  {
+                                    {
+                                      const gencol68 = values
+                                      const gencol_size69 = size(gencol68)
+                                      {
+                                        ;(() => {
+                                          const genloop_fun70 = (genit67) => {
+                                            if (lt_s(genit67, gencol_size69)) {
+                                              {
+                                                const value = at(gencol68, genit67)
+                                                {
+                                                  {
+                                                    unify_report(gctx, switch_type, go(level, lctx, value), value)
+                                                    return genloop_fun70(add(genit67, 1))
+                                                  }
+                                                }
+                                              }
+                                            } else {
+                                              return 'wuns-undefined'
+                                            }
+                                          }
+                                          return genloop_fun70
+                                        })()(0)
+                                      }
+                                    }
+                                    unify_report(gctx, go(level, lctx, branch), result_type, branch)
+                                  }
+                                }
+                                return genloop_fun66(add(genit63, 1))
+                              }
+                            }
+                          }
+                        } else {
+                          return 'wuns-undefined'
+                        }
+                      }
+                      return genloop_fun66
+                    })()(0)
+                  }
+                }
+                unify_report(gctx, go(level, lctx, _default), result_type, _default)
+                return result_type
+              }
+            }
+          }
+          case 'bexp/match': {
+            const match_value = tmp193[0]
+            const clauses = tmp193[1]
+            const opt_default = tmp193[2]
+            {
+              const match_type = go(level, lctx, match_value)
+              const mresult_type = generate_fresh_type_var(gctx, level)
+              const try_get_def_desc = syntax_info_slash_try_get_def_desc(check_context_slash_syntax_info(gctx))
+              const def_desc_from_sname = (() => {
+                const ddfn = (node) => {
+                  {
+                    const tmp198 = try_get_def_desc(node)
+                    const tmp199 = tmp198['args']
+                    switch (externs['host']['get-tag'](tmp198)) {
+                      case 'option/some': {
+                        const dd = tmp199[0]
+                        return dd
+                      }
+                      default: {
+                        return abort(
+                          list(
+                            quote(form_slash_word('match')),
+                            quote(form_slash_word('def-desc')),
+                            quote(form_slash_word('not')),
+                            quote(form_slash_word('found')),
+                          ),
+                        )
+                      }
+                    }
+                  }
+                }
+                return ddfn
+              })()
+              {
+                {
+                  const gencol72 = clauses
+                  const gencol_size73 = size(gencol72)
+                  {
+                    ;(() => {
+                      const genloop_fun74 = (genit71) => {
+                        if (lt_s(genit71, gencol_size73)) {
+                          {
+                            const clause = at(gencol72, genit71)
+                            {
+                              {
+                                {
+                                  const mpattern = pair_slash_fst(clause)
+                                  const branch = pair_slash_snd(clause)
+                                  const ctor_sname = match_pattern_slash_ctor(mpattern)
+                                  const match_params = match_pattern_slash_params(mpattern)
+                                  const dvts = get(
+                                    check_context_slash_def_var_types(gctx),
+                                    syntax_word_slash_word(ctor_sname),
+                                  )
+                                  const var_types = transient_kv_map()
+                                  const branch_ctx = make_local_context(
+                                    var_types,
+                                    lctx,
+                                    local_context_kind_slash_match(),
+                                  )
+                                  {
+                                    {
+                                      const tmp200 = def_desc_from_sname(ctor_sname)
+                                      const tmp201 = tmp200['args']
+                                      switch (externs['host']['get-tag'](tmp200)) {
+                                        case 'def-desc/union-ctor': {
+                                          const union_desc = tmp201[0]
+                                          const index = tmp201[1]
+                                          {
+                                            const type_name = union_desc_slash_name(union_desc)
+                                            const type_params = union_desc_slash_type_params(union_desc)
+                                            const ctor = at(union_desc_slash_ctors(union_desc), index)
+                                            const t_def = get(
+                                              check_context_slash_types(gctx),
+                                              syntax_word_slash_word(type_name),
+                                            )
+                                            const rt = type_def_slash_result_type(t_def)
+                                            const param_map = type_def_slash_param_map(t_def)
+                                            const param_types = pair_slash_snd(ctor)
+                                            const growable_params = growable_list()
+                                            {
+                                              if (eq(size(param_types), size(match_params))) {
+                                              } else {
+                                                {
+                                                  abort(
+                                                    list(
+                                                      quote(form_slash_word('match')),
+                                                      quote(form_slash_word('pattern')),
+                                                      quote(form_slash_word('and')),
+                                                      quote(form_slash_word('union')),
+                                                      quote(form_slash_word('ctor')),
+                                                      quote(form_slash_word('arity')),
+                                                      quote(form_slash_word('mismatch')),
+                                                    ),
+                                                  )
+                                                }
+                                              }
+                                              {
+                                                const genword75 = size(match_params)
+                                                {
+                                                  ;(() => {
+                                                    const genword76 = (i) => {
+                                                      if (lt_s(i, genword75)) {
+                                                        {
+                                                          {
+                                                            const pattern_var = at(match_params, i)
+                                                            const param_type = generate_fresh_type_var(gctx, level)
+                                                            const param_type_scheme = mk_empty_type_scheme(param_type)
+                                                            {
+                                                              push(growable_params, param_type)
+                                                              set_kv_map(
+                                                                var_types,
+                                                                syntax_word_slash_word(pattern_var),
+                                                                param_type_scheme,
+                                                              )
+                                                            }
+                                                          }
+                                                          return genword76(add(i, 1))
+                                                        }
+                                                      } else {
+                                                        return 'wuns-undefined'
+                                                      }
+                                                    }
+                                                    return genword76
+                                                  })()(n0)
+                                                }
+                                              }
+                                              unify_report(
+                                                gctx,
+                                                specialize_type_scheme(
+                                                  check_context_slash_type_var_counter(gctx),
+                                                  level,
+                                                  dvts,
+                                                ),
+                                                type_ctor(clone_growable_to_frozen_list(growable_params), match_type),
+                                                branch,
+                                              )
+                                            }
+                                          }
+                                          break
+                                        }
+                                        default: {
+                                          abort(
+                                            list(
+                                              quote(form_slash_word('match')),
+                                              quote(form_slash_word('not')),
+                                              quote(form_slash_word('bound')),
+                                              quote(form_slash_word('to')),
+                                              quote(form_slash_word('union')),
+                                              quote(form_slash_word('ctor')),
+                                            ),
+                                          )
+                                        }
+                                      }
+                                    }
+                                    unify_report(gctx, go(level, branch_ctx, branch), mresult_type, branch)
+                                  }
+                                }
+                                return genloop_fun74(add(genit71, 1))
+                              }
+                            }
+                          }
+                        } else {
+                          return 'wuns-undefined'
+                        }
+                      }
+                      return genloop_fun74
+                    })()(0)
+                  }
+                }
+                {
+                  const tmp202 = opt_default
+                  const tmp203 = tmp202['args']
+                  switch (externs['host']['get-tag'](tmp202)) {
+                    case 'option/some': {
+                      const default_form = tmp203[0]
+                      {
+                        unify_report(gctx, go(level, lctx, default_form), mresult_type, default_form)
+                      }
+                      break
+                    }
+                    default:
+                  }
+                }
+                return mresult_type
+              }
+            }
+          }
+          case 'bexp/call': {
+            const f = tmp193[0]
+            const args = tmp193[1]
+            {
+              const ft = go(level, lctx, f)
+              const arg_types = list_map_fn(
+                (() => {
+                  const f = (arg) => {
+                    return go(level, lctx, arg)
+                  }
+                  return f
+                })(),
+                args,
+              )
+              const t_res = generate_fresh_type_var(gctx, level)
+              const t_func = type_func_no_rest(arg_types, t_res)
+              {
+                unify_report(gctx, ft, t_func, bform)
+                return t_res
+              }
+            }
+          }
+          case 'bexp/call-fexpr': {
+            const f = tmp193[0]
+            const form_args = tmp193[1]
+            {
+              const ft = go(level, lctx, f)
+              const arg_types = list_map_fn(
+                (() => {
+                  const f = (arg) => {
+                    return type_form
+                  }
+                  return f
+                })(),
+                form_args,
+              )
+              const t_res = generate_fresh_type_var(gctx, level)
+              const t_func = type_func_no_rest(arg_types, t_res)
+              {
+                unify_report(gctx, ft, t_func, bform)
+                return t_res
+              }
+            }
+          }
+          case 'bexp/extern': {
+            const es = tmp193[0]
+            return generate_fresh_type_var(gctx, level)
+          }
+          case 'bexp/type-anno': {
+            const bf = tmp193[0]
+            const bts = tmp193[1]
+            {
+              const value_type = go(level, lctx, bf)
+              const inst_anno_type = instantiate_syntax_type_scheme(
+                check_context_slash_type_var_counter(gctx),
+                level,
+                bts,
+              )
+              {
+                unify_report(gctx, value_type, inst_anno_type, bf)
+                return value_type
+              }
+            }
+          }
+          default: {
+            log_fn(list(bform))
+            {
+              return abort(
+                list(
+                  quote(form_slash_word('check2')),
+                  quote(form_slash_word('not')),
+                  quote(form_slash_word('implemented')),
+                ),
+              )
+            }
+          }
+        }
+      }
+    }
+    const check_top = (form) => {
+      {
+        const tmp204 = form
+        const tmp205 = tmp204['args']
+        switch (externs['host']['get-tag'](tmp204)) {
+          case 'btop/type': {
+            const decls = tmp205[0]
+            {
+              const types = check_context_slash_types(gctx)
+              const def_var_types = check_context_slash_def_var_types(gctx)
+              {
+                {
+                  const gencol78 = decls
+                  const gencol_size79 = size(gencol78)
+                  {
+                    ;(() => {
+                      const genloop_fun80 = (genit77) => {
+                        if (lt_s(genit77, gencol_size79)) {
+                          {
+                            const decl = at(gencol78, genit77)
+                            {
+                              {
+                                {
+                                  const sname = type_decl_slash_name(decl)
+                                  const name_word = syntax_word_slash_word(sname)
+                                  {
+                                    if (has(types, name_word)) {
+                                      report_sword(
+                                        gctx,
+                                        sname,
+                                        quote(
+                                          form_slash_list([form_slash_word('already'), form_slash_word('defined')]),
+                                        ),
+                                      )
+                                    } else {
+                                      {
+                                        const type_params_list = type_decl_slash_type_params(decl)
+                                        const param_map = transient_kv_map()
+                                        const type_args = growable_list()
+                                        {
+                                          {
+                                            const gencol82 = type_params_list
+                                            const gencol_size83 = size(gencol82)
+                                            {
+                                              ;(() => {
+                                                const genloop_fun84 = (genit81) => {
+                                                  if (lt_s(genit81, gencol_size83)) {
+                                                    {
+                                                      const param_word = at(gencol82, genit81)
+                                                      {
+                                                        {
+                                                          if (has(param_map, syntax_word_slash_word(param_word))) {
+                                                            {
+                                                              report_sword(
+                                                                gctx,
+                                                                param_word,
+                                                                quote(
+                                                                  form_slash_list([
+                                                                    form_slash_word('already'),
+                                                                    form_slash_word('defined'),
+                                                                  ]),
+                                                                ),
+                                                              )
+                                                            }
+                                                          } else {
+                                                          }
+                                                          {
+                                                            const tv = generate_fresh_type_var(gctx, n1)
+                                                            {
+                                                              set_kv_map(
+                                                                param_map,
+                                                                syntax_word_slash_word(param_word),
+                                                                tv,
+                                                              )
+                                                              push(type_args, tv)
+                                                            }
+                                                          }
+                                                          return genloop_fun84(add(genit81, 1))
+                                                        }
+                                                      }
+                                                    }
+                                                  } else {
+                                                    return 'wuns-undefined'
+                                                  }
+                                                }
+                                                return genloop_fun84
+                                              })()(0)
+                                            }
+                                          }
+                                          set_kv_map(
+                                            types,
+                                            name_word,
+                                            type_def(
+                                              size(type_params_list),
+                                              param_map,
+                                              make_type_list(name_word, clone_growable_to_frozen_list(type_args)),
+                                            ),
+                                          )
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                                return genloop_fun80(add(genit77, 1))
+                              }
+                            }
+                          }
+                        } else {
+                          return 'wuns-undefined'
+                        }
+                      }
+                      return genloop_fun80
+                    })()(0)
+                  }
+                }
+                {
+                  const gencol86 = decls
+                  const gencol_size87 = size(gencol86)
+                  {
+                    return (() => {
+                      const genloop_fun88 = (genit85) => {
+                        if (lt_s(genit85, gencol_size87)) {
+                          {
+                            const decl = at(gencol86, genit85)
+                            {
+                              {
+                                {
+                                  const sname = type_decl_slash_name(decl)
+                                  const name_word = syntax_word_slash_word(sname)
+                                  const type_prefix = concat_words(name_word, '/')
+                                  const this_type_def = get(types, name_word)
+                                  const result_type = type_def_slash_result_type(this_type_def)
+                                  const param_map = type_def_slash_param_map(this_type_def)
+                                  {
+                                    {
+                                      const tmp206 = type_decl_slash_kind(decl)
+                                      const tmp207 = tmp206['args']
+                                      switch (externs['host']['get-tag'](tmp206)) {
+                                        case 'type-decl-kind/union': {
+                                          const ctors = tmp207[0]
+                                          {
+                                            const gencol90 = ctors
+                                            const gencol_size91 = size(gencol90)
+                                            {
+                                              ;(() => {
+                                                const genloop_fun92 = (genit89) => {
+                                                  if (lt_s(genit89, gencol_size91)) {
+                                                    {
+                                                      const ctor = at(gencol90, genit89)
+                                                      {
+                                                        {
+                                                          {
+                                                            const param_list = list_map_fn(
+                                                              (() => {
+                                                                const genword93 = (param) => {
+                                                                  return instantiate_syntax_type(param_map, param)
+                                                                }
+                                                                return genword93
+                                                              })(),
+                                                              pair_slash_snd(ctor),
+                                                            )
+                                                            const tctor = type_ctor(param_list, result_type)
+                                                            {
+                                                              set_kv_map(
+                                                                def_var_types,
+                                                                concat_words(
+                                                                  type_prefix,
+                                                                  syntax_word_slash_word(pair_slash_fst(ctor)),
+                                                                ),
+                                                                generalize_top(tctor),
+                                                              )
+                                                            }
+                                                          }
+                                                          return genloop_fun92(add(genit89, 1))
+                                                        }
+                                                      }
+                                                    }
+                                                  } else {
+                                                    return 'wuns-undefined'
+                                                  }
+                                                }
+                                                return genloop_fun92
+                                              })()(0)
+                                            }
+                                          }
+                                          break
+                                        }
+                                        case 'type-decl-kind/record': {
+                                          const field_decls = tmp207[0]
+                                          {
+                                            const fields = growable_list()
+                                            {
+                                              {
+                                                const gencol95 = field_decls
+                                                const gencol_size96 = size(gencol95)
+                                                {
+                                                  ;(() => {
+                                                    const genloop_fun97 = (genit94) => {
+                                                      if (lt_s(genit94, gencol_size96)) {
+                                                        {
+                                                          const field = at(gencol95, genit94)
+                                                          {
+                                                            {
+                                                              {
+                                                                const inst_field_type = instantiate_syntax_type(
+                                                                  param_map,
+                                                                  pair_slash_snd(field),
+                                                                )
+                                                                {
+                                                                  push(fields, inst_field_type)
+                                                                  set_kv_map(
+                                                                    def_var_types,
+                                                                    concat_words(
+                                                                      type_prefix,
+                                                                      syntax_word_slash_word(pair_slash_fst(field)),
+                                                                    ),
+                                                                    generalize_top(
+                                                                      type_func_no_rest(
+                                                                        list(result_type),
+                                                                        inst_field_type,
+                                                                      ),
+                                                                    ),
+                                                                  )
+                                                                }
+                                                              }
+                                                              return genloop_fun97(add(genit94, 1))
+                                                            }
+                                                          }
+                                                        }
+                                                      } else {
+                                                        return 'wuns-undefined'
+                                                      }
+                                                    }
+                                                    return genloop_fun97
+                                                  })()(0)
+                                                }
+                                              }
+                                              set_kv_map(
+                                                def_var_types,
+                                                name_word,
+                                                generalize_top(
+                                                  type_func_no_rest(
+                                                    clone_growable_to_frozen_list(fields),
+                                                    type_def_slash_result_type(this_type_def),
+                                                  ),
+                                                ),
+                                              )
+                                            }
+                                          }
+                                          break
+                                        }
+                                        default: {
+                                          abort(
+                                            list(
+                                              quote(form_slash_word('check')),
+                                              quote(form_slash_word('type')),
+                                              quote(form_slash_word('definition')),
+                                              quote(form_slash_word('not')),
+                                              quote(form_slash_word('recognized')),
+                                            ),
+                                          )
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                                return genloop_fun88(add(genit85, 1))
+                              }
+                            }
+                          }
+                        } else {
+                          return 'wuns-undefined'
+                        }
+                      }
+                      return genloop_fun88
+                    })()(0)
+                  }
+                }
+              }
+            }
+          }
+          case 'btop/def': {
+            const _var = tmp205[0]
+            const value = tmp205[1]
+            {
+              const value_type = go(n1, local_stack_slash_empty(), value)
+              const general_val_type = is_syntactic_value(value)
+                ? generalize(n0, value_type)
+                : mk_empty_type_scheme(value_type)
+              {
+                return set_kv_map(
+                  check_context_slash_def_var_types(gctx),
+                  syntax_word_slash_word(_var),
+                  general_val_type,
+                )
+              }
+            }
+          }
+          case 'btop/defunc': {
+            const kind = tmp205[0]
+            const f = tmp205[1]
+            {
+              const fkind = (() => {
+                {
+                  const tmp208 = kind
+                  const tmp209 = tmp208['args']
+                  switch (externs['host']['get-tag'](tmp208)) {
+                    case 'bdefunc-kind/func': {
+                      return function_kind_slash_func()
+                    }
+                    case 'bdefunc-kind/macro': {
+                      return function_kind_slash_macro()
+                    }
+                    case 'bdefunc-kind/fexpr': {
+                      return function_kind_slash_fexpr()
+                    }
+                    default:
+                      throw 'unmatched-match'
+                  }
+                }
+              })()
+              const ft = go_func(n0, local_stack_slash_empty(), f, fkind)
+              const general_val_type = generalize(n0, ft)
+              {
+                return set_kv_map(
+                  check_context_slash_def_var_types(gctx),
+                  syntax_word_slash_word(bfunc_slash_name(f)),
+                  general_val_type,
+                )
+              }
+            }
+          }
+          case 'btop/export': {
+            const es = tmp205[0]
+            {
+              {
+                const gencol99 = es
+                const gencol_size100 = size(gencol99)
+                {
+                  return (() => {
+                    const genloop_fun101 = (genit98) => {
+                      if (lt_s(genit98, gencol_size100)) {
+                        {
+                          const e = at(gencol99, genit98)
+                          {
+                            {
+                              {
+                                const type_scheme = get(
+                                  check_context_slash_def_var_types(gctx),
+                                  syntax_word_slash_word(e),
+                                )
+                                const t = specialize_type_scheme(
+                                  check_context_slash_type_var_counter(gctx),
+                                  n0,
+                                  type_scheme,
+                                )
+                                {
+                                  annotate(gctx, e, t)
+                                }
+                              }
+                              return genloop_fun101(add(genit98, 1))
+                            }
+                          }
+                        }
+                      } else {
+                        return 'wuns-undefined'
+                      }
+                    }
+                    return genloop_fun101
+                  })()(0)
+                }
+              }
+            }
+          }
+          case 'btop/do': {
+            const btops = tmp205[0]
+            {
+              const gencol103 = btops
+              const gencol_size104 = size(gencol103)
+              {
+                return (() => {
+                  const genloop_fun105 = (genit102) => {
+                    if (lt_s(genit102, gencol_size104)) {
+                      {
+                        const btop = at(gencol103, genit102)
+                        {
+                          {
+                            check_top(btop)
+                            return genloop_fun105(add(genit102, 1))
+                          }
+                        }
+                      }
+                    } else {
+                      return 'wuns-undefined'
+                    }
+                  }
+                  return genloop_fun105
+                })()(0)
+              }
+            }
+          }
+          default:
+            throw 'unmatched-match'
+        }
+      }
+    }
+    {
+      return checker(
+        (() => {
+          const check_exp = (bexp) => {
+            return go(n0, local_stack_slash_empty(), bexp)
+          }
+          return check_exp
+        })(),
+        check_top,
+      )
+    }
+  })()
+}
+const normalize_deep = (internal_type) => {
+  {
+    const nt = normalize_type(internal_type)
+    {
+      {
+        const tmp210 = nt
+        const tmp211 = tmp210['args']
+        switch (externs['host']['get-tag'](tmp210)) {
+          case 'ctype/var': {
+            const tv = tmp211[0]
+            {
+              const tmp212 = get_type_var_kind(tv)
+              const tmp213 = tmp212['args']
+              switch (externs['host']['get-tag'](tmp212)) {
+                case 'type-var-kind/linked': {
+                  const lt = tmp213[0]
+                  {
+                    return abort(
+                      list(
+                        quote(form_slash_word('normalize-deep')),
+                        quote(form_slash_word('expected')),
+                        quote(form_slash_word('a')),
+                        quote(form_slash_word('non-linked')),
+                        quote(form_slash_word('type')),
+                        quote(form_slash_word('var')),
+                      ),
+                    )
+                  }
+                }
+                default:
+                  return 'wuns-undefined'
+              }
+            }
+          }
+          case 'ctype/inst': {
+            const inst_type = tmp211[0]
+            {
+              const tmp214 = inst_type
+              const tmp215 = tmp214['args']
+              switch (externs['host']['get-tag'](tmp214)) {
+                case 'inst-type/func': {
+                  const ft = tmp215[0]
+                  {
+                    {
+                      const gencol107 = func_type_slash_params(ft)
+                      const gencol_size108 = size(gencol107)
+                      {
+                        ;(() => {
+                          const genloop_fun109 = (genit106) => {
+                            if (lt_s(genit106, gencol_size108)) {
+                              {
+                                const param = at(gencol107, genit106)
+                                {
+                                  {
+                                    normalize_deep(param)
+                                    return genloop_fun109(add(genit106, 1))
+                                  }
+                                }
+                              }
+                            } else {
+                              return 'wuns-undefined'
+                            }
+                          }
+                          return genloop_fun109
+                        })()(0)
+                      }
+                    }
+                    {
+                      const tmp216 = func_type_slash_rest_param_opt(ft)
+                      const tmp217 = tmp216['args']
+                      switch (externs['host']['get-tag'](tmp216)) {
+                        case 'option/some': {
+                          const rest_type = tmp217[0]
+                          {
+                            normalize_deep(rest_type)
+                          }
+                          break
+                        }
+                        default:
+                      }
+                    }
+                    return normalize_deep(func_type_slash_result(ft))
+                  }
+                }
+                case 'inst-type/apply': {
+                  const type_name = tmp215[0]
+                  const type_args = tmp215[1]
+                  {
+                    const gencol111 = type_args
+                    const gencol_size112 = size(gencol111)
+                    {
+                      return (() => {
+                        const genloop_fun113 = (genit110) => {
+                          if (lt_s(genit110, gencol_size112)) {
+                            {
+                              const type_arg = at(gencol111, genit110)
+                              {
+                                {
+                                  normalize_deep(type_arg)
+                                  return genloop_fun113(add(genit110, 1))
+                                }
+                              }
+                            }
+                          } else {
+                            return 'wuns-undefined'
+                          }
+                        }
+                        return genloop_fun113
+                      })()(0)
+                    }
+                  }
+                }
+                default:
+                  throw 'unmatched-match'
+              }
+            }
+          }
+          default:
+            throw 'unmatched-match'
+        }
+      }
+    }
+  }
+}
+const internal_to_present_type = (internal_type) => {
+  {
+    const nt = internal_type
+    {
+      {
+        const tmp218 = nt
+        const tmp219 = tmp218['args']
+        switch (externs['host']['get-tag'](tmp218)) {
+          case 'ctype/var': {
+            const tv = tmp219[0]
+            {
+              const kind = get_type_var_kind(tv)
+              {
+                {
+                  const tmp220 = kind
+                  const tmp221 = tmp220['args']
+                  switch (externs['host']['get-tag'](tmp220)) {
+                    case 'type-var-kind/linked': {
+                      const lt = tmp221[0]
+                      {
+                        return abort(
+                          list(
+                            quote(form_slash_word('internal-to-present-type')),
+                            quote(form_slash_word('expected')),
+                            quote(form_slash_word('a')),
+                            quote(form_slash_word('non-linked')),
+                            quote(form_slash_word('type')),
+                            quote(form_slash_word('var')),
+                          ),
+                        )
+                      }
+                    }
+                    case 'type-var-kind/word': {
+                      const w = tmp221[0]
+                      return form_slash_word(w)
+                    }
+                    default:
+                      throw 'unmatched-match'
+                  }
+                }
+              }
+            }
+          }
+          case 'ctype/inst': {
+            const inst_type = tmp219[0]
+            {
+              const tmp222 = inst_type
+              const tmp223 = tmp222['args']
+              switch (externs['host']['get-tag'](tmp222)) {
+                case 'inst-type/func': {
+                  const ft = tmp223[0]
+                  return flist(
+                    quote(form_slash_word('func')),
+                    (() => {
+                      {
+                        const tmp224 = func_type_slash_rest_param_opt(ft)
+                        const tmp225 = tmp224['args']
+                        switch (externs['host']['get-tag'](tmp224)) {
+                          case 'option/some': {
+                            const rest_type = tmp225[0]
+                            return form_concat(
+                              list_map_fn(
+                                (() => {
+                                  const genword114 = (type) => {
+                                    return internal_to_present_type(type)
+                                  }
+                                  return genword114
+                                })(),
+                                func_type_slash_params(ft),
+                              ),
+                              list(quote(form_slash_word('..')), internal_to_present_type(rest_type)),
+                            )
+                          }
+                          default:
+                            return form_slash_list(
+                              list_map_fn(
+                                (() => {
+                                  const genword115 = (type) => {
+                                    return internal_to_present_type(type)
+                                  }
+                                  return genword115
+                                })(),
+                                func_type_slash_params(ft),
+                              ),
+                            )
+                        }
+                      }
+                    })(),
+                    internal_to_present_type(func_type_slash_result(ft)),
+                  )
+                }
+                case 'inst-type/apply': {
+                  const type_name = tmp223[0]
+                  const type_args = tmp223[1]
+                  if (eq_word(type_name, 'tuple')) {
+                    return form_concat(
+                      list(quote(form_slash_word('tuple'))),
+                      list_map_fn(
+                        (() => {
+                          const genword116 = (type) => {
+                            return internal_to_present_type(type)
+                          }
+                          return genword116
+                        })(),
+                        type_args,
+                      ),
+                    )
+                  } else {
+                    {
+                      const n_of_args = size(type_args)
+                      {
+                        if (n_of_args) {
+                          return form_concat(
+                            list(form_slash_word(type_name)),
+                            list_map_fn(
+                              (() => {
+                                const genword117 = (ta) => {
+                                  return internal_to_present_type(ta)
+                                }
+                                return genword117
+                              })(),
+                              slice(type_args, n0, n_of_args),
+                            ),
+                          )
+                        } else {
+                          return form_slash_word(type_name)
+                        }
+                      }
+                    }
+                  }
+                }
+                default:
+                  throw 'unmatched-match'
+              }
+            }
+          }
+          default:
+            throw 'unmatched-match'
+        }
+      }
+    }
+  }
+}
+const normalize_present_type_scheme = (internal_type) => {
+  normalize_deep(internal_type)
+  {
+    const type_vars = free_type_vars(internal_type)
+    const type_var_counter = atom(n0)
+    const subst_assoc_list = list_map_fn(
+      (() => {
+        const genword118 = (tv) => {
+          return pair(tv, generate_fresh_type_var_atom(type_var_counter, n0))
+        }
+        return genword118
+      })(),
+      type_vars,
+    )
+    const copied_type = copy_type(subst_assoc_list, internal_type)
+    const new_present_type_vars = list_map_fn(
+      (() => {
+        const genword119 = (tv) => {
+          {
+            const kind = get_type_var_kind(tv)
+            {
+              {
+                const tmp226 = kind
+                const tmp227 = tmp226['args']
+                switch (externs['host']['get-tag'](tmp226)) {
+                  case 'type-var-kind/linked': {
+                    const lt = tmp227[0]
+                    {
+                      return abort(
+                        list(
+                          quote(form_slash_word('internal-to-present-type')),
+                          quote(form_slash_word('expected')),
+                          quote(form_slash_word('a')),
+                          quote(form_slash_word('non-linked')),
+                          quote(form_slash_word('type')),
+                          quote(form_slash_word('var')),
+                        ),
+                      )
+                    }
+                  }
+                  case 'type-var-kind/word': {
+                    const w = tmp227[0]
+                    return form_slash_word(w)
+                  }
+                  default:
+                    throw 'unmatched-match'
+                }
+              }
+            }
+          }
+        }
+        return genword119
+      })(),
+      free_type_vars(copied_type),
+    )
+    {
+      if (is_empty(new_present_type_vars)) {
+        return internal_to_present_type(copied_type)
+      } else {
+        return flist(
+          quote(form_slash_word('type-scheme')),
+          form_slash_list(new_present_type_vars),
+          internal_to_present_type(copied_type),
+        )
+      }
+    }
+  }
+}
+export {
+  make_global_context_from_syntax_info as 'make-global-context-from-syntax-info',
+  make_checker as 'make-checker',
+}

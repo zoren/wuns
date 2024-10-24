@@ -802,3 +802,5 @@
       [flist [quote type-scheme]
         [form/list new-present-type-vars]
         [internal-to-present-type copied-type]]]]]
+
+[export make-global-context-from-syntax-info make-checker]

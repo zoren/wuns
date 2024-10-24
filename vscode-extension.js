@@ -348,27 +348,34 @@ const getActiveTextEditorDocument = () => {
 }
 
 const addCheckActiveDocumentCommand = async (context) => {
-  const { treeToFormsSafeNoMeta, tryGetNodeFromForm, printFormMessage } = await import(
-    './esm/core.js'
-  )
-  const astBind = await import('./esm/artifacts/ast-bind.formatted.js')
-  const makeFormToAstConverter = astBind['mk-form-to-ast']
+  const { treeToFormsSafeNoMeta, tryGetNodeFromForm, printFormMessage } = await import('./esm/core.js')
+  const check2 = await import('./esm/artifacts/check2.formatted.js')
+  const makeFormToAstConverter = check2['mk-form-to-ast']
+  const mkGlobal = check2['make-global-context-from-syntax-info']
+  const mkChecker = check2['make-checker']
   const diagnosticCollection = languages.createDiagnosticCollection('wuns')
   const diagnose = () => {
     const doc = getActiveTextEditorDocument()
     if (!doc) return console.error('no active text editor')
     const tree = parseDocumentTreeSitter(doc)
     const converter = makeFormToAstConverter(path.dirname(doc.fileName))
-    const formToAST = converter['form-to-ast']
+    const formToTop = converter['form-to-top']
+    const syntaxInfo = converter['syntax-info']
+    const checkContext = mkGlobal(syntaxInfo)
+    const checker = mkChecker(checkContext)
+    const checkTop = checker['check-top']
+    // make-global-context-from-syntax-info
     const diagnosticsForFile = []
     for (const form of treeToFormsSafeNoMeta(tree)) {
-      const { tag, args } = formToAST(form)
+      const { tag, args } = formToTop(form)
       switch (tag) {
-        case 'result/ok':
+        case 'result/ok': {
+          const topForm = args[0]
+          checkTop(topForm)
           break
+        }
         case 'result/error': {
-          const errors = args[0]
-          for (const error of errors) {
+          for (const error of args[0]) {
             const { form, message } = error
             const node = tryGetNodeFromForm(form)
             if (!node) {
@@ -380,9 +387,8 @@ const addCheckActiveDocumentCommand = async (context) => {
               console.error('diagnose error different tree', error, form)
               continue
             }
-            const range = rangeFromNode(node)
             diagnosticsForFile.push(
-              new vscode.Diagnostic(range, printFormMessage(message), vscode.DiagnosticSeverity.Error),
+              new vscode.Diagnostic(rangeFromNode(node), printFormMessage(message), vscode.DiagnosticSeverity.Error),
             )
           }
           break
@@ -391,13 +397,23 @@ const addCheckActiveDocumentCommand = async (context) => {
           throw new Error('unexpected tag')
       }
     }
+    for (const error of checkContext.messages) {
+      const optNode = error['opt-node']
+      if (optNode.tag !== 'option/some') continue
+      const node = optNode.args[0]
+      const nodeTree = node.tree
+      if (nodeTree !== tree) {
+        console.error('diagnose error different tree', error, form)
+        continue
+      }
+      diagnosticsForFile.push(
+        new vscode.Diagnostic(rangeFromNode(node), printFormMessage(error.message), vscode.DiagnosticSeverity.Error),
+      )
+    }
     diagnosticCollection.clear()
     diagnosticCollection.set(doc.uri, diagnosticsForFile)
   }
-  context.subscriptions.push(
-    diagnosticCollection,
-    commands.registerCommand('wunslang.check', diagnose),
-  )
+  context.subscriptions.push(diagnosticCollection, commands.registerCommand('wunslang.check', diagnose))
 }
 
 /**

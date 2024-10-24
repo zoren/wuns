@@ -810,3 +810,5 @@
         [func try-get-ldesc [n] [try-get node-to-ldesc n]]
         [func try-get-def-desc [n] [try-get node-to-def-desc n]]
         [func try-get-form [n] [try-get bst-to-form n]]]]]]]
+
+[export mk-form-to-ast]
