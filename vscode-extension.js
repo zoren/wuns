@@ -87,199 +87,197 @@ const makeProvideDocumentSemanticTokensForms = async () => {
 
     const tokensBuilder = new SemanticTokensBuilder(legend)
     const tree = parseDocumentTreeSitter(document)
-    const topForms = treeToFormsSafeNoMeta(tree)
-    try {
-      const pushTokenWithModifier = (form, tokenType, tokenModifiers) => {
-        if (!form) return
-        const word = tryGetFormWord(form)
-        if (!word) return console.error('expected word')
-        const node = tryGetNodeFromForm(form)
-        if (!node) return
-        // ignore if not in the same file, this can happen with macros
-        if (tree !== node.tree) return
-        const { row, column } = node.startPosition
-        tokensBuilder.push(row, column, word.length, tokenType, tokenModifiers)
+    const pushTokenWithModifier = (form, tokenType, tokenModifiers) => {
+      if (!form) return
+      const word = tryGetFormWord(form)
+      if (!word) return console.error('expected word')
+      const node = tryGetNodeFromForm(form)
+      if (!node) return
+      // ignore if not in the same file, this can happen with macros
+      if (tree !== node.tree) return
+      const { row, column } = node.startPosition
+      tokensBuilder.push(row, column, word.length, tokenType, tokenModifiers)
+    }
+    const pushToken = (form, tokenType) => pushTokenWithModifier(form, tokenType, 0)
+    const emptyList = Object.freeze([])
+    const getListOrEmpty = (form) => tryGetFormList(form) || emptyList
+    const goType = (form) => {
+      if (!form) return
+      if (tryGetFormWord(form)) pushToken(form, typeTokenType)
+      else getListOrEmpty(form).forEach(goType)
+    }
+    const go = (form) => {
+      if (!form) return
+      const word = tryGetFormWord(form)
+      if (word) {
+        pushToken(form, variableTokenType)
+        return
       }
-      const pushToken = (form, tokenType) => pushTokenWithModifier(form, tokenType, 0)
-      const emptyList = Object.freeze([])
-      const getListOrEmpty = (form) => tryGetFormList(form) || emptyList
-      const goType = (form) => {
-        if (!form) return
-        if (tryGetFormWord(form)) pushToken(form, typeTokenType)
-        else getListOrEmpty(form).forEach(goType)
+      const list = tryGetFormList(form)
+      if (!list) {
+        console.error('expected list', form)
+        return
       }
-      const go = (form) => {
-        if (!form) return
-        const word = tryGetFormWord(form)
-        if (word) {
-          pushToken(form, variableTokenType)
-          return
+      if (list.length === 0) return
+      const [head, ...tail] = list
+      const headWord = tryGetFormWord(head)
+      const runForm = () => {
+        try {
+          // eval for side effects so macros are defined and can be expanded
+          // todo only eval def and do forms, to avoid evaling top level forms, that may crash
+          evalForm(form)
+        } catch (e) {
+          console.error('provideDocumentSemanticTokensForms evalForm error', e.message)
+          console.error(e)
         }
-        const list = tryGetFormList(form)
-        if (!list) {
-          console.error('expected list', form)
-          return
-        }
-        if (list.length === 0) return
-        const [head, ...tail] = list
-        const headWord = tryGetFormWord(head)
-        const runForm = () => {
-          try {
-            // eval for side effects so macros are defined and can be expanded
-            // todo only eval def and do forms, to avoid evaling top level forms, that may crash
-            evalForm(form)
-          } catch (e) {
-            console.error('provideDocumentSemanticTokensForms evalForm error', e.message)
-            console.error(e)
-          }
-        }
-        const funcSpecial = (headWord, [name, paramsForm, ...bodies]) => {
-          pushToken(name, headWord === 'macro' ? macroTokenType : functionTokenType)
-          for (const param of getListOrEmpty(paramsForm)) pushToken(param, parameterTokenType)
-          for (const body of bodies) go(body)
-        }
-        const specialForms = {
-          i32: () => {
-            pushToken(tail[0], tokenTypeNumber)
-          },
-          f64: () => {
-            pushToken(tail[0], tokenTypeNumber)
-          },
-          word: () => {
-            pushToken(tail[0], stringTokenType)
-          },
-          if: () => {
-            for (const form of tail) go(form)
-          },
-          switch: () => {
-            go(tail[0])
-            for (let i = 1; i < tail.length - 1; i += 2) {
-              const constForm = tail[i]
-              for (const form of getListOrEmpty(constForm)) go(form)
-              go(tail[i + 1])
-            }
-            go(tail.at(-1))
-          },
-          match: () => {
-            go(tail[0])
-            for (let i = 1; i < tail.length - 1; i += 2) {
-              const patternList = getListOrEmpty(tail[i])
-              pushToken(patternList[0], enumMemberTokenType)
-              for (let j = 1; j < patternList.length; j++)
-                pushTokenWithModifier(patternList[j], variableTokenType, declarationModifier)
-              go(tail[i + 1])
-            }
-            if (tail.length % 2 === 0) go(tail.at(-1))
-          },
-          do: () => {
-            for (const form of tail) go(form)
-          },
-          let: () => {
-            const [bindingsForm, ...bodies] = tail
-            const bindings = getListOrEmpty(bindingsForm)
-            for (let i = 0; i < bindings.length - 1; i += 2) {
-              pushTokenWithModifier(bindings[i], variableTokenType, declarationModifier)
-              go(bindings[i + 1])
-            }
-            for (const body of bodies) go(body)
-          },
-          letfn: () => {
-            const [functionsForm, body] = tail
-            for (const func of getListOrEmpty(functionsForm)) {
-              const [head, ...tail] = getListOrEmpty(func)
-              const headWord = tryGetFormWord(head)
-              if (headWord !== 'func' && headWord !== 'fexpr' && headWord !== 'macro') continue
-              pushToken(head, keywordTokenType)
-              funcSpecial(headWord, tail)
-            }
-            go(body)
-          },
-          func: () => funcSpecial(headWord, tail),
-          defn: () => {
-            funcSpecial(headWord, tail)
-            runForm()
-          },
-          defexpr: () => {
-            funcSpecial(headWord, tail)
-            runForm()
-          },
-          defmacro: () => {
-            funcSpecial(headWord, tail)
-            runForm()
-          },
-          def: () => {
-            const [cname, val] = tail
-            pushTokenWithModifier(cname, variableTokenType, declarationModifier)
-            go(val)
-            runForm()
-          },
-          extern: () => {
-            for (const form of tail) pushToken(form, stringTokenType)
-          },
-          intrinsic: () => {
-            pushToken(form[0], tokenTypeOperator)
-          },
-          'type-anno': () => {
-            go(tail[0])
-            goType(tail[1])
-          },
-          type: () => {
-            for (let i = 0; i < tail.length; i += 3) {
-              pushTokenWithModifier(tail[i], typeTokenType, declarationModifier)
-              for (const typeParam of getListOrEmpty(tail[i + 1])) pushToken(typeParam, typeParameterTokenType)
-              goType(tail[i + 2])
-            }
-            runForm()
-          },
-          load: () => {
-            if (tail.length === 1 && tryGetFormWord(tail[0])) pushToken(tail[0], stringTokenType)
-            runForm()
-          },
-          export: () => {
-            for (const form of tail) pushToken(form, variableTokenType)
-          }
-        }
-        if (headWord) {
-          const specialHandler = specialForms[headWord]
-          if (specialHandler) {
-            // console.log('special form', headWord)
-            pushToken(head, keywordTokenType)
-            specialHandler(tail)
-            return
-          }
-          // check if headWord is a defed macro or fexpr, or a func
-          const headValue = defEnv.get(headWord)
-          switch (tryGetClosureKind(headValue)) {
-            case 'macro':
-              pushToken(head, macroTokenType)
-              go(headValue(...tail))
-              return
-            case 'fexpr':
-              pushToken(head, functionTokenType)
-              const goQuote = (form) => {
-                if (tryGetFormWord(form)) pushToken(form, stringTokenType)
-                else getListOrEmpty(form).forEach(goQuote)
-              }
-              for (const form of tail) goQuote(form)
-              return
-            case 'func':
-              pushToken(head, functionTokenType)
-              for (const form of tail) go(form)
-              return
-            case null:
-              break
-            default:
-              throw new Error('unexpected closure kind')
-          }
-          pushToken(head, functionTokenType)
+      }
+      const funcSpecial = (headWord, [name, paramsForm, ...bodies]) => {
+        pushToken(name, headWord === 'macro' ? macroTokenType : functionTokenType)
+        for (const param of getListOrEmpty(paramsForm)) pushToken(param, parameterTokenType)
+        for (const body of bodies) go(body)
+      }
+      const specialForms = {
+        i32: () => {
+          pushToken(tail[0], tokenTypeNumber)
+        },
+        f64: () => {
+          pushToken(tail[0], tokenTypeNumber)
+        },
+        word: () => {
+          pushToken(tail[0], stringTokenType)
+        },
+        if: () => {
           for (const form of tail) go(form)
+        },
+        switch: () => {
+          go(tail[0])
+          for (let i = 1; i < tail.length - 1; i += 2) {
+            const constForm = tail[i]
+            for (const form of getListOrEmpty(constForm)) go(form)
+            go(tail[i + 1])
+          }
+          go(tail.at(-1))
+        },
+        match: () => {
+          go(tail[0])
+          for (let i = 1; i < tail.length - 1; i += 2) {
+            const patternList = getListOrEmpty(tail[i])
+            pushToken(patternList[0], enumMemberTokenType)
+            for (let j = 1; j < patternList.length; j++)
+              pushTokenWithModifier(patternList[j], variableTokenType, declarationModifier)
+            go(tail[i + 1])
+          }
+          if (tail.length % 2 === 0) go(tail.at(-1))
+        },
+        do: () => {
+          for (const form of tail) go(form)
+        },
+        let: () => {
+          const [bindingsForm, ...bodies] = tail
+          const bindings = getListOrEmpty(bindingsForm)
+          for (let i = 0; i < bindings.length - 1; i += 2) {
+            pushTokenWithModifier(bindings[i], variableTokenType, declarationModifier)
+            go(bindings[i + 1])
+          }
+          for (const body of bodies) go(body)
+        },
+        letfn: () => {
+          const [functionsForm, body] = tail
+          for (const func of getListOrEmpty(functionsForm)) {
+            const [head, ...tail] = getListOrEmpty(func)
+            const headWord = tryGetFormWord(head)
+            if (headWord !== 'func' && headWord !== 'fexpr' && headWord !== 'macro') continue
+            pushToken(head, keywordTokenType)
+            funcSpecial(headWord, tail)
+          }
+          go(body)
+        },
+        func: () => funcSpecial(headWord, tail),
+        defn: () => {
+          funcSpecial(headWord, tail)
+          runForm()
+        },
+        defexpr: () => {
+          funcSpecial(headWord, tail)
+          runForm()
+        },
+        defmacro: () => {
+          funcSpecial(headWord, tail)
+          runForm()
+        },
+        def: () => {
+          const [cname, val] = tail
+          pushTokenWithModifier(cname, variableTokenType, declarationModifier)
+          go(val)
+          runForm()
+        },
+        extern: () => {
+          for (const form of tail) pushToken(form, stringTokenType)
+        },
+        intrinsic: () => {
+          pushToken(form[0], tokenTypeOperator)
+        },
+        'type-anno': () => {
+          go(tail[0])
+          goType(tail[1])
+        },
+        type: () => {
+          for (let i = 0; i < tail.length; i += 3) {
+            pushTokenWithModifier(tail[i], typeTokenType, declarationModifier)
+            for (const typeParam of getListOrEmpty(tail[i + 1])) pushToken(typeParam, typeParameterTokenType)
+            goType(tail[i + 2])
+          }
+          runForm()
+        },
+        load: () => {
+          if (tail.length === 1 && tryGetFormWord(tail[0])) pushToken(tail[0], stringTokenType)
+          runForm()
+        },
+        export: () => {
+          for (const form of tail) pushToken(form, variableTokenType)
+        },
+      }
+      if (headWord) {
+        const specialHandler = specialForms[headWord]
+        if (specialHandler) {
+          // console.log('special form', headWord)
+          pushToken(head, keywordTokenType)
+          specialHandler(tail)
           return
         }
-        go(head)
+        // check if headWord is a defed macro or fexpr, or a func
+        const headValue = defEnv.get(headWord)
+        switch (tryGetClosureKind(headValue)) {
+          case 'macro':
+            pushToken(head, macroTokenType)
+            go(headValue(...tail))
+            return
+          case 'fexpr':
+            pushToken(head, functionTokenType)
+            const goQuote = (form) => {
+              if (tryGetFormWord(form)) pushToken(form, stringTokenType)
+              else getListOrEmpty(form).forEach(goQuote)
+            }
+            for (const form of tail) goQuote(form)
+            return
+          case 'func':
+            pushToken(head, functionTokenType)
+            for (const form of tail) go(form)
+            return
+          case null:
+            break
+          default:
+            throw new Error('unexpected closure kind')
+        }
+        pushToken(head, functionTokenType)
         for (const form of tail) go(form)
+        return
       }
-
-      for (const topForm of topForms) go(topForm)
+      go(head)
+      for (const form of tail) go(form)
+    }
+    try {
+      for (const topForm of treeToFormsSafeNoMeta(tree)) go(topForm)
     } catch (e) {
       console.error('provideDocumentSemanticTokensForms error catch', e)
     }
