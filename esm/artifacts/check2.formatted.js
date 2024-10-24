@@ -1759,10 +1759,16 @@ const def_desc_slash_type = () => externs['host']['make-tagged-value']('def-desc
 const def_desc_slash_union_ctor = (p0, p1) => externs['host']['make-tagged-value']('def-desc/union-ctor', [p0, p1])
 const def_desc_slash_record_ctor = () => externs['host']['make-tagged-value']('def-desc/record-ctor', [])
 const def_desc_slash_record_proj = (p0, p1) => externs['host']['make-tagged-value']('def-desc/record-proj', [p0, p1])
-const report_message = (message, form) =>
-  externs['host']['make-record-from-object']('report-message', { message: message, form: form })
+const diagnostic_severity_slash_error = () => externs['host']['make-tagged-value']('diagnostic-severity/error', [])
+const diagnostic_severity_slash_warning = () => externs['host']['make-tagged-value']('diagnostic-severity/warning', [])
+const diagnostic_severity_slash_information = () =>
+  externs['host']['make-tagged-value']('diagnostic-severity/information', [])
+const diagnostic_severity_slash_hint = () => externs['host']['make-tagged-value']('diagnostic-severity/hint', [])
+const report_message = (message, form, severity) =>
+  externs['host']['make-record-from-object']('report-message', { message: message, form: form, severity: severity })
 const report_message_slash_message = (record) => record['message']
 const report_message_slash_form = (record) => record['form']
+const report_message_slash_severity = (record) => record['severity']
 const builtin_type_arity_ok = (type_name, n_of_type_args) => {
   switch (type_name) {
     case 'tuple':
@@ -1875,7 +1881,7 @@ const mk_form_to_ast = (current_directory) => {
     const errors = growable_list()
     const push_error = (() => {
       const pe = (form, msg) => {
-        return push(errors, report_message(msg, form))
+        return push(errors, report_message(msg, form, diagnostic_severity_slash_error()))
       }
       return pe
     })()
@@ -5181,10 +5187,15 @@ const intrinsic_name_to_type = (name) => {
     }
   }
 }
-const check_message = (message, opt_node) =>
-  externs['host']['make-record-from-object']('check-message', { message: message, 'opt-node': opt_node })
+const check_message = (message, opt_node, severity) =>
+  externs['host']['make-record-from-object']('check-message', {
+    message: message,
+    'opt-node': opt_node,
+    severity: severity,
+  })
 const check_message_slash_message = (record) => record['message']
 const check_message_slash_opt_node = (record) => record['opt-node']
+const check_message_slash_severity = (record) => record['severity']
 const log_check_message = (error) => {
   {
     const tmp178 = check_message_slash_opt_node(error)
@@ -5233,10 +5244,16 @@ const make_global_context_from_syntax_info = (syntax_info) => {
   )
 }
 const report_fn = (gctx, message, opt_location) => {
-  return push(check_context_slash_messages(gctx), check_message(message, opt_location))
+  return push(
+    check_context_slash_messages(gctx),
+    check_message(message, opt_location, diagnostic_severity_slash_error()),
+  )
 }
 const report_sword = (gctx, sw, message) => {
-  return push(check_context_slash_messages(gctx), check_message(message, syntax_word_slash_node(sw)))
+  return push(
+    check_context_slash_messages(gctx),
+    check_message(message, syntax_word_slash_node(sw), diagnostic_severity_slash_error()),
+  )
 }
 const generate_fresh_type_var = (gctx, level) => {
   return generate_fresh_type_var_atom(check_context_slash_type_var_counter(gctx), level)

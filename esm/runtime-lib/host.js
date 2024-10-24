@@ -23,6 +23,7 @@ export const abort = (message) => {
 
 export const read_file = (path) => {
   if (typeof path !== 'string') throw new Error('read-file expects string')
+  // maybe return a result so clients can react if file not found
   return readFile(path)
 }
 

@@ -347,6 +347,24 @@ const getActiveTextEditorDocument = () => {
   return activeTextEditor.document
 }
 
+const serverityToDiagnosticSeverity = (severity) => {
+  const prefix = 'diagnostic-severity/'
+  const tag = severity.tag
+  if (!tag.startsWith(prefix)) throw new Error('unexpected severity tag')
+  switch (tag.slice(prefix.length)) {
+    case 'error':
+      return vscode.DiagnosticSeverity.Error
+    case 'warning':
+      return vscode.DiagnosticSeverity.Warning
+    case 'info':
+      return vscode.DiagnosticSeverity.Information
+    case 'hint':
+      return vscode.DiagnosticSeverity.Hint
+    default:
+      throw new Error('unexpected severity')
+  }
+}
+
 const addCheckActiveDocumentCommand = async (context) => {
   const { treeToFormsSafeNoMeta, tryGetNodeFromForm, printFormMessage } = await import('./esm/core.js')
   const check2 = await import('./esm/artifacts/check2.formatted.js')
@@ -376,7 +394,7 @@ const addCheckActiveDocumentCommand = async (context) => {
         }
         case 'result/error': {
           for (const error of args[0]) {
-            const { form, message } = error
+            const { form, message, severity } = error
             const node = tryGetNodeFromForm(form)
             if (!node) {
               console.error('diagnose error no node', error, form)
@@ -388,7 +406,11 @@ const addCheckActiveDocumentCommand = async (context) => {
               continue
             }
             diagnosticsForFile.push(
-              new vscode.Diagnostic(rangeFromNode(node), printFormMessage(message), vscode.DiagnosticSeverity.Error),
+              new vscode.Diagnostic(
+                rangeFromNode(node),
+                'binding: ' + printFormMessage(message),
+                serverityToDiagnosticSeverity(severity),
+              ),
             )
           }
           break
@@ -398,16 +420,21 @@ const addCheckActiveDocumentCommand = async (context) => {
       }
     }
     for (const error of checkContext.messages) {
+      const { message, severity } = error
       const optNode = error['opt-node']
       if (optNode.tag !== 'option/some') continue
       const node = optNode.args[0]
       const nodeTree = node.tree
       if (nodeTree !== tree) {
-        console.error('diagnose error different tree', error, form)
+        console.error('diagnose error different tree', error)
         continue
       }
       diagnosticsForFile.push(
-        new vscode.Diagnostic(rangeFromNode(node), printFormMessage(error.message), vscode.DiagnosticSeverity.Error),
+        new vscode.Diagnostic(
+          rangeFromNode(node),
+          'type check: ' + printFormMessage(message),
+          serverityToDiagnosticSeverity(severity),
+        ),
       )
     }
     diagnosticCollection.clear()

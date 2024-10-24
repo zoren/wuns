@@ -344,7 +344,8 @@
 [type check-message []
   [record
     [message form]
-    [opt-node [option syntax-node]]]]
+    [opt-node [option syntax-node]]
+    [severity diagnostic-severity]]]
 
 [defn log-check-message [error]
   [if-let [node [check-message/opt-node error]]
@@ -371,10 +372,10 @@
     [transient-kv-map]]]
 
 [defn report-fn [gctx message opt-location]
-  [push [check-context/messages gctx] [check-message message opt-location]]]
+  [push [check-context/messages gctx] [check-message message opt-location [diagnostic-severity/error]]]]
 
 [defn report-sword [gctx sw message]
-  [push [check-context/messages gctx] [check-message message [syntax-word/node sw]]]]
+  [push [check-context/messages gctx] [check-message message [syntax-word/node sw] [diagnostic-severity/error]]]]
 
 [defn generate-fresh-type-var [gctx level]
   [generate-fresh-type-var-atom [check-context/type-var-counter gctx] level]]
