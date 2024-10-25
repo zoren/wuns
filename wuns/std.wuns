@@ -47,10 +47,7 @@
     [quote def]
     def-name
     [flist [quote func] def-name [quote [a b]]
-      [flist
-        [flist [quote intrinsic] inst-name]
-        [quote a]
-        [quote b]]]]]
+      [flist [quote intrinsic-call] inst-name [quote a] [quote b]]]]]
 
 [defmacro def-instruction [def-name inst-name] [def-instruction-fn def-name inst-name]]
 
@@ -74,6 +71,11 @@
 [def 2  [i32 2]]
 [def 3  [i32 3]]
 [def 4  [i32 4]]
+[def 5  [i32 5]]
+[def 6  [i32 6]]
+[def 7  [i32 7]]
+[def 8  [i32 8]]
+[def 9  [i32 9]]
 
 [defn inc [x] [add x 1]]
 
@@ -515,31 +517,6 @@
 [def-extern byte-array-get [func [byte-array i32] i32]]
 [def-extern byte-array-set [func [byte-array i32 i32] [tuple]]]
 [def-extern byte-array-log-as-string [func [byte-array] [tuple]]]
-
-[defn word-list-contains [w .. words]
-  [let [s-words [size words]]
-    [[func go [i]
-      [if [lt-s i s-words]
-        [if [eq-word w [at words i]]
-          1
-          [go [inc i]]]
-        0]]
-      0]]]
-
-[todo remove this]
-[defn is-i32-bin-inst [w2]
-  [word-list-contains w2
-    [word i32.add] [word i32.sub] [word i32.mul] [word i32.rem-s] [word i32.div-s]
-    [word i32.and] [word i32.or]
-    [word i32.eq] [word i32.lt-s] [word i32.le-s]]]
-
-[defn is-f64-bin-inst [w2]
-  [word-list-contains w2
-    [word f64.add] [word f64.sub] [word f64.mul]]]
-
-[defn is-f64-comp-inst [w2]
-  [word-list-contains w2
-    [word f64.eq] [word f64.lt] [word f64.le]]]
 
 [def-extern pairwise [type-scheme [a] [func [[list a]] [list [list a]]]]]
 [def-extern triplewise [type-scheme [a] [func [[list a]] [list [list a]]]]]

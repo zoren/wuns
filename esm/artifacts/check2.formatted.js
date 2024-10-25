@@ -9,11 +9,11 @@ const list = (...entries) => {
 }
 const qword = (m) => {
   {
-    const tmp0 = m
-    const tmp1 = tmp0['args']
-    switch (externs['host']['get-tag'](tmp0)) {
+    const tmp236 = m
+    const tmp237 = tmp236['args']
+    switch (externs['host']['get-tag'](tmp236)) {
       case 'form/word': {
-        const w = tmp1[0]
+        const w = tmp237[0]
         return flist(form_slash_word('form/word'), flist(form_slash_word('word'), form_slash_word(w)))
       }
       default:
@@ -57,7 +57,8 @@ const def_instruction_fn = (def_name, inst_name) => {
       def_name,
       quote(form_slash_list([form_slash_word('a'), form_slash_word('b')])),
       flist(
-        flist(quote(form_slash_word('intrinsic')), inst_name),
+        quote(form_slash_word('intrinsic-call')),
+        inst_name,
         quote(form_slash_word('a')),
         quote(form_slash_word('b')),
       ),
@@ -70,11 +71,11 @@ const def_instruction = (def_name, inst_name) => {
 const abort = externs['host']['abort']
 const form_to_word = (form) => {
   {
-    const tmp2 = form
-    const tmp3 = tmp2['args']
-    switch (externs['host']['get-tag'](tmp2)) {
+    const tmp238 = form
+    const tmp239 = tmp238['args']
+    switch (externs['host']['get-tag'](tmp238)) {
       case 'form/word': {
-        const w = tmp3[0]
+        const w = tmp239[0]
         return w
       }
       default:
@@ -118,6 +119,11 @@ const n1 = 1
 const n2 = 2
 const n3 = 3
 const n4 = 4
+const n5 = 5
+const n6 = 6
+const n7 = 7
+const n8 = 8
+const n9 = 9
 const inc = (x) => {
   return add(x, n1)
 }
@@ -220,11 +226,11 @@ const if_not = (cond, false_form, true_form) => {
 }
 const is_word = (form) => {
   {
-    const tmp4 = form
-    const tmp5 = tmp4['args']
-    switch (externs['host']['get-tag'](tmp4)) {
+    const tmp240 = form
+    const tmp241 = tmp240['args']
+    switch (externs['host']['get-tag'](tmp240)) {
       case 'form/word': {
-        const x = tmp5[0]
+        const x = tmp241[0]
         return n1
       }
       default:
@@ -253,15 +259,15 @@ const quote_list = (lmsg) => {
         (() => {
           const f = (e) => {
             {
-              const tmp6 = e
-              const tmp7 = tmp6['args']
-              switch (externs['host']['get-tag'](tmp6)) {
+              const tmp242 = e
+              const tmp243 = tmp242['args']
+              switch (externs['host']['get-tag'](tmp242)) {
                 case 'form/word': {
-                  const w = tmp7[0]
+                  const w = tmp243[0]
                   return mk_quote(e)
                 }
                 case 'form/list': {
-                  const l = tmp7[0]
+                  const l = tmp243[0]
                   return e
                 }
                 default:
@@ -448,11 +454,11 @@ const or = (...clauses) => {
 }
 const form_to_list = (form) => {
   {
-    const tmp8 = form
-    const tmp9 = tmp8['args']
-    switch (externs['host']['get-tag'](tmp8)) {
+    const tmp244 = form
+    const tmp245 = tmp244['args']
+    switch (externs['host']['get-tag'](tmp244)) {
       case 'form/word': {
-        const w = tmp9[0]
+        const w = tmp245[0]
         {
           return abort(
             list(
@@ -468,7 +474,7 @@ const form_to_list = (form) => {
         }
       }
       case 'form/list': {
-        const l = tmp9[0]
+        const l = tmp245[0]
         return l
       }
       default:
@@ -478,11 +484,11 @@ const form_to_list = (form) => {
 }
 const is_list = (form) => {
   {
-    const tmp10 = form
-    const tmp11 = tmp10['args']
-    switch (externs['host']['get-tag'](tmp10)) {
+    const tmp246 = form
+    const tmp247 = tmp246['args']
+    switch (externs['host']['get-tag'](tmp246)) {
       case 'form/list': {
-        const l = tmp11[0]
+        const l = tmp247[0]
         return n1
       }
       default:
@@ -496,15 +502,15 @@ const none = option_slash_none
 const some = option_slash_some
 const try_get_word = (form) => {
   {
-    const tmp12 = form
-    const tmp13 = tmp12['args']
-    switch (externs['host']['get-tag'](tmp12)) {
+    const tmp248 = form
+    const tmp249 = tmp248['args']
+    switch (externs['host']['get-tag'](tmp248)) {
       case 'form/word': {
-        const w = tmp13[0]
+        const w = tmp249[0]
         return some(w)
       }
       case 'form/list': {
-        const l = tmp13[0]
+        const l = tmp249[0]
         return none()
       }
       default:
@@ -514,15 +520,15 @@ const try_get_word = (form) => {
 }
 const try_get_list = (form) => {
   {
-    const tmp14 = form
-    const tmp15 = tmp14['args']
-    switch (externs['host']['get-tag'](tmp14)) {
+    const tmp250 = form
+    const tmp251 = tmp250['args']
+    switch (externs['host']['get-tag'](tmp250)) {
       case 'form/word': {
-        const w = tmp15[0]
+        const w = tmp251[0]
         return none()
       }
       case 'form/list': {
-        const l = tmp15[0]
+        const l = tmp251[0]
         return some(l)
       }
       default:
@@ -532,11 +538,11 @@ const try_get_list = (form) => {
 }
 const if_let = (binding_form, true_form, false_form) => {
   {
-    const tmp16 = binding_form
-    const tmp17 = tmp16['args']
-    switch (externs['host']['get-tag'](tmp16)) {
+    const tmp252 = binding_form
+    const tmp253 = tmp252['args']
+    switch (externs['host']['get-tag'](tmp252)) {
       case 'form/list': {
-        const binding = tmp17[0]
+        const binding = tmp253[0]
         {
           if (eq(n2, size(binding))) {
           } else {
@@ -609,11 +615,11 @@ const if_let = (binding_form, true_form, false_form) => {
 }
 const when_let = (binding_form, ...forms) => {
   {
-    const tmp18 = binding_form
-    const tmp19 = tmp18['args']
-    switch (externs['host']['get-tag'](tmp18)) {
+    const tmp254 = binding_form
+    const tmp255 = tmp254['args']
+    switch (externs['host']['get-tag'](tmp254)) {
       case 'form/list': {
-        const binding = tmp19[0]
+        const binding = tmp255[0]
         {
           if (eq(n2, size(binding))) {
           } else {
@@ -712,17 +718,17 @@ const eq_word = (wa, wb) => {
 }
 const eq_form_word = (fa, fb) => {
   {
-    const tmp20 = fa
-    const tmp21 = tmp20['args']
-    switch (externs['host']['get-tag'](tmp20)) {
+    const tmp256 = fa
+    const tmp257 = tmp256['args']
+    switch (externs['host']['get-tag'](tmp256)) {
       case 'form/word': {
-        const wa = tmp21[0]
+        const wa = tmp257[0]
         {
-          const tmp22 = fb
-          const tmp23 = tmp22['args']
-          switch (externs['host']['get-tag'](tmp22)) {
+          const tmp258 = fb
+          const tmp259 = tmp258['args']
+          switch (externs['host']['get-tag'](tmp258)) {
             case 'form/word': {
-              const wb = tmp23[0]
+              const wb = tmp259[0]
               return eq_word(wa, wb)
             }
             default:
@@ -1007,15 +1013,15 @@ const logq = (...lmsg) => {
       (() => {
         const genword5 = (form) => {
           {
-            const tmp24 = form
-            const tmp25 = tmp24['args']
-            switch (externs['host']['get-tag'](tmp24)) {
+            const tmp260 = form
+            const tmp261 = tmp260['args']
+            switch (externs['host']['get-tag'](tmp260)) {
               case 'form/word': {
-                const w = tmp25[0]
+                const w = tmp261[0]
                 return mk_quote(form)
               }
               case 'form/list': {
-                const l = tmp25[0]
+                const l = tmp261[0]
                 return form
               }
               default:
@@ -1071,32 +1077,32 @@ const logq = (...lmsg) => {
 }
 const try_get_syntax_node_rec = (form) => {
   {
-    const tmp26 = try_get_syntax_node(form)
-    const tmp27 = tmp26['args']
-    switch (externs['host']['get-tag'](tmp26)) {
+    const tmp262 = try_get_syntax_node(form)
+    const tmp263 = tmp262['args']
+    switch (externs['host']['get-tag'](tmp262)) {
       case 'option/some': {
-        const node = tmp27[0]
+        const node = tmp263[0]
         return some(node)
       }
       default: {
-        const tmp28 = form
-        const tmp29 = tmp28['args']
-        switch (externs['host']['get-tag'](tmp28)) {
+        const tmp264 = form
+        const tmp265 = tmp264['args']
+        switch (externs['host']['get-tag'](tmp264)) {
           case 'form/word': {
-            const w = tmp29[0]
+            const w = tmp265[0]
             return none()
           }
           case 'form/list': {
-            const l = tmp29[0]
+            const l = tmp265[0]
             return (() => {
               const go = (i) => {
                 if (lt_s(i, size(l))) {
                   {
-                    const tmp30 = try_get_syntax_node_rec(at(l, i))
-                    const tmp31 = tmp30['args']
-                    switch (externs['host']['get-tag'](tmp30)) {
+                    const tmp266 = try_get_syntax_node_rec(at(l, i))
+                    const tmp267 = tmp266['args']
+                    switch (externs['host']['get-tag'](tmp266)) {
                       case 'option/some': {
-                        const node = tmp31[0]
+                        const node = tmp267[0]
                         return some(node)
                       }
                       default:
@@ -1132,11 +1138,11 @@ const log_node_location = (node) => {
 }
 const log_location = (form) => {
   {
-    const tmp32 = try_get_syntax_node_rec(form)
-    const tmp33 = tmp32['args']
-    switch (externs['host']['get-tag'](tmp32)) {
+    const tmp268 = try_get_syntax_node_rec(form)
+    const tmp269 = tmp268['args']
+    switch (externs['host']['get-tag'](tmp268)) {
       case 'option/some': {
-        const node = tmp33[0]
+        const node = tmp269[0]
         return log_node_location(node)
       }
       default: {
@@ -1182,48 +1188,6 @@ const byte_array_size = externs['host']['byte-array-size']
 const byte_array_get = externs['host']['byte-array-get']
 const byte_array_set = externs['host']['byte-array-set']
 const byte_array_log_as_string = externs['host']['byte-array-log-as-string']
-const word_list_contains = (w, ...words) => {
-  {
-    const s_words = size(words)
-    {
-      return (() => {
-        const go = (i) => {
-          if (lt_s(i, s_words)) {
-            if (eq_word(w, at(words, i))) {
-              return n1
-            } else {
-              return go(inc(i))
-            }
-          } else {
-            return n0
-          }
-        }
-        return go
-      })()(n0)
-    }
-  }
-}
-const is_i32_bin_inst = (w2) => {
-  return word_list_contains(
-    w2,
-    'i32.add',
-    'i32.sub',
-    'i32.mul',
-    'i32.rem-s',
-    'i32.div-s',
-    'i32.and',
-    'i32.or',
-    'i32.eq',
-    'i32.lt-s',
-    'i32.le-s',
-  )
-}
-const is_f64_bin_inst = (w2) => {
-  return word_list_contains(w2, 'f64.add', 'f64.sub', 'f64.mul')
-}
-const is_f64_comp_inst = (w2) => {
-  return word_list_contains(w2, 'f64.eq', 'f64.lt', 'f64.le')
-}
 const pairwise = externs['host']['pairwise']
 const triplewise = externs['host']['triplewise']
 const _false = 0
@@ -1343,15 +1307,15 @@ const map_result = (l, f) => {
         const go = (i) => {
           if (lt_s(i, size(l))) {
             {
-              const tmp34 = f(at(l, i))
-              const tmp35 = tmp34['args']
-              switch (externs['host']['get-tag'](tmp34)) {
+              const tmp270 = f(at(l, i))
+              const tmp271 = tmp270['args']
+              switch (externs['host']['get-tag'](tmp270)) {
                 case 'result/error': {
-                  const e = tmp35[0]
+                  const e = tmp271[0]
                   return result_slash_error(e)
                 }
                 case 'result/ok': {
-                  const v = tmp35[0]
+                  const v = tmp271[0]
                   {
                     push(gl, v)
                     return go(inc(i))
@@ -1393,6 +1357,7 @@ const syntax_word_slash_node = (record) => record['node']
 const btype_slash_var = (p0) => externs['host']['make-tagged-value']('btype/var', [p0])
 const btype_slash_func = (p0, p1, p2) => externs['host']['make-tagged-value']('btype/func', [p0, p1, p2])
 const btype_slash_apply = (p0, p1) => externs['host']['make-tagged-value']('btype/apply', [p0, p1])
+const btype_slash_memory = (p0, p1) => externs['host']['make-tagged-value']('btype/memory', [p0, p1])
 const btype_slash_error = () => externs['host']['make-tagged-value']('btype/error', [])
 const btype_scheme = (type_params, type) =>
   externs['host']['make-record-from-object']('btype-scheme', { 'type-params': type_params, type: type })
@@ -1412,6 +1377,11 @@ const match_pattern_slash_params = (record) => record['params']
 const literal_slash_i32 = (p0) => externs['host']['make-tagged-value']('literal/i32', [p0])
 const literal_slash_f64 = (p0) => externs['host']['make-tagged-value']('literal/f64', [p0])
 const literal_slash_word = (p0) => externs['host']['make-tagged-value']('literal/word', [p0])
+const intrinsic_memargs = (memory, offset, align) =>
+  externs['host']['make-record-from-object']('intrinsic-memargs', { memory: memory, offset: offset, align: align })
+const intrinsic_memargs_slash_memory = (record) => record['memory']
+const intrinsic_memargs_slash_offset = (record) => record['offset']
+const intrinsic_memargs_slash_align = (record) => record['align']
 const bfunc = (name, parameters, rest_param, body) =>
   externs['host']['make-record-from-object']('bfunc', {
     name: name,
@@ -1423,9 +1393,15 @@ const bfunc_slash_name = (record) => record['name']
 const bfunc_slash_parameters = (record) => record['parameters']
 const bfunc_slash_rest_param = (record) => record['rest-param']
 const bfunc_slash_body = (record) => record['body']
+const intrinsic_call_slash_bin = (p0, p1, p2) =>
+  externs['host']['make-tagged-value']('intrinsic-call/bin', [p0, p1, p2])
+const intrinsic_call_slash_load = (p0, p1, p2) =>
+  externs['host']['make-tagged-value']('intrinsic-call/load', [p0, p1, p2])
+const intrinsic_call_slash_store = (p0, p1, p2, p3) =>
+  externs['host']['make-tagged-value']('intrinsic-call/store', [p0, p1, p2, p3])
 const bexp_slash_var = (p0) => externs['host']['make-tagged-value']('bexp/var', [p0])
 const bexp_slash_literal = (p0) => externs['host']['make-tagged-value']('bexp/literal', [p0])
-const bexp_slash_intrinsic = (p0) => externs['host']['make-tagged-value']('bexp/intrinsic', [p0])
+const bexp_slash_intrinsic_call = (p0) => externs['host']['make-tagged-value']('bexp/intrinsic-call', [p0])
 const bexp_slash_extern = (p0) => externs['host']['make-tagged-value']('bexp/extern', [p0])
 const bexp_slash_func = (p0) => externs['host']['make-tagged-value']('bexp/func', [p0])
 const bexp_slash_if = (p0, p1, p2) => externs['host']['make-tagged-value']('bexp/if', [p0, p1, p2])
@@ -1453,24 +1429,56 @@ const bexp_recur = (f) => {
       if (f(bform)) {
         {
           {
-            const tmp36 = bform
-            const tmp37 = tmp36['args']
-            switch (externs['host']['get-tag'](tmp36)) {
+            const tmp272 = bform
+            const tmp273 = tmp272['args']
+            switch (externs['host']['get-tag'](tmp272)) {
               case 'bexp/var': {
-                const sw = tmp37[0]
+                const sw = tmp273[0]
                 return 'wuns-undefined'
               }
               case 'bexp/literal': {
-                const l = tmp37[0]
+                const l = tmp273[0]
                 return 'wuns-undefined'
               }
-              case 'bexp/intrinsic': {
-                const i = tmp37[0]
-                return 'wuns-undefined'
+              case 'bexp/intrinsic-call': {
+                const ic = tmp273[0]
+                {
+                  const tmp274 = ic
+                  const tmp275 = tmp274['args']
+                  switch (externs['host']['get-tag'](tmp274)) {
+                    case 'intrinsic-call/bin': {
+                      const w = tmp275[0]
+                      const a = tmp275[1]
+                      const b = tmp275[2]
+                      {
+                        go(a)
+                        return go(b)
+                      }
+                    }
+                    case 'intrinsic-call/load': {
+                      const w = tmp275[0]
+                      const ma = tmp275[1]
+                      const a = tmp275[2]
+                      return go(a)
+                    }
+                    case 'intrinsic-call/store': {
+                      const w = tmp275[0]
+                      const ma = tmp275[1]
+                      const a = tmp275[2]
+                      const b = tmp275[3]
+                      {
+                        go(a)
+                        return go(b)
+                      }
+                    }
+                    default:
+                      throw 'unmatched-match'
+                  }
+                }
               }
               case 'bexp/call': {
-                const f = tmp37[0]
-                const args = tmp37[1]
+                const f = tmp273[0]
+                const args = tmp273[1]
                 {
                   go(f)
                   {
@@ -1500,9 +1508,9 @@ const bexp_recur = (f) => {
                 }
               }
               case 'bexp/if': {
-                const c = tmp37[0]
-                const t = tmp37[1]
-                const e = tmp37[2]
+                const c = tmp273[0]
+                const t = tmp273[1]
+                const e = tmp273[2]
                 {
                   go(c)
                   go(t)
@@ -1510,7 +1518,7 @@ const bexp_recur = (f) => {
                 }
               }
               case 'bexp/do': {
-                const bs = tmp37[0]
+                const bs = tmp273[0]
                 {
                   const gencol5 = bs
                   const gencol_size6 = size(gencol5)
@@ -1537,8 +1545,8 @@ const bexp_recur = (f) => {
                 }
               }
               case 'bexp/let': {
-                const bs = tmp37[0]
-                const body = tmp37[1]
+                const bs = tmp273[0]
+                const body = tmp273[1]
                 {
                   {
                     const gencol9 = bs
@@ -1591,8 +1599,8 @@ const bexp_recur = (f) => {
                 }
               }
               case 'bexp/loop': {
-                const bs = tmp37[0]
-                const body = tmp37[1]
+                const bs = tmp273[0]
+                const body = tmp273[1]
                 {
                   {
                     const gencol17 = bs
@@ -1645,7 +1653,7 @@ const bexp_recur = (f) => {
                 }
               }
               case 'bexp/continue': {
-                const ass = tmp37[0]
+                const ass = tmp273[0]
                 {
                   const gencol25 = ass
                   const gencol_size26 = size(gencol25)
@@ -1713,24 +1721,24 @@ const local_stack_slash_empty = () => externs['host']['make-tagged-value']('loca
 const local_stack_slash_frame = (p0, p1) => externs['host']['make-tagged-value']('local-stack/frame', [p0, p1])
 const try_get_local = (lstack, w) => {
   {
-    const tmp38 = lstack
-    const tmp39 = tmp38['args']
-    switch (externs['host']['get-tag'](tmp38)) {
+    const tmp276 = lstack
+    const tmp277 = tmp276['args']
+    switch (externs['host']['get-tag'](tmp276)) {
       case 'local-stack/empty': {
         return none()
       }
       case 'local-stack/frame': {
-        const outer = tmp39[0]
-        const lctx = tmp39[1]
+        const outer = tmp277[0]
+        const lctx = tmp277[1]
         {
-          const tmp40 = try_get(local_context_slash_vars(lctx), w)
-          const tmp41 = tmp40['args']
-          switch (externs['host']['get-tag'](tmp40)) {
+          const tmp278 = try_get(local_context_slash_vars(lctx), w)
+          const tmp279 = tmp278['args']
+          switch (externs['host']['get-tag'](tmp278)) {
             case 'option/none': {
               return try_get_local(outer, w)
             }
             case 'option/some': {
-              const kind = tmp41[0]
+              const kind = tmp279[0]
               return some(kind)
             }
             default:
@@ -1779,6 +1787,19 @@ const builtin_type_arity_ok = (type_name, n_of_type_args) => {
       return some(eq(n_of_type_args, n0))
     case 'list':
       return some(eq(n_of_type_args, n1))
+    case 'memory':
+      return some(
+        (() => {
+          const genword28 = eq(n_of_type_args, n1)
+          {
+            if (genword28) {
+              return genword28
+            } else {
+              return eq(n_of_type_args, n2)
+            }
+          }
+        })(),
+      )
     default:
       return none()
   }
@@ -1789,11 +1810,11 @@ const is_reserved_type_name = (type_name) => {
     case 'func':
       return _true
     default: {
-      const tmp42 = builtin_type_arity_ok(type_name, n0)
-      const tmp43 = tmp42['args']
-      switch (externs['host']['get-tag'](tmp42)) {
+      const tmp280 = builtin_type_arity_ok(type_name, n0)
+      const tmp281 = tmp280['args']
+      switch (externs['host']['get-tag'](tmp280)) {
         case 'option/some': {
-          const arity = tmp43[0]
+          const arity = tmp281[0]
           return _true
         }
         default:
@@ -1808,11 +1829,11 @@ const log_report_message = (error) => {
 }
 const sword = (form) => {
   {
-    const tmp44 = try_get_word(form)
-    const tmp45 = tmp44['args']
-    switch (externs['host']['get-tag'](tmp44)) {
+    const tmp282 = try_get_word(form)
+    const tmp283 = tmp282['args']
+    switch (externs['host']['get-tag'](tmp282)) {
       case 'option/some': {
-        const w = tmp45[0]
+        const w = tmp283[0]
         return syntax_word(w, try_get_syntax_node(form))
       }
       default: {
@@ -1825,19 +1846,19 @@ const sword = (form) => {
 }
 const try_get_enclosing_loop_context = (lstack) => {
   {
-    const tmp46 = lstack
-    const tmp47 = tmp46['args']
-    switch (externs['host']['get-tag'](tmp46)) {
+    const tmp284 = lstack
+    const tmp285 = tmp284['args']
+    switch (externs['host']['get-tag'](tmp284)) {
       case 'local-stack/empty': {
         return none()
       }
       case 'local-stack/frame': {
-        const outer = tmp47[0]
-        const lctx = tmp47[1]
+        const outer = tmp285[0]
+        const lctx = tmp285[1]
         {
-          const tmp48 = local_context_slash_kind(lctx)
-          const tmp49 = tmp48['args']
-          switch (externs['host']['get-tag'](tmp48)) {
+          const tmp286 = local_context_slash_kind(lctx)
+          const tmp287 = tmp286['args']
+          switch (externs['host']['get-tag'](tmp286)) {
             case 'local-context-kind/loop': {
               return some(lctx)
             }
@@ -1874,6 +1895,43 @@ const form_to_ast_converter_slash_form_to_top = (record) => record['form-to-top'
 const form_to_ast_converter_slash_form_to_exp = (record) => record['form-to-exp']
 const form_to_ast_converter_slash_errors = (record) => record['errors']
 const form_to_ast_converter_slash_syntax_info = (record) => record['syntax-info']
+const is_i32_bin_inst = (w2) => {
+  switch (w2) {
+    case 'i32.add':
+    case 'i32.sub':
+    case 'i32.mul':
+    case 'i32.rem-s':
+    case 'i32.div-s':
+    case 'i32.and':
+    case 'i32.or':
+    case 'i32.eq':
+    case 'i32.lt-s':
+    case 'i32.le-s':
+      return _true
+    default:
+      return _false
+  }
+}
+const is_f64_bin_inst = (w2) => {
+  switch (w2) {
+    case 'f64.add':
+    case 'f64.sub':
+    case 'f64.mul':
+      return _true
+    default:
+      return _false
+  }
+}
+const is_f64_comp_inst = (w2) => {
+  switch (w2) {
+    case 'f64.eq':
+    case 'f64.lt':
+    case 'f64.le':
+      return _true
+    default:
+      return _false
+  }
+}
 const mk_form_to_ast = (current_directory) => {
   {
     const eval_ctx = make_eval_context(current_directory)
@@ -1888,11 +1946,11 @@ const mk_form_to_ast = (current_directory) => {
     const eval_form = (() => {
       const ef = (top_form) => {
         {
-          const tmp50 = evaluate_result(evaluator, top_form)
-          const tmp51 = tmp50['args']
-          switch (externs['host']['get-tag'](tmp50)) {
+          const tmp288 = evaluate_result(evaluator, top_form)
+          const tmp289 = tmp288['args']
+          switch (externs['host']['get-tag'](tmp288)) {
             case 'result/error': {
-              const error = tmp51[0]
+              const error = tmp289[0]
               return push_error(
                 top_form,
                 quote(
@@ -1907,7 +1965,7 @@ const mk_form_to_ast = (current_directory) => {
               )
             }
             case 'result/ok': {
-              const _ = tmp51[0]
+              const _ = tmp289[0]
               return 'wuns-undefined'
             }
             default:
@@ -1923,11 +1981,11 @@ const mk_form_to_ast = (current_directory) => {
     const try_get_word_report = (() => {
       const gw = (form) => {
         {
-          const tmp52 = form
-          const tmp53 = tmp52['args']
-          switch (externs['host']['get-tag'](tmp52)) {
+          const tmp290 = form
+          const tmp291 = tmp290['args']
+          switch (externs['host']['get-tag'](tmp290)) {
             case 'form/word': {
-              const w = tmp53[0]
+              const w = tmp291[0]
               return some(w)
             }
             default: {
@@ -1942,11 +2000,11 @@ const mk_form_to_ast = (current_directory) => {
     const get_word = (() => {
       const gw = (form) => {
         {
-          const tmp54 = try_get_word_report(form)
-          const tmp55 = tmp54['args']
-          switch (externs['host']['get-tag'](tmp54)) {
+          const tmp292 = try_get_word_report(form)
+          const tmp293 = tmp292['args']
+          switch (externs['host']['get-tag'](tmp292)) {
             case 'option/some': {
-              const w = tmp55[0]
+              const w = tmp293[0]
               return w
             }
             default:
@@ -1959,11 +2017,11 @@ const mk_form_to_ast = (current_directory) => {
     const get_sword = (() => {
       const gw = (form) => {
         {
-          const tmp56 = try_get_word_report(form)
-          const tmp57 = tmp56['args']
-          switch (externs['host']['get-tag'](tmp56)) {
+          const tmp294 = try_get_word_report(form)
+          const tmp295 = tmp294['args']
+          switch (externs['host']['get-tag'](tmp294)) {
             case 'option/some': {
-              const w = tmp57[0]
+              const w = tmp295[0]
               return sword(form)
             }
             default:
@@ -1976,11 +2034,11 @@ const mk_form_to_ast = (current_directory) => {
     const get_list = (() => {
       const gl = (form) => {
         {
-          const tmp58 = form
-          const tmp59 = tmp58['args']
-          switch (externs['host']['get-tag'](tmp58)) {
+          const tmp296 = form
+          const tmp297 = tmp296['args']
+          switch (externs['host']['get-tag'](tmp296)) {
             case 'form/list': {
-              const l = tmp59[0]
+              const l = tmp297[0]
               return l
             }
             default: {
@@ -2026,6 +2084,31 @@ const mk_form_to_ast = (current_directory) => {
       }
       return sd
     })()
+    const try_bind_get_ddesc = (() => {
+      const tbdd = (sw) => {
+        {
+          const opt_ddesc = try_get(def_ctx, syntax_word_slash_word(sw))
+          {
+            {
+              const tmp298 = opt_ddesc
+              const tmp299 = tmp298['args']
+              switch (externs['host']['get-tag'](tmp298)) {
+                case 'option/some': {
+                  const ddesc = tmp299[0]
+                  {
+                    set_kv_map(node_to_def_desc, sw, ddesc)
+                  }
+                  break
+                }
+                default:
+              }
+            }
+            return opt_ddesc
+          }
+        }
+      }
+      return tbdd
+    })()
     const type_ctx = transient_kv_map()
     const set_type = (() => {
       const st = (f, arity) => {
@@ -2069,11 +2152,11 @@ const mk_form_to_ast = (current_directory) => {
               lt_s(n1, n_of_param_forms)
                 ? (() => {
                     {
-                      const tmp60 = try_get_word(at(param_list, n_2))
-                      const tmp61 = tmp60['args']
-                      switch (externs['host']['get-tag'](tmp60)) {
+                      const tmp300 = try_get_word(at(param_list, n_2))
+                      const tmp301 = tmp300['args']
+                      switch (externs['host']['get-tag'](tmp300)) {
                         case 'option/some': {
-                          const but_last_param = tmp61[0]
+                          const but_last_param = tmp301[0]
                           return eq_word(but_last_param, '..')
                         }
                         default:
@@ -2108,17 +2191,17 @@ const mk_form_to_ast = (current_directory) => {
           return (() => {
             const f2t = (form) => {
               {
-                const tmp62 = form
-                const tmp63 = tmp62['args']
-                switch (externs['host']['get-tag'](tmp62)) {
+                const tmp302 = form
+                const tmp303 = tmp302['args']
+                switch (externs['host']['get-tag'](tmp302)) {
                   case 'form/word': {
-                    const w = tmp63[0]
+                    const w = tmp303[0]
                     {
-                      const tmp64 = builtin_type_arity_ok(w, n0)
-                      const tmp65 = tmp64['args']
-                      switch (externs['host']['get-tag'](tmp64)) {
+                      const tmp304 = builtin_type_arity_ok(w, n0)
+                      const tmp305 = tmp304['args']
+                      switch (externs['host']['get-tag'](tmp304)) {
                         case 'option/some': {
-                          const arity_ok = tmp65[0]
+                          const arity_ok = tmp305[0]
                           {
                             if (arity_ok) {
                             } else {
@@ -2147,11 +2230,11 @@ const mk_form_to_ast = (current_directory) => {
                             return btype_slash_var(sword(form))
                           } else {
                             {
-                              const tmp66 = try_get(type_ctx, w)
-                              const tmp67 = tmp66['args']
-                              switch (externs['host']['get-tag'](tmp66)) {
+                              const tmp306 = try_get(type_ctx, w)
+                              const tmp307 = tmp306['args']
+                              switch (externs['host']['get-tag'](tmp306)) {
                                 case 'option/some': {
-                                  const arity = tmp67[0]
+                                  const arity = tmp307[0]
                                   {
                                     if (eq(n0, arity)) {
                                     } else {
@@ -2195,7 +2278,7 @@ const mk_form_to_ast = (current_directory) => {
                     }
                   }
                   case 'form/list': {
-                    const l = tmp63[0]
+                    const l = tmp303[0]
                     if (is_empty(l)) {
                       {
                         push_error(
@@ -2253,20 +2336,20 @@ const mk_form_to_ast = (current_directory) => {
                                     return btype_slash_func(
                                       list_map_fn(
                                         (() => {
-                                          const genword28 = (p) => {
+                                          const genword29 = (p) => {
                                             return f2t(p)
                                           }
-                                          return genword28
+                                          return genword29
                                         })(),
                                         pair_slash_fst(parsed_params),
                                       ),
                                       (() => {
                                         {
-                                          const tmp68 = pair_slash_snd(parsed_params)
-                                          const tmp69 = tmp68['args']
-                                          switch (externs['host']['get-tag'](tmp68)) {
+                                          const tmp308 = pair_slash_snd(parsed_params)
+                                          const tmp309 = tmp308['args']
+                                          switch (externs['host']['get-tag'](tmp308)) {
                                             case 'option/some': {
-                                              const rest_param = tmp69[0]
+                                              const rest_param = tmp309[0]
                                               return some(f2t(rest_param))
                                             }
                                             default:
@@ -2283,80 +2366,105 @@ const mk_form_to_ast = (current_directory) => {
                               const n_of_args = dec(size(l))
                               {
                                 {
-                                  const tmp70 = builtin_type_arity_ok(fw, n_of_args)
-                                  const tmp71 = tmp70['args']
-                                  switch (externs['host']['get-tag'](tmp70)) {
+                                  const tmp310 = builtin_type_arity_ok(fw, n_of_args)
+                                  const tmp311 = tmp310['args']
+                                  switch (externs['host']['get-tag'](tmp310)) {
                                     case 'option/some': {
-                                      const arity_ok = tmp71[0]
-                                      if (arity_ok) {
-                                      } else {
-                                        {
-                                          push_error(
-                                            form,
-                                            quote(
-                                              form_slash_list([
-                                                form_slash_word('wrong'),
-                                                form_slash_word('number'),
-                                                form_slash_word('of'),
-                                                form_slash_word('type'),
-                                                form_slash_word('arguments'),
-                                                form_slash_word('to'),
-                                                form_slash_word('builtin'),
-                                              ]),
+                                      const arity_ok = tmp311[0]
+                                      {
+                                        if (arity_ok) {
+                                        } else {
+                                          {
+                                            push_error(
+                                              form,
+                                              quote(
+                                                form_slash_list([
+                                                  form_slash_word('wrong'),
+                                                  form_slash_word('number'),
+                                                  form_slash_word('of'),
+                                                  form_slash_word('type'),
+                                                  form_slash_word('arguments'),
+                                                  form_slash_word('to'),
+                                                  form_slash_word('builtin'),
+                                                ]),
+                                              ),
+                                            )
+                                          }
+                                        }
+                                        if (eq_word('memory', fw)) {
+                                          return btype_slash_memory(
+                                            sword(second(l)),
+                                            lt_s(n2, size(l)) ? some(sword(third(l))) : none(),
+                                          )
+                                        } else {
+                                          return btype_slash_apply(
+                                            sword(first(l)),
+                                            list_map_fn(
+                                              (() => {
+                                                const genword30 = (arg) => {
+                                                  return f2t(arg)
+                                                }
+                                                return genword30
+                                              })(),
+                                              rest(l),
                                             ),
                                           )
                                         }
                                       }
-                                      break
                                     }
                                     default: {
-                                      const tmp72 = try_get(type_ctx, fw)
-                                      const tmp73 = tmp72['args']
-                                      switch (externs['host']['get-tag'](tmp72)) {
-                                        case 'option/some': {
-                                          const arity = tmp73[0]
-                                          if (eq(n_of_args, arity)) {
-                                          } else {
-                                            {
-                                              push_error(
-                                                form,
-                                                quote(
-                                                  form_slash_list([
-                                                    form_slash_word('wrong'),
-                                                    form_slash_word('number'),
-                                                    form_slash_word('of'),
-                                                    form_slash_word('type'),
-                                                    form_slash_word('arguments'),
-                                                  ]),
-                                                ),
-                                              )
+                                      {
+                                        const tmp312 = try_get(type_ctx, fw)
+                                        const tmp313 = tmp312['args']
+                                        switch (externs['host']['get-tag'](tmp312)) {
+                                          case 'option/some': {
+                                            const arity = tmp313[0]
+                                            if (eq(n_of_args, arity)) {
+                                            } else {
+                                              {
+                                                push_error(
+                                                  form,
+                                                  quote(
+                                                    form_slash_list([
+                                                      form_slash_word('wrong'),
+                                                      form_slash_word('number'),
+                                                      form_slash_word('of'),
+                                                      form_slash_word('type'),
+                                                      form_slash_word('arguments'),
+                                                    ]),
+                                                  ),
+                                                )
+                                              }
                                             }
+                                            break
                                           }
-                                          break
+                                          default:
+                                            push_error(
+                                              form,
+                                              quote(
+                                                form_slash_list([
+                                                  form_slash_word('undefined'),
+                                                  form_slash_word('type'),
+                                                ]),
+                                              ),
+                                            )
                                         }
-                                        default:
-                                          push_error(
-                                            form,
-                                            quote(
-                                              form_slash_list([form_slash_word('undefined'), form_slash_word('type')]),
-                                            ),
-                                          )
                                       }
+                                      return btype_slash_apply(
+                                        sword(first(l)),
+                                        list_map_fn(
+                                          (() => {
+                                            const genword31 = (arg) => {
+                                              return f2t(arg)
+                                            }
+                                            return genword31
+                                          })(),
+                                          rest(l),
+                                        ),
+                                      )
                                     }
                                   }
                                 }
-                                return btype_slash_apply(
-                                  sword(first(l)),
-                                  list_map_fn(
-                                    (() => {
-                                      const genword29 = (arg) => {
-                                        return f2t(arg)
-                                      }
-                                      return genword29
-                                    })(),
-                                    rest(l),
-                                  ),
-                                )
                               }
                             }
                           }
@@ -2381,22 +2489,22 @@ const mk_form_to_ast = (current_directory) => {
             const word_to_form = transient_kv_map()
             {
               {
-                const gencol31 = get_list(form)
-                const gencol_size32 = size(gencol31)
+                const gencol33 = get_list(form)
+                const gencol_size34 = size(gencol33)
                 {
                   ;(() => {
-                    const genloop_fun33 = (genit30) => {
-                      if (lt_s(genit30, gencol_size32)) {
+                    const genloop_fun35 = (genit32) => {
+                      if (lt_s(genit32, gencol_size34)) {
                         {
-                          const tpf = at(gencol31, genit30)
+                          const tpf = at(gencol33, genit32)
                           {
                             {
                               {
-                                const tmp74 = try_get_word_report(tpf)
-                                const tmp75 = tmp74['args']
-                                switch (externs['host']['get-tag'](tmp74)) {
+                                const tmp314 = try_get_word_report(tpf)
+                                const tmp315 = tmp314['args']
+                                switch (externs['host']['get-tag'](tmp314)) {
                                   case 'option/some': {
-                                    const tpw = tmp75[0]
+                                    const tpw = tmp315[0]
                                     {
                                       {
                                         if (has(word_to_form, tpw)) {
@@ -2443,7 +2551,7 @@ const mk_form_to_ast = (current_directory) => {
                                   default:
                                 }
                               }
-                              return genloop_fun33(add(genit30, 1))
+                              return genloop_fun35(add(genit32, 1))
                             }
                           }
                         }
@@ -2451,7 +2559,7 @@ const mk_form_to_ast = (current_directory) => {
                         return 'wuns-undefined'
                       }
                     }
-                    return genloop_fun33
+                    return genloop_fun35
                   })()(0)
                 }
               }
@@ -2461,15 +2569,15 @@ const mk_form_to_ast = (current_directory) => {
         }
         const form_to_type_scheme = (form) => {
           {
-            const tmp76 = form
-            const tmp77 = tmp76['args']
-            switch (externs['host']['get-tag'](tmp76)) {
+            const tmp316 = form
+            const tmp317 = tmp316['args']
+            switch (externs['host']['get-tag'](tmp316)) {
               case 'form/word': {
-                const w = tmp77[0]
+                const w = tmp317[0]
                 return btype_scheme(list(), form_to_type(form))
               }
               case 'form/list': {
-                const l = tmp77[0]
+                const l = tmp317[0]
                 if (is_empty(l)) {
                   {
                     push_error(
@@ -2537,18 +2645,18 @@ const mk_form_to_ast = (current_directory) => {
             {
               set_local(lvars, second(form_list), local_var_kind_slash_func_internal_self())
               {
-                const gencol35 = regular_param_forms
-                const gencol_size36 = size(gencol35)
+                const gencol37 = regular_param_forms
+                const gencol_size38 = size(gencol37)
                 {
                   ;(() => {
-                    const genloop_fun37 = (genit34) => {
-                      if (lt_s(genit34, gencol_size36)) {
+                    const genloop_fun39 = (genit36) => {
+                      if (lt_s(genit36, gencol_size38)) {
                         {
-                          const param = at(gencol35, genit34)
+                          const param = at(gencol37, genit36)
                           {
                             {
                               set_local(lvars, param, local_var_kind_slash_param(name, inc_atom(counter_atom)))
-                              return genloop_fun37(add(genit34, 1))
+                              return genloop_fun39(add(genit36, 1))
                             }
                           }
                         }
@@ -2556,16 +2664,16 @@ const mk_form_to_ast = (current_directory) => {
                         return 'wuns-undefined'
                       }
                     }
-                    return genloop_fun37
+                    return genloop_fun39
                   })()(0)
                 }
               }
               {
-                const tmp78 = opt_rest_param
-                const tmp79 = tmp78['args']
-                switch (externs['host']['get-tag'](tmp78)) {
+                const tmp318 = opt_rest_param
+                const tmp319 = tmp318['args']
+                switch (externs['host']['get-tag'](tmp318)) {
                   case 'option/some': {
-                    const rest_param = tmp79[0]
+                    const rest_param = tmp319[0]
                     {
                       set_local(lvars, rest_param, local_var_kind_slash_param(name, inc_atom(counter_atom)))
                     }
@@ -2580,23 +2688,23 @@ const mk_form_to_ast = (current_directory) => {
                   sword(second(form_list)),
                   list_map_fn(
                     (() => {
-                      const genword38 = (param) => {
+                      const genword40 = (param) => {
                         return sword(param)
                       }
-                      return genword38
+                      return genword40
                     })(),
                     regular_param_forms,
                   ),
                   (() => {
                     {
-                      const tmp80 = opt_rest_param
-                      const tmp81 = tmp80['args']
-                      switch (externs['host']['get-tag'](tmp80)) {
+                      const tmp320 = opt_rest_param
+                      const tmp321 = tmp320['args']
+                      switch (externs['host']['get-tag'](tmp320)) {
                         case 'option/none': {
                           return option_slash_none()
                         }
                         case 'option/some': {
-                          const v = tmp81[0]
+                          const v = tmp321[0]
                           return option_slash_some(sword(v))
                         }
                         default:
@@ -2606,10 +2714,10 @@ const mk_form_to_ast = (current_directory) => {
                   })(),
                   list_map_fn(
                     (() => {
-                      const genword39 = (f) => {
+                      const genword41 = (f) => {
                         return form_to_ast(new_lstack, f)
                       }
-                      return genword39
+                      return genword41
                     })(),
                     slice(form_list, n3, size(form_list)),
                   ),
@@ -2631,11 +2739,11 @@ const mk_form_to_ast = (current_directory) => {
                 form,
                 (() => {
                   {
-                    const tmp82 = form
-                    const tmp83 = tmp82['args']
-                    switch (externs['host']['get-tag'](tmp82)) {
+                    const tmp322 = form
+                    const tmp323 = tmp322['args']
+                    switch (externs['host']['get-tag'](tmp322)) {
                       case 'form/word': {
-                        const w = tmp83[0]
+                        const w = tmp323[0]
                         {
                           return abort(
                             list(
@@ -2649,7 +2757,7 @@ const mk_form_to_ast = (current_directory) => {
                         }
                       }
                       case 'form/list': {
-                        const l = tmp83[0]
+                        const l = tmp323[0]
                         {
                           const n_of_args = dec(size(l))
                           const assert_n_args = (() => {
@@ -2685,20 +2793,20 @@ const mk_form_to_ast = (current_directory) => {
                           const first_form = first(l)
                           {
                             {
-                              const tmp84 = first_form
-                              const tmp85 = tmp84['args']
-                              switch (externs['host']['get-tag'](tmp84)) {
+                              const tmp324 = first_form
+                              const tmp325 = tmp324['args']
+                              switch (externs['host']['get-tag'](tmp324)) {
                                 case 'form/word': {
-                                  const first_word = tmp85[0]
+                                  const first_word = tmp325[0]
                                   switch (first_word) {
                                     case 'do':
                                       return btop_slash_do(
                                         list_map_fn(
                                           (() => {
-                                            const genword40 = (arg) => {
+                                            const genword42 = (arg) => {
                                               return form_to_top(arg)
                                             }
-                                            return genword40
+                                            return genword42
                                           })(),
                                           rest(l),
                                         ),
@@ -2754,10 +2862,10 @@ const mk_form_to_ast = (current_directory) => {
                                         const file_path = path_join(current_directory, get_word(get_arg(n0)))
                                         const bforms = list_map_fn(
                                           (() => {
-                                            const genword41 = (bf) => {
+                                            const genword43 = (bf) => {
                                               return form_to_top(bf)
                                             }
-                                            return genword41
+                                            return genword43
                                           })(),
                                           read_file(file_path),
                                         )
@@ -2770,18 +2878,18 @@ const mk_form_to_ast = (current_directory) => {
                                     case 'type': {
                                       const triples = triplewise(rest(l))
                                       const _ = (() => {
-                                        const gencol43 = triples
-                                        const gencol_size44 = size(gencol43)
+                                        const gencol45 = triples
+                                        const gencol_size46 = size(gencol45)
                                         {
                                           return (() => {
-                                            const genloop_fun45 = (genit42) => {
-                                              if (lt_s(genit42, gencol_size44)) {
+                                            const genloop_fun47 = (genit44) => {
+                                              if (lt_s(genit44, gencol_size46)) {
                                                 {
-                                                  const triple = at(gencol43, genit42)
+                                                  const triple = at(gencol45, genit44)
                                                   {
                                                     {
                                                       set_type(first(triple), size(get_list(second(triple))))
-                                                      return genloop_fun45(add(genit42, 1))
+                                                      return genloop_fun47(add(genit44, 1))
                                                     }
                                                   }
                                                 }
@@ -2789,14 +2897,14 @@ const mk_form_to_ast = (current_directory) => {
                                                 return 'wuns-undefined'
                                               }
                                             }
-                                            return genloop_fun45
+                                            return genloop_fun47
                                           })()(0)
                                         }
                                       })()
                                       const fb = btop_slash_type(
                                         list_map_fn(
                                           (() => {
-                                            const genword46 = (triple) => {
+                                            const genword48 = (triple) => {
                                               {
                                                 const type_name_form = first(triple)
                                                 const stype_name = get_sword(type_name_form)
@@ -2837,11 +2945,11 @@ const mk_form_to_ast = (current_directory) => {
                                                     type_params,
                                                     (() => {
                                                       {
-                                                        const tmp86 = third(triple)
-                                                        const tmp87 = tmp86['args']
-                                                        switch (externs['host']['get-tag'](tmp86)) {
+                                                        const tmp326 = third(triple)
+                                                        const tmp327 = tmp326['args']
+                                                        switch (externs['host']['get-tag'](tmp326)) {
                                                           case 'form/list': {
-                                                            const l = tmp87[0]
+                                                            const l = tmp327[0]
                                                             {
                                                               if (not(is_empty(l))) {
                                                               } else {
@@ -2862,7 +2970,7 @@ const mk_form_to_ast = (current_directory) => {
                                                                 case 'union': {
                                                                   const ctors = list_map_fn(
                                                                     (() => {
-                                                                      const genword47 = (ctor) => {
+                                                                      const genword49 = (ctor) => {
                                                                         {
                                                                           const ctor_list = get_list(ctor)
                                                                           const ctor_name_form = first(ctor_list)
@@ -2887,10 +2995,10 @@ const mk_form_to_ast = (current_directory) => {
                                                                               sword(ctor_name_form),
                                                                               list_map_fn(
                                                                                 (() => {
-                                                                                  const genword48 = (arg) => {
+                                                                                  const genword50 = (arg) => {
                                                                                     return form_to_type_with_params(arg)
                                                                                   }
-                                                                                  return genword48
+                                                                                  return genword50
                                                                                 })(),
                                                                                 rest(ctor_list),
                                                                               ),
@@ -2898,7 +3006,7 @@ const mk_form_to_ast = (current_directory) => {
                                                                           }
                                                                         }
                                                                       }
-                                                                      return genword47
+                                                                      return genword49
                                                                     })(),
                                                                     rest(l),
                                                                   )
@@ -2909,11 +3017,11 @@ const mk_form_to_ast = (current_directory) => {
                                                                   )
                                                                   {
                                                                     {
-                                                                      const genword49 = size(ctors)
+                                                                      const genword51 = size(ctors)
                                                                       {
                                                                         ;(() => {
-                                                                          const genword50 = (i) => {
-                                                                            if (lt_s(i, genword49)) {
+                                                                          const genword52 = (i) => {
+                                                                            if (lt_s(i, genword51)) {
                                                                               {
                                                                                 def_prefix(
                                                                                   syntax_word_slash_word(
@@ -2924,13 +3032,13 @@ const mk_form_to_ast = (current_directory) => {
                                                                                     i,
                                                                                   ),
                                                                                 )
-                                                                                return genword50(add(i, 1))
+                                                                                return genword52(add(i, 1))
                                                                               }
                                                                             } else {
                                                                               return 'wuns-undefined'
                                                                             }
                                                                           }
-                                                                          return genword50
+                                                                          return genword52
                                                                         })()(n0)
                                                                       }
                                                                     }
@@ -2940,7 +3048,7 @@ const mk_form_to_ast = (current_directory) => {
                                                                 case 'record': {
                                                                   const fields = list_map_fn(
                                                                     (() => {
-                                                                      const genword51 = (field) => {
+                                                                      const genword53 = (field) => {
                                                                         {
                                                                           const field_list = get_list(field)
                                                                           const field_name_form = first(field_list)
@@ -2971,7 +3079,7 @@ const mk_form_to_ast = (current_directory) => {
                                                                           }
                                                                         }
                                                                       }
-                                                                      return genword51
+                                                                      return genword53
                                                                     })(),
                                                                     rest(l),
                                                                   )
@@ -2982,11 +3090,11 @@ const mk_form_to_ast = (current_directory) => {
                                                                   )
                                                                   {
                                                                     {
-                                                                      const genword52 = size(fields)
+                                                                      const genword54 = size(fields)
                                                                       {
                                                                         ;(() => {
-                                                                          const genword53 = (i) => {
-                                                                            if (lt_s(i, genword52)) {
+                                                                          const genword55 = (i) => {
+                                                                            if (lt_s(i, genword54)) {
                                                                               {
                                                                                 def_prefix(
                                                                                   syntax_word_slash_word(
@@ -2997,13 +3105,13 @@ const mk_form_to_ast = (current_directory) => {
                                                                                     i,
                                                                                   ),
                                                                                 )
-                                                                                return genword53(add(i, 1))
+                                                                                return genword55(add(i, 1))
                                                                               }
                                                                             } else {
                                                                               return 'wuns-undefined'
                                                                             }
                                                                           }
-                                                                          return genword53
+                                                                          return genword55
                                                                         })()(n0)
                                                                       }
                                                                     }
@@ -3039,7 +3147,7 @@ const mk_form_to_ast = (current_directory) => {
                                                 }
                                               }
                                             }
-                                            return genword46
+                                            return genword48
                                           })(),
                                           triples,
                                         ),
@@ -3053,16 +3161,16 @@ const mk_form_to_ast = (current_directory) => {
                                       return btop_slash_export(
                                         list_map_fn(
                                           (() => {
-                                            const genword54 = (f) => {
+                                            const genword56 = (f) => {
                                               {
                                                 const sw = get_sword(f)
                                                 {
                                                   {
-                                                    const tmp88 = try_get(def_ctx, syntax_word_slash_word(sw))
-                                                    const tmp89 = tmp88['args']
-                                                    switch (externs['host']['get-tag'](tmp88)) {
+                                                    const tmp328 = try_get(def_ctx, syntax_word_slash_word(sw))
+                                                    const tmp329 = tmp328['args']
+                                                    switch (externs['host']['get-tag'](tmp328)) {
                                                       case 'option/some': {
-                                                        const ddesc = tmp89[0]
+                                                        const ddesc = tmp329[0]
                                                         set_kv_map(node_to_def_desc, sw, ddesc)
                                                         break
                                                       }
@@ -3084,36 +3192,36 @@ const mk_form_to_ast = (current_directory) => {
                                                 }
                                               }
                                             }
-                                            return genword54
+                                            return genword56
                                           })(),
                                           rest(l),
                                         ),
                                       )
                                     default: {
-                                      const tmp90 = try_get(def_ctx, first_word)
-                                      const tmp91 = tmp90['args']
-                                      switch (externs['host']['get-tag'](tmp90)) {
+                                      const tmp330 = try_get(def_ctx, first_word)
+                                      const tmp331 = tmp330['args']
+                                      switch (externs['host']['get-tag'](tmp330)) {
                                         case 'option/some': {
-                                          const ddesc = tmp91[0]
+                                          const ddesc = tmp331[0]
                                           {
                                             set_kv_map(node_to_def_desc, get_sword(first_form), ddesc)
                                             {
-                                              const tmp92 = ddesc
-                                              const tmp93 = tmp92['args']
-                                              switch (externs['host']['get-tag'](tmp92)) {
+                                              const tmp332 = ddesc
+                                              const tmp333 = tmp332['args']
+                                              switch (externs['host']['get-tag'](tmp332)) {
                                                 case 'def-desc/defunc': {
-                                                  const defunc_desc = tmp93[0]
+                                                  const defunc_desc = tmp333[0]
                                                   {
-                                                    const tmp94 = defunc_desc
-                                                    const tmp95 = tmp94['args']
-                                                    switch (externs['host']['get-tag'](tmp94)) {
+                                                    const tmp334 = defunc_desc
+                                                    const tmp335 = tmp334['args']
+                                                    switch (externs['host']['get-tag'](tmp334)) {
                                                       case 'bdefunc-kind/macro': {
                                                         {
-                                                          const tmp96 = try_get_macro(eval_ctx, first_word)
-                                                          const tmp97 = tmp96['args']
-                                                          switch (externs['host']['get-tag'](tmp96)) {
+                                                          const tmp336 = try_get_macro(eval_ctx, first_word)
+                                                          const tmp337 = tmp336['args']
+                                                          switch (externs['host']['get-tag'](tmp336)) {
                                                             case 'option/some': {
-                                                              const macro_func = tmp97[0]
+                                                              const macro_func = tmp337[0]
                                                               return form_to_top(interpreter_apply(macro_func, rest(l)))
                                                             }
                                                             default: {
@@ -3178,7 +3286,7 @@ const mk_form_to_ast = (current_directory) => {
                                   }
                                 }
                                 case 'form/list': {
-                                  const fl = tmp85[0]
+                                  const fl = tmp325[0]
                                   {
                                     return abort(
                                       list(
@@ -3219,15 +3327,15 @@ const mk_form_to_ast = (current_directory) => {
             const assert_empty_stack = (() => {
               const aes = () => {
                 {
-                  const tmp98 = lstack
-                  const tmp99 = tmp98['args']
-                  switch (externs['host']['get-tag'](tmp98)) {
+                  const tmp338 = lstack
+                  const tmp339 = tmp338['args']
+                  switch (externs['host']['get-tag'](tmp338)) {
                     case 'local-stack/empty': {
                       return 'wuns-undefined'
                     }
                     case 'local-stack/frame': {
-                      const lvars = tmp99[0]
-                      const lctx = tmp99[1]
+                      const lvars = tmp339[0]
+                      const lctx = tmp339[1]
                       return report_error(
                         quote(
                           form_slash_list([
@@ -3252,30 +3360,30 @@ const mk_form_to_ast = (current_directory) => {
                 form,
                 (() => {
                   {
-                    const tmp100 = form
-                    const tmp101 = tmp100['args']
-                    switch (externs['host']['get-tag'](tmp100)) {
+                    const tmp340 = form
+                    const tmp341 = tmp340['args']
+                    switch (externs['host']['get-tag'](tmp340)) {
                       case 'form/word': {
-                        const w = tmp101[0]
+                        const w = tmp341[0]
                         {
                           const sname = get_sword(form)
                           const bf = bexp_slash_var(sname)
                           {
                             {
-                              const tmp102 = try_get_local(lstack, w)
-                              const tmp103 = tmp102['args']
-                              switch (externs['host']['get-tag'](tmp102)) {
+                              const tmp342 = try_get_local(lstack, w)
+                              const tmp343 = tmp342['args']
+                              switch (externs['host']['get-tag'](tmp342)) {
                                 case 'option/some': {
-                                  const ldesc = tmp103[0]
+                                  const ldesc = tmp343[0]
                                   set_kv_map(node_to_ldesc, sname, ldesc)
                                   break
                                 }
                                 default: {
-                                  const tmp104 = try_get(def_ctx, w)
-                                  const tmp105 = tmp104['args']
-                                  switch (externs['host']['get-tag'](tmp104)) {
+                                  const tmp344 = try_get(def_ctx, w)
+                                  const tmp345 = tmp344['args']
+                                  switch (externs['host']['get-tag'](tmp344)) {
                                     case 'option/some': {
-                                      const ddesc = tmp105[0]
+                                      const ddesc = tmp345[0]
                                       set_kv_map(node_to_def_desc, get_sword(form), ddesc)
                                       break
                                     }
@@ -3292,7 +3400,7 @@ const mk_form_to_ast = (current_directory) => {
                         }
                       }
                       case 'form/list': {
-                        const l = tmp101[0]
+                        const l = tmp341[0]
                         {
                           const n_of_args = dec(size(l))
                           const assert_n_args = (() => {
@@ -3328,11 +3436,11 @@ const mk_form_to_ast = (current_directory) => {
                           const first_form = first(l)
                           {
                             {
-                              const tmp106 = first_form
-                              const tmp107 = tmp106['args']
-                              switch (externs['host']['get-tag'](tmp106)) {
+                              const tmp346 = first_form
+                              const tmp347 = tmp346['args']
+                              switch (externs['host']['get-tag'](tmp346)) {
                                 case 'form/word': {
-                                  const first_word = tmp107[0]
+                                  const first_word = tmp347[0]
                                   switch (first_word) {
                                     case 'i32':
                                       return bexp_slash_literal(literal_slash_i32(get_sword(get_arg(n0))))
@@ -3356,16 +3464,127 @@ const mk_form_to_ast = (current_directory) => {
                                       return bexp_slash_extern(
                                         list_map_fn(
                                           (() => {
-                                            const genword55 = (w) => {
+                                            const genword57 = (w) => {
                                               return get_sword(w)
                                             }
-                                            return genword55
+                                            return genword57
                                           })(),
                                           rest(l),
                                         ),
                                       )
-                                    case 'intrinsic':
-                                      return bexp_slash_intrinsic(get_sword(get_arg(n0)))
+                                    case 'intrinsic-call': {
+                                      const inst_sname = get_sword(get_arg(n0))
+                                      const inst_name = syntax_word_slash_word(inst_sname)
+                                      {
+                                        return bexp_slash_intrinsic_call(
+                                          (() => {
+                                            const genword59 = is_i32_bin_inst(inst_name)
+                                            {
+                                              if (genword59) {
+                                                return genword59
+                                              } else {
+                                                {
+                                                  const genword58 = is_f64_bin_inst(inst_name)
+                                                  {
+                                                    if (genword58) {
+                                                      return genword58
+                                                    } else {
+                                                      return is_f64_comp_inst(inst_name)
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          })()
+                                            ? (() => {
+                                                {
+                                                  assert_n_args(n3)
+                                                  return intrinsic_call_slash_bin(
+                                                    inst_sname,
+                                                    form_to_ast(lstack, get_arg(n1)),
+                                                    form_to_ast(lstack, get_arg(n2)),
+                                                  )
+                                                }
+                                              })()
+                                            : (() => {
+                                                const parse_mem_args = (() => {
+                                                  const pma = () => {
+                                                    {
+                                                      const mem_sword = get_sword(get_arg(n1))
+                                                      {
+                                                        {
+                                                          const tmp348 = try_bind_get_ddesc(mem_sword)
+                                                          const tmp349 = tmp348['args']
+                                                          switch (externs['host']['get-tag'](tmp348)) {
+                                                            case 'option/some': {
+                                                              const ddesc = tmp349[0]
+                                                              break
+                                                            }
+                                                            default:
+                                                              push_error(
+                                                                get_arg(n1),
+                                                                quote(
+                                                                  form_slash_list([
+                                                                    form_slash_word('memory'),
+                                                                    form_slash_word('not'),
+                                                                    form_slash_word('bound'),
+                                                                    form_slash_word('to'),
+                                                                    form_slash_word('a'),
+                                                                    form_slash_word('def'),
+                                                                    form_slash_word('at'),
+                                                                    form_slash_word('all'),
+                                                                  ]),
+                                                                ),
+                                                              )
+                                                          }
+                                                        }
+                                                        return intrinsic_memargs(
+                                                          mem_sword,
+                                                          get_sword(get_arg(n2)),
+                                                          get_sword(get_arg(n3)),
+                                                        )
+                                                      }
+                                                    }
+                                                  }
+                                                  return pma
+                                                })()
+                                                {
+                                                  switch (inst_name) {
+                                                    case 'i32.load': {
+                                                      assert_n_args(n5)
+                                                      return intrinsic_call_slash_load(
+                                                        inst_sname,
+                                                        parse_mem_args(),
+                                                        form_to_ast(lstack, get_arg(n4)),
+                                                      )
+                                                    }
+                                                    case 'i32.store': {
+                                                      assert_n_args(n6)
+                                                      return intrinsic_call_slash_store(
+                                                        inst_sname,
+                                                        parse_mem_args(),
+                                                        form_to_ast(lstack, get_arg(n4)),
+                                                        form_to_ast(lstack, get_arg(n5)),
+                                                      )
+                                                    }
+                                                    default: {
+                                                      log_fn(list(form))
+                                                      {
+                                                        return abort(
+                                                          list(
+                                                            quote(form_slash_word('form-to-ast')),
+                                                            quote(form_slash_word('not')),
+                                                            quote(form_slash_word('implemented')),
+                                                          ),
+                                                        )
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              })(),
+                                        )
+                                      }
+                                    }
                                     case 'func':
                                       return bexp_slash_func(form_to_func(lstack, form))
                                     case 'if': {
@@ -3397,21 +3616,21 @@ const mk_form_to_ast = (current_directory) => {
                                         form_to_ast(lstack, get_arg(n0)),
                                         list_map_fn(
                                           (() => {
-                                            const genword56 = (p) => {
+                                            const genword60 = (p) => {
                                               return pair(
                                                 list_map_fn(
                                                   (() => {
-                                                    const genword57 = (v) => {
+                                                    const genword61 = (v) => {
                                                       return form_to_ast(lstack, v)
                                                     }
-                                                    return genword57
+                                                    return genword61
                                                   })(),
                                                   get_list(first(p)),
                                                 ),
                                                 form_to_ast(lstack, second(p)),
                                               )
                                             }
-                                            return genword56
+                                            return genword60
                                           })(),
                                           pairwise(slice(l, n2, dec(size(l)))),
                                         ),
@@ -3422,7 +3641,7 @@ const mk_form_to_ast = (current_directory) => {
                                       const union_type_name_atom = atom(none())
                                       const clauses = list_map_fn(
                                         (() => {
-                                          const genword58 = (p) => {
+                                          const genword62 = (p) => {
                                             {
                                               const pat_list = get_list(pair_slash_fst(p))
                                               {
@@ -3449,23 +3668,23 @@ const mk_form_to_ast = (current_directory) => {
                                                     const new_lstack = local_stack_slash_frame(lstack, lctx)
                                                     {
                                                       {
-                                                        const tmp108 = try_get(
+                                                        const tmp350 = try_get(
                                                           def_ctx,
                                                           syntax_word_slash_word(ctor_sname),
                                                         )
-                                                        const tmp109 = tmp108['args']
-                                                        switch (externs['host']['get-tag'](tmp108)) {
+                                                        const tmp351 = tmp350['args']
+                                                        switch (externs['host']['get-tag'](tmp350)) {
                                                           case 'option/some': {
-                                                            const ddesc = tmp109[0]
+                                                            const ddesc = tmp351[0]
                                                             {
                                                               set_kv_map(node_to_def_desc, ctor_sname, ddesc)
                                                               {
-                                                                const tmp110 = ddesc
-                                                                const tmp111 = tmp110['args']
-                                                                switch (externs['host']['get-tag'](tmp110)) {
+                                                                const tmp352 = ddesc
+                                                                const tmp353 = tmp352['args']
+                                                                switch (externs['host']['get-tag'](tmp352)) {
                                                                   case 'def-desc/union-ctor': {
-                                                                    const union_desc = tmp111[0]
-                                                                    const index = tmp111[1]
+                                                                    const union_desc = tmp353[0]
+                                                                    const index = tmp353[1]
                                                                     {
                                                                       const union_type_name = syntax_word_slash_word(
                                                                         union_desc_slash_name(union_desc),
@@ -3475,11 +3694,11 @@ const mk_form_to_ast = (current_directory) => {
                                                                       const ctor_params = pair_slash_snd(ctor_pair)
                                                                       {
                                                                         {
-                                                                          const tmp112 = atom_get(union_type_name_atom)
-                                                                          const tmp113 = tmp112['args']
-                                                                          switch (externs['host']['get-tag'](tmp112)) {
+                                                                          const tmp354 = atom_get(union_type_name_atom)
+                                                                          const tmp355 = tmp354['args']
+                                                                          switch (externs['host']['get-tag'](tmp354)) {
                                                                             case 'option/some': {
-                                                                              const prev_union_type_name = tmp113[0]
+                                                                              const prev_union_type_name = tmp355[0]
                                                                               {
                                                                                 if (
                                                                                   eq_word(
@@ -3531,27 +3750,27 @@ const mk_form_to_ast = (current_directory) => {
                                                                           }
                                                                         }
                                                                         {
-                                                                          const genword59 = min(
+                                                                          const genword63 = min(
                                                                             size(ctor_params),
                                                                             size(params),
                                                                           )
                                                                           {
                                                                             ;(() => {
-                                                                              const genword60 = (i) => {
-                                                                                if (lt_s(i, genword59)) {
+                                                                              const genword64 = (i) => {
+                                                                                if (lt_s(i, genword63)) {
                                                                                   {
                                                                                     set_local(
                                                                                       lvars,
                                                                                       at(params, i),
                                                                                       local_var_kind_slash_match_param(),
                                                                                     )
-                                                                                    return genword60(add(i, 1))
+                                                                                    return genword64(add(i, 1))
                                                                                   }
                                                                                 } else {
                                                                                   return 'wuns-undefined'
                                                                                 }
                                                                               }
-                                                                              return genword60
+                                                                              return genword64
                                                                             })()(n0)
                                                                           }
                                                                         }
@@ -3599,10 +3818,10 @@ const mk_form_to_ast = (current_directory) => {
                                                           ctor_sname,
                                                           list_map_fn(
                                                             (() => {
-                                                              const genword61 = (param) => {
+                                                              const genword65 = (param) => {
                                                                 return get_sword(param)
                                                               }
-                                                              return genword61
+                                                              return genword65
                                                             })(),
                                                             params,
                                                           ),
@@ -3615,7 +3834,7 @@ const mk_form_to_ast = (current_directory) => {
                                               }
                                             }
                                           }
-                                          return genword58
+                                          return genword62
                                         })(),
                                         pairwise_pairs(slice(l, n2, size(l))),
                                       )
@@ -3631,10 +3850,10 @@ const mk_form_to_ast = (current_directory) => {
                                       return bexp_slash_do(
                                         list_map_fn(
                                           (() => {
-                                            const genword62 = (arg) => {
+                                            const genword66 = (arg) => {
                                               return form_to_ast(lstack, arg)
                                             }
-                                            return genword62
+                                            return genword66
                                           })(),
                                           rest(l),
                                         ),
@@ -3664,18 +3883,18 @@ const mk_form_to_ast = (current_directory) => {
                                         return bexp_slash_loop(
                                           list_map_fn(
                                             (() => {
-                                              const genword63 = (p) => {
+                                              const genword67 = (p) => {
                                                 {
                                                   const name = first(p)
                                                   const name_word = get_word(name)
                                                   const be = form_to_ast(new_lstack, second(p))
                                                   {
                                                     {
-                                                      const tmp114 = try_get_local(lstack, name_word)
-                                                      const tmp115 = tmp114['args']
-                                                      switch (externs['host']['get-tag'](tmp114)) {
+                                                      const tmp356 = try_get_local(lstack, name_word)
+                                                      const tmp357 = tmp356['args']
+                                                      switch (externs['host']['get-tag'](tmp356)) {
                                                         case 'option/some': {
-                                                          const ldesc = tmp115[0]
+                                                          const ldesc = tmp357[0]
                                                           push_error(
                                                             name,
                                                             quote(
@@ -3690,11 +3909,11 @@ const mk_form_to_ast = (current_directory) => {
                                                           break
                                                         }
                                                         default: {
-                                                          const tmp116 = try_get(def_ctx, name_word)
-                                                          const tmp117 = tmp116['args']
-                                                          switch (externs['host']['get-tag'](tmp116)) {
+                                                          const tmp358 = try_get(def_ctx, name_word)
+                                                          const tmp359 = tmp358['args']
+                                                          switch (externs['host']['get-tag'](tmp358)) {
                                                             case 'option/some': {
-                                                              const ddesc = tmp117[0]
+                                                              const ddesc = tmp359[0]
                                                               {
                                                                 push_error(
                                                                   name,
@@ -3720,16 +3939,16 @@ const mk_form_to_ast = (current_directory) => {
                                                   }
                                                 }
                                               }
-                                              return genword63
+                                              return genword67
                                             })(),
                                             pairwise(bindings),
                                           ),
                                           list_map_fn(
                                             (() => {
-                                              const genword64 = (f) => {
+                                              const genword68 = (f) => {
                                                 return form_to_ast(new_lstack, f)
                                               }
-                                              return genword64
+                                              return genword68
                                             })(),
                                             slice(l, n2, size(l)),
                                           ),
@@ -3739,11 +3958,11 @@ const mk_form_to_ast = (current_directory) => {
                                     case 'continue': {
                                       const loop_vars = (() => {
                                         {
-                                          const tmp118 = try_get_enclosing_loop_context(lstack)
-                                          const tmp119 = tmp118['args']
-                                          switch (externs['host']['get-tag'](tmp118)) {
+                                          const tmp360 = try_get_enclosing_loop_context(lstack)
+                                          const tmp361 = tmp360['args']
+                                          switch (externs['host']['get-tag'](tmp360)) {
                                             case 'option/some': {
-                                              const loop_context = tmp119[0]
+                                              const loop_context = tmp361[0]
                                               return local_context_slash_vars(loop_context)
                                             }
                                             default: {
@@ -3768,7 +3987,7 @@ const mk_form_to_ast = (current_directory) => {
                                         return bexp_slash_continue(
                                           list_map_fn(
                                             (() => {
-                                              const genword65 = (p) => {
+                                              const genword69 = (p) => {
                                                 {
                                                   const name = pair_slash_fst(p)
                                                   const sname = sword(name)
@@ -3776,11 +3995,11 @@ const mk_form_to_ast = (current_directory) => {
                                                   const be = form_to_ast(lstack, pair_slash_snd(p))
                                                   {
                                                     {
-                                                      const tmp120 = try_get(loop_vars, name_word)
-                                                      const tmp121 = tmp120['args']
-                                                      switch (externs['host']['get-tag'](tmp120)) {
+                                                      const tmp362 = try_get(loop_vars, name_word)
+                                                      const tmp363 = tmp362['args']
+                                                      switch (externs['host']['get-tag'](tmp362)) {
                                                         case 'option/some': {
-                                                          const ldesc = tmp121[0]
+                                                          const ldesc = tmp363[0]
                                                           set_kv_map(node_to_ldesc, sname, ldesc)
                                                           break
                                                         }
@@ -3806,7 +4025,7 @@ const mk_form_to_ast = (current_directory) => {
                                                   }
                                                 }
                                               }
-                                              return genword65
+                                              return genword69
                                             })(),
                                             pairwise_pairs(rest(l)),
                                           ),
@@ -3838,18 +4057,18 @@ const mk_form_to_ast = (current_directory) => {
                                         return bexp_slash_let(
                                           list_map_fn(
                                             (() => {
-                                              const genword66 = (p) => {
+                                              const genword70 = (p) => {
                                                 {
                                                   const name = first(p)
                                                   const name_word = get_word(name)
                                                   const be = form_to_ast(new_lstack, second(p))
                                                   {
                                                     {
-                                                      const tmp122 = try_get_local(lstack, name_word)
-                                                      const tmp123 = tmp122['args']
-                                                      switch (externs['host']['get-tag'](tmp122)) {
+                                                      const tmp364 = try_get_local(lstack, name_word)
+                                                      const tmp365 = tmp364['args']
+                                                      switch (externs['host']['get-tag'](tmp364)) {
                                                         case 'option/some': {
-                                                          const ldesc = tmp123[0]
+                                                          const ldesc = tmp365[0]
                                                           push_error(
                                                             name,
                                                             quote(
@@ -3864,11 +4083,11 @@ const mk_form_to_ast = (current_directory) => {
                                                           break
                                                         }
                                                         default: {
-                                                          const tmp124 = try_get(def_ctx, name_word)
-                                                          const tmp125 = tmp124['args']
-                                                          switch (externs['host']['get-tag'](tmp124)) {
+                                                          const tmp366 = try_get(def_ctx, name_word)
+                                                          const tmp367 = tmp366['args']
+                                                          switch (externs['host']['get-tag'](tmp366)) {
                                                             case 'option/some': {
-                                                              const ddesc = tmp125[0]
+                                                              const ddesc = tmp367[0]
                                                               {
                                                                 push_error(
                                                                   name,
@@ -3894,16 +4113,16 @@ const mk_form_to_ast = (current_directory) => {
                                                   }
                                                 }
                                               }
-                                              return genword66
+                                              return genword70
                                             })(),
                                             pairwise(bindings),
                                           ),
                                           list_map_fn(
                                             (() => {
-                                              const genword67 = (f) => {
+                                              const genword71 = (f) => {
                                                 return form_to_ast(new_lstack, f)
                                               }
-                                              return genword67
+                                              return genword71
                                             })(),
                                             slice(l, n2, size(l)),
                                           ),
@@ -3933,14 +4152,14 @@ const mk_form_to_ast = (current_directory) => {
                                         } else {
                                         }
                                         {
-                                          const gencol69 = funcs
-                                          const gencol_size70 = size(gencol69)
+                                          const gencol73 = funcs
+                                          const gencol_size74 = size(gencol73)
                                           {
                                             ;(() => {
-                                              const genloop_fun71 = (genit68) => {
-                                                if (lt_s(genit68, gencol_size70)) {
+                                              const genloop_fun75 = (genit72) => {
+                                                if (lt_s(genit72, gencol_size74)) {
                                                   {
-                                                    const ff = at(gencol69, genit68)
+                                                    const ff = at(gencol73, genit72)
                                                     {
                                                       {
                                                         {
@@ -3949,7 +4168,7 @@ const mk_form_to_ast = (current_directory) => {
                                                             set_local(lvars, name, local_var_kind_slash_letfn())
                                                           }
                                                         }
-                                                        return genloop_fun71(add(genit68, 1))
+                                                        return genloop_fun75(add(genit72, 1))
                                                       }
                                                     }
                                                   }
@@ -3957,28 +4176,28 @@ const mk_form_to_ast = (current_directory) => {
                                                   return 'wuns-undefined'
                                                 }
                                               }
-                                              return genloop_fun71
+                                              return genloop_fun75
                                             })()(0)
                                           }
                                         }
                                         return bexp_slash_letfn(
                                           list_map_fn(
                                             (() => {
-                                              const genword72 = (ff) => {
+                                              const genword76 = (ff) => {
                                                 {
                                                   return form_to_func(new_lstack, ff)
                                                 }
                                               }
-                                              return genword72
+                                              return genword76
                                             })(),
                                             funcs,
                                           ),
                                           list_map_fn(
                                             (() => {
-                                              const genword73 = (f) => {
+                                              const genword77 = (f) => {
                                                 return form_to_ast(new_lstack, f)
                                               }
-                                              return genword73
+                                              return genword77
                                             })(),
                                             slice(l, n2, size(l)),
                                           ),
@@ -3993,42 +4212,42 @@ const mk_form_to_ast = (current_directory) => {
                                       )
                                     }
                                     default: {
-                                      const tmp126 = try_get_local(lstack, first_word)
-                                      const tmp127 = tmp126['args']
-                                      switch (externs['host']['get-tag'](tmp126)) {
+                                      const tmp368 = try_get_local(lstack, first_word)
+                                      const tmp369 = tmp368['args']
+                                      switch (externs['host']['get-tag'](tmp368)) {
                                         case 'option/some': {
-                                          const ldesc = tmp127[0]
+                                          const ldesc = tmp369[0]
                                           return bexp_slash_call(
                                             form_to_ast(lstack, first_form),
                                             list_map_fn(
                                               (() => {
-                                                const genword74 = (arg) => {
+                                                const genword78 = (arg) => {
                                                   return form_to_ast(lstack, arg)
                                                 }
-                                                return genword74
+                                                return genword78
                                               })(),
                                               rest(l),
                                             ),
                                           )
                                         }
                                         default: {
-                                          const tmp128 = try_get(def_ctx, first_word)
-                                          const tmp129 = tmp128['args']
-                                          switch (externs['host']['get-tag'](tmp128)) {
+                                          const tmp370 = try_get(def_ctx, first_word)
+                                          const tmp371 = tmp370['args']
+                                          switch (externs['host']['get-tag'](tmp370)) {
                                             case 'option/some': {
-                                              const ddesc = tmp129[0]
+                                              const ddesc = tmp371[0]
                                               {
                                                 set_kv_map(node_to_def_desc, get_sword(first_form), ddesc)
                                                 {
-                                                  const tmp130 = ddesc
-                                                  const tmp131 = tmp130['args']
-                                                  switch (externs['host']['get-tag'](tmp130)) {
+                                                  const tmp372 = ddesc
+                                                  const tmp373 = tmp372['args']
+                                                  switch (externs['host']['get-tag'](tmp372)) {
                                                     case 'def-desc/defunc': {
-                                                      const defunc_desc = tmp131[0]
+                                                      const defunc_desc = tmp373[0]
                                                       {
-                                                        const tmp132 = defunc_desc
-                                                        const tmp133 = tmp132['args']
-                                                        switch (externs['host']['get-tag'](tmp132)) {
+                                                        const tmp374 = defunc_desc
+                                                        const tmp375 = tmp374['args']
+                                                        switch (externs['host']['get-tag'](tmp374)) {
                                                           case 'bdefunc-kind/fexpr': {
                                                             return bexp_slash_call_fexpr(
                                                               bexp_slash_var(get_sword(first_form)),
@@ -4037,11 +4256,11 @@ const mk_form_to_ast = (current_directory) => {
                                                           }
                                                           case 'bdefunc-kind/macro': {
                                                             {
-                                                              const tmp134 = try_get_macro(eval_ctx, first_word)
-                                                              const tmp135 = tmp134['args']
-                                                              switch (externs['host']['get-tag'](tmp134)) {
+                                                              const tmp376 = try_get_macro(eval_ctx, first_word)
+                                                              const tmp377 = tmp376['args']
+                                                              switch (externs['host']['get-tag'](tmp376)) {
                                                                 case 'option/some': {
-                                                                  const macro_func = tmp135[0]
+                                                                  const macro_func = tmp377[0]
                                                                   return form_to_ast(
                                                                     lstack,
                                                                     interpreter_apply(macro_func, rest(l)),
@@ -4065,10 +4284,10 @@ const mk_form_to_ast = (current_directory) => {
                                                               form_to_ast(lstack, first_form),
                                                               list_map_fn(
                                                                 (() => {
-                                                                  const genword75 = (arg) => {
+                                                                  const genword79 = (arg) => {
                                                                     return form_to_ast(lstack, arg)
                                                                   }
-                                                                  return genword75
+                                                                  return genword79
                                                                 })(),
                                                                 rest(l),
                                                               ),
@@ -4081,10 +4300,10 @@ const mk_form_to_ast = (current_directory) => {
                                                         form_to_ast(lstack, first_form),
                                                         list_map_fn(
                                                           (() => {
-                                                            const genword76 = (arg) => {
+                                                            const genword80 = (arg) => {
                                                               return form_to_ast(lstack, arg)
                                                             }
-                                                            return genword76
+                                                            return genword80
                                                           })(),
                                                           rest(l),
                                                         ),
@@ -4111,15 +4330,15 @@ const mk_form_to_ast = (current_directory) => {
                                   }
                                 }
                                 case 'form/list': {
-                                  const fl = tmp107[0]
+                                  const fl = tmp347[0]
                                   return bexp_slash_call(
                                     form_to_ast(lstack, first(l)),
                                     list_map_fn(
                                       (() => {
-                                        const genword77 = (arg) => {
+                                        const genword81 = (arg) => {
                                           return form_to_ast(lstack, arg)
                                         }
-                                        return genword77
+                                        return genword81
                                       })(),
                                       rest(l),
                                     ),
@@ -4224,6 +4443,7 @@ const make_type = (type_name, ...type_args) => {
 const type_i32 = make_type('i32')
 const type_f64 = make_type('f64')
 const type_word = make_type('word')
+const type_memory = make_type('memory')
 const type_form = make_type('form')
 const type_list = (elem_type) => {
   return make_type('list', elem_type)
@@ -4238,9 +4458,6 @@ const type_func = (params, opt_rest_param, result) => {
 const type_func_no_rest = (params, result) => {
   return type_func(params, none(), result)
 }
-const i32i32_to_i32 = type_func_no_rest(list(type_i32, type_i32), type_i32)
-const f64f64_to_f64 = type_func_no_rest(list(type_f64, type_f64), type_f64)
-const f64f64_to_i32 = type_func_no_rest(list(type_f64, type_f64), type_i32)
 const type_ctor = (params, result) => {
   return ctype_slash_inst(inst_type_slash_func(func_type(params, none(), result, function_kind_slash_ctor())))
 }
@@ -4252,21 +4469,21 @@ const set_type_var_kind_to_type = (type_var, type) => {
 }
 const normalize_type = (t0) => {
   {
-    const tmp136 = t0
-    const tmp137 = tmp136['args']
-    switch (externs['host']['get-tag'](tmp136)) {
+    const tmp378 = t0
+    const tmp379 = tmp378['args']
+    switch (externs['host']['get-tag'](tmp378)) {
       case 'ctype/var': {
-        const tv = tmp137[0]
+        const tv = tmp379[0]
         {
-          const tmp138 = get_type_var_kind(tv)
-          const tmp139 = tmp138['args']
-          switch (externs['host']['get-tag'](tmp138)) {
+          const tmp380 = get_type_var_kind(tv)
+          const tmp381 = tmp380['args']
+          switch (externs['host']['get-tag'](tmp380)) {
             case 'type-var-kind/word': {
-              const w = tmp139[0]
+              const w = tmp381[0]
               return t0
             }
             case 'type-var-kind/linked': {
-              const linked_t = tmp139[0]
+              const linked_t = tmp381[0]
               {
                 const t2 = normalize_type(linked_t)
                 {
@@ -4310,11 +4527,11 @@ const free_type_vars = (t) => {
           const nt = normalize_type(t)
           {
             {
-              const tmp140 = nt
-              const tmp141 = tmp140['args']
-              switch (externs['host']['get-tag'](tmp140)) {
+              const tmp382 = nt
+              const tmp383 = tmp382['args']
+              switch (externs['host']['get-tag'](tmp382)) {
                 case 'ctype/var': {
-                  const tv = tmp141[0]
+                  const tv = tmp383[0]
                   if (set_has(ftvs, tv)) {
                     return 'wuns-undefined'
                   } else {
@@ -4324,13 +4541,13 @@ const free_type_vars = (t) => {
                   }
                 }
                 case 'ctype/inst': {
-                  const inst_type = tmp141[0]
+                  const inst_type = tmp383[0]
                   {
-                    const tmp142 = inst_type
-                    const tmp143 = tmp142['args']
-                    switch (externs['host']['get-tag'](tmp142)) {
+                    const tmp384 = inst_type
+                    const tmp385 = tmp384['args']
+                    switch (externs['host']['get-tag'](tmp384)) {
                       case 'inst-type/func': {
-                        const ft = tmp143[0]
+                        const ft = tmp385[0]
                         {
                           {
                             const gencol1 = func_type_slash_params(ft)
@@ -4357,11 +4574,11 @@ const free_type_vars = (t) => {
                             }
                           }
                           {
-                            const tmp144 = func_type_slash_rest_param_opt(ft)
-                            const tmp145 = tmp144['args']
-                            switch (externs['host']['get-tag'](tmp144)) {
+                            const tmp386 = func_type_slash_rest_param_opt(ft)
+                            const tmp387 = tmp386['args']
+                            switch (externs['host']['get-tag'](tmp386)) {
                               case 'option/some': {
-                                const rest = tmp145[0]
+                                const rest = tmp387[0]
                                 {
                                   go(rest)
                                 }
@@ -4374,8 +4591,8 @@ const free_type_vars = (t) => {
                         }
                       }
                       case 'inst-type/apply': {
-                        const type_name = tmp143[0]
-                        const type_args = tmp143[1]
+                        const type_name = tmp385[0]
+                        const type_args = tmp385[1]
                         {
                           const gencol5 = type_args
                           const gencol_size6 = size(gencol5)
@@ -4494,17 +4711,17 @@ const unify = (outer_t1, outer_t2) => {
           const nt2 = normalize_type(t2)
           {
             {
-              const tmp146 = nt1
-              const tmp147 = tmp146['args']
-              switch (externs['host']['get-tag'](tmp146)) {
+              const tmp388 = nt1
+              const tmp389 = tmp388['args']
+              switch (externs['host']['get-tag'](tmp388)) {
                 case 'ctype/var': {
-                  const tv1 = tmp147[0]
+                  const tv1 = tmp389[0]
                   {
-                    const tmp148 = nt2
-                    const tmp149 = tmp148['args']
-                    switch (externs['host']['get-tag'](tmp148)) {
+                    const tmp390 = nt2
+                    const tmp391 = tmp390['args']
+                    switch (externs['host']['get-tag'](tmp390)) {
                       case 'ctype/var': {
-                        const tv2 = tmp149[0]
+                        const tv2 = tmp391[0]
                         if (is_identical(tv1, tv2)) {
                           return 'wuns-undefined'
                         } else {
@@ -4518,7 +4735,7 @@ const unify = (outer_t1, outer_t2) => {
                         }
                       }
                       case 'ctype/inst': {
-                        const inst_type2 = tmp149[0]
+                        const inst_type2 = tmp391[0]
                         return link_var_to_type(tv1, nt2)
                       }
                       default:
@@ -4527,29 +4744,29 @@ const unify = (outer_t1, outer_t2) => {
                   }
                 }
                 case 'ctype/inst': {
-                  const inst_type1 = tmp147[0]
+                  const inst_type1 = tmp389[0]
                   {
-                    const tmp150 = nt2
-                    const tmp151 = tmp150['args']
-                    switch (externs['host']['get-tag'](tmp150)) {
+                    const tmp392 = nt2
+                    const tmp393 = tmp392['args']
+                    switch (externs['host']['get-tag'](tmp392)) {
                       case 'ctype/var': {
-                        const tv2 = tmp151[0]
+                        const tv2 = tmp393[0]
                         return link_var_to_type(tv2, nt1)
                       }
                       case 'ctype/inst': {
-                        const inst_type2 = tmp151[0]
+                        const inst_type2 = tmp393[0]
                         {
-                          const tmp152 = inst_type1
-                          const tmp153 = tmp152['args']
-                          switch (externs['host']['get-tag'](tmp152)) {
+                          const tmp394 = inst_type1
+                          const tmp395 = tmp394['args']
+                          switch (externs['host']['get-tag'](tmp394)) {
                             case 'inst-type/func': {
-                              const ft1 = tmp153[0]
+                              const ft1 = tmp395[0]
                               {
-                                const tmp154 = inst_type2
-                                const tmp155 = tmp154['args']
-                                switch (externs['host']['get-tag'](tmp154)) {
+                                const tmp396 = inst_type2
+                                const tmp397 = tmp396['args']
+                                switch (externs['host']['get-tag'](tmp396)) {
                                   case 'inst-type/func': {
-                                    const ft2 = tmp155[0]
+                                    const ft2 = tmp397[0]
                                     {
                                       const type_args1 = func_type_slash_params(ft1)
                                       const type_args2 = func_type_slash_params(ft2)
@@ -4578,11 +4795,11 @@ const unify = (outer_t1, outer_t2) => {
                                           {
                                             if (lt_s(s1, s2)) {
                                               {
-                                                const tmp156 = func_type_slash_rest_param_opt(ft1)
-                                                const tmp157 = tmp156['args']
-                                                switch (externs['host']['get-tag'](tmp156)) {
+                                                const tmp398 = func_type_slash_rest_param_opt(ft1)
+                                                const tmp399 = tmp398['args']
+                                                switch (externs['host']['get-tag'](tmp398)) {
                                                   case 'option/some': {
-                                                    const rest1 = tmp157[0]
+                                                    const rest1 = tmp399[0]
                                                     {
                                                       const genword14 = s2
                                                       {
@@ -4621,11 +4838,11 @@ const unify = (outer_t1, outer_t2) => {
                                               }
                                             } else {
                                               {
-                                                const tmp158 = func_type_slash_rest_param_opt(ft2)
-                                                const tmp159 = tmp158['args']
-                                                switch (externs['host']['get-tag'](tmp158)) {
+                                                const tmp400 = func_type_slash_rest_param_opt(ft2)
+                                                const tmp401 = tmp400['args']
+                                                switch (externs['host']['get-tag'](tmp400)) {
                                                   case 'option/some': {
-                                                    const rest2 = tmp159[0]
+                                                    const rest2 = tmp401[0]
                                                     {
                                                       const genword16 = s1
                                                       {
@@ -4687,15 +4904,15 @@ const unify = (outer_t1, outer_t2) => {
                               }
                             }
                             case 'inst-type/apply': {
-                              const type_name1 = tmp153[0]
-                              const type_args1 = tmp153[1]
+                              const type_name1 = tmp395[0]
+                              const type_args1 = tmp395[1]
                               {
-                                const tmp160 = inst_type2
-                                const tmp161 = tmp160['args']
-                                switch (externs['host']['get-tag'](tmp160)) {
+                                const tmp402 = inst_type2
+                                const tmp403 = tmp402['args']
+                                switch (externs['host']['get-tag'](tmp402)) {
                                   case 'inst-type/apply': {
-                                    const type_name2 = tmp161[0]
-                                    const type_args2 = tmp161[1]
+                                    const type_name2 = tmp403[0]
+                                    const type_args2 = tmp403[1]
                                     if (eq_word(type_name1, type_name2)) {
                                       if (eq(size(type_args1), size(type_args2))) {
                                         {
@@ -4872,29 +5089,29 @@ const try_get_assoc_identical = (assoc_list, _var) => {
 }
 const copy_type = (subst_map, t) => {
   {
-    const tmp162 = t
-    const tmp163 = tmp162['args']
-    switch (externs['host']['get-tag'](tmp162)) {
+    const tmp404 = t
+    const tmp405 = tmp404['args']
+    switch (externs['host']['get-tag'](tmp404)) {
       case 'ctype/var': {
-        const tv = tmp163[0]
+        const tv = tmp405[0]
         {
-          const tmp164 = try_get_assoc_identical(subst_map, tv)
-          const tmp165 = tmp164['args']
-          switch (externs['host']['get-tag'](tmp164)) {
+          const tmp406 = try_get_assoc_identical(subst_map, tv)
+          const tmp407 = tmp406['args']
+          switch (externs['host']['get-tag'](tmp406)) {
             case 'option/some': {
-              const subst_type = tmp165[0]
+              const subst_type = tmp407[0]
               return subst_type
             }
             default: {
-              const tmp166 = get_type_var_kind(tv)
-              const tmp167 = tmp166['args']
-              switch (externs['host']['get-tag'](tmp166)) {
+              const tmp408 = get_type_var_kind(tv)
+              const tmp409 = tmp408['args']
+              switch (externs['host']['get-tag'](tmp408)) {
                 case 'type-var-kind/word': {
-                  const w = tmp167[0]
+                  const w = tmp409[0]
                   return t
                 }
                 case 'type-var-kind/linked': {
-                  const linked_t = tmp167[0]
+                  const linked_t = tmp409[0]
                   return copy_type(subst_map, linked_t)
                 }
                 default:
@@ -4905,13 +5122,13 @@ const copy_type = (subst_map, t) => {
         }
       }
       case 'ctype/inst': {
-        const inst_type = tmp163[0]
+        const inst_type = tmp405[0]
         {
-          const tmp168 = inst_type
-          const tmp169 = tmp168['args']
-          switch (externs['host']['get-tag'](tmp168)) {
+          const tmp410 = inst_type
+          const tmp411 = tmp410['args']
+          switch (externs['host']['get-tag'](tmp410)) {
             case 'inst-type/func': {
-              const ft = tmp169[0]
+              const ft = tmp411[0]
               return ctype_slash_inst(
                 inst_type_slash_func(
                   func_type(
@@ -4926,11 +5143,11 @@ const copy_type = (subst_map, t) => {
                     ),
                     (() => {
                       {
-                        const tmp170 = func_type_slash_rest_param_opt(ft)
-                        const tmp171 = tmp170['args']
-                        switch (externs['host']['get-tag'](tmp170)) {
+                        const tmp412 = func_type_slash_rest_param_opt(ft)
+                        const tmp413 = tmp412['args']
+                        switch (externs['host']['get-tag'](tmp412)) {
                           case 'option/some': {
-                            const rest = tmp171[0]
+                            const rest = tmp413[0]
                             return some(copy_type(subst_map, rest))
                           }
                           default:
@@ -4945,8 +5162,8 @@ const copy_type = (subst_map, t) => {
               )
             }
             case 'inst-type/apply': {
-              const type_name = tmp169[0]
-              const type_args = tmp169[1]
+              const type_name = tmp411[0]
+              const type_args = tmp411[1]
               return ctype_slash_inst(
                 inst_type_slash_apply(
                   type_name,
@@ -4998,16 +5215,16 @@ const instantiate_syntax_type = (type_var_env, outer_syntax_type) => {
   return (() => {
     const go = (syntax_type) => {
       {
-        const tmp172 = syntax_type
-        const tmp173 = tmp172['args']
-        switch (externs['host']['get-tag'](tmp172)) {
+        const tmp414 = syntax_type
+        const tmp415 = tmp414['args']
+        switch (externs['host']['get-tag'](tmp414)) {
           case 'btype/var': {
-            const tv = tmp173[0]
+            const tv = tmp415[0]
             return get(type_var_env, syntax_word_slash_word(tv))
           }
           case 'btype/apply': {
-            const type_name = tmp173[0]
-            const targs = tmp173[1]
+            const type_name = tmp415[0]
+            const targs = tmp415[1]
             switch (syntax_word_slash_word(type_name)) {
               case 'i32':
                 return type_i32
@@ -5030,10 +5247,15 @@ const instantiate_syntax_type = (type_var_env, outer_syntax_type) => {
                 )
             }
           }
+          case 'btype/memory': {
+            const lower = tmp415[0]
+            const opt_upper = tmp415[1]
+            return type_memory
+          }
           case 'btype/func': {
-            const reg_params = tmp173[0]
-            const opt_rest_param = tmp173[1]
-            const result = tmp173[2]
+            const reg_params = tmp415[0]
+            const opt_rest_param = tmp415[1]
+            const result = tmp415[2]
             return type_func(
               list_map_fn(
                 (() => {
@@ -5046,11 +5268,11 @@ const instantiate_syntax_type = (type_var_env, outer_syntax_type) => {
               ),
               (() => {
                 {
-                  const tmp174 = opt_rest_param
-                  const tmp175 = tmp174['args']
-                  switch (externs['host']['get-tag'](tmp174)) {
+                  const tmp416 = opt_rest_param
+                  const tmp417 = tmp416['args']
+                  switch (externs['host']['get-tag'](tmp416)) {
                     case 'option/some': {
-                      const rest_param = tmp175[0]
+                      const rest_param = tmp417[0]
                       return some(go(rest_param))
                     }
                     default:
@@ -5107,58 +5329,23 @@ const instantiate_syntax_type_scheme = (counter_atom, level, syntax_type_scheme)
 }
 const literal_to_type = (l) => {
   {
-    const tmp176 = l
-    const tmp177 = tmp176['args']
-    switch (externs['host']['get-tag'](tmp176)) {
+    const tmp418 = l
+    const tmp419 = tmp418['args']
+    switch (externs['host']['get-tag'](tmp418)) {
       case 'literal/i32': {
-        const _ = tmp177[0]
+        const _ = tmp419[0]
         return type_i32
       }
       case 'literal/f64': {
-        const _ = tmp177[0]
+        const _ = tmp419[0]
         return type_f64
       }
       case 'literal/word': {
-        const _ = tmp177[0]
+        const _ = tmp419[0]
         return type_word
       }
       default:
         throw 'unmatched-match'
-    }
-  }
-}
-const intrinsic_name_to_type = (name) => {
-  if (is_i32_bin_inst(name)) {
-    return i32i32_to_i32
-  } else {
-    if (is_f64_bin_inst(name)) {
-      return f64f64_to_f64
-    } else {
-      if (is_f64_comp_inst(name)) {
-        return f64f64_to_i32
-      } else {
-        if (eq_word(name, 'unreachable')) {
-          {
-            return abort(
-              list(
-                quote(form_slash_word('unreachable')),
-                quote(form_slash_word('not')),
-                quote(form_slash_word('implemented')),
-              ),
-            )
-          }
-        } else {
-          {
-            return abort(
-              list(
-                quote(form_slash_word('intrinsic-name-to-type')),
-                quote(form_slash_word('not')),
-                quote(form_slash_word('implemented')),
-              ),
-            )
-          }
-        }
-      }
     }
   }
 }
@@ -5173,11 +5360,11 @@ const check_message_slash_opt_node = (record) => record['opt-node']
 const check_message_slash_severity = (record) => record['severity']
 const log_check_message = (error) => {
   {
-    const tmp178 = check_message_slash_opt_node(error)
-    const tmp179 = tmp178['args']
-    switch (externs['host']['get-tag'](tmp178)) {
+    const tmp420 = check_message_slash_opt_node(error)
+    const tmp421 = tmp420['args']
+    switch (externs['host']['get-tag'](tmp420)) {
       case 'option/some': {
-        const node = tmp179[0]
+        const node = tmp421[0]
         log_node_location(node)
         break
       }
@@ -5235,11 +5422,11 @@ const generate_fresh_type_var = (gctx, level) => {
 }
 const try_get_var_type = (gctx, local_ctx, var_name) => {
   {
-    const tmp180 = try_get_local_var_type(local_ctx, var_name)
-    const tmp181 = tmp180['args']
-    switch (externs['host']['get-tag'](tmp180)) {
+    const tmp422 = try_get_local_var_type(local_ctx, var_name)
+    const tmp423 = tmp422['args']
+    switch (externs['host']['get-tag'](tmp422)) {
       case 'option/some': {
-        const ltype = tmp181[0]
+        const ltype = tmp423[0]
         return some(ltype)
       }
       default:
@@ -5253,11 +5440,11 @@ const try_get_node = (gctx, bst) => {
     const opt_form = syntax_info_slash_try_get_form(info)(to_js_value(bst))
     {
       {
-        const tmp182 = opt_form
-        const tmp183 = tmp182['args']
-        switch (externs['host']['get-tag'](tmp182)) {
+        const tmp424 = opt_form
+        const tmp425 = tmp424['args']
+        switch (externs['host']['get-tag'](tmp424)) {
           case 'option/some': {
-            const form = tmp183[0]
+            const form = tmp425[0]
             return try_get_syntax_node(form)
           }
           default: {
@@ -5307,28 +5494,28 @@ const unify_report = (gctx, t1, t2, bst) => {
 }
 const is_syntactic_value = (bform) => {
   {
-    const tmp184 = bform
-    const tmp185 = tmp184['args']
-    switch (externs['host']['get-tag'](tmp184)) {
+    const tmp426 = bform
+    const tmp427 = tmp426['args']
+    switch (externs['host']['get-tag'](tmp426)) {
       case 'bexp/literal': {
-        const l = tmp185[0]
+        const l = tmp427[0]
         return n1
       }
       case 'bexp/func': {
-        const f = tmp185[0]
+        const f = tmp427[0]
         return n1
       }
       case 'bexp/var': {
-        const f = tmp185[0]
+        const f = tmp427[0]
         return n1
       }
       case 'bexp/extern': {
-        const f = tmp185[0]
+        const f = tmp427[0]
         return n1
       }
       case 'bexp/type-anno': {
-        const f = tmp185[0]
-        const ts = tmp185[1]
+        const f = tmp427[0]
+        const ts = tmp427[1]
         return is_syntactic_value(f)
       }
       default:
@@ -5383,9 +5570,9 @@ const make_checker = (gctx) => {
         const reg_params = growable_list()
         const takes_form_params = (() => {
           {
-            const tmp186 = function_kind
-            const tmp187 = tmp186['args']
-            switch (externs['host']['get-tag'](tmp186)) {
+            const tmp428 = function_kind
+            const tmp429 = tmp428['args']
+            switch (externs['host']['get-tag'](tmp428)) {
               case 'function-kind/func': {
                 return _false
               }
@@ -5443,11 +5630,11 @@ const make_checker = (gctx) => {
           {
             const opt_rest = (() => {
               {
-                const tmp188 = bfunc_slash_rest_param(func)
-                const tmp189 = tmp188['args']
-                switch (externs['host']['get-tag'](tmp188)) {
+                const tmp430 = bfunc_slash_rest_param(func)
+                const tmp431 = tmp430['args']
+                switch (externs['host']['get-tag'](tmp430)) {
                   case 'option/some': {
-                    const rest_param = tmp189[0]
+                    const rest_param = tmp431[0]
                     {
                       const tv = takes_form_params ? type_form : generate_fresh_type_var(gctx, level_1)
                       {
@@ -5474,9 +5661,9 @@ const make_checker = (gctx) => {
                 func,
               )
               {
-                const tmp190 = function_kind
-                const tmp191 = tmp190['args']
-                switch (externs['host']['get-tag'](tmp190)) {
+                const tmp432 = function_kind
+                const tmp433 = tmp432['args']
+                switch (externs['host']['get-tag'](tmp432)) {
                   case 'function-kind/macro': {
                     unify_report(gctx, return_type, type_form, last(bfunc_slash_body(func)))
                     break
@@ -5492,17 +5679,17 @@ const make_checker = (gctx) => {
     }
     const go = (level, lctx, bform) => {
       {
-        const tmp192 = bform
-        const tmp193 = tmp192['args']
-        switch (externs['host']['get-tag'](tmp192)) {
+        const tmp434 = bform
+        const tmp435 = tmp434['args']
+        switch (externs['host']['get-tag'](tmp434)) {
           case 'bexp/var': {
-            const w = tmp193[0]
+            const w = tmp435[0]
             {
-              const tmp194 = try_get_var_type(gctx, lctx, syntax_word_slash_word(w))
-              const tmp195 = tmp194['args']
-              switch (externs['host']['get-tag'](tmp194)) {
+              const tmp436 = try_get_var_type(gctx, lctx, syntax_word_slash_word(w))
+              const tmp437 = tmp436['args']
+              switch (externs['host']['get-tag'](tmp436)) {
                 case 'option/some': {
-                  const type_scheme = tmp195[0]
+                  const type_scheme = tmp437[0]
                   return specialize_type_scheme(check_context_slash_type_var_counter(gctx), level, type_scheme)
                 }
                 default: {
@@ -5519,17 +5706,90 @@ const make_checker = (gctx) => {
             }
           }
           case 'bexp/literal': {
-            const l = tmp193[0]
+            const l = tmp435[0]
             return literal_to_type(l)
           }
-          case 'bexp/intrinsic': {
-            const _in = tmp193[0]
-            return intrinsic_name_to_type(syntax_word_slash_word(_in))
+          case 'bexp/intrinsic-call': {
+            const ic = tmp435[0]
+            {
+              const tmp438 = ic
+              const tmp439 = tmp438['args']
+              switch (externs['host']['get-tag'](tmp438)) {
+                case 'intrinsic-call/bin': {
+                  const inst_name = tmp439[0]
+                  const a = tmp439[1]
+                  const b = tmp439[2]
+                  if (is_i32_bin_inst(syntax_word_slash_word(inst_name))) {
+                    {
+                      unify_report(gctx, type_i32, go(level, lctx, a), a)
+                      unify_report(gctx, type_i32, go(level, lctx, b), b)
+                      return type_i32
+                    }
+                  } else {
+                    if (is_f64_bin_inst(syntax_word_slash_word(inst_name))) {
+                      {
+                        unify_report(gctx, type_f64, go(level, lctx, a), a)
+                        unify_report(gctx, type_f64, go(level, lctx, b), b)
+                        return type_f64
+                      }
+                    } else {
+                      if (is_f64_comp_inst(syntax_word_slash_word(inst_name))) {
+                        {
+                          unify_report(gctx, type_f64, go(level, lctx, a), a)
+                          unify_report(gctx, type_f64, go(level, lctx, b), b)
+                          return type_i32
+                        }
+                      } else {
+                        {
+                          return abort(
+                            list(
+                              quote(form_slash_word('bin')),
+                              quote(form_slash_word('intrinsic')),
+                              quote(form_slash_word('not')),
+                              quote(form_slash_word('implemented')),
+                            ),
+                          )
+                        }
+                      }
+                    }
+                  }
+                }
+                case 'intrinsic-call/load': {
+                  const inst_name = tmp439[0]
+                  const memargs = tmp439[1]
+                  const addr = tmp439[2]
+                  {
+                    const memword = intrinsic_memargs_slash_memory(memargs)
+                    const type_scheme = get(check_context_slash_def_var_types(gctx), syntax_word_slash_word(memword))
+                    const t = specialize_type_scheme(check_context_slash_type_var_counter(gctx), n0, type_scheme)
+                    {
+                      annotate(gctx, memword, t)
+                      unify_report(gctx, type_memory, t, bform)
+                      unify_report(gctx, type_i32, go(level, lctx, addr), addr)
+                      return type_i32
+                    }
+                  }
+                }
+                case 'intrinsic-call/store': {
+                  const inst_name = tmp439[0]
+                  const memargs = tmp439[1]
+                  const addr = tmp439[2]
+                  const value = tmp439[3]
+                  {
+                    unify_report(gctx, type_i32, go(level, lctx, addr), addr)
+                    unify_report(gctx, type_i32, go(level, lctx, value), value)
+                    return type_empty_tuple
+                  }
+                }
+                default:
+                  throw 'unmatched-match'
+              }
+            }
           }
           case 'bexp/if': {
-            const cond = tmp193[0]
-            const then = tmp193[1]
-            const _else = tmp193[2]
+            const cond = tmp435[0]
+            const then = tmp435[1]
+            const _else = tmp435[2]
             {
               const cond_type = go(level, lctx, cond)
               const then_type = go(level, lctx, then)
@@ -5542,12 +5802,12 @@ const make_checker = (gctx) => {
             }
           }
           case 'bexp/do': {
-            const sub_forms = tmp193[0]
+            const sub_forms = tmp435[0]
             return go_forms(level, lctx, sub_forms)
           }
           case 'bexp/let': {
-            const bindings = tmp193[0]
-            const bodies = tmp193[1]
+            const bindings = tmp435[0]
+            const bodies = tmp435[1]
             {
               const var_types = transient_kv_map()
               const let_ctx = make_local_context(var_types, lctx, local_context_kind_slash_let())
@@ -5592,8 +5852,8 @@ const make_checker = (gctx) => {
             }
           }
           case 'bexp/loop': {
-            const bindings = tmp193[0]
-            const bodies = tmp193[1]
+            const bindings = tmp435[0]
+            const bodies = tmp435[1]
             {
               const var_types = transient_kv_map()
               const loop_ctx = make_local_context(var_types, lctx, local_context_kind_slash_loop())
@@ -5637,14 +5897,14 @@ const make_checker = (gctx) => {
             }
           }
           case 'bexp/continue': {
-            const assignments = tmp193[0]
+            const assignments = tmp435[0]
             {
               {
-                const tmp196 = try_get_enclosing_loop_context(lctx)
-                const tmp197 = tmp196['args']
-                switch (externs['host']['get-tag'](tmp196)) {
+                const tmp440 = try_get_enclosing_loop_context(lctx)
+                const tmp441 = tmp440['args']
+                switch (externs['host']['get-tag'](tmp440)) {
                   case 'option/some': {
-                    const loop_context = tmp197[0]
+                    const loop_context = tmp441[0]
                     {
                       {
                         const gencol54 = assignments
@@ -5696,8 +5956,8 @@ const make_checker = (gctx) => {
             }
           }
           case 'bexp/letfn': {
-            const funcs = tmp193[0]
-            const bodies = tmp193[1]
+            const funcs = tmp435[0]
+            const bodies = tmp435[1]
             {
               const var_types = transient_kv_map()
               const letfn_ctx = make_local_context(var_types, lctx, local_context_kind_slash_letfn())
@@ -5773,13 +6033,13 @@ const make_checker = (gctx) => {
             }
           }
           case 'bexp/func': {
-            const f = tmp193[0]
+            const f = tmp435[0]
             return go_func(level, lctx, f, function_kind_slash_func())
           }
           case 'bexp/switch': {
-            const switch_value = tmp193[0]
-            const clauses = tmp193[1]
-            const _default = tmp193[2]
+            const switch_value = tmp435[0]
+            const clauses = tmp435[1]
+            const _default = tmp435[2]
             {
               const switch_type = go(level, lctx, switch_value)
               const result_type = generate_fresh_type_var(gctx, level)
@@ -5844,9 +6104,9 @@ const make_checker = (gctx) => {
             }
           }
           case 'bexp/match': {
-            const match_value = tmp193[0]
-            const clauses = tmp193[1]
-            const opt_default = tmp193[2]
+            const match_value = tmp435[0]
+            const clauses = tmp435[1]
+            const opt_default = tmp435[2]
             {
               const match_type = go(level, lctx, match_value)
               const mresult_type = generate_fresh_type_var(gctx, level)
@@ -5854,11 +6114,11 @@ const make_checker = (gctx) => {
               const def_desc_from_sname = (() => {
                 const ddfn = (node) => {
                   {
-                    const tmp198 = try_get_def_desc(node)
-                    const tmp199 = tmp198['args']
-                    switch (externs['host']['get-tag'](tmp198)) {
+                    const tmp442 = try_get_def_desc(node)
+                    const tmp443 = tmp442['args']
+                    switch (externs['host']['get-tag'](tmp442)) {
                       case 'option/some': {
-                        const dd = tmp199[0]
+                        const dd = tmp443[0]
                         return dd
                       }
                       default: {
@@ -5905,12 +6165,12 @@ const make_checker = (gctx) => {
                                   )
                                   {
                                     {
-                                      const tmp200 = def_desc_from_sname(ctor_sname)
-                                      const tmp201 = tmp200['args']
-                                      switch (externs['host']['get-tag'](tmp200)) {
+                                      const tmp444 = def_desc_from_sname(ctor_sname)
+                                      const tmp445 = tmp444['args']
+                                      switch (externs['host']['get-tag'](tmp444)) {
                                         case 'def-desc/union-ctor': {
-                                          const union_desc = tmp201[0]
-                                          const index = tmp201[1]
+                                          const union_desc = tmp445[0]
+                                          const index = tmp445[1]
                                           {
                                             const type_name = union_desc_slash_name(union_desc)
                                             const type_params = union_desc_slash_type_params(union_desc)
@@ -6014,11 +6274,11 @@ const make_checker = (gctx) => {
                   }
                 }
                 {
-                  const tmp202 = opt_default
-                  const tmp203 = tmp202['args']
-                  switch (externs['host']['get-tag'](tmp202)) {
+                  const tmp446 = opt_default
+                  const tmp447 = tmp446['args']
+                  switch (externs['host']['get-tag'](tmp446)) {
                     case 'option/some': {
-                      const default_form = tmp203[0]
+                      const default_form = tmp447[0]
                       {
                         unify_report(gctx, go(level, lctx, default_form), mresult_type, default_form)
                       }
@@ -6032,8 +6292,8 @@ const make_checker = (gctx) => {
             }
           }
           case 'bexp/call': {
-            const f = tmp193[0]
-            const args = tmp193[1]
+            const f = tmp435[0]
+            const args = tmp435[1]
             {
               const ft = go(level, lctx, f)
               const arg_types = list_map_fn(
@@ -6054,8 +6314,8 @@ const make_checker = (gctx) => {
             }
           }
           case 'bexp/call-fexpr': {
-            const f = tmp193[0]
-            const form_args = tmp193[1]
+            const f = tmp435[0]
+            const form_args = tmp435[1]
             {
               const ft = go(level, lctx, f)
               const arg_types = list_map_fn(
@@ -6076,12 +6336,12 @@ const make_checker = (gctx) => {
             }
           }
           case 'bexp/extern': {
-            const es = tmp193[0]
+            const es = tmp435[0]
             return generate_fresh_type_var(gctx, level)
           }
           case 'bexp/type-anno': {
-            const bf = tmp193[0]
-            const bts = tmp193[1]
+            const bf = tmp435[0]
+            const bts = tmp435[1]
             {
               const value_type = go(level, lctx, bf)
               const inst_anno_type = instantiate_syntax_type_scheme(
@@ -6112,11 +6372,11 @@ const make_checker = (gctx) => {
     }
     const check_top = (form) => {
       {
-        const tmp204 = form
-        const tmp205 = tmp204['args']
-        switch (externs['host']['get-tag'](tmp204)) {
+        const tmp448 = form
+        const tmp449 = tmp448['args']
+        switch (externs['host']['get-tag'](tmp448)) {
           case 'btop/type': {
-            const decls = tmp205[0]
+            const decls = tmp449[0]
             {
               const types = check_context_slash_types(gctx)
               const def_var_types = check_context_slash_def_var_types(gctx)
@@ -6245,11 +6505,11 @@ const make_checker = (gctx) => {
                                   const param_map = type_def_slash_param_map(this_type_def)
                                   {
                                     {
-                                      const tmp206 = type_decl_slash_kind(decl)
-                                      const tmp207 = tmp206['args']
-                                      switch (externs['host']['get-tag'](tmp206)) {
+                                      const tmp450 = type_decl_slash_kind(decl)
+                                      const tmp451 = tmp450['args']
+                                      switch (externs['host']['get-tag'](tmp450)) {
                                         case 'type-decl-kind/union': {
-                                          const ctors = tmp207[0]
+                                          const ctors = tmp451[0]
                                           {
                                             const gencol90 = ctors
                                             const gencol_size91 = size(gencol90)
@@ -6298,7 +6558,7 @@ const make_checker = (gctx) => {
                                           break
                                         }
                                         case 'type-decl-kind/record': {
-                                          const field_decls = tmp207[0]
+                                          const field_decls = tmp451[0]
                                           {
                                             const fields = growable_list()
                                             {
@@ -6392,8 +6652,8 @@ const make_checker = (gctx) => {
             }
           }
           case 'btop/def': {
-            const _var = tmp205[0]
-            const value = tmp205[1]
+            const _var = tmp449[0]
+            const value = tmp449[1]
             {
               const value_type = go(n1, local_stack_slash_empty(), value)
               const general_val_type = is_syntactic_value(value)
@@ -6409,14 +6669,14 @@ const make_checker = (gctx) => {
             }
           }
           case 'btop/defunc': {
-            const kind = tmp205[0]
-            const f = tmp205[1]
+            const kind = tmp449[0]
+            const f = tmp449[1]
             {
               const fkind = (() => {
                 {
-                  const tmp208 = kind
-                  const tmp209 = tmp208['args']
-                  switch (externs['host']['get-tag'](tmp208)) {
+                  const tmp452 = kind
+                  const tmp453 = tmp452['args']
+                  switch (externs['host']['get-tag'](tmp452)) {
                     case 'bdefunc-kind/func': {
                       return function_kind_slash_func()
                     }
@@ -6443,7 +6703,7 @@ const make_checker = (gctx) => {
             }
           }
           case 'btop/export': {
-            const es = tmp205[0]
+            const es = tmp449[0]
             {
               {
                 const gencol99 = es
@@ -6485,7 +6745,7 @@ const make_checker = (gctx) => {
             }
           }
           case 'btop/do': {
-            const btops = tmp205[0]
+            const btops = tmp449[0]
             {
               const gencol103 = btops
               const gencol_size104 = size(gencol103)
@@ -6534,17 +6794,17 @@ const normalize_deep = (internal_type) => {
     const nt = normalize_type(internal_type)
     {
       {
-        const tmp210 = nt
-        const tmp211 = tmp210['args']
-        switch (externs['host']['get-tag'](tmp210)) {
+        const tmp454 = nt
+        const tmp455 = tmp454['args']
+        switch (externs['host']['get-tag'](tmp454)) {
           case 'ctype/var': {
-            const tv = tmp211[0]
+            const tv = tmp455[0]
             {
-              const tmp212 = get_type_var_kind(tv)
-              const tmp213 = tmp212['args']
-              switch (externs['host']['get-tag'](tmp212)) {
+              const tmp456 = get_type_var_kind(tv)
+              const tmp457 = tmp456['args']
+              switch (externs['host']['get-tag'](tmp456)) {
                 case 'type-var-kind/linked': {
-                  const lt = tmp213[0]
+                  const lt = tmp457[0]
                   {
                     return abort(
                       list(
@@ -6564,13 +6824,13 @@ const normalize_deep = (internal_type) => {
             }
           }
           case 'ctype/inst': {
-            const inst_type = tmp211[0]
+            const inst_type = tmp455[0]
             {
-              const tmp214 = inst_type
-              const tmp215 = tmp214['args']
-              switch (externs['host']['get-tag'](tmp214)) {
+              const tmp458 = inst_type
+              const tmp459 = tmp458['args']
+              switch (externs['host']['get-tag'](tmp458)) {
                 case 'inst-type/func': {
-                  const ft = tmp215[0]
+                  const ft = tmp459[0]
                   {
                     {
                       const gencol107 = func_type_slash_params(ft)
@@ -6597,11 +6857,11 @@ const normalize_deep = (internal_type) => {
                       }
                     }
                     {
-                      const tmp216 = func_type_slash_rest_param_opt(ft)
-                      const tmp217 = tmp216['args']
-                      switch (externs['host']['get-tag'](tmp216)) {
+                      const tmp460 = func_type_slash_rest_param_opt(ft)
+                      const tmp461 = tmp460['args']
+                      switch (externs['host']['get-tag'](tmp460)) {
                         case 'option/some': {
-                          const rest_type = tmp217[0]
+                          const rest_type = tmp461[0]
                           {
                             normalize_deep(rest_type)
                           }
@@ -6614,8 +6874,8 @@ const normalize_deep = (internal_type) => {
                   }
                 }
                 case 'inst-type/apply': {
-                  const type_name = tmp215[0]
-                  const type_args = tmp215[1]
+                  const type_name = tmp459[0]
+                  const type_args = tmp459[1]
                   {
                     const gencol111 = type_args
                     const gencol_size112 = size(gencol111)
@@ -6658,20 +6918,20 @@ const internal_to_present_type = (internal_type) => {
     const nt = internal_type
     {
       {
-        const tmp218 = nt
-        const tmp219 = tmp218['args']
-        switch (externs['host']['get-tag'](tmp218)) {
+        const tmp462 = nt
+        const tmp463 = tmp462['args']
+        switch (externs['host']['get-tag'](tmp462)) {
           case 'ctype/var': {
-            const tv = tmp219[0]
+            const tv = tmp463[0]
             {
               const kind = get_type_var_kind(tv)
               {
                 {
-                  const tmp220 = kind
-                  const tmp221 = tmp220['args']
-                  switch (externs['host']['get-tag'](tmp220)) {
+                  const tmp464 = kind
+                  const tmp465 = tmp464['args']
+                  switch (externs['host']['get-tag'](tmp464)) {
                     case 'type-var-kind/linked': {
-                      const lt = tmp221[0]
+                      const lt = tmp465[0]
                       {
                         return abort(
                           list(
@@ -6686,7 +6946,7 @@ const internal_to_present_type = (internal_type) => {
                       }
                     }
                     case 'type-var-kind/word': {
-                      const w = tmp221[0]
+                      const w = tmp465[0]
                       return form_slash_word(w)
                     }
                     default:
@@ -6697,22 +6957,22 @@ const internal_to_present_type = (internal_type) => {
             }
           }
           case 'ctype/inst': {
-            const inst_type = tmp219[0]
+            const inst_type = tmp463[0]
             {
-              const tmp222 = inst_type
-              const tmp223 = tmp222['args']
-              switch (externs['host']['get-tag'](tmp222)) {
+              const tmp466 = inst_type
+              const tmp467 = tmp466['args']
+              switch (externs['host']['get-tag'](tmp466)) {
                 case 'inst-type/func': {
-                  const ft = tmp223[0]
+                  const ft = tmp467[0]
                   return flist(
                     quote(form_slash_word('func')),
                     (() => {
                       {
-                        const tmp224 = func_type_slash_rest_param_opt(ft)
-                        const tmp225 = tmp224['args']
-                        switch (externs['host']['get-tag'](tmp224)) {
+                        const tmp468 = func_type_slash_rest_param_opt(ft)
+                        const tmp469 = tmp468['args']
+                        switch (externs['host']['get-tag'](tmp468)) {
                           case 'option/some': {
-                            const rest_type = tmp225[0]
+                            const rest_type = tmp469[0]
                             return form_concat(
                               list_map_fn(
                                 (() => {
@@ -6745,8 +7005,8 @@ const internal_to_present_type = (internal_type) => {
                   )
                 }
                 case 'inst-type/apply': {
-                  const type_name = tmp223[0]
-                  const type_args = tmp223[1]
+                  const type_name = tmp467[0]
+                  const type_args = tmp467[1]
                   if (eq_word(type_name, 'tuple')) {
                     return form_concat(
                       list(quote(form_slash_word('tuple'))),
@@ -6818,11 +7078,11 @@ const normalize_present_type_scheme = (internal_type) => {
             const kind = get_type_var_kind(tv)
             {
               {
-                const tmp226 = kind
-                const tmp227 = tmp226['args']
-                switch (externs['host']['get-tag'](tmp226)) {
+                const tmp470 = kind
+                const tmp471 = tmp470['args']
+                switch (externs['host']['get-tag'](tmp470)) {
                   case 'type-var-kind/linked': {
-                    const lt = tmp227[0]
+                    const lt = tmp471[0]
                     {
                       return abort(
                         list(
@@ -6837,7 +7097,7 @@ const normalize_present_type_scheme = (internal_type) => {
                     }
                   }
                   case 'type-var-kind/word': {
-                    const w = tmp227[0]
+                    const w = tmp471[0]
                     return form_slash_word(w)
                   }
                   default:

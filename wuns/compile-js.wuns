@@ -161,8 +161,12 @@
         [bexp/if c t e]
         [js-exp/ternary [cexp c] [cexp t] [cexp e]]
 
-        [bexp/intrinsic i]
-        [logq-abort cexp toplevel intrinsic not allowed]
+        [bexp/intrinsic-call ic]
+        [match ic
+          [intrinsic-call/bin op e1 e2]
+          [instruction-name-and-args-to-js-exp [syntax-word/word op] [list-map arg [list e1 e2] [cexp arg]]]
+
+          [logq-abort cexp unknown intrinsic-call kind]]
 
         [bexp/extern ws]
         [mk-extern [list-map w ws [syntax-word/word w]]]
@@ -191,11 +195,7 @@
         [js-exp/call [cexp fexpr] [list-map arg arg-forms [form-to-quoted-js arg]]]
 
         [bexp/call f args]
-        [match f
-          [bexp/intrinsic i]
-          [instruction-name-and-args-to-js-exp [syntax-word/word i] [list-map arg args [cexp arg]]]
-
-          [js-exp/call [cexp f] [list-map arg args [cexp arg]]]]
+        [js-exp/call [cexp f] [list-map arg args [cexp arg]]]
 
         [bexp/type-anno bf t]
         [cexp bf]

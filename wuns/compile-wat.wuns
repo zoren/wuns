@@ -7,6 +7,12 @@
     [f32]
     [f64]]]
 
+[type wat-inst-memargs []
+  [record
+    [memory word]
+    [offset word]
+    [alignment word]]]
+
 [type wat-inst []
   [union
     [i32.const word]
@@ -14,6 +20,8 @@
     [local.get word]
     [local.set word wat-inst]
     [inst word [list wat-inst]]
+    [load word wat-inst-memargs wat-inst]
+    [store word wat-inst-memargs wat-inst wat-inst]
     [if [list wat-type-basic] wat-inst wat-inst wat-inst]
     [call word [list wat-inst]]
     [instructions [list wat-inst]]
@@ -28,16 +36,24 @@
     [result [list wat-type-basic]]
     [body wat-inst]]]
 
+[type import-kind []
+  [union
+    [memory word i32]]]
+
 [type export-kind []
   [union [func] [global]]]
 
 [type wat-output []
   [record
+    [imports [growable-list [pair [list word] import-kind]]]
     [funcs [growable-list output-func]]
     [exports [growable-list [pair word [pair export-kind word]]]]]]
 
 [defn make-wat-output []
-  [wat-output [growable-list] [growable-list]]]
+  [wat-output
+    [growable-list]
+    [growable-list]
+    [growable-list]]]
 
 [type translate-context []
   [record
@@ -100,16 +116,6 @@
       [[word i32.ge-s]]  [bin-0 [binop/ge]]
  ]
 
-[defn instruction-name-and-args-to-inst [inst-name cargs]
-  [assert [eq [size cargs] 2] instruction-name-and-args-to-inst expects 2 arguments]
-  [switch inst-name
-    [[word i32.add] [word i32.sub] [word i32.mul] [word i32.eq] [word i32.ne]
-      [word i32.and] [word i32.or]
-      [word f64.add] [word f64.sub] [word f64.mul]] [wat-inst/inst inst-name cargs]
-
-    [do
-      [log inst-name]
-      [logq-abort instruction-name-and-args-to-inst not implemented]]]]
 
 [defn mk-translate-form [tctx]
   [func go [form]
@@ -150,12 +156,30 @@
         [go true]
         [go false]]
 
+      [bexp/intrinsic-call ic]
+      [match ic
+        [intrinsic-call/bin inst-name a b]
+        [wat-inst/inst [syntax-word/word inst-name] [list [go a] [go b]]]
+
+        [intrinsic-call/load inst-name memargs addr]
+        [wat-inst/load [syntax-word/word inst-name]
+          [wat-inst-memargs
+            [syntax-word/word [intrinsic-memargs/memory memargs]]
+            [syntax-word/word [intrinsic-memargs/offset memargs]]
+            [syntax-word/word [intrinsic-memargs/align memargs]]]
+          [go addr]]
+
+        [intrinsic-call/store inst-name memargs addr value]
+        [wat-inst/store [syntax-word/word inst-name]
+          [wat-inst-memargs
+            [syntax-word/word [intrinsic-memargs/memory memargs]]
+            [syntax-word/word [intrinsic-memargs/offset memargs]]
+            [syntax-word/word [intrinsic-memargs/align memargs]]]
+          [go addr]
+          [go value]]]
+
       [bexp/call f args]
       [match f
-        [bexp/intrinsic i]
-        [instruction-name-and-args-to-inst [syntax-word/word i]
-          [list-map arg args [go arg]]]
-
         [bexp/var w]
         [wat-inst/call [syntax-word/word w] [list-map a args [go a]]]
 
@@ -197,6 +221,25 @@
 
 [defn translate-top-form [tctx bform]
   [match bform
+    [btop/def name value]
+    [match value
+      [bexp/type-anno annotated-exp bts]
+      [match annotated-exp
+        [bexp/extern es]
+        [match [btype-scheme/type bts]
+          [btype/memory lower opt-upper]
+          [push
+            [wat-output/imports [translate-context/output tctx]]
+            [pair
+              [list-map e es [syntax-word/word e]]
+              [import-kind/memory [syntax-word/word name] [i32 0]]]]
+
+          [logq-abort translate-top-form extern not implemented]]
+
+        [logq-abort translate-top-form extern not implemented]]
+
+      [logq-abort translate-top-form extern not implemented]]
+
     [btop/defunc kind f]
     [let [t [get [check-context/type-annotations [translate-context/check-context tctx]] [to-js-value f]]
           ft [get-func-type t]
@@ -321,7 +364,8 @@
     [dollar word]
     [dqstring word]
     [seq [list wat]]
-    [list [list wat]]]]
+    [list [list wat]]
+    [eq-pair word word]]]
 
 [defn print-wat [printer wat]
   [match wat
@@ -344,7 +388,11 @@
             [print-byte printer ascii-space]
             [print-wat printer [at l i]]]]
         [print-byte printer ascii-right-paren]]
-      ]]
+    [wat/eq-pair w1 w2]
+      [do
+        [print-word printer w1]
+        [print-byte printer ascii-equal]
+        [print-word printer w2]]]]
 
 [defn wat-list [.. l] [wat/list l]]
 
@@ -355,15 +403,19 @@
 
 [defn wat-concat [.. l] [wat/list [concat-lists l]]]
 
+[defn wat-inst-memargs-to-out [ma]
+  [list
+    [wat-list [wat/word [word memory]] [wat/dollar [wat-inst-memargs/memory ma]]]
+    [wat/eq-pair [word offset] [wat-inst-memargs/offset ma]]
+    [wat/eq-pair [word align] [wat-inst-memargs/alignment ma]]]]
+
 [defn wat-inst-to-out [i]
   [match i
     [wat-inst/i32.const w]
-    [wat-concat
-      [list [wat/word [word i32.const]] [wat/word w]]]
+    [wat-list [wat/word [word i32.const]] [wat/word w]]
 
     [wat-inst/f64.const w]
-    [wat-concat
-      [list [wat/word [word f64.const]] [wat/word w]]]
+    [wat-list [wat/word [word f64.const]] [wat/word w]]
 
     [wat-inst/inst w args]
     [wat-concat
@@ -374,6 +426,18 @@
 
     [wat-inst/local.set w e]
     [wat-list [wat/word [word local.set]] [wat/dollar w] [wat-inst-to-out e]]
+
+    [wat-inst/load name ma addr]
+    [wat-concat
+      [list [wat/word name]]
+      [wat-inst-memargs-to-out ma]
+      [list [wat-inst-to-out addr]]]
+
+    [wat-inst/store name ma addr value]
+    [wat-concat
+      [list [wat/word name]]
+      [wat-inst-memargs-to-out ma]
+      [list [wat-inst-to-out addr] [wat-inst-to-out value]]]
 
     [wat-inst/instructions insts]
     [wat/seq [list-map inst insts [wat-inst-to-out inst]]]
@@ -405,6 +469,18 @@
 
     [logq-abort wat-inst-to-out unknown instruction]]]
 
+[defn import-to-wat [import]
+  [wat-concat
+    [list [wat/word [word import]]]
+    [list-map w [pair/fst import] [wat/dqstring w]]
+    [list
+      [match [pair/snd import]
+        [import-kind/memory name init-size]
+        [wat-list
+          [wat/word [word memory]]
+          [wat/dollar name]
+          [wat/word [word 0]]]]]]]
+
 [defn output-func-to-wat [of]
   [wat-concat
     [list
@@ -433,3 +509,11 @@
               [export-kind/func] [word func]
               [logq-abort export-to-wat unknown export kind]]]
           [wat/dollar [pair/snd kind-pair]]]]]]]
+
+[defn output-to-wat [output]
+  [wat/seq
+    [concat-lists
+      [list
+        [list-map imp [clone-growable-to-frozen-list [wat-output/imports output]] [import-to-wat imp]]
+        [list-map of [clone-growable-to-frozen-list [wat-output/funcs output]] [output-func-to-wat of]]
+        [list-map e [clone-growable-to-frozen-list [wat-output/exports output]] [export-to-wat e]]]]]]

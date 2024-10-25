@@ -11,6 +11,7 @@
     [var syntax-word]
     [func [list btype] [option btype] btype]
     [apply syntax-word [list btype]]
+    [memory syntax-word [option syntax-word]]
     [error]]]
 
 [type btype-scheme []
@@ -37,6 +38,13 @@
     [f64 syntax-word]
     [word syntax-word]]]
 
+[type
+  intrinsic-memargs []
+  [record
+    [memory syntax-word]
+    [offset syntax-word]
+    [align syntax-word]]]
+
 [todo in match allow multiple patterns for one branch]
 [type
   bfunc []
@@ -46,11 +54,17 @@
     [rest-param [option syntax-word]]
     [body [list bexp]]]
 
+  intrinsic-call []
+  [union
+    [bin syntax-word bexp bexp]
+    [load syntax-word intrinsic-memargs bexp]
+    [store syntax-word intrinsic-memargs bexp bexp]]
+
   bexp []
   [union
     [var syntax-word]
     [literal literal]
-    [intrinsic syntax-word]
+    [intrinsic-call intrinsic-call]
     [extern [list syntax-word]]
 
     [func bfunc]
@@ -91,8 +105,11 @@
         [bexp/literal l]
         [do]
 
-        [bexp/intrinsic i]
-        [do]
+        [bexp/intrinsic-call ic]
+        [match ic
+          [intrinsic-call/bin w a b] [do [go a] [go b]]
+          [intrinsic-call/load w ma a] [go a]
+          [intrinsic-call/store w ma a b] [do [go a] [go b]]]
 
         [bexp/call f args]
         [do
@@ -193,6 +210,7 @@
     [[word tuple]] [some true]
     [[word i32] [word f64] [word word]] [some [eq n-of-type-args 0]]
     [[word list]] [some [eq n-of-type-args 1]]
+    [[word memory]] [some [or [eq n-of-type-args 1] [eq n-of-type-args 2]]]
     [none]]]
 
 [defn is-reserved-type-name [type-name]
@@ -237,6 +255,24 @@
     [form-to-exp [func [form] bexp]]
     [errors [growable-list report-message]]
     [syntax-info syntax-info]]]
+
+[defn is-i32-bin-inst [w2]
+  [switch w2
+    [[word i32.add] [word i32.sub] [word i32.mul] [word i32.rem-s] [word i32.div-s]
+     [word i32.and] [word i32.or]
+     [word i32.eq] [word i32.lt-s] [word i32.le-s]]
+    true
+    false]]
+
+[defn is-f64-bin-inst [w2]
+  [switch w2
+    [[word f64.add] [word f64.sub] [word f64.mul]] true
+    false]]
+
+[defn is-f64-comp-inst [w2]
+  [switch w2
+    [[word f64.eq] [word f64.lt] [word f64.le]] true
+    false]]
 
 [defn mk-form-to-ast [current-directory]
   [let
@@ -288,6 +324,11 @@
       [let [w [get-word f]]
         [when [has def-ctx w] [push-error f [quote [redefing def]]]]
         [set-kv-map def-ctx w kind]]]
+    try-bind-get-ddesc
+    [func tbdd [sw]
+      [let [opt-ddesc [try-get def-ctx [syntax-word/word sw]]]
+        [when-let [ddesc opt-ddesc] [set-kv-map node-to-def-desc sw ddesc]]
+        opt-ddesc]]
     type-ctx [transient-kv-map]
     set-type
     [func st [f arity]
@@ -362,13 +403,20 @@
 
                   [let [n-of-args [dec [size l]]]
                     [if-let [arity-ok [builtin-type-arity-ok fw n-of-args]]
-                      [when-not arity-ok
-                        [push-error form [quote [wrong number of type arguments to builtin]]]]
-                      [if-let [arity [try-get type-ctx fw]]
-                        [when-not [eq n-of-args arity]
-                          [push-error form [quote [wrong number of type arguments]]]]
-                        [push-error form [quote [undefined type]]]]]
-                    [btype/apply [sword [first l]] [list-map arg [rest l] [f2t arg]]]]]]]]]]
+                      [do
+                        [when-not arity-ok
+                          [push-error form [quote [wrong number of type arguments to builtin]]]]
+                        [if [eq-word [word memory] fw]
+                          [btype/memory
+                            [sword [second l]]
+                            [if [lt-s 2 [size l]] [some [sword [third l]]] [none]]]
+                          [btype/apply [sword [first l]] [list-map arg [rest l] [f2t arg]]]]]
+                      [do
+                        [if-let [arity [try-get type-ctx fw]]
+                          [when-not [eq n-of-args arity]
+                            [push-error form [quote [wrong number of type arguments]]]]
+                          [push-error form [quote [undefined type]]]]
+                        [btype/apply [sword [first l]] [list-map arg [rest l] [f2t arg]]]]]]]]]]]]
       [func form-to-type [form] [[mk-form-to-type [transient-kv-map]] form]]
       [func form-to-type-param-list [form]
         [let
@@ -617,8 +665,44 @@
                 [[word extern]]
                 [bexp/extern [list-map w [rest l] [get-sword w]]]
 
-                [[word intrinsic]]
-                [bexp/intrinsic [get-sword [get-arg 0]]]
+                [[word intrinsic-call]]
+                [let [inst-sname [get-sword [get-arg 0]]
+                      inst-name [syntax-word/word inst-sname]]
+                  [bexp/intrinsic-call
+                    [if [or [is-i32-bin-inst inst-name] [is-f64-bin-inst inst-name] [is-f64-comp-inst inst-name]]
+                      [do
+                        [assert-n-args 3]
+                        [intrinsic-call/bin inst-sname [form-to-ast lstack [get-arg 1]] [form-to-ast lstack [get-arg 2]]]]
+                      [let [parse-mem-args
+                            [func pma []
+                              [let [mem-sword [get-sword [get-arg 1]]]
+                                [if-let [ddesc [try-bind-get-ddesc mem-sword]]
+                                  [do]
+                                  [push-error [get-arg 1] [quote [memory not bound to a def at all]]]]
+                                [intrinsic-memargs
+                                  mem-sword
+                                  [get-sword [get-arg 2]]
+                                  [get-sword [get-arg 3]]]]]]
+                        [switch inst-name
+                        [[word i32.load]]
+                        [do
+                          [todo we need to check the memory is deffed as a memory]
+                          [assert-n-args 5]
+                          [intrinsic-call/load inst-sname
+                            [parse-mem-args]
+                            [form-to-ast lstack [get-arg 4]]]]
+
+                        [[word i32.store]]
+                        [do
+                          [assert-n-args 6]
+                          [intrinsic-call/store inst-sname
+                            [parse-mem-args]
+                            [form-to-ast lstack [get-arg 4]]
+                            [form-to-ast lstack [get-arg 5]]]]
+
+                      [do
+                        [log form]
+                        [logq-abort form-to-ast not implemented]]]]]]]
 
                 [[word func]]
                 [bexp/func [form-to-func lstack form]]

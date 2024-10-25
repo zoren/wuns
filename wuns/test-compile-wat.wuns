@@ -18,15 +18,13 @@
 [def-wasm-extern wasm-call-export [type-scheme [a] [func [wasm-instance word [list a]] [list a]]]]
 [type export-func [] [union]]
 
+[def-wasm-extern memory [func [i32 i32 i32] js-value]]
+
 [def-wasm-extern wasm-get-export-object [func [wasm-instance] [object export-func]]]
 
 [defn output-to-module [output]
   [let [p [empty-printer [i32 800]]]
-    [print-wat p
-      [wat/seq
-        [concat
-          [list-map of [clone-growable-to-frozen-list [wat-output/funcs output]] [output-func-to-wat of]]
-          [list-map e [clone-growable-to-frozen-list [wat-output/exports output]] [export-to-wat e]]]]]
+    [print-wat p [output-to-wat output]]
     [let [ba [printer-to-byte-array p]
           module [byte-array-to-wasm-module [wat-to-byte-array ba]]]
       [byte-array-log-as-string ba]
@@ -177,7 +175,24 @@
     [test-assert-eq [i32 200010000] [js-call gauss-loop 20000]]
     [test-assert-eq [i32 2147450880] [js-call gauss-loop 65535]]
     ]
-
+  [let [m [module
+[def dmem [type-anno [extern env mem] [memory 1]]]
+[defn get-aligned [p] [intrinsic-call i32.load dmem 0 4 p]]
+[defn set-aligned [p v] [intrinsic-call i32.store dmem 0 4 p v]]
+[export get-aligned set-aligned]]
+        env-kv [transient-kv-map]
+        - [set-kv-map env-kv [word mem] [memory 1 1 0]]
+        env-object [kv-map-to-object env-kv]
+        import-kv [transient-kv-map]
+        - [set-kv-map import-kv [word env] env-object]
+        import-object [kv-map-to-object import-kv]
+        i [wasm-instantiate m import-object]
+        get-aligned [get-export i [word get-aligned]]
+        set-aligned [get-export i [word set-aligned]]
+        ]
+    [test-assert-eq [i32 0] [js-call get-aligned 0]]
+    [js-call set-aligned 0 1337]
+    [test-assert-eq [i32 1337] [js-call get-aligned 0]]]
 
 [comment this requires temp vars for args dependent on parameters
   [let [m [module

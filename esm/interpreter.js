@@ -231,6 +231,12 @@ export const makeEvalForm = (externs, defEnv) => {
         case 'intrinsic':
           assertNumArgs(1)
           return intrinsics[getFormWord(forms[1])]
+        case 'intrinsic-call': {
+          if (numOfArgs < 1) throw evalError('intrinsic-call expected at least one argument')
+          const f = intrinsics[getFormWord(forms[1])]
+          if (!f) throw evalError('undefined intrinsic')
+          return f(...forms.slice(2).map((arg) => go(env, arg)))
+        }
         case 'def':
           assertNumArgs(2)
           assertTopLevel()

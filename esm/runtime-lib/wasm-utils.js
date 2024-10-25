@@ -3,16 +3,21 @@ import wabtProm from 'wabt'
 const wabt = await wabtProm()
 
 export const wat_to_byte_array = (inputBuffer) => {
-  if (!(inputBuffer instanceof Uint8Array)) throw new Error('expects ArrayBuffer')
-  const module = wabt.parseWat('', inputBuffer)
+  if (!(inputBuffer instanceof Uint8Array)) throw new Error('expects Uint8Array')
+  const module = wabt.parseWat('', inputBuffer, {
+    multi_memory: true,
+  })
   module.resolveNames()
   module.validate()
-  const { buffer } = module.toBinary({
+  const { buffer, log } = module.toBinary({
     log: true,
     write_debug_names: true,
   })
+  // console.log({ toBinaryLog: log })
   return buffer
 }
+export const memory = (initial_size, maximum_size, shared) =>
+  new WebAssembly.Memory({ initial: initial_size, maximum: maximum_size, shared })
 export const byte_array_to_wasm_module = (buf) => new WebAssembly.Module(buf)
 export const wasm_instantiate = (module, import_object) => new WebAssembly.Instance(module, import_object)
 const emptyTuple = Object.freeze([])

@@ -54,6 +54,7 @@
 [def type-f64 [make-type [word f64]]]
 
 [def type-word [make-type [word word]]]
+[def type-memory [make-type [word memory]]]
 
 [def type-form [make-type [word form]]]
 
@@ -66,10 +67,6 @@
   [ctype/inst [inst-type/func [func-type params opt-rest-param result [function-kind/func]]]]]
 
 [defn type-func-no-rest [params result] [type-func params [none] result]]
-
-[def i32i32-to-i32 [type-func-no-rest [list type-i32 type-i32] type-i32]]
-[def f64f64-to-f64 [type-func-no-rest [list type-f64 type-f64] type-f64]]
-[def f64f64-to-i32 [type-func-no-rest [list type-f64 type-f64] type-i32]]
 
 [defn type-ctor [params result]
   [ctype/inst [inst-type/func [func-type params [none] result [function-kind/ctor]]]]]
@@ -304,6 +301,9 @@
 
         [make-type-list [syntax-word/word type-name] [list-map ta targs [go ta]]]]
 
+      [btype/memory lower opt-upper]
+      type-memory
+
       [btype/func reg-params opt-rest-param result]
       [type-func
         [list-map param reg-params [go param]]
@@ -324,22 +324,6 @@
     [literal/i32 -] type-i32
     [literal/f64 -] type-f64
     [literal/word -] type-word]]
-
-[defn intrinsic-name-to-type [name]
-  [ifs
-    [is-i32-bin-inst name]
-    i32i32-to-i32
-
-    [is-f64-bin-inst name]
-    f64f64-to-f64
-
-    [is-f64-comp-inst name]
-    f64f64-to-i32
-
-    [eq-word name [word unreachable]]
-    [logq-abort unreachable not implemented]
-
-    [logq-abort intrinsic-name-to-type not implemented]]]
 
 [type check-message []
   [record
@@ -478,8 +462,45 @@
         [bexp/literal l]
         [literal-to-type l]
 
-        [bexp/intrinsic in]
-        [intrinsic-name-to-type [syntax-word/word in]]
+        [bexp/intrinsic-call ic]
+        [match ic
+          [intrinsic-call/bin inst-name a b]
+          [ifs
+            [is-i32-bin-inst [syntax-word/word inst-name]]
+            [do
+              [unify-report gctx type-i32 [go level lctx a] a]
+              [unify-report gctx type-i32 [go level lctx b] b]
+              type-i32]
+
+            [is-f64-bin-inst [syntax-word/word inst-name]]
+            [do
+              [unify-report gctx type-f64 [go level lctx a] a]
+              [unify-report gctx type-f64 [go level lctx b] b]
+              type-f64]
+
+            [is-f64-comp-inst [syntax-word/word inst-name]]
+            [do
+              [unify-report gctx type-f64 [go level lctx a] a]
+              [unify-report gctx type-f64 [go level lctx b] b]
+              type-i32]
+
+            [logq-abort bin intrinsic not implemented]]
+
+          [intrinsic-call/load inst-name memargs addr]
+          [let
+            [memword [intrinsic-memargs/memory memargs]
+             type-scheme [get [check-context/def-var-types gctx] [syntax-word/word memword]]
+             t [specialize-type-scheme [check-context/type-var-counter gctx] 0 type-scheme]]
+            [annotate gctx memword t]
+            [unify-report gctx type-memory t bform]
+            [unify-report gctx type-i32 [go level lctx addr] addr]
+            type-i32]
+
+          [intrinsic-call/store inst-name memargs addr value]
+          [do
+            [unify-report gctx type-i32 [go level lctx addr] addr]
+            [unify-report gctx type-i32 [go level lctx value] value]
+            type-empty-tuple]]
 
         [bexp/if cond then else]
         [let
