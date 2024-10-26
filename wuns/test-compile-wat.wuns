@@ -76,6 +76,10 @@
     f
     [form-concat [list [quote list]] [list-map form forms [flist [quote to-js-value] [flist [quote f64] form]]]]]]
 
+[defn byte-array-set-word [ba base w]
+  [for i 0 [word-byte-size w]
+    [byte-array-set ba [add base i] [char-code-at w i]]]]
+
 [defn test []
   [test-assert-eq [i32 1] [trans-eval-form [i32 1]]]
   [test-assert-eq [f64 1.5] [trans-eval-form [f64 1.5]]]
@@ -87,9 +91,9 @@
   [test-assert-undefined [trans-eval-form [if [i32 1] [do] [do]]]]
 
   [comment intrinsics]
-  [test-assert-eq [i32 5] [trans-eval-form [[intrinsic i32.add] [i32 2] [i32 3]]]]
-  [test-assert-eq [i32 5] [trans-eval-form [[intrinsic i32.sub] [i32 8] [i32 3]]]]
-  [test-assert-eq [i32 15] [trans-eval-form [[intrinsic i32.mul] [i32 5] [i32 3]]]]
+  [test-assert-eq [i32 5] [trans-eval-form [intrinsic-call i32.add [i32 2] [i32 3]]]]
+  [test-assert-eq [i32 5] [trans-eval-form [intrinsic-call i32.sub [i32 8] [i32 3]]]]
+  [test-assert-eq [i32 15] [trans-eval-form [intrinsic-call i32.mul [i32 5] [i32 3]]]]
 
   [comment parameters]
   [let [m [module [defn not [b] [if b [i32 0] [i32 1]]] [export not]]
@@ -98,7 +102,7 @@
     [test-assert-eq [i32 1] [js-apply f [list [to-js-value [i32 0]]]]]
     [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1]]]]]
     [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1337]]]]]]
-  [let [m [module [defn not2 [b] [[intrinsic i32.eq] b [i32 0]]] [export not2]]
+  [let [m [module [defn not2 [b] [intrinsic-call i32.eq b [i32 0]]] [export not2]]
         i [wasm-instantiate m empty-object]
         f [get-export i [word not2]]]
     [test-assert-eq [i32 1] [js-apply f [list [to-js-value [i32 0]]]]]
@@ -130,7 +134,7 @@
   [let [m [module
     [defn gauss-direct [n]
       [if n
-        [[intrinsic i32.add] n [gauss-direct [[intrinsic i32.sub] n [i32 1]]]]
+        [intrinsic-call i32.add n [gauss-direct [intrinsic-call i32.sub n [i32 1]]]]
         [i32 0]]]
     [export gauss-direct]]
         i [wasm-instantiate m empty-object]
@@ -145,7 +149,7 @@
   [let [m [module
     [defn go [res n]
       [if n
-        [go [[intrinsic i32.add] res n] [[intrinsic i32.sub] n [i32 1]]]
+        [go [intrinsic-call i32.add res n] [intrinsic-call i32.sub n [i32 1]]]
         res]]
     [defn gauss-tail [n] [go [i32 0] n]]
     [export gauss-tail]]
@@ -163,8 +167,8 @@
       [loop [res [i32 0] i n]
         [if i
           [continue
-            res [[intrinsic i32.add] res i]
-            i [[intrinsic i32.sub] i [i32 1]]]
+            res [intrinsic-call i32.add res i]
+            i [intrinsic-call i32.sub i [i32 1]]]
           res]]]
     [export gauss-loop]]
         i [wasm-instantiate m empty-object]
@@ -181,10 +185,10 @@
 [defn set-aligned [p v] [intrinsic-call i32.store dmem 0 4 p v]]
 [export get-aligned set-aligned]]
         env-kv [transient-kv-map]
-        - [set-kv-map env-kv [word mem] [memory 1 1 0]]
+        - [set-kv-map env-kv [word mem] [to-js-value [memory 1 1 0]]]
         env-object [kv-map-to-object env-kv]
         import-kv [transient-kv-map]
-        - [set-kv-map import-kv [word env] env-object]
+        -- [set-kv-map import-kv [word env] [to-js-value env-object]]
         import-object [kv-map-to-object import-kv]
         i [wasm-instantiate m import-object]
         get-aligned [get-export i [word get-aligned]]
@@ -193,6 +197,48 @@
     [test-assert-eq [i32 0] [js-call get-aligned 0]]
     [js-call set-aligned 0 1337]
     [test-assert-eq [i32 1337] [js-call get-aligned 0]]]
+
+  [comment hash it out]
+  [let [m [module
+[def dmem [type-anno [extern env mem] [memory 1]]]
+[def fnv-prime [i32 16777619]]
+[def fnv-offset-basis [i32 -2128831035]]
+
+[defn hash-fnv-1a-i32 [p len]
+  [let [end-p [intrinsic-call i32.add p len]]
+    [loop [hash fnv-offset-basis
+           q p]
+      [if [intrinsic-call i32.lt-s q end-p]
+        [continue
+            hash
+            [intrinsic-call i32.mul
+              [intrinsic-call i32.xor hash
+                [intrinsic-call i32.load8-u dmem 0 1 q]]
+              fnv-prime]
+            q [intrinsic-call i32.add q [i32 1]]]
+        hash]]]]
+[export hash-fnv-1a-i32]
+]
+        env-kv [transient-kv-map]
+        wasm-mem [memory 1 1 0]
+        wasm-mem-array [byte-array-from [object-get [to-js-value wasm-mem] [word buffer]]]
+        - [set-kv-map env-kv [word mem] [to-js-value wasm-mem]]
+        env-object [kv-map-to-object env-kv]
+        import-kv [transient-kv-map]
+        -- [set-kv-map import-kv [word env] [to-js-value env-object]]
+        import-object [kv-map-to-object import-kv]
+        i [wasm-instantiate m import-object]
+        hash-fnv-1a-i32 [get-export i [word hash-fnv-1a-i32]]]
+    [test-assert-eq [i32 -2128831035] [js-call hash-fnv-1a-i32 0 0]]
+
+    [comment stolen from https://github.com/fnvhash/libfnv/blob/master/test/unit/basic_full.ts#L15]
+
+    [byte-array-set-word wasm-mem-array 0 [word a]]
+    [test-assert-eq [word e40c292c] [i32-to-hex [js-call hash-fnv-1a-i32 0 1]]]
+
+    [byte-array-set-word wasm-mem-array 0 [word foobar]]
+    [test-assert-eq [word bf9cf968] [i32-to-hex [js-call hash-fnv-1a-i32 0 6]]]
+    ]
 
 [comment this requires temp vars for args dependent on parameters
   [let [m [module

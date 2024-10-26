@@ -202,3 +202,9 @@ export const kv_map_to_object = (map) => {
   for (const [k] of map) if (typeof k !== 'string') throw new Error('expects string keys')
   return Object.fromEntries(map)
 }
+
+export const byte_array_from = (v) => new Uint8Array(v)
+export const object_get = (obj, key) => {
+  if (typeof obj !== 'object') throw new Error('expects object')
+  return obj[key]
+}

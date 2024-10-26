@@ -161,9 +161,9 @@
         [bexp/if c t e]
         [js-exp/ternary [cexp c] [cexp t] [cexp e]]
 
-        [bexp/intrinsic-call ic]
+        [bexp/intrinsic-call op ic]
         [match ic
-          [intrinsic-call/bin op e1 e2]
+          [intrinsic-call-args/bin e1 e2]
           [instruction-name-and-args-to-js-exp [syntax-word/word op] [list-map arg [list e1 e2] [cexp arg]]]
 
           [logq-abort cexp unknown intrinsic-call kind]]

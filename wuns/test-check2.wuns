@@ -315,17 +315,6 @@
 
 ]]
 
-[defn get-ok-result [result]
-  [match result
-    [result/error f2a-errors]
-    [do
-      [logq form to bound syntax had errors start]
-      [for-each f2a-error f2a-errors [log-report-message f2a-error]]
-      [logq-abort form to bound syntax had errors end]]
-
-    [result/ok o]
-    o]]
-
 [defn check-top-and-exp-forms [converter gctx forms]
   [assert [not [is-empty forms]] check-top-and-exp-forms expects at least one form]
   [let
@@ -335,8 +324,8 @@
      check-top [checker/check-top ch]
      check-exp [checker/check-exp ch]]
     [for-each form [slice forms 0 [dec [size forms]]]
-      [check-top [get-ok-result [f2t form]]]]
-    [check-exp [get-ok-result [f2e [last forms]]]]]]]
+      [check-top [f2t form]]]
+    [check-exp [f2e [last forms]]]]]]
 
 [defn run-tests-check2 [tests]
   [let [tests-run-atom [atom 0]]
@@ -392,7 +381,13 @@
      f2t [form-to-ast-converter/form-to-top converter]
      check-top [checker/check-top [make-checker gctx]]]
     [for-each form [read-file file-name]
-      [check-top [get-ok-result [f2t form]]]
+      [let [btop [f2t form]
+            f2a-errors [clone-growable-to-frozen-list [form-to-ast-converter/errors converter]]]
+        [when-not [is-empty f2a-errors]
+          [for-each error f2a-errors
+            [log error]]
+          [logq-abort test-ok failed there were errors]]
+        [check-top btop]]
       [let [check-errors [clone-growable-to-frozen-list [check-context/messages gctx]]]
         [when-not [is-empty check-errors]
           [logq test-ok there were errors]

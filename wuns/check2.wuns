@@ -399,6 +399,51 @@
     [check-exp [func [bexp] ctype]]
     [check-top [func [btop] [tuple]]]]]
 
+[defn make-get-ctype-from-form-or-annotation [type-annotations]
+  [func go [bform]
+    [match bform
+      [bexp/literal l]
+      [match l
+        [literal/i32 i] type-i32
+        [literal/f64 f] type-f64
+        [literal/word w] type-word]
+
+      [bexp/intrinsic-call inst-name ica]
+      [match ica
+        [intrinsic-call-args/bin a b]
+        [ifs
+          [is-i32-bin-inst [syntax-word/word inst-name]]
+          type-i32
+
+          [is-f64-bin-inst [syntax-word/word inst-name]]
+          type-f64
+
+          [is-f64-comp-inst [syntax-word/word inst-name]]
+          type-i32
+
+          [logq-abort bin intrinsic not implemented]]
+
+        [intrinsic-call-args/load memargs addr]
+        [switch [syntax-word/word inst-name]
+          [[word i32.load]] type-i32
+          [[word f64.load]] type-f64
+
+          [logq-abort load intrinsic not implemented]]
+
+        [intrinsic-call-args/store memargs addr value]
+        type-empty-tuple]
+
+      [bexp/do forms]
+      [if [is-empty forms]
+        type-empty-tuple
+        [go [last forms]]]
+
+      [if-let [anno [try-get type-annotations [to-js-value bform]]]
+          anno
+          [do
+            [log bform]
+            [logq-abort get-ctype-from-form-or-annotation expected an annotation]]]]]]
+
 [defn make-checker [gctx]
   [letfn [
     [func go-forms [level lctx sub-forms]
@@ -462,9 +507,9 @@
         [bexp/literal l]
         [literal-to-type l]
 
-        [bexp/intrinsic-call ic]
+        [bexp/intrinsic-call inst-name ic]
         [match ic
-          [intrinsic-call/bin inst-name a b]
+          [intrinsic-call-args/bin a b]
           [ifs
             [is-i32-bin-inst [syntax-word/word inst-name]]
             [do
@@ -486,7 +531,7 @@
 
             [logq-abort bin intrinsic not implemented]]
 
-          [intrinsic-call/load inst-name memargs addr]
+          [intrinsic-call-args/load memargs addr]
           [let
             [memword [intrinsic-memargs/memory memargs]
              type-scheme [get [check-context/def-var-types gctx] [syntax-word/word memword]]
@@ -496,7 +541,7 @@
             [unify-report gctx type-i32 [go level lctx addr] addr]
             type-i32]
 
-          [intrinsic-call/store inst-name memargs addr value]
+          [intrinsic-call-args/store memargs addr value]
           [do
             [unify-report gctx type-i32 [go level lctx addr] addr]
             [unify-report gctx type-i32 [go level lctx value] value]

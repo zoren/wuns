@@ -84,7 +84,7 @@ export const char_code_at = (word, index) => {
 export const concat_words = (word_1, word_2) => stringToWord(wordValue(word_1) + wordValue(word_2))
 // todo rename code_point_to_word
 export const char_code_to_word = (code_point) => stringToWord(String.fromCodePoint(code_point))
-
+export const code_points_to_word = (code_points) => stringToWord(String.fromCodePoint(...code_points))
 export const size = (list) => {
   if (isList(list)) return list.length
   throw new Error('size expects list, found: ' + list + ' ' + typeof list)

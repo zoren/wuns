@@ -19,9 +19,10 @@
     [f64.const word]
     [local.get word]
     [local.set word wat-inst]
-    [inst word [list wat-inst]]
-    [load word wat-inst-memargs wat-inst]
-    [store word wat-inst-memargs wat-inst wat-inst]
+    [global.get word]
+    [inst byte-array [list wat-inst]]
+    [load byte-array wat-inst-memargs wat-inst]
+    [store byte-array wat-inst-memargs wat-inst wat-inst]
     [if [list wat-type-basic] wat-inst wat-inst wat-inst]
     [call word [list wat-inst]]
     [instructions [list wat-inst]]
@@ -43,14 +44,22 @@
 [type export-kind []
   [union [func] [global]]]
 
+[type wat-global []
+  [record
+    [name word]
+    [type wat-type-basic]
+    [value wat-inst]]]
+
 [type wat-output []
   [record
     [imports [growable-list [pair [list word] import-kind]]]
+    [globals [growable-list wat-global]]
     [funcs [growable-list output-func]]
     [exports [growable-list [pair word [pair export-kind word]]]]]]
 
 [defn make-wat-output []
   [wat-output
+    [growable-list]
     [growable-list]
     [growable-list]
     [growable-list]]]
@@ -88,40 +97,50 @@
     [do [log it] [logq-abort not implemented translate-types inst-type/apply]]]]
 
 [defn get-annotation [tctx bst]
-  [get [check-context/type-annotations [translate-context/check-context tctx]] [to-js-value bst]]]
+  [if-let [anno [try-get [check-context/type-annotations [translate-context/check-context tctx]] [to-js-value bst]]]
+    anno
+    [do
+      [log bst]
+      [logq-abort get-annotation expected an annotation]]]]
 
-[defn get-form-types [tctx bform]
-  [match bform
-    [bexp/literal l]
-    [match l
-      [literal/i32 i] [list [wat-type-basic/i32]]
-      [literal/f64 f] [list [wat-type-basic/f64]]
-      [literal/word w] [logq-abort not implemented get-form-types literal/word]]
+[def ascii-underscore [i32 95]]
 
-    [bexp/do forms]
-    [if [is-empty forms]
-      [list]
-      [get-form-types tctx [last forms]]]
+[comment wuns does not have underscores so we convert dashes to underscores]
+[defn wasm-name-to-wat-bytes [w]
+  [let [sw [word-byte-size w]
+        res [growable-list]]
+    [for i 0 sw
+      [push res
+        [let [c [char-code-at w i]] [if [eq c [word-to-char-code -]] ascii-underscore c]]]]
+    [clone-growable-to-frozen-list res]]]
 
-    [translate-types
-      [get-annotation tctx bform]]
-    ]]
+[defn wasm-name-to-wat-byte-array [w]
+  [let [sw [word-byte-size w]
+        res [byte-array sw]]
+    [for i 0 sw
+      [byte-array-set res i
+        [let [c [char-code-at w i]] [if [eq c [word-to-char-code -]] ascii-underscore c]]]]
+    res]]
 
-[comment
-      [[word i32.div-s]] [bin-0 [binop/div]]
-      [[word i32.rem-s]] [bin-0 [binop/rem]]
-      [[word i32.lt-s]]  [bin-0 [binop/lt]]
-      [[word i32.le-s]]  [bin-0 [binop/le]]
-      [[word i32.gt-s]]  [bin-0 [binop/gt]]
-      [[word i32.ge-s]]  [bin-0 [binop/ge]]
- ]
+[def drop-name-byte-array [wasm-name-to-wat-byte-array [word drop]]]
 
+[defn wat-inst-drop [i]
+  [wat-inst/inst drop-name-byte-array [list i]]]
 
 [defn mk-translate-form [tctx]
+  [let
+    [cctx [translate-context/check-context tctx]
+     type-annos [check-context/type-annotations cctx]
+     get-ctype [make-get-ctype-from-form-or-annotation type-annos]
+     get-form-types [func get-form-types [form] [translate-types [get-ctype form]]]
+     info [check-context/syntax-info cctx]
+     try-get-ldesc [syntax-info/try-get-ldesc info]]
   [func go [form]
     [match form
       [bexp/var w]
-      [wat-inst/local.get [syntax-word/word w]]
+      [if-let [ldesc [try-get-ldesc w]]
+        [wat-inst/local.get [syntax-word/word w]]
+        [wat-inst/global.get [syntax-word/word w]]]
 
       [bexp/literal l]
       [match l
@@ -135,42 +154,42 @@
         [wat-inst/instructions
           [concat
             [list-map form [slice forms 0 [dec [size forms]]]
-              [let [types [get-form-types tctx form]]
+              [let [types [get-form-types form]]
                 [todo replace with  [loop [res [go form] i [size types]]
                   [if i
                     [continue
-                      res [wat-inst/inst [word drop] [list res]]
+                      res [wat-inst-drop [list res]]
                       i [dec i]]
                     res]] ]
                 [[func loopi [i]
                   [if i
-                    [wat-inst/inst [word drop] [list [loopi [dec i]]]]
+                    [wat-inst-drop [loopi [dec i]]]
                     [go form]]]
                   [size types]]]]
             [list [go [last forms]]]]]]
 
       [bexp/if cond true false]
       [wat-inst/if
-        [get-form-types tctx form]
+        [get-form-types form]
         [go cond]
         [go true]
         [go false]]
 
-      [bexp/intrinsic-call ic]
+      [bexp/intrinsic-call inst-name ic]
       [match ic
-        [intrinsic-call/bin inst-name a b]
-        [wat-inst/inst [syntax-word/word inst-name] [list [go a] [go b]]]
+        [intrinsic-call-args/bin a b]
+        [wat-inst/inst [wasm-name-to-wat-byte-array [syntax-word/word inst-name]] [list [go a] [go b]]]
 
-        [intrinsic-call/load inst-name memargs addr]
-        [wat-inst/load [syntax-word/word inst-name]
+        [intrinsic-call-args/load memargs addr]
+        [wat-inst/load [wasm-name-to-wat-byte-array [syntax-word/word inst-name]]
           [wat-inst-memargs
             [syntax-word/word [intrinsic-memargs/memory memargs]]
             [syntax-word/word [intrinsic-memargs/offset memargs]]
             [syntax-word/word [intrinsic-memargs/align memargs]]]
           [go addr]]
 
-        [intrinsic-call/store inst-name memargs addr value]
-        [wat-inst/store [syntax-word/word inst-name]
+        [intrinsic-call-args/store memargs addr value]
+        [wat-inst/store [wasm-name-to-wat-byte-array [syntax-word/word inst-name]]
           [wat-inst-memargs
             [syntax-word/word [intrinsic-memargs/memory memargs]]
             [syntax-word/word [intrinsic-memargs/offset memargs]]
@@ -185,6 +204,15 @@
 
         [logq-abort translate-form call not implemented]]
 
+      [bexp/let bindings body]
+      [do
+        [assert [eq [size body] 1] expected one body]
+        [wat-inst/instructions
+          [concat
+            [list-map b bindings
+              [wat-inst/local.set [syntax-word/word [pair/fst b]] [go [pair/snd b]]]]
+            [list-map b body [go b]]]]]
+
       [bexp/loop bindings body]
       [do
         [assert [eq [size body] 1] expected one body]
@@ -194,7 +222,7 @@
               [wat-inst/local.set [syntax-word/word [pair/fst b]] [go [pair/snd b]]]]
             [list
               [wat-inst/loop
-                [get-form-types tctx form]
+                [get-form-types form]
                 [wat-inst/instructions
                   [list-map b body [go b]]]]]]]]
 
@@ -206,7 +234,7 @@
 
       [do
         [log form]
-        [logq-abort not implemented translate-form]]]]]
+        [logq-abort not implemented translate-form]]]]]]
 
 [defn get-func-type [t]
   [match [normalize-type t]
@@ -220,7 +248,12 @@
     [logq-abort get-func-type expected a func type]]]
 
 [defn translate-top-form [tctx bform]
-  [match bform
+  [let [output [translate-context/output tctx]
+        tform [mk-translate-form tctx]
+        cctx [translate-context/check-context tctx]
+        type-annos [check-context/type-annotations cctx]
+        get-ctype [make-get-ctype-from-form-or-annotation type-annos]]
+    [match bform
     [btop/def name value]
     [match value
       [bexp/type-anno annotated-exp bts]
@@ -229,16 +262,35 @@
         [match [btype-scheme/type bts]
           [btype/memory lower opt-upper]
           [push
-            [wat-output/imports [translate-context/output tctx]]
+            [wat-output/imports output]
             [pair
               [list-map e es [syntax-word/word e]]
               [import-kind/memory [syntax-word/word name] [i32 0]]]]
 
-          [logq-abort translate-top-form extern not implemented]]
+          [do
+            [log bform]
+            [logq-abort translate-top-form def type-anno extern not implemented]]]
 
-        [logq-abort translate-top-form extern not implemented]]
+        [do
+          [log bform]
+          [logq-abort translate-top-form def type-anno not implemented]]]
 
-      [logq-abort translate-top-form extern not implemented]]
+      [bexp/literal l]
+      [let
+        [t
+         [match l
+          [literal/i32 i] [wat-type-basic/i32]
+          [literal/f64 f] [wat-type-basic/f64]
+          [logq-abort translate-top-form not implemented def literal]]]
+        [push [wat-output/globals output]
+          [wat-global
+            [syntax-word/word name]
+            t
+            [tform value]]]]
+
+      [do
+        [log bform]
+        [logq-abort translate-top-form def kind not implemented]]]
 
     [btop/defunc kind f]
     [let [t [get [check-context/type-annotations [translate-context/check-context tctx]] [to-js-value f]]
@@ -247,7 +299,6 @@
           params [bfunc/parameters f]
           bodies [bfunc/body f]
           gparams [growable-list]
-          cctx [translate-context/check-context tctx]
           glocals [growable-list]]
       [assert [eq [size params] [size param-types]] expected matching number of parameters and types]
       [for i 0 [size params]
@@ -259,22 +310,21 @@
                 [match bform
                   [bexp/let bs body]
                   [for-each b bs
-                    [push glocals [pair [syntax-word/word [pair/fst b]] [translate-type [get-annotation tctx [pair/snd b]]]]]]
+                    [push glocals [pair [syntax-word/word [pair/fst b]] [translate-type [get-ctype [pair/snd b]]]]]]
 
                   [bexp/loop bs body]
                   [for-each b bs
-                    [push glocals [pair [syntax-word/word [pair/fst b]] [translate-type [get-annotation tctx [pair/snd b]]]]]]
+                    [push glocals [pair [syntax-word/word [pair/fst b]] [translate-type [get-ctype [pair/snd b]]]]]]
 
                   [do]]
                 true]]
-            tform [mk-translate-form tctx]
             wat-bodies
             [list-map b bodies
               [do
                 [proc b]
                 [tform b]]]]
       [push
-        [wat-output/funcs [translate-context/output tctx]]
+        [wat-output/funcs output]
         [output-func
           [syntax-word/word [bfunc/name f]]
           [clone-growable-to-frozen-list gparams]
@@ -295,12 +345,12 @@
 
               [logq-abort get-func-type expected a func type]]]
       [push
-        [wat-output/exports [translate-context/output tctx]]
+        [wat-output/exports output]
         [pair [syntax-word/word sname] [pair export-kind [syntax-word/word sname]]]]]]
 
     [do
       [log bform]
-      [logq-abort not implemented translate-top-form bform]]]]
+      [logq-abort not implemented translate-top-form bform]]]]]
 
 [defn translate-top-forms [forms]
   [let [converter [mk-form-to-ast [word dummy-dir-name]]
@@ -361,6 +411,7 @@
 [type wat []
   [union
     [word word]
+    [byte-array byte-array]
     [dollar word]
     [dqstring word]
     [seq [list wat]]
@@ -370,6 +421,9 @@
 [defn print-wat [printer wat]
   [match wat
     [wat/word w] [print-word printer w]
+    [wat/byte-array ba]
+      [for i 0 [byte-array-size ba]
+        [print-byte printer [byte-array-get ba i]]]
     [wat/dollar w] [do [print-byte printer ascii-dollar] [print-word printer w]]
     [wat/dqstring w] [do [print-byte printer ascii-double-quote] [print-word printer w] [print-byte printer ascii-double-quote]]
     [wat/seq l]
@@ -419,7 +473,7 @@
 
     [wat-inst/inst w args]
     [wat-concat
-      [list [wat/word w]] [list-map a args [wat-inst-to-out a]]]
+      [list [wat/byte-array w]] [list-map a args [wat-inst-to-out a]]]
 
     [wat-inst/local.get w]
     [wat-list [wat/word [word local.get]] [wat/dollar w]]
@@ -427,15 +481,18 @@
     [wat-inst/local.set w e]
     [wat-list [wat/word [word local.set]] [wat/dollar w] [wat-inst-to-out e]]
 
+    [wat-inst/global.get w]
+    [wat-list [wat/word [word global.get]] [wat/dollar w]]
+
     [wat-inst/load name ma addr]
     [wat-concat
-      [list [wat/word name]]
+      [list [wat/byte-array name]]
       [wat-inst-memargs-to-out ma]
       [list [wat-inst-to-out addr]]]
 
     [wat-inst/store name ma addr value]
     [wat-concat
-      [list [wat/word name]]
+      [list [wat/byte-array name]]
       [wat-inst-memargs-to-out ma]
       [list [wat-inst-to-out addr] [wat-inst-to-out value]]]
 
@@ -481,6 +538,13 @@
           [wat/dollar name]
           [wat/word [word 0]]]]]]]
 
+[defn global-to-wat [global]
+  [wat-list
+    [wat/word [word global]]
+    [wat/dollar [wat-global/name global]]
+    [wat/word [wat-type-basic-to-word [wat-global/type global]]]
+    [wat-inst-to-out [wat-global/value global]]]]
+
 [defn output-func-to-wat [of]
   [wat-concat
     [list
@@ -515,5 +579,22 @@
     [concat-lists
       [list
         [list-map imp [clone-growable-to-frozen-list [wat-output/imports output]] [import-to-wat imp]]
+        [list-map g [clone-growable-to-frozen-list [wat-output/globals output]] [global-to-wat g]]
         [list-map of [clone-growable-to-frozen-list [wat-output/funcs output]] [output-func-to-wat of]]
         [list-map e [clone-growable-to-frozen-list [wat-output/exports output]] [export-to-wat e]]]]]]
+
+[defn int-to-hex-ascii [i]
+  [if [lt-s i [i32 10]]
+    [add i [i32 48]]
+    [add [sub i [i32 10]] [i32 97]]]]
+
+[defn i32-to-hex [value]
+  [let [gl [growable-list]]
+    [loop [index [intrinsic-call i32.shl [i32 15] [i32 28]]
+           i [i32 28]]
+      [when index
+        [push gl [int-to-hex-ascii [intrinsic-call i32.shr-u [intrinsic-call i32.and value index] i]]]
+        [continue
+          index [intrinsic-call i32.shr-u index [i32 4]]
+          i [sub i 4]]]]
+    [code-points-to-word [clone-growable-to-frozen-list gl]]]]
