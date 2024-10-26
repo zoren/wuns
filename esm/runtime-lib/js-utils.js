@@ -208,3 +208,4 @@ export const object_get = (obj, key) => {
   if (typeof obj !== 'object') throw new Error('expects object')
   return obj[key]
 }
+export const performance_now = () => performance.now()

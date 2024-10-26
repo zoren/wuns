@@ -608,7 +608,7 @@
 
 [def performance-now
   [type-anno
-    [extern performance-now]
+    [extern js performance-now]
     [func [] f64]]]
 
 [def to-js-value
