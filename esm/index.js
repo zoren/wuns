@@ -4,7 +4,7 @@ import * as readline from 'node:readline'
 import { stdin, stdout, nextTick } from 'node:process'
 
 import externs from './runtime-lib/externs.js'
-import { makeDefEnv, print, readString, readFile, langUndefined } from './core.js'
+import { makeDefEnv, print, readString, langUndefined } from './core.js'
 import { makeEvalForm, catchErrors } from './interpreter.js'
 
 const specialForms = [
@@ -44,7 +44,7 @@ const evaluateForms = (forms) => {
   return result
 }
 catchErrors(() => {
-  for (const filePath of files) evaluateForms(readFile(filePath))
+  for (const filePath of files) evaluateForms(readString(fs.readFileSync(filePath, 'ascii'), filePath))
 })
 
 const readHistory = (historyFilePath) => {
