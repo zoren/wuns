@@ -112,8 +112,18 @@ const testEvaluator = ({ pe }) => {
     expect(pe('[let [x [i32 5]]]')).toBe(langUndefined)
     expect(pe('[let [] [i32 2]]')).toBe(2)
     expect(pe('[let [x [i32 2]] x]')).toBe(2)
+    expect(pe('[let [x [let [x [i32 2]] x]] x]')).toBe(2)
     expect(pe('[let [x [i32 2] y x] y]')).toBe(2)
     expect(pe('[let [x [i32 2] y [i32 5]] x]')).toBe(2)
+    expect(pe('[let [x [i32 2]] [intrinsic-call i32.add x [i32 3]]]')).toBe(5)
+    expect(pe(`
+[let
+  [x [i32 2]
+   x [intrinsic-call i32.add x [i32 3]]
+  ]
+  x]`)).toBe(5)
+    // expect(pe('[let [x [i32 2] x [intrinsic-call i32.add x [i32 3]]] x]')).toBe(5)
+
     expect(pe('[let [x [i32 2] y [i32 5]] y]')).toBe(5)
     expect(pe('[let [x [i32 1] x [i32 2]] x]')).toBe(2)
     expect(pe('[let [x [i32 1]] [let [x [i32 1337]] x]]')).toBe(1337)
@@ -128,7 +138,12 @@ const testEvaluator = ({ pe }) => {
     expect(pe('[loop [x [i32 2] y x] y]')).toBe(2)
     expect(pe('[loop [x [i32 1]] [loop [x [i32 1337]] x]]')).toBe(1337)
     expect(pe('[loop [x [loop [x [i32 1337]] x]] x]')).toBe(1337)
-
+    expect(pe(`
+      [loop
+        [x [i32 2]
+         x [intrinsic-call i32.add x [i32 3]]
+        ]
+        x]`)).toBe(5)
     // loop with continue
     // expect(pe('[loop [] [if [i32 1] [i32 5] [continue]]]')).toBe(5)
     assert.throws(() => pe('[loop [] [let [i [i32 5]] [continue i [i32 4]]]]'))
@@ -194,6 +209,11 @@ const testEvaluator = ({ pe }) => {
     assert.throws(() => pe('[letfn f]'))
 
     expect(pe('[letfn []]')).toBe(langUndefined)
+    expect(pe(`
+[letfn [
+  [func f [] [i32 1]]
+  [func f [] [i32 2]]]
+  [f]]`)).toBe(2)
     {
       const isEvenSlow = pe(`
       [letfn

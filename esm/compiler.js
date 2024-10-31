@@ -142,6 +142,7 @@ const maxLocalIndex = (ctx) => {
 }
 
 const newLocal = (ctx, name) => {
+  if (ctx.has(name)) return ctx.get(name)
   const m = maxLocalIndex(ctx)
   const index = m === null ? 0 : m + 1
   ctx.set(name, index)
