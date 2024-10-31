@@ -53,6 +53,10 @@ const testEvaluator = ({ pe }) => {
   })
 
   test('intrinsics', () => {
+    assert.throws(() => pe('[intrinsic-call]'))
+    assert.throws(() => pe('[intrinsic-call no-such-intrinsic]'))
+    assert.throws(() => pe('[intrinsic-call i32.add]'))
+    assert.throws(() => pe('[intrinsic-call i32.add [i32 1]]'))
     expect(pe('[intrinsic-call i32.add [i32 1] [i32 2]]')).toBe(3)
     expect(pe('[intrinsic-call i32.sub [i32 1] [i32 2]]')).toBe(-1)
 
@@ -60,12 +64,24 @@ const testEvaluator = ({ pe }) => {
   })
 
   test('if', () => {
+    assert.throws(() => pe('[if]'))
+    assert.throws(() => pe('[if [i32 1]]'))
+    assert.throws(() => pe('[if [i32 1] [i32 2]]'))
+    assert.throws(() => pe('[if [i32 1] [i32 2] [i32 3] [i32 4]]'))
+
     expect(pe('[if [i32 1] [i32 2] [i32 3]]')).toBe(2)
     expect(pe('[if [i32 0] [i32 2] [i32 3]]')).toBe(3)
   })
 
   test('switch', () => {
-    expect(pe('[switch [i32 1] [[i32 1]] [i32 2] [i32 3]]')).toBe(2)
+    assert.throws(() => pe('[switch]'))
+    assert.throws(() => pe('[switch [i32 1]]'))
+    assert.throws(() => pe('[switch [i32 1] [i32 2] [i32 3]]'))
+    assert.throws(() => pe('[switch [i32 1] [i32 2] [i32 3] [i32 4]]'))
+
+    expect(pe('[switch [i32 1] [word default]]')).toBe('default')
+    expect(pe('[switch [i32 0] [[i32 1]] [word one] [word default]]')).toBe('default')
+    expect(pe('[switch [i32 1] [[i32 1]] [word one] [word default]]')).toBe('one')
     expect(
       pe(`[switch [i32 0]
       [[i32 0]] [word zero]
@@ -90,7 +106,7 @@ const testEvaluator = ({ pe }) => {
     assert.throws(() => pe('[let]'))
     assert.throws(() => pe('[let x]'))
     assert.throws(() => pe('[let x [i32 5] x]'))
-    assert.throws(() => pe('[let [[] [i32 0]] ]'))
+    assert.throws(() => pe('[let [[] [i32 0]]]'))
 
     expect(pe('[let []]')).toBe(langUndefined)
     expect(pe('[let [x [i32 5]]]')).toBe(langUndefined)

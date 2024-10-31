@@ -174,6 +174,7 @@ const expSpecialForms = {
     const [opForm, ...args] = tail
     const opName = getFormWord(opForm)
     if (!intrinsics[opName]) throw new CompileError('undefined intrinsic')
+    if (args.length !== intrinsics[opName].length) throw new CompileError('wrong number of arguments')
     return opIntrinsicCall(
       opName,
       args.map((arg) => compExp(ctx, arg)),
