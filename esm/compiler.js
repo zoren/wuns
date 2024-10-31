@@ -83,7 +83,7 @@ const evalOp = (inst) => {
       }
     }
     case 'func': {
-      const { name, paramIndexes, body } = inst
+      const { name, recIndex, paramIndexes, body } = inst
       const cbody = evalOp(body)
       return (env) => {
         const f = (...args) => {
@@ -91,6 +91,7 @@ const evalOp = (inst) => {
           for (let i = 0; i < paramIndexes.length; i++) newEnv[paramIndexes[i]] = args[i]
           return cbody(newEnv)
         }
+        env[recIndex] = f
         setJSFunctionName(f, name)
         return f
       }

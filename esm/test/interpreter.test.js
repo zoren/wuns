@@ -135,10 +135,13 @@ const testEvaluator = ({ pe }) => {
     assert.throws(() => pe('[loop [] [let [i [i32 5]] [continue [i32 5]]]]'))
     assert.throws(() => pe('[loop [] [let [i [i32 5]] [continue [i32 5] [i32 4]]]]'))
     // can we continue outer loops?
-    assert.throws(() => pe(
-      `[loop [i [i32 0]]
+    assert.throws(() =>
+      pe(
+        `[loop [i [i32 0]]
           [loop [j [i32 5]]
-            [continue i [i32 5]]]]`))
+            [continue i [i32 5]]]]`,
+      ),
+    )
     assert.throws(() => pe('[continue]'))
     const gauss = `
     [loop [i [i32 10] result [i32 0]]
@@ -164,6 +167,24 @@ const testEvaluator = ({ pe }) => {
     expect(pe('[[func f [p q] p] [i32 1] [i32 2]]')).toBe(1)
     expect(pe('[[func f [p q] q] [i32 1] [i32 2]]')).toBe(2)
     expect(pe('[[func f [p q r] r] [i32 1] [i32 2] [i32 3]]')).toBe(3)
+    const gaussDirectRecursive = pe(`
+[func go [n]
+  [if n
+    [intrinsic-call i32.add n [go [intrinsic-call i32.sub n [i32 1]]]]
+    [i32 0]]]`)
+    expect(gaussDirectRecursive).toBeTypeOf('function')
+    expect(gaussDirectRecursive(10)).toBe(55)
+    expect(gaussDirectRecursive(100)).toBe(5050)
+
+    const gaussTailRecursive = pe(`
+    [func go [res n]
+      [if n
+        [go [intrinsic-call i32.add res n] [intrinsic-call i32.sub n [i32 1]]]
+        res]]`)
+    expect(gaussTailRecursive).toBeTypeOf('function')
+    expect(gaussTailRecursive(0, 10)).toBe(55)
+    expect(gaussTailRecursive(0, 100)).toBe(5050)
+    expect(gaussTailRecursive(0, 1000)).toBe(500500)
   })
 }
 
@@ -176,7 +197,6 @@ const parseEval = (s) => {
   const { evalExp } = makeEvalForm()
   return evalExp(parseString(s, test)[0])
 }
-
 
 describe.each([
   { name: 'direct', pe: parseEval },
