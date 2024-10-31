@@ -102,6 +102,13 @@ const testEvaluator = ({ pe }) => {
     ).toBe('not-01')
   })
 
+  test('do', () => {
+    expect(pe('[do]')).toBe(langUndefined)
+    expect(pe('[do [i32 5]]')).toBe(5)
+    expect(pe('[do [i32 5] [i32 6]]')).toBe(6)
+    expect(pe('[do [let [x [i32 5]] x] [let [x [i32 6]] x]]')).toBe(6)
+  })
+
   test('let', () => {
     assert.throws(() => pe('[let]'))
     assert.throws(() => pe('[let x]'))

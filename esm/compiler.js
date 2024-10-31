@@ -274,6 +274,7 @@ const expSpecialForms = {
     insts.push(opContinue())
     return opInsts(insts)
   },
+  do: (tail, ctx) => opInsts(tail.map((f) => compExp(ctx, f))),
   match: () => {
     throw new CompileError('not implemented')
   },
@@ -295,9 +296,9 @@ const topSpecialForms = {
   defmacro: () => {
     throw new CompileError('not implemented')
   },
-  do: () => {
-    throw new CompileError('not implemented')
-  },
+  // do: () => {
+  //   throw new CompileError('not implemented')
+  // },
   load: () => {
     throw new CompileError('not implemented')
   },
