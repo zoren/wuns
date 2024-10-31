@@ -1,24 +1,6 @@
 import { langUndefined, tryGetFormList, tryGetFormWord } from './core.js'
 import { intrinsics } from './intrinsics.js'
 
-class CompileError extends Error {
-  constructor(message) {
-    super(message)
-  }
-}
-
-const getFormWord = (form) => {
-  const word = tryGetFormWord(form)
-  if (word) return word
-  throw new CompileError('expected word', form)
-}
-
-const getFormList = (form) => {
-  const list = tryGetFormList(form)
-  if (list) return list
-  throw new CompileError('expected list', form)
-}
-
 const opConstant = (value) => ({ op: 'constant', value })
 const opIntrinsicCall = (opName, args) => ({ op: 'intrinsic', opName, args })
 const opIf = (cond, ctrue, cfalse) => ({ op: 'if', cond, ctrue, cfalse })
@@ -28,6 +10,8 @@ const opSetLocal = (index, value) => ({ op: 'setLocal', index, value })
 const opInsts = (insts) => ({ op: 'insts', insts })
 const opLoop = (body) => ({ op: 'loop', body })
 const opContinue = () => ({ op: 'continue' })
+const opFunc = (paramIndexes, body) => ({ op: 'func', paramIndexes, body })
+const opCall = (func, args) => ({ op: 'call', func, args })
 
 const continueValue = Symbol('continue')
 
@@ -97,9 +81,44 @@ const evalOp = (inst) => {
         return continueValue
       }
     }
+    case 'func': {
+      const { paramIndexes, body } = inst
+      const cbody = evalOp(body)
+      return (env) => {
+        return (...args) => {
+          const newEnv = [...env]
+          for (let i = 0; i < paramIndexes.length; i++) newEnv[paramIndexes[i]] = args[i]
+          return cbody(newEnv)
+        }
+      }
+    }
+    case 'call': {
+      const { func, args } = inst
+      const cfunc = evalOp(func)
+      const cargs = args.map(evalOp)
+      return (env) => cfunc(env)(...cargs.map((carg) => carg(env)))
+    }
     default:
-      throw new CompileError('unexpected op')
+      throw new Error('unexpected op')
   }
+}
+
+class CompileError extends Error {
+  constructor(message) {
+    super(message)
+  }
+}
+
+const getFormWord = (form) => {
+  const word = tryGetFormWord(form)
+  if (word) return word
+  throw new CompileError('expected word', form)
+}
+
+const getFormList = (form) => {
+  const list = tryGetFormList(form)
+  if (list) return list
+  throw new CompileError('expected list', form)
 }
 
 const makeCtx = (outer, declaringForm) => {
@@ -161,7 +180,14 @@ const expSpecialForms = {
     )
   },
   func: (tail, ctx) => {
-    throw new CompileError('not implemented')
+    const name = getFormWord(tail[0])
+    const parameters = getFormList(tail[1]).map(getFormWord)
+    const bodies = tail.slice(2)
+    const hasNoRest = parameters.length < 2 || parameters.at(-2) !== '..'
+    if (!hasNoRest) throw new CompileError('rest parameter not supported')
+    const newCtx = makeCtx(ctx, 'func')
+    const paramIndexes = parameters.map((p) => newLocal(newCtx, p))
+    return opFunc(paramIndexes, opInsts(bodies.map((f) => compExp(newCtx, f))))
   },
   if: (tail, ctx) => {
     if (tail.length !== 3) throw new CompileError('if expected three arguments')
@@ -278,7 +304,6 @@ const topSpecialForms = {
 }
 
 const compExp = (ctx, form) => {
-  const compileError = (message, innerError) => new CompileError(message, form, innerError)
   const word = tryGetFormWord(form)
   if (word) {
     let curCtx = ctx
@@ -286,44 +311,34 @@ const compExp = (ctx, form) => {
       if (curCtx.has(word)) return opGetLocal(curCtx.get(word))
       curCtx = curCtx.outer
     }
-    throw compileError('undefined variable: ' + word)
+    throw new CompileError('undefined variable: ' + word)
   }
   const forms = tryGetFormList(form)
   if (!forms) {
-    // here we throw an Error not an evalError as the input is not a form
+    // here we throw an Error not an CompileError as the input is not a form
     throw new Error('expected a valid form value', { cause: form })
   }
-  if (forms.length === 0) throw compileError('empty list')
+  if (forms.length === 0) throw new CompileError('empty list')
 
   const [firstForm, ...args] = forms
   const firstWord = tryGetFormWord(firstForm)
-  if (!firstWord) throw compileError('not a word')
-  const topSpecialHandler = topSpecialForms[firstWord]
-  if (topSpecialHandler) throw compileError('top special not allowed in expression form')
+  if (firstWord) {
+    const topSpecialHandler = topSpecialForms[firstWord]
+    if (topSpecialHandler) throw new CompileError('top special not allowed in expression form')
 
-  const expSpecialHandler = expSpecialForms[firstWord]
-  if (expSpecialHandler) return expSpecialHandler(args, ctx)
-
-  throw compileError('not a function')
+    const expSpecialHandler = expSpecialForms[firstWord]
+    if (expSpecialHandler) return expSpecialHandler(args, ctx)
+  }
+  const cfunc = compExp(ctx, firstForm)
+  const cargs = args.map((arg) => compExp(ctx, arg))
+  return opCall(cfunc, cargs)
 }
 
 export const compEval = (form) => {
   const ctx = new Map()
   const cform = compExp(ctx, form)
   const eop = evalOp(cform)
+  // todo init the array with the maximum number of locals
   const env = []
   return eop(env)
 }
-const gauss = `
-[loop [i [i32 10]
-       result [i32 0]]
-  [if i
-    [continue
-      result [intrinsic-call i32.add result i]
-      i [intrinsic-call i32.sub i [i32 1]]]
-    result]]]`
-import { parseString } from './core.js'
-const forms = parseString(gauss, 'gauss')
-const ctx = new Map()
-const cform = compExp(ctx, forms[0])
-// console.dir(cform, { depth: null })

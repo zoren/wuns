@@ -53,7 +53,7 @@ export const makeEvalForm = () => {
   const defEnv = new Map()
 
   const makeClosureOfKind = (kind, forms, env) => {
-    if (forms.length - 1 < 3)
+    if (forms.length < 3)
       throw new EvalError(`special form '${getFormWord(forms[0])}' expected at least three arguments`)
     const name = getFormWord(forms[1])
     const parameters = getFormList(forms[2]).map(getFormWord)

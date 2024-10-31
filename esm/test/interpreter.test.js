@@ -104,7 +104,7 @@ const testEvaluator = ({ pe }) => {
     expect(pe('[let [x [let [x [i32 1337]] x]] x]')).toBe(1337)
   })
 
-  test('loop', () => {
+  test('loop continue', () => {
     // loop acts as a let when it has no continue's in its body
     expect(pe('[loop [] [i32 1]]')).toBe(1)
     expect(pe('[loop [] [i32 2]]')).toBe(2)
@@ -132,6 +132,21 @@ const testEvaluator = ({ pe }) => {
           i [intrinsic-call i32.sub i [i32 1]]]
         result]]]`
     expect(pe(gauss)).toBe(55)
+  })
+
+  test('func', () => {
+    assert.throws(() => pe('[func]'))
+    assert.throws(() => pe('[func []]'))
+    assert.throws(() => pe('[func []]'))
+    assert.throws(() => pe('[func f [[]]]'))
+
+    expect(pe('[func f []]')).toBeTypeOf('function')
+    expect(pe('[func f [] [i32 1]]')).toBeTypeOf('function')
+    expect(pe('[[func f [] [i32 1]]]')).toBe(1)
+    expect(pe('[[func f [p] p] [i32 1]]')).toBe(1)
+    expect(pe('[[func f [p q] p] [i32 1] [i32 2]]')).toBe(1)
+    expect(pe('[[func f [p q] q] [i32 1] [i32 2]]')).toBe(2)
+    expect(pe('[[func f [p q r] r] [i32 1] [i32 2] [i32 3]]')).toBe(3)
   })
 }
 
