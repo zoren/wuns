@@ -352,23 +352,6 @@
       [log bform]
       [logq-abort not implemented translate-top-form bform]]]]]
 
-[defn translate-top-forms [forms]
-  [let [converter [mk-form-to-ast [word dummy-dir-name]]
-        check-ctx [make-global-context-from-syntax-info [form-to-ast-converter/syntax-info converter]]
-        f2t [form-to-ast-converter/form-to-top converter]
-        check-top [checker/check-top [make-checker check-ctx]]
-        output [make-wat-output]
-        tctx [translate-context output check-ctx]]
-    [for-each form forms
-      [let [btop [f2t form]]
-        [check-top btop]
-        [let [check-errors [clone-growable-to-frozen-list [check-context/messages check-ctx]]]
-          [when-not [is-empty check-errors]
-            [for-each error check-errors [log-check-message error]]
-            [logq-abort translate-top-forms binding errors]]]
-        [translate-top-form tctx btop]]]
-    output]]
-
 [def ascii-line-feed [i32 10]]
 [def ascii-space [i32 32]]
 [def ascii-double-quote [i32 34]]

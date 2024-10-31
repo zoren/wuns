@@ -2,14 +2,19 @@
   "name": "wuns",
   "version": "0.0.2",
   "description": "the wuns programming language extension",
+  "publisher": "zoren.dk",
   "engines": {
     "vscode": "^1.88.0"
   },
   "contributes": {
     "commands": [
       {
-        "command": "wunslang.check",
-        "title": "Check current wuns file"
+        "command": "wunslang.bindcheck",
+        "title": "Bind check current wuns file"
+      },
+      {
+        "command": "wunslang.typecheck",
+        "title": "Type check current wuns file"
       },
       {
         "command": "wunslang.interpret",

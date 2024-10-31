@@ -1,20 +1,16 @@
 {
-  "name": "esm",
+  "name": "web",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "type": "module",
+  "main": "vite.config.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "type": "module",
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "description": "",
   "dependencies": {
-    "wabt": "^1.0.36"
-  },
-  "devDependencies": {
-    "prettier": "3.3.3",
-    "vitest": "^2.1.4"
+    "vite": "^5.4.10"
   }
 }

@@ -1,12 +1,7 @@
 [load compile-wat.wuns]
 
 [defmacro def-wasm-extern [name type]
-  [flist [qword def] name
-    [flist [qword type-anno]
-      [flist [qword extern] [qword wasm] name]
-      type]]]
-
-[def-wasm-extern wat-to-byte-array [func [byte-array] byte-array]]
+  [flist [quote import] [quote wasm] name type]]
 
 [type wasm-module [] [union]]
 
@@ -20,7 +15,37 @@
 
 [def-wasm-extern memory [func [i32 i32 i32] js-value]]
 
-[def-wasm-extern wasm-get-export-object [func [wasm-instance] [object export-func]]]
+[def-wasm-extern wasm-get-export-object [func [wasm-instance] [object js-value]]]
+
+[defn translate-top-forms-async [forms]
+  [let
+    [converter [mk-form-to-ast]
+     sinfo [form-to-ast-converter/syntax-info converter]
+     f2t [form-to-ast-converter/form-to-top-async converter]]
+    [promise-then
+      [promises-seq forms f2t]
+      [func then [btops]
+        [let
+          [bind-errors [clone-growable-to-frozen-list [form-to-ast-converter/errors converter]]
+           gctx [make-global-context-from-syntax-info sinfo]
+           ctop [checker/check-top [make-checker gctx]]
+           output [make-wat-output]
+           tctx [translate-context output gctx]]
+          [for-each btop btops
+            [ctop btop]
+            [let [check-errors [clone-growable-to-frozen-list [check-context/messages gctx]]]
+              [when-not [is-empty check-errors]
+                [for-each error check-errors [log-check-message error]]
+                [logq-abort translate-top-forms binding errors]]]
+            [translate-top-form tctx btop]]
+          output]]]]]
+
+[def empty-object [kv-map-to-object [transient-kv-map]]]
+
+[defn get-export [wasm-inst export-name]
+  [get [object-to-kv-map [wasm-get-export-object wasm-inst]] export-name]]
+
+[import wabt wat-to-byte-array [func [byte-array] byte-array]]
 
 [defn output-to-module [output]
   [let [p [empty-printer [i32 800]]]
@@ -29,20 +54,7 @@
           module [byte-array-to-wasm-module [wat-to-byte-array ba]]]
       [byte-array-log-as-string ba]
       module]]]
-
-[def js-apply
-  [type-anno
-    [extern interpreter apply]
-    [func [export-func [list js-value]] js-value]]]
-
-[defexpr module [.. forms]
-  [output-to-module [translate-top-forms forms]]]
-
-[def empty-object [kv-map-to-object [transient-kv-map]]]
-
-[defn get-export [wasm-inst export-name]
-  [get [object-to-kv-map [wasm-get-export-object wasm-inst]] export-name]]
-
+[comment
 [defexpr trans-eval-form [form]
   [let
     [m [output-to-module
@@ -53,7 +65,7 @@
      i [wasm-instantiate m empty-object]
      f [get-export i [word f]]]
   [js-apply f [list]]]]
-
+ ]
 [defn test-assert-eq [expected actual]
   [let [js-expected [to-js-value expected]]
     [when-not [is-identical js-expected actual]
@@ -80,89 +92,133 @@
   [for i 0 [word-byte-size w]
     [byte-array-set ba [add base i] [char-code-at w i]]]]
 
-[defn test []
-  [test-assert-eq [i32 1] [trans-eval-form [i32 1]]]
-  [test-assert-eq [f64 1.5] [trans-eval-form [f64 1.5]]]
-  [test-assert-eq [i32 5] [trans-eval-form [i32 5]]]
+[defexpr module-async [.. forms]
+  [promise-then
+    [translate-top-forms-async forms]
+    [func then [output] [output-to-module output]]]]
 
+[defn test-exp-eq-fn [expected form-to-translate]
+  [promise-then
+    [translate-top-forms-async
+      [list
+        [flist [quote defn] [quote f] [quote []] form-to-translate]
+        [quote [export f]]]]
+    [func then [output]
+      [let [mod [output-to-module output]
+            inst [wasm-instantiate mod empty-object]
+            f [get-export inst [word f]]
+            actual [js-apply f [list]]
+            js-expected [to-js-value expected]]
+        [when-not [is-identical js-expected actual]
+          [logq test failed]
+          [log js-expected]
+          [log actual]]]]]]
+
+[defmacro test-exp-eq [expected form-to-translate]
+  [flist [quote test-exp-eq-fn] expected [mk-quote form-to-translate]]]
+
+[defmacro let-async [binding-form .. bodies]
+  [match binding-form
+    [form/list binding]
+    [do
+      [assert [eq 2 [size binding]] let-async bindings should have exactly two elements]
+      [let [v [first binding] aform [second binding]]
+        [assert [is-word v] let-async requires a word as the first element of the first argument]
+        [flist [quote promise-bind]
+          aform
+          [form-concat
+            [list [quote func] [quote then] [flist v]]
+            bodies]]]]
+    [logq-abort let-async requires a list as the first argument]]]
+
+[defn test []
+  [test-exp-eq [i32 1] [i32 1]]
+  [test-exp-eq [f64 1.5] [f64 1.5]]
+  [test-exp-eq [i32 5] [i32 5]]
   [comment if]
-  [test-assert-eq [i32 5] [trans-eval-form [if [i32 0] [i32 7] [i32 5]]]]
-  [test-assert-eq [i32 5] [trans-eval-form [if [i32 1] [i32 5] [i32 9]]]]
-  [test-assert-undefined [trans-eval-form [if [i32 1] [do] [do]]]]
+  [test-exp-eq [i32 5] [if [i32 0] [i32 7] [i32 5]]]
+  [test-exp-eq [i32 5] [if [i32 1] [i32 5] [i32 9]]]
+  [comment  [test-assert-undefined [trans-eval-form [if [i32 1] [do] [do]]]] ]
 
   [comment intrinsics]
-  [test-assert-eq [i32 5] [trans-eval-form [intrinsic-call i32.add [i32 2] [i32 3]]]]
-  [test-assert-eq [i32 5] [trans-eval-form [intrinsic-call i32.sub [i32 8] [i32 3]]]]
-  [test-assert-eq [i32 15] [trans-eval-form [intrinsic-call i32.mul [i32 5] [i32 3]]]]
+  [test-exp-eq [i32 5] [intrinsic-call i32.add [i32 2] [i32 3]]]
+  [test-exp-eq [i32 5] [intrinsic-call i32.sub [i32 8] [i32 3]]]
+  [test-exp-eq [i32 15] [intrinsic-call i32.mul [i32 5] [i32 3]]]
 
   [comment parameters]
-  [let [m [module [defn not [b] [if b [i32 0] [i32 1]]] [export not]]
-        i [wasm-instantiate m empty-object]
-        f [get-export i [word not]]]
+  [promise-bind
+    [module-async [defn not [b] [if b [i32 0] [i32 1]]] [export not]]
+    [func then [m]
+      [let [i [wasm-instantiate m empty-object]
+            f [get-export i [word not]]]
+      [test-assert-eq [i32 1] [js-apply f [list [to-js-value [i32 0]]]]]
+      [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1]]]]]
+      [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1337]]]]]]]]
+
+  [let-async
+    [m [module-async [defn not2 [b] [intrinsic-call i32.eq b [i32 0]]] [export not2]]]
+    [let [i [wasm-instantiate m empty-object]
+          f [get-export i [word not2]]]
     [test-assert-eq [i32 1] [js-apply f [list [to-js-value [i32 0]]]]]
     [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1]]]]]
-    [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1337]]]]]]
-  [let [m [module [defn not2 [b] [intrinsic-call i32.eq b [i32 0]]] [export not2]]
-        i [wasm-instantiate m empty-object]
-        f [get-export i [word not2]]]
-    [test-assert-eq [i32 1] [js-apply f [list [to-js-value [i32 0]]]]]
-    [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1]]]]]
-    [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1337]]]]]]
-  [let [m [module [defn twop [i f] [if i f [f64 1.5]]] [export twop]]
-        i [wasm-instantiate m empty-object]
-        twop [get-export i [word twop]]]
+    [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1337]]]]]]]
+
+  [let-async
+    [m [module-async [defn twop [i f] [if i f [f64 1.5]]] [export twop]]]
+    [let [i [wasm-instantiate m empty-object]
+          twop [get-export i [word twop]]]
     [test-assert-eq [f64 1.5] [js-call twop 0 0]]
     [test-assert-eq [f64 1.5] [js-call twop 0 0.25]]
     [test-assert-eq [f64 0] [js-call twop 1 0]]
     [test-assert-eq [f64 0.25] [js-call twop 13.0 0.25]]
-    [test-assert-eq [f64 0.1337] [js-call twop 13.0 0.1337]]]
+    [test-assert-eq [f64 0.1337] [js-call twop 13.0 0.1337]]]]
 
   [comment calls]
-  [let [m [module
+  [let-async [m [module-async
             [defn f [] [i32 1]]
             [export f]
             [defn g [] [f]]
-            [export g]]
-        i [wasm-instantiate m empty-object]
-        f [get-export i [word f]]
-        g [get-export i [word g]]]
-  [test-assert-eq [f64 1] [js-call f]]
-  [test-assert-eq [f64 1] [js-call g]]
-  ]
+            [export g]]]
+    [let[i [wasm-instantiate m empty-object]
+         f [get-export i [word f]]
+         g [get-export i [word g]]]
+    [test-assert-eq [f64 1] [js-call f]]
+    [test-assert-eq [f64 1] [js-call g]]]]
 
   [comment recursion]
-  [let [m [module
+  [let-async [m [module-async
     [defn gauss-direct [n]
       [if n
         [intrinsic-call i32.add n [gauss-direct [intrinsic-call i32.sub n [i32 1]]]]
         [i32 0]]]
-    [export gauss-direct]]
-        i [wasm-instantiate m empty-object]
-        gauss-direct [get-export i [word gauss-direct]]]
-    [test-assert-eq [i32 0] [js-call gauss-direct 0]]
-    [test-assert-eq [i32 55] [js-call gauss-direct 10]]
-    [test-assert-eq [i32 5050] [js-call gauss-direct 100]]
-    [test-assert-eq [i32 500500] [js-call gauss-direct 1000]]
-    [test-assert-eq [i32 50005000] [js-call gauss-direct 10000]]
-    [comment this one breaks the stack
-      [test-assert-eq [i32 200010000] [js-call gauss-direct 20000]]]]
-  [let [m [module
+    [export gauss-direct]]]
+    [let [i [wasm-instantiate m empty-object]
+          gauss-direct [get-export i [word gauss-direct]]]
+      [test-assert-eq [i32 0] [js-call gauss-direct 0]]
+      [test-assert-eq [i32 55] [js-call gauss-direct 10]]
+      [test-assert-eq [i32 5050] [js-call gauss-direct 100]]
+      [test-assert-eq [i32 500500] [js-call gauss-direct 1000]]
+      [test-assert-eq [i32 50005000] [js-call gauss-direct 10000]]
+      [comment this one breaks the stack
+        [test-assert-eq [i32 200010000] [js-call gauss-direct 20000]]]]
+
+  [let-async [m [module-async
     [defn go [res n]
       [if n
         [go [intrinsic-call i32.add res n] [intrinsic-call i32.sub n [i32 1]]]
         res]]
     [defn gauss-tail [n] [go [i32 0] n]]
-    [export gauss-tail]]
-        i [wasm-instantiate m empty-object]
-        gauss-tail [get-export i [word gauss-tail]]]
-    [test-assert-eq [i32 0] [js-call gauss-tail 0]]
-    [test-assert-eq [i32 55] [js-call gauss-tail 10]]
-    [test-assert-eq [i32 5050] [js-call gauss-tail 100]]
-    [comment here tail recursion allows us to calculate larger values]
-[comment      [test-assert-eq [i32 200010000] [js-call gauss-tail 20000]]
-    [test-assert-eq [i32 2147450880] [js-call gauss-tail 65535]] ]
-    ]
-  [let [m [module
+    [export gauss-tail]]]
+    [let [i [wasm-instantiate m empty-object]
+          gauss-tail [get-export i [word gauss-tail]]]
+      [test-assert-eq [i32 0] [js-call gauss-tail 0]]
+      [test-assert-eq [i32 55] [js-call gauss-tail 10]]
+      [test-assert-eq [i32 5050] [js-call gauss-tail 100]]
+      [comment here tail recursion allows us to calculate larger values]
+  [comment      [test-assert-eq [i32 200010000] [js-call gauss-tail 20000]]
+      [test-assert-eq [i32 2147450880] [js-call gauss-tail 65535]] ]
+      ]]
+  [let-async [m [module-async
     [defn gauss-loop [n]
       [loop [res [i32 0] i n]
         [if i
@@ -170,21 +226,21 @@
             res [intrinsic-call i32.add res i]
             i [intrinsic-call i32.sub i [i32 1]]]
           res]]]
-    [export gauss-loop]]
+    [export gauss-loop]]][let[
         i [wasm-instantiate m empty-object]
         gauss-loop [get-export i [word gauss-loop]]]
-    [test-assert-eq [i32 0] [js-call gauss-loop 0]]
-    [test-assert-eq [i32 55] [js-call gauss-loop 10]]
-    [test-assert-eq [i32 5050] [js-call gauss-loop 100]]
-    [test-assert-eq [i32 200010000] [js-call gauss-loop 20000]]
-    [test-assert-eq [i32 2147450880] [js-call gauss-loop 65535]]
-    ]
-  [let [m [module
-[def dmem [type-anno [extern env mem] [memory 1]]]
-[defn get-aligned [p] [intrinsic-call i32.load dmem 0 4 p]]
-[defn set-aligned [p v] [intrinsic-call i32.store dmem 0 4 p v]]
-[export get-aligned set-aligned]]
-        env-kv [transient-kv-map]
+      [test-assert-eq [i32 0] [js-call gauss-loop 0]]
+      [test-assert-eq [i32 55] [js-call gauss-loop 10]]
+      [test-assert-eq [i32 5050] [js-call gauss-loop 100]]
+      [test-assert-eq [i32 200010000] [js-call gauss-loop 20000]]
+      [test-assert-eq [i32 2147450880] [js-call gauss-loop 65535]]]]
+  [comment
+  [let-async [m [module-async
+[import env mem [memory 1]]
+[defn get-aligned [p] [intrinsic-call i32.load mem 0 4 p]]
+[defn set-aligned [p v] [intrinsic-call i32.store mem 0 4 p v]]
+[export get-aligned set-aligned]]]
+  [let [env-kv [transient-kv-map]
         - [set-kv-map env-kv [word mem] [to-js-value [memory 1 1 0]]]
         env-object [kv-map-to-object env-kv]
         import-kv [transient-kv-map]
@@ -192,15 +248,14 @@
         import-object [kv-map-to-object import-kv]
         i [wasm-instantiate m import-object]
         get-aligned [get-export i [word get-aligned]]
-        set-aligned [get-export i [word set-aligned]]
-        ]
-    [test-assert-eq [i32 0] [js-call get-aligned 0]]
-    [js-call set-aligned 0 1337]
-    [test-assert-eq [i32 1337] [js-call get-aligned 0]]]
+        set-aligned [get-export i [word set-aligned]]]
+      [test-assert-eq [i32 0] [js-call get-aligned 0]]
+      [js-call set-aligned 0 1337]
+      [test-assert-eq [i32 1337] [js-call get-aligned 0]]]]
 
   [comment hash it out]
   [let [m [module
-[def dmem [type-anno [extern env mem] [memory 1]]]
+[import env mem [memory 1]]
 [def fnv-prime [i32 16777619]]
 [def fnv-offset-basis [i32 -2128831035]]
 
@@ -213,7 +268,7 @@
             hash
             [intrinsic-call i32.mul
               [intrinsic-call i32.xor hash
-                [intrinsic-call i32.load8-u dmem 0 1 q]]
+                [intrinsic-call i32.load8-u mem 0 1 q]]
               fnv-prime]
             q [intrinsic-call i32.add q [i32 1]]]
         hash]]]]
@@ -231,7 +286,7 @@
         hash-fnv-1a-i32 [get-export i [word hash-fnv-1a-i32]]]
     [test-assert-eq [i32 -2128831035] [js-call hash-fnv-1a-i32 0 0]]
 
-    [comment stolen from https://github.com/fnvhash/libfnv/blob/master/test/unit/basic_full.ts#L15]
+    [comment stolen from github.com/fnvhash/libfnv/blob/master/test/unit/basic-full.ts]
 
     [byte-array-set-word wasm-mem-array 0 [word a]]
     [test-assert-eq [word e40c292c] [i32-to-hex [js-call hash-fnv-1a-i32 0 1]]]
@@ -239,56 +294,5 @@
     [byte-array-set-word wasm-mem-array 0 [word foobar]]
     [test-assert-eq [word bf9cf968] [i32-to-hex [js-call hash-fnv-1a-i32 0 6]]]
     ]
-
-[comment this requires temp vars for args dependent on parameters
-  [let [m [module
-    [defn go-rev [n res]
-      [if n
-        [go-rev [[intrinsic i32.sub] n [i32 1]] [[intrinsic i32.add] res n]]
-        res]]
-    [defn gauss-tail [n] [go-rev n [i32 0]]]]
-        i [wasm-instantiate m empty-object]
-        gauss-tail [get-export i [word gauss-tail]]]
-    [test-assert-eq [i32 0] [js-call gauss-tail 0]]
-    [test-assert-eq [i32 55] [js-call gauss-tail 10]]
-    [test-assert-eq [i32 5050] [js-call gauss-tail 100]]
-    [comment here tail recursion allows us to calculate larger values]
-    [test-assert-eq [i32 200010000] [js-call gauss-tail 20000]]
-    [test-assert-eq [i32 2147450880] [js-call gauss-tail 65535]]] ]
-
-
-  [comment type]
-[todo
-    [let [m [module
-    [type r [] [record [i i32]]]
-    [defn f [] [r/i [r [i32 5]]]]]
-      i [wasm-instantiate m empty-object]
-      f [get-export i [word f]]]
-    [test-assert-eq [i32 0] [js-call f]]
-    ]]
-]
-
-[defn smart-gauss [n]
-  [ifs
-    [or [lt-s n [i32 0]] [lt-s [i32 65535] n]]
-    [i32 -1]
-
-    [is-odd n]
-    [mul [i32.div-s [inc n] [i32 2]] n]
-
-    [mul [i32.div-s n [i32 2]] [inc n]]]]
-[comment
-[defn go-rev [n res]
-  [if n
-    [go-rev [[intrinsic i32.sub] n [i32 1]] [[intrinsic i32.add] res n]]
-    res]]
-[defn gauss-tail [n] [go-rev n [i32 0]]]
-
-[defn gauss [n]
-  [loop [i [i32 0] result [i32 0]]
-    [if [lt-s i n]
-      [continue
-        i [inc i]
-        result [add result i]]
-      result]]]
  ]
+]]

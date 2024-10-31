@@ -328,12 +328,24 @@
 [type check-message []
   [record
     [message form]
-    [opt-node [option syntax-node]]
+    [opt-form [option form]]
     [severity diagnostic-severity]]]
 
+[comment
+  [when-not [is-empty errors]
+    [for-each error errors
+      [log
+        [report-message/message error]
+        [if-let [loc [try-get-syntax-node [report-message/form error]]]
+          loc
+          [word no-location]]]]
+    [logq-abort bind-forms errors]]
+]
 [defn log-check-message [error]
-  [if-let [node [check-message/opt-node error]]
-    [log-node-location node]
+  [if-let [form [check-message/opt-form error]]
+    [do
+      [log form]
+      [log-location form]]
     [logq no location]]
   [log [check-message/message error]]]
 
@@ -359,7 +371,7 @@
   [push [check-context/messages gctx] [check-message message opt-location [diagnostic-severity/error]]]]
 
 [defn report-sword [gctx sw message]
-  [push [check-context/messages gctx] [check-message message [syntax-word/node sw] [diagnostic-severity/error]]]]
+  [push [check-context/messages gctx] [check-message message [syntax-word/opt-form sw] [diagnostic-severity/error]]]]
 
 [defn generate-fresh-type-var [gctx level]
   [generate-fresh-type-var-atom [check-context/type-var-counter gctx] level]]
@@ -369,17 +381,11 @@
     [some ltype]
     [try-get [check-context/def-var-types gctx] var-name]]]
 
-[defn try-get-node [gctx bst]
+[defn unify-report [gctx t1 t2 bst]
   [let [info [check-context/syntax-info gctx]
         opt-form [[syntax-info/try-get-form info] [to-js-value bst]]]
-    [if-let [form opt-form]
-      [try-get-syntax-node form]
-      [logq-abort try-get-node no form]]]]
-
-[defn unify-report [gctx t1 t2 bst]
-  [let [opt-node [try-get-node gctx bst]]
     [for-each error [unify t1 t2]
-      [report-fn gctx error opt-node]]]]
+      [report-fn gctx error opt-form]]]]
 
 [defn is-syntactic-value [bform]
   [match bform
@@ -441,7 +447,6 @@
       [if-let [anno [try-get type-annotations [to-js-value bform]]]
           anno
           [do
-            [log bform]
             [logq-abort get-ctype-from-form-or-annotation expected an annotation]]]]]]
 
 [defn make-checker [gctx]
@@ -798,7 +803,15 @@
 
           [btop/do btops]
           [for-each btop btops
-            [check-top btop]]]]]
+            [check-top btop]]
+
+          [btop/load file-name]
+          [logq-abort check load not implemented]
+
+          [btop/import module-name import-name bts]
+          [let [inst-type [instantiate-syntax-type-scheme [check-context/type-var-counter gctx] 1 bts]
+                general-val-type [generalize 0 inst-type]]
+            [set-kv-map [check-context/def-var-types gctx] [syntax-word/word import-name] general-val-type]]]]]
       [checker
         [func check-exp [bexp] [go 0 [local-stack/empty] bexp]]
         check-top]]]
@@ -869,5 +882,52 @@
       [flist [quote type-scheme]
         [form/list new-present-type-vars]
         [internal-to-present-type copied-type]]]]]
+
+[defn check-top-forms [converter btops]
+  [let
+    [gctx [make-global-context-from-syntax-info [form-to-ast-converter/syntax-info converter]]
+     check-top [checker/check-top [make-checker gctx]]]
+    [for-each btop btops
+      [check-top btop]
+      [let [check-errors [clone-growable-to-frozen-list [check-context/messages gctx]]]
+        [when-not [is-empty check-errors]
+          [logq check-top-forms there were errors]
+          [for-each message check-errors
+            [log-check-message message]]
+          [logq-abort check-top-forms failed there were errors]]]]]]
+
+[defn check-forms [forms]
+  [let [converter [mk-form-to-ast]]
+    [promise-then
+      [bind-forms converter forms]
+      [func then2 [btops]
+        [check-top-forms converter btops]]]]]
+
+[defn check-file [file-name]
+  [let [converter [mk-form-to-ast]]
+    [promise-then
+      [read-parse-file-async file-name]
+      [func then [forms]
+        [promise-then
+          [bind-forms converter forms]
+          [func then2 [btops]
+            [check-top-forms converter btops]]]]]]]
+
+[defn bind-type-check-forms [forms]
+  [let
+    [converter [mk-form-to-ast]
+     sinfo [form-to-ast-converter/syntax-info converter]
+     f2t [form-to-ast-converter/form-to-top-async converter]]
+    [promise-then
+      [promises-seq forms f2t]
+      [func then [btops]
+        [let
+          [bind-errors [clone-growable-to-frozen-list [form-to-ast-converter/errors converter]]
+           gctx [make-global-context-from-syntax-info sinfo]
+           ctop [checker/check-top [make-checker gctx]]]
+          [for-each btop btops [ctop btop]]
+          [pair bind-errors [clone-growable-to-frozen-list [check-context/messages gctx]]]]]]]]
+
+[export check-forms check-file bind-type-check-forms]
 
 [export make-global-context-from-syntax-info make-checker]

@@ -249,7 +249,7 @@
   [logq ran [form/word [int-to-word [atom-get test-assert-count-atom]]]]]]
 
 [defn mk-eval-forms []
-  [let [eval-context [make-eval-context [current-dir]]
+  [let [eval-context [make-eval-context]
         evaluator [make-evaluator externs-object-value eval-context]]
     [func eval-forms [forms]
       [let [results [list-map form forms [evaluate-result evaluator form]]]
@@ -267,11 +267,11 @@
   [todo this is broken now]
   [let
     [converter [mk-form-to-ast [word dummy-path]]
-     f2a [form-to-ast-converter/form-to-ast converter]
+     f2t [form-to-ast-converter/form-to-top converter]
      but-last-forms [slice forms 0 [dec [size forms]]]
      comp-run
      [func comp-run [form]
-      [match [f2a form]
+      [match [f2t form]
         [result/error f2a-errors]
         [result/error [compile-run-error/form-to-ast-errors f2a-errors]]
 

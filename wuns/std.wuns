@@ -7,21 +7,14 @@
 
 [defn list [.. entries] entries]
 
-[defmacro qword [m]
-  [match m
-    [form/word w]
-    [flist [form/word [word form/word]]
-      [flist [form/word [word word]] [form/word w]]]]]
+[defexpr quote [f] f]
 
 [defmacro def-extern [name type]
-  [flist [qword def] name
-    [flist [qword type-anno]
-      [flist [qword extern] [qword host] name]
-      type]]]
+  [flist [quote import] [quote host] name type]]
 
 [def-extern concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]
 
-[defexpr quote [f] f]
+[defexpr qlist [.. forms] forms]
 
 [def-extern concat-lists [type-scheme [a] [func [[list [list a]]] [list a]]]]
 
@@ -138,8 +131,6 @@
 [defn list-map-fn [f l]
   [list-init-func [size l] [func list-map-fn-f [i] [f [at l i]]]]]
 
-[def-extern list-reverse [type-scheme [a] [func [[list a]] [list a]]]]
-
 [defn quote-list [lmsg]
   [form/list
     [concat
@@ -164,6 +155,12 @@
 [defmacro logq-abort [.. lmsg]
   [flist [quote do]
     [flist [quote abort] [quote-list lmsg]]]]
+
+[defexpr qword [f]
+  [match f
+    [form/word w] [do]
+    [form/list l] [logq-abort qword requires a word as its argument]]
+  f]
 
 [defn identity [x] x]
 
@@ -279,6 +276,8 @@
     [form/word w] [none]
     [form/list l] [some l]]]
 
+[todo if-let could take a pattern as argument instead of a word]
+
 [defmacro if-let [binding-form true-form false-form]
   [match binding-form
     [form/list binding]
@@ -371,26 +370,24 @@
   [let
     [iteration-var [genword-prefix [word it]]
      col-var [genword-prefix [word col]]
-     col-size-var [genword-prefix [word col-size]]
-     loopw [genword-prefix [word loop-fun]]]
+     col-size-var [genword-prefix [word col-size]]]
     [assert [is-word element-var] for-each requires a word as the first argument]
     [flist
       [quote let] [flist col-var collection
                         col-size-var [flist [quote size] col-var]]
       [flist
-        [flist
-          [quote func] loopw [flist iteration-var]
-          [flist [quote if]
-            [flist [quote lt-s] iteration-var col-size-var]
-            [form-concat
-              [list [quote let]]
-              [list [flist element-var [flist [quote at] col-var iteration-var]]]
-              [list
-                [form-concat [list [quote do]]
-                  forms
-                  [list [flist loopw [flist [quote add] iteration-var [quote [i32 1]]]]]]]]
-            [quote [do]]]]
-        [quote [i32 0]]]]]]
+        [quote loop] [flist iteration-var [quote [i32 0]]]
+        [flist [quote if]
+          [flist [quote lt-s] iteration-var col-size-var]
+          [form-concat
+            [list [quote let]]
+            [list [flist element-var [flist [quote at] col-var iteration-var]]]
+            [list
+              [form-concat
+                [list [quote do]]
+                forms
+                [list [flist [quote continue] iteration-var [flist [quote add] iteration-var [quote [i32 1]]]]]]]]
+          [quote [do]]]]]]]
 
 [defmacro list-map [element-var collection form]
   [do
@@ -440,23 +437,44 @@
 
 [type syntax-node-location [] [record [row i32] [column i32]]]
 
-[def-extern read-file [func [word] [list form]]]
-[type syntax-node [] [union]]
+[type promise [a] [union]]
+
 [type string [] [union]]
+
+[import files read-file-async [func [word] [promise string]]]
+[import files write-file-async [func [word string] [promise [tuple]]]]
+
+[def-extern parse-string [func [string word] [list form]]]
+
+[type syntax-node [] [union]]
 [def-extern try-get-syntax-node [func [form] [option syntax-node]]]
 [def-extern syntax-node-content-name [func [syntax-node] string]]
-[def-extern get-syntax-node-location [func [syntax-node] syntax-node-location]]
 
-[def-extern stdout-print [type-scheme [a] [func [a] [tuple]]]]
-[def-extern stdout-write-code-point [func [i32] [tuple]]]
+[def-extern print [type-scheme [a] [func [a] string]]]
+
+[def-extern code-point-to-string [func [i32] string]]
+
+[defmacro def-js-extern [name type]
+  [flist [quote import] [quote js] name type]]
+
+[type js-value [] [union]]
+
+[def-js-extern console-log [type-scheme [a] [func [.. a] [tuple]]]]
+
+[def-js-extern promise-resolve [type-scheme [a] [func [a] [promise a]]]]
+[def-js-extern promise-bind [type-scheme [a b] [func [[promise a] [func [a] [promise b]]] [promise b]]]]
+[def-js-extern promise-then [type-scheme [a b] [func [[promise a] [func [a] b]] [promise b]]]]
+[def-js-extern promises-seq [type-scheme [a b] [func [[list a] [func [a] [promise b]]] [promise [list b]]]]]
+
+[defn read-parse-file-async [file-name]
+  [promise-then
+    [read-file-async file-name]
+    [func then [content] [parse-string content file-name]]]]
+
+[def-extern apply [type-scheme [a b] [func [[func [[list a]] b] [list a]] b]]]
 
 [defn log-fn [forms]
-  [when-not [is-empty forms]
-    [stdout-print [first forms]]
-    [for-each f [rest forms]
-      [stdout-write-code-point [i32 32]]
-      [stdout-print f]]]
-  [stdout-write-code-point [i32 10]]]
+  [apply console-log [list-map f forms [print f]]]]
 
 [defmacro log [.. forms]
   [flist [quote log-fn]
@@ -467,19 +485,16 @@
 
 [defmacro logq [.. lmsg]
   [let [qforms [list-map form lmsg [match form [form/word w] [mk-quote form] [form/list l] form]]]
-    [form/list
-      [concat
-        [list [quote do]]
+    [flist [quote log-fn]
+      [form/list
         [concat
-          [if [is-empty lmsg]
-            [list]
-            [concat
-              [list [flist [quote stdout-print] [first qforms]]]
-              [list-map qform [rest qforms]
-                [flist [quote do]
-                  [quote [stdout-write-code-point [i32 32]]]
-                  [flist [quote stdout-print] qform]]]]]
-          [list [quote [stdout-write-code-point [i32 10]]]]]]]]]
+          [list [quote list]]
+          [list-map qform qforms [flist [quote print] qform]]]]]]]
+
+[def-extern get-syntax-node-location-as-string [func [syntax-node] string]]
+
+[defn log-node-location [node]
+  [log [get-syntax-node-location-as-string node]]]
 
 [defn try-get-syntax-node-rec [form]
   [if-let [node [try-get-syntax-node form]]
@@ -495,15 +510,6 @@
           [none]]
         ] 0
       ]]]]
-
-[defn log-node-location [node]
-  [let [loc [get-syntax-node-location node]]
-    [stdout-print [syntax-node-content-name node]]
-    [stdout-write-code-point [i32 58]]
-    [stdout-print [inc [syntax-node-location/row loc]]]
-    [stdout-write-code-point [i32 58]]
-    [stdout-print [inc [syntax-node-location/column loc]]]
-    [stdout-write-code-point [i32 10]]]]
 
 [defn log-location [form]
   [if-let [node [try-get-syntax-node-rec form]]
@@ -589,53 +595,16 @@
         [result/ok [clone-growable-to-frozen-list gl]]]]
       0]]]
 
-[type js-value [] [union]]
+[def-js-extern performance-now [func [] f64]]
 
-[def current-dir
-  [type-anno
-    [extern current-dir]
-    [func [] [word]]]]
+[def-js-extern to-js-value [type-scheme [a] [func [a] js-value]]]
 
-[def path-join
-  [type-anno
-    [extern path join]
-    [func [word word] [word]]]]
-
-[def path-dirname
-  [type-anno
-    [extern path dirname]
-    [func [word] [word]]]]
-
-[def performance-now
-  [type-anno
-    [extern js performance-now]
-    [func [] f64]]]
-
-[def to-js-value
-  [type-anno
-    [extern js identity]
-    [type-scheme [a] [func [a] js-value]]]]
-
-[def is-undefined
-  [type-anno
-    [extern js is-undefined]
-    [func [js-value] i32]]]
+[def-js-extern is-undefined [func [js-value] i32]]
 
 [type object [v] [union]]
 
-[def object-to-kv-map
-  [type-anno
-    [extern js object-to-kv-map]
-    [type-scheme [v] [func [[object v]] [transient-kv-map word v]]]]]
-[def kv-map-to-object
-  [type-anno
-    [extern js kv-map-to-object]
-    [type-scheme [v] [func [[transient-kv-map word v]] [object v]]]]]
-[def object-get
-  [type-anno
-    [extern js object-get]
-    [func [js-value word] js-value]]]
-[def byte-array-from
-  [type-anno
-    [extern js byte-array-from]
-    [func [js-value] byte-array]]]
+[def-js-extern object-to-kv-map [type-scheme [v] [func [[object v]] [transient-kv-map word v]]]]
+[def-js-extern kv-map-to-object [type-scheme [v] [func [[transient-kv-map word v]] [object v]]]]
+[def-js-extern object-get [func [js-value word] js-value]]
+[def-js-extern byte-array-from [func [js-value] byte-array]]
+[def-js-extern js-apply [func [js-value [list js-value]] js-value]]

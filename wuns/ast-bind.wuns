@@ -4,7 +4,7 @@
 [type syntax-word []
   [record
     [word word]
-    [node [option syntax-node]]]]
+    [opt-form [option form]]]]
 
 [type btype []
   [union
@@ -92,6 +92,8 @@
     [def syntax-word bexp]
     [do [list btop]]
     [export [list syntax-word]]
+    [import syntax-word syntax-word btype-scheme]
+    [load syntax-word]
     ]]
 
 [defn bexp-recur [f]
@@ -194,7 +196,8 @@
 
     [type]
     [union-ctor union-desc i32]
-    [record-ctor] [record-proj record-desc i32]]]
+    [record-ctor] [record-proj record-desc i32]
+    [import syntax-word btype-scheme]]]
 
 [type diagnostic-severity []
   [union [error] [warning] [information] [hint]]]
@@ -229,7 +232,7 @@
   [if-let [w [try-get-word form]]
     [syntax-word
       w
-      [try-get-syntax-node form]]
+      [option/some form]]
     [logq-abort sword expected word]]]
 
 [defn try-get-enclosing-loop-context [lstack]
@@ -251,7 +254,7 @@
 
 [type form-to-ast-converter []
   [record
-    [form-to-top [func [form] btop]]
+    [form-to-top-async [func [form] [promise btop]]]
     [form-to-exp [func [form] bexp]]
     [errors [growable-list report-message]]
     [syntax-info syntax-info]]]
@@ -275,19 +278,11 @@
     [[word f64.eq] [word f64.lt] [word f64.le]] true
     false]]
 
-[defn mk-form-to-ast [current-directory]
+[defn mk-form-to-ast []
   [let
-    [eval-ctx [make-eval-context current-directory]
-     evaluator [make-evaluator externs-object-value eval-ctx]
+    [evaluator [make-evaluator]
      errors [growable-list]
      push-error [func pe [form msg] [push errors [report-message msg form [diagnostic-severity/error]]]]
-     eval-form [func ef [top-form]
-      [match [evaluate-result evaluator top-form]
-        [result/error error]
-        [push-error top-form [quote [runtime error when evaluating form]]]
-
-        [result/ok -]
-        [do]]]
      def-ctx [transient-kv-map]
      node-to-ldesc [transient-kv-map]
      node-to-def-desc [transient-kv-map]
@@ -416,7 +411,7 @@
                         [if-let [arity [try-get type-ctx fw]]
                           [when-not [eq n-of-args arity]
                             [push-error form [quote [wrong number of type arguments]]]]
-                          [push-error form [quote [undefined type]]]]
+                          [push-error [first l] [quote [undefined type]]]]
                         [btype/apply [sword [first l]] [list-map arg [rest l] [f2t arg]]]]]]]]]]]]
       [func form-to-type [form] [[mk-form-to-type [transient-kv-map]] form]]
       [func form-to-type-param-list [form]
@@ -475,10 +470,29 @@
               [list-map param regular-param-forms [sword param]]
               [match opt-rest-param [option/none] [option/none] [option/some v] [option/some [sword v]]]
               [list-map f [slice form-list 3 [size form-list]] [form-to-ast new-lstack f]]]]]]
+      [func form-to-top-eval-async [form]
+        [let [btop [form-to-top form]]
+          [insert-form form btop]
+          [match btop
+            [btop/do bs]
+            [if [is-empty bs]
+              [promise-resolve btop]
+              [logq-abort form-to-top-eval-async do at top level not supported]]
+
+            [btop/load file-name]
+            [promise-bind
+              [read-parse-file-async [syntax-word/word file-name]]
+              [func then [forms]
+                [promise-then
+                  [promises-seq forms form-to-top-eval-async]
+                  [func f [bforms] [btop/do bforms]]]]]
+
+            [promise-then
+              [evaluate-top-async evaluator form]
+              [func t [r] btop]]]]]
       [func form-to-top [form]
         [let
           [report-error [func r [msg] [push-error form msg]]]
-          [insert-form form
           [match form
           [form/word w]
           [logq-abort form-to-top word form not implemented]
@@ -497,10 +511,8 @@
                 [[word def]]
                 [do
                   [assert-n-args 2]
-                  [let [bf [btop/def [sword [get-arg 0]] [form-to-ast [local-stack/empty] [third l]]]]
-                    [set-def [get-arg 0] [def-desc/any]]
-                    [eval-form form]
-                    bf]]
+                  [set-def [get-arg 0] [def-desc/any]]
+                  [btop/def [sword [get-arg 0]] [form-to-ast [local-stack/empty] [third l]]]]
 
                 [[word defn] [word defexpr] [word defmacro]]
                 [let [f2f [form-to-func [local-stack/empty] form]
@@ -511,16 +523,12 @@
                         [[word defmacro]] [bdefunc-kind/macro]
                         [logq-abort form-to-top def kind not recognized]]]
                   [set-def [get-arg 0] [def-desc/defunc def-desc]]
-                  [eval-form form]
                   [btop/defunc def-desc f2f]]
 
                 [[word load]]
                 [do
                   [assert-n-args 1]
-                  [let [file-path [path-join current-directory [get-word [get-arg 0]]]
-                        bforms [list-map bf [read-file file-path] [form-to-top bf]]]
-                    [eval-form form]
-                    [btop/do bforms]]]
+                  [btop/load [get-sword [get-arg 0]]]]
 
                 [[word type]]
                 [let
@@ -590,7 +598,6 @@
                                   [logq-abort unknown type kind]]]
 
                               [logq-abort form-to-type-decl-kind not implemented]]]]]]]
-                  [eval-form form]
                   fb]
 
                 [[word export]]
@@ -602,6 +609,16 @@
                         [push-error f [quote [not a defined name]]]]
                       sw]]]
 
+                [[word import]]
+                [let [module-name [get-sword [get-arg 0]]
+                      module-import [get-sword [get-arg 1]]
+                      import-type [form-to-type-scheme [get-arg 2]]]
+                  [set-def [get-arg 1] [def-desc/import module-name import-type]]
+                  [btop/import
+                    module-name
+                    module-import
+                    import-type]]
+
                 [if-let [ddesc [try-get def-ctx first-word]]
                   [do
                     [set-kv-map node-to-def-desc [get-sword first-form] ddesc]
@@ -609,8 +626,8 @@
                       [def-desc/defunc defunc-desc]
                       [match defunc-desc
                         [bdefunc-kind/macro]
-                        [if-let [macro-func [try-get-macro eval-ctx first-word]]
-                          [form-to-top [interpreter-apply macro-func [rest l]]]
+                        [if-let [macro-func [try-get-macro evaluator first-word]]
+                          [form-to-top [apply macro-func [rest l]]]
                           [logq-abort form-to-top macro not found]]
 
                         [logq-abort form-to-top func/fexpr call at top level not supported]]
@@ -623,7 +640,7 @@
                     [btop/do [list]]]]]
 
               [form/list fl]
-              [logq-abort direct call at top not supported]]]]]]]
+              [logq-abort direct call at top not supported]]]]]]
       [func form-to-ast [lstack form]
         [let
           [report-error [func r [msg] [push-error form msg]]
@@ -867,8 +884,8 @@
                           [bexp/call-fexpr [bexp/var [get-sword first-form]] [rest l]]
 
                           [bdefunc-kind/macro]
-                          [if-let [macro-func [try-get-macro eval-ctx first-word]]
-                            [form-to-ast lstack [interpreter-apply macro-func [rest l]]]
+                          [if-let [macro-func [try-get-macro evaluator first-word]]
+                            [form-to-ast lstack [apply macro-func [rest l]]]
                             [logq-abort form-to-top macro not found]]
 
                           [bexp/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]]
@@ -882,12 +899,29 @@
               [form/list fl]
               [bexp/call [form-to-ast lstack [first l]] [list-map arg [rest l] [form-to-ast lstack arg]]]]]]]]]]
     [form-to-ast-converter
-      form-to-top
+      form-to-top-eval-async
       [func f2e [exp-form] [form-to-ast [local-stack/empty] exp-form]]
       errors
       [syntax-info
         [func try-get-ldesc [n] [try-get node-to-ldesc n]]
         [func try-get-def-desc [n] [try-get node-to-def-desc n]]
         [func try-get-form [n] [try-get bst-to-form n]]]]]]]
+
+[defn bind-forms [converter forms]
+  [let
+    [f2t [form-to-ast-converter/form-to-top-async converter]]
+    [promise-then
+      [promises-seq forms f2t]
+      [func then [btops]
+        [let
+          [errors [clone-growable-to-frozen-list [form-to-ast-converter/errors converter]]]
+
+          [when-not [is-empty errors]
+            [for-each error errors
+              [log [report-message/message error]]
+              [log [try-get-syntax-node [report-message/form error]]]]
+            [logq-abort bind-forms errors]]
+
+          btops]]]]]
 
 [export mk-form-to-ast]

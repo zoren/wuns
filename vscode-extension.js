@@ -1,5 +1,4 @@
 const vscode = require('vscode')
-const path = require('path')
 const { SemanticTokensLegend, SemanticTokensBuilder, SelectionRange, Range, Position } = vscode
 
 const makeStopWatch = () => {
@@ -76,14 +75,12 @@ const modificationModifier = encodeTokenModifiers('modification')
  * @param {vscode.TextDocument} document
  */
 const makeProvideDocumentSemanticTokensForms = async () => {
-  const { makeDefEnv, tryGetClosureKind, tryGetFormWord, tryGetFormList, treeToFormsSafeNoMeta, tryGetNodeFromForm } =
-    await import('./esm/core.js')
+  const { treeToFormsSafeNoMeta, tryGetNodeFromForm } = await import('./esm/parseTreeSitter.js')
+  const { tryGetClosureKind, tryGetFormWord, tryGetFormList } = await import('./esm/core.js')
   const { makeEvalForm } = await import('./esm/interpreter.js')
-  const { default: externs } = await import('./esm/runtime-lib/externs.js')
-  const provideDocumentSemanticTokens = (document) => {
-    const { fileName } = document
-    const defEnv = makeDefEnv(path.dirname(fileName))
-    const evalForm = makeEvalForm(externs, defEnv)
+
+  const provideDocumentSemanticTokens = async (document) => {
+    const { evalTop, getDef } = makeEvalForm()
 
     const tokensBuilder = new SemanticTokensBuilder(legend)
     const tree = parseDocumentTreeSitter(document)
@@ -93,8 +90,6 @@ const makeProvideDocumentSemanticTokensForms = async () => {
       if (!word) return console.error('expected word')
       const node = tryGetNodeFromForm(form)
       if (!node) return
-      // ignore if not in the same file, this can happen with macros
-      if (tree !== node.tree) return
       const { row, column } = node.startPosition
       tokensBuilder.push(row, column, word.length, tokenType, tokenModifiers)
     }
@@ -106,7 +101,125 @@ const makeProvideDocumentSemanticTokensForms = async () => {
       if (tryGetFormWord(form)) pushToken(form, typeTokenType)
       else getListOrEmpty(form).forEach(goType)
     }
-    const go = (form) => {
+    const letLoopSpecial = (_headWord, tail) => {
+      const [bindingsForm, ...bodies] = tail
+      const bindings = getListOrEmpty(bindingsForm)
+      for (let i = 0; i < bindings.length - 1; i += 2) {
+        pushTokenWithModifier(bindings[i], variableTokenType, declarationModifier)
+        goExp(bindings[i + 1])
+      }
+      for (const body of bodies) goExp(body)
+    }
+    const funcSpecial = (headWord, [name, paramsForm, ...bodies]) => {
+      pushToken(name, headWord === 'macro' ? macroTokenType : functionTokenType)
+      for (const param of getListOrEmpty(paramsForm)) pushToken(param, parameterTokenType)
+      for (const body of bodies) goExp(body)
+    }
+    const expSpecialForms = {
+      i32: (_headWord, tail) => {
+        pushToken(tail[0], tokenTypeNumber)
+      },
+      f64: (_headWord, tail) => {
+        pushToken(tail[0], tokenTypeNumber)
+      },
+      word: (_headWord, tail) => {
+        pushToken(tail[0], stringTokenType)
+      },
+      if: (_headWord, tail) => {
+        for (const form of tail) goExp(form)
+      },
+      switch: (_headWord, tail) => {
+        goExp(tail[0])
+        for (let i = 1; i < tail.length - 1; i += 2) {
+          const constForm = tail[i]
+          for (const form of getListOrEmpty(constForm)) goExp(form)
+          goExp(tail[i + 1])
+        }
+        if (tail.length % 2 === 0) goExp(tail.at(-1))
+      },
+      match: (_headWord, tail) => {
+        goExp(tail[0])
+        for (let i = 1; i < tail.length - 1; i += 2) {
+          const patternList = getListOrEmpty(tail[i])
+          pushToken(patternList[0], enumMemberTokenType)
+          for (let j = 1; j < patternList.length; j++)
+            pushTokenWithModifier(patternList[j], variableTokenType, declarationModifier)
+          goExp(tail[i + 1])
+        }
+        if (tail.length % 2 === 0) goExp(tail.at(-1))
+      },
+      do: (_headWord, tail) => {
+        for (const form of tail) goExp(form)
+        // if at top level or inside a do at top level we need to eval def forms
+      },
+      let: letLoopSpecial,
+      loop: letLoopSpecial,
+      continue: (_headWord, tail) => {
+        for (let i = 0; i < tail.length; i += 2) {
+          pushTokenWithModifier(tail[i], variableTokenType, modificationModifier)
+          goExp(tail[i + 1])
+        }
+      },
+      letfn: (_headWord, tail) => {
+        const [functionsForm, body] = tail
+        for (const func of getListOrEmpty(functionsForm)) {
+          const [head, ...tail] = getListOrEmpty(func)
+          const fnHeadWord = tryGetFormWord(head)
+          if (fnHeadWord !== 'func' && fnHeadWord !== 'fexpr' && fnHeadWord !== 'macro') continue
+          pushToken(head, keywordTokenType)
+          funcSpecial(fnHeadWord, tail)
+        }
+        goExp(body)
+      },
+      func: funcSpecial,
+      intrinsic: (_headWord, tail) => {
+        pushToken(tail[0], tokenTypeOperator)
+      },
+      'type-anno': (_headWord, tail) => {
+        goExp(tail[0])
+        goType(tail[1])
+      },
+    }
+    const topSpecialForms = {
+      defn: (headWord, tail) => {
+        funcSpecial(headWord, tail)
+      },
+      defexpr: (headWord, tail) => {
+        funcSpecial(headWord, tail)
+      },
+      defmacro: (headWord, tail) => {
+        funcSpecial(headWord, tail)
+      },
+      def: (_headWord, tail) => {
+        const [cname, val] = tail
+        pushTokenWithModifier(cname, variableTokenType, declarationModifier)
+        goExp(val)
+      },
+      type: (_headWord, tail) => {
+        for (let i = 0; i < tail.length; i += 3) {
+          pushTokenWithModifier(tail[i], typeTokenType, declarationModifier)
+          for (const typeParam of getListOrEmpty(tail[i + 1])) pushToken(typeParam, typeParameterTokenType)
+          goType(tail[i + 2])
+        }
+      },
+      load: (_headWord, tail) => {
+        if (tail.length === 1 && tryGetFormWord(tail[0])) pushToken(tail[0], stringTokenType)
+      },
+      export: (_headWord, tail) => {
+        for (const form of tail) pushToken(form, variableTokenType)
+      },
+      do: (_headWord, tail) => {
+        for (const form of tail) goTop(form)
+        // if at top level or inside a do at top level we need to eval def forms
+      },
+      import: (_headWord, tail) => {
+        pushToken(tail[0], stringTokenType)
+        pushTokenWithModifier(tail[1], variableTokenType, declarationModifier)
+        goType(tail[2])
+      },
+    }
+
+    const goExp = (form) => {
       if (!form) return
       if (tryGetFormWord(form)) {
         pushToken(form, variableTokenType)
@@ -121,147 +234,28 @@ const makeProvideDocumentSemanticTokensForms = async () => {
       const [head, ...tail] = list
       const headWord = tryGetFormWord(head)
       if (!headWord) {
-        go(head)
-        for (const form of tail) go(form)
+        goExp(head)
+        for (const form of tail) goExp(form)
         return
       }
-      const runForm = () => {
-        try {
-          // eval for side effects so macros are defined and can be expanded
-          // todo only eval def and do forms, to avoid evaling top level forms, that may crash
-          evalForm(form)
-        } catch (e) {
-          console.error('provideDocumentSemanticTokensForms evalForm error', e.message)
-          console.error(e)
-        }
-      }
-      const letLoopSpecial = () => {
-        const [bindingsForm, ...bodies] = tail
-        const bindings = getListOrEmpty(bindingsForm)
-        for (let i = 0; i < bindings.length - 1; i += 2) {
-          pushTokenWithModifier(bindings[i], variableTokenType, declarationModifier)
-          go(bindings[i + 1])
-        }
-        for (const body of bodies) go(body)
-      }
-      const funcSpecial = (headWord, [name, paramsForm, ...bodies]) => {
-        pushToken(name, headWord === 'macro' ? macroTokenType : functionTokenType)
-        for (const param of getListOrEmpty(paramsForm)) pushToken(param, parameterTokenType)
-        for (const body of bodies) go(body)
-      }
-      const specialForms = {
-        i32: () => {
-          pushToken(tail[0], tokenTypeNumber)
-        },
-        f64: () => {
-          pushToken(tail[0], tokenTypeNumber)
-        },
-        word: () => {
-          pushToken(tail[0], stringTokenType)
-        },
-        if: () => {
-          for (const form of tail) go(form)
-        },
-        switch: () => {
-          go(tail[0])
-          for (let i = 1; i < tail.length - 1; i += 2) {
-            const constForm = tail[i]
-            for (const form of getListOrEmpty(constForm)) go(form)
-            go(tail[i + 1])
-          }
-          go(tail.at(-1))
-        },
-        match: () => {
-          go(tail[0])
-          for (let i = 1; i < tail.length - 1; i += 2) {
-            const patternList = getListOrEmpty(tail[i])
-            pushToken(patternList[0], enumMemberTokenType)
-            for (let j = 1; j < patternList.length; j++)
-              pushTokenWithModifier(patternList[j], variableTokenType, declarationModifier)
-            go(tail[i + 1])
-          }
-          if (tail.length % 2 === 0) go(tail.at(-1))
-        },
-        do: () => {
-          for (const form of tail) go(form)
-          // if at top level or inside a do at top level we need to eval def forms
-        },
-        let: letLoopSpecial,
-        loop: letLoopSpecial,
-        continue: () => {
-          for (let i = 0; i < tail.length; i += 2) {
-            pushTokenWithModifier(tail[i], variableTokenType, modificationModifier)
-            go(tail[i + 1])
-          }
-        },
-        letfn: () => {
-          const [functionsForm, body] = tail
-          for (const func of getListOrEmpty(functionsForm)) {
-            const [head, ...tail] = getListOrEmpty(func)
-            const headWord = tryGetFormWord(head)
-            if (headWord !== 'func' && headWord !== 'fexpr' && headWord !== 'macro') continue
-            pushToken(head, keywordTokenType)
-            funcSpecial(headWord, tail)
-          }
-          go(body)
-        },
-        func: () => funcSpecial(headWord, tail),
-        defn: () => {
-          funcSpecial(headWord, tail)
-          runForm()
-        },
-        defexpr: () => {
-          funcSpecial(headWord, tail)
-          runForm()
-        },
-        defmacro: () => {
-          funcSpecial(headWord, tail)
-          runForm()
-        },
-        def: () => {
-          const [cname, val] = tail
-          pushTokenWithModifier(cname, variableTokenType, declarationModifier)
-          go(val)
-          runForm()
-        },
-        extern: () => {
-          for (const form of tail) pushToken(form, stringTokenType)
-        },
-        intrinsic: () => {
-          pushToken(form[0], tokenTypeOperator)
-        },
-        'type-anno': () => {
-          go(tail[0])
-          goType(tail[1])
-        },
-        type: () => {
-          for (let i = 0; i < tail.length; i += 3) {
-            pushTokenWithModifier(tail[i], typeTokenType, declarationModifier)
-            for (const typeParam of getListOrEmpty(tail[i + 1])) pushToken(typeParam, typeParameterTokenType)
-            goType(tail[i + 2])
-          }
-          runForm()
-        },
-        load: () => {
-          if (tail.length === 1 && tryGetFormWord(tail[0])) pushToken(tail[0], stringTokenType)
-          runForm()
-        },
-        export: () => {
-          for (const form of tail) pushToken(form, variableTokenType)
-        },
-      }
-      const specialHandler = specialForms[headWord]
-      if (specialHandler) {
+      const expSpecialHandler = expSpecialForms[headWord]
+      if (expSpecialHandler) {
         pushToken(head, keywordTokenType)
-        specialHandler(tail)
+        expSpecialHandler(headWord, tail)
         return
+      }
+      const topSpecialHandler = topSpecialForms[headWord]
+      if (topSpecialHandler) {
+        pushToken(head, keywordTokenType)
+        topSpecialHandler(headWord, tail)
+        return console.error('top special form not allowed in exp', headWord)
       }
       // check if headWord is a defed macro or fexpr, or a func
-      const headValue = defEnv.get(headWord)
+      const headValue = getDef(headWord)
       switch (tryGetClosureKind(headValue)) {
         case 'macro':
           pushToken(head, macroTokenType)
-          go(headValue(...tail))
+          goExp(headValue(...tail))
           return
         case 'fexpr':
           pushToken(head, functionTokenType)
@@ -273,7 +267,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
           return
         case 'func':
           pushToken(head, functionTokenType)
-          for (const form of tail) go(form)
+          for (const form of tail) goExp(form)
           return
         case null:
           break
@@ -281,17 +275,80 @@ const makeProvideDocumentSemanticTokensForms = async () => {
           throw new Error('unexpected closure kind')
       }
       pushToken(head, functionTokenType)
-      for (const form of tail) go(form)
+      for (const form of tail) goExp(form)
     }
+    const goTop = async (form) => {
+      if (!form) return
+      const list = tryGetFormList(form)
+      if (!list) {
+        console.error('expected list', form)
+        return
+      }
+      if (list.length === 0) return
+      const [head, ...tail] = list
+      const headWord = tryGetFormWord(head)
+      if (!headWord) {
+        // goTop(head)
+        // for (const form of tail) goTop(form)
+        return console.error('expected word')
+      }
+      const topSpecialHandler = topSpecialForms[headWord]
+      if (topSpecialHandler) {
+        pushToken(head, keywordTokenType)
+        topSpecialHandler(headWord, tail)
+        try {
+          // eval for side effects so macros are defined and can be expanded
+          // todo only eval def and do forms, to avoid evaling top level forms, that may crash
+          await evalTop(form)
+        } catch (e) {
+          console.error('provideDocumentSemanticTokensForms evalForm error', e.message)
+          console.error(e)
+        }
+        return
+      }
+      const expSpecialHandler = expSpecialForms[headWord]
+      if (expSpecialHandler) {
+        pushToken(head, keywordTokenType)
+        expSpecialHandler(headWord, tail)
+        const node = tryGetNodeFromForm(form)
+        return console.error('exp special form not allowed at top level', headWord, node, node.startPosition)
+      }
+      // check if headWord is a defed macro or fexpr, or a func
+      const headValue = getDef(headWord)
+      switch (tryGetClosureKind(headValue)) {
+        case 'macro':
+          pushToken(head, macroTokenType)
+          const macroForm = headValue(...tail)
+          return goTop(macroForm)
+        case 'fexpr':
+          return console.log('top-level fexpr not allowed')
+        case 'func':
+          return console.log('top-level fexpr not allowed')
+        case null:
+          break
+        default:
+          throw new Error('unexpected closure kind')
+      }
+      pushToken(head, functionTokenType)
+      // for (const form of tail) await goTop(form)
+    }
+
     try {
-      for (const topForm of treeToFormsSafeNoMeta(tree)) go(topForm)
+      for (const topForm of treeToFormsSafeNoMeta(tree)) await goTop(topForm)
     } catch (e) {
       console.error('provideDocumentSemanticTokensForms error catch', e)
     }
     return tokensBuilder.build()
   }
+
   return {
-    provideDocumentSemanticTokens,
+    provideDocumentSemanticTokens: (document) => {
+      try {
+        return provideDocumentSemanticTokens(document)
+      } catch (e) {
+        console.error('provideDocumentSemanticTokens error catch', e)
+      }
+    },
   }
 }
 
@@ -365,84 +422,141 @@ const serverityToDiagnosticSeverity = (severity) => {
   }
 }
 
-const addCheckActiveDocumentCommand = async (context) => {
-  const { treeToFormsSafeNoMeta, tryGetNodeFromForm, printFormMessage } = await import('./esm/core.js')
-  const check2 = await import('./esm/artifacts/check2.formatted.js')
-  const makeFormToAstConverter = check2['mk-form-to-ast']
-  const mkGlobal = check2['make-global-context-from-syntax-info']
-  const mkChecker = check2['make-checker']
-  const diagnosticCollection = languages.createDiagnosticCollection('wuns')
-  const diagnose = () => {
-    const doc = getActiveTextEditorDocument()
-    if (!doc) return console.error('no active text editor')
-    const tree = parseDocumentTreeSitter(doc)
-    const converter = makeFormToAstConverter(path.dirname(doc.fileName))
+const addBindCheckActiveDocumentCommand = async (context) => {
+  const { printFormMessage, parseString, print, tryGetFormInfo, getFormInfoAsRange } = await import('./esm/core.js')
+  const getRangeFromForm = (form) => {
+    const info = tryGetFormInfo(form)
+    if (!info) {
+      console.error('diagnose error no info', form)
+      return null
+    }
+    const { start, end } = getFormInfoAsRange(info)
+    return new Range(pointToPosition(start), pointToPosition(end))
+  }
+  const astBind = await import('./esm/ast-bind.js')
+  const makeFormToAstConverter = astBind['mk-form-to-ast']
+
+  const diagnosticCollection = languages.createDiagnosticCollection('wuns-bind')
+  const bindCheck = async () => {
+    const document = getActiveTextEditorDocument()
+    if (!document) return console.error('no active text editor')
+    const text = document.getText()
+    const { fileName } = document
+    const forms = parseString(text, fileName)
+    const converter = makeFormToAstConverter()
     const formToTop = converter['form-to-top']
     const bindErrors = converter.errors
-    const syntaxInfo = converter['syntax-info']
-    const checkContext = mkGlobal(syntaxInfo)
-    const checker = mkChecker(checkContext)
-    const checkTop = checker['check-top']
     const diagnosticsForFile = []
-    for (const form of treeToFormsSafeNoMeta(tree)) {
-      const topForm = formToTop(form)
-      if (bindErrors.length) continue
-      checkTop(topForm)
+    for (const form of forms) {
+      try {
+        await formToTop(form)
+      } catch (e) {
+        console.error('formToTop error', print(form), e)
+        break
+      }
     }
     for (const error of bindErrors) {
       const { form, message, severity } = error
-      const node = tryGetNodeFromForm(form)
-      if (!node) {
-        console.error('diagnose error no node', error, form)
-        continue
-      }
-      const nodeTree = node.tree
-      if (nodeTree !== tree) {
-        console.error('diagnose error different tree', error, form)
-        continue
-      }
-      diagnosticsForFile.push(
-        new vscode.Diagnostic(
-          rangeFromNode(node),
-          'binding: ' + printFormMessage(message),
-          serverityToDiagnosticSeverity(severity),
-        ),
+      const range = getRangeFromForm(form)
+      if (!range) continue
+      const diag = new vscode.Diagnostic(
+        range,
+        'binding: ' + printFormMessage(message),
+        serverityToDiagnosticSeverity(severity),
       )
+      diagnosticsForFile.push(diag)
     }
-    for (const error of checkContext.messages) {
-      const { message, severity } = error
-      const optNode = error['opt-node']
-      if (optNode.tag !== 'option/some') continue
-      const node = optNode.args[0]
-      const nodeTree = node.tree
-      if (nodeTree !== tree) {
-        console.error('diagnose error different tree', error)
-        continue
+
+    diagnosticCollection.clear()
+    diagnosticCollection.set(document.uri, diagnosticsForFile)
+  }
+  context.subscriptions.push(
+    diagnosticCollection,
+    commands.registerCommand('wunslang.bindcheck', () => {
+      try {
+        bindCheck()
+      } catch (e) {
+        console.error('bind check threw error', e)
       }
+    }),
+  )
+
+  const check2 = await import('./esm/check2.js')
+
+  const bindTypeCheckForms = check2['bind-type-check-forms']
+
+  // const diagnosticCollection = languages.createDiagnosticCollection('wuns')
+  const bindType = async () => {
+    const document = getActiveTextEditorDocument()
+    if (!document) return console.error('no active text editor')
+    const text = document.getText()
+    const { fileName } = document
+    const forms = parseString(text, fileName)
+
+    const diagnosticsForFile = []
+    const checkRes = await bindTypeCheckForms(forms)
+    console.log('checkRes', checkRes)
+    const bindErrors = checkRes.fst
+    for (const error of bindErrors) {
+      const { form, message, severity } = error
+      const range = getRangeFromForm(form)
+      if (!range) continue
+      const diag = new vscode.Diagnostic(
+        range,
+        'binding: ' + printFormMessage(message),
+        serverityToDiagnosticSeverity(severity),
+      )
+      diagnosticsForFile.push(diag)
+    }
+    for (const error of checkRes.snd) {
+      const { message, severity } = error
+      const optForm = error['opt-form']
+      if (optForm.tag !== 'option/some') continue
+      const form = optForm.args[0]
+      const range = getRangeFromForm(form)
+      if (!range) continue
       diagnosticsForFile.push(
         new vscode.Diagnostic(
-          rangeFromNode(node),
+          range,
           'type check: ' + printFormMessage(message),
           serverityToDiagnosticSeverity(severity),
         ),
       )
     }
     diagnosticCollection.clear()
-    diagnosticCollection.set(doc.uri, diagnosticsForFile)
+    diagnosticCollection.set(document.uri, diagnosticsForFile)
   }
-  context.subscriptions.push(diagnosticCollection, commands.registerCommand('wunslang.check', diagnose))
+  context.subscriptions.push(
+    diagnosticCollection,
+    commands.registerCommand('wunslang.typecheck', () => {
+      try {
+        bindType()
+      } catch (e) {
+        console.error('type check threw error', e)
+      }
+    }),
+  )
 }
 
 /**
  * @param {vscode.ExtensionContext} context
  */
 async function activate(context) {
-  const { parseTagTreeSitter } = await import('./esm/core.js')
+  const { parseTagTreeSitter } = await import('./esm/parseTreeSitter.js')
+  const { parseString } = await import('./esm/core.js')
+
   parseDocumentTreeSitter = (document) => {
-    const watch = makeStopWatch()
-    const tree = parseTagTreeSitter(document.getText(), document.fileName)
-    if (tree.rootNode.hasError) console.error('tree-sitter error', document.fileName)
-    console.log('parse treesitter took', watch(), 'ms', document.fileName)
+    const text = document.getText()
+    const { fileName } = document
+    const watchTreeSitter = makeStopWatch()
+    const tree = parseTagTreeSitter(text, fileName)
+    if (tree.rootNode.hasError) console.error('tree-sitter error', fileName)
+    const elapsedTreeSitter = watchTreeSitter()
+
+    const watchJsParser = makeStopWatch()
+    const forms = parseString(text, fileName)
+    const elapsedJsParser = watchJsParser()
+    console.log(fileName, 'treesitter took', elapsedTreeSitter, 'ms', 'js parser took', elapsedJsParser, 'ms', fileName)
     return tree
   }
   console.log('starting wuns lang extension: ' + context.extensionPath)
@@ -453,7 +567,7 @@ async function activate(context) {
     languages.registerDocumentSemanticTokensProvider(selector, documentSemanticTokensProvider, legend),
     languages.registerSelectionRangeProvider(selector, { provideSelectionRanges }),
   )
-  await addCheckActiveDocumentCommand(context)
+  await addBindCheckActiveDocumentCommand(context)
   console.log('Congratulations, your extension "wunslang" is now active!')
 }
 

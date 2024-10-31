@@ -1,6 +1,3 @@
-import { isJSReservedWord } from '../utils.js'
-import { resultError, resultOk } from '../core.js'
-
 const binopMap = {
   add: '+',
   sub: '-',
@@ -25,6 +22,73 @@ const jsBinopToString = (op) => {
   const mappedOp = binopMap[op.slice(6)]
   if (!mappedOp) throw new Error(`unknown binop: ${op}`)
   return mappedOp
+}
+
+const isJSReservedWord = (word) => {
+  return [
+    'abstract',
+    'await',
+    'boolean',
+    'break',
+    'byte',
+    'case',
+    'catch',
+    'char',
+    'class',
+    'const',
+    'continue',
+    'debugger',
+    'default',
+    'delete',
+    'do',
+    'double',
+    'else',
+    'enum',
+    'export',
+    'extends',
+    'false',
+    'final',
+    'finally',
+    'float',
+    'for',
+    'function',
+    'goto',
+    'if',
+    'implements',
+    'import',
+    'in',
+    'instanceof',
+    'int',
+    'interface',
+    'let',
+    'long',
+    'native',
+    'new',
+    'null',
+    'package',
+    'private',
+    'protected',
+    'public',
+    'return',
+    'short',
+    'static',
+    'super',
+    'switch',
+    'synchronized',
+    'this',
+    'throw',
+    'throws',
+    'transient',
+    'true',
+    'try',
+    'typeof',
+    'var',
+    'void',
+    'volatile',
+    'while',
+    'with',
+    'yield',
+  ].includes(word)
 }
 
 const escapeIdentifier = (id) => {
@@ -71,6 +135,8 @@ const jsExpToString = (js) => {
       return `(${paramsToString()}) => ${jsStmtToString(arg(2))}`
     case 'js-exp/call':
       return `(${jsExpToString(arg(0))})(${arg(1).map(jsExpToString).join(', ')})`
+    case 'js-exp/paren':
+      return `(${jsExpToString(arg(0))})`
     default:
       throw new Error(`unknown js exp tag: ${tag}`)
   }
@@ -109,6 +175,8 @@ const jsStmtToString = (js) => {
       return arg(0).map(jsStmtToString).join(';\n')
     case 'js-stmt/const-decl':
       return `const ${escapeIdentifier(arg(0))} = ${jsExpToString(arg(1))}`
+    case 'js-stmt/let-decl':
+      return `let ${escapeIdentifier(arg(0))} = ${jsExpToString(arg(1))}`
     case 'js-stmt/assign':
       return `${escapeIdentifier(arg(0))} = ${jsExpToString(arg(1))}`
     case 'js-stmt/exp':
@@ -119,6 +187,10 @@ const jsStmtToString = (js) => {
       return `while (${jsExpToString(arg(0))}) ${jsStmtToString(arg(1))}`
     case 'js-stmt/import':
       return `import ${arg(0)} from '${arg(1)}'`
+    case 'js-stmt/import-as-string': {
+      const imports = arg(0).map(({ fst, snd }) => `'${fst}' as ${escapeIdentifier(snd)}`)
+      return `import { ${imports} } from '${arg(1)}'`
+    }
     case 'js-stmt/export':
       // export { name1, /* …, */ nameN };
       return `export { ${arg(0).map(escapeIdentifier).join(', ')} }`
@@ -133,42 +205,36 @@ const jsStmtToString = (js) => {
   }
 }
 
-const runJs = (jsSrc, externs) => {
-  // console.log(jsSrc)
-  try {
-    const runFunc = new Function('externs', jsSrc)
-    const before = performance.now()
-    const r = runFunc(externs)
-    const after = performance.now()
-    // console.log('runJs time', after - before)
-    return resultOk(r)
-  } catch (e) {
-    if (e instanceof SyntaxError || e instanceof TypeError || e instanceof ReferenceError) {
-      console.log('runJs error')
-      console.log(e)
-      console.log(jsSrc)
-      // return error(`SyntaxError: ${e.message}`)
-      // return error(e)
-    }
-    return resultError(e)
-  }
-}
+export { jsStmtToString as 'js-stmt-to-string' }
 
-export const run_js_stmt = (res, externs) => {
-  const jsSrc = jsStmtToString(res)
-  // console.log('runJsStmt src', jsSrc)
-  return runJs(jsSrc, externs)
-}
+// const runJs = (jsSrc, externs) => {
+//   // console.log(jsSrc)
+//   try {
+//     const runFunc = new Function('externs', jsSrc)
+//     const before = performance.now()
+//     const r = runFunc(externs)
+//     const after = performance.now()
+//     // console.log('runJs time', after - before)
+//     return resultOk(r)
+//   } catch (e) {
+//     if (e instanceof SyntaxError || e instanceof TypeError || e instanceof ReferenceError) {
+//       console.log('runJs error')
+//       console.log(e)
+//       console.log(jsSrc)
+//       // return error(`SyntaxError: ${e.message}`)
+//       // return error(e)
+//     }
+//     return resultError(e)
+//   }
+// }
 
-export const call_js_func = (func, args) => {
-  if (typeof func !== 'function') {
-    console.log('func', func)
-    throw new Error('not a function')
-  }
-  const res = func(...args)
-  console.log('callJsFunc', res)
-  return res
-}
+// const run_js_stmt = (res, externs) => {
+//   const jsSrc = jsStmtToString(res)
+//   // console.log('runJsStmt src', jsSrc)
+//   return runJs(jsSrc, externs)
+// }
+
+// export { run_js_stmt as 'run-js-stmt' }
 
 import * as prettier from 'prettier'
 
@@ -180,32 +246,68 @@ const prettierOptions = {
   parser: 'babel',
 }
 
-import fs from 'fs'
+const format_js_src_async = (jsSrc) => prettier.format(jsSrc, prettierOptions)
 
-export const write_js_stmt = (file_name, stmt) => {
-  const jsSrc = jsStmtToString(stmt)
-  fs.writeFileSync(file_name + '.orig.js', jsSrc)
-  prettier.format(jsSrc, prettierOptions).then((formatted) => {
-    fs.writeFileSync(file_name + '.formatted.js', formatted)
-  })
-}
+export { format_js_src_async as 'format-js-src-async' }
+
+// import fs from 'node:fs'
+
+// const write_js_stmt = (file_name, stmt) => {
+//   const jsSrc = jsStmtToString(stmt)
+//   fs.writeFileSync(file_name + '.orig.js', jsSrc)
+//   prettier.format(jsSrc, prettierOptions).then((formatted) => {
+//     fs.writeFileSync(file_name + '.formatted.js', formatted)
+//   })
+// }
+
+// export { write_js_stmt as 'write-js-stmt' }
 
 export const identity = (v) => v
-export const is_undefined = (v) => v === undefined
-export const object_to_kv_map = (obj) => {
+const to_js_value = (v) => v
+export { to_js_value as 'to-js-value' }
+const is_undefined = (v) => v === undefined
+export { is_undefined as 'is-undefined' }
+const object_to_kv_map = (obj) => {
   if (typeof obj !== 'object') throw new Error('expects object')
   return new Map(Object.entries(obj))
 }
+export { object_to_kv_map as 'object-to-kv-map' }
 
-export const kv_map_to_object = (map) => {
+const kv_map_to_object = (map) => {
   if (!(map instanceof Map)) throw new Error('expects map')
   for (const [k] of map) if (typeof k !== 'string') throw new Error('expects string keys')
   return Object.fromEntries(map)
 }
+export { kv_map_to_object as 'kv-map-to-object' }
 
-export const byte_array_from = (v) => new Uint8Array(v)
-export const object_get = (obj, key) => {
+const byte_array_from = (v) => new Uint8Array(v)
+export { byte_array_from as 'byte-array-from' }
+const object_get = (obj, key) => {
   if (typeof obj !== 'object') throw new Error('expects object')
   return obj[key]
 }
-export const performance_now = () => performance.now()
+export { object_get as 'object-get' }
+const performance_now = () => performance.now()
+export { performance_now as 'performance-now' }
+const console_log = (...v) => console.log(...v)
+export { console_log as 'console-log' }
+
+const promise_resolve = (v) => Promise.resolve(v)
+export { promise_resolve as 'promise-resolve' }
+
+const promise_bind = (p, f) => p.then(f)
+export { promise_bind as 'promise-bind' }
+
+const promise_then = (p, f) => p.then(f)
+export { promise_then as 'promise-then' }
+
+const promises_seq = (l, f) => {
+  let p = Promise.resolve()
+  const results = []
+  for (const x of l) p = p.then(() => f(x)).then((r) => results.push(r))
+  return p.then(() => results)
+}
+export { promises_seq as 'promises-seq' }
+
+const js_apply = (f, args) => f(...args)
+export { js_apply as 'js-apply' }

@@ -1,29 +1,45 @@
-import { isDefEnv, isForm, langUndefined, resultError, resultOk } from '../core.js'
+import { isForm, optionNone, makeOptionSome, resultError, resultOk } from '../core.js'
 import { makeEvalForm } from '../interpreter.js'
 
-export const make_evaluator = (externs, def_env) => {
-  if (!isDefEnv(def_env)) throw new Error('make-evaluator expects context')
-  return makeEvalForm(externs, def_env)
+const make_evaluator = () => {
+  return makeEvalForm()
 }
 
-// these externs are defined here to avoid a circular dependency
-export const evaluate = (eval_form, form) => {
-  if (!isForm(form)) throw new Error('evaluate-result expects form')
-  try {
-    eval_form(form)
-  } catch (e) {
-    console.error('evaluate error discarded')
-    console.log(form)
-    console.error(e)
-  }
-  return langUndefined
-}
+export { make_evaluator as 'make-evaluator' }
 
-export const evaluate_result = (eval_form, form) => {
-  if (!isForm(form)) throw new Error('evaluate-result expects form')
+const evaluate_top = (evaluator, top_form) => {
+  if (!isForm(top_form)) throw new Error('eval-top expects form')
   try {
-    return resultOk(eval_form(form))
+    return resultOk(evaluator.evalTop(top_form))
   } catch (e) {
     return resultError(e)
   }
 }
+
+export { evaluate_top as 'evaluate-top' }
+
+const evaluate_top_async = async (evaluator, top_form) => {
+  if (!isForm(top_form)) throw new Error('eval-top-async expects form')
+  return evaluator.evalTop(top_form)
+}
+
+export { evaluate_top_async as 'evaluate-top-async' }
+
+const evaluate_exp = (evaluator, exp_form) => {
+  if (!isForm(exp_form)) throw new Error('eval-exp expects form')
+  try {
+    return resultOk(evaluator.evalExp(exp_form))
+  } catch (e) {
+    return resultError(e)
+  }
+}
+
+export { evaluate_exp as 'evaluate-exp' }
+
+const try_get_macro = (evaluator, name) => {
+  if (typeof name !== 'string') throw new Error('try-get-macro expects string')
+  const value = evaluator.tryGetMacro(name)
+  return value ? makeOptionSome(value) : optionNone
+}
+
+export { try_get_macro as 'try-get-macro' }

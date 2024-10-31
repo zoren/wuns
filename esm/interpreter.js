@@ -8,26 +8,22 @@ const setEnv = (env, varName, value) => {
   env.set(varName, value)
 }
 
-import path from 'node:path'
-
 import {
   getRecordType,
-  isDefEnv,
   isTaggedValue,
   langUndefined,
   makeList,
   makeRecordFromObj,
   makeValueTagger,
-  readFile,
+  parseString,
   tryGetFormList,
   tryGetFormWord,
   makeClosure,
   tryGetClosureKind,
   makeFormWord,
   makeFormList,
-  tryGetNodeFromForm,
 } from './core.js'
-
+import { 'read-file-async' as read_file_async } from './runtime-lib/files.js'
 class EvalError extends Error {
   constructor(message, form, innerError) {
     super(message)
@@ -48,93 +44,53 @@ const getFormList = (form) => {
   throw new EvalError('expected list', form)
 }
 
-import { setJSFunctionName } from './utils.js'
-
-const intrinsics = {}
-
-{
-  const pushNamedFunc = (fname, ...args) => {
-    const last = args.at(-1)
-    const f = Function(
-      'a',
-      'b',
-      `
-    if (typeof a !== 'number') throw new Error('${fname} first arg is not a number');
-    if (typeof b !== 'number') throw new Error('${fname} second arg is not a number');
-    return (${last})`,
-    )
-    setJSFunctionName(f, fname)
-    intrinsics[fname] = Object.freeze(f)
-  }
-
-  const i32Instructions = [
-    { name: 'add', op: '+' },
-    { name: 'sub', op: '-', alias: 'subtract' },
-    { name: 'mul', op: '*', alias: 'multiply' },
-    { name: 'div-s', op: '/', alias: 'divide-signed' },
-    { name: 'rem-s', op: '%', alias: 'remainder-signed' },
-
-    { name: 'eq', op: '===', alias: 'equals' },
-    { name: 'ne', op: '!==', alias: 'not-equals' },
-
-    { name: 'lt-s', op: '<', alias: 'less-than-signed' },
-    { name: 'gt-s', op: '>', alias: 'greater-than-signed' },
-    { name: 'le-s', op: '<=', alias: 'less-than-or-equal-signed' },
-    { name: 'ge-s', op: '>=', alias: 'greater-than-or-equal-signed' },
-
-    { name: 'and', op: '&', alias: 'bitwise-and' },
-    { name: 'or', op: '|', alias: 'bitwise-ior' },
-    { name: 'xor', op: '^', alias: 'bitwise-xor' },
-    { name: 'shl', op: '<<', alias: 'bitwise-shift-left' },
-    { name: 'shr-s', op: '>>', alias: 'bitwise-shift-right' },
-    { name: 'shr-u', op: '>>>', alias: 'bitwise-shift-right-unsigned' },
-  ]
-  for (const { op, name } of i32Instructions) {
-    pushNamedFunc(`i32.${name}`, `(a ${op} b) | 0`)
-  }
-
-  const f64ArithInstructions = [
-    { name: 'add', op: '+' },
-    { name: 'sub', op: '-' },
-    { name: 'mul', op: '*' },
-    { name: 'div', op: '/' },
-  ]
-  for (const { op, name } of f64ArithInstructions) {
-    pushNamedFunc(`f64.${name}`, `(a ${op} b)`)
-  }
-
-  const f64CmpInstructions = [
-    { name: 'eq', op: '===' },
-    { name: 'ne', op: '!==' },
-
-    { name: 'lt', op: '<' },
-    { name: 'gt', op: '>' },
-    { name: 'le', op: '<=' },
-    { name: 'ge', op: '>=' },
-  ]
-  for (const { op, name } of f64CmpInstructions) {
-    pushNamedFunc(`f64.${name}`, `(a ${op} b) | 0`)
-  }
-
-  const unreachable = () => {
-    throw new Error('unreachable')
-  }
-  Object.freeze(unreachable)
-  intrinsics.unreachable = unreachable
-  Object.freeze(intrinsics)
-}
+import { intrinsics } from './intrinsics.js'
 
 const doFormWord = makeFormWord('do')
 const makeDoForm = (forms) => makeFormList(makeList(doFormWord, ...forms))
 
-export const makeEvalForm = (externs, defEnv) => {
-  if (!isDefEnv(defEnv)) throw new Error('first argument must be a defEnv')
-  const { currentDir } = defEnv
-  if (typeof currentDir !== 'string') throw new Error('defEnv.currentDir must be a string')
-  const externCurrentDir = () => currentDir
+export const makeEvalForm = () => {
+  const defEnv = new Map()
 
-  const instanceExterns = { ...externs, 'current-dir': externCurrentDir }
-  const go = (env, form) => {
+  const makeClosureOfKind = (kind, forms, env) => {
+    if (forms.length - 1 < 3)
+      throw new EvalError(`special form '${getFormWord(forms[0])}' expected at least three arguments`)
+    const name = getFormWord(forms[1])
+    const parameters = getFormList(forms[2]).map(getFormWord)
+    const body = makeDoForm(forms.slice(3))
+    let closure
+    const paramEnvMaker = (() => {
+      if (parameters.length < 2 || parameters.at(-2) !== '..') {
+        const arity = parameters.length
+        return (eargs) => {
+          const paramEnv = makeEnv(env)
+          paramEnv.isClosureEnv = true
+          setEnv(paramEnv, name, closure)
+          if (eargs.length !== arity) throw new EvalError(`${name} expected ${arity} arguments, got ${eargs.length}`)
+          for (let i = 0; i < arity; i++) setEnv(paramEnv, parameters[i], eargs[i])
+          return paramEnv
+        }
+      }
+      const restParam = parameters.at(-1)
+      const regularParameters = parameters.slice(0, -2)
+      const arity = regularParameters.length
+      return (eargs) => {
+        const paramEnv = makeEnv(env)
+        paramEnv.isClosureEnv = true
+        setEnv(paramEnv, name, closure)
+        if (eargs.length < arity)
+          throw new EvalError(`${name} expected at least ${arity} arguments, got ${eargs.length}`)
+        for (let i = 0; i < arity; i++) setEnv(paramEnv, regularParameters[i], eargs[i])
+        setEnv(paramEnv, restParam, makeList(...eargs.slice(arity)))
+        return paramEnv
+      }
+    })()
+    const f = (...args) => goExp(paramEnvMaker(args), body)
+    closure = makeClosure(f, kind, paramEnvMaker, body)
+    return closure
+  }
+
+  const goExp = (env, form) => {
     const evalError = (message, innerError) => new EvalError(message, form, innerError)
     while (true) {
       const word = tryGetFormWord(form)
@@ -160,46 +116,6 @@ export const makeEvalForm = (externs, defEnv) => {
         if (numOfArgs !== num)
           throw evalError(`special form '${firstWord}' expected ${num} arguments, got ${numOfArgs}`)
       }
-      const assertTopLevel = () => {
-        if (env !== defEnv) throw evalError(`special form '${firstWord}' must be used at the top level`)
-      }
-      const makeClosureOfKind = (kind) => {
-        if (numOfArgs < 3) throw evalError(`special form '${firstWord}' expected at least three arguments`)
-        const name = getFormWord(forms[1])
-        const parameters = getFormList(forms[2]).map(getFormWord)
-        const body = makeDoForm(forms.slice(3))
-        let closure
-        const paramEnvMaker = (() => {
-          if (parameters.length < 2 || parameters.at(-2) !== '..') {
-            const arity = parameters.length
-            return (eargs) => {
-              const paramEnv = makeEnv(env)
-              paramEnv.isClosureEnv = true
-              setEnv(paramEnv, name, closure)
-              if (eargs.length !== arity)
-                throw new EvalError(`${name} expected ${arity} arguments, got ${eargs.length}`)
-              for (let i = 0; i < arity; i++) setEnv(paramEnv, parameters[i], eargs[i])
-              return paramEnv
-            }
-          }
-          const restParam = parameters.at(-1)
-          const regularParameters = parameters.slice(0, -2)
-          const arity = regularParameters.length
-          return (eargs) => {
-            const paramEnv = makeEnv(env)
-            paramEnv.isClosureEnv = true
-            setEnv(paramEnv, name, closure)
-            if (eargs.length < arity)
-              throw new EvalError(`${name} expected at least ${arity} arguments, got ${eargs.length}`)
-            for (let i = 0; i < arity; i++) setEnv(paramEnv, regularParameters[i], eargs[i])
-            setEnv(paramEnv, restParam, makeList(...eargs.slice(arity)))
-            return paramEnv
-          }
-        })()
-        const f = (...args) => go(paramEnvMaker(args), body)
-        closure = makeClosure(f, kind, paramEnvMaker, body)
-        return closure
-      }
       switch (firstWord) {
         // constants
         case 'i32':
@@ -217,48 +133,20 @@ export const makeEvalForm = (externs, defEnv) => {
         case 'word':
           assertNumArgs(1)
           return getFormWord(forms[1])
-        case 'extern': {
-          let ext = instanceExterns
-          for (let i = 1; i < forms.length; i++) {
-            const prop = getFormWord(forms[i])
-            const extProp = ext[prop]
-            // if (extProp === undefined) throw evalError('undefined extern: ' + prop + ' in ' + ext)
-            if (extProp === undefined) return langUndefined
-            ext = extProp
-          }
-          return ext
-        }
         case 'intrinsic-call': {
           if (numOfArgs < 1) throw evalError('intrinsic-call expected at least one argument')
           const f = intrinsics[getFormWord(forms[1])]
           if (!f) throw evalError('undefined intrinsic')
-          return f(...forms.slice(2).map((arg) => go(env, arg)))
+          return f(...forms.slice(2).map((arg) => goExp(env, arg)))
         }
-        case 'def':
-          assertNumArgs(2)
-          assertTopLevel()
-          defEnv.set(getFormWord(forms[1]), go(env, forms[2]))
-          return go(env, forms[2])
-        case 'defn':
-          assertTopLevel()
-          defEnv.set(getFormWord(forms[1]), makeClosureOfKind('func'))
-          return langUndefined
-        case 'defexpr':
-          assertTopLevel()
-          defEnv.set(getFormWord(forms[1]), makeClosureOfKind('fexpr'))
-          return langUndefined
-        case 'defmacro':
-          assertTopLevel()
-          defEnv.set(getFormWord(forms[1]), makeClosureOfKind('macro'))
-          return langUndefined
         // constants calculated from environment
         case 'func':
-          return makeClosureOfKind(firstWord)
+          return makeClosureOfKind(firstWord, forms, env)
         // control flow
         case 'if':
           assertNumArgs(3)
           try {
-            form = forms[go(env, forms[1]) !== 0 ? 2 : 3]
+            form = forms[goExp(env, forms[1]) !== 0 ? 2 : 3]
           } catch (e) {
             throw evalError('error in if condition', e)
           }
@@ -266,10 +154,10 @@ export const makeEvalForm = (externs, defEnv) => {
         case 'switch': {
           if (numOfArgs < 2) throw evalError(`special form 'switch' expected at least two arguments`)
           if (numOfArgs % 2 !== 0) throw evalError('no switch default found')
-          const value = go(env, forms[1])
+          const value = goExp(env, forms[1])
           form = forms.at(-1)
           for (let i = 2; i < forms.length - 1; i += 2) {
-            if (getFormList(forms[i]).some((patForm) => go(env, patForm) === value)) {
+            if (getFormList(forms[i]).some((patForm) => goExp(env, patForm) === value)) {
               form = forms[i + 1]
               break
             }
@@ -278,8 +166,11 @@ export const makeEvalForm = (externs, defEnv) => {
         }
         case 'match': {
           if (numOfArgs === 0) throw evalError(`special form '${firstWord}' expected at least one argument`)
-          const value = go(env, forms[1])
-          if (!isTaggedValue(value)) throw evalError('expected tagged value')
+          const value = goExp(env, forms[1])
+          if (!isTaggedValue(value)) {
+            console.log({ nonTaggedValue: value })
+            throw evalError('expected tagged value')
+          }
           const { tag, args } = value
           const findMatch = () => {
             for (let i = 2; i < forms.length - 1; i += 2) {
@@ -309,7 +200,7 @@ export const makeEvalForm = (externs, defEnv) => {
         case 'do':
           if (forms.length === 1) return langUndefined
           try {
-            for (let i = 1; i < forms.length - 1; i++) go(env, forms[i])
+            for (let i = 1; i < forms.length - 1; i++) goExp(env, forms[i])
           } catch (e) {
             throw evalError('error in do', e)
           }
@@ -322,7 +213,7 @@ export const makeEvalForm = (externs, defEnv) => {
           const newEnv = makeEnv(env)
           try {
             for (let i = 0; i < bindings.length - 1; i += 2)
-              setEnv(newEnv, getFormWord(bindings[i]), go(newEnv, bindings[i + 1]))
+              setEnv(newEnv, getFormWord(bindings[i]), goExp(newEnv, bindings[i + 1]))
           } catch (e) {
             throw evalError('error in let bindings', e)
           }
@@ -340,7 +231,7 @@ export const makeEvalForm = (externs, defEnv) => {
           try {
             for (let i = 0; i < bindings.length - 1; i += 2) {
               const variableName = getFormWord(bindings[i])
-              setEnv(loopEnv, variableName, go(loopEnv, bindings[i + 1]))
+              setEnv(loopEnv, variableName, goExp(loopEnv, bindings[i + 1]))
             }
           } catch (e) {
             throw evalError('error in loop bindings', e)
@@ -362,7 +253,7 @@ export const makeEvalForm = (externs, defEnv) => {
             const variableForm = forms[i]
             const variableName = getFormWord(variableForm)
             if (!loopEnv.has(variableName)) throw new EvalError('continue, not a loop variable', variableForm)
-            setEnv(loopEnv, variableName, go(env, forms[i + 1]))
+            setEnv(loopEnv, variableName, goExp(env, forms[i + 1]))
           }
           env = loopEnv
           form = loopEnv.loopBody
@@ -382,7 +273,7 @@ export const makeEvalForm = (externs, defEnv) => {
           const newEnv = makeEnv(env)
           try {
             const values = []
-            for (const func of funcs) values.push(go(newEnv, func.funcForm))
+            for (const func of funcs) values.push(goExp(newEnv, func.funcForm))
             for (let i = 0; i < funcs.length; i++) setEnv(newEnv, funcs[i].name, values[i])
           } catch (e) {
             throw evalError('error in let bindings', e)
@@ -391,10 +282,85 @@ export const makeEvalForm = (externs, defEnv) => {
           form = makeDoForm(forms.slice(2))
           continue
         }
+        case 'type-anno':
+          assertNumArgs(2)
+          form = forms[1]
+          continue
+      }
+      const func = goExp(env, firstForm)
+      const args = forms.slice(1)
+      // closures are also functions so we to check if it is a closure first
+      const closureKind = tryGetClosureKind(func)
+      if (!closureKind) {
+        if (typeof func !== 'function') throw evalError('not a function')
+        try {
+          return func(...args.map((arg) => goExp(env, arg)))
+        } catch (e) {
+          throw evalError('error in function call', e)
+        }
+      }
+      const { paramEnvMaker, body } = func
+      switch (closureKind) {
+        case 'macro':
+          form = goExp(paramEnvMaker(args), body)
+          continue
+        case 'fexpr':
+          env = paramEnvMaker(args)
+          form = body
+          continue
+        case 'func':
+          env = paramEnvMaker(args.map((arg) => goExp(env, arg)))
+          form = body
+          continue
+        default:
+          throw evalError('unexpected closure kind: ' + kind + ' ' + func)
+      }
+    }
+  }
+  const evalExp = (form) => goExp(defEnv, form)
+  const evalTop = async (form) => {
+    const evalError = (message, innerError) => new EvalError(message, form, innerError)
+    const setDef = (name, value) => {
+      if (defEnv.has(name)) throw evalError('redefining variable')
+      defEnv.set(name, value)
+    }
+    const forms = tryGetFormList(form)
+    if (forms && forms.length) {
+      const [firstForm] = forms
+      const numOfArgs = forms.length - 1
+
+      const firstWord = tryGetFormWord(firstForm)
+      switch (firstWord) {
+        case 'def':
+          setDef(getFormWord(forms[1]), evalExp(forms[2]))
+          return langUndefined
+        case 'defn':
+          setDef(getFormWord(forms[1]), makeClosureOfKind('func', forms, defEnv))
+          return langUndefined
+        case 'defexpr':
+          setDef(getFormWord(forms[1]), makeClosureOfKind('fexpr', forms, defEnv))
+          return langUndefined
+        case 'defmacro':
+          setDef(getFormWord(forms[1]), makeClosureOfKind('macro', forms, defEnv))
+          return langUndefined
+        case 'do':
+          try {
+            for (let i = 1; i < forms.length - 1; i++) await evalTop(forms[i])
+          } catch (e) {
+            throw evalError('error in do', e)
+          }
+          return langUndefined
+        case 'load': {
+          if (forms.length !== 2) throw evalError('load expects one argument')
+          const relativeFilePath = getFormWord(forms[1])
+          const fileContent = await read_file_async(relativeFilePath)
+          const fileForms = parseString(fileContent, relativeFilePath)
+          for (const fileForm of fileForms) await evalTop(fileForm)
+          return langUndefined
+        }
         // types
         case 'type': {
           if (numOfArgs % 3 !== 0) throw evalError('type expected triplets')
-          assertTopLevel()
           for (let i = 1; i < forms.length; i += 3) {
             const type = getFormWord(forms[i])
             const _typeParams = getFormList(forms[i + 1]).map(getFormWord)
@@ -408,7 +374,7 @@ export const makeEvalForm = (externs, defEnv) => {
                   const unionCaseName = getFormWord(unionCase[0])
                   const qualName = `${type}/${unionCaseName}`
                   const tagger = makeValueTagger(qualName, unionCase.length - 1)
-                  defEnv.set(qualName, tagger)
+                  setDef(qualName, tagger)
                 }
                 break
               case 'record': {
@@ -426,7 +392,7 @@ export const makeEvalForm = (externs, defEnv) => {
                       throw evalError(`field projecter ${projecterName} on wrong type ${recordType}`)
                     return record[fieldName]
                   }
-                  defEnv.set(projecterName, projecter)
+                  setDef(projecterName, projecter)
                 }
                 const constructor = (...args) => {
                   if (args.length !== fieldNames.length) throw evalError('wrong number of arguments to ' + type)
@@ -434,7 +400,7 @@ export const makeEvalForm = (externs, defEnv) => {
                   for (let i = 0; i < fieldNames.length; i++) fieldObj[fieldNames[i]] = args[i]
                   return makeRecordFromObj(type, fieldObj)
                 }
-                defEnv.set(type, constructor)
+                setDef(type, constructor)
                 break
               }
               default:
@@ -443,19 +409,16 @@ export const makeEvalForm = (externs, defEnv) => {
           }
           return langUndefined
         }
-        case 'type-anno':
-          assertNumArgs(2)
-          form = forms[1]
-          continue
-        case 'load': {
-          assertNumArgs(1)
-          assertTopLevel()
-          const relativeFilePath = getFormWord(forms[1])
-          const resolvedPath = path.join(currentDir, relativeFilePath)
-          const fileForms = readFile(resolvedPath)
-          let result = langUndefined
-          for (const fileForm of fileForms) result = go(defEnv, fileForm)
-          return result
+        case 'import': {
+          if (forms.length !== 4) throw evalError('import expects three arguments')
+          const importModuleName = getFormWord(forms[1])
+          const module = await import(`./runtime-lib/${importModuleName}.js`)
+          const importElementName = getFormWord(forms[2])
+          const importedValue = module[importElementName]
+          if (importedValue === undefined)
+            throw evalError('imported value not found in module ' + importModuleName + ' ' + importElementName)
+          setDef(importElementName, importedValue)
+          return langUndefined
         }
         case 'export':
           for (let i = 1; i < forms.length; i++) {
@@ -464,60 +427,40 @@ export const makeEvalForm = (externs, defEnv) => {
           }
           return langUndefined
       }
-      const func = go(env, firstForm)
-      const args = forms.slice(1)
-      // closures are also functions so we to check if it is a closure first
+      // if (!defEnv.has(firstWord)) throw evalError('undefined variable')
+      const func = defEnv.get(firstWord)
       const closureKind = tryGetClosureKind(func)
-      if (!closureKind) {
-        if (typeof func !== 'function') throw evalError('not a function')
-        try {
-          return func(...args.map((arg) => go(env, arg)))
-        } catch (e) {
-          throw evalError('error in function call', e)
-        }
-      }
-      const { paramEnvMaker, body } = func
-      switch (closureKind) {
-        case 'macro':
-          form = go(paramEnvMaker(args), body)
-          continue
-        case 'fexpr':
-          env = paramEnvMaker(args)
-          form = body
-          continue
-        case 'func':
-          env = paramEnvMaker(args.map((arg) => go(env, arg)))
-          form = body
-          continue
-        default:
-          throw evalError('unexpected closure kind: ' + kind + ' ' + func)
+      if (closureKind === 'macro') {
+        const { paramEnvMaker, body } = func
+        const macroResult = goExp(paramEnvMaker(forms.slice(1)), body)
+        return evalTop(macroResult)
       }
     }
+    return evalExp(form)
   }
-  return (topForm) => go(defEnv, topForm)
+  const tryGetMacro = (name) => {
+    if (typeof name !== 'string') throw new Error('try-get-macro expects string')
+    const value = defEnv.get(name)
+    if (tryGetClosureKind(value) === 'macro') return value
+    return null
+  }
+  return { evalExp, evalTop, tryGetMacro, getDefNames: () => defEnv.keys(), getDef: (name) => defEnv.get(name) }
 }
 
-import { print } from './core.js'
+import { print, tryGetFormInfo, getPosition, tryGetFormInfoRec } from './core.js'
 
-export const catchErrors = (f) => {
-  try {
-    return f()
-  } catch (e) {
-    const treeSitterNode = tryGetNodeFromForm(e.form)
-    if (treeSitterNode) {
-      const contentName = treeSitterNode.tree.contentName
-      const { startPosition, endPosition } = treeSitterNode
-      const { row, column } = startPosition
-      const location = `${contentName}:${row + 1}:${column + 1}`
-      console.error('catchErrors node location', e.message, location)
-    } else {
-      console.error('catchErrors no ', e.message, print(e.form))
-    }
-    console.log('catchErrors', e.message, e.form, e.innerError ? 'has inner' : '')
-    let curErr = e
-    while (curErr) {
-      console.error(curErr.message, print(curErr.form))
-      curErr = curErr.innerError
-    }
+const getLocationFromForm = (form) => {
+  const formInfo = tryGetFormInfoRec(form)
+  if (!formInfo) return 'no location'
+  const { row, column } = getPosition(formInfo)
+  return `${formInfo.contentObj.contentName}:${row + 1}:${column + 1}`
+}
+
+export const logEvalError = (e) => {
+  console.error(e.message, getLocationFromForm(e.form))
+  let curErr = e
+  while (curErr) {
+    console.error(curErr.message, getLocationFromForm(curErr.form))
+    curErr = curErr.innerError
   }
 }

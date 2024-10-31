@@ -1,47 +1,15 @@
-[type evaluation-context [] [union]]
-
-[def make-eval-context
-  [type-anno
-    [extern interpreter make-context]
-    [func [word] [evaluation-context]]]]
-
-[def macro-expand
-  [type-anno
-    [extern interpreter macro-expand]
-    [func [evaluation-context form] [form]]]]
-
-[type macro [] [union]]
-
-[def try-get-macro
-  [type-anno
-    [extern interpreter try-get-macro]
-    [func [evaluation-context word] [option macro]]]]
-
-[def interpreter-apply
-  [type-anno
-    [extern interpreter apply]
-    [func [macro [list form]] form]]]
-
 [type externs-object [] [union]]
 
 [type evaluator [] [union]]
 
-[def make-evaluator
-  [type-anno
-    [extern evaluation make-evaluator]
-    [func [externs-object evaluation-context] evaluator]]]
+[defmacro def-evaluation-extern [name type]
+  [flist [qword import] [qword evaluation] name type]]
 
-[def externs-object-value
-  [type-anno
-    [extern]
-    [externs-object]]]
+[def-evaluation-extern make-evaluator [func [] evaluator]]
 
-[def evaluate
-  [type-anno
-    [extern evaluation evaluate]
-    [func [evaluator form] [tuple]]]]
+[def-evaluation-extern evaluate-top [func [evaluator form] [result tuple js-value]]]
+[def-evaluation-extern evaluate-top-async [func [evaluator form] [promise js-value]]]
+[def-evaluation-extern evaluate-exp [func [evaluator form] [result tuple js-value]]]
 
-[def evaluate-result
-  [type-anno
-    [extern evaluation evaluate-result]
-    [func [evaluator form] [result js-value js-value]]]]
+[def-evaluation-extern try-get-macro
+  [func [evaluator word] [option [func [[list form]] form]]]]

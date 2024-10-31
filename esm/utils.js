@@ -20,73 +20,6 @@ export const createParameterNamesWrapper = (parameters) => {
   return Function('body', `return function (${paramsString}) { return body(${paramsString}) }`)
 }
 
-export const isJSReservedWord = (word) => {
-  return [
-    'abstract',
-    'await',
-    'boolean',
-    'break',
-    'byte',
-    'case',
-    'catch',
-    'char',
-    'class',
-    'const',
-    'continue',
-    'debugger',
-    'default',
-    'delete',
-    'do',
-    'double',
-    'else',
-    'enum',
-    'export',
-    'extends',
-    'false',
-    'final',
-    'finally',
-    'float',
-    'for',
-    'function',
-    'goto',
-    'if',
-    'implements',
-    'import',
-    'in',
-    'instanceof',
-    'int',
-    'interface',
-    'let',
-    'long',
-    'native',
-    'new',
-    'null',
-    'package',
-    'private',
-    'protected',
-    'public',
-    'return',
-    'short',
-    'static',
-    'super',
-    'switch',
-    'synchronized',
-    'this',
-    'throw',
-    'throws',
-    'transient',
-    'true',
-    'try',
-    'typeof',
-    'var',
-    'void',
-    'volatile',
-    'while',
-    'with',
-    'yield',
-  ].includes(word)
-}
-
 export const createNamedFunction = (name, jsParameterNames, wunsParameterNames, wunsRestParameter, body) => {
   const f = createParameterNamesWrapper(jsParameterNames)(body)
   setJSFunctionName(f, name)
@@ -102,15 +35,15 @@ export const wrapJSFunctionName = (dashedName, importFunc) => {
   let wunsParameterNames = null
   let wunsRestParam = null
   if (jsParameterNames.length && jsParameterNames.at(-1).startsWith('...')) {
-    wunsParameterNames = jsParameterNames.slice(0, -1)
+    wunsParameterNames = jsParameterNames.slice(0, -1).map(underscoreToDash)
     wunsRestParam = underscoreToDash(jsParameterNames.at(-1).slice(3))
   } else {
-    wunsParameterNames = [...jsParameterNames]
+    wunsParameterNames = jsParameterNames.map(underscoreToDash)
   }
   return createNamedFunction(
     dashedName,
     jsParameterNames,
-    wunsParameterNames.map(underscoreToDash),
+    wunsParameterNames,
     wunsRestParam,
     importFunc,
   )

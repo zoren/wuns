@@ -20,17 +20,12 @@ export const arrayToList = (array) => (array.length === 0 ? emptyList : Object.f
 export const makeList = (...args) => arrayToList(args)
 export const isList = (f) => Array.isArray(f)
 
-class TaggedValue {
-  constructor(tag, ...args) {
-    if (!isWord(tag)) throw new Error('tag must be a word')
-    this.tag = tag
-    this.args = Object.freeze(args)
-  }
-}
-
-export const isTaggedValue = (v) => v instanceof TaggedValue
+export const isTaggedValue = (v) => typeof v === 'object' && 'tag' in v && 'args' in v
 export const tryGetTag = (v) => (isTaggedValue(v) ? v.tag : null)
-export const makeTaggedValue = (tag, ...args) => Object.freeze(new TaggedValue(tag, ...args))
+export const makeTaggedValue = (tag, ...args) => {
+  if (!isWord(tag)) throw new Error('tag must be a word')
+  return Object.freeze({ tag, args: Object.freeze(args) })
+}
 export const makeValueTagger = (tag, arity) => {
   return (...args) => {
     if (args.length !== arity) throw new Error(`'${tag}' expected ${arity} arguments, got ${args.length}`)
@@ -118,7 +113,7 @@ export const print = (ox) => {
       return `[kv-map${Object.entries(x)
         .map(([k, v]) => ` ${k} ${go(v)}`)
         .join('')}]`
-    return `[transient-kv-map${Object.entries(x)
+    return `[object${Object.entries(x)
       .map(([k, v]) => ` ${k} ${go(v)}`)
       .join('')}]`
   }
@@ -133,97 +128,112 @@ export const printFormMessage = (message) => {
   throw new Error('printMessage expects a form')
 }
 
-import fs from 'node:fs'
+const parsedForms = new WeakMap()
 
-import TSParser from 'tree-sitter'
-const parser = new TSParser()
+export const tryGetFormInfo = (form) => parsedForms.get(form)
 
-import Wuns from 'tree-sitter-wuns'
-parser.setLanguage(Wuns)
-
-const parse = (content, oldTree) => {
-  // workaround for https://github.com/tree-sitter/node-tree-sitter/issues/199
-  // without it we cannot parse strings longer than 32768 bytes
-  const bufferSize = content.length + 1
-  return parser.parse(content, oldTree, { bufferSize })
-}
-
-export const parseTagTreeSitter = (content, contentName) => {
-  const tree = parse(content)
-  tree.contentName = contentName
-  return tree
-}
-
-/**
- * @typedef {import('tree-sitter').TSParser} TSParser
- */
-
-const formToNodeMap = new WeakMap()
-
-export const tryGetNodeFromForm = (form) => formToNodeMap.get(form)
-
-/**
- * @param {TSParser.Tree} tree
- * @returns { topForms: readonly TaggedValue[], formToNodeMap: Map<TaggedValue, TSParser.SyntaxNode> }
- */
-export const treeToFormsSafeNoMeta = (tree) => {
-  /**
-   * @param {TSParser.SyntaxNode} node
-   */
-  const tryNodeToForm = (node) => {
-    const { isError, type } = node
-    const mkWord = () => {
-      const formWord = makeFormWord(node.text)
-      formToNodeMap.set(formWord, node)
-      return formWord
-    }
-    const mkList = () => {
-      const formList = makeFormList(childrenToList(node))
-      formToNodeMap.set(formList, node)
-      return formList
-    }
-    if (isError) {
-      if (node.text.startsWith(']')) return null
-      if (node.text.startsWith('[')) return mkList()
-      return mkWord()
-    }
-    switch (type) {
-      case 'word':
-        return mkWord()
-      case 'list':
-        return mkList()
-      default:
-        throw new Error('unexpected node type: ' + type)
+export const tryGetFormInfoRec = (form) => {
+  const info = tryGetFormInfo(form)
+  if (info) return info
+  const list = tryGetFormList(form)
+  if (list) {
+    for (const f of list) {
+      const info = tryGetFormInfoRec(f)
+      if (info) return info
     }
   }
-  const childrenToList = (node) => {
-    const childForms = []
-    for (const child of node.namedChildren) {
-      const subForm = tryNodeToForm(child)
-      if (subForm) childForms.push(subForm)
+  return null
+}
+
+const getPositionFromContentOffset = (content, byteOffset) => {
+  let row = 0,
+    column = 0
+  for (let i = 0; i < byteOffset; i++) {
+    if (content[i] === '\n') {
+      row++
+      column = 0
+    } else {
+      column++
     }
-    return Object.freeze(childForms)
   }
-  return childrenToList(tree.rootNode)
+  return { row, column }
 }
 
-export const readString = (content, contentName) => {
-  const tree = parseTagTreeSitter(content, contentName)
-  return arrayToList(treeToFormsSafeNoMeta(tree, contentName))
+export const getFormInfoAsRange = ({ contentObj, byteOffset, endOffset }) => {
+  const { content } = contentObj
+  return {
+    start: getPositionFromContentOffset(content, byteOffset),
+    end: getPositionFromContentOffset(content, endOffset),
+  }
 }
 
-export const readFile = (filePath) => readString(fs.readFileSync(filePath, 'ascii'), filePath)
-
-export const makeDefEnv = (currentDir) => {
-  if (!currentDir) throw new Error('makeDefEnv expects currentDir')
-  if (typeof currentDir !== 'string') throw new Error('currentDir must be a string')
-  const defMap = new Map()
-  defMap[defEnvTag] = true
-  defMap.currentDir = currentDir
-  return defMap
+export const getPosition = ({ contentObj, byteOffset }) => {
+  const { content } = contentObj
+  return getPositionFromContentOffset(content, byteOffset)
 }
-const defEnvTag = Symbol('def-env')
-export const isDefEnv = (v) => v instanceof Map && v[defEnvTag]
+
+export const getFormPositionAsString = (formInfo) => {
+  if (typeof formInfo === 'string') return formInfo
+  console.log({ formInfo })
+  const { row, column } = getPosition(formInfo)
+  return `${formInfo.contentObj.contentName}:${row + 1}:${column + 1}`
+}
+
+export const parseString = (content, contentName) => {
+  const len = content.length
+  let i = 0
+  const offsetAsString = (offset) => {
+    const { row, column } = getPositionFromContentOffset(content, offset)
+    return `${contentName}:${row + 1}:${column + 1}`
+  }
+  const contentObj = { content, contentName }
+  const registerForm = (form, byteOffset) => {
+    parsedForms.set(form, { contentObj, byteOffset, endOffset: i })
+    return form
+  }
+  const done = () => i >= len
+  const go = () => {
+    if (done()) return null
+    let startIndex = i
+    let c = content[i++]
+    while (c === ' ' || c === '\n') {
+      if (done()) return null
+      c = content[i++]
+      startIndex++
+    }
+    switch (c) {
+      case '[': {
+        const list = []
+        while (true) {
+          if (done()) {
+            console.warn('missing closing bracket: ' + offsetAsString(startIndex))
+            return registerForm(makeFormList(Object.freeze(list)), startIndex)
+          }
+          const element = go()
+          if (element === null) return registerForm(makeFormList(Object.freeze(list)), startIndex)
+          list.push(element)
+        }
+      }
+      case ']':
+        return null
+      default: {
+        if (!isWord(c)) console.error(`illegal character: ${c} at ${offsetAsString(i - 1)}`)
+        while (i < len && isWord(content[i])) i++
+        return registerForm(makeFormWord(content.slice(startIndex, i)), startIndex)
+      }
+    }
+  }
+  const forms = []
+  while (!done()) {
+    const form = go()
+    if (form !== null) {
+      forms.push(form)
+    } else {
+      if (!done()) console.warn('extra closing bracket: ' + offsetAsString(i))
+    }
+  }
+  return forms
+}
 
 class Closure extends Function {
   constructor(f, kind, paramEnvMaker, body) {

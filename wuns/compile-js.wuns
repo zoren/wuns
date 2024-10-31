@@ -34,6 +34,7 @@
     [binop binop js-exp js-exp]
     [arrow-exp [list word] [option word] js-exp]
     [arrow-stmt [list word] [option word] js-stmt]
+    [paren js-exp]
   ]
 
   js-stmt []
@@ -43,6 +44,7 @@
     [exp js-exp]
     [throw js-exp]
     [return js-exp]
+    [let-decl word js-exp]
     [const-decl word js-exp]
     [assign word js-exp]
     [if js-exp js-stmt js-stmt]
@@ -51,25 +53,11 @@
     [seq [list js-stmt]]
     [while js-exp js-stmt]
     [import word word]
+    [import-as-string [list [pair word word]] word]
     [export [list word]]
     [export-as-string [list [pair word word]]]
   ]
 ]
-
-[def run-js-stmt
-  [type-anno
-    [extern js run-js-stmt]
-    [func [js-stmt externs-object] [result js-value js-value]]]]
-
-[def write-js-stmt
-  [type-anno
-    [extern js write-js-stmt]
-    [func [word js-stmt] [tuple]]]]
-
-[def call-js-func
-  [type-anno
-    [extern js call-js-func]
-    [func [js-value [list form]] form]]]
 
 [defn block [.. stmts] [js-stmt/block stmts]]
 
@@ -134,20 +122,17 @@
     [js-exp/call [js-exp/var [word form/list]]
       [list [js-exp/array [list-map e l [form-to-quoted-js e]]]]]]]
 
-[defn compile-top-form [outer-is-tail top-form]
-  [let
-    []
-    [letfn
-    [[func cfunc [f]
+[defn make-compile-top-form []
+  [letfn [
+    [func cfunc [f]
       [let
         [js-name [syntax-word/word [bfunc/name f]]
          params [bfunc/parameters f]
          js-params [list-map p params [syntax-word/word p]]
          js-opt-rest-param [if-let [rp [bfunc/rest-param f]] [some [syntax-word/word rp]] [none]]
          body [bfunc/body f]]
-        [js-exp/arrow-stmt js-params js-opt-rest-param [cstmt-do true body]]
-          ]]
-     [func cexp [bform]
+        [js-exp/arrow-stmt js-params js-opt-rest-param [cstmt-do true body]]]]
+    [func cexp [bform]
       [match bform
         [bexp/var wf]
         [js-exp/var [syntax-word/word wf]]
@@ -172,7 +157,9 @@
         [mk-extern [list-map w ws [syntax-word/word w]]]
 
         [bexp/let lpairs e]
-        [iife [cstmt true bform]]
+        [do
+          [todo could this be handled by the general case or do we need a block here]
+          [iife [cstmt true bform]]]
 
         [bexp/letfn fns e]
         [iife
@@ -240,11 +227,12 @@
                           [js-exp/arrow-exp
                             params
                             [none]
-                            [js-exp/call
-                              [mk-extern [list [word host] [word make-tagged-value]]]
-                              [list
-                                [js-exp/string tag]
-                                [js-exp/array [list-map p params [js-exp/var p]]]]]]]]]
+                            [js-exp/paren
+                              [js-exp/object
+                                [concat
+                                  [list [pair [word tag] [js-exp/string tag]]]
+                                  [list [pair [word args]
+                                    [js-exp/array [list-map p params [js-exp/var p]]]]]]]]]]]]
 
                     [type-decl-kind/record fields]
                     [let [field-names [list-map field fields [syntax-word/word [pair/fst field]]]]
@@ -256,15 +244,12 @@
                             [js-exp/arrow-exp
                               field-names
                               [none]
-                              [js-exp/call
-                                [mk-extern [list [word host] [word make-record-from-object]]]
-                                [list
-                                  [js-exp/string js-type-name]
-                                  [js-exp/object
-                                    [list-map field-name field-names
-                                      [pair
-                                        field-name
-                                        [js-exp/var field-name]]]]]]]]]
+                              [js-exp/paren
+                                [js-exp/object
+                                  [list-map field-name field-names
+                                    [pair
+                                      field-name
+                                      [js-exp/var field-name]]]]]]]]
                         [list-map field-name field-names
                           [js-stmt/const-decl
                             [concat-words type-name-prefix field-name]
@@ -280,10 +265,14 @@
           [btop/export snames]
           [js-stmt/export-as-string [list-map sname snames [let [name [syntax-word/word sname]] [pair name name]]]]
 
+          [btop/import module-name import-name type]
+          [let [name [syntax-word/word import-name]]
+            [js-stmt/import-as-string [list [pair name name]] [syntax-word/word module-name]]]
+
           [btop/do top-forms]
           [js-stmt/seq [list-map f top-forms [ctop f]]]
 
-          [logq-abort cstmt unknown top form]]]
+          [logq-abort ctop unknown top form]]]
 
       [func cstmt [is-tail bform]
         [match bform
@@ -312,9 +301,9 @@
               [js-stmt/const-decl tmp [cexp exp]]
               [js-stmt/const-decl tmp-args [js-exp/subscript [js-exp/var tmp] [js-exp/string [word args]]]]
               [js-stmt/switch
-                [js-exp/call
-                  [mk-extern [list [word host] [word get-tag]]]
-                  [list [js-exp/var tmp]]]
+                [js-exp/subscript
+                  [js-exp/var tmp]
+                  [js-exp/string [word tag]]]
                 [list-map case cases
                   [let [mp [pair/fst case]
                         ctor [syntax-word/word [match-pattern/ctor mp]]
@@ -334,7 +323,11 @@
                               [js-stmt/break]]]]]]]]
                 [if-let [default-case opt-default]
                   [cstmt is-tail default-case]
-                  [js-stmt/throw [js-exp/string [word unmatched-match]]]]]]]
+                  [js-stmt/throw
+                    [js-exp/array
+                      [list
+                        [js-exp/string [word unmatched-match]]
+                        [js-exp/var tmp]]]]]]]]
 
           [bexp/do forms]
           [cstmt-do is-tail forms]
@@ -345,38 +338,67 @@
               [list-map decl decls [js-stmt/const-decl [syntax-word/word [pair/fst decl]] [cexp [pair/snd decl]]]]
               [list [cstmt-do is-tail e]]]]
 
-          [bexp/call f args]
-          [if is-tail
-            [js-stmt/return [cexp bform]]
-            [js-stmt/exp [cexp bform]]]
+          [bexp/loop init-decls e]
+          [js-stmt/block
+            [concat
+              [list-map decl init-decls
+                [js-stmt/let-decl [syntax-word/word [pair/fst decl]] [cexp [pair/snd decl]]]]
+              [list
+                [js-stmt/while js-1
+                  [js-stmt/block
+                    [list
+                      [cstmt-do is-tail e]
+                      [js-stmt/break]]]]]]]
+
+          [bexp/continue assignments]
+          [do
+            [js-stmt/seq
+              [concat
+                [list-map a assignments
+                  [js-stmt/assign [syntax-word/word [pair/fst a]] [cexp [pair/snd a]]]]
+                [list [js-stmt/continue]]]]]
 
           [if is-tail
             [js-stmt/return [cexp bform]]
-            [js-stmt/exp [cexp bform]]]]]]
-    [match top-form
-      [btop/do forms]
-      [js-stmt/seq [list-map f forms [compile-top-form outer-is-tail f]]]
+            [js-stmt/exp [cexp bform]]]]]
+    ]
+    ctop]]
 
-      [ctop top-form]]]]]
+[def compile-top-form [make-compile-top-form]]
+
+[def-js-extern js-stmt-to-string [func [js-stmt] string]]
+
+[def-js-extern format-js-src-async [func [string] [promise string]]]
+
+[defn compile-forms [forms]
+  [let
+    [converter [mk-form-to-ast]
+     f2t [form-to-ast-converter/form-to-top-async converter]]
+    [promise-then
+      [promises-seq forms f2t]
+      [func then [btops]
+        [let
+          [errors [clone-growable-to-frozen-list [form-to-ast-converter/errors converter]]]
+          [when-not [is-empty errors]
+            [log errors]
+            [logq-abort compile-forms errors]]
+          [js-stmt-to-string [js-stmt/seq [list-map btop btops [do [compile-top-form btop]]]]]]]]]]
+
+[defn compile-file-to-string [file-name]
+  [promise-bind
+    [read-parse-file-async file-name]
+    [func then [forms]
+      [promise-bind
+        [compile-forms forms]
+        format-js-src-async]]]]
+
+[defn compile-file-to-file [input-file-name output-file-name]
+  [promise-then
+    [compile-file-to-string input-file-name]
+    [func then [js-text]
+      [write-file-async output-file-name js-text]]]]
 
 [type compile-run-error []
   [union
     [form-to-ast-errors [list report-message]]
     [eval-error js-value]]]
-
-[defn compile-file-to-file [wuns-file-name js-file-name]
-  [let
-    [file-dir [path-dirname wuns-file-name]
-     converter [mk-form-to-ast file-dir]
-     f2a [form-to-ast-converter/form-to-top converter]
-     stmts [list-map form [read-file wuns-file-name] [compile-top-form false [f2a form]]]
-     errors [clone-growable-to-frozen-list [form-to-ast-converter/errors converter]]]
-    [if [is-empty errors]
-      [let [prologue [list [js-stmt/import [word externs] [word ../runtime-lib/externs.js]]]]
-        [write-js-stmt js-file-name
-          [js-stmt/seq [concat prologue stmts]]]]
-      [do
-        [log errors]
-        [logq-abort compile-file-to-file errors]]]]]
-
-[export compile-file-to-file]
