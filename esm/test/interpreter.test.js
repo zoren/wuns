@@ -157,6 +157,7 @@ const testEvaluator = ({ pe }) => {
     assert.throws(() => pe('[func f [[]]]'))
 
     expect(pe('[func f []]')).toBeTypeOf('function')
+    expect(pe('[func my-func-name []]')).toSatisfy((f) => f.name === 'my-func-name')
     expect(pe('[func f [] [i32 1]]')).toBeTypeOf('function')
     expect(pe('[[func f [] [i32 1]]]')).toBe(1)
     expect(pe('[[func f [p] p] [i32 1]]')).toBe(1)

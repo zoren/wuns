@@ -1,3 +1,4 @@
+import { setJSFunctionName } from './utils.js'
 import { langUndefined, tryGetFormList, tryGetFormWord } from './core.js'
 import { intrinsics } from './intrinsics.js'
 
@@ -10,7 +11,7 @@ const opSetLocal = (index, value) => ({ op: 'setLocal', index, value })
 const opInsts = (insts) => ({ op: 'insts', insts })
 const opLoop = (body) => ({ op: 'loop', body })
 const opContinue = () => ({ op: 'continue' })
-const opFunc = (paramIndexes, body) => ({ op: 'func', paramIndexes, body })
+const opFunc = (name, recIndex, paramIndexes, body) => ({ op: 'func', name, recIndex, paramIndexes, body })
 const opCall = (func, args) => ({ op: 'call', func, args })
 
 const continueValue = Symbol('continue')
@@ -82,14 +83,16 @@ const evalOp = (inst) => {
       }
     }
     case 'func': {
-      const { paramIndexes, body } = inst
+      const { name, paramIndexes, body } = inst
       const cbody = evalOp(body)
       return (env) => {
-        return (...args) => {
+        const f = (...args) => {
           const newEnv = [...env]
           for (let i = 0; i < paramIndexes.length; i++) newEnv[paramIndexes[i]] = args[i]
           return cbody(newEnv)
         }
+        setJSFunctionName(f, name)
+        return f
       }
     }
     case 'call': {
@@ -187,8 +190,9 @@ const expSpecialForms = {
     const hasNoRest = parameters.length < 2 || parameters.at(-2) !== '..'
     if (!hasNoRest) throw new CompileError('rest parameter not supported')
     const newCtx = makeCtx(ctx, 'func')
+    const recIndex = newLocal(newCtx, name)
     const paramIndexes = parameters.map((p) => newLocal(newCtx, p))
-    return opFunc(paramIndexes, opInsts(bodies.map((f) => compExp(newCtx, f))))
+    return opFunc(name, recIndex, paramIndexes, opInsts(bodies.map((f) => compExp(newCtx, f))))
   },
   if: (tail, ctx) => {
     if (tail.length !== 3) throw new CompileError('if expected three arguments')

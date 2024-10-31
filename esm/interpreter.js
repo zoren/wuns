@@ -1,3 +1,5 @@
+import { setJSFunctionName } from './utils.js'
+
 const makeEnv = (outer) => {
   if (!(outer instanceof Map)) throw new Error('makeEnv expects a Map')
   const env = new Map()
@@ -86,6 +88,7 @@ export const makeEvalForm = () => {
       }
     })()
     const f = (...args) => goExp(paramEnvMaker(args), body)
+    setJSFunctionName(f, name)
     closure = makeClosure(f, kind, paramEnvMaker, body)
     return closure
   }
