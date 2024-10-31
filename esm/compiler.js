@@ -135,22 +135,15 @@ const makeCtx = (outer, declaringForm) => {
 
 const maxLocalIndex = (ctx) => {
   let lastValue = null
-  for (const value of ctx.values()) {
-    lastValue = value
-  }
-  // console.log('maxLocalIndex', { ctx, lastValue })
+  for (const value of ctx.values()) lastValue = value
   if (lastValue !== null) return lastValue
   if (ctx.outer) return maxLocalIndex(ctx.outer)
   return null
 }
 
 const newLocal = (ctx, name) => {
-  // if (ctx.has(name)) throw new CompileError('variable already defined')
-  // console.log('new local', { ctx, name })
   const m = maxLocalIndex(ctx)
   const index = m === null ? 0 : m + 1
-  // console.log('new local', { ctx, name, m, index })
-
   ctx.set(name, index)
   return index
 }
@@ -213,9 +206,6 @@ const expSpecialForms = {
     }
     const defaultForm = tail.at(-1)
     return opSwitch(cvalue, cases, compExp(ctx, defaultForm))
-  },
-  match: () => {
-    throw new CompileError('not implemented')
   },
   let: (tail, ctx) => {
     if (tail.length < 1) throw new CompileError('let expected at least a binding list')
@@ -282,6 +272,9 @@ const expSpecialForms = {
     }
     insts.push(opContinue())
     return opInsts(insts)
+  },
+  match: () => {
+    throw new CompileError('not implemented')
   },
   'type-anno': () => {
     throw new CompileError('not implemented')
