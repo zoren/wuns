@@ -162,6 +162,8 @@ const testEvaluator = ({ pe }) => {
     expect(pe('[func f []]')).toBeTypeOf('function')
     expect(pe('[func my-func-name []]')).toSatisfy((f) => f.name === 'my-func-name')
     expect(pe('[func f [] [i32 1]]')).toBeTypeOf('function')
+
+    expect(pe('[[func f []]]')).toBe(langUndefined)
     expect(pe('[[func f [] [i32 1]]]')).toBe(1)
     expect(pe('[[func f [p] p] [i32 1]]')).toBe(1)
     expect(pe('[[func f [p q] p] [i32 1] [i32 2]]')).toBe(1)
@@ -185,6 +187,46 @@ const testEvaluator = ({ pe }) => {
     expect(gaussTailRecursive(0, 10)).toBe(55)
     expect(gaussTailRecursive(0, 100)).toBe(5050)
     expect(gaussTailRecursive(0, 1000)).toBe(500500)
+  })
+
+  test('letfn', () => {
+    assert.throws(() => pe('[letfn]'))
+    assert.throws(() => pe('[letfn f]'))
+
+    expect(pe('[letfn []]')).toBe(langUndefined)
+    {
+      const isEvenSlow = pe(`
+      [letfn
+        [[func is-even [n]
+          [if n
+            [is-odd [intrinsic-call i32.sub n [i32 1]]]
+            [i32 1]]]
+          [func is-odd [n]
+          [if n
+            [is-even [intrinsic-call i32.sub n [i32 1]]]
+            [i32 0]]]]
+        is-even]`)
+      expect(isEvenSlow(0)).toBe(1)
+      expect(isEvenSlow(2)).toBe(1)
+      expect(isEvenSlow(22)).toBe(1)
+    }
+    {
+      const isEvenSlowWrapped = pe(`
+[func is-even-slow-letfn [outer-n]
+  [letfn
+    [[func is-even [n]
+      [if n
+        [is-odd [intrinsic-call i32.sub n [i32 1]]]
+        [i32 1]]]
+     [func is-odd [n]
+      [if n
+        [is-even [intrinsic-call i32.sub n [i32 1]]]
+        [i32 0]]]]
+    [is-even outer-n]]]`)
+      expect(isEvenSlowWrapped(0)).toBe(1)
+      expect(isEvenSlowWrapped(2)).toBe(1)
+      expect(isEvenSlowWrapped(22)).toBe(1)
+    }
   })
 }
 

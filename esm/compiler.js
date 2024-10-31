@@ -54,14 +54,14 @@ const evalOp = (inst) => {
       const cvalue = evalOp(value)
       return (env) => {
         env[index] = cvalue(env)
-        return undefined
+        return langUndefined
       }
     }
     case 'insts': {
       const { insts } = inst
       const cinsts = insts.map(evalOp)
       return (env) => {
-        let lastValue = null
+        let lastValue = langUndefined
         for (const cinst of cinsts) lastValue = cinst(env)
         return lastValue
       }
@@ -155,6 +155,18 @@ const newLocal = (ctx, name) => {
   return index
 }
 
+const compFunc = (tail, ctx) => {
+  const name = getFormWord(tail[0])
+  const parameters = getFormList(tail[1]).map(getFormWord)
+  const bodies = tail.slice(2)
+  const hasNoRest = parameters.length < 2 || parameters.at(-2) !== '..'
+  if (!hasNoRest) throw new CompileError('rest parameter not supported')
+  const newCtx = makeCtx(ctx, 'func')
+  const recIndex = newLocal(newCtx, name)
+  const paramIndexes = parameters.map((p) => newLocal(newCtx, p))
+  return opFunc(name, recIndex, paramIndexes, opInsts(bodies.map((f) => compExp(newCtx, f))))
+}
+
 const expSpecialForms = {
   i32: (tail) => {
     if (tail.length !== 1) throw new CompileError('i32 expected one argument')
@@ -184,17 +196,7 @@ const expSpecialForms = {
       args.map((arg) => compExp(ctx, arg)),
     )
   },
-  func: (tail, ctx) => {
-    const name = getFormWord(tail[0])
-    const parameters = getFormList(tail[1]).map(getFormWord)
-    const bodies = tail.slice(2)
-    const hasNoRest = parameters.length < 2 || parameters.at(-2) !== '..'
-    if (!hasNoRest) throw new CompileError('rest parameter not supported')
-    const newCtx = makeCtx(ctx, 'func')
-    const recIndex = newLocal(newCtx, name)
-    const paramIndexes = parameters.map((p) => newLocal(newCtx, p))
-    return opFunc(name, recIndex, paramIndexes, opInsts(bodies.map((f) => compExp(newCtx, f))))
-  },
+  func: compFunc,
   if: (tail, ctx) => {
     if (tail.length !== 3) throw new CompileError('if expected three arguments')
     return opIf(...tail.map((f) => compExp(ctx, f)))
@@ -227,11 +229,25 @@ const expSpecialForms = {
       const cexp = compExp(newCtx, bindings[i + 1])
       insts.push(opSetLocal(varIndex, cexp))
     }
-    if (tail.length === 1) {
-      insts.push(opConstant(langUndefined))
-    } else {
-      insts.push(...tail.slice(1).map((f) => compExp(newCtx, f)))
+    insts.push(...tail.slice(1).map((f) => compExp(newCtx, f)))
+    return opInsts(insts)
+  },
+  letfn: (tail, ctx) => {
+    if (tail.length < 1) throw new CompileError('let expected at least a binding list')
+    const funcForms = getFormList(tail[0])
+    const newCtx = makeCtx(ctx, 'letfn')
+    const indexes = []
+    for (const funcForm of funcForms) {
+      const [firstFuncForm, funcNameForm] = getFormList(funcForm)
+      if (getFormWord(firstFuncForm) !== 'func') throw new CompileError('expected func')
+      indexes.push(newLocal(newCtx, getFormWord(funcNameForm)))
     }
+    const insts = []
+    for (let i = 0; i < funcForms.length; i++) {
+      const cfunc = compFunc(getFormList(funcForms[i]).slice(1), newCtx)
+      insts.push(opSetLocal(indexes[i], cfunc))
+    }
+    insts.push(...tail.slice(1).map((f) => compExp(newCtx, f)))
     return opInsts(insts)
   },
   loop: (tail, ctx) => {
@@ -247,11 +263,7 @@ const expSpecialForms = {
       initInsts.push(opSetLocal(varIndex, cexp))
     }
     const bodyInsts = []
-    if (tail.length === 1) {
-      bodyInsts.push(opConstant(langUndefined))
-    } else {
-      bodyInsts.push(...tail.slice(1).map((f) => compExp(newCtx, f)))
-    }
+    bodyInsts.push(...tail.slice(1).map((f) => compExp(newCtx, f)))
     return opInsts([opInsts(initInsts), opLoop(opInsts(bodyInsts))])
   },
   continue: (tail, ctx) => {
@@ -270,9 +282,6 @@ const expSpecialForms = {
     }
     insts.push(opContinue())
     return opInsts(insts)
-  },
-  letfn: () => {
-    throw new CompileError('not implemented')
   },
   'type-anno': () => {
     throw new CompileError('not implemented')
