@@ -225,19 +225,14 @@ const expSpecialForms = {
   },
   letfn: (tail, ctx) => {
     if (tail.length < 1) throw new CompileError('let expected at least a binding list')
-    const funcForms = getFormList(tail[0])
+    const funcFormList = getFormList(tail[0])
     const newCtx = makeCtx(ctx, 'letfn')
-    const indexes = []
-    for (const funcForm of funcForms) {
-      const [firstFuncForm, funcNameForm] = getFormList(funcForm)
+    const indexes = funcFormList.map((funcForm) => {
+      const [firstFuncForm, ...rest] = getFormList(funcForm)
       if (getFormWord(firstFuncForm) !== 'func') throw new CompileError('expected func')
-      indexes.push(newLocal(newCtx, getFormWord(funcNameForm)))
-    }
-    const insts = []
-    for (let i = 0; i < funcForms.length; i++) {
-      const cfunc = compFunc(getFormList(funcForms[i]).slice(1), newCtx)
-      insts.push(opSetLocal(indexes[i], cfunc))
-    }
+      return [newLocal(newCtx, getFormWord(rest[0])), rest]
+    })
+    const insts = indexes.map(([varIndex, rest]) => opSetLocal(varIndex, compFunc(rest, newCtx)))
     insts.push(...tail.slice(1).map((f) => compExp(newCtx, f)))
     return opInsts(insts)
   },
