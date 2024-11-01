@@ -123,12 +123,14 @@ const testEvaluator = ({ pe }) => {
     expect(pe('[let [x [i32 2] y x] y]')).toBe(2)
     expect(pe('[let [x [i32 2] y [i32 5]] x]')).toBe(2)
     expect(pe('[let [x [i32 2]] [intrinsic-call i32.add x [i32 3]]]')).toBe(5)
-    expect(pe(`
+    expect(
+      pe(`
 [let
   [x [i32 2]
    x [intrinsic-call i32.add x [i32 3]]
   ]
-  x]`)).toBe(5)
+  x]`),
+    ).toBe(5)
     // expect(pe('[let [x [i32 2] x [intrinsic-call i32.add x [i32 3]]] x]')).toBe(5)
 
     expect(pe('[let [x [i32 2] y [i32 5]] y]')).toBe(5)
@@ -145,12 +147,14 @@ const testEvaluator = ({ pe }) => {
     expect(pe('[loop [x [i32 2] y x] y]')).toBe(2)
     expect(pe('[loop [x [i32 1]] [loop [x [i32 1337]] x]]')).toBe(1337)
     expect(pe('[loop [x [loop [x [i32 1337]] x]] x]')).toBe(1337)
-    expect(pe(`
+    expect(
+      pe(`
       [loop
         [x [i32 2]
          x [intrinsic-call i32.add x [i32 3]]
         ]
-        x]`)).toBe(5)
+        x]`),
+    ).toBe(5)
     // loop with continue
     // expect(pe('[loop [] [if [i32 1] [i32 5] [continue]]]')).toBe(5)
     assert.throws(() => pe('[loop [] [let [i [i32 5]] [continue i [i32 4]]]]'))
@@ -216,11 +220,13 @@ const testEvaluator = ({ pe }) => {
     assert.throws(() => pe('[letfn f]'))
 
     expect(pe('[letfn []]')).toBe(langUndefined)
-    expect(pe(`
+    expect(
+      pe(`
 [letfn [
   [func f [] [i32 1]]
   [func f [] [i32 2]]]
-  [f]]`)).toBe(2)
+  [f]]`),
+    ).toBe(2)
     {
       const isEvenSlow = pe(`
       [letfn
@@ -255,16 +261,45 @@ const testEvaluator = ({ pe }) => {
       expect(isEvenSlowWrapped(22)).toBe(1)
     }
   })
+
+  test('def', () => {
+    expect(pe('[def x [i32 5]] x')).toBe(5)
+    // expect(pe('[defn f [] [i32 5]] [f]')).toBe(5)
+  })
+  test('defn', () => {
+    // expect(pe('[def x [i32 5]] x')).toBe(5)
+    expect(pe('[defn f [] [i32 5]] [f]')).toBe(5)
+  })
+
+  test('defexpr', () => {
+    expect(pe('[defexpr q [p] p] [q a]')).toStrictEqual({tag: 'form/word', args: ['a']})
+    expect(pe('[defexpr q [p] p] [q []]')).toStrictEqual({tag: 'form/list', args: [[]]})
+  })
+
+  test('defmacro', () => {
+    expect(pe(`
+  [defexpr q [p] p]
+  [defmacro m [] [q [i32 5]]]
+  [m]`)).toBe(5)
+  })
 }
 
 import { makeEvalForm } from '../interpreter.js'
-import { compEval } from '../compiler.js'
 import { langUndefined, parseString } from '../core.js'
 
-const parseCompEval = (s) => compEval(parseString(s, test)[0])
 const parseEval = (s) => {
-  const { evalExp } = makeEvalForm()
-  return evalExp(parseString(s, test)[0])
+  const { evalTop, evalExp } = makeEvalForm()
+  const forms = parseString(s, 'test')
+  if (forms.length === 0) throw new Error(`Expected 0 forms, got ${forms.length}`)
+  for (let i = 0; i < forms.length - 1; i++) evalTop(forms[i])
+  return evalExp(forms.at(-1))
+}
+
+import { compileEvalForms } from '../compiler.js'
+
+const parseCompEval = (s) => {
+  const forms = parseString(s, 'test')
+  return compileEvalForms(forms)
 }
 
 describe.each([
