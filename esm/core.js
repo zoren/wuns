@@ -1,6 +1,6 @@
 import { isPlainObject } from './utils.js'
 
-export const langUndefined = Symbol('undefined')
+export const langUndefined = undefined
 
 export const isSigned32BitInteger = (n) => (n | 0) === n
 

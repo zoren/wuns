@@ -110,6 +110,7 @@ const testExp = ({ pe }) => {
     expect(pe('[do]')).toBe(langUndefined)
     expect(pe('[do [i32 5]]')).toBe(5)
     expect(pe('[do [i32 5] [i32 6]]')).toBe(6)
+    expect(pe('[do [let [x [i32 6]] x]]')).toBe(6)
     expect(pe('[do [let [x [i32 5]] x] [let [x [i32 6]] x]]')).toBe(6)
   })
 
@@ -190,7 +191,7 @@ const testExp = ({ pe }) => {
     assert.throws(() => pe('[func f [[]]]'))
 
     expect(pe('[func f []]')).toBeTypeOf('function')
-    expect(pe('[func my-func-name []]')).toSatisfy((f) => f.name === 'my-func-name')
+    expect(pe('[func myfuncname []]')).toSatisfy((f) => f.name === 'myfuncname')
     expect(pe('[func f [] [i32 1]]')).toBeTypeOf('function')
 
     expect(pe('[[func f []]]')).toBe(langUndefined)
