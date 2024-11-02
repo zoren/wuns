@@ -1,6 +1,10 @@
 import { expect, assert, test, describe } from 'vitest'
 
-const testEvaluator = ({ pe }) => {
+import { langUndefined, parseString } from '../core.js'
+import { makeEvalForm } from '../interpreter.js'
+import { makeCompilingEvaluator } from '../compiler.js'
+
+const testExp = ({ pe }) => {
   test('i32', () => {
     assert.throws(() => pe('[i32 0x80000000]'))
     assert.throws(() => pe('[i32 10n]'))
@@ -262,47 +266,65 @@ const testEvaluator = ({ pe }) => {
     }
   })
 
-  test('def', () => {
-    expect(pe('[def x [i32 5]] x')).toBe(5)
-    // expect(pe('[defn f [] [i32 5]] [f]')).toBe(5)
-  })
-  test('defn', () => {
-    // expect(pe('[def x [i32 5]] x')).toBe(5)
-    expect(pe('[defn f [] [i32 5]] [f]')).toBe(5)
-  })
-
-  test('defexpr', () => {
-    expect(pe('[defexpr q [p] p] [q a]')).toStrictEqual({tag: 'form/word', args: ['a']})
-    expect(pe('[defexpr q [p] p] [q []]')).toStrictEqual({tag: 'form/list', args: [[]]})
-  })
-
-  test('defmacro', () => {
-    expect(pe(`
-  [defexpr q [p] p]
-  [defmacro m [] [q [i32 5]]]
-  [m]`)).toBe(5)
+  test('type-anno', () => {
+    expect(pe('[type-anno [i32 1] i32]')).toBe(1)
   })
 }
 
-import { makeEvalForm } from '../interpreter.js'
-import { langUndefined, parseString } from '../core.js'
-
-const parseEval = (s) => {
-  const { evalTop, evalExp } = makeEvalForm()
-  const forms = parseString(s, 'test')
-  if (forms.length === 0) throw new Error(`Expected 0 forms, got ${forms.length}`)
-  for (let i = 0; i < forms.length - 1; i++) evalTop(forms[i])
-  return evalExp(forms.at(-1))
-}
-
-import { compileEvalForms } from '../compiler.js'
-
-const parseCompEval = (s) => {
-  const forms = parseString(s, 'test')
-  return compileEvalForms(forms)
+const makeParseEvalExp = (makeEvaluator) => {
+  return (s) => {
+    const forms = parseString(s, 'test')
+    if (forms.length !== 1) throw new Error(`Expected 1 form, got ${forms.length}`)
+    const { evalExp } = makeEvaluator()
+    return evalExp(forms[0])
+  }
 }
 
 describe.each([
-  { name: 'direct', pe: parseEval },
-  { name: 'compiled', pe: parseCompEval },
-])('$name', testEvaluator)
+  { name: 'direct', pe: makeParseEvalExp(makeEvalForm) },
+  { name: 'compiled', pe: makeParseEvalExp(makeCompilingEvaluator) },
+])('$name', testExp)
+
+const testTop = ({ ptse }) => {
+  test('def', async () => {
+    expect(await ptse('[def x [i32 5]] x')).toBe(5)
+    expect(await ptse('[def x [i32 5]] [def y x] y')).toBe(5)
+  })
+  test('defn', async () => {
+    expect(await ptse('[defn f [] [i32 5]] [f]')).toBe(5)
+  })
+
+  test('defexpr', async () => {
+    expect(await ptse('[defexpr q [p] p] [q a]')).toStrictEqual({ tag: 'form/word', args: ['a'] })
+    expect(await ptse('[defexpr q [p] p] [q []]')).toStrictEqual({ tag: 'form/list', args: [[]] })
+  })
+
+  test('defmacro', async () => {
+    const code = `
+  [defexpr q [p] p]
+  [defmacro m [] [q [i32 5]]]
+  [m]`
+    expect(await ptse(code)).toBe(5)
+  })
+
+  test('do top-level', async () => {
+    expect(await ptse('[do] [i32 5]')).toBe(5)
+    expect(await ptse('[do [do]] [i32 5]')).toBe(5)
+    expect(await ptse('[do [def x [i32 5]] [def y x]] y')).toBe(5)
+  })
+}
+
+const makeParseEvalTopsExp = (makeEvaluator) => {
+  return async (s) => {
+    const forms = parseString(s, 'test')
+    if (forms.length === 0) throw new Error(`Expected at least 1 form, got 0`)
+    const { evalTop, evalExp } = makeEvaluator()
+    for (let i = 0; i < forms.length - 1; i++) await evalTop(forms[i])
+    return evalExp(forms.at(-1))
+  }
+}
+
+describe.each([
+  { name: 'top direct', ptse: makeParseEvalTopsExp(makeEvalForm) },
+  { name: 'top compiled', ptse: makeParseEvalTopsExp(makeCompilingEvaluator) },
+])('$name', testTop)

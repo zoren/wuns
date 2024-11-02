@@ -34,7 +34,7 @@ const compileOp = (defEnv) => {
         const ccond = go(inst.cond)
         const ctrue = go(inst.ctrue)
         const cfalse = go(inst.cfalse)
-        return (env) => (ccond(env) !== 0 ? ctrue(env) : cfalse(env))
+        return (env) => (ccond(env) !== 0 ? ctrue : cfalse)(env)
       }
       case 'switch': {
         const { value, cases, defaultCase } = inst
@@ -284,12 +284,12 @@ const expSpecialForms = {
   match: () => {
     throw new CompileError('not implemented')
   },
-  'type-anno': () => {
-    throw new CompileError('not implemented')
+  'type-anno': (tail, ctx, defCtx) => {
+    return compExp(ctx, tail[0], defCtx)
   },
 }
 
-const defFuncLike = (tail, defCtx, firstWord) => {
+const defFuncLike = (firstWord, tail, defCtx) => {
   const defName = getFormWord(tail[0])
   const parameters = getFormList(tail[1]).map(getFormWord)
   const bodies = tail.slice(2)
@@ -305,7 +305,7 @@ const defFuncLike = (tail, defCtx, firstWord) => {
 }
 
 const topSpecialForms = {
-  def: (tail, defCtx) => {
+  def: (_, tail, defCtx) => {
     if (tail.length !== 2) throw new CompileError('def expected two arguments')
     const varName = getFormWord(tail[0])
     const cvalue = compExp(null, tail[1], defCtx)
@@ -316,13 +316,13 @@ const topSpecialForms = {
   defn: defFuncLike,
   defexpr: defFuncLike,
   defmacro: defFuncLike,
-  // do: () => {
-  //   throw new CompileError('not implemented')
-  // },
+  do: async (_, tail, defCtx) => {
+    for (const form of tail) await evalTopDefEnv(defCtx, form)
+  },
   load: () => {
     throw new CompileError('not implemented')
   },
-  type: () => {
+  type: (tail, defCtx) => {
     throw new CompileError('not implemented')
   },
   export: () => {
@@ -358,6 +358,7 @@ const compExp = (ctx, form, defEnv) => {
   const [firstForm, ...args] = forms
   const firstWord = tryGetFormWord(firstForm)
   if (firstWord) {
+    if (firstWord === 'do') return opInsts(args.map((f) => compExp(ctx, f, defEnv)))
     const topSpecialHandler = topSpecialForms[firstWord]
     if (topSpecialHandler) throw new CompileError('top special not allowed in expression form')
 
@@ -393,27 +394,31 @@ const compExp = (ctx, form, defEnv) => {
   )
 }
 
-const compTop = (defCtx, form) => {
+const evalTopDefEnv = async (defEnv, form) => {
   const forms = tryGetFormList(form)
   if (forms && forms.length > 0) {
     const [firstForm, ...args] = forms
     const firstWord = tryGetFormWord(firstForm)
     if (firstWord) {
       const topSpecialHandler = topSpecialForms[firstWord]
-      if (topSpecialHandler) return topSpecialHandler(args, defCtx, firstWord)
+      if (topSpecialHandler) {
+        await topSpecialHandler(firstWord, args, defEnv)
+        return true
+      }
     }
   }
-  const inst = compExp(null, form, defCtx)
-  const cop = compileOp(defCtx)
-  const eop = cop(inst)
-  const localEnv = []
-  return eop(localEnv)
+  return false
 }
 
-export const compileEvalForms = (forms) => {
-  if (forms.length === 0) throw new Error(`Expected 0 forms, got ${forms.length}`)
-  const defCtx = new Map()
-  let result = langUndefined
-  for (const form of forms) result = compTop(defCtx, form)
-  return result
+export const makeCompilingEvaluator = () => {
+  const defEnv = new Map()
+  const evalExp = (form) => {
+    const inst = compExp(null, form, defEnv)
+    const cop = compileOp(defEnv)
+    const eop = cop(inst)
+    const localEnv = []
+    return eop(localEnv)
+  }
+  const evalTop = async (form) => evalTopDefEnv(defEnv, form)
+  return { evalExp, evalTop }
 }
