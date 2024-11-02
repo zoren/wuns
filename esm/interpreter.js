@@ -348,7 +348,7 @@ export const makeEvalForm = () => {
           return langUndefined
         case 'do':
           try {
-            for (let i = 1; i < forms.length - 1; i++) await evalTop(forms[i])
+            for (let i = 1; i < forms.length; i++) await evalTop(forms[i])
           } catch (e) {
             throw evalError('error in do', e)
           }
