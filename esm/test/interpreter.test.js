@@ -312,6 +312,10 @@ const testTop = ({ ptse }) => {
     expect(await ptse('[do [do]] [i32 5]')).toBe(5)
     expect(await ptse('[do [def x [i32 5]] [def y x]] y')).toBe(5)
   })
+
+  test('import', async () => {
+    expect(await ptse('[import host concat [type-scheme [a] [func [[list a] [list a]] [list a]]]] concat')).toBeTypeOf('function')
+  })
 }
 
 const makeParseEvalTopsExp = (makeEvaluator) => {

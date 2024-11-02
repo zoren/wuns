@@ -304,6 +304,11 @@ const defFuncLike = (firstWord, tail, defCtx) => {
   defCtx.set(defName, { defKind: firstWord, value })
 }
 
+const setDef = (defEnv, varName, desc) => {
+  if (defEnv.has(varName)) throw new CompileError('redefining variable')
+  defEnv.set(varName, desc)
+}
+
 const topSpecialForms = {
   def: (_, tail, defCtx) => {
     if (tail.length !== 2) throw new CompileError('def expected two arguments')
@@ -311,7 +316,7 @@ const topSpecialForms = {
     const cvalue = compExp(null, tail[1], defCtx)
     const ctop = compileOp(defCtx)
     const value = ctop(cvalue)([])
-    defCtx.set(varName, { defKind: 'def', value })
+    setDef(defCtx, varName, { defKind: 'def', value })
   },
   defn: defFuncLike,
   defexpr: defFuncLike,
@@ -322,14 +327,21 @@ const topSpecialForms = {
   load: () => {
     throw new CompileError('not implemented')
   },
-  type: (tail, defCtx) => {
+  type: (_, tail, defCtx) => {
     throw new CompileError('not implemented')
   },
   export: () => {
     throw new CompileError('not implemented')
   },
-  import: () => {
-    throw new CompileError('not implemented')
+  import: async (_, tail, defEnv) => {
+    if (tail.length !== 3) throw evalError('import expects three arguments')
+    const importModuleName = getFormWord(tail[0])
+    const importElementName = getFormWord(tail[1])
+    const module = await import(`./runtime-lib/${importModuleName}.js`)
+    const importedValue = module[importElementName]
+    if (importedValue === undefined)
+      throw evalError('imported value not found in module ' + importModuleName + ' ' + importElementName)
+    setDef(defEnv, importElementName, { defKind: 'import', value: importedValue })
   },
 }
 
