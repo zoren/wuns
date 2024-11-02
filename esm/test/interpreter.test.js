@@ -3,6 +3,7 @@ import { expect, assert, test, describe } from 'vitest'
 import { langUndefined, parseString } from '../core.js'
 import { makeEvalForm } from '../interpreter.js'
 import { makeCompilingEvaluator } from '../compiler.js'
+import { makeJSCompilingEvaluator } from '../compiler-js.js'
 
 const testExp = ({ pe }) => {
   test('i32', () => {
@@ -283,7 +284,8 @@ const makeParseEvalExp = (makeEvaluator) => {
 
 describe.each([
   { name: 'direct', pe: makeParseEvalExp(makeEvalForm) },
-  { name: 'compiled', pe: makeParseEvalExp(makeCompilingEvaluator) },
+  { name: 'compiled closure', pe: makeParseEvalExp(makeCompilingEvaluator) },
+  { name: 'compiled js', pe: makeParseEvalExp(makeJSCompilingEvaluator) },
 ])('$name', testExp)
 
 const testTop = ({ ptse }) => {

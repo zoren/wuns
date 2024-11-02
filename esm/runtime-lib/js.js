@@ -97,11 +97,11 @@ const escapeIdentifier = (id) => {
   return (isJSReservedWord(id) ? '_' : '') + id.replace(/-/g, '_').replace(/\//g, '_slash_').replace(/\./g, '_dot_')
 }
 
-const jsExpToString = (js) => {
+export const jsExpToString = (js) => {
   if (!js) throw new Error('js exp is falsy')
   const { tag, args } = js
   const arg = (i) => {
-    if (!args[i]) throw new Error(`jsStmt ${tag} arg ${i} not found`)
+    if (i >= args.length) throw new Error(`jsExpToString ${tag} arg ${i} not found`)
     return args[i]
   }
   const paramsToString = () => {
@@ -142,7 +142,7 @@ const jsExpToString = (js) => {
   }
 }
 
-const jsStmtToString = (js) => {
+export const jsStmtToString = (js) => {
   if (!js) throw new Error('js stmt is falsy')
   const { tag, args } = js
   const arg = (i) => {
