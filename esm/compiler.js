@@ -160,7 +160,7 @@ const newLocal = (ctx, name) => {
   return index
 }
 
-const compFunc = (tail, ctx, defCtx) => {
+const compFunc = (tail, ctx, defEnv) => {
   const name = getFormWord(tail[0])
   const parameters = getFormList(tail[1]).map(getFormWord)
   const bodies = tail.slice(2)
@@ -169,7 +169,7 @@ const compFunc = (tail, ctx, defCtx) => {
   const newCtx = makeCtx(ctx, 'func')
   const recIndex = newLocal(newCtx, name)
   const paramIndexes = parameters.map((p) => newLocal(newCtx, p))
-  return opFunc(name, recIndex, paramIndexes, opInsts(bodies.map((f) => compExp(newCtx, f, defCtx))))
+  return opFunc(name, recIndex, paramIndexes, opInsts(bodies.map((f) => compExp(newCtx, f, defEnv))))
 }
 
 const expSpecialForms = {
@@ -190,7 +190,7 @@ const expSpecialForms = {
     if (tail.length !== 1) throw new CompileError('word expected one argument')
     return opConstant(getFormWord(tail[0]))
   },
-  'intrinsic-call': (tail, ctx, defCtx) => {
+  'intrinsic-call': (tail, ctx, defEnv) => {
     if (tail.length < 1) throw new CompileError('intrinsic-call expected at least one argument')
     const [opForm, ...args] = tail
     const opName = getFormWord(opForm)
@@ -198,28 +198,28 @@ const expSpecialForms = {
     if (args.length !== intrinsics[opName].length) throw new CompileError('wrong number of arguments')
     return opIntrinsicCall(
       opName,
-      args.map((arg) => compExp(ctx, arg, defCtx)),
+      args.map((arg) => compExp(ctx, arg, defEnv)),
     )
   },
   func: compFunc,
-  if: (tail, ctx, defCtx) => {
+  if: (tail, ctx, defEnv) => {
     if (tail.length !== 3) throw new CompileError('if expected three arguments')
-    return opIf(...tail.map((f) => compExp(ctx, f, defCtx)))
+    return opIf(...tail.map((f) => compExp(ctx, f, defEnv)))
   },
-  switch: (tail, ctx, defCtx) => {
+  switch: (tail, ctx, defEnv) => {
     if (tail.length < 2) throw new CompileError(`special form 'switch' expected at least two arguments`)
     if (tail.length % 2 !== 0) throw new CompileError('no switch default found')
-    const cvalue = compExp(ctx, tail[0], defCtx)
+    const cvalue = compExp(ctx, tail[0], defEnv)
     const cases = []
     for (let i = 1; i < tail.length - 1; i += 2) {
-      const values = getFormList(tail[i]).map((patForm) => compExp(ctx, patForm, defCtx))
-      const branchBody = compExp(ctx, tail[i + 1], defCtx)
+      const values = getFormList(tail[i]).map((patForm) => compExp(ctx, patForm, defEnv))
+      const branchBody = compExp(ctx, tail[i + 1], defEnv)
       cases.push([values, branchBody])
     }
     const defaultForm = tail.at(-1)
-    return opSwitch(cvalue, cases, compExp(ctx, defaultForm, defCtx))
+    return opSwitch(cvalue, cases, compExp(ctx, defaultForm, defEnv))
   },
-  let: (tail, ctx, defCtx) => {
+  let: (tail, ctx, defEnv) => {
     if (tail.length < 1) throw new CompileError('let expected at least a binding list')
     const bindings = getFormList(tail[0])
     if (bindings.length % 2 !== 0) throw new CompileError('odd number of bindings')
@@ -228,13 +228,13 @@ const expSpecialForms = {
     for (let i = 0; i < bindings.length - 1; i += 2) {
       const varName = getFormWord(bindings[i])
       const varIndex = newLocal(newCtx, varName)
-      const cexp = compExp(newCtx, bindings[i + 1], defCtx)
+      const cexp = compExp(newCtx, bindings[i + 1], defEnv)
       insts.push(opSetLocal(varIndex, cexp))
     }
-    insts.push(...tail.slice(1).map((f) => compExp(newCtx, f, defCtx)))
+    insts.push(...tail.slice(1).map((f) => compExp(newCtx, f, defEnv)))
     return opInsts(insts)
   },
-  letfn: (tail, ctx, defCtx) => {
+  letfn: (tail, ctx, defEnv) => {
     if (tail.length < 1) throw new CompileError('let expected at least a binding list')
     const funcFormList = getFormList(tail[0])
     const newCtx = makeCtx(ctx, 'letfn')
@@ -243,11 +243,11 @@ const expSpecialForms = {
       if (getFormWord(firstFuncForm) !== 'func') throw new CompileError('expected func')
       return [newLocal(newCtx, getFormWord(rest[0])), rest]
     })
-    const insts = indexes.map(([varIndex, rest]) => opSetLocal(varIndex, compFunc(rest, newCtx, defCtx)))
-    insts.push(...tail.slice(1).map((f) => compExp(newCtx, f, defCtx)))
+    const insts = indexes.map(([varIndex, rest]) => opSetLocal(varIndex, compFunc(rest, newCtx, defEnv)))
+    insts.push(...tail.slice(1).map((f) => compExp(newCtx, f, defEnv)))
     return opInsts(insts)
   },
-  loop: (tail, ctx, defCtx) => {
+  loop: (tail, ctx, defEnv) => {
     if (tail.length < 1) throw new CompileError('loop expected at least a binding list')
     const bindings = getFormList(tail[0])
     if (bindings.length % 2 !== 0) throw new CompileError('odd number of bindings')
@@ -255,15 +255,15 @@ const expSpecialForms = {
     const initInsts = []
     for (let i = 0; i < bindings.length - 1; i += 2) {
       const varName = getFormWord(bindings[i])
-      const cexp = compExp(newCtx, bindings[i + 1], defCtx)
+      const cexp = compExp(newCtx, bindings[i + 1], defEnv)
       const varIndex = newLocal(newCtx, varName)
       initInsts.push(opSetLocal(varIndex, cexp))
     }
     const bodyInsts = []
-    bodyInsts.push(...tail.slice(1).map((f) => compExp(newCtx, f, defCtx)))
+    bodyInsts.push(...tail.slice(1).map((f) => compExp(newCtx, f, defEnv)))
     return opInsts([opInsts(initInsts), opLoop(opInsts(bodyInsts))])
   },
-  continue: (tail, ctx, defCtx) => {
+  continue: (tail, ctx, defEnv) => {
     let loopContext = ctx
     while (loopContext) {
       if (loopContext.declaringForm === 'loop') break
@@ -275,21 +275,19 @@ const expSpecialForms = {
       const variableForm = tail[i]
       const variableName = getFormWord(variableForm)
       if (!loopContext.has(variableName)) throw new CompileError('continue, not a loop variable')
-      insts.push(opSetLocal(loopContext.get(variableName), compExp(ctx, tail[i + 1], defCtx)))
+      insts.push(opSetLocal(loopContext.get(variableName), compExp(ctx, tail[i + 1], defEnv)))
     }
     insts.push(opContinue())
     return opInsts(insts)
   },
-  do: (tail, ctx, defCtx) => opInsts(tail.map((f) => compExp(ctx, f, defCtx))),
+  do: (tail, ctx, defEnv) => opInsts(tail.map((f) => compExp(ctx, f, defEnv))),
   match: () => {
     throw new CompileError('not implemented')
   },
-  'type-anno': (tail, ctx, defCtx) => {
-    return compExp(ctx, tail[0], defCtx)
-  },
+  'type-anno': (tail, ctx, defEnv) => compExp(ctx, tail[0], defEnv),
 }
 
-const defFuncLike = (firstWord, tail, defCtx) => {
+const defFuncLike = (firstWord, tail, defEnv) => {
   const defName = getFormWord(tail[0])
   const parameters = getFormList(tail[1]).map(getFormWord)
   const bodies = tail.slice(2)
@@ -298,10 +296,10 @@ const defFuncLike = (firstWord, tail, defCtx) => {
   const newCtx = new Map()
   const recIndex = newLocal(newCtx, defName)
   const paramIndexes = parameters.map((p) => newLocal(newCtx, p))
-  const f = opFunc(defName, recIndex, paramIndexes, opInsts(bodies.map((f) => compExp(newCtx, f, defCtx))))
-  const ctop = compileOp(defCtx)
+  const f = opFunc(defName, recIndex, paramIndexes, opInsts(bodies.map((f) => compExp(newCtx, f, defEnv))))
+  const ctop = compileOp(defEnv)
   const value = ctop(f)([])
-  defCtx.set(defName, { defKind: firstWord, value })
+  defEnv.set(defName, { defKind: firstWord, value })
 }
 
 const setDef = (defEnv, varName, desc) => {
@@ -310,24 +308,24 @@ const setDef = (defEnv, varName, desc) => {
 }
 
 const topSpecialForms = {
-  def: (_, tail, defCtx) => {
+  def: (_, tail, defEnv) => {
     if (tail.length !== 2) throw new CompileError('def expected two arguments')
     const varName = getFormWord(tail[0])
-    const cvalue = compExp(null, tail[1], defCtx)
-    const ctop = compileOp(defCtx)
+    const cvalue = compExp(null, tail[1], defEnv)
+    const ctop = compileOp(defEnv)
     const value = ctop(cvalue)([])
-    setDef(defCtx, varName, { defKind: 'def', value })
+    setDef(defEnv, varName, { defKind: 'def', value })
   },
   defn: defFuncLike,
   defexpr: defFuncLike,
   defmacro: defFuncLike,
-  do: async (_, tail, defCtx) => {
-    for (const form of tail) await evalTopDefEnv(defCtx, form)
+  do: async (_, tail, defEnv) => {
+    for (const form of tail) await evalTopDefEnv(defEnv, form)
   },
   load: () => {
     throw new CompileError('not implemented')
   },
-  type: (_, tail, defCtx) => {
+  type: (_, tail, defEnv) => {
     throw new CompileError('not implemented')
   },
   export: () => {
@@ -394,7 +392,6 @@ const compExp = (ctx, form, defEnv) => {
         case 'defn':
         case 'def':
           break
-        // return opCall(opDefGet(index), args.map((arg) => compExp(ctx, arg, defCtx)))
         default:
           throw new CompileError('unexpected defKind')
       }
