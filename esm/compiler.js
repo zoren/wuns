@@ -17,7 +17,7 @@ const opCall = (func, args) => ({ op: 'call', func, args })
 
 const continueValue = Symbol('continue')
 
-const compileOp = (defEnv) => {
+const compileEvalInst = (defEnv, inst) => {
   const go = (inst) => {
     switch (inst.op) {
       case 'constant': {
@@ -115,7 +115,9 @@ const compileOp = (defEnv) => {
         throw new Error('unexpected op')
     }
   }
-  return go
+  const eop = go(inst)
+  const localEnv = []
+  return eop(localEnv)
 }
 
 class CompileError extends Error {
@@ -296,9 +298,8 @@ const defFuncLike = (firstWord, tail, defEnv) => {
   const newCtx = new Map()
   const recIndex = newLocal(newCtx, defName)
   const paramIndexes = parameters.map((p) => newLocal(newCtx, p))
-  const f = opFunc(defName, recIndex, paramIndexes, opInsts(bodies.map((f) => compExp(newCtx, f, defEnv))))
-  const ctop = compileOp(defEnv)
-  const value = ctop(f)([])
+  const funcInst = opFunc(defName, recIndex, paramIndexes, opInsts(bodies.map((f) => compExp(newCtx, f, defEnv))))
+  const value = compileEvalInst(defEnv, funcInst)
   defEnv.set(defName, { defKind: firstWord, value })
 }
 
@@ -312,8 +313,7 @@ const topSpecialForms = {
     if (tail.length !== 2) throw new CompileError('def expected two arguments')
     const varName = getFormWord(tail[0])
     const cvalue = compExp(null, tail[1], defEnv)
-    const ctop = compileOp(defEnv)
-    const value = ctop(cvalue)([])
+    const value = compileEvalInst(defEnv, cvalue)
     setDef(defEnv, varName, { defKind: 'def', value })
   },
   defn: defFuncLike,
@@ -381,10 +381,7 @@ const compExp = (ctx, form, defEnv) => {
       switch (defKind) {
         case 'defmacro': {
           const callInst = opCall(opDefGet(firstWord), args.map(opConstant))
-          const ctop = compileOp(defEnv)
-          const eop = ctop(callInst)
-          const localEnv = []
-          const macroForm = eop(localEnv)
+          const macroForm = compileEvalInst(defEnv, callInst)
           return compExp(ctx, macroForm, defEnv)
         }
         case 'defexpr':
@@ -421,13 +418,7 @@ const evalTopDefEnv = async (defEnv, form) => {
 
 export const makeCompilingEvaluator = () => {
   const defEnv = new Map()
-  const evalExp = (form) => {
-    const inst = compExp(null, form, defEnv)
-    const cop = compileOp(defEnv)
-    const eop = cop(inst)
-    const localEnv = []
-    return eop(localEnv)
-  }
+  const evalExp = form => compileEvalInst(defEnv, compExp(null, form, defEnv))
   const evalTop = async (form) => evalTopDefEnv(defEnv, form)
   return { evalExp, evalTop }
 }
