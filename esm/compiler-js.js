@@ -1,4 +1,4 @@
-import { tryGetFormList, tryGetFormWord, optionNone, makeOptionSome, makeTaggedValue } from './core.js'
+import { tryGetFormList, tryGetFormWord, optionNone, makeOptionSome, makeTaggedValue, parseString } from './core.js'
 import { intrinsics } from './intrinsics.js'
 import { escapeIdentifier, jsExpToString, jsStmtToString } from './runtime-lib/js.js'
 
@@ -481,6 +481,7 @@ const defFuncLike = async (firstWord, tail, defEnv) => {
   const exp = compFuncArrow(tail, null, defEnv)
   await setDef(defEnv, defName, firstWord, exp)
 }
+import { 'read-file-async' as read_file_async } from './runtime-lib/files.js'
 
 const topSpecialForms = {
   def: async (_, tail, defEnv) => {
@@ -493,14 +494,14 @@ const topSpecialForms = {
   defexpr: defFuncLike,
   defmacro: defFuncLike,
   do: async (_, tail, defEnv) => {
-    const jsStmts = []
-    for (const form of tail) jsStmts.push(await evalTopDefEnv(defEnv, form))
+    for (const form of tail) await evalTopDefEnv(defEnv, form)
   },
-  load: (_, tail, defEnv) => {
+  load: async (_, tail, defEnv) => {
     if (tail.length !== 1) throw evalError('load expects one argument')
-    const relativeFilePath = getFormWord(tail[1])
+    const relativeFilePath = getFormWord(tail[0])
+    const fileContent = await read_file_async(relativeFilePath)
     const fileForms = parseString(fileContent, relativeFilePath)
-    throw new CompileError('not implemented')
+    for (const form of fileForms) await evalTopDefEnv(defEnv, form)
   },
   type: async (_, forms, defEnv) => {
     if (forms.length % 3 !== 0) throw new CompileError('type expected triples')
@@ -543,8 +544,11 @@ const topSpecialForms = {
       }
     }
   },
-  export: () => {
-    throw new CompileError('not implemented')
+  export: (_, forms, defEnv) => {
+    for (const form of forms) {
+      const exportWord = getFormWord(form)
+      if (!defEnv.has(exportWord)) throw evalError('exported def variable not found: ' + exportWord)
+    }
   },
   import: async (_, tail, defEnv) => {
     if (tail.length !== 3) throw evalError('import expects three arguments')
