@@ -1,19 +1,21 @@
-import { tryGetFormList, tryGetFormWord } from './core.js'
+import { tryGetFormList, tryGetFormWord, optionNone, makeOptionSome, makeTaggedValue } from './core.js'
 import { intrinsics } from './intrinsics.js'
 import { escapeIdentifier, jsExpToString, jsStmtToString } from './runtime-lib/js.js'
 
 const jsExp =
   (ctor) =>
-  (...args) => ({ tag: 'js-exp/' + ctor, args })
+  (...args) =>
+    makeTaggedValue('js-exp/' + ctor, ...args)
 
 const jsStmt =
   (ctor) =>
-  (...args) => ({ tag: 'js-stmt/' + ctor, args })
+  (...args) =>
+    makeTaggedValue('js-stmt/' + ctor, ...args)
 
 const jsNumber = jsExp('number')
 const jsString = jsExp('string')
 const jsBinop = jsExp('binop')
-const jsBin = (s) => (a, b) => jsBinop({ tag: 'binop/' + s, args: [] }, a, b)
+const jsBin = (s) => (a, b) => jsBinop(makeTaggedValue('binop/' + s), a, b)
 const jsAdd = jsBin('add')
 const jsSub = jsBin('sub')
 const jsBinIOr = jsBin('binary-ior')
@@ -27,7 +29,7 @@ const jsObject = jsExp('object')
 const jsAwait = jsExp('await')
 const jsSubscript = jsExp('subscript')
 
-const jsArrowExpNoRest = (params, body) => jsArrowExp(params, { tag: 'option/none' }, body)
+const jsArrowExpNoRest = (params, body) => jsArrowExp(params, optionNone, body)
 
 const js0 = jsNumber(0)
 const js1 = jsNumber(1)
@@ -49,7 +51,7 @@ const jsContinue = jsStmt('continue')()
 const jsSwitch = jsStmt('switch')
 const jsThrow = jsStmt('throw')
 
-const jsIIFE = (stmts) => jsCall(jsArrowStmt([], { tag: 'option/none' }, jsBlock(stmts)), [])
+const jsIIFE = (stmts) => jsCall(jsArrowStmt([], optionNone, jsBlock(stmts)), [])
 
 const opIntrinsicCall = (opName, args) => {
   switch (opName) {
@@ -144,13 +146,13 @@ const compFuncArrow = (tail, ctx, defEnv) => {
   const bodies = tail.slice(2)
   const newCtx = makeCtx(ctx, 'func')
   setNewLocal(newCtx, name)
-  let restOption = { tag: 'option/none' }
+  let restOption = optionNone
   if (parameters.length >= 2 && parameters.at(-2) === '..') {
     const restParam = parameters.at(-1)
     parameters = parameters.slice(0, -2)
     parameters.forEach((p) => setNewLocal(newCtx, p))
     setNewLocal(newCtx, restParam)
-    restOption = { tag: 'option/some', args: [restParam] }
+    restOption = makeOptionSome(restParam)
   } else {
     parameters.forEach((p) => setNewLocal(newCtx, p))
   }
