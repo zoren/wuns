@@ -1,6 +1,6 @@
-import { tryGetFormList, tryGetFormWord, makeValueTagger, isTaggedValue } from './core.js'
+import { tryGetFormList, tryGetFormWord } from './core.js'
 import { intrinsics } from './intrinsics.js'
-import { jsExpToString, jsStmtToString } from './runtime-lib/js.js'
+import { escapeIdentifier, jsExpToString, jsStmtToString } from './runtime-lib/js.js'
 
 const jsExp =
   (ctor) =>
@@ -13,13 +13,28 @@ const jsStmt =
 const jsNumber = jsExp('number')
 const jsString = jsExp('string')
 const jsBinop = jsExp('binop')
-const jsAdd = (a, b) => jsBinop({ tag: 'binop/add', args: [] }, a, b)
-const jsSub = (a, b) => jsBinop({ tag: 'binop/sub', args: [] }, a, b)
-const jsBinIOr = (a, b) => jsBinop({ tag: 'binop/binary-ior', args: [] }, a, b)
+const jsBin = (s) => (a, b) => jsBinop({ tag: 'binop/' + s, args: [] }, a, b)
+const jsAdd = jsBin('add')
+const jsSub = jsBin('sub')
+const jsBinIOr = jsBin('binary-ior')
 const jsTernary = jsExp('ternary')
 const jsVar = jsExp('var')
 const jsCall = jsExp('call')
 const jsArrowStmt = jsExp('arrow-stmt')
+const jsArrowExp = jsExp('arrow-exp')
+const jsArray = jsExp('array')
+const jsObject = jsExp('object')
+const jsAwait = jsExp('await')
+const jsSubscript = jsExp('subscript')
+
+const jsArrowExpNoRest = (params, body) => jsArrowExp(params, { tag: 'option/none' }, body)
+
+const js0 = jsNumber(0)
+const js1 = jsNumber(1)
+const jsUndefined = jsVar('undefined')
+
+const mkObject = (...args) => jsObject(args.map(([k, v]) => ({ fst: k, snd: v })))
+const mkTaggedObject = (tag, ...args) => mkObject(['tag', jsString(tag)], ['args', jsArray(args)])
 
 const jsIf = jsStmt('if')
 const jsConstDecl = jsStmt('const-decl')
@@ -32,56 +47,39 @@ const jsExpStmt = jsStmt('exp')
 const jsWhile = jsStmt('while')
 const jsContinue = jsStmt('continue')()
 const jsSwitch = jsStmt('switch')
+const jsThrow = jsStmt('throw')
 
-const jsIIFE = (stmt) => jsCall(jsArrowStmt([], { tag: 'option/none' }, stmt), [])
-
-const opConstant = (value) => {
-  if (typeof value === 'number') return jsNumber(value)
-  if (typeof value === 'string') return jsString(value)
-  throw new Error('unexpected constant value')
-}
-const js0 = opConstant(0)
-const js1 = opConstant(1)
-const jsUndefined = jsVar('undefined')
-const jsSymbol = (name) => jsCall(jsVar('Symbol'), [jsString(name)])
-const jsLangUndefined = jsSymbol('undefined')
+const jsIIFE = (stmts) => jsCall(jsArrowStmt([], { tag: 'option/none' }, jsBlock(stmts)), [])
 
 const opIntrinsicCall = (opName, args) => {
-  // if (opName === 'i32.add') return jsBinop({ tag: 'binop/add' }, ...args)
   switch (opName) {
     case 'i32.add':
       return jsBinIOr(jsAdd(...args), js0)
     case 'i32.sub':
       return jsBinIOr(jsSub(...args), js0)
+    case 'i32.mul':
+      return jsBinIOr(jsBin('mul')(...args), js0)
+    case 'i32.div-s':
+      return jsBinIOr(jsBin('div')(...args), js0)
+    case 'i32.rem-s':
+      return jsBinIOr(jsBin('rem')(...args), js0)
+    case 'i32.and':
+      return jsBin('binary-and')(...args)
     case 'i32.or':
       return jsBinIOr(...args)
+    case 'i32.eq':
+      return jsBinIOr(jsBin('eq')(...args), js0)
+    case 'i32.lt-s':
+      return jsBinIOr(jsBin('lt')(...args), js0)
+    case 'i32.le-s':
+      return jsBinIOr(jsBin('le')(...args), js0)
+
     case 'f64.add':
       return jsAdd(...args)
     case 'f64.sub':
       return jsSub(...args)
     default:
-      throw new Error('unexpected intrinsic')
-  }
-}
-const opSwitch = (value, cases, defaultCase) => ({ op: 'switch', value, cases, defaultCase })
-const opGetLocal = (index) => ({ op: 'getLocal', index })
-const opSetLocal = (index, value) => ({ op: 'setLocal', index, value })
-const opDefGet = (varName) => ({ op: 'defGet', varName })
-const opInsts = (insts) => ({ op: 'insts', insts })
-const opLoop = (body) => ({ op: 'loop', body })
-const opContinue = () => ({ op: 'continue' })
-const opFunc = (name, recIndex, paramIndexes, body) => ({ op: 'func', name, recIndex, paramIndexes, body })
-const opCall = (func, args) => ({ op: 'call', func, args })
-const opError = (message) => ({ op: 'error', message })
-
-const compileEvalInst = (defEnv, inst) => {
-  try {
-    const jsStr = jsExpToString(inst)
-    const func = new Function('return ' + jsStr)
-    return func()
-  } catch (e) {
-    console.error(e)
-    console.dir(inst, { depth: null })
+      throw new Error('unexpected intrinsic: ' + opName)
   }
 }
 
@@ -140,17 +138,29 @@ const bodiesToStmts = (defEnv, ctx, tail, isTail) => {
   return stmts
 }
 
-const compFunc = (tail, ctx, defEnv) => {
+const compFuncArrow = (tail, ctx, defEnv) => {
   const name = getFormWord(tail[0])
-  const parameters = getFormList(tail[1]).map(getFormWord)
+  let parameters = getFormList(tail[1]).map(getFormWord)
   const bodies = tail.slice(2)
-  const hasNoRest = parameters.length < 2 || parameters.at(-2) !== '..'
-  if (!hasNoRest) throw new CompileError('rest parameter not supported')
   const newCtx = makeCtx(ctx, 'func')
   setNewLocal(newCtx, name)
-  parameters.map((p) => setNewLocal(newCtx, p))
-  const arrow = jsArrowStmt(parameters, { tag: 'option/none' }, jsBlock(bodiesToStmts(defEnv, newCtx, bodies, true)))
-  return jsIIFE(jsBlock([jsConstDecl(name, arrow), jsReturn(jsVar(name))]))
+  let restOption = { tag: 'option/none' }
+  if (parameters.length >= 2 && parameters.at(-2) === '..') {
+    const restParam = parameters.at(-1)
+    parameters = parameters.slice(0, -2)
+    parameters.forEach((p) => setNewLocal(newCtx, p))
+    setNewLocal(newCtx, restParam)
+    restOption = { tag: 'option/some', args: [restParam] }
+  } else {
+    parameters.forEach((p) => setNewLocal(newCtx, p))
+  }
+  return jsArrowStmt(parameters, restOption, jsBlock(bodiesToStmts(defEnv, newCtx, bodies, true)))
+}
+
+const compFunc = (tail, ctx, defEnv) => {
+  const name = getFormWord(tail[0])
+  const arrow = compFuncArrow(tail, ctx, defEnv)
+  return jsIIFE([jsConstDecl(name, arrow), jsReturn(jsVar(name))])
 }
 
 const expSpecialFormsExp = {
@@ -159,17 +169,17 @@ const expSpecialFormsExp = {
     const v = +getFormWord(tail[0])
     const normalized = v | 0
     if (v !== normalized) throw new CompileError('expected i32')
-    return opConstant(normalized)
+    return jsNumber(normalized)
   },
   f64: (tail) => {
     if (tail.length !== 1) throw new CompileError('f64 expected one argument')
     const v = +getFormWord(tail[0])
     if (isNaN(v)) throw new CompileError('expected number')
-    return opConstant(v)
+    return jsNumber(v)
   },
   word: (tail) => {
     if (tail.length !== 1) throw new CompileError('word expected one argument')
-    return opConstant(getFormWord(tail[0]))
+    return jsString(getFormWord(tail[0]))
   },
   'intrinsic-call': (tail, ctx, defEnv) => {
     if (tail.length < 1) throw new CompileError('intrinsic-call expected at least one argument')
@@ -273,7 +283,7 @@ const expSpecialFormsStmt = {
     return jsSeq(insts)
   },
   do: (tail, ctx, defEnv, isTailPos) => jsSeq(bodiesToStmts(defEnv, ctx, tail, isTailPos)),
-  switch: (tail, ctx, defEnv) => {
+  switch: (tail, ctx, defEnv, isTailPos) => {
     if (tail.length < 2) throw new CompileError(`special form 'switch' expected at least two arguments`)
     if (tail.length % 2 !== 0) throw new CompileError('no switch default found')
     const cvalue = compExp(ctx, tail[0], defEnv)
@@ -284,56 +294,48 @@ const expSpecialFormsStmt = {
       cases.push({ fst: values, snd: branchBody })
     }
     const defaultForm = tail.at(-1)
-    return jsSwitch(cvalue, cases, compExpStmt(ctx, defaultForm, defEnv, true))
+    const theSwitch = jsSwitch(cvalue, cases, compExpStmt(ctx, defaultForm, defEnv, true))
+    return isTailPos ? theSwitch : jsExpStmt(jsIIFE([theSwitch]))
   },
-  match: (forms, lctx, defEnv) => {
-    throw new CompileError('not implemented')
+  match: (forms, lctx, defEnv, isTailPos) => {
+    if (forms.length === 0) throw new CompileError('match expected at least one argument')
+    const lctxMatch = makeCtx(lctx, 'match')
+
+    const stmts = []
+    const tmpValueVarName = 'matchValue' + tmpVarCounter++
+    setNewLocal(lctxMatch, tmpValueVarName)
+    const cvalue = compExp(lctxMatch, forms[0], defEnv)
+    stmts.push(jsConstDecl(tmpValueVarName, cvalue))
+    const tmpArgsVar = 'matchValueArgs' + tmpVarCounter++
+    setNewLocal(lctxMatch, tmpArgsVar)
+    stmts.push(jsConstDecl(tmpArgsVar, jsSubscript(jsVar(tmpValueVarName), jsString('args'))))
+
+    const cases = []
+    for (let i = 1; i < forms.length - 1; i += 2) {
+      const patternList = getFormList(forms[i])
+      if (patternList.length === 0) throw evalError('pattern must have at least one word')
+      const tag = getFormWord(patternList[0])
+      const brach = forms[i + 1]
+      const newCtx = makeCtx(lctxMatch, 'match-case')
+      const branchStmts = []
+      for (let j = 1; j < patternList.length; j++) {
+        const patternWord = getFormWord(patternList[j])
+        setNewLocal(newCtx, patternWord)
+        branchStmts.push(jsAssign(patternWord, jsSubscript(jsVar(tmpArgsVar), jsNumber(j - 1))))
+      }
+      branchStmts.push(compExpStmt(newCtx, brach, defEnv, true))
+      cases.push({ fst: [jsString(tag)], snd: jsBlock(branchStmts) })
+    }
+
+    const defaultCase =
+      forms.length % 2 === 0 ? compExpStmt(lctx, forms.at(-1), defEnv, true) : jsThrow(jsString('no match string'))
+    const theSwitch = jsSwitch(jsSubscript(jsVar(tmpValueVarName), jsString('tag')), cases, defaultCase)
+    stmts.push(theSwitch)
+    return isTailPos ? jsBlock(stmts) : jsExpStmt(jsIIFE(stmts))
   },
 }
 
 let tmpVarCounter = 0
-
-const defFuncLike = (firstWord, tail, defEnv) => {
-  const defName = getFormWord(tail[0])
-  const parameters = getFormList(tail[1]).map(getFormWord)
-  const bodies = tail.slice(2)
-  const hasNoRest = parameters.length < 2 || parameters.at(-2) !== '..'
-  if (!hasNoRest) throw new CompileError('rest parameter not supported')
-  const newCtx = new Map()
-  const recIndex = setNewLocal(newCtx, defName)
-  const paramIndexes = parameters.map((p) => setNewLocal(newCtx, p))
-  throw new CompileError('not implemented')
-}
-
-const setDef = (defEnv, varName, desc) => {
-  if (defEnv.has(varName)) throw new CompileError('redefining variable')
-  defEnv.set(varName, desc)
-}
-
-const topSpecialForms = {
-  def: (_, tail, defEnv) => {
-    if (tail.length !== 2) throw new CompileError('def expected two arguments')
-    throw new CompileError('not implemented')
-  },
-  defn: defFuncLike,
-  defexpr: defFuncLike,
-  defmacro: defFuncLike,
-  do: async (_, tail, defEnv) => {
-    for (const form of tail) await evalTopDefEnv(defEnv, form)
-  },
-  load: () => {
-    throw new CompileError('not implemented')
-  },
-  type: (_, forms, defEnv) => {
-    throw new CompileError('not implemented')
-  },
-  export: () => {
-    throw new CompileError('not implemented')
-  },
-  import: async (_, tail, defEnv) => {
-    throw new CompileError('not implemented')
-  },
-}
 
 const compExpStmt = (ctx, form, defEnv, isTail) => {
   const forms = tryGetFormList(form)
@@ -350,6 +352,36 @@ const compExpStmt = (ctx, form, defEnv, isTail) => {
   return isTail ? jsReturn(jsExp) : jsExpStmt(jsExp)
 }
 
+const formToQuotedJS = (form) => {
+  const w = tryGetFormWord(form)
+  if (w) return mkTaggedObject('form/word', jsString(w))
+  const forms = tryGetFormList(form)
+  if (!forms) throw new CompileError('unexpected form')
+  return mkTaggedObject('form/list', jsArray(forms.map(formToQuotedJS)))
+}
+
+const jsStmtToStringSafe = (js) => {
+  try {
+    return jsStmtToString(js)
+  } catch (e) {
+    console.error(e)
+    console.dir(js, { depth: null })
+    // return '/* error in jsStmtToStringSafe */'
+    throw e
+  }
+}
+
+const jsExpToStringSafe = (js) => {
+  try {
+    return jsExpToString(js)
+  } catch (e) {
+    console.error(e)
+    console.dir(js, { depth: null })
+    // return '/* error in jsExpToStringSafe */'
+    throw e
+  }
+}
+
 const compExp = (ctx, form, defEnv) => {
   const word = tryGetFormWord(form)
   if (word) {
@@ -363,7 +395,7 @@ const compExp = (ctx, form, defEnv) => {
     const { defKind } = desc
     if (defKind === 'defmacro') throw new CompileError('macro in value position')
     if (defKind === 'defexpr') throw new CompileError('fexpr in value position')
-    return opDefGet(word)
+    return jsVar(word)
   }
   const forms = tryGetFormList(form)
   if (!forms) {
@@ -383,25 +415,19 @@ const compExp = (ctx, form, defEnv) => {
     if (expSpecialHandler) return expSpecialHandler(args, ctx, defEnv)
 
     const stmtSpecialHandler = expSpecialFormsStmt[firstWord]
-    if (stmtSpecialHandler) return jsIIFE(stmtSpecialHandler(args, ctx, defEnv, true))
+    // todo optimize the generated code so we don't wrap every if in a block
+    if (stmtSpecialHandler) return jsIIFE([stmtSpecialHandler(args, ctx, defEnv, true)])
 
-    const d = defEnv.get(firstWord)
-    if (d) {
-      const { defKind } = d
+    const defDesc = defEnv.get(firstWord)
+    if (defDesc) {
+      const { defKind, value } = defDesc
       switch (defKind) {
-        case 'defmacro': {
-          const callInst = opCall(opDefGet(firstWord), args.map(opConstant))
-          const macroForm = compileEvalInst(defEnv, callInst)
-          return compExp(ctx, macroForm, defEnv)
-        }
+        case 'defmacro':
+          return compExp(ctx, value(...args), defEnv)
         case 'defexpr':
-          return opCall(opDefGet(firstWord), args.map(opConstant))
-        case 'defn':
-        case 'def':
-        case 'type':
-          break
+          return jsCall(jsVar(firstWord), args.map(formToQuotedJS))
         default:
-          throw new CompileError('unexpected defKind')
+          break
       }
     }
   }
@@ -409,10 +435,123 @@ const compExp = (ctx, form, defEnv) => {
     compExp(ctx, firstForm, defEnv),
     args.map((arg) => compExp(ctx, arg, defEnv)),
   )
-  // return opCall(
-  //   compExp(ctx, firstForm, defEnv),
-  //   args.map((arg) => compExp(ctx, arg, defEnv)),
-  // )
+}
+
+const AsyncFunction = async function () {}.constructor
+
+const importModuleElement = async (moduleName, elementName) => {
+  const module = await import(`./runtime-lib/${moduleName}.js`)
+  const elem = module[elementName]
+  if (elem === undefined) throw new Error('imported value not found in module ' + moduleName + ' ' + elementName)
+  return elem
+}
+
+const evalExpAsync = async (defEnv, jsExp) => {
+  const jsSrc = jsExpToStringSafe(jsExp)
+  try {
+    const asyncFunc = new AsyncFunction('dynImport', ...defEnv.keys().map(escapeIdentifier), 'return ' + jsSrc)
+    return await asyncFunc(importModuleElement, ...defEnv.values().map(({ value }) => value))
+  } catch (e) {
+    if (e instanceof SyntaxError) {
+      console.error(e)
+      console.log(jsSrc)
+      console.dir(jsExp, { depth: null })
+      throw new CompileError('SyntaxError in evalExpAsync')
+    }
+    throw e
+  }
+}
+
+const setDef = async (defEnv, varName, defKind, jsExp) => {
+  if (defEnv.has(varName)) throw new CompileError('redefining variable')
+  try {
+    const value = await evalExpAsync(defEnv, jsExp)
+    defEnv.set(varName, { defKind, value })
+  } catch (e) {
+    console.error({ varName, defKind })
+    console.error(e)
+    throw e
+  }
+}
+
+const defFuncLike = async (firstWord, tail, defEnv) => {
+  const defName = getFormWord(tail[0])
+  const exp = compFuncArrow(tail, null, defEnv)
+  await setDef(defEnv, defName, firstWord, exp)
+}
+
+const topSpecialForms = {
+  def: async (_, tail, defEnv) => {
+    if (tail.length !== 2) throw new CompileError('def expected two arguments')
+    const varName = getFormWord(tail[0])
+    const jsExp = compExp(null, tail[1], defEnv)
+    await setDef(defEnv, varName, 'def', jsExp)
+  },
+  defn: defFuncLike,
+  defexpr: defFuncLike,
+  defmacro: defFuncLike,
+  do: async (_, tail, defEnv) => {
+    const jsStmts = []
+    for (const form of tail) jsStmts.push(await evalTopDefEnv(defEnv, form))
+  },
+  load: (_, tail, defEnv) => {
+    if (tail.length !== 1) throw evalError('load expects one argument')
+    const relativeFilePath = getFormWord(tail[1])
+    const fileForms = parseString(fileContent, relativeFilePath)
+    throw new CompileError('not implemented')
+  },
+  type: async (_, forms, defEnv) => {
+    if (forms.length % 3 !== 0) throw new CompileError('type expected triples')
+    for (let i = 0; i < forms.length; i += 3) {
+      const type = getFormWord(forms[i])
+      const _typeParams = getFormList(forms[i + 1]).map(getFormWord)
+      const body = getFormList(forms[i + 2])
+      const firstBodyWord = getFormWord(body[0])
+      const typePrefix = `${type}/`
+      switch (firstBodyWord) {
+        case 'union': {
+          for (let i = 1; i < body.length; i++) {
+            const unionCase = getFormList(body[i])
+            if (unionCase.length === 0) throw new CompileError('union case must have at least one word')
+            const unionCaseName = getFormWord(unionCase[0])
+            const qualName = typePrefix + unionCaseName
+            const parameters = unionCase.slice(1).map((_, i) => `p${i}`)
+            const ctor = jsArrowExpNoRest(parameters, mkTaggedObject(qualName, ...parameters.map((p) => jsVar(p))))
+            await setDef(defEnv, qualName, 'unionCtor', ctor)
+          }
+          break
+        }
+        case 'record': {
+          const fieldNames = []
+          for (let i = 1; i < body.length; i++) {
+            const recordField = getFormList(body[i])
+            if (recordField.length < 2) throw evalError('record field must have a name and a type')
+            const fieldName = getFormWord(recordField[0])
+            fieldNames.push(fieldName)
+            const projecterName = typePrefix + fieldName
+            const jsProjecter = jsArrowExpNoRest(['record'], jsSubscript(jsVar('record'), jsString(fieldName)))
+            await setDef(defEnv, projecterName, 'recordProj', jsProjecter)
+          }
+          const jsConstructor = jsArrowExpNoRest(fieldNames, mkObject(...fieldNames.map((f) => [f, jsVar(f)])))
+          await setDef(defEnv, type, 'recordCtor', jsConstructor)
+          break
+        }
+        default:
+          throw new CompileError('unexpected type body: ' + firstBodyWord)
+      }
+    }
+  },
+  export: () => {
+    throw new CompileError('not implemented')
+  },
+  import: async (_, tail, defEnv) => {
+    if (tail.length !== 3) throw evalError('import expects three arguments')
+    const importModuleName = getFormWord(tail[0])
+    const importElementName = getFormWord(tail[1])
+    const jsExp = jsAwait(jsCall(jsVar('dynImport'), [jsString(importModuleName), jsString(importElementName)]))
+    await setDef(defEnv, importElementName, 'import', jsExp)
+    return jsExp
+  },
 }
 
 const evalTopDefEnv = async (defEnv, form) => {
@@ -422,22 +561,31 @@ const evalTopDefEnv = async (defEnv, form) => {
     const firstWord = tryGetFormWord(firstForm)
     if (firstWord) {
       const topSpecialHandler = topSpecialForms[firstWord]
-      if (topSpecialHandler) {
-        await topSpecialHandler(firstWord, args, defEnv)
-        return true
-      }
+      if (topSpecialHandler) return await topSpecialHandler(firstWord, args, defEnv)
     }
+    const defDesc = defEnv.get(firstWord)
+    if (defDesc && defDesc.defKind === 'defmacro') return await evalTopDefEnv(defEnv, defDesc.value(...args))
   }
-  return false
+  return compExpStmt(null, form, defEnv, false)
 }
 
 export const makeJSCompilingEvaluator = () => {
   const defEnv = new Map()
   const evalExp = (form) => {
     const ce = compExpStmt(null, form, defEnv, true)
-    const f = new Function(jsStmtToString(ce))
+    const f = new Function(jsStmtToStringSafe(ce))
     return f()
   }
-  const evalTop = async (form) => evalTopDefEnv(defEnv, form)
-  return { evalExp, evalTop }
+  const evalTop = (form) => evalTopDefEnv(defEnv, form)
+  const evalTops = async (forms) => {
+    for (const form of forms) await evalTopDefEnv(defEnv, form)
+  }
+  const evalTopsExp = async (forms) => {
+    if (forms.length === 0) throw new CompileError('empty list')
+    for (let i = 0; i < forms.length - 1; i++) await evalTopDefEnv(defEnv, forms[i])
+    const exp = forms.at(-1)
+    const jsExp = compExp(null, exp, defEnv)
+    return await evalExpAsync(defEnv, jsExp)
+  }
+  return { evalExp, evalTop, evalTopsExp, evalTops }
 }

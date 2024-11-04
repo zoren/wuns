@@ -1,8 +1,8 @@
+import fs from 'node:fs'
 import { expect, assert, test, describe } from 'vitest'
 
 import { langUndefined, parseString } from '../core.js'
 import { makeEvalForm } from '../interpreter.js'
-import { makeCompilingEvaluator } from '../compiler.js'
 import { makeJSCompilingEvaluator } from '../compiler-js.js'
 
 const testExp = ({ pe }) => {
@@ -105,6 +105,16 @@ const testExp = ({ pe }) => {
           [[i32 1]] [word one]
           [word not-01]]`),
     ).toBe('not-01')
+    expect(
+      pe(`
+    [
+      [func f [n]
+        [switch n
+          [[i32 0]] [word zero]
+          [word not-01]]
+        [i32 5]]
+      [i32 0]]`),
+    ).toBe(5)
   })
 
   test('do', () => {
@@ -201,6 +211,7 @@ const testExp = ({ pe }) => {
     expect(pe('[[func f [p q] p] [i32 1] [i32 2]]')).toBe(1)
     expect(pe('[[func f [p q] q] [i32 1] [i32 2]]')).toBe(2)
     expect(pe('[[func f [p q r] r] [i32 1] [i32 2] [i32 3]]')).toBe(3)
+    expect(pe('[[func list [.. r] r] [i32 1] [i32 2] [i32 3]]')).toStrictEqual([1,2,3])
     const gaussDirectRecursive = pe(`
 [func go [n]
   [if n
@@ -284,7 +295,7 @@ const makeParseEvalExp = (makeEvaluator) => {
 
 describe.each([
   { name: 'direct', pe: makeParseEvalExp(makeEvalForm) },
-  { name: 'compiled closure', pe: makeParseEvalExp(makeCompilingEvaluator) },
+  // { name: 'compiled closure', pe: makeParseEvalExp(makeCompilingEvaluator) },
   { name: 'compiled js', pe: makeParseEvalExp(makeJSCompilingEvaluator) },
 ])('$name', testExp)
 
@@ -292,32 +303,153 @@ const testTop = ({ ptse }) => {
   test('def', async () => {
     expect(await ptse('[def x [i32 5]] x')).toBe(5)
     expect(await ptse('[def x [i32 5]] [def y x] y')).toBe(5)
+    expect(await ptse('[def x-hyphenated [i32 5]] [def y x-hyphenated] y')).toBe(5)
   })
   test('defn', async () => {
     expect(await ptse('[defn f [] [i32 5]] [f]')).toBe(5)
+    expect(await ptse('[defn f [] [i32 5]] [defn g [] [f]] [g]')).toBe(5)
+    expect(await ptse('[defn inc [p] [intrinsic-call i32.add p [i32 1]]] [inc [i32 4]]')).toBe(5)
+    expect(await ptse('[defn list [.. elements] elements] [list [i32 1] [i32 2]]')).toStrictEqual([1, 2])
   })
 
+  const formWord = (w) => ({ tag: 'form/word', args: [w] })
+  const formList = (...elements) => ({ tag: 'form/list', args: [elements] })
+
   test('defexpr', async () => {
-    expect(await ptse('[defexpr q [p] p] [q a]')).toStrictEqual({ tag: 'form/word', args: ['a'] })
-    expect(await ptse('[defexpr q [p] p] [q []]')).toStrictEqual({ tag: 'form/list', args: [[]] })
+    expect(await ptse('[defexpr q [p] p] [q a]')).toStrictEqual(formWord('a'))
+    expect(await ptse('[defexpr q [p] p] [q []]')).toStrictEqual(formList())
+    expect(await ptse('[defexpr q [p] p] [q [[]]]')).toStrictEqual(formList(formList()))
+    expect(await ptse('[defexpr q [p] p] [q [i32 5]]')).toStrictEqual(formList(formWord('i32'), formWord('5')))
   })
 
   test('defmacro', async () => {
-    const code = `
+    {
+      const code = `
   [defexpr q [p] p]
   [defmacro m [] [q [i32 5]]]
   [m]`
-    expect(await ptse(code)).toBe(5)
+      expect(await ptse(code)).toBe(5)
+    }
+
+    expect(await ptse('[defmacro m [p] p] [m [i32 5]]')).toBe(5)
+    expect(
+      await ptse(`
+      [type form []
+  [union
+    [word word]
+    [list [list form]]]]
+
+[defn flist [.. elements] [form/list elements]]
+
+[defn list [.. entries] entries]
+
+[defexpr quote [f] f]
+
+[defmacro def-extern [name type]
+  [flist [quote import] [quote host] name type]]
+
+[def-extern concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]
+[i32 0]
+      `),
+    )
   })
 
-  test('do top-level', async () => {
+  test('do', async () => {
     expect(await ptse('[do] [i32 5]')).toBe(5)
     expect(await ptse('[do [do]] [i32 5]')).toBe(5)
     expect(await ptse('[do [def x [i32 5]] [def y x]] y')).toBe(5)
   })
 
   test('import', async () => {
-    expect(await ptse('[import host concat [type-scheme [a] [func [[list a] [list a]] [list a]]]] concat')).toBeTypeOf('function')
+    expect(await ptse('[import host concat [type-scheme [a] [func [[list a] [list a]] [list a]]]] concat')).toBeTypeOf(
+      'function',
+    )
+  })
+
+  test('type union', async () => {
+    expect(await ptse('[type option [a] [union [none] [some a]]] [option/none]')).toStrictEqual({
+      tag: 'option/none',
+      args: [],
+    })
+    expect(await ptse('[type option [a] [union [none] [some a]]] [option/some [i32 5]]')).toStrictEqual({
+      tag: 'option/some',
+      args: [5],
+    })
+    expect(
+      await ptse(`
+      [type bool [] [union [false] [true]]]
+      [match [bool/true]
+        [bool/true] [i32 1]
+        [bool/false] [i32 0]]`),
+    ).toStrictEqual(1)
+    expect(
+      await ptse(`
+      [type bool [] [union [false] [true]]]
+      [match [bool/false]
+        [bool/true] [i32 1]
+        [bool/false] [i32 0]]`),
+    ).toStrictEqual(0)
+    expect(
+      await ptse(`
+      [type bool [] [union [false] [true]]]
+      [match [bool/false]
+        [bool/false] [i32 0]]`),
+    ).toStrictEqual(0)
+    expect(
+      await ptse(`
+      [type bool [] [union [false] [true]]]
+      [match [bool/true]
+        [bool/false] [i32 0]
+        [word default]]`),
+    ).toBe('default')
+    await expect(
+      ptse(`
+      [type bool [] [union [false] [true]]]
+      [match [bool/true]
+        [bool/false] [i32 0]]`),
+    ).rejects.toThrow('no match')
+    expect(
+      await ptse(`
+  [type option [a] [union [none] [some a]]]
+  [match [option/some [i32 5]]
+    [option/some p] p]`),
+    ).toStrictEqual(5)
+    expect(
+      await ptse(`
+  [type option [a] [union [none] [some a]]]
+  [match [option/some [i32 5]]
+    [option/none] [i32 0]
+    [option/some p] p
+    ]`),
+    ).toStrictEqual(5)
+    expect(
+      await ptse(`
+      [type option [a] [union [none] [some a]]]
+      [match [option/none]
+        [option/none] [i32 0]
+        [option/some p] p
+        ]`),
+    ).toStrictEqual(0)
+    expect(
+      await ptse(`
+      [type bool [] [union [false] [true]]]
+      [defn f []
+        [match [bool/false]
+          [bool/true] [i32 4]
+          [bool/false] [i32 5]]]
+      [f]`),
+    ).toBe(5)
+    expect(
+      await ptse(`
+      [type bool [] [union [false] [true]]]
+      [defn f []
+        [match [bool/false]
+          [bool/true] [i32 4]
+          [bool/false] [i32 5]]
+        [i32 6]]
+      [f]`),
+    ).toBe(6)
+
   })
 }
 
@@ -331,7 +463,26 @@ const makeParseEvalTopsExp = (makeEvaluator) => {
   }
 }
 
+const parseEvalTopsExpJS = async (s) => {
+  const forms = parseString(s, 'test')
+  if (forms.length === 0) throw new Error(`Expected at least 1 form, got 0`)
+  const { evalTopsExp } = makeJSCompilingEvaluator()
+  return await evalTopsExp(forms)
+}
+
 describe.each([
   { name: 'top direct', ptse: makeParseEvalTopsExp(makeEvalForm) },
-  { name: 'top compiled', ptse: makeParseEvalTopsExp(makeCompilingEvaluator) },
+  // { name: 'top compiled closure', ptse: makeParseEvalTopsExp(makeCompilingEvaluator) },
+  {
+    name: 'top compiled js',
+    ptse: parseEvalTopsExpJS,
+  },
 ])('$name', testTop)
+import { print, parseString } from './core.js'
+
+{
+  const stdFormsString = fs.readFileSync('../wuns/std.wuns', 'ascii')
+  const stdForms = parseString(stdFormsString, 'std.wuns')
+  const { evalTops } = makeJSCompilingEvaluator()
+  evalTops(stdForms)
+}

@@ -91,7 +91,7 @@ const isJSReservedWord = (word) => {
   ].includes(word)
 }
 
-const escapeIdentifier = (id) => {
+export const escapeIdentifier = (id) => {
   if (typeof id !== 'string') throw new Error('not a string')
   if (!isNaN(+id)) return ('n' + id).replace(/-/g, '_')
   return (isJSReservedWord(id) ? '_' : '') + id.replace(/-/g, '_').replace(/\//g, '_slash_').replace(/\./g, '_dot_')
@@ -130,13 +130,15 @@ export const jsExpToString = (js) => {
     case 'js-exp/ternary':
       return `(${jsExpToString(arg(0))} ? ${jsExpToString(arg(1))} : ${jsExpToString(arg(2))})`
     case 'js-exp/arrow-exp':
-      return `(${paramsToString()}) => ${jsExpToString(arg(2))}`
+      return `(${paramsToString()}) => (${jsExpToString(arg(2))})`
     case 'js-exp/arrow-stmt':
       return `(${paramsToString()}) => ${jsStmtToString(arg(2))}`
     case 'js-exp/call':
       return `(${jsExpToString(arg(0))})(${arg(1).map(jsExpToString).join(', ')})`
     case 'js-exp/paren':
       return `(${jsExpToString(arg(0))})`
+    case 'js-exp/await':
+      return `await ${jsExpToString(arg(0))}`
     default:
       throw new Error(`unknown js exp tag: ${tag}`)
   }

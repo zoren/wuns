@@ -1,8 +1,9 @@
 import { print, parseString } from './core.js'
-import { makeEvalForm } from './interpreter.js'
 import { 'read-file-async' as read_file_async } from './runtime-lib/files.js'
 
-const { evalTop, evalExp } = makeEvalForm()
+// import { makeEvalForm } from './interpreter.js'
+import { makeJSCompilingEvaluator } from './compiler-js.js'
+const { evalTops, evalExp } = makeJSCompilingEvaluator()
 
 const weval = (s) => {
   const forms = parseString(s, `repl-${replLineNo++}`)
@@ -17,7 +18,7 @@ const evalStringOut = async (s) => {
   const forms = parseString(s, `repl-${replLineNo++}`)
   try {
     let res
-    for (const form of forms) res = await evalTop(form)
+    await evalTops(forms)
     return res
   } catch (e) {
     console.error(e)
@@ -35,9 +36,9 @@ const evalString = async (s) => {
 }
 
 export const main = async () => {
-  const file = 'test-compile-wat.wuns'
+  const file = 'std.wuns'
   const text = await read_file_async(file)
-  for (const form of parseString(text, file)) await evalTop(form)
+  await evalTops(parseString(text, file))
   window.weval = weval
   window.evalString = evalString
   window.evalStringOut = evalStringOut
