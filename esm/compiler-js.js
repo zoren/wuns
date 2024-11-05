@@ -105,27 +105,26 @@ const getFormList = (form) => {
 }
 
 const makeCtx = (outer, declaringForm) => {
-  if (!(outer === null || outer instanceof Map)) throw new Error('makeCtx expects null or a Map')
-  const ctx = new Map()
+  if (!(outer === null || outer instanceof Set)) throw new Error('makeCtx expects null or a context')
+  const ctx = new Set()
   ctx.outer = outer
   ctx.declaringForm = declaringForm
   return ctx
 }
 
-const maxLocalIndex = (ctx) => {
-  let lastValue = null
-  for (const value of ctx.values()) lastValue = value
-  if (lastValue !== null) return lastValue
-  if (ctx.outer) return maxLocalIndex(ctx.outer)
-  return null
+const setNewLocal = (ctx, name) => {
+  if (ctx.has(name)) return
+  ctx.add(name)
 }
 
-const setNewLocal = (ctx, name) => {
-  if (ctx.has(name)) return ctx.get(name)
-  const m = maxLocalIndex(ctx)
-  const index = m === null ? 0 : m + 1
-  ctx.set(name, index)
-  return index
+const setNewLocalForm = (ctx, form) => {
+  const name = getFormWord(form)
+  // let curCtx = ctx.outer
+  // while (curCtx) {
+  //   if (curCtx.has(name)) throw new CompileError('redefining variable: ' + name, form)
+  //   curCtx = curCtx.outer
+  // }
+  setNewLocal(ctx, name)
 }
 
 const bodiesToStmts = (defEnv, ctx, tail, isTail) => {
@@ -141,28 +140,26 @@ const bodiesToStmts = (defEnv, ctx, tail, isTail) => {
   return stmts
 }
 
-const compFuncArrow = (tail, ctx, defEnv) => {
+const compFunc = (tail, ctx, defEnv) => {
   const name = getFormWord(tail[0])
-  let parameters = getFormList(tail[1]).map(getFormWord)
+  let parametersForms = getFormList(tail[1])
   const bodies = tail.slice(2)
   const newCtx = makeCtx(ctx, 'func')
   setNewLocal(newCtx, name)
+  let parameters
   let restOption = optionNone
-  if (parameters.length >= 2 && parameters.at(-2) === '..') {
-    const restParam = parameters.at(-1)
-    parameters = parameters.slice(0, -2)
-    parameters.forEach((p) => setNewLocal(newCtx, p))
-    setNewLocal(newCtx, restParam)
-    restOption = makeOptionSome(restParam)
+  if (parametersForms.length >= 2 && getFormWord(parametersForms.at(-2)) === '..') {
+    const restParam = parametersForms.at(-1)
+    parametersForms = parametersForms.slice(0, -2)
+    parametersForms.forEach((p) => setNewLocalForm(newCtx, p))
+    parameters = parametersForms.map(getFormWord)
+    setNewLocalForm(newCtx, restParam)
+    restOption = makeOptionSome(getFormWord(restParam))
   } else {
-    parameters.forEach((p) => setNewLocal(newCtx, p))
+    parameters = parametersForms.map(getFormWord)
+    parametersForms.forEach((p) => setNewLocalForm(newCtx, p))
   }
-  return jsArrowStmt(parameters, restOption, jsBlock(bodiesToStmts(defEnv, newCtx, bodies, true)))
-}
-
-const compFunc = (tail, ctx, defEnv) => {
-  const name = getFormWord(tail[0])
-  const arrow = compFuncArrow(tail, ctx, defEnv)
+  const arrow = jsArrowStmt(parameters, restOption, jsBlock(bodiesToStmts(defEnv, newCtx, bodies, true)))
   return jsIIFE([jsConstDecl(name, arrow), jsReturn(jsVar(name))])
 }
 
@@ -222,14 +219,14 @@ const expSpecialFormsStmt = {
     for (let i = 0; i < bindings.length - 1; i += 2) {
       const varName = getFormWord(bindings[i])
       const isRedef = newCtx.has(varName)
-      setNewLocal(newCtx, varName)
+      setNewLocalForm(newCtx, bindings[i])
       const cexp = compExp(newCtx, bindings[i + 1], defEnv)
       stmts.push(isRedef ? jsAssign(varName, cexp) : jsLetDecl(varName, cexp))
     }
     stmts.push(...bodiesToStmts(defEnv, newCtx, bodies, isTailPos))
     return jsBlock(stmts)
   },
-  letfn: (tail, ctx, defEnv, isTail) => {
+  letfn: (tail, ctx, defEnv, isTailPos) => {
     if (tail.length < 1) throw new CompileError('letfn expected at least a binding list')
     const [bindingForm, ...bodies] = tail
     const funcFormList = getFormList(bindingForm)
@@ -239,7 +236,7 @@ const expSpecialFormsStmt = {
       if (getFormWord(firstFuncForm) !== 'func') throw new CompileError('expected func')
       const fname = getFormWord(rest[0])
       const isRedef = newCtx.has(fname)
-      setNewLocal(newCtx, fname)
+      setNewLocalForm(newCtx, rest[0])
       return [fname, rest, isRedef]
     })
     const stmts = []
@@ -247,7 +244,7 @@ const expSpecialFormsStmt = {
       const funcInst = compFunc(rest, newCtx, defEnv)
       stmts.push(isRedef ? jsAssign(fname, funcInst) : jsLetDecl(fname, funcInst))
     }
-    stmts.push(...bodiesToStmts(defEnv, newCtx, bodies, isTail))
+    stmts.push(...bodiesToStmts(defEnv, newCtx, bodies, isTailPos))
     return jsBlock(stmts)
   },
   loop: (tail, ctx, defEnv, isTail) => {
@@ -261,7 +258,7 @@ const expSpecialFormsStmt = {
       const varName = getFormWord(bindings[i])
       const cexp = compExp(newCtx, bindings[i + 1], defEnv)
       const isRedef = newCtx.has(varName)
-      setNewLocal(newCtx, varName)
+      setNewLocalForm(newCtx, bindings[i])
       initStmts.push(isRedef ? jsAssign(varName, cexp) : jsLetDecl(varName, cexp))
     }
     const bodyStmts = bodiesToStmts(defEnv, newCtx, bodies, isTail)
@@ -323,7 +320,7 @@ const expSpecialFormsStmt = {
       const branchStmts = []
       for (let j = 1; j < patternList.length; j++) {
         const patternWord = getFormWord(patternList[j])
-        setNewLocal(newCtx, patternWord)
+        setNewLocalForm(newCtx, patternList[j])
         branchStmts.push(jsConstDecl(patternWord, jsSubscript(jsVar(tmpArgsVar), jsNumber(j - 1))))
       }
       branchStmts.push(compExpStmt(newCtx, brach, defEnv, true))
