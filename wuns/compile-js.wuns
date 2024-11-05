@@ -18,7 +18,10 @@
 
     [binary-and]
     [binary-ior]
-    ]]
+
+    [binary-shl]
+    [binary-shr]
+    [binary-shr-u]]]
 
 [type js-exp []
   [union
@@ -86,13 +89,17 @@
       [[word i32.and]]   [bin [binop/binary-and]]
       [[word i32.or]]    [bin [binop/binary-ior]]
 
+      [[word i32.shl]]   [bin [binop/binary-shl]]
+      [[word i32.shr-s]] [bin [binop/binary-shr]]
+      [[word i32.shr-u]] [bin [binop/binary-shr-u]]
+
       [[word f64.add]]   [bin [binop/add]]
       [[word f64.sub]]   [bin [binop/sub]]
       [[word f64.mul]]   [bin [binop/mul]]
 
       [do
         [log inst-name]
-        [logq-abort instruction-name-to-binop not implemented]]]]]
+        [logq-abort instruction-name-and-args-to-js-exp not implemented]]]]]
 
 [defn iife [stmt]
   [js-exp/call
