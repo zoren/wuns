@@ -410,9 +410,8 @@ const compExp = (ctx, form, defEnv) => {
   const [firstForm, ...args] = forms
   const firstWord = tryGetFormWord(firstForm)
   if (firstWord) {
-    // if (firstWord === 'do') return opInsts(args.map((f) => compExp(ctx, f, defEnv)))
-    // const topSpecialHandler = topSpecialForms[firstWord]
-    // if (topSpecialHandler) throw new CompileError('top special not allowed in expression form')
+    if (firstWord === 'do') return jsIIFE(bodiesToStmts(defEnv, ctx, args, true))
+    if (firstWord in topSpecialForms) throw new CompileError('top special not allowed in expression form')
 
     const expSpecialHandler = expSpecialFormsExp[firstWord]
     if (expSpecialHandler) return expSpecialHandler(args, ctx, defEnv)
@@ -455,7 +454,7 @@ const evalExpAsync = async (defEnv, jsExp) => {
     const asyncFunc = new AsyncFunction('dynImport', ...[...defEnv.keys()].map(escapeIdentifier), 'return ' + jsSrc)
     return await asyncFunc(importModuleElement, ...[...defEnv.values()].map(({ value }) => value))
   } catch (e) {
-    if (e instanceof SyntaxError) {
+    if (e instanceof SyntaxError || e instanceof ReferenceError) {
       console.error(e)
       console.log(jsSrc)
       console.dir(jsExp, { depth: null })

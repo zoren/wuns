@@ -136,13 +136,11 @@ export const tryGetFormInfoRec = (form) => {
   const info = tryGetFormInfo(form)
   if (info) return info
   const list = tryGetFormList(form)
-  if (list) {
-    for (const f of list) {
-      const info = tryGetFormInfoRec(f)
-      if (info) return info
-    }
+  if (!list) return null
+  for (const f of list) {
+    const info = tryGetFormInfoRec(f)
+    if (info) return info
   }
-  return null
 }
 
 const getPositionFromContentOffset = (content, byteOffset) => {
