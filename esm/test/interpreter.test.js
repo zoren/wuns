@@ -455,7 +455,16 @@ const testTop = ({ ptse }) => {
         [i32 6]]
       [f]`),
     ).toBe(6)
-
+    // test for compiler bug where match parameters would become assignments not const declarations
+    expect(
+      await ptse(`
+  [type option [a] [union [none] [some a]]]
+  [loop [p [i32 0]]
+    [match [option/some [i32 5]]
+      [option/some p] p]
+    p]`),
+    ).toBe(0)
+    console.log({ p: globalThis.p })
   })
 }
 

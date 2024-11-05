@@ -324,7 +324,7 @@ const expSpecialFormsStmt = {
       for (let j = 1; j < patternList.length; j++) {
         const patternWord = getFormWord(patternList[j])
         setNewLocal(newCtx, patternWord)
-        branchStmts.push(jsAssign(patternWord, jsSubscript(jsVar(tmpArgsVar), jsNumber(j - 1))))
+        branchStmts.push(jsConstDecl(patternWord, jsSubscript(jsVar(tmpArgsVar), jsNumber(j - 1))))
       }
       branchStmts.push(compExpStmt(newCtx, brach, defEnv, true))
       cases.push({ fst: [jsString(tag)], snd: jsBlock(branchStmts) })
