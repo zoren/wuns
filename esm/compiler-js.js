@@ -86,8 +86,9 @@ const opIntrinsicCall = (opName, args) => {
 }
 
 class CompileError extends Error {
-  constructor(message) {
+  constructor(message, form) {
     super(message)
+    this.form = form
   }
 }
 
@@ -393,7 +394,7 @@ const compExp = (ctx, form, defEnv) => {
       curCtx = curCtx.outer
     }
     const desc = defEnv.get(word)
-    if (!desc) throw new CompileError('undefined variable: ' + word)
+    if (!desc) throw new CompileError('undefined variable: ' + word, form)
     const { defKind } = desc
     if (defKind === 'defmacro') throw new CompileError('macro in value position')
     if (defKind === 'defexpr') throw new CompileError('fexpr in value position')
