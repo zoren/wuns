@@ -2,7 +2,7 @@
 
 [defn test-ok-fn [forms]
   [let [converter [mk-form-to-ast]
-        f2a [form-to-ast-converter/form-to-top converter]
+        f2a [form-to-ast-converter/form-to-top-async converter]
         bforms [list-map form forms [f2a form]]
         errors [clone-growable-to-frozen-list [form-to-ast-converter/errors converter]]]
     [when-not [is-empty errors]
@@ -18,7 +18,7 @@
 
 [defn test-error-fn [expected-errors-form forms]
   [let [converter [mk-form-to-ast]
-        f2a [form-to-ast-converter/form-to-top converter]
+        f2a [form-to-ast-converter/form-to-top-async converter]
         bforms [list-map form forms [f2a form]]
         errors [clone-growable-to-frozen-list [form-to-ast-converter/errors converter]]]
     [when [is-empty errors]

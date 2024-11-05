@@ -90,8 +90,6 @@
 
 [defn is-odd [x] [i32.bitwise-and x 1]]
 
-[defn is-even [x] [not [is-odd x]]]
-
 [defn is-negative [x] [lt-s x 0]]
 
 [defn min [a b] [if [lt-s a b] a b]]

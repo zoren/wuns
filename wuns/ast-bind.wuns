@@ -113,9 +113,9 @@
           [intrinsic-call-args/load ma a] [go a]
           [intrinsic-call-args/store ma a b] [do [go a] [go b]]]
 
-        [bexp/call f args]
+        [bexp/call fn args]
         [do
-          [go f]
+          [go fn]
           [for-each a args [go a]]]
 
         [bexp/if c t e]
@@ -335,7 +335,7 @@
             [when [has type-ctx w] [push-error f [quote [redefing type]]]]
             [set-kv-map type-ctx w arity]]]]]
     parse-param-list
-    [func parse-param-list [param-list]
+    [func ppl [param-list]
       [let
         [n-of-param-forms [size param-list]]
         [if [and
@@ -558,14 +558,14 @@
                             stype-name
                             type-params
                             [match [third triple]
-                              [form/list l]
+                              [form/list fl]
                               [do
-                                [assert [not [is-empty l]] type decl kind form is empty]
-                                [switch [get-word [first l]]
+                                [assert [not [is-empty fl]] type decl kind form is empty]
+                                [switch [get-word [first fl]]
                                   [[word union]]
                                   [let
                                     [ctors
-                                      [list-map ctor [rest l]
+                                      [list-map ctor [rest fl]
                                         [let [ctor-list [get-list ctor]
                                               ctor-name-form [first ctor-list]]
                                           [assert [not [is-empty ctor-list]] type decl kind union ctor is empty]
@@ -581,7 +581,7 @@
 
                                   [[word record]]
                                   [let [fields
-                                        [list-map field [rest l]
+                                        [list-map field [rest fl]
                                           [let [field-list [get-list field]
                                                 field-name-form [first field-list]
                                                 field-name [get-word field-name-form]]

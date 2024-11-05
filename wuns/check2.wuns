@@ -98,7 +98,7 @@
         [member-type-var-list-go [inc i]]]
       0]] 0]]
 
-[defn free-type-vars [t]
+[defn free-type-vars [outer-t]
   [let
     [ftvs [set]
      go
@@ -122,7 +122,7 @@
             [inst-type/apply type-name type-args]
             [for-each arg type-args
               [go arg]]]]]]]
-    [go t]
+    [go outer-t]
     [set-to-list ftvs]]]
 
 [defn prune-level [max-level tvs]

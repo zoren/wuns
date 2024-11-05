@@ -174,9 +174,9 @@
         [bexp/func f]
         [let [js-name [syntax-word/word [bfunc/name f]]]
           [iife
-              [block
-                [js-stmt/const-decl js-name [cfunc f]]
-                [js-stmt/return [js-exp/var js-name]]]]]
+            [block
+              [js-stmt/const-decl js-name [cfunc f]]
+              [js-stmt/return [js-exp/var js-name]]]]]
 
         [bexp/call-fexpr fexpr arg-forms]
         [js-exp/call [cexp fexpr] [list-map arg arg-forms [form-to-quoted-js arg]]]
