@@ -191,8 +191,10 @@ const testExp = ({ pe }) => {
         [continue
           result [intrinsic-call i32.add result i]
           i [intrinsic-call i32.sub i [i32 1]]]
-        result]]]`
+        result]]`
     expect(pe(gauss)).toBe(55)
+    // non-tail loop
+    expect(pe(`[do ${gauss} [i32 5]]`)).toBe(5)
   })
 
   test('func', () => {
@@ -211,7 +213,7 @@ const testExp = ({ pe }) => {
     expect(pe('[[func f [p q] p] [i32 1] [i32 2]]')).toBe(1)
     expect(pe('[[func f [p q] q] [i32 1] [i32 2]]')).toBe(2)
     expect(pe('[[func f [p q r] r] [i32 1] [i32 2] [i32 3]]')).toBe(3)
-    expect(pe('[[func list [.. r] r] [i32 1] [i32 2] [i32 3]]')).toStrictEqual([1,2,3])
+    expect(pe('[[func list [.. r] r] [i32 1] [i32 2] [i32 3]]')).toStrictEqual([1, 2, 3])
     const gaussDirectRecursive = pe(`
 [func go [n]
   [if n
@@ -464,7 +466,6 @@ const testTop = ({ ptse }) => {
       [option/some p] p]
     p]`),
     ).toBe(0)
-    console.log({ p: globalThis.p })
   })
 }
 

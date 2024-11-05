@@ -69,6 +69,12 @@ const opIntrinsicCall = (opName, args) => {
       return jsBin('binary-and')(...args)
     case 'i32.or':
       return jsBinIOr(...args)
+    case 'i32.shl':
+      return jsBin('binary-shl')(...args)
+    case 'i32.shr-s':
+      return jsBin('binary-shr')(...args)
+    case 'i32.shr-u':
+      return jsBin('binary-shr-u')(...args)
     case 'i32.eq':
       return jsBinIOr(jsBin('eq')(...args), js0)
     case 'i32.lt-s':
@@ -200,6 +206,8 @@ const expSpecialFormsExp = {
   'type-anno': (tail, ctx, defEnv) => compExp(ctx, tail[0], defEnv),
 }
 
+let tmpVarCounter = 0
+
 const expSpecialFormsStmt = {
   if: (tail, ctx, defEnv, isTailPos) => {
     if (tail.length !== 3) throw new CompileError('if expected three arguments')
@@ -247,7 +255,7 @@ const expSpecialFormsStmt = {
     stmts.push(...bodiesToStmts(defEnv, newCtx, bodies, isTailPos))
     return jsBlock(stmts)
   },
-  loop: (tail, ctx, defEnv, isTail) => {
+  loop: (tail, ctx, defEnv) => {
     if (tail.length < 1) throw new CompileError('loop expected at least a binding list')
     const [bindingForm, ...bodies] = tail
     const bindings = getFormList(bindingForm)
@@ -261,7 +269,7 @@ const expSpecialFormsStmt = {
       setNewLocalForm(newCtx, bindings[i])
       initStmts.push(isRedef ? jsAssign(varName, cexp) : jsLetDecl(varName, cexp))
     }
-    const bodyStmts = bodiesToStmts(defEnv, newCtx, bodies, isTail)
+    const bodyStmts = bodiesToStmts(defEnv, newCtx, bodies, true)
     return jsBlock([...initStmts, jsWhile(js1, jsBlock(bodyStmts))])
   },
   continue: (tail, ctx, defEnv, isTailPos) => {
@@ -283,7 +291,7 @@ const expSpecialFormsStmt = {
     return jsSeq(insts)
   },
   do: (tail, ctx, defEnv, isTailPos) => jsSeq(bodiesToStmts(defEnv, ctx, tail, isTailPos)),
-  switch: (tail, ctx, defEnv, isTailPos) => {
+  switch: (tail, ctx, defEnv) => {
     if (tail.length < 2) throw new CompileError(`special form 'switch' expected at least two arguments`)
     if (tail.length % 2 !== 0) throw new CompileError('no switch default found')
     const cvalue = compExp(ctx, tail[0], defEnv)
@@ -294,10 +302,9 @@ const expSpecialFormsStmt = {
       cases.push({ fst: values, snd: branchBody })
     }
     const defaultForm = tail.at(-1)
-    const theSwitch = jsSwitch(cvalue, cases, compExpStmt(ctx, defaultForm, defEnv, true))
-    return isTailPos ? theSwitch : jsExpStmt(jsIIFE([theSwitch]))
+    return jsSwitch(cvalue, cases, compExpStmt(ctx, defaultForm, defEnv, true))
   },
-  match: (forms, lctx, defEnv, isTailPos) => {
+  match: (forms, lctx, defEnv) => {
     if (forms.length === 0) throw new CompileError('match expected at least one argument')
     const lctxMatch = makeCtx(lctx, 'match')
 
@@ -331,11 +338,9 @@ const expSpecialFormsStmt = {
       forms.length % 2 === 0 ? compExpStmt(lctx, forms.at(-1), defEnv, true) : jsThrow(jsString('no match string'))
     const theSwitch = jsSwitch(jsSubscript(jsVar(tmpValueVarName), jsString('tag')), cases, defaultCase)
     stmts.push(theSwitch)
-    return isTailPos ? jsBlock(stmts) : jsExpStmt(jsIIFE(stmts))
+    return jsBlock(stmts)
   },
 }
-
-let tmpVarCounter = 0
 
 const compExpStmt = (ctx, form, defEnv, isTail) => {
   const forms = tryGetFormList(form)
@@ -345,7 +350,17 @@ const compExpStmt = (ctx, form, defEnv, isTail) => {
     const firstWord = tryGetFormWord(firstForm)
     if (firstWord) {
       const stmtSpecialHandler = expSpecialFormsStmt[firstWord]
-      if (stmtSpecialHandler) return stmtSpecialHandler(args, ctx, defEnv, isTail)
+      if (stmtSpecialHandler) {
+        const stmt = stmtSpecialHandler(args, ctx, defEnv, isTail)
+        return isTail ? stmt : jsExpStmt(jsIIFE([stmt]))
+      }
+      const expSpecialHandler = expSpecialFormsExp[firstWord]
+      if (expSpecialHandler) {
+        const exp = expSpecialHandler(args, ctx, defEnv)
+        return isTail ? jsReturn(exp) : jsExpStmt(exp)
+      }
+      const desc = defEnv.get(firstWord)
+      if (desc && desc.defKind === 'defmacro') return compExpStmt(ctx, desc.value(...args), defEnv, isTail)
     }
   }
   const jsExp = compExp(ctx, form, defEnv)
@@ -453,7 +468,7 @@ const evalExpAsync = async (defEnv, jsExp) => {
   } catch (e) {
     if (e instanceof SyntaxError || e instanceof ReferenceError) {
       console.error(e)
-      console.log(jsSrc)
+      console.error(jsSrc)
       console.dir(jsExp, { depth: null })
       throw new CompileError('SyntaxError in evalExpAsync')
     }
