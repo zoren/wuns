@@ -151,6 +151,7 @@ const testExp = ({ pe }) => {
 
     expect(pe('[let [x [i32 2] y [i32 5]] y]')).toBe(5)
     expect(pe('[let [x [i32 1] x [i32 2]] x]')).toBe(2)
+    expect(pe('[let [x [i32 1] x [intrinsic-call i32.add x [i32 1]]] x]')).toBe(2)
     expect(pe('[let [x [i32 1]] [let [x [i32 1337]] x]]')).toBe(1337)
     expect(pe('[let [x [let [x [i32 1337]] x]] x]')).toBe(1337)
   })
@@ -312,12 +313,14 @@ const testTop = ({ ptse }) => {
     expect(await ptse('[defn f [] [i32 5]] [defn g [] [f]] [g]')).toBe(5)
     expect(await ptse('[defn inc [p] [intrinsic-call i32.add p [i32 1]]] [inc [i32 4]]')).toBe(5)
     expect(await ptse('[defn list [.. elements] elements] [list [i32 1] [i32 2]]')).toStrictEqual([1, 2])
-    expect(await ptse(`
+    expect(
+      await ptse(`
       [defn gauss-direct [n]
         [if n
           [intrinsic-call i32.add n [gauss-direct [intrinsic-call i32.sub n [i32 1]]]]
           [i32 0]]]
-      [gauss-direct [i32 10]]`)).toBe(55)
+      [gauss-direct [i32 10]]`),
+    ).toBe(55)
   })
 
   const formWord = (w) => ({ tag: 'form/word', args: [w] })

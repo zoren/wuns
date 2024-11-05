@@ -7,6 +7,9 @@ import { print, parseString, getPosition, tryGetFormInfoRec } from './core.js'
 import { specialForms, makeJSCompilingEvaluator } from './compiler-js.js'
 import { 'read-file-async' as read_file_async } from './runtime-lib/files.js'
 
+// import { makeEvalForm } from './interpreter.js'
+// const { evalTops, getDefNames } = makeEvalForm()
+
 const { evalTops, getDefNames } = makeJSCompilingEvaluator()
 
 const getCompletions = (prefix) => {

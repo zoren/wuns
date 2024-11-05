@@ -441,11 +441,16 @@ export const makeEvalForm = () => {
     }
     return evalExp(form)
   }
+  const evalTops = async (forms) => {
+    let optExp = null
+    for (const form of forms) optExp = await evalTop(form)
+    return optExp
+  }
   const tryGetMacro = (name) => {
     if (typeof name !== 'string') throw new Error('try-get-macro expects string')
     const value = defEnv.get(name)
     if (tryGetClosureKind(value) === 'macro') return value
     return null
   }
-  return { evalExp, evalTop, tryGetMacro, getDefNames: () => defEnv.keys(), getDef: (name) => defEnv.get(name) }
+  return { evalExp, evalTop, evalTops, tryGetMacro, getDefNames: () => defEnv.keys(), getDef: (name) => defEnv.get(name) }
 }

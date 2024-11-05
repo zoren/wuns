@@ -15,6 +15,10 @@ const binopMap = {
 
   'binary-ior': '|',
   'binary-and': '&',
+
+  'binary-shl': '<<',
+  'binary-shr': '>>',
+  'binary-shr-u': '>>>',
 }
 
 const jsBinopToString = (op) => {
@@ -248,7 +252,7 @@ const prettierOptions = {
   parser: 'babel',
 }
 
-const format_js_src_async = (jsSrc) => prettier.format(jsSrc, prettierOptions)
+export const format_js_src_async = (jsSrc) => prettier.format(jsSrc, prettierOptions)
 
 export { format_js_src_async as 'format-js-src-async' }
 

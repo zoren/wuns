@@ -429,7 +429,6 @@ const compExp = (ctx, form, defEnv) => {
     if (expSpecialHandler) return expSpecialHandler(args, ctx, defEnv)
 
     const stmtSpecialHandler = expSpecialFormsStmt[firstWord]
-    // todo optimize the generated code so we don't wrap every if in a block
     if (stmtSpecialHandler) return jsIIFE([stmtSpecialHandler(args, ctx, defEnv, true)])
 
     const defDesc = defEnv.get(firstWord)
