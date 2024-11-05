@@ -478,7 +478,7 @@ const setDef = async (defEnv, varName, defKind, jsExp) => {
 
 const defFuncLike = async (firstWord, tail, defEnv) => {
   const defName = getFormWord(tail[0])
-  const exp = compFuncArrow(tail, null, defEnv)
+  const exp = compFunc(tail, null, defEnv)
   await setDef(defEnv, defName, firstWord, exp)
 }
 import { 'read-file-async' as read_file_async } from './runtime-lib/files.js'
