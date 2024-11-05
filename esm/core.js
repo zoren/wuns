@@ -20,7 +20,7 @@ export const arrayToList = (array) => (array.length === 0 ? emptyList : Object.f
 export const makeList = (...args) => arrayToList(args)
 export const isList = (f) => Array.isArray(f)
 
-export const isTaggedValue = (v) => typeof v === 'object' && 'tag' in v && 'args' in v
+export const isTaggedValue = (v) => v && typeof v === 'object' && 'tag' in v && 'args' in v
 export const tryGetTag = (v) => (isTaggedValue(v) ? v.tag : null)
 export const makeTaggedValue = (tag, ...args) => {
   if (!isWord(tag)) throw new Error('tag must be a word')

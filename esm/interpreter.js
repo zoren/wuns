@@ -449,21 +449,3 @@ export const makeEvalForm = () => {
   }
   return { evalExp, evalTop, tryGetMacro, getDefNames: () => defEnv.keys(), getDef: (name) => defEnv.get(name) }
 }
-
-import { print, tryGetFormInfo, getPosition, tryGetFormInfoRec } from './core.js'
-
-const getLocationFromForm = (form) => {
-  const formInfo = tryGetFormInfoRec(form)
-  if (!formInfo) return 'no location'
-  const { row, column } = getPosition(formInfo)
-  return `${formInfo.contentObj.contentName}:${row + 1}:${column + 1}`
-}
-
-export const logEvalError = (e) => {
-  console.error(e.message, getLocationFromForm(e.form))
-  let curErr = e
-  while (curErr) {
-    console.error(curErr.message, getLocationFromForm(curErr.form))
-    curErr = curErr.innerError
-  }
-}

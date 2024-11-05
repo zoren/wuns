@@ -3,33 +3,11 @@ import fs from 'node:fs/promises'
 import * as readline from 'node:readline'
 import { stdin, stdout, nextTick } from 'node:process'
 
-import { print, parseString, langUndefined } from './core.js'
-import { makeEvalForm, logEvalError } from './interpreter.js'
-// import { isBrowser, read_file_async } from './runtime-lib/files.js'
+import { print, parseString, getPosition, tryGetFormInfoRec } from './core.js'
+import { specialForms, makeJSCompilingEvaluator } from './compiler-js.js'
 import { 'read-file-async' as read_file_async } from './runtime-lib/files.js'
 
-// console.log({ isBrowser: isBrowser() })
-// read_file_async('std.wuns').then((s) => {
-//   console.log({ stdLength: s.length })
-// })
-
-const specialForms = [
-  'i32',
-  'word',
-  'quote',
-  'func',
-  'extern',
-  'def',
-  'if',
-  'do',
-  'let',
-  'switch',
-  'match',
-  // todo add a whole bunch
-  // not actually a special form
-  '..',
-]
-const { evalTop, getDefNames } = makeEvalForm()
+const { evalTops, getDefNames } = makeJSCompilingEvaluator()
 
 const getCompletions = (prefix) => {
   const completions = []
@@ -42,11 +20,25 @@ const commandLineArgs = process.argv.slice(2)
 const endsWithDashFlag = commandLineArgs.at(-1) === '-'
 const files = endsWithDashFlag ? commandLineArgs.slice(0, -1) : commandLineArgs
 
+const getLocationFromForm = (form) => {
+  const formInfo = tryGetFormInfoRec(form)
+  if (!formInfo) return 'no location'
+  const { row, column } = getPosition(formInfo)
+  return `${formInfo.contentObj.contentName}:${row + 1}:${column + 1}`
+}
+
+const logEvalError = (e) => {
+  console.error(e.message, getLocationFromForm(e.form))
+  let curErr = e
+  while (curErr) {
+    console.error(curErr.message, getLocationFromForm(curErr.form))
+    curErr = curErr.innerError
+  }
+}
+
 const evaluateForms = async (forms) => {
   try {
-    let result = langUndefined
-    for (const form of forms) result = await evalTop(form)
-    return result
+    return await evalTops(forms)
   } catch (e) {
     console.error(e)
     logEvalError(e)
@@ -108,9 +100,12 @@ if (!endsWithDashFlag) {
         return
       }
       const forms = parseString(line, `repl-${replLineNo++}`)
-      const result = await evaluateForms(forms)
-      console.log(print(result))
-
+      try {
+        const result = await evaluateForms(forms)
+        if (result !== null) console.log(print(result))
+      } catch (e) {
+        console.error(e)
+      }
       nextTick(prompt)
     })
   }

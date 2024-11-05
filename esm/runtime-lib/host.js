@@ -9,7 +9,6 @@ import {
   print,
   stringToWord,
   parseString,
-  tryGetFormInfo,
   tryGetFormInfoRec,
   optionNone,
   makeOptionSome,

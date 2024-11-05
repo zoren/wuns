@@ -451,8 +451,8 @@ const importModuleElement = async (moduleName, elementName) => {
 const evalExpAsync = async (defEnv, jsExp) => {
   const jsSrc = jsExpToStringSafe(jsExp)
   try {
-    const asyncFunc = new AsyncFunction('dynImport', ...defEnv.keys().map(escapeIdentifier), 'return ' + jsSrc)
-    return await asyncFunc(importModuleElement, ...defEnv.values().map(({ value }) => value))
+    const asyncFunc = new AsyncFunction('dynImport', ...[...defEnv.keys()].map(escapeIdentifier), 'return ' + jsSrc)
+    return await asyncFunc(importModuleElement, ...[...defEnv.values()].map(({ value }) => value))
   } catch (e) {
     if (e instanceof SyntaxError) {
       console.error(e)
@@ -494,14 +494,14 @@ const topSpecialForms = {
   defexpr: defFuncLike,
   defmacro: defFuncLike,
   do: async (_, tail, defEnv) => {
-    for (const form of tail) await evalTopDefEnv(defEnv, form)
+    for (const form of tail) await compileTopDefEnv(defEnv, form)
   },
   load: async (_, tail, defEnv) => {
     if (tail.length !== 1) throw evalError('load expects one argument')
     const relativeFilePath = getFormWord(tail[0])
     const fileContent = await read_file_async(relativeFilePath)
     const fileForms = parseString(fileContent, relativeFilePath)
-    for (const form of fileForms) await evalTopDefEnv(defEnv, form)
+    for (const form of fileForms) await compileTopDefEnv(defEnv, form)
   },
   type: async (_, forms, defEnv) => {
     if (forms.length % 3 !== 0) throw new CompileError('type expected triples')
@@ -560,20 +560,31 @@ const topSpecialForms = {
   },
 }
 
-const evalTopDefEnv = async (defEnv, form) => {
+const compileTopDefEnv = async (defEnv, form) => {
   const forms = tryGetFormList(form)
   if (forms && forms.length > 0) {
     const [firstForm, ...args] = forms
     const firstWord = tryGetFormWord(firstForm)
     if (firstWord) {
       const topSpecialHandler = topSpecialForms[firstWord]
-      if (topSpecialHandler) return await topSpecialHandler(firstWord, args, defEnv)
+      if (topSpecialHandler) {
+        await topSpecialHandler(firstWord, args, defEnv)
+        return null
+      }
     }
     const defDesc = defEnv.get(firstWord)
-    if (defDesc && defDesc.defKind === 'defmacro') return await evalTopDefEnv(defEnv, defDesc.value(...args))
+    if (defDesc && defDesc.defKind === 'defmacro') return await compileTopDefEnv(defEnv, defDesc.value(...args))
   }
-  return compExpStmt(null, form, defEnv, false)
+  return compExp(null, form, defEnv)
 }
+
+export const specialForms = Object.freeze([
+  ...new Set([
+    ...Object.keys(expSpecialFormsExp),
+    ...Object.keys(expSpecialFormsStmt),
+    ...Object.keys(topSpecialForms),
+  ]),
+])
 
 export const makeJSCompilingEvaluator = () => {
   const defEnv = new Map()
@@ -582,16 +593,23 @@ export const makeJSCompilingEvaluator = () => {
     const f = new Function(jsStmtToStringSafe(ce))
     return f()
   }
-  const evalTop = (form) => evalTopDefEnv(defEnv, form)
+  const evalTop = async (form) => {
+    const optJsExp = await compileTopDefEnv(defEnv, form)
+    if (optJsExp === null) return
+    if (optJsExp) return await evalExpAsync(defEnv, optJsExp)
+  }
   const evalTops = async (forms) => {
-    for (const form of forms) await evalTopDefEnv(defEnv, form)
+    let optJsExp = null
+    for (const form of forms) optJsExp = await compileTopDefEnv(defEnv, form)
+    if (optJsExp !== null) return await evalExpAsync(defEnv, optJsExp)
   }
   const evalTopsExp = async (forms) => {
     if (forms.length === 0) throw new CompileError('empty list')
-    for (let i = 0; i < forms.length - 1; i++) await evalTopDefEnv(defEnv, forms[i])
-    const exp = forms.at(-1)
-    const jsExp = compExp(null, exp, defEnv)
+    for (let i = 0; i < forms.length - 1; i++) await compileTopDefEnv(defEnv, forms[i])
+    const lastForm = forms.at(-1)
+    const jsExp = compExp(null, lastForm, defEnv)
     return await evalExpAsync(defEnv, jsExp)
   }
-  return { evalExp, evalTop, evalTopsExp, evalTops }
+  const getDefNames = () => defEnv.keys()
+  return { evalExp, evalTop, evalTopsExp, evalTops, getDefNames }
 }
