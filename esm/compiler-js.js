@@ -69,6 +69,8 @@ const opIntrinsicCall = (opName, args) => {
       return jsBin('binary-and')(...args)
     case 'i32.or':
       return jsBinIOr(...args)
+    case 'i32.xor':
+      return jsBin('binary-xor')(...args)
     case 'i32.shl':
       return jsBin('binary-shl')(...args)
     case 'i32.shr-s':
@@ -191,7 +193,7 @@ const expSpecialFormsExp = {
     if (tail.length < 1) throw new CompileError('intrinsic expected at least one argument')
     const [opForm, ...args] = tail
     const opName = getFormWord(opForm)
-    if (!intrinsics[opName]) throw new CompileError('undefined intrinsic')
+    if (!intrinsics[opName]) throw new CompileError('undefined intrinsic: ' + opName)
     if (args.length !== intrinsics[opName].length) throw new CompileError('wrong number of arguments')
     return opIntrinsicCall(
       opName,

@@ -14,6 +14,7 @@ const binopMap = {
   ge: '>=',
 
   'binary-ior': '|',
+  'binary-xor': '^',
   'binary-and': '&',
 
   'binary-shl': '<<',
