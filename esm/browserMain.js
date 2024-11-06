@@ -1,7 +1,4 @@
 import { print, parseString } from './core.js'
-import { 'read-file-async' as read_file_async } from './runtime-lib/files.js'
-
-// import { makeEvalForm } from './interpreter.js'
 import { makeJSCompilingEvaluator } from './compiler-js.js'
 const { evalTops, evalExp } = makeJSCompilingEvaluator()
 
@@ -36,9 +33,9 @@ const evalString = async (s) => {
 }
 
 export const main = async () => {
-  const file = 'std.wuns'
-  const text = await read_file_async(file)
-  await evalTops(parseString(text, file))
+  const { default: text } = await import('../wuns/test-compile-wat.wuns?raw')
+  await evalTops(parseString(text, 'file'))
+  await evalString('[test]')
   window.weval = weval
   window.evalString = evalString
   window.evalStringOut = evalStringOut
