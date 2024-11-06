@@ -170,10 +170,8 @@ export const makeEvalForm = () => {
         case 'match': {
           if (numOfArgs === 0) throw evalError(`special form '${firstWord}' expected at least one argument`)
           const value = goExp(env, forms[1])
-          if (!isTaggedValue(value)) {
-            console.log({ nonTaggedValue: value })
-            throw evalError('expected tagged value')
-          }
+          if (!isTaggedValue(value)) throw evalError('expected tagged value')
+
           const { tag, args } = value
           const findMatch = () => {
             for (let i = 2; i < forms.length - 1; i += 2) {
@@ -189,10 +187,7 @@ export const makeEvalForm = () => {
               return { newEnv, body: forms[i + 1] }
             }
             // an odd number of arguments means there is no default case
-            if (numOfArgs % 2 !== 0) {
-              console.dir(value)
-              throw evalError('no match found')
-            }
+            if (numOfArgs % 2 !== 0) throw evalError('no match found')
             return { newEnv: env, body: forms.at(-1) }
           }
           const { newEnv, body } = findMatch()
@@ -452,5 +447,12 @@ export const makeEvalForm = () => {
     if (tryGetClosureKind(value) === 'macro') return value
     return null
   }
-  return { evalExp, evalTop, evalTops, tryGetMacro, getDefNames: () => defEnv.keys(), getDef: (name) => defEnv.get(name) }
+  return {
+    evalExp,
+    evalTop,
+    evalTops,
+    tryGetMacro,
+    getDefNames: () => defEnv.keys(),
+    getDef: (name) => defEnv.get(name),
+  }
 }
