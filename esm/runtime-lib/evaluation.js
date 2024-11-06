@@ -1,8 +1,8 @@
 import { isForm, optionNone, makeOptionSome, resultError, resultOk } from '../core.js'
-import { makeEvalForm } from '../interpreter.js'
+import { makeJSCompilingEvaluator } from '../compiler-js.js'
 
 const make_evaluator = () => {
-  return makeEvalForm()
+  return makeJSCompilingEvaluator()
 }
 
 export { make_evaluator as 'make-evaluator' }

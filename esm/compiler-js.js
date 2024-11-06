@@ -630,5 +630,9 @@ export const makeJSCompilingEvaluator = () => {
     if (desc) return desc.defKind
   }
   const getDefNames = () => defEnv.keys()
-  return { evalExp, evalTop, evalTopsExp, evalTops, getDef, getDefKind, getDefNames }
+  const tryGetMacro = (name) => {
+    const desc = defEnv.get(name)
+    if (desc && desc.defKind === 'defmacro') return desc.value
+  }
+  return { evalExp, evalTop, evalTopsExp, evalTops, getDef, getDefKind, getDefNames, tryGetMacro }
 }
