@@ -9,16 +9,6 @@ const makeStopWatch = () => {
   }
 }
 
-/**
- * @typedef {import('tree-sitter').TSParser} TSParser
- */
-
-/**
- * @param {vscode.TextDocument} document
- * @returns {TSParser.Tree}
- */
-let parseDocumentTreeSitter = null
-
 const wunsLanguageId = 'wuns'
 
 // https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide
@@ -75,22 +65,23 @@ const modificationModifier = encodeTokenModifiers('modification')
  * @param {vscode.TextDocument} document
  */
 const makeProvideDocumentSemanticTokensForms = async () => {
-  const { treeToFormsSafeNoMeta, tryGetNodeFromForm } = await import('./esm/parseTreeSitter.js')
-  const { tryGetFormWord, tryGetFormList } = await import('./esm/core.js')
+  const { parseString, tryGetFormInfo, tryGetFormWord, tryGetFormList, getFormInfoAsRange } = await import(
+    './esm/core.js'
+  )
   const { makeJSCompilingEvaluator } = await import('./esm/compiler-js.js')
 
   const provideDocumentSemanticTokens = async (document) => {
     const { evalTop, getDef, getDefKind } = makeJSCompilingEvaluator()
 
     const tokensBuilder = new SemanticTokensBuilder(legend)
-    const tree = parseDocumentTreeSitter(document)
     const pushTokenWithModifier = (form, tokenType, tokenModifiers) => {
       if (!form) return
       const word = tryGetFormWord(form)
       if (!word) return console.error('expected word')
-      const node = tryGetNodeFromForm(form)
-      if (!node) return
-      const { row, column } = node.startPosition
+      const info = tryGetFormInfo(form)
+      if (!info) return
+      const { start } = getFormInfoAsRange(info)
+      const { row, column } = start
       tokensBuilder.push(row, column, word.length, tokenType, tokenModifiers)
     }
     const pushToken = (form, tokenType) => pushTokenWithModifier(form, tokenType, 0)
@@ -309,9 +300,9 @@ const makeProvideDocumentSemanticTokensForms = async () => {
       }
       pushToken(head, getDefKind(headWord) === 'defmacro' ? macroTokenType : functionTokenType)
     }
-
+    const topForms = parseString(document.getText(), document.fileName)
     try {
-      for (const topForm of treeToFormsSafeNoMeta(tree)) await goTop(topForm)
+      for (const topForm of topForms) await goTop(topForm)
     } catch (e) {
       console.error('provideDocumentSemanticTokensForms error catch', e)
     }
@@ -331,43 +322,52 @@ const makeProvideDocumentSemanticTokensForms = async () => {
 
 const pointToPosition = ({ row, column }) => new Position(row, column)
 
-const rangeFromNode = ({ startPosition, endPosition }) =>
-  new Range(pointToPosition(startPosition), pointToPosition(endPosition))
+const makeProvideSelectionRanges = async () => {
+  const { parseString, tryGetFormInfo, tryGetFormWord, tryGetFormList, getFormInfoAsRange } = await import(
+    './esm/core.js'
+  )
+  const getFormRange = (topForm) => {
+    const info = tryGetFormInfo(topForm)
+    if (!info) throw new Error('expected info')
+    const { start, end } = getFormInfoAsRange(info)
+    return new Range(pointToPosition(start), pointToPosition(end))
+  }
+  /**
+   *
+   * @param {vscode.TextDocument} document
+   * @param {vscode.Position[]} positions
+   */
+  return (document, positions) => {
+    const forms = parseString(document.getText(), document.fileName)
+    // todo make selection aware of special forms such as let, where one wants to select bindings(pairs) before entire binding form
+    const selRanges = []
 
-/**
- *
- * @param {vscode.TextDocument} document
- * @param {vscode.Position[]} positions
- * @param {vscode.CancellationToken} token
- */
-const provideSelectionRanges = (document, positions) => {
-  const tree = parseDocumentTreeSitter(document)
-  const topLevelNodes = tree.rootNode.children
-  // todo make selection aware of special forms such as let, where one wants to select bindings(pairs) before entire binding form
-  const tryFindRange = (pos) => {
-    const go = (node, parentSelectionRange) => {
-      const range = rangeFromNode(node)
-      if (!range.contains(pos)) return null
-      const selRange = new SelectionRange(range, parentSelectionRange)
-      if (node.namedChildCount === 0) return selRange
-      for (const child of node.namedChildren) {
-        const found = go(child, selRange)
-        if (found) return found
+    for (const topForm of forms) {
+      const topRange = getFormRange(topForm)
+      for (const pos of positions) {
+        if (!topRange.contains(pos)) continue
+        const go = (form, parentSelectionRange) => {
+          const range = getFormRange(form)
+          if (!range.contains(pos)) return null
+          const selRange = new SelectionRange(range, parentSelectionRange)
+          if (tryGetFormWord(form)) return selRange
+          const list = tryGetFormList(form)
+          if (!list) throw new Error('expected list')
+          for (const child of list) {
+            const found = go(child, selRange)
+            if (found) return found
+          }
+          return selRange
+        }
+        const found = go(topForm, undefined)
+        if (found !== null) {
+          selRanges.push(found)
+          break
+        }
       }
-      return selRange
     }
-    for (const node of topLevelNodes) {
-      const found = go(node, undefined)
-      if (found) return found
-    }
-    return null
+    return selRanges
   }
-  const selRanges = []
-  for (const pos of positions) {
-    const found = tryFindRange(pos)
-    if (found) selRanges.push(found)
-  }
-  return selRanges
 }
 
 const { languages, workspace, window, commands } = vscode
@@ -527,30 +527,13 @@ const addBindCheckActiveDocumentCommand = async (context) => {
  * @param {vscode.ExtensionContext} context
  */
 async function activate(context) {
-  const { parseTagTreeSitter } = await import('./esm/parseTreeSitter.js')
-  const { parseString } = await import('./esm/core.js')
-
-  parseDocumentTreeSitter = (document) => {
-    const text = document.getText()
-    const { fileName } = document
-    const watchTreeSitter = makeStopWatch()
-    const tree = parseTagTreeSitter(text, fileName)
-    if (tree.rootNode.hasError) console.error('tree-sitter error', fileName)
-    const elapsedTreeSitter = watchTreeSitter()
-
-    const watchJsParser = makeStopWatch()
-    const forms = parseString(text, fileName)
-    const elapsedJsParser = watchJsParser()
-    console.log(fileName, 'treesitter took', elapsedTreeSitter, 'ms', 'js parser took', elapsedJsParser, 'ms', fileName)
-    return tree
-  }
   console.log('starting wuns lang extension: ' + context.extensionPath)
 
   const selector = { language: wunsLanguageId, scheme: 'file' }
   const documentSemanticTokensProvider = await makeProvideDocumentSemanticTokensForms()
   context.subscriptions.push(
     languages.registerDocumentSemanticTokensProvider(selector, documentSemanticTokensProvider, legend),
-    languages.registerSelectionRangeProvider(selector, { provideSelectionRanges }),
+    languages.registerSelectionRangeProvider(selector, { provideSelectionRanges: await makeProvideSelectionRanges() }),
   )
   await addBindCheckActiveDocumentCommand(context)
   console.log('Congratulations, your extension "wunslang" is now active!')
