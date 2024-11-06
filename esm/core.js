@@ -48,6 +48,16 @@ export const tryGetFormWord = (f) => (tryGetTag(f) === formWordName ? f.args[0] 
 export const isForm = (f) => isTaggedValue(f) && (tryGetTag(f) === formWordName || tryGetTag(f) === formListName)
 
 export const tryGetFormList = (f) => (tryGetTag(f) === formListName ? f.args[0] : null)
+export const getFormChildren = (f) => {
+  switch (tryGetTag(f)) {
+    case formWordName:
+      return emptyList
+    case formListName:
+      return f.args[0]
+    default:
+      throw new Error('getFormChildren expects form')
+  }
+}
 
 class Atom {
   #value

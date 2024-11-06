@@ -323,7 +323,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
 const pointToPosition = ({ row, column }) => new Position(row, column)
 
 const makeProvideSelectionRanges = async () => {
-  const { parseString, tryGetFormInfo, tryGetFormWord, tryGetFormList, getFormInfoAsRange } = await import(
+  const { parseString, tryGetFormInfo, getFormChildren, getFormInfoAsRange } = await import(
     './esm/core.js'
   )
   const getFormRange = (topForm) => {
@@ -344,16 +344,13 @@ const makeProvideSelectionRanges = async () => {
 
     for (const topForm of forms) {
       const topRange = getFormRange(topForm)
-      for (const pos of positions) {
-        if (!topRange.contains(pos)) continue
+      for (const position of positions) {
+        if (!topRange.contains(position)) continue
         const go = (form, parentSelectionRange) => {
           const range = getFormRange(form)
-          if (!range.contains(pos)) return null
+          if (!range.contains(position)) return null
           const selRange = new SelectionRange(range, parentSelectionRange)
-          if (tryGetFormWord(form)) return selRange
-          const list = tryGetFormList(form)
-          if (!list) throw new Error('expected list')
-          for (const child of list) {
+          for (const child of getFormChildren(form)) {
             const found = go(child, selRange)
             if (found) return found
           }
