@@ -17,7 +17,7 @@
         [bform/defmacro f] [logq-abort map-option not implemented defmacro]
         [bform/call f args] [bform/call [go f] [list-map arg args [go arg]]]
         [bform/call-fexpr f form-args] [bform/call-fexpr [go f] form-args]
-        [bform/type-anno f t] [bform/type-anno [go f] t]
+
 
         ast]]]
     ast]]

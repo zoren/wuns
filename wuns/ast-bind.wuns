@@ -78,7 +78,6 @@
     [continue [list [pair syntax-word bexp]]]
     [call bexp [list bexp]]
     [call-fexpr bexp [list form]]
-    [type-anno bexp btype-scheme]
     ]]
 
 [type bdefunc-kind []
@@ -860,13 +859,6 @@
                         [todo check ff starts with func]
                         [form-to-func new-lstack ff]]]
                     [list-map f [slice l 2 [size l]] [form-to-ast new-lstack f]]]]
-
-                [[word type-anno]]
-                [do
-                  [assert-n-args 2]
-                  [bexp/type-anno
-                    [form-to-ast lstack [get-arg 0]]
-                    [form-to-type-scheme [get-arg 1]]]]
 
                 [if-let [ldesc [try-get-local lstack first-word]]
                   [bexp/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]

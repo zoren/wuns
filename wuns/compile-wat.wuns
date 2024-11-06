@@ -256,25 +256,6 @@
     [match bform
     [btop/def name value]
     [match value
-      [bexp/type-anno annotated-exp bts]
-      [match annotated-exp
-        [bexp/extern es]
-        [match [btype-scheme/type bts]
-          [btype/memory lower opt-upper]
-          [push
-            [wat-output/imports output]
-            [pair
-              [list-map e es [syntax-word/word e]]
-              [import-kind/memory [syntax-word/word name] [i32 0]]]]
-
-          [do
-            [log bform]
-            [logq-abort translate-top-form def type-anno extern not implemented]]]
-
-        [do
-          [log bform]
-          [logq-abort translate-top-form def type-anno not implemented]]]
-
       [bexp/literal l]
       [let
         [t

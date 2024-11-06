@@ -100,25 +100,23 @@
     [type pair [a b] [record [fst a] [snd b]]]
     [pair [i32 1] [word a]]
     [pair/snd [pair [i32 1] [word a]]]]
-  [test-ok
-    [type-anno [i32 2] [type-scheme [a b c] [func [[list a] [list b]] [list c]]]]]
 
   [test-error [[redefing type]] [type t [] [union]] [type t [] [union]]]
   [test-error [[type name is reserved]] [type i32 [] [union]]]
 
   [test-error [[undefined type or type param]] [type t [] [union [ctor no-such-type]]]]
   [test-error [[undefined type]] [type t [] [union [ctor [no-such-type]]]]]
-  [test-error [[type is empty]] [type-anno [i32 2] []]]
-  [test-error [[type is empty]] [type-anno [i32 2] [type-scheme [] []]]]
-[comment    [test-error [[does not accept type-scheme]] [type-anno [i32 2] [type-scheme [] type-scheme]]] ]
-  [test-error [[does not accept type-scheme]] [type-anno [i32 2] [type-scheme [] [type-scheme]]]]
-  [test-error [[func expects a parameter list and a return type]] [type-anno [i32 2] [func]]]
-  [test-error [[func expects a parameter list and a return type]] [type-anno [i32 2] [func []]]]
+  [test-error [[type is empty]] [import host concat []]]
+  [test-error [[type is empty]] [import host concat [type-scheme [] []]]]
+[comment    [test-error [[does not accept type-scheme]] [import host concat [type-scheme [] type-scheme]]] ]
+  [test-error [[does not accept type-scheme]] [import host concat [type-scheme [] [type-scheme]]]]
+  [test-error [[func expects a parameter list and a return type]] [import host concat [func]]]
+  [test-error [[func expects a parameter list and a return type]] [import host concat [func []]]]
   [test-error [[wrong number of type arguments to builtin]] [type t [] [union [ctor [i32 f64]]]]]
   [test-error [[wrong number of type arguments]] [type t [] [union [ctor]]] [type t2 [] [union [ctor [t i32]]]]]
 
   [test-error [[undefined type]] [type t [] [union [ctor [no-such-type]]]]]
-  [test-error [[duplicate type param]] [type-anno [i32 2] [type-scheme [a a] i32]]]
+  [test-error [[duplicate type param]] [import host concat [type-scheme [a a] i32]]]
   [test-error [[duplicate type param]] [type t [a a] [union]]]
   [test-error [[reserved types cannot be used as type params]] [type t [i32] [union]]]
 
@@ -175,7 +173,8 @@
 
   [word done]
   ]
-
+[comment
 [defn test-file-ok [file-name]
   [test-ok-fn [read-file file-name]]
   [word done]]
+ ]

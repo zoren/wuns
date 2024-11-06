@@ -191,9 +191,6 @@
         [bexp/call f args]
         [js-exp/call [cexp f] [list-map arg args [cexp arg]]]
 
-        [bexp/type-anno bf t]
-        [cexp bf]
-
         [iife [block [cstmt true bform]]]]]
 
       [func cstmt-do [is-tail forms]

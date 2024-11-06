@@ -392,7 +392,6 @@
     [bexp/literal l] 1
     [bexp/func f] 1
     [bexp/var f] 1
-    [bexp/type-anno f ts] [is-syntactic-value f]
     0]]
 
 [defn annotate [gctx bst type]
@@ -703,13 +702,6 @@
            t-func [type-func-no-rest arg-types t-res]]
           [unify-report gctx ft t-func bform]
           t-res]
-
-        [bexp/type-anno bf bts]
-        [let
-          [value-type [go level lctx bf]
-           inst-anno-type [instantiate-syntax-type-scheme [check-context/type-var-counter gctx] level bts]]
-          [unify-report gctx value-type inst-anno-type bf]
-          value-type]
 
         [do
           [log bform]
