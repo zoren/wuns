@@ -76,11 +76,11 @@ const modificationModifier = encodeTokenModifiers('modification')
  */
 const makeProvideDocumentSemanticTokensForms = async () => {
   const { treeToFormsSafeNoMeta, tryGetNodeFromForm } = await import('./esm/parseTreeSitter.js')
-  const { tryGetClosureKind, tryGetFormWord, tryGetFormList } = await import('./esm/core.js')
-  const { makeEvalForm } = await import('./esm/interpreter.js')
+  const { tryGetFormWord, tryGetFormList } = await import('./esm/core.js')
+  const { makeJSCompilingEvaluator } = await import('./esm/compiler-js.js')
 
   const provideDocumentSemanticTokens = async (document) => {
-    const { evalTop, getDef } = makeEvalForm()
+    const { evalTop, getDef, getDefKind } = makeJSCompilingEvaluator()
 
     const tokensBuilder = new SemanticTokensBuilder(legend)
     const tree = parseDocumentTreeSitter(document)
@@ -251,13 +251,14 @@ const makeProvideDocumentSemanticTokensForms = async () => {
         return console.error('top special form not allowed in exp', headWord)
       }
       // check if headWord is a defed macro or fexpr, or a func
-      const headValue = getDef(headWord)
-      switch (tryGetClosureKind(headValue)) {
-        case 'macro':
+      switch (getDefKind(headWord)) {
+        case 'defmacro': {
           pushToken(head, macroTokenType)
+          const headValue = getDef(headWord)
           goExp(headValue(...tail))
           return
-        case 'fexpr':
+        }
+        case 'defexpr':
           pushToken(head, functionTokenType)
           const goQuote = (form) => {
             if (tryGetFormWord(form)) pushToken(form, stringTokenType)
@@ -265,17 +266,12 @@ const makeProvideDocumentSemanticTokensForms = async () => {
           }
           for (const form of tail) goQuote(form)
           return
-        case 'func':
+        case 'defn':
+        default:
           pushToken(head, functionTokenType)
           for (const form of tail) goExp(form)
           return
-        case null:
-          break
-        default:
-          throw new Error('unexpected closure kind')
       }
-      pushToken(head, functionTokenType)
-      for (const form of tail) goExp(form)
     }
     const goTop = async (form) => {
       if (!form) return
@@ -285,6 +281,12 @@ const makeProvideDocumentSemanticTokensForms = async () => {
         return
       }
       if (list.length === 0) return
+      try {
+        await evalTop(form)
+      } catch (e) {
+        console.error('provideDocumentSemanticTokensForms evalForm error', e.message)
+        console.error(e)
+      }
       const [head, ...tail] = list
       const headWord = tryGetFormWord(head)
       if (!headWord) {
@@ -296,14 +298,6 @@ const makeProvideDocumentSemanticTokensForms = async () => {
       if (topSpecialHandler) {
         pushToken(head, keywordTokenType)
         topSpecialHandler(headWord, tail)
-        try {
-          // eval for side effects so macros are defined and can be expanded
-          // todo only eval def and do forms, to avoid evaling top level forms, that may crash
-          await evalTop(form)
-        } catch (e) {
-          console.error('provideDocumentSemanticTokensForms evalForm error', e.message)
-          console.error(e)
-        }
         return
       }
       const expSpecialHandler = expSpecialForms[headWord]
@@ -313,24 +307,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
         const node = tryGetNodeFromForm(form)
         return console.error('exp special form not allowed at top level', headWord, node, node.startPosition)
       }
-      // check if headWord is a defed macro or fexpr, or a func
-      const headValue = getDef(headWord)
-      switch (tryGetClosureKind(headValue)) {
-        case 'macro':
-          pushToken(head, macroTokenType)
-          const macroForm = headValue(...tail)
-          return goTop(macroForm)
-        case 'fexpr':
-          return console.log('top-level fexpr not allowed')
-        case 'func':
-          return console.log('top-level fexpr not allowed')
-        case null:
-          break
-        default:
-          throw new Error('unexpected closure kind')
-      }
-      pushToken(head, functionTokenType)
-      // for (const form of tail) await goTop(form)
+      pushToken(head, getDefKind(headWord) === 'defmacro' ? macroTokenType : functionTokenType)
     }
 
     try {
@@ -422,8 +399,12 @@ const serverityToDiagnosticSeverity = (severity) => {
   }
 }
 
+const fsPromises = require('fs').promises
+const path = require('path')
+
 const addBindCheckActiveDocumentCommand = async (context) => {
   const { printFormMessage, parseString, print, tryGetFormInfo, getFormInfoAsRange } = await import('./esm/core.js')
+  const { makeJSCompilingEvaluator } = await import('./esm/compiler-js.js')
   const getRangeFromForm = (form) => {
     const info = tryGetFormInfo(form)
     if (!info) {
@@ -433,8 +414,14 @@ const addBindCheckActiveDocumentCommand = async (context) => {
     const { start, end } = getFormInfoAsRange(info)
     return new Range(pointToPosition(start), pointToPosition(end))
   }
-  const astBind = await import('./esm/ast-bind.js')
-  const makeFormToAstConverter = astBind['mk-form-to-ast']
+  const check2Path = path.join(context.extensionPath, 'wuns/check2.wuns')
+
+  const check2 = await fsPromises.readFile(check2Path, 'ascii')
+  const check2Forms = parseString(check2, check2Path)
+  const { evalTops, getDef } = makeJSCompilingEvaluator()
+  await evalTops(check2Forms)
+
+  const makeFormToAstConverter = getDef('mk-form-to-ast')
 
   const diagnosticCollection = languages.createDiagnosticCollection('wuns-bind')
   const bindCheck = async () => {
@@ -481,9 +468,7 @@ const addBindCheckActiveDocumentCommand = async (context) => {
     }),
   )
 
-  const check2 = await import('./esm/check2.js')
-
-  const bindTypeCheckForms = check2['bind-type-check-forms']
+  const bindTypeCheckForms = getDef('bind-type-check-forms')
 
   // const diagnosticCollection = languages.createDiagnosticCollection('wuns')
   const bindType = async () => {

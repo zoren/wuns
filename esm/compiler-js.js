@@ -621,6 +621,14 @@ export const makeJSCompilingEvaluator = () => {
     const jsExp = compExp(null, lastForm, defEnv)
     return await evalExpAsync(defEnv, jsExp)
   }
+  const getDef = (name) => {
+    const desc = defEnv.get(name)
+    if (desc) return desc.value
+  }
+  const getDefKind = (name) => {
+    const desc = defEnv.get(name)
+    if (desc) return desc.defKind
+  }
   const getDefNames = () => defEnv.keys()
-  return { evalExp, evalTop, evalTopsExp, evalTops, getDefNames }
+  return { evalExp, evalTop, evalTopsExp, evalTops, getDef, getDefKind, getDefNames }
 }
