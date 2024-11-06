@@ -153,12 +153,12 @@
         [bexp/if c t e]
         [js-exp/ternary [cexp c] [cexp t] [cexp e]]
 
-        [bexp/intrinsic-call op ic]
+        [bexp/intrinsic op ic]
         [match ic
-          [intrinsic-call-args/bin e1 e2]
+          [intrinsic-args/bin e1 e2]
           [instruction-name-and-args-to-js-exp [syntax-word/word op] [list-map arg [list e1 e2] [cexp arg]]]
 
-          [logq-abort cexp unknown intrinsic-call kind]]
+          [logq-abort cexp unknown intrinsic kind]]
 
         [bexp/extern ws]
         [mk-extern [list-map w ws [syntax-word/word w]]]

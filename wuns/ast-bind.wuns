@@ -54,7 +54,7 @@
     [rest-param [option syntax-word]]
     [body [list bexp]]]
 
-  intrinsic-call-args []
+  intrinsic-args []
   [union
     [bin bexp bexp]
     [load intrinsic-memargs bexp]
@@ -64,8 +64,7 @@
   [union
     [var syntax-word]
     [literal literal]
-    [intrinsic-call syntax-word intrinsic-call-args]
-    [extern [list syntax-word]]
+    [intrinsic syntax-word intrinsic-args]
 
     [func bfunc]
 
@@ -107,11 +106,11 @@
         [bexp/literal l]
         [do]
 
-        [bexp/intrinsic-call w ic]
+        [bexp/intrinsic w ic]
         [match ic
-          [intrinsic-call-args/bin a b] [do [go a] [go b]]
-          [intrinsic-call-args/load ma a] [go a]
-          [intrinsic-call-args/store ma a b] [do [go a] [go b]]]
+          [intrinsic-args/bin a b] [do [go a] [go b]]
+          [intrinsic-args/load ma a] [go a]
+          [intrinsic-args/store ma a b] [do [go a] [go b]]]
 
         [bexp/call fn args]
         [do
@@ -680,17 +679,14 @@
                 [[word word]]
                 [bexp/literal [literal/word [get-sword [get-arg 0]]]]
 
-                [[word extern]]
-                [bexp/extern [list-map w [rest l] [get-sword w]]]
-
-                [[word intrinsic-call]]
+                [[word intrinsic]]
                 [let [inst-sname [get-sword [get-arg 0]]
                       inst-name [syntax-word/word inst-sname]]
-                  [bexp/intrinsic-call inst-sname
+                  [bexp/intrinsic inst-sname
                     [if [or [is-i32-bin-inst inst-name] [is-f64-bin-inst inst-name] [is-f64-comp-inst inst-name]]
                       [do
                         [assert-n-args 3]
-                        [intrinsic-call-args/bin [form-to-ast lstack [get-arg 1]] [form-to-ast lstack [get-arg 2]]]]
+                        [intrinsic-args/bin [form-to-ast lstack [get-arg 1]] [form-to-ast lstack [get-arg 2]]]]
                       [let [parse-mem-args
                             [func pma []
                               [let [mem-sword [get-sword [get-arg 1]]]
@@ -706,14 +702,14 @@
                         [do
                           [todo we need to check the memory is deffed as a memory]
                           [assert-n-args 5]
-                          [intrinsic-call-args/load
+                          [intrinsic-args/load
                             [parse-mem-args]
                             [form-to-ast lstack [get-arg 4]]]]
 
                         [[word i32.store]]
                         [do
                           [assert-n-args 6]
-                          [intrinsic-call-args/store
+                          [intrinsic-args/store
                             [parse-mem-args]
                             [form-to-ast lstack [get-arg 4]]
                             [form-to-ast lstack [get-arg 5]]]]

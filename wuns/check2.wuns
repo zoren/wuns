@@ -392,7 +392,6 @@
     [bexp/literal l] 1
     [bexp/func f] 1
     [bexp/var f] 1
-    [bexp/extern f] 1
     [bexp/type-anno f ts] [is-syntactic-value f]
     0]]
 
@@ -414,9 +413,9 @@
         [literal/f64 f] type-f64
         [literal/word w] type-word]
 
-      [bexp/intrinsic-call inst-name ica]
+      [bexp/intrinsic inst-name ica]
       [match ica
-        [intrinsic-call-args/bin a b]
+        [intrinsic-args/bin a b]
         [ifs
           [is-i32-bin-inst [syntax-word/word inst-name]]
           type-i32
@@ -429,14 +428,14 @@
 
           [logq-abort bin intrinsic not implemented]]
 
-        [intrinsic-call-args/load memargs addr]
+        [intrinsic-args/load memargs addr]
         [switch [syntax-word/word inst-name]
           [[word i32.load]] type-i32
           [[word f64.load]] type-f64
 
           [logq-abort load intrinsic not implemented]]
 
-        [intrinsic-call-args/store memargs addr value]
+        [intrinsic-args/store memargs addr value]
         type-empty-tuple]
 
       [bexp/do forms]
@@ -512,9 +511,9 @@
         [bexp/literal l]
         [literal-to-type l]
 
-        [bexp/intrinsic-call inst-name ic]
+        [bexp/intrinsic inst-name ic]
         [match ic
-          [intrinsic-call-args/bin a b]
+          [intrinsic-args/bin a b]
           [ifs
             [is-i32-bin-inst [syntax-word/word inst-name]]
             [do
@@ -536,7 +535,7 @@
 
             [logq-abort bin intrinsic not implemented]]
 
-          [intrinsic-call-args/load memargs addr]
+          [intrinsic-args/load memargs addr]
           [let
             [memword [intrinsic-memargs/memory memargs]
              type-scheme [get [check-context/def-var-types gctx] [syntax-word/word memword]]
@@ -546,7 +545,7 @@
             [unify-report gctx type-i32 [go level lctx addr] addr]
             type-i32]
 
-          [intrinsic-call-args/store memargs addr value]
+          [intrinsic-args/store memargs addr value]
           [do
             [unify-report gctx type-i32 [go level lctx addr] addr]
             [unify-report gctx type-i32 [go level lctx value] value]
@@ -704,9 +703,6 @@
            t-func [type-func-no-rest arg-types t-res]]
           [unify-report gctx ft t-func bform]
           t-res]
-
-        [bexp/extern es]
-        [generate-fresh-type-var gctx level]
 
         [bexp/type-anno bf bts]
         [let

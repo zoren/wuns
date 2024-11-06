@@ -187,8 +187,8 @@ const expSpecialFormsExp = {
     if (tail.length !== 1) throw new CompileError('word expected one argument')
     return jsString(getFormWord(tail[0]))
   },
-  'intrinsic-call': (tail, ctx, defEnv) => {
-    if (tail.length < 1) throw new CompileError('intrinsic-call expected at least one argument')
+  intrinsic: (tail, ctx, defEnv) => {
+    if (tail.length < 1) throw new CompileError('intrinsic expected at least one argument')
     const [opForm, ...args] = tail
     const opName = getFormWord(opForm)
     if (!intrinsics[opName]) throw new CompileError('undefined intrinsic')

@@ -141,9 +141,9 @@
   [comment  [test-assert-undefined [trans-eval-form [if [i32 1] [do] [do]]]] ]
 
   [comment intrinsics]
-  [test-exp-eq [i32 5] [intrinsic-call i32.add [i32 2] [i32 3]]]
-  [test-exp-eq [i32 5] [intrinsic-call i32.sub [i32 8] [i32 3]]]
-  [test-exp-eq [i32 15] [intrinsic-call i32.mul [i32 5] [i32 3]]]
+  [test-exp-eq [i32 5] [intrinsic i32.add [i32 2] [i32 3]]]
+  [test-exp-eq [i32 5] [intrinsic i32.sub [i32 8] [i32 3]]]
+  [test-exp-eq [i32 15] [intrinsic i32.mul [i32 5] [i32 3]]]
 
   [comment parameters]
   [promise-bind
@@ -156,7 +156,7 @@
       [test-assert-eq [i32 0] [js-apply f [list [to-js-value [i32 1337]]]]]]]]
 
   [let-async
-    [m [module-async [defn not2 [b] [intrinsic-call i32.eq b [i32 0]]] [export not2]]]
+    [m [module-async [defn not2 [b] [intrinsic i32.eq b [i32 0]]] [export not2]]]
     [let [i [wasm-instantiate m empty-object]
           f [get-export i [word not2]]]
     [test-assert-eq [i32 1] [js-apply f [list [to-js-value [i32 0]]]]]
@@ -189,7 +189,7 @@
   [let-async [m [module-async
     [defn gauss-direct [n]
       [if n
-        [intrinsic-call i32.add n [gauss-direct [intrinsic-call i32.sub n [i32 1]]]]
+        [intrinsic i32.add n [gauss-direct [intrinsic i32.sub n [i32 1]]]]
         [i32 0]]]
     [export gauss-direct]]]
     [let [i [wasm-instantiate m empty-object]
@@ -205,7 +205,7 @@
   [let-async [m [module-async
     [defn go [res n]
       [if n
-        [go [intrinsic-call i32.add res n] [intrinsic-call i32.sub n [i32 1]]]
+        [go [intrinsic i32.add res n] [intrinsic i32.sub n [i32 1]]]
         res]]
     [defn gauss-tail [n] [go [i32 0] n]]
     [export gauss-tail]]]
@@ -223,8 +223,8 @@
       [loop [res [i32 0] i n]
         [if i
           [continue
-            res [intrinsic-call i32.add res i]
-            i [intrinsic-call i32.sub i [i32 1]]]
+            res [intrinsic i32.add res i]
+            i [intrinsic i32.sub i [i32 1]]]
           res]]]
     [export gauss-loop]]][let[
         i [wasm-instantiate m empty-object]
@@ -237,8 +237,8 @@
   [comment
   [let-async [m [module-async
 [import env mem [memory 1]]
-[defn get-aligned [p] [intrinsic-call i32.load mem 0 4 p]]
-[defn set-aligned [p v] [intrinsic-call i32.store mem 0 4 p v]]
+[defn get-aligned [p] [intrinsic i32.load mem 0 4 p]]
+[defn set-aligned [p v] [intrinsic i32.store mem 0 4 p v]]
 [export get-aligned set-aligned]]]
   [let [env-kv [transient-kv-map]
         - [set-kv-map env-kv [word mem] [to-js-value [memory 1 1 0]]]
@@ -260,17 +260,17 @@
 [def fnv-offset-basis [i32 -2128831035]]
 
 [defn hash-fnv-1a-i32 [p len]
-  [let [end-p [intrinsic-call i32.add p len]]
+  [let [end-p [intrinsic i32.add p len]]
     [loop [hash fnv-offset-basis
            q p]
-      [if [intrinsic-call i32.lt-s q end-p]
+      [if [intrinsic i32.lt-s q end-p]
         [continue
             hash
-            [intrinsic-call i32.mul
-              [intrinsic-call i32.xor hash
-                [intrinsic-call i32.load8-u mem 0 1 q]]
+            [intrinsic i32.mul
+              [intrinsic i32.xor hash
+                [intrinsic i32.load8-u mem 0 1 q]]
               fnv-prime]
-            q [intrinsic-call i32.add q [i32 1]]]
+            q [intrinsic i32.add q [i32 1]]]
         hash]]]]
 [export hash-fnv-1a-i32]
 ]

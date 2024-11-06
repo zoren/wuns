@@ -62,8 +62,8 @@
   [test-ok f64 [f64 1.5]]
   [test-ok word [word a]]
 
-  [test-ok i32 [intrinsic-call i32.add [i32 1] [i32 2]]]
-  [test-ok f64 [intrinsic-call f64.add [f64 1] [f64 1]]]
+  [test-ok i32 [intrinsic i32.add [i32 1] [i32 2]]]
+  [test-ok f64 [intrinsic f64.add [f64 1] [f64 1]]]
 
   [test-errors i32 [[not unifiable - different types]] [if [word ok] [i32 5] [i32 5]]]
   [test-errors i32 [[not unifiable - different types]] [if [i32 5] [i32 5] [word a]]]

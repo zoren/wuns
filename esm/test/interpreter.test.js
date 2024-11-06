@@ -1,4 +1,3 @@
-import fs from 'node:fs'
 import { expect, assert, test, describe } from 'vitest'
 
 import { langUndefined, parseString } from '../core.js'
@@ -58,14 +57,14 @@ const testExp = ({ pe }) => {
   })
 
   test('intrinsics', () => {
-    assert.throws(() => pe('[intrinsic-call]'))
-    assert.throws(() => pe('[intrinsic-call no-such-intrinsic]'))
-    assert.throws(() => pe('[intrinsic-call i32.add]'))
-    assert.throws(() => pe('[intrinsic-call i32.add [i32 1]]'))
-    expect(pe('[intrinsic-call i32.add [i32 1] [i32 2]]')).toBe(3)
-    expect(pe('[intrinsic-call i32.sub [i32 1] [i32 2]]')).toBe(-1)
+    assert.throws(() => pe('[intrinsic]'))
+    assert.throws(() => pe('[intrinsic no-such-intrinsic]'))
+    assert.throws(() => pe('[intrinsic i32.add]'))
+    assert.throws(() => pe('[intrinsic i32.add [i32 1]]'))
+    expect(pe('[intrinsic i32.add [i32 1] [i32 2]]')).toBe(3)
+    expect(pe('[intrinsic i32.sub [i32 1] [i32 2]]')).toBe(-1)
 
-    expect(pe('[intrinsic-call f64.sub [f64 1.5] [f64 2.5]]')).toBe(-1)
+    expect(pe('[intrinsic f64.sub [f64 1.5] [f64 2.5]]')).toBe(-1)
   })
 
   test('if', () => {
@@ -138,20 +137,20 @@ const testExp = ({ pe }) => {
     expect(pe('[let [x [let [x [i32 2]] x]] x]')).toBe(2)
     expect(pe('[let [x [i32 2] y x] y]')).toBe(2)
     expect(pe('[let [x [i32 2] y [i32 5]] x]')).toBe(2)
-    expect(pe('[let [x [i32 2]] [intrinsic-call i32.add x [i32 3]]]')).toBe(5)
+    expect(pe('[let [x [i32 2]] [intrinsic i32.add x [i32 3]]]')).toBe(5)
     expect(
       pe(`
 [let
   [x [i32 2]
-   x [intrinsic-call i32.add x [i32 3]]
+   x [intrinsic i32.add x [i32 3]]
   ]
   x]`),
     ).toBe(5)
-    // expect(pe('[let [x [i32 2] x [intrinsic-call i32.add x [i32 3]]] x]')).toBe(5)
+    // expect(pe('[let [x [i32 2] x [intrinsic i32.add x [i32 3]]] x]')).toBe(5)
 
     expect(pe('[let [x [i32 2] y [i32 5]] y]')).toBe(5)
     expect(pe('[let [x [i32 1] x [i32 2]] x]')).toBe(2)
-    expect(pe('[let [x [i32 1] x [intrinsic-call i32.add x [i32 1]]] x]')).toBe(2)
+    expect(pe('[let [x [i32 1] x [intrinsic i32.add x [i32 1]]] x]')).toBe(2)
     expect(pe('[let [x [i32 1]] [let [x [i32 1337]] x]]')).toBe(1337)
     expect(pe('[let [x [let [x [i32 1337]] x]] x]')).toBe(1337)
   })
@@ -168,7 +167,7 @@ const testExp = ({ pe }) => {
       pe(`
       [loop
         [x [i32 2]
-         x [intrinsic-call i32.add x [i32 3]]
+         x [intrinsic i32.add x [i32 3]]
         ]
         x]`),
     ).toBe(5)
@@ -190,8 +189,8 @@ const testExp = ({ pe }) => {
     [loop [i [i32 10] result [i32 0]]
       [if i
         [continue
-          result [intrinsic-call i32.add result i]
-          i [intrinsic-call i32.sub i [i32 1]]]
+          result [intrinsic i32.add result i]
+          i [intrinsic i32.sub i [i32 1]]]
         result]]`
     expect(pe(gauss)).toBe(55)
     // non-tail loop
@@ -218,7 +217,7 @@ const testExp = ({ pe }) => {
     const gaussDirectRecursive = pe(`
 [func go [n]
   [if n
-    [intrinsic-call i32.add n [go [intrinsic-call i32.sub n [i32 1]]]]
+    [intrinsic i32.add n [go [intrinsic i32.sub n [i32 1]]]]
     [i32 0]]]`)
     expect(gaussDirectRecursive).toBeTypeOf('function')
     expect(gaussDirectRecursive(10)).toBe(55)
@@ -227,7 +226,7 @@ const testExp = ({ pe }) => {
     const gaussTailRecursive = pe(`
     [func go [res n]
       [if n
-        [go [intrinsic-call i32.add res n] [intrinsic-call i32.sub n [i32 1]]]
+        [go [intrinsic i32.add res n] [intrinsic i32.sub n [i32 1]]]
         res]]`)
     expect(gaussTailRecursive).toBeTypeOf('function')
     expect(gaussTailRecursive(0, 10)).toBe(55)
@@ -252,11 +251,11 @@ const testExp = ({ pe }) => {
       [letfn
         [[func is-even [n]
           [if n
-            [is-odd [intrinsic-call i32.sub n [i32 1]]]
+            [is-odd [intrinsic i32.sub n [i32 1]]]
             [i32 1]]]
           [func is-odd [n]
           [if n
-            [is-even [intrinsic-call i32.sub n [i32 1]]]
+            [is-even [intrinsic i32.sub n [i32 1]]]
             [i32 0]]]]
         is-even]`)
       expect(isEvenSlow(0)).toBe(1)
@@ -269,11 +268,11 @@ const testExp = ({ pe }) => {
   [letfn
     [[func is-even [n]
       [if n
-        [is-odd [intrinsic-call i32.sub n [i32 1]]]
+        [is-odd [intrinsic i32.sub n [i32 1]]]
         [i32 1]]]
      [func is-odd [n]
       [if n
-        [is-even [intrinsic-call i32.sub n [i32 1]]]
+        [is-even [intrinsic i32.sub n [i32 1]]]
         [i32 0]]]]
     [is-even outer-n]]]`)
       expect(isEvenSlowWrapped(0)).toBe(1)
@@ -297,9 +296,8 @@ const makeParseEvalExp = (makeEvaluator) => {
 }
 
 describe.each([
-  { name: 'direct', pe: makeParseEvalExp(makeEvalForm) },
-  // { name: 'compiled closure', pe: makeParseEvalExp(makeCompilingEvaluator) },
-  { name: 'compiled js', pe: makeParseEvalExp(makeJSCompilingEvaluator) },
+  { name: 'exp direct', pe: makeParseEvalExp(makeEvalForm) },
+  { name: 'exp compiled js', pe: makeParseEvalExp(makeJSCompilingEvaluator) },
 ])('$name', testExp)
 
 const testTop = ({ ptse }) => {
@@ -311,13 +309,13 @@ const testTop = ({ ptse }) => {
   test('defn', async () => {
     expect(await ptse('[defn f [] [i32 5]] [f]')).toBe(5)
     expect(await ptse('[defn f [] [i32 5]] [defn g [] [f]] [g]')).toBe(5)
-    expect(await ptse('[defn inc [p] [intrinsic-call i32.add p [i32 1]]] [inc [i32 4]]')).toBe(5)
+    expect(await ptse('[defn inc [p] [intrinsic i32.add p [i32 1]]] [inc [i32 4]]')).toBe(5)
     expect(await ptse('[defn list [.. elements] elements] [list [i32 1] [i32 2]]')).toStrictEqual([1, 2])
     expect(
       await ptse(`
       [defn gauss-direct [n]
         [if n
-          [intrinsic-call i32.add n [gauss-direct [intrinsic-call i32.sub n [i32 1]]]]
+          [intrinsic i32.add n [gauss-direct [intrinsic i32.sub n [i32 1]]]]
           [i32 0]]]
       [gauss-direct [i32 10]]`),
     ).toBe(55)
@@ -491,7 +489,6 @@ const parseEvalTopsExpJS = async (s) => {
 
 describe.each([
   { name: 'top direct', ptse: makeParseEvalTopsExp(makeEvalForm) },
-  // { name: 'top compiled closure', ptse: makeParseEvalTopsExp(makeCompilingEvaluator) },
   {
     name: 'top compiled js',
     ptse: parseEvalTopsExpJS,

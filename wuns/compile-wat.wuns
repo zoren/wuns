@@ -175,12 +175,12 @@
         [go true]
         [go false]]
 
-      [bexp/intrinsic-call inst-name ic]
+      [bexp/intrinsic inst-name ic]
       [match ic
-        [intrinsic-call-args/bin a b]
+        [intrinsic-args/bin a b]
         [wat-inst/inst [wasm-name-to-wat-byte-array [syntax-word/word inst-name]] [list [go a] [go b]]]
 
-        [intrinsic-call-args/load memargs addr]
+        [intrinsic-args/load memargs addr]
         [wat-inst/load [wasm-name-to-wat-byte-array [syntax-word/word inst-name]]
           [wat-inst-memargs
             [syntax-word/word [intrinsic-memargs/memory memargs]]
@@ -188,7 +188,7 @@
             [syntax-word/word [intrinsic-memargs/align memargs]]]
           [go addr]]
 
-        [intrinsic-call-args/store memargs addr value]
+        [intrinsic-args/store memargs addr value]
         [wat-inst/store [wasm-name-to-wat-byte-array [syntax-word/word inst-name]]
           [wat-inst-memargs
             [syntax-word/word [intrinsic-memargs/memory memargs]]
@@ -573,11 +573,11 @@
 
 [defn i32-to-hex [value]
   [let [gl [growable-list]]
-    [loop [index [intrinsic-call i32.shl [i32 15] [i32 28]]
+    [loop [index [intrinsic i32.shl [i32 15] [i32 28]]
            i [i32 28]]
       [when index
-        [push gl [int-to-hex-ascii [intrinsic-call i32.shr-u [intrinsic-call i32.and value index] i]]]
+        [push gl [int-to-hex-ascii [intrinsic i32.shr-u [intrinsic i32.and value index] i]]]
         [continue
-          index [intrinsic-call i32.shr-u index [i32 4]]
+          index [intrinsic i32.shr-u index [i32 4]]
           i [sub i 4]]]]
     [code-points-to-word [clone-growable-to-frozen-list gl]]]]
