@@ -459,9 +459,9 @@ const addBindCheckActiveDocumentCommand = async (context) => {
   }
   context.subscriptions.push(
     diagnosticCollection,
-    commands.registerCommand('wunslang.bindcheck', () => {
+    commands.registerCommand('wunslang.bindcheck', async () => {
       try {
-        bindCheck()
+        await bindCheck()
       } catch (e) {
         console.error('bind check threw error', e)
       }
@@ -513,9 +513,9 @@ const addBindCheckActiveDocumentCommand = async (context) => {
   }
   context.subscriptions.push(
     diagnosticCollection,
-    commands.registerCommand('wunslang.typecheck', () => {
+    commands.registerCommand('wunslang.typecheck', async () => {
       try {
-        bindType()
+        await bindType()
       } catch (e) {
         console.error('type check threw error', e)
       }
