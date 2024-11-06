@@ -431,12 +431,12 @@ const addBindCheckActiveDocumentCommand = async (context) => {
     const { fileName } = document
     const forms = parseString(text, fileName)
     const converter = makeFormToAstConverter()
-    const formToTop = converter['form-to-top']
+    const formToTopAsync = converter['form-to-top-async']
     const bindErrors = converter.errors
     const diagnosticsForFile = []
     for (const form of forms) {
       try {
-        await formToTop(form)
+        await formToTopAsync(form)
       } catch (e) {
         console.error('formToTop error', print(form), e)
         break
