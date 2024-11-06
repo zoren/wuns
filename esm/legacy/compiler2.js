@@ -1,6 +1,6 @@
-import { setJSFunctionName } from './utils.js'
-import { langUndefined, tryGetFormList, tryGetFormWord } from './core.js'
-import { intrinsics } from './intrinsics.js'
+import { setJSFunctionName } from '../utils.js'
+import { langUndefined, tryGetFormList, tryGetFormWord } from '../core.js'
+import { intrinsics } from '../intrinsics.js'
 
 const opConstant = (value) => ({ op: 'constant', value })
 const opIntrinsicCall = (opName, args) => ({ op: 'intrinsic', opName, args })
