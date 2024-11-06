@@ -320,7 +320,7 @@ const expSpecialFormsStmt = {
     const cases = []
     for (let i = 1; i < forms.length - 1; i += 2) {
       const patternList = getFormList(forms[i])
-      if (patternList.length === 0) throw evalError('pattern must have at least one word')
+      if (patternList.length === 0) throw new CompileError('pattern must have at least one word', forms[i])
       const tag = getFormWord(patternList[0])
       const brach = forms[i + 1]
       const newCtx = makeCtx(lctxMatch, 'match-case')
@@ -508,7 +508,7 @@ const topSpecialForms = {
     for (const form of tail) await compileTopDefEnv(defEnv, form)
   },
   load: async (_, tail, defEnv) => {
-    if (tail.length !== 1) throw evalError('load expects one argument')
+    if (tail.length !== 1) throw new CompileError('load expects one argument')
     const relativeFilePath = getFormWord(tail[0])
     const fileContent = await read_file_async(relativeFilePath)
     const fileForms = parseString(fileContent, relativeFilePath)
@@ -539,7 +539,7 @@ const topSpecialForms = {
           const fieldNames = []
           for (let i = 1; i < body.length; i++) {
             const recordField = getFormList(body[i])
-            if (recordField.length < 2) throw evalError('record field must have a name and a type')
+            if (recordField.length < 2) throw new CompileError('record field must have a name and a type')
             const fieldName = getFormWord(recordField[0])
             fieldNames.push(fieldName)
             const projecterName = typePrefix + fieldName
@@ -558,11 +558,11 @@ const topSpecialForms = {
   export: (_, forms, defEnv) => {
     for (const form of forms) {
       const exportWord = getFormWord(form)
-      if (!defEnv.has(exportWord)) throw evalError('exported def variable not found: ' + exportWord)
+      if (!defEnv.has(exportWord)) throw new CompileError('exported def variable not found: ' + exportWord, form)
     }
   },
   import: async (_, tail, defEnv) => {
-    if (tail.length !== 3) throw evalError('import expects three arguments')
+    if (tail.length !== 3) throw new CompileError('import expects three arguments')
     const importModuleName = getFormWord(tail[0])
     const importElementName = getFormWord(tail[1])
     const jsExp = jsAwait(jsCall(jsVar('dynImport'), [jsString(importModuleName), jsString(importElementName)]))
