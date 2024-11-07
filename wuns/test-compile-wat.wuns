@@ -52,7 +52,6 @@
     [print-wat p [output-to-wat output]]
     [let [ba [printer-to-byte-array p]
           module [byte-array-to-wasm-module [wat-to-byte-array ba]]]
-      [byte-array-log-as-string ba]
       module]]]
 [comment
 [defexpr trans-eval-form [form]

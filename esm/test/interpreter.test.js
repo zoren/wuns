@@ -500,13 +500,3 @@ describe.each([
     ptse: parseEvalTopsExpJS,
   },
 ])('$name', testTop)
-
-import { parseString } from './core.js'
-
-{
-  const filename = 'compile-js.wuns'
-  const stdFormsString = fs.readFileSync('../wuns/' + filename, 'ascii')
-  const stdForms = parseString(stdFormsString, filename)
-  const { evalTops } = makeJSCompilingEvaluator()
-  evalTops(stdForms)
-}
