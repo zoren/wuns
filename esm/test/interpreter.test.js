@@ -355,7 +355,7 @@ const testTop = ({ ptse }) => {
 [defexpr quote [f] f]
 
 [defmacro def-extern [name type]
-  [flist [quote import] [quote host] name type]]
+  [flist [quote import] [quote ./runtime-lib/host.js] name type]]
 
 [def-extern concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]
 [i32 0]
@@ -370,7 +370,7 @@ const testTop = ({ ptse }) => {
   })
 
   test('import', async () => {
-    expect(await ptse('[import host concat [type-scheme [a] [func [[list a] [list a]] [list a]]]] concat')).toBeTypeOf(
+    expect(await ptse('[import ./runtime-lib/host.js concat [type-scheme [a] [func [[list a] [list a]] [list a]]]] concat')).toBeTypeOf(
       'function',
     )
   })
