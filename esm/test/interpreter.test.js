@@ -468,6 +468,12 @@ const testTop = ({ ptse }) => {
     p]`),
     ).toBe(0)
   })
+
+  test('type record', async () => {
+    expect(await ptse('[type empty [] [record]] [empty]')).toStrictEqual({})
+    expect(await ptse('[type pair [a b] [record [fst a] [snd b]]] [pair/fst [pair [i32 5] [i32 6]]]')).toBe(5)
+    expect(await ptse('[type pair [a b] [record [fst a] [snd b]]] [pair/snd [pair [i32 5] [i32 6]]]')).toBe(6)
+  })
 }
 
 const makeParseEvalTopsExp = (makeEvaluator) => {

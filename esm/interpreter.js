@@ -11,11 +11,9 @@ const setEnv = (env, varName, value) => {
 }
 
 import {
-  getRecordType,
   isTaggedValue,
   langUndefined,
   makeList,
-  makeRecordFromObj,
   makeValueTagger,
   parseString,
   tryGetFormList,
@@ -384,20 +382,14 @@ export const makeEvalForm = () => {
                   const fieldName = getFormWord(recordField[0])
                   fieldNames.push(fieldName)
                   const projecterName = `${type}/${fieldName}`
-                  const projecter = (record) => {
-                    const recordType = getRecordType(record)
-                    if (!recordType) throw evalError(`field projecter ${projecterName} not a record ${type}`)
-                    if (recordType !== type)
-                      throw evalError(`field projecter ${projecterName} on wrong type ${recordType}`)
-                    return record[fieldName]
-                  }
+                  const projecter = record => record[fieldName]
                   setDef(projecterName, projecter)
                 }
                 const constructor = (...args) => {
                   if (args.length !== fieldNames.length) throw evalError('wrong number of arguments to ' + type)
                   const fieldObj = {}
                   for (let i = 0; i < fieldNames.length; i++) fieldObj[fieldNames[i]] = args[i]
-                  return makeRecordFromObj(type, fieldObj)
+                  return Object.freeze(fieldObj)
                 }
                 setDef(type, constructor)
                 break

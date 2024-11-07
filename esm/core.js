@@ -74,21 +74,6 @@ class Atom {
 export const atom = (v) => new Atom(v)
 export const isAtom = (f) => f instanceof Atom
 
-const recordTag = Symbol('record')
-export const makeRecordFromObj = (type, fieldObj) => {
-  const record = { ...fieldObj }
-  record[recordTag] = type
-  return Object.freeze(record)
-}
-export const makePair = (fst, snd) =>
-  makeRecordFromObj('pair', {
-    fst,
-    snd,
-  })
-
-export const isRecord = (v) => v && v[recordTag]
-export const getRecordType = (v) => v[recordTag]
-
 export const print = (ox) => {
   const go = (x) => {
     if (x === undefined) return '*js-undefined*'
@@ -100,11 +85,6 @@ export const print = (ox) => {
     if (list) return go(list)
     if (isAtom(x)) return `[atom ${go(x.value)}]`
     if (isTaggedValue(x)) return `[${x.tag}${x.args.map((a) => ` ${go(a)}`).join('')}]`
-    const recordTag = isRecord(x)
-    if (recordTag)
-      return `[record ${recordTag}${Object.entries(x)
-        .map(([k, v]) => ` ${k} ${go(v)}`)
-        .join('')}]`
     if (x instanceof Uint8Array) {
       const strings = []
       for (let i = 0; i < x.length; i++) strings.push(` ${x[i]}`)
