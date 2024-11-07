@@ -452,14 +452,18 @@ const compExp = (ctx, form, defEnv) => {
   )
 }
 
-const AsyncFunction = async function () {}.constructor
+const modules = import.meta.glob('./runtime-lib/*.js')
 
 const importModuleElement = async (moduleName, elementName) => {
-  const module = await import(`./runtime-lib/${moduleName}.js`)
+  const modProm = modules[moduleName]
+  if (!modProm) throw new Error('module not found: ' + moduleName)
+  const module = await modProm()
   const elem = module[elementName]
   if (elem === undefined) throw new Error('imported value not found in module ' + moduleName + ' ' + elementName)
   return elem
 }
+
+const AsyncFunction = async function () {}.constructor
 
 const evalExpAsync = async (defEnv, jsExp) => {
   const jsSrc = jsExpToStringSafe(jsExp)

@@ -50,6 +50,7 @@ import { intrinsics } from './intrinsics.js'
 
 const doFormWord = makeFormWord('do')
 const makeDoForm = (forms) => makeFormList(makeList(doFormWord, ...forms))
+const modules = import.meta.glob('./runtime-lib/*.js')
 
 export const makeEvalForm = () => {
   const defEnv = new Map()
@@ -410,7 +411,9 @@ export const makeEvalForm = () => {
         case 'import': {
           if (forms.length !== 4) throw evalError('import expects three arguments')
           const importModuleName = getFormWord(forms[1])
-          const module = await import(`./runtime-lib/${importModuleName}.js`)
+          const modProm = modules[importModuleName]
+          if (!modProm) throw new Error('module not found: ' + importModuleName)
+          const module = await modProm()
           const importElementName = getFormWord(forms[2])
           const importedValue = module[importElementName]
           if (importedValue === undefined)

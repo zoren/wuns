@@ -1,7 +1,7 @@
 [load compile-wat.wuns]
 
 [defmacro def-wasm-extern [name type]
-  [flist [quote import] [quote wasm] name type]]
+  [flist [quote import] [quote ./runtime-lib/wasm.js] name type]]
 
 [type wasm-module [] [union]]
 
@@ -45,7 +45,7 @@
 [defn get-export [wasm-inst export-name]
   [get [object-to-kv-map [wasm-get-export-object wasm-inst]] export-name]]
 
-[import wabt wat-to-byte-array [func [byte-array] byte-array]]
+[import ./runtime-lib/wabt.js wat-to-byte-array [func [byte-array] byte-array]]
 
 [defn output-to-module [output]
   [let [p [empty-printer [i32 800]]]

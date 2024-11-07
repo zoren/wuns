@@ -3,7 +3,7 @@
 [type evaluator [] [union]]
 
 [defmacro def-evaluation-extern [name type]
-  [flist [qword import] [qword evaluation] name type]]
+  [flist [qword import] [qword ./runtime-lib/evaluation.js] name type]]
 
 [def-evaluation-extern make-evaluator [func [] evaluator]]
 

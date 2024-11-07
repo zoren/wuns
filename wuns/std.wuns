@@ -10,7 +10,7 @@
 [defexpr quote [f] f]
 
 [defmacro def-extern [name type]
-  [flist [quote import] [quote host] name type]]
+  [flist [quote import] [quote ./runtime-lib/host.js] name type]]
 
 [def-extern concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]
 
@@ -439,8 +439,8 @@
 
 [type string [] [union]]
 
-[import files read-file-async [func [word] [promise string]]]
-[import files write-file-async [func [word string] [promise [tuple]]]]
+[import ./runtime-lib/files.js read-file-async [func [word] [promise string]]]
+[import ./runtime-lib/files.js write-file-async [func [word string] [promise [tuple]]]]
 
 [def-extern parse-string [func [string word] [list form]]]
 
@@ -453,7 +453,7 @@
 [def-extern code-point-to-string [func [i32] string]]
 
 [defmacro def-js-extern [name type]
-  [flist [quote import] [quote js] name type]]
+  [flist [quote import] [quote ./runtime-lib/js.js] name type]]
 
 [type js-value [] [union]]
 
