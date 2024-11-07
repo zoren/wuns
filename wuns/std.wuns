@@ -37,10 +37,10 @@
 
 [defn def-instruction-fn [def-name inst-name]
   [flist
-    [quote def]
+    [quote defn]
     def-name
-    [flist [quote func] def-name [quote [a b]]
-      [flist [quote intrinsic] inst-name [quote a] [quote b]]]]]
+    [quote [a b]]
+    [flist [quote intrinsic] inst-name [quote a] [quote b]]]]
 
 [defmacro def-instruction [def-name inst-name] [def-instruction-fn def-name inst-name]]
 
@@ -51,7 +51,8 @@
     [form/word w] w
     [abort [list [quote [form-to-word requires a word as its argument]]]]]]
 
-[defmacro def-bin-i32-inst [name] [def-instruction-fn name [form/word [concat-words [word i32.] [form-to-word name]]]]]
+[defmacro def-bin-i32-inst [name]
+  [def-instruction-fn name [form/word [concat-words [word i32.] [form-to-word name]]]]]
 
 [def-bin-i32-inst add]
 [comment maybe introduce booleans instead of i32s for comparisons]
