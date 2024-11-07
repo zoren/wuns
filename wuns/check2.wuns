@@ -771,6 +771,10 @@
                 [mk-empty-type-scheme value-type]]]
               [set-kv-map [check-context/def-var-types gctx] [syntax-word/word var] general-val-type]]
 
+          [btop/memory name init-size opt-max]
+          [do
+            [set-kv-map [check-context/def-var-types gctx] [syntax-word/word name] [mk-empty-type-scheme type-memory]]]
+
           [btop/defunc kind f]
           [let
             [fkind

@@ -28,6 +28,9 @@ const jsArray = jsExp('array')
 const jsObject = jsExp('object')
 const jsAwait = jsExp('await')
 const jsSubscript = jsExp('subscript')
+const jsNew = jsExp('new')
+const jsAssignExp = jsExp('assign-exp')
+const jsParenComma = jsExp('paren-comma')
 
 const jsArrowExpNoRest = (params, body) => jsArrowExp(params, optionNone, body)
 
@@ -193,6 +196,44 @@ const expSpecialFormsExp = {
     if (tail.length < 1) throw new CompileError('intrinsic expected at least one argument')
     const [opForm, ...args] = tail
     const opName = getFormWord(opForm)
+    const getMemLval = (arrayName, byteSize) => {
+      const [memForm, offsetForm, alignmentForm, addrForm] = args
+      const memName = getFormWord(memForm)
+      const memDesc = defEnv.get(memName)
+      if (!memDesc) throw new CompileError('undefined memory')
+      if (memDesc.defKind !== 'memory') throw new CompileError('not a memory')
+      const offset = +getFormWord(offsetForm)
+      if (isNaN(offset)) throw new CompileError('expected number')
+      const alignment = +getFormWord(alignmentForm)
+      if (isNaN(alignment)) throw new CompileError('expected number')
+      const arrayExp = jsNew(jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer'))]))
+      let addrExp = jsAdd(jsNumber(offset), compExp(ctx, addrForm, defEnv))
+      // need to divide by byteSize
+      if (byteSize !== 1) addrExp = jsBin('div')(addrExp, jsNumber(byteSize))
+      return jsSubscript(arrayExp, addrExp)
+    }
+    switch (opName) {
+      case 'i32.load': {
+        if (args.length !== 4) throw new CompileError('i32.load expected four arguments')
+        return getMemLval('Int32Array', 4)
+      }
+      case 'i32.load8-u': {
+        if (args.length !== 4) throw new CompileError('i32.load8-u expected four arguments')
+        return getMemLval('UInt8Array', 1)
+      }
+      case 'i32.store8': {
+        if (args.length !== 5) throw new CompileError('i32.store8 expected five arguments')
+          const [, , , , valueForm] = args
+        const jsExp = jsAssignExp(getMemLval('Int8Array', 1), compExp(ctx, valueForm, defEnv))
+        return jsParenComma([jsExp, jsUndefined])
+      }
+      case 'i32.store': {
+        if (args.length !== 5) throw new CompileError('i32.store expected five arguments')
+        const [, , , , valueForm] = args
+        const jsExp = jsAssignExp(getMemLval('Int32Array', 4), compExp(ctx, valueForm, defEnv))
+        return jsParenComma([jsExp, jsUndefined])
+      }
+    }
     if (!intrinsics[opName]) throw new CompileError('undefined intrinsic: ' + opName)
     if (args.length !== intrinsics[opName].length) throw new CompileError('wrong number of arguments')
     return opIntrinsicCall(
@@ -452,14 +493,13 @@ const compExp = (ctx, form, defEnv) => {
   )
 }
 
-const modules = import.meta.glob('./runtime-lib/*.js')
-
-const importModuleElement = async (moduleName, elementName) => {
-  const modProm = modules[moduleName]
-  if (!modProm) throw new Error('module not found: ' + moduleName)
-  const module = await modProm()
+const importModuleElement = async (modulePath, elementName) => {
+  if (!modulePath.startsWith('./runtime-lib/')) throw new Error('invalid module name: ' + modulePath)
+  if (!modulePath.endsWith('.js')) throw new Error('invalid module name: ' + modulePath)
+  const moduleName = modulePath.slice(14, -3)
+  const module = await import(`./runtime-lib/${moduleName}.js`)
   const elem = module[elementName]
-  if (elem === undefined) throw new Error('imported value not found in module ' + moduleName + ' ' + elementName)
+  if (elem === undefined) throw new Error('imported value not found in module ' + modulePath + ' ' + elementName)
   return elem
 }
 
@@ -573,7 +613,15 @@ const topSpecialForms = {
     const importElementName = getFormWord(tail[1])
     const jsExp = jsAwait(jsCall(jsVar('dynImport'), [jsString(importModuleName), jsString(importElementName)]))
     await setDef(defEnv, importElementName, 'import', jsExp)
-    return jsExp
+  },
+  memory: async (_, tail, defEnv) => {
+    const [memoryName, memorySize] = tail.map(getFormWord)
+    const initialSize = +memorySize
+    if (initialSize <= 0) throw new CompileError('memory size must be positive')
+    if ((initialSize !== initialSize) | 0) throw new CompileError('memory size must be an integer')
+    const jsMemDesc = mkObject(['initial', jsNumber(initialSize)])
+    const jsExp = jsNew(jsCall(jsSubscript(jsVar('WebAssembly'), jsString('Memory')), [jsMemDesc]))
+    await setDef(defEnv, memoryName, 'memory', jsExp)
   },
 }
 

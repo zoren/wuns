@@ -144,6 +144,13 @@ export const jsExpToString = (js) => {
       return `(${jsExpToString(arg(0))})`
     case 'js-exp/await':
       return `await ${jsExpToString(arg(0))}`
+    case 'js-exp/new':
+      return `new ${jsExpToString(arg(0))}`
+    case 'js-exp/assign-exp':
+      return `${jsExpToString(arg(0))} = ${jsExpToString(arg(1))}`
+    case 'js-exp/paren-comma':
+      return `( ${arg(0).map(jsExpToString).join(', ')} )`
+
     default:
       throw new Error(`unknown js exp tag: ${tag}`)
   }

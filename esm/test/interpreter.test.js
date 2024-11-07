@@ -370,9 +370,9 @@ const testTop = ({ ptse }) => {
   })
 
   test('import', async () => {
-    expect(await ptse('[import ./runtime-lib/host.js concat [type-scheme [a] [func [[list a] [list a]] [list a]]]] concat')).toBeTypeOf(
-      'function',
-    )
+    expect(
+      await ptse('[import ./runtime-lib/host.js concat [type-scheme [a] [func [[list a] [list a]] [list a]]]] concat'),
+    ).toBeTypeOf('function')
   })
 
   test('type union', async () => {

@@ -241,6 +241,11 @@ export const concat = (l1, l2) => {
 }
 const int_to_word = (i) => stringToWord(String(i))
 export { int_to_word as 'int-to-word' }
+const word_to_int = (word) => {
+  if (!isWord(word)) throw new Error('word-to-int expects word')
+  return parseInt(wordValue(word), 10)
+}
+export { word_to_int as 'word-to-int' }
 export const slice = (list, start, end) => {
   if (!isList(list)) throw new Error('slice expects list')
   if (!isSigned32BitInteger(start)) throw new Error('slice expects number: ' + start)

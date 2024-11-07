@@ -254,6 +254,11 @@
         type-annos [check-context/type-annotations cctx]
         get-ctype [make-get-ctype-from-form-or-annotation type-annos]]
     [match bform
+    [btop/memory name init-size opt-max]
+    [push [wat-output/imports output]
+      [pair [list [syntax-word/word name]]
+        [import-kind/memory [syntax-word/word name] [word-to-int [syntax-word/word init-size]]]]]
+
     [btop/def name value]
     [match value
       [bexp/literal l]
@@ -491,16 +496,12 @@
     [logq-abort wat-inst-to-out unknown instruction]]]
 
 [defn import-to-wat [import]
-  [wat-concat
-    [list [wat/word [word import]]]
-    [list-map w [pair/fst import] [wat/dqstring w]]
-    [list
-      [match [pair/snd import]
-        [import-kind/memory name init-size]
-        [wat-list
-          [wat/word [word memory]]
-          [wat/dollar name]
-          [wat/word [word 0]]]]]]]
+  [match [pair/snd import]
+    [import-kind/memory name init-size]
+    [wat-list
+      [wat/word [word memory]]
+      [wat/dollar name]
+      [wat/word [int-to-word init-size]]]]]
 
 [defn global-to-wat [global]
   [wat-list

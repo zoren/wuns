@@ -3,13 +3,11 @@ import { makeJSCompilingEvaluator } from '../compiler-js.js'
 
 const filename = 'test-compile-wat.wuns'
 
-import stdFormsString from '../../wuns/test-compile-wat.wuns?raw'
+import formsString from '../../wuns/test-compile-wat.wuns?raw'
 import { test, expect } from 'vitest'
 
-const stdForms = parseString(stdFormsString, filename)
 const { evalTops, getDef } = makeJSCompilingEvaluator()
-await evalTops(stdForms)
-const translateAsync = getDef('translate-top-forms-async')
+await evalTops(parseString(formsString, filename))
 const moduleAsync = getDef('module-async')
 
 const stringToInst = async (s, importObject) => {
@@ -34,7 +32,10 @@ test.each([
   ['[intrinsic i32.add [i32 2] [i32 3]]', 5],
   ['[intrinsic i32.sub [i32 8] [i32 3]]', 5],
   ['[intrinsic i32.mul [i32 5] [i32 3]]', 15],
-])('%s -> %s', async (s, expected) => {
+
+  ['[let [x [i32 2]] [intrinsic i32.add x [i32 3]]]', 5],
+  ['[let [x [i32 2] y [i32 3]] [intrinsic i32.add x y]]', 5],
+])('%s -> %o', async (s, expected) => {
   const m = `[defn f [] ${s}] [export f]`
   expect((await stringToInst(m)).f()).toBe(expected)
 })
@@ -88,4 +89,57 @@ test('loop', async () => {
   expect(inst['gauss-loop'](20000)).toBe(200010000)
   // the largest value before i32 wrap around
   expect(inst['gauss-loop'](65535)).toBe(2147450880)
+})
+
+test ('memory', async () => {
+  const inst = await stringToInst(`
+[memory mem 1]
+[defn get [p] [intrinsic i32.load mem 0 4 p]]
+[defn set [p v] [intrinsic i32.store mem 0 4 p v]]
+[export get set]`)
+  const { get, set } = inst
+  set(0, 5)
+  expect(get(0)).toBe(5)
+  set(0, 6)
+  expect(get(0)).toBe(6)
+  set(4, 7)
+  expect(get(4)).toBe(7)
+})
+
+test ('hash', async () => {
+  const inst = await stringToInst(`
+[memory mem 1]
+[def fnv-prime [i32 16777619]]
+[def fnv-offset-basis [i32 -2128831035]]
+
+[defn hash-fnv-1a-i32 [p len]
+  [let [end-p [intrinsic i32.add p len]]
+    [loop [hash fnv-offset-basis
+           q p]
+      [if [intrinsic i32.lt-s q end-p]
+        [continue
+          hash
+          [intrinsic i32.mul
+            [intrinsic i32.xor hash
+              [intrinsic i32.load8-u mem 0 1 q]]
+            fnv-prime]
+          q [intrinsic i32.add q [i32 1]]]
+        hash]]]]
+
+[defn set-byte [p v] [intrinsic i32.store8 mem 0 1 p v]]
+
+[export set-byte hash-fnv-1a-i32]`)
+    const setByte = inst['set-byte']
+    const hash = inst['hash-fnv-1a-i32']
+    // hashing no characters should return offset basis
+    expect(hash(0, 0)).toBe(-2128831035)
+
+    // stolen from https://github.com/fnvhash/libfnv/blob/master/test/unit/basic_full.ts#L13
+    setByte(0, 97) // a
+    expect(hash(0, 1)).toBe(0xe40c292c | 0)
+
+    // stolen from https://github.com/fnvhash/libfnv/blob/master/test/unit/basic_full.ts#L20
+    'foobar'.split('').forEach((c, i) => setByte(i, c.charCodeAt(0)))
+    expect(hash(0, 6)).toBe(0xbf9cf968 | 0)
+
 })

@@ -91,6 +91,7 @@
     [do [list btop]]
     [export [list syntax-word]]
     [import syntax-word syntax-word btype-scheme]
+    [memory syntax-word syntax-word [option syntax-word]]
     [load syntax-word]
     ]]
 
@@ -195,7 +196,8 @@
     [type]
     [union-ctor union-desc i32]
     [record-ctor] [record-proj record-desc i32]
-    [import syntax-word btype-scheme]]]
+    [import syntax-word btype-scheme]
+    [memory]]]
 
 [type diagnostic-severity []
   [union [error] [warning] [information] [hint]]]
@@ -617,6 +619,13 @@
                     module-import
                     import-type]]
 
+                [[word memory]]
+                [let
+                  [mem-name [get-sword [get-arg 0]]
+                   mem-initial-size [get-sword [get-arg 1]]]
+                  [set-def [get-arg 0] [def-desc/memory]]
+                  [btop/memory mem-name mem-initial-size [option/none]]]
+
                 [if-let [ddesc [try-get def-ctx first-word]]
                   [do
                     [set-kv-map node-to-def-desc [get-sword first-form] ddesc]
@@ -705,7 +714,7 @@
                             [parse-mem-args]
                             [form-to-ast lstack [get-arg 4]]]]
 
-                        [[word i32.store]]
+                        [[word i32.store] [word i32.store8]]
                         [do
                           [assert-n-args 6]
                           [intrinsic-args/store
