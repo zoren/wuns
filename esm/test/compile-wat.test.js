@@ -143,3 +143,15 @@ test ('hash', async () => {
     expect(hash(0, 6)).toBe(0xbf9cf968 | 0)
 
 })
+
+import allocString from '../../wuns/ll/alloc.wuns?raw'
+
+test('alloc', async () => {
+  const inst = await stringToInst(allocString)
+  const setByte = inst['set-byte']
+  const parse = inst['parse']
+  const setString = (s) => s.split('').forEach((c, i) => setByte(i, c.charCodeAt(0)))
+  console.log(inst)
+  setString('hello you')
+  const res = parse(0, 9)
+})

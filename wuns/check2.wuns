@@ -429,7 +429,7 @@
 
         [intrinsic-args/load memargs addr]
         [switch [syntax-word/word inst-name]
-          [[word i32.load]] type-i32
+          [[word i32.load] [word i32.load8-u]] type-i32
           [[word f64.load]] type-f64
 
           [logq-abort load intrinsic not implemented]]
@@ -445,6 +445,7 @@
       [if-let [anno [try-get type-annotations [to-js-value bform]]]
           anno
           [do
+            [log bform]
             [logq-abort get-ctype-from-form-or-annotation expected an annotation]]]]]]
 
 [defn make-checker [gctx]
@@ -692,7 +693,7 @@
            t-res [generate-fresh-type-var gctx level]
            t-func [type-func-no-rest arg-types t-res]]
           [unify-report gctx ft t-func bform]
-          t-res]
+          [annotate gctx bform t-res]]
 
         [bexp/call-fexpr f form-args]
         [let

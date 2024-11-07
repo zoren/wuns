@@ -11,34 +11,10 @@
 
 [def-wasm-extern wasm-instantiate [func [wasm-module [object js-value]] wasm-instance]]
 [def-wasm-extern wasm-call-export [type-scheme [a] [func [wasm-instance word [list a]] [list a]]]]
-[type export-func [] [union]]
 
 [def-wasm-extern memory [func [i32 i32 i32] js-value]]
 
 [def-wasm-extern wasm-get-export-object [func [wasm-instance] [object js-value]]]
-
-[defn translate-top-forms-async [forms]
-  [let
-    [converter [mk-form-to-ast]
-     sinfo [form-to-ast-converter/syntax-info converter]
-     f2t [form-to-ast-converter/form-to-top-async converter]]
-    [promise-then
-      [promises-seq forms f2t]
-      [func then [btops]
-        [let
-          [bind-errors [clone-growable-to-frozen-list [form-to-ast-converter/errors converter]]
-           gctx [make-global-context-from-syntax-info sinfo]
-           ctop [checker/check-top [make-checker gctx]]
-           output [make-wat-output]
-           tctx [translate-context output gctx]]
-          [for-each btop btops
-            [ctop btop]
-            [let [check-errors [clone-growable-to-frozen-list [check-context/messages gctx]]]
-              [when-not [is-empty check-errors]
-                [for-each error check-errors [log-check-message error]]
-                [logq-abort translate-top-forms binding errors]]]
-            [translate-top-form tctx btop]]
-          output]]]]]
 
 [def empty-object [kv-map-to-object [transient-kv-map]]]
 
@@ -48,7 +24,7 @@
 [import ./runtime-lib/wabt.js wat-to-byte-array [func [byte-array] byte-array]]
 
 [defn output-to-module [output]
-  [let [p [empty-printer [i32 800]]]
+  [let [p [empty-printer [i32 5000]]]
     [print-wat p [output-to-wat output]]
     [let [ba [printer-to-byte-array p]
           module [byte-array-to-wasm-module [wat-to-byte-array ba]]]

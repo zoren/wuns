@@ -563,3 +563,27 @@
           index [intrinsic i32.shr-u index [i32 4]]
           i [sub i 4]]]]
     [code-points-to-word [clone-growable-to-frozen-list gl]]]]
+
+[defn translate-top-forms-async [forms]
+  [let
+    [converter [mk-form-to-ast]
+     sinfo [form-to-ast-converter/syntax-info converter]
+     f2t [form-to-ast-converter/form-to-top-async converter]]
+    [promise-then
+      [promises-seq forms f2t]
+      [func then [btops]
+        [let
+          [bind-errors [clone-growable-to-frozen-list [form-to-ast-converter/errors converter]]
+           gctx [make-global-context-from-syntax-info sinfo]
+           ctop [checker/check-top [make-checker gctx]]
+           output [make-wat-output]
+           tctx [translate-context output gctx]]
+          [for-each btop btops
+            [ctop btop]
+            [let [check-errors [clone-growable-to-frozen-list [check-context/messages gctx]]]
+              [when-not [is-empty check-errors]
+                [for-each error check-errors [log-check-message error]]
+                [logq-abort translate-top-forms-async binding errors]]]]
+          [for-each btop [shake-tops sinfo btops]
+            [translate-top-form tctx btop]]
+          output]]]]]

@@ -250,7 +250,62 @@
   [record
     [try-get-ldesc [func [syntax-word] [option local-var-kind]]]
     [try-get-def-desc [func [syntax-word] [option def-desc]]]
-    [try-get-form [func [js-value] [option form]]]]]
+    [try-get-form [func [js-value] [option form]]]
+    [try-get-top [func [word] [option btop]]]]]
+
+[defn shake-tops [sinfo btops]
+  [let [tgdd [syntax-info/try-get-def-desc sinfo]
+        tgt [syntax-info/try-get-top sinfo]
+        ddescs [growable-list]
+        def-names [set]]
+    [letfn [
+      [func add-def-exp [bform]
+        [match bform
+          [bexp/intrinsic w ic]
+          [match ic
+            [intrinsic-args/load ma a] [add-def-name [syntax-word/word [intrinsic-memargs/memory ma]]]
+            [intrinsic-args/store ma a b] [add-def-name [syntax-word/word [intrinsic-memargs/memory ma]]]
+            [do]
+            ]
+
+          [bexp/var sw]
+          [when-let [ddesc [tgdd sw]]
+            [add-def-name [syntax-word/word sw]]]
+
+          [do]]
+        true]
+      [func add-def-name [name]
+        [when-not [set-has def-names name]
+          [if-let [btop [tgt name]]
+            [do
+              [match btop
+                [btop/memory name initial-size opt-max-size]
+                [do]
+
+                [btop/def k bfunc]
+                [do]
+
+                [btop/defunc k bfunc]
+                [for-each b [bfunc/body bfunc]
+                  [[bexp-recur add-def-exp] b]]
+
+                [do
+                  [log btop]
+                  [logq-abort shake-tops only supports function exports now]]]
+              [push ddescs btop]]
+            [logq-abort shake-tops def name not found]]
+          [set-add def-names name]]]
+      ]
+    [for-each btop btops
+      [match btop
+        [btop/export snames]
+        [do
+          [for-each sname snames
+            [add-def-name [syntax-word/word sname]]]
+          [push ddescs btop]]
+
+        [do]]]]
+    [clone-growable-to-frozen-list ddescs]]]
 
 [type form-to-ast-converter []
   [record
@@ -284,6 +339,7 @@
      errors [growable-list]
      push-error [func pe [form msg] [push errors [report-message msg form [diagnostic-severity/error]]]]
      def-ctx [transient-kv-map]
+     name-to-top [transient-kv-map]
      node-to-ldesc [transient-kv-map]
      node-to-def-desc [transient-kv-map]
      try-get-word-report
@@ -320,6 +376,10 @@
       [let [w [get-word f]]
         [when [has def-ctx w] [push-error f [quote [redefing def]]]]
         [set-kv-map def-ctx w kind]]]
+    set-def-form
+    [func sdf [wf btop]
+      [set-kv-map name-to-top [get-word wf] btop]
+      btop]
     try-bind-get-ddesc
     [func tbdd [sw]
       [let [opt-ddesc [try-get def-ctx [syntax-word/word sw]]]
@@ -509,21 +569,23 @@
                 [btop/do [list-map arg [rest l] [form-to-top arg]]]
 
                 [[word def]]
-                [do
+                [let [name-form [get-arg 0]]
                   [assert-n-args 2]
-                  [set-def [get-arg 0] [def-desc/any]]
-                  [btop/def [sword [get-arg 0]] [form-to-ast [local-stack/empty] [third l]]]]
+                  [set-def name-form [def-desc/any]]
+                  [set-def-form name-form
+                    [btop/def [sword name-form] [form-to-ast [local-stack/empty] [third l]]]]]
 
                 [[word defn] [word defexpr] [word defmacro]]
-                [let [f2f [form-to-func [local-stack/empty] form]
+                [let [name-form [get-arg 0]
+                      f2f [form-to-func [local-stack/empty] form]
                       def-desc
                       [switch first-word
                         [[word defn]] [bdefunc-kind/func]
                         [[word defexpr]] [bdefunc-kind/fexpr]
                         [[word defmacro]] [bdefunc-kind/macro]
                         [logq-abort form-to-top def kind not recognized]]]
-                  [set-def [get-arg 0] [def-desc/defunc def-desc]]
-                  [btop/defunc def-desc f2f]]
+                  [set-def name-form [def-desc/defunc def-desc]]
+                  [set-def-form name-form [btop/defunc def-desc f2f]]]
 
                 [[word load]]
                 [do
@@ -611,20 +673,24 @@
 
                 [[word import]]
                 [let [module-name [get-sword [get-arg 0]]
-                      module-import [get-sword [get-arg 1]]
+                      module-import-form [get-arg 1]
+                      module-import [get-sword module-import-form]
                       import-type [form-to-type-scheme [get-arg 2]]]
-                  [set-def [get-arg 1] [def-desc/import module-name import-type]]
-                  [btop/import
-                    module-name
-                    module-import
-                    import-type]]
+                  [set-def module-import-form [def-desc/import module-name import-type]]
+                  [set-def-form module-import-form
+                    [btop/import
+                      module-name
+                      module-import
+                      import-type]]]
 
                 [[word memory]]
                 [let
-                  [mem-name [get-sword [get-arg 0]]
+                  [name-form [get-arg 0]
+                   mem-name [get-sword name-form]
                    mem-initial-size [get-sword [get-arg 1]]]
-                  [set-def [get-arg 0] [def-desc/memory]]
-                  [btop/memory mem-name mem-initial-size [option/none]]]
+                  [set-def name-form [def-desc/memory]]
+                  [set-def-form name-form
+                    [btop/memory mem-name mem-initial-size [option/none]]]]
 
                 [if-let [ddesc [try-get def-ctx first-word]]
                   [do
@@ -902,7 +968,8 @@
       [syntax-info
         [func try-get-ldesc [n] [try-get node-to-ldesc n]]
         [func try-get-def-desc [n] [try-get node-to-def-desc n]]
-        [func try-get-form [n] [try-get bst-to-form n]]]]]]]
+        [func try-get-form [n] [try-get bst-to-form n]]
+        [func try-get-top [n] [try-get name-to-top n]]]]]]]
 
 [defn bind-forms [converter forms]
   [let
