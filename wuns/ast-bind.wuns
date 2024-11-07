@@ -663,7 +663,7 @@
             [if-let [ldesc [try-get-local lstack w]]
               [set-kv-map node-to-ldesc sname ldesc]
               [if-let [ddesc [try-get def-ctx w]]
-                [set-kv-map node-to-def-desc [get-sword form] ddesc]
+                [set-kv-map node-to-def-desc sname ddesc]
                 [report-error [quote [undefined word]]]]]
             bf]
 
