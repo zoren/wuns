@@ -34,16 +34,25 @@ test.each([
   ['[intrinsic i32.add [i32 2] [i32 3]]', 5],
   ['[intrinsic i32.sub [i32 8] [i32 3]]', 5],
   ['[intrinsic i32.mul [i32 5] [i32 3]]', 15],
-
-
 ])('%s -> %s', async (s, expected) => {
   const m = `[defn f [] ${s}] [export f]`
   expect((await stringToInst(m)).f()).toBe(expected)
 })
 
-test('test-compile-wat', async () => {
+test('defn', async () => {
   expect((await stringToInst('[defn f [] [i32 4]] [export f]')).f()).toBe(4)
-  expect((await stringToInst('[defn f [] [i32 4]] [export f]')).f()).toBe(4)
+  const inst = await stringToInst(`
+[defn abs [p]
+  [if [intrinsic i32.lt-s p [i32 0]]
+    [intrinsic i32.sub [i32 0] p]
+    p]]
+[export abs]`)
+  const { abs } = inst
+  expect(abs(0)).toBe(0)
+  expect(abs(4)).toBe(4)
+  expect(abs(-4)).toBe(4)
+  expect(abs(-2147483647)).toBe(2147483647)
+  expect(abs(-2147483648)).toBe(-2147483648)
 })
 
 test('recursion', async () => {
@@ -61,7 +70,7 @@ test('recursion', async () => {
   // expect(inst['gauss-direct'](20000)).toBe(200010000)
 })
 
-test('loop', async() => {
+test('loop', async () => {
   const inst = await stringToInst(`
     [defn gauss-loop [n]
       [loop [res [i32 0] i n]
