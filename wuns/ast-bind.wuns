@@ -197,7 +197,7 @@
     [union-ctor union-desc i32]
     [record-ctor] [record-proj record-desc i32]
     [import syntax-word btype-scheme]
-    [memory]]]
+    [memory i32]]]
 
 [type diagnostic-severity []
   [union [error] [warning] [information] [hint]]]
@@ -279,7 +279,7 @@
           [if-let [btop [tgt name]]
             [do
               [match btop
-                [btop/memory name initial-size opt-max-size]
+                [btop/memory name min-size opt-max-size]
                 [do]
 
                 [btop/def k bfunc]
@@ -410,7 +410,8 @@
     [func i [form bform]
       [do
         [set-kv-map bst-to-form [to-js-value bform] form]
-        bform]]]
+        bform]]
+    mem-counter-atom [atom 0]]
     [letfn [
       [func mk-form-to-type [type-param-map]
         [func f2t [form]
@@ -687,10 +688,11 @@
                 [let
                   [name-form [get-arg 0]
                    mem-name [get-sword name-form]
-                   mem-initial-size [get-sword [get-arg 1]]]
-                  [set-def name-form [def-desc/memory]]
+                   mem-min-size [get-sword [get-arg 1]]
+                   mem-index [inc-atom mem-counter-atom]]
+                  [set-def name-form [def-desc/memory mem-index]]
                   [set-def-form name-form
-                    [btop/memory mem-name mem-initial-size [option/none]]]]
+                    [btop/memory mem-name mem-min-size [option/none]]]]
 
                 [if-let [ddesc [try-get def-ctx first-word]]
                   [do

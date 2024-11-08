@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import * as readline from 'node:readline'
 import { stdin, stdout, nextTick } from 'node:process'
 
-import { print, parseString, getPosition, tryGetFormInfoRec } from './core.js'
+import { getLocationFromForm, parseString, print } from './core.js'
 import { specialForms, makeJSCompilingEvaluator } from './compiler-js.js'
 import { 'read-file-async' as read_file_async } from './runtime-lib/files.js'
 
@@ -19,13 +19,6 @@ const getCompletions = (prefix) => {
 const commandLineArgs = process.argv.slice(2)
 const endsWithDashFlag = commandLineArgs.at(-1) === '-'
 const files = endsWithDashFlag ? commandLineArgs.slice(0, -1) : commandLineArgs
-
-const getLocationFromForm = (form) => {
-  const formInfo = tryGetFormInfoRec(form)
-  if (!formInfo) return 'no location'
-  const { row, column } = getPosition(formInfo)
-  return `${formInfo.contentObj.contentName}:${row + 1}:${column + 1}`
-}
 
 const logEvalError = (e) => {
   console.error(e.message, getLocationFromForm(e.form))

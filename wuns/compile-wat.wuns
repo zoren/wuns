@@ -42,7 +42,7 @@
     [memory word i32]]]
 
 [type export-kind []
-  [union [func] [global]]]
+  [union [func] [global] [memory]]]
 
 [type wat-global []
   [record
@@ -252,7 +252,8 @@
         tform [mk-translate-form tctx]
         cctx [translate-context/check-context tctx]
         type-annos [check-context/type-annotations cctx]
-        get-ctype [make-get-ctype-from-form-or-annotation type-annos]]
+        get-ctype [make-get-ctype-from-form-or-annotation type-annos]
+        sinfo [check-context/syntax-info cctx]]
     [match bform
     [btop/memory name init-size opt-max]
     [push [wat-output/imports output]
@@ -321,18 +322,28 @@
     [btop/export snames]
     [for-each sname snames
       [let [export-kind
-            [match [normalize-type [get-annotation tctx sname]]
-              [ctype/inst inst-type]
-              [match inst-type
-                [inst-type/func func-type]
-                [export-kind/func]
+            [if-let [dd [[syntax-info/try-get-def-desc sinfo] sname]]
+              [match dd
+                [def-desc/memory index]
+                [export-kind/memory index]
 
-                [export-kind/global]]
+                [match [normalize-type [get-annotation tctx sname]]
+                  [ctype/inst inst-type]
+                  [match inst-type
+                    [inst-type/func func-type]
+                    [export-kind/func]
 
-              [logq-abort get-func-type expected a func type]]]
-      [push
-        [wat-output/exports output]
-        [pair [syntax-word/word sname] [pair export-kind [syntax-word/word sname]]]]]]
+                    [export-kind/global]]]]
+              [match [normalize-type [get-annotation tctx sname]]
+                [ctype/inst inst-type]
+                [match inst-type
+                  [inst-type/func func-type]
+                  [export-kind/func]
+
+                  [export-kind/global]]]]]
+        [push
+          [wat-output/exports output]
+          [pair [syntax-word/word sname] [pair export-kind [syntax-word/word sname]]]]]]
 
     [do
       [log bform]
@@ -536,6 +547,7 @@
           [wat/word
             [match [pair/fst kind-pair]
               [export-kind/func] [word func]
+              [export-kind/memory i] [word memory]
               [logq-abort export-to-wat unknown export kind]]]
           [wat/dollar [pair/snd kind-pair]]]]]]]
 

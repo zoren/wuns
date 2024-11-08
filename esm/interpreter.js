@@ -22,6 +22,7 @@ import {
   tryGetClosureKind,
   makeFormWord,
   makeFormList,
+  wordToI32,
 } from './core.js'
 import { 'read-file-async' as read_file_async } from './runtime-lib/files.js'
 class EvalError extends Error {
@@ -122,10 +123,12 @@ export const makeEvalForm = () => {
         // constants
         case 'i32':
           assertNumArgs(1)
-          const v = +getFormWord(forms[1])
-          const normalized = v | 0
-          if (v !== normalized) throw evalError('expected i32')
-          return normalized
+          try {
+            return wordToI32(getFormWord(tail[0]))
+          } catch (e) {
+            if (e instanceof EvalError) throw e
+            throw new EvalError(e.message, tail[0], e)
+          }
         case 'f64': {
           assertNumArgs(1)
           const v = +getFormWord(forms[1])
@@ -382,7 +385,7 @@ export const makeEvalForm = () => {
                   const fieldName = getFormWord(recordField[0])
                   fieldNames.push(fieldName)
                   const projecterName = `${type}/${fieldName}`
-                  const projecter = record => record[fieldName]
+                  const projecter = (record) => record[fieldName]
                   setDef(projecterName, projecter)
                 }
                 const constructor = (...args) => {

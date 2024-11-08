@@ -6,10 +6,11 @@ import { makeJSCompilingEvaluator } from '../compiler-js.js'
 
 const testExp = ({ pe }) => {
   test('i32', () => {
-    assert.throws(() => pe('[i32 0x80000000]'))
     assert.throws(() => pe('[i32 10n]'))
     assert.throws(() => pe('[i32]'))
     assert.throws(() => pe('[i32 1 2]'))
+    assert.throws(() => pe('[i32 not-a-number]'))
+    assert.throws(() => pe('[i32 0x100000000]'))
 
     expect(pe('[i32 1]')).toBe(1)
     expect(pe('[i32 007]')).toBe(7)
@@ -17,6 +18,9 @@ const testExp = ({ pe }) => {
     expect(pe('[i32 0b10]')).toBe(2)
     expect(pe('[i32 0o10]')).toBe(8)
     expect(pe('[i32 0x7fffffff]')).toBe(2147483647)
+    expect(pe('[i32 0xffffffff]')).toBe(-1)
+    expect(pe('[i32 0x80000000]')).toBe(-2147483648)
+    expect(pe('[i32 0xff000000]')).toBe(0xff000000 | 0)
     expect(pe('[i32 -1]')).toBe(-1)
     expect(pe('[i32 2147483647]')).toBe(2147483647)
     expect(pe('[i32 -2147483648]')).toBe(-2147483648)

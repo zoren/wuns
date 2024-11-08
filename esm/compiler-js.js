@@ -1,4 +1,12 @@
-import { tryGetFormList, tryGetFormWord, optionNone, makeOptionSome, makeTaggedValue, parseString } from './core.js'
+import {
+  tryGetFormList,
+  tryGetFormWord,
+  optionNone,
+  makeOptionSome,
+  makeTaggedValue,
+  parseString,
+  wordToI32,
+} from './core.js'
 import { intrinsics } from './intrinsics.js'
 import { escapeIdentifier, jsExpToString, jsStmtToString } from './runtime-lib/js.js'
 
@@ -177,10 +185,12 @@ const compFunc = (tail, ctx, defEnv) => {
 const expSpecialFormsExp = {
   i32: (tail) => {
     if (tail.length !== 1) throw new CompileError('i32 expected one argument')
-    const v = +getFormWord(tail[0])
-    const normalized = v | 0
-    if (v !== normalized) throw new CompileError('expected i32')
-    return jsNumber(normalized)
+    try {
+      return jsNumber(wordToI32(getFormWord(tail[0])))
+    } catch (e) {
+      if (e instanceof CompileError) throw e
+      throw new CompileError(e.message, tail[0])
+    }
   },
   f64: (tail) => {
     if (tail.length !== 1) throw new CompileError('f64 expected one argument')
@@ -223,7 +233,7 @@ const expSpecialFormsExp = {
       }
       case 'i32.store8': {
         if (args.length !== 5) throw new CompileError('i32.store8 expected five arguments')
-          const [, , , , valueForm] = args
+        const [, , , , valueForm] = args
         const jsExp = jsAssignExp(getMemLval('Int8Array', 1), compExp(ctx, valueForm, defEnv))
         return jsParenComma([jsExp, jsUndefined])
       }

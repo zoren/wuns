@@ -1,21 +1,6 @@
-import { parseString } from '../core.js'
-import { makeJSCompilingEvaluator } from '../compiler-js.js'
-
-const filename = 'test-compile-wat.wuns'
-
-import formsString from '../../wuns/test-compile-wat.wuns?raw'
 import { test, expect } from 'vitest'
 
-const { evalTops, getDef } = makeJSCompilingEvaluator()
-await evalTops(parseString(formsString, filename))
-const moduleAsync = getDef('module-async')
-
-const stringToInst = async (s, importObject) => {
-  const forms = parseString(s, 'test-content')
-  const module = await moduleAsync(...forms)
-  const { exports } = new WebAssembly.Instance(module, importObject)
-  return exports
-}
+import { stringToInst } from './wat-compile-util.js'
 
 test.each([
   ['[f64 1.5]', 1.5],
@@ -91,7 +76,7 @@ test('loop', async () => {
   expect(inst['gauss-loop'](65535)).toBe(2147450880)
 })
 
-test ('memory', async () => {
+test('memory', async () => {
   const inst = await stringToInst(`
 [memory mem 1]
 [defn get [p] [intrinsic i32.load mem 0 4 p]]
@@ -106,7 +91,7 @@ test ('memory', async () => {
   expect(get(4)).toBe(7)
 })
 
-test ('hash', async () => {
+test('hash', async () => {
   const inst = await stringToInst(`
 [memory mem 1]
 [def fnv-prime [i32 16777619]]
@@ -129,19 +114,18 @@ test ('hash', async () => {
 [defn set-byte [p v] [intrinsic i32.store8 mem 0 1 p v]]
 
 [export set-byte hash-fnv-1a-i32]`)
-    const setByte = inst['set-byte']
-    const hash = inst['hash-fnv-1a-i32']
-    // hashing no characters should return offset basis
-    expect(hash(0, 0)).toBe(-2128831035)
+  const setByte = inst['set-byte']
+  const hash = inst['hash-fnv-1a-i32']
+  // hashing no characters should return offset basis
+  expect(hash(0, 0)).toBe(-2128831035)
 
-    // stolen from https://github.com/fnvhash/libfnv/blob/master/test/unit/basic_full.ts#L13
-    setByte(0, 97) // a
-    expect(hash(0, 1)).toBe(0xe40c292c | 0)
+  // stolen from https://github.com/fnvhash/libfnv/blob/master/test/unit/basic_full.ts#L13
+  setByte(0, 97) // a
+  expect(hash(0, 1)).toBe(0xe40c292c | 0)
 
-    // stolen from https://github.com/fnvhash/libfnv/blob/master/test/unit/basic_full.ts#L20
-    'foobar'.split('').forEach((c, i) => setByte(i, c.charCodeAt(0)))
-    expect(hash(0, 6)).toBe(0xbf9cf968 | 0)
-
+  // stolen from https://github.com/fnvhash/libfnv/blob/master/test/unit/basic_full.ts#L20
+  'foobar'.split('').forEach((c, i) => setByte(i, c.charCodeAt(0)))
+  expect(hash(0, 6)).toBe(0xbf9cf968 | 0)
 })
 
 import allocString from '../../wuns/ll/alloc.wuns?raw'
@@ -151,7 +135,6 @@ test('alloc', async () => {
   const setByte = inst['set-byte']
   const parse = inst['parse']
   const setString = (s) => s.split('').forEach((c, i) => setByte(i, c.charCodeAt(0)))
-  console.log(inst)
   setString('hello you')
   const res = parse(0, 9)
 })

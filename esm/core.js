@@ -235,3 +235,19 @@ class Closure extends Function {
 
 export const makeClosure = (f, kind, paramEnvMaker, body) => Object.freeze(new Closure(f, kind, paramEnvMaker, body))
 export const tryGetClosureKind = (v) => (v instanceof Closure ? v.kind : null)
+
+export const wordToI32 = (w) => {
+  const v = +w
+  if (isNaN(v)) throw new Error('expected number')
+  if (!Number.isInteger(v)) throw new Error('expected integer')
+  if (v < -2147483648) throw new Error('expected i32')
+  if (v > 2 ** 32 - 1) throw new Error('expected i32')
+  return v | 0
+}
+
+export const getLocationFromForm = (form) => {
+  const formInfo = tryGetFormInfoRec(form)
+  if (!formInfo) return 'no location'
+  const { row, column } = getPosition(formInfo)
+  return `${formInfo.contentObj.contentName}:${row + 1}:${column + 1}`
+}
