@@ -127,15 +127,26 @@
 [defn wat-inst-drop [i]
   [wat-inst/inst drop-name-byte-array [list i]]]
 
-[defn mk-translate-form [tctx]
-  [let
-    [cctx [translate-context/check-context tctx]
-     type-annos [check-context/type-annotations cctx]
-     get-ctype [make-get-ctype-from-form-or-annotation type-annos]
-     get-form-types [func get-form-types [form] [translate-types [get-ctype form]]]
-     info [check-context/syntax-info cctx]
-     try-get-ldesc [syntax-info/try-get-ldesc info]]
-  [letfn
+[defn get-func-type [t]
+  [match [normalize-type t]
+    [ctype/inst inst-type]
+    [match inst-type
+      [inst-type/func func-type]
+      func-type
+
+      [logq-abort get-func-type expected a func type]]
+
+    [logq-abort get-func-type expected a func type]]]
+
+[defn translate-top-form [tctx bform]
+  [let [output [translate-context/output tctx]
+        cctx [translate-context/check-context tctx]
+        type-annos [check-context/type-annotations cctx]
+        get-ctype [make-get-ctype-from-form-or-annotation type-annos]
+        sinfo [check-context/syntax-info cctx]
+        get-form-types [func get-form-types [form] [translate-types [get-ctype form]]]
+        try-get-ldesc [syntax-info/try-get-ldesc sinfo]]
+[letfn
     [
   [func go-forms [forms]
     [if [is-empty forms]
@@ -234,27 +245,7 @@
       [do
         [log form]
         [logq-abort not implemented translate-form]]]]]
-      go]]]
-
-[defn get-func-type [t]
-  [match [normalize-type t]
-    [ctype/inst inst-type]
-    [match inst-type
-      [inst-type/func func-type]
-      func-type
-
-      [logq-abort get-func-type expected a func type]]
-
-    [logq-abort get-func-type expected a func type]]]
-
-[defn translate-top-form [tctx bform]
-  [let [output [translate-context/output tctx]
-        tform [mk-translate-form tctx]
-        cctx [translate-context/check-context tctx]
-        type-annos [check-context/type-annotations cctx]
-        get-ctype [make-get-ctype-from-form-or-annotation type-annos]
-        sinfo [check-context/syntax-info cctx]]
-    [match bform
+  [match bform
     [btop/memory name init-size opt-max]
     [push [wat-output/imports output]
       [pair [list [syntax-word/word name]]
@@ -273,7 +264,7 @@
           [wat-global
             [syntax-word/word name]
             t
-            [tform value]]]]
+            [go value]]]]
 
       [do
         [log bform]
@@ -304,12 +295,8 @@
                     [push glocals [pair [syntax-word/word [pair/fst b]] [translate-type [get-ctype [pair/snd b]]]]]]
 
                   [do]]
-                true]]
-            wat-bodies
-            [list-map b bodies
-              [do
-                [proc b]
-                [tform b]]]]
+                true]]]
+      [for-each b bodies [proc b]]
       [push
         [wat-output/funcs output]
         [output-func
@@ -317,7 +304,7 @@
           [clone-growable-to-frozen-list gparams]
           [clone-growable-to-frozen-list glocals]
           [translate-types [func-type/result ft]]
-          [wat-inst/instructions wat-bodies]]]]]
+          [wat-inst/instructions [go-forms bodies]]]]]]
 
     [btop/export snames]
     [for-each sname snames
@@ -347,7 +334,7 @@
 
     [do
       [log bform]
-      [logq-abort not implemented translate-top-form bform]]]]]
+      [logq-abort not implemented translate-top-form bform]]]]]]
 
 [def ascii-line-feed [i32 10]]
 [def ascii-space [i32 32]]
