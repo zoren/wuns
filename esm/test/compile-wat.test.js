@@ -57,7 +57,8 @@ test('recursion', async () => {
 })
 
 test('loop', async () => {
-  const inst = await stringToInst(`
+  {
+    const inst = await stringToInst(`
     [defn gauss-loop [n]
       [loop [res [i32 0] i n]
         [if i
@@ -66,14 +67,48 @@ test('loop', async () => {
             i [intrinsic i32.sub i [i32 1]]]
           res]]]
     [export gauss-loop]`)
-  expect(inst['gauss-loop'](10)).toBe(55)
-  expect(inst['gauss-loop'](100)).toBe(5050)
-  expect(inst['gauss-loop'](1000)).toBe(500500)
-  expect(inst['gauss-loop'](10000)).toBe(50005000)
-  // no stack overflow with loop
-  expect(inst['gauss-loop'](20000)).toBe(200010000)
-  // the largest value before i32 wrap around
-  expect(inst['gauss-loop'](65535)).toBe(2147450880)
+    const gauss = inst['gauss-loop']
+    expect(gauss(10)).toBe(55)
+    expect(gauss(100)).toBe(5050)
+    expect(gauss(1000)).toBe(500500)
+    expect(gauss(10000)).toBe(50005000)
+    // no stack overflow with loop
+    expect(gauss(20000)).toBe(200010000)
+    // the largest value before i32 wrap around
+    expect(gauss(65535)).toBe(2147450880)
+  }
+  {
+    const inst = await stringToInst(`
+[load std.wuns]
+[memory mem 1]
+
+[defn set-byte [p v] [intrinsic i32.store8 mem 0 1 p v]]
+
+[defn is-whitespace [c]
+  [or [eq c [i32 32]] [eq c [i32 10]]]]
+
+[defn is-word-char [c]
+  [or
+    [is-between-inclusive [i32 97] c [i32 122]]
+    [is-between-inclusive [i32 45] c [i32 57]]]]
+
+[defn scan-word [p end-p]
+  [loop [q p]
+    [if [lt-s q end-p]
+      [if [is-word-char [intrinsic i32.load8-u mem 0 1 q]]
+        [continue q [inc q]]
+        q]
+      q]]]
+
+[export set-byte scan-word]`)
+    const scanWord = inst['scan-word']
+    const setByte = inst['set-byte']
+    const setString = (s, p) => s.split('').forEach((c, i) => setByte(p + i, c.charCodeAt(0)))
+    setString('hello you', 0)
+    expect(scanWord(0, 9)).toBe(5)
+    expect(scanWord(5, 9)).toBe(5)
+    expect(scanWord(6, 9)).toBe(9)
+  }
 })
 
 test('memory', async () => {
@@ -128,13 +163,42 @@ test('hash', async () => {
   expect(hash(0, 6)).toBe(0xbf9cf968 | 0)
 })
 
+test('loop ifs', async () => {
+  const inst = await stringToInst(`
+[load std.wuns]
+[memory mem 1]
+
+[defn is-word-char [c]
+  [or
+    [is-between-inclusive [i32 97] c [i32 122]]
+    [is-between-inclusive [i32 45] c [i32 57]]]]
+
+[defn scan-word [p end-p]
+  [loop [q p]
+    [if [lt-s q end-p]
+      [if [is-word-char [intrinsic i32.load8-u mem 0 1 q]]
+        [continue q [inc q]]
+        q]
+      q]]]
+
+[export scan-word]`)
+})
+
 import allocString from '../../wuns/ll/alloc.wuns?raw'
 
 test('alloc', async () => {
   const inst = await stringToInst(allocString)
   const setByte = inst['set-byte']
-  const parse = inst['parse']
+  const countWords = inst['count-words']
   const setString = (s) => s.split('').forEach((c, i) => setByte(i, c.charCodeAt(0)))
+  setString('   ')
+  expect(countWords(0, 3)).toBe(0)
+
   setString('hello you')
-  const res = parse(0, 9)
+  expect(countWords(0, 9)).toBe(2)
+  expect(countWords(4, 9)).toBe(2)
+  expect(countWords(5, 9)).toBe(1)
+
+  setString('ILLEGAL')
+  expect(countWords(0, 7)).toBe(-1)
 })

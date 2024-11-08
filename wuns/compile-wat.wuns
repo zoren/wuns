@@ -26,7 +26,7 @@
     [if [list wat-type-basic] wat-inst wat-inst wat-inst]
     [call word [list wat-inst]]
     [instructions [list wat-inst]]
-    [loop [list wat-type-basic] wat-inst]
+    [loop word [list wat-type-basic] wat-inst]
     [br word]]]
 
 [type output-func []
@@ -222,6 +222,7 @@
               [wat-inst/local.set [syntax-word/word [pair/fst b]] [go [pair/snd b]]]]
             [list
               [wat-inst/loop
+                [word loop-label]
                 [get-form-types form]
                 [wat-inst/instructions
                   [list-map b body [go b]]]]]]]]
@@ -230,7 +231,7 @@
       [wat-inst/instructions
         [concat
           [list-map a assignments [wat-inst/local.set [syntax-word/word [pair/fst a]] [go [pair/snd a]]]]
-          [list [wat-inst/br [word 1]]]]]
+          [list [wat-inst/br [word loop-label]]]]]
 
       [do
         [log form]
@@ -493,16 +494,17 @@
       [list [wat/word [word call]] [wat/dollar w]]
       [list-map a args [wat-inst-to-out a]]]
 
-    [wat-inst/loop result-types body]
+    [wat-inst/loop loop-label result-types body]
     [wat-list
       [wat/word [word loop]]
+      [wat/dollar loop-label]
       [wat/list
         [concat [list [wat/word [word result]]]
           [list-map rt result-types [wat/word [wat-type-basic-to-word rt]]]]]
       [wat-inst-to-out body]]
 
     [wat-inst/br w]
-    [wat-list [wat/word [word br]] [wat/word w]]
+    [wat-list [wat/word [word br]] [wat/dollar w]]
 
     [logq-abort wat-inst-to-out unknown instruction]]]
 
