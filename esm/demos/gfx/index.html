@@ -1,0 +1,83 @@
+<!doctype html>
+<html>
+  <head>
+    <title>canvas gfx</title>
+  </head>
+  <body>
+    <canvas id="myCanvas" width="400" height="400"></canvas>
+
+    <script type="module">
+      // Get the canvas element
+      const canvas = document.getElementById('myCanvas')
+      const dim = 256 * 2
+      const width = dim
+      const height = dim
+      canvas.width = width
+      canvas.height = height
+
+      const ctx = canvas.getContext('2d', { colorSpace: 'display-p3' })
+
+      canvas.style.width = `${width}px`
+      canvas.style.height = `${height}px`
+
+      const dpiScale = window.devicePixelRatio
+      canvas.width = width * dpiScale
+      canvas.height = height * dpiScale
+
+      ctx.scale(dpiScale, dpiScale)
+      const byteCount = canvas.width * canvas.height * 4
+      const pages = Math.ceil(byteCount / 65536) + 1
+      console.log({ byteCount, pages })
+      import { stringToInst } from '../../test/wat-compile-util.js'
+      const { mem, fill } = await stringToInst(`
+[load std.wuns]
+[memory mem 65]
+
+[defn fill [p w h pcolor]
+  [let [end [add p [mul 4 [mul w h]]]
+        color [intrinsic i32.or pcolor [i32 0xff000000]]]
+    [loop [cur p]
+      [when [lt-s cur end]
+        [intrinsic i32.store mem 0 4 cur color]
+        [continue cur [add cur 4]]]]]]
+
+[export fill mem]
+      `)
+      const clampedui8 = new Uint8ClampedArray(mem.buffer).subarray(0, byteCount)
+      const imageData = new ImageData(clampedui8, canvas.width, canvas.height, { colorSpace: 'display-p3' })
+      let i = 0
+      let incDec = 1
+      let frameCount = 0
+      let totalElapsed = 0
+      const step = (timeStamp) => {
+        const now = performance.now()
+        if (i === 255 && incDec === 1) {
+          incDec = -1
+        } else if (i === 0 && incDec === -1) {
+          incDec = 1
+        }
+        i += incDec
+        // call wasm function
+        fill(0, canvas.width, canvas.height, ((255 - i) << 16) + i)
+        // fillVec(0, canvas.width, canvas.height, ((255 - i) << 16) + i)
+
+        ctx.putImageData(imageData, 0, 0)
+        const elapsed = performance.now() - now
+        totalElapsed += elapsed
+        frameCount++
+        if (frameCount % 60 === 0) {
+          const avgElapsed = totalElapsed / frameCount
+          totalElapsed = 0
+          const fps = 1000 / avgElapsed
+          console.log(
+            `rendered ${canvas.width} x ${canvas.height} ${canvas.width * canvas.height} pixels in ${avgElapsed.toFixed(
+              2,
+            )}ms or ${fps | 0}fps`,
+          )
+        }
+        window.requestAnimationFrame(step)
+      }
+      window.requestAnimationFrame(step)
+    </script>
+  </body>
+</html>
