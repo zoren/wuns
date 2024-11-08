@@ -388,7 +388,9 @@ const expSpecialFormsStmt = {
     }
 
     const defaultCase =
-      forms.length % 2 === 0 ? compExpStmt(lctx, forms.at(-1), defEnv, true) : jsThrow(jsString('no match string'))
+      forms.length % 2 === 0
+        ? compExpStmt(lctx, forms.at(-1), defEnv, true)
+        : jsThrow(jsNew(jsCall(jsVar('Error'), [jsString('no match string')])))
     const theSwitch = jsSwitch(jsSubscript(jsVar(tmpValueVarName), jsString('tag')), cases, defaultCase)
     stmts.push(theSwitch)
     return jsBlock(stmts)
