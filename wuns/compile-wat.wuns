@@ -135,6 +135,20 @@
      get-form-types [func get-form-types [form] [translate-types [get-ctype form]]]
      info [check-context/syntax-info cctx]
      try-get-ldesc [syntax-info/try-get-ldesc info]]
+  [letfn
+    [
+  [func go-forms [forms]
+    [if [is-empty forms]
+      [list]
+      [concat
+        [list-map form [slice forms 0 [dec [size forms]]]
+          [loop [res [go form] i [size [get-form-types form]]]
+              [if i
+                [continue
+                  res [wat-inst-drop res]
+                  i [dec i]]
+                res]]]
+        [list [go [last forms]]]]]]
   [func go [form]
     [match form
       [bexp/var w]
@@ -149,24 +163,7 @@
         [literal/word w] [logq-abort not implemented translate-form literal/word]]
 
       [bexp/do forms]
-      [if [is-empty forms]
-        [wat-inst/instructions [list]]
-        [wat-inst/instructions
-          [concat
-            [list-map form [slice forms 0 [dec [size forms]]]
-              [let [types [get-form-types form]]
-                [todo replace with  [loop [res [go form] i [size types]]
-                  [if i
-                    [continue
-                      res [wat-inst-drop [list res]]
-                      i [dec i]]
-                    res]] ]
-                [[func loopi [i]
-                  [if i
-                    [wat-inst-drop [loopi [dec i]]]
-                    [go form]]]
-                  [size types]]]]
-            [list [go [last forms]]]]]]
+      [wat-inst/instructions [go-forms forms]]
 
       [bexp/if cond true false]
       [wat-inst/if
@@ -210,27 +207,23 @@
         [logq-abort translate-form call not implemented]]
 
       [bexp/let bindings body]
-      [do
-        [assert [eq [size body] 1] expected one body]
-        [wat-inst/instructions
-          [concat
-            [list-map b bindings
-              [wat-inst/local.set [syntax-word/word [pair/fst b]] [go [pair/snd b]]]]
-            [list-map b body [go b]]]]]
+      [wat-inst/instructions
+        [concat
+          [list-map b bindings
+            [wat-inst/local.set [syntax-word/word [pair/fst b]] [go [pair/snd b]]]]
+          [go-forms body]]]
 
       [bexp/loop bindings body]
-      [do
-        [assert [eq [size body] 1] expected one body]
-        [wat-inst/instructions
-          [concat
-            [list-map b bindings
-              [wat-inst/local.set [syntax-word/word [pair/fst b]] [go [pair/snd b]]]]
-            [list
-              [wat-inst/loop
-                [word loop-label]
-                [get-form-types form]
-                [wat-inst/instructions
-                  [list-map b body [go b]]]]]]]]
+      [wat-inst/instructions
+        [concat
+          [list-map b bindings
+            [wat-inst/local.set [syntax-word/word [pair/fst b]] [go [pair/snd b]]]]
+          [list
+            [wat-inst/loop
+              [word loop-label]
+              [get-form-types form]
+              [wat-inst/instructions
+                [go-forms body]]]]]]
 
       [bexp/continue assignments]
       [wat-inst/instructions
@@ -240,7 +233,8 @@
 
       [do
         [log form]
-        [logq-abort not implemented translate-form]]]]]]
+        [logq-abort not implemented translate-form]]]]]
+      go]]]
 
 [defn get-func-type [t]
   [match [normalize-type t]
