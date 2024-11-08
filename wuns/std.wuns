@@ -88,6 +88,8 @@
 [defn is-zero [x] [eq x 0]]
 
 [def-instruction i32.bitwise-and i32.and]
+[def-instruction i32.bitwise-ior i32.or]
+[def-instruction i32.bitwise-xor i32.xor]
 
 [defn is-odd [x] [i32.bitwise-and x 1]]
 

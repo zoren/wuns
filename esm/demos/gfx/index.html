@@ -35,7 +35,7 @@
 
 [defn fill [p w h pcolor]
   [let [end [add p [mul 4 [mul w h]]]
-        color [intrinsic i32.or pcolor [i32 0xff000000]]]
+        color [i32.bitwise-ior pcolor [i32 0xff000000]]]
     [loop [cur p]
       [when [lt-s cur end]
         [intrinsic i32.store mem 0 4 cur color]
