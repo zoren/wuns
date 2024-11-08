@@ -99,6 +99,8 @@ const opIntrinsicCall = (opName, args) => {
       return jsAdd(...args)
     case 'f64.sub':
       return jsSub(...args)
+    case 'unreachable':
+      return jsIIFE([jsThrow(jsString('unreachable'))])
     default:
       throw new Error('unexpected intrinsic: ' + opName)
   }
@@ -534,7 +536,7 @@ const evalExpAsync = async (defEnv, jsExp) => {
 }
 
 const setDef = async (defEnv, varName, defKind, jsExp) => {
-  if (defEnv.has(varName)) throw new CompileError('redefining variable')
+  if (defEnv.has(varName)) throw new CompileError('redefining variable: ' + varName)
   try {
     const value = await evalExpAsync(defEnv, jsExp)
     defEnv.set(varName, { defKind, value })

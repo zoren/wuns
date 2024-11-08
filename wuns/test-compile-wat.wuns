@@ -24,7 +24,7 @@
 [import ./runtime-lib/wabt.js wat-to-byte-array [func [byte-array] byte-array]]
 
 [defn output-to-module [output]
-  [let [p [empty-printer [i32 5000]]]
+  [let [p [empty-printer [i32 10000]]]
     [print-wat p [output-to-wat output]]
     [let [ba [printer-to-byte-array p]
           module [byte-array-to-wasm-module [wat-to-byte-array ba]]]

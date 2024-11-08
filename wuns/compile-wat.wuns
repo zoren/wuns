@@ -195,7 +195,12 @@
             [syntax-word/word [intrinsic-memargs/offset memargs]]
             [syntax-word/word [intrinsic-memargs/align memargs]]]
           [go addr]
-          [go value]]]
+          [go value]]
+
+        [intrinsic-args/none]
+        [wat-inst/inst [wasm-name-to-wat-byte-array [syntax-word/word inst-name]] [list]]
+
+        [logq-abort translate-form intrinsic not implemented]]
 
       [bexp/call f args]
       [match f

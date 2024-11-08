@@ -1,4 +1,4 @@
-import { test, expect } from 'vitest'
+import { test, expect, assert } from 'vitest'
 
 import { stringToInst } from './wat-compile-util.js'
 
@@ -184,10 +184,46 @@ test('loop ifs', async () => {
 [export scan-word]`)
 })
 
-import allocString from '../../wuns/ll/alloc.wuns?raw'
+test('count words', async () => {
+  const inst = await stringToInst(`
+[load std.wuns]
+[memory mem 1]
 
-test('alloc', async () => {
-  const inst = await stringToInst(allocString)
+[defn set-byte [p v] [intrinsic i32.store8 mem 0 1 p v]]
+
+[defn is-whitespace [c]
+  [or [eq c [i32 32]] [eq c [i32 10]]]]
+
+[defn is-word-char [c]
+  [or
+    [is-between-inclusive [i32 97] c [i32 122]]
+    [is-between-inclusive [i32 45] c [i32 57]]]]
+
+[defn scan-word [p end-p]
+  [loop [q p]
+    [if [and [lt-s q end-p] [is-word-char [intrinsic i32.load8-u mem 0 1 q]]]
+      [continue q [inc q]]
+      q]]]
+
+[defn count-words [start end-p]
+  [loop [p start
+         word-count 0]
+    [if [lt-s p end-p]
+      [let [c [intrinsic i32.load8-u mem 0 1 p]]
+        [ifs
+          [is-whitespace c]
+          [continue p [inc p]]
+
+          [is-word-char c]
+          [let [end-word [scan-word [inc p] end-p]]
+            [continue
+              p end-word
+              word-count [inc word-count]]]
+
+          -1]]
+      word-count]]]
+[export set-byte count-words]
+    `)
   const setByte = inst['set-byte']
   const countWords = inst['count-words']
   const setString = (s) => s.split('').forEach((c, i) => setByte(i, c.charCodeAt(0)))

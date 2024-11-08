@@ -435,7 +435,12 @@
           [logq-abort load intrinsic not implemented]]
 
         [intrinsic-args/store memargs addr value]
-        type-empty-tuple]
+        type-empty-tuple
+
+        [intrinsic-args/none]
+        type-empty-tuple
+
+        [logq-abort intrinsic not recognized]]
 
       [bexp/do forms]
       [if [is-empty forms]
@@ -549,7 +554,10 @@
           [do
             [unify-report gctx type-i32 [go level lctx addr] addr]
             [unify-report gctx type-i32 [go level lctx value] value]
-            type-empty-tuple]]
+            type-empty-tuple]
+
+          [intrinsic-args/none]
+          type-empty-tuple]
 
         [bexp/if cond then else]
         [let

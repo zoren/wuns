@@ -58,7 +58,8 @@
   [union
     [bin bexp bexp]
     [load intrinsic-memargs bexp]
-    [store intrinsic-memargs bexp bexp]]
+    [store intrinsic-memargs bexp bexp]
+    [none]]
 
   bexp []
   [union
@@ -110,7 +111,10 @@
         [match ic
           [intrinsic-args/bin a b] [do [go a] [go b]]
           [intrinsic-args/load ma a] [go a]
-          [intrinsic-args/store ma a b] [do [go a] [go b]]]
+          [intrinsic-args/store ma a b] [do [go a] [go b]]
+          [intrinsic-args/none] [do]
+
+          [logq-abort bexp-recur not implemented]]
 
         [bexp/call fn args]
         [do
@@ -790,9 +794,14 @@
                             [form-to-ast lstack [get-arg 4]]
                             [form-to-ast lstack [get-arg 5]]]]
 
-                      [do
-                        [log form]
-                        [logq-abort form-to-ast not implemented]]]]]]]
+                        [[word unreachable]]
+                        [do
+                          [assert-n-args 1]
+                          [intrinsic-args/none]]
+
+                        [do
+                          [log form]
+                          [logq-abort form-to-ast not implemented]]]]]]]
 
                 [[word func]]
                 [bexp/func [form-to-func lstack form]]
