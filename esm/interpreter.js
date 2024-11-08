@@ -121,14 +121,17 @@ export const makeEvalForm = () => {
       }
       switch (firstWord) {
         // constants
-        case 'i32':
+        case 'i32': {
           assertNumArgs(1)
+          const form = forms[1]
+          const word = getFormWord(form)
           try {
-            return wordToI32(getFormWord(tail[0]))
+            return wordToI32(word)
           } catch (e) {
             if (e instanceof EvalError) throw e
-            throw new EvalError(e.message, tail[0], e)
+            throw new EvalError(e.message, form, e)
           }
+        }
         case 'f64': {
           assertNumArgs(1)
           const v = +getFormWord(forms[1])
