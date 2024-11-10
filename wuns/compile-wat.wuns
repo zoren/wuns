@@ -138,6 +138,11 @@
 
     [logq-abort get-func-type expected a func type]]]
 
+[defn syntax-word-get-form [sw]
+  [if-let [f [syntax-word/opt-form sw]]
+    f
+    [logq-abort syntax-word-get-form expected a form]]]
+
 [defn translate-top-form [tctx bform]
   [let [output [translate-context/output tctx]
         cctx [translate-context/check-context tctx]
@@ -145,8 +150,17 @@
         get-ctype [make-get-ctype-from-form-or-annotation type-annos]
         sinfo [check-context/syntax-info cctx]
         get-form-types [func get-form-types [form] [translate-types [get-ctype form]]]
-        try-get-ldesc [syntax-info/try-get-ldesc sinfo]]
-[letfn
+        try-get-ldesc [syntax-info/try-get-ldesc sinfo]
+        ldesc-to-index [transient-kv-map]
+        lvar-to-name
+          [func lvar-to-name [lvar-sname]
+            [if-let [ldesc [try-get-ldesc [syntax-word-get-form lvar-sname]]]
+              [let [w [syntax-word/word lvar-sname]]
+                [if-let [index [try-get ldesc-to-index ldesc]]
+                  [concat-words w [int-to-word index]]
+                  w]]
+              [logq-abort lvar-to-name expected local var]]]]
+  [letfn
     [
   [func go-forms [forms]
     [if [is-empty forms]
@@ -162,10 +176,14 @@
         [list [go [last forms]]]]]]
   [func go [form]
     [match form
-      [bexp/var w]
-      [if-let [ldesc [try-get-ldesc w]]
-        [wat-inst/local.get [syntax-word/word w]]
-        [wat-inst/global.get [syntax-word/word w]]]
+      [bexp/var sw]
+      [let [w [syntax-word/word sw]]
+        [if-let [ldesc [try-get-ldesc [syntax-word-get-form sw]]]
+          [do
+            [if-let [index [try-get ldesc-to-index ldesc]]
+              [wat-inst/local.get [concat-words w [int-to-word index]]]
+              [wat-inst/local.get w]]]
+          [wat-inst/global.get w]]]
 
       [bexp/literal l]
       [match l
@@ -221,14 +239,14 @@
       [wat-inst/instructions
         [concat
           [list-map b bindings
-            [wat-inst/local.set [syntax-word/word [pair/fst b]] [go [pair/snd b]]]]
+            [wat-inst/local.set [lvar-to-name [pair/fst b]] [go [pair/snd b]]]]
           [go-forms body]]]
 
       [bexp/loop bindings body]
       [wat-inst/instructions
         [concat
           [list-map b bindings
-            [wat-inst/local.set [syntax-word/word [pair/fst b]] [go [pair/snd b]]]]
+            [wat-inst/local.set [lvar-to-name [pair/fst b]] [go [pair/snd b]]]]
           [list
             [wat-inst/loop
               [word loop-label]
@@ -239,7 +257,8 @@
       [bexp/continue assignments]
       [wat-inst/instructions
         [concat
-          [list-map a assignments [wat-inst/local.set [syntax-word/word [pair/fst a]] [go [pair/snd a]]]]
+          [list-map a assignments
+            [wat-inst/local.set [lvar-to-name [pair/fst a]] [go [pair/snd a]]]]
           [list [wat-inst/br [word loop-label]]]]]
 
       [do
@@ -277,26 +296,42 @@
           params [bfunc/parameters f]
           bodies [bfunc/body f]
           gparams [growable-list]
-          glocals [growable-list]]
+          glocals [growable-list]
+          local-names [transient-kv-map]]
       [assert [eq [size params] [size param-types]] expected matching number of parameters and types]
       [for i 0 [size params]
         [push gparams
           [pair [syntax-word/word [at params i]] [translate-type [at param-types i]]]]]
-      [let [proc
-            [bexp-recur
-              [func f [bform]
-                [match bform
-                  [bexp/let bs body]
-                  [for-each b bs
-                    [push glocals [pair [syntax-word/word [pair/fst b]] [translate-type [get-ctype [pair/snd b]]]]]]
+      [let
+        [add-binding
+          [func ab [b]
+            [let [sname [pair/fst b]
+                  name [syntax-word/word sname]
+                  name-index
+                  [if-let [ldesc [try-get-ldesc [syntax-word-get-form sname]]]
+                    [let [index [kv-map-size ldesc-to-index]]
+                      [set-kv-map ldesc-to-index ldesc index]
+                      [concat-words name [int-to-word index]]]
+                    [do
+                      [log name]
+                      [when-let [form [syntax-word/opt-form sname]]
+                        [log-location form]
+                        ]
+                      [logq-abort translate-top-form expected a local description]]]]
+              [push glocals [pair name-index [translate-type [get-ctype [pair/snd b]]]]]]]
+         proc
+          [bexp-recur
+            [func f [bform]
+              [match bform
+                [bexp/let bs body]
+                [for-each b bs [add-binding b]]
 
-                  [bexp/loop bs body]
-                  [for-each b bs
-                    [push glocals [pair [syntax-word/word [pair/fst b]] [translate-type [get-ctype [pair/snd b]]]]]]
+                [bexp/loop bs body]
+                [for-each b bs [add-binding b]]
 
-                  [do]]
-                true]]]
-      [for-each b bodies [proc b]]
+                [do]]
+              true]]]
+        [for-each b bodies [proc b]]]
       [push
         [wat-output/funcs output]
         [output-func
@@ -304,7 +339,7 @@
           [clone-growable-to-frozen-list gparams]
           [clone-growable-to-frozen-list glocals]
           [translate-types [func-type/result ft]]
-          [wat-inst/instructions [go-forms bodies]]]]]]
+          [wat-inst/instructions [go-forms bodies]]]]]
 
     [btop/export snames]
     [for-each sname snames
@@ -312,7 +347,7 @@
             [if-let [dd [[syntax-info/try-get-def-desc sinfo] sname]]
               [match dd
                 [def-desc/memory index]
-                [export-kind/memory index]
+                [export-kind/memory]
 
                 [match [normalize-type [get-annotation tctx sname]]
                   [ctype/inst inst-type]
@@ -535,7 +570,7 @@
           [wat/word
             [match [pair/fst kind-pair]
               [export-kind/func] [word func]
-              [export-kind/memory i] [word memory]
+              [export-kind/memory] [word memory]
               [logq-abort export-to-wat unknown export kind]]]
           [wat/dollar [pair/snd kind-pair]]]]]]]
 

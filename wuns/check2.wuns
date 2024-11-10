@@ -447,6 +447,16 @@
         type-empty-tuple
         [go [last forms]]]
 
+      [bexp/let bindings forms]
+      [if [is-empty forms]
+        type-empty-tuple
+        [go [last forms]]]
+
+      [bexp/loop bindings forms]
+      [if [is-empty forms]
+        type-empty-tuple
+        [go [last forms]]]
+
       [if-let [anno [try-get type-annotations [to-js-value bform]]]
           anno
           [do
