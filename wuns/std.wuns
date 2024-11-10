@@ -341,23 +341,19 @@
                 0]
               1]] 0]]]]]]
 
-[defn for-func [iw start increment end forms]
+[defn for-func [iteration-var start increment end forms]
   [assert [lt-s 0 increment] for-func increment must be positive]
-  [let [ew [genword]
-        loopw [genword]]
+  [let [ew [genword]]
     [flist
-      [quote let] [flist ew end]
-      [flist
-        [flist
-          [quote func] loopw [flist iw]
-          [flist [quote if]
-            [flist [quote lt-s] iw ew]
-            [form-concat
-              [list [quote do]]
-              forms
-              [list [flist loopw [flist [quote add] iw [i32-to-form increment]]]]]
-            [quote [do]]]]
-        start]]]]
+      [quote loop] [flist ew end
+                         iteration-var start]
+      [flist [quote if]
+        [flist [quote lt-s] iteration-var ew]
+        [form-concat
+          [list [quote do]]
+          forms
+          [list [flist [quote continue] iteration-var [flist [quote add] iteration-var [i32-to-form increment]]]]]
+        [quote [do]]]]]]
 
 [defmacro for [iw start end .. forms]
   [for-func iw start [i32 1] end forms]]
