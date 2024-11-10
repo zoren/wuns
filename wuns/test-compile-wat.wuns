@@ -10,7 +10,6 @@
 [type wasm-instance [] [union]]
 
 [def-wasm-extern wasm-instantiate [func [wasm-module [object js-value]] wasm-instance]]
-[def-wasm-extern wasm-call-export [type-scheme [a] [func [wasm-instance word [list a]] [list a]]]]
 
 [def-wasm-extern memory [func [i32 i32 i32] js-value]]
 
