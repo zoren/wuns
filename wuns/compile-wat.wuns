@@ -298,6 +298,8 @@
           gparams [growable-list]
           glocals [growable-list]
           local-names [transient-kv-map]]
+      [when-let [rest [bfunc/rest-param f]]
+        [logq-abort translate-top-form rest param not implemented]]
       [assert [eq [size params] [size param-types]] expected matching number of parameters and types]
       [for i 0 [size params]
         [push gparams

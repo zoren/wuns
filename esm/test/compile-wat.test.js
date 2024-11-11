@@ -26,6 +26,7 @@ test.each([
 })
 
 test('defn', async () => {
+  await expect(stringToInst('[defn f [.. r]] [export f]')).rejects.toThrow('rest param not implemented')
   expect((await stringToInst('[defn f [] [i32 4]] [export f]')).f()).toBe(4)
   const inst = await stringToInst(`
 [defn abs [p]
