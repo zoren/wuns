@@ -525,7 +525,7 @@ const evalExpAsync = async (defEnv, jsExp) => {
     const asyncFunc = new AsyncFunction('dynImport', ...[...defEnv.keys()].map(escapeIdentifier), 'return ' + jsSrc)
     return await asyncFunc(importModuleElement, ...[...defEnv.values()].map(({ value }) => value))
   } catch (e) {
-    if (e instanceof SyntaxError || e instanceof ReferenceError) {
+    if (e instanceof SyntaxError || e instanceof ReferenceError || e instanceof RangeError) {
       console.error(e)
       console.error(jsSrc)
       console.dir(jsExp, { depth: null })
