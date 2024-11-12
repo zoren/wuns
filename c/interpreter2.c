@@ -289,7 +289,8 @@ typedef enum
   SF_DO,
   SF_LET,
   SF_LOOP,
-  SF_CONTINUE
+  SF_CONTINUE,
+  SF_SWITCH
 } special_form_type_t;
 
 typedef struct special_form
@@ -665,6 +666,36 @@ rtval_t eval_form(const env_t *env, const form_t *form)
         update_env_var(loop_env, var, val);
       }
       return (rtval_t){.tag = rtval_continue};
+    }
+    case SF_SWITCH:
+    {
+      assert(list->size >= 3 && "switch requires at least two arguments");
+      assert (list->size % 2 != 0 && "switch requires an odd number of arguments");
+      const rtval_t cond = eval_form(env, list->cells[1]);
+      for (int i = 2; i < list->size - 1; i+=2)
+      {
+        const form_list_t* case_values = get_list(list->cells[i]);
+        for (int j = 0; j < case_values->size; j++)
+        {
+          const rtval_t case_val = eval_form(env, case_values->cells[j]);
+          if (case_val.tag != cond.tag) continue;
+          switch (case_val.tag)
+          {
+          case rtval_i32:
+            if (case_val.i32 == cond.i32)
+              return eval_form(env, list->cells[i+1]);
+            break;
+          case rtval_f64:
+            if (case_val.f64 == cond.f64)
+              return eval_form(env, list->cells[i+1]);
+            break;
+          default:
+            break;
+          }
+        }
+      }
+      const form_t* default_case = list->cells[list->size-1];
+      return eval_form(env, default_case);
     }
     }
     exit(1);

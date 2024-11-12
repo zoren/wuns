@@ -87,37 +87,27 @@ const testExp = ({ pe }) => {
     assert.throws(() => pe('[switch [i32 1] [i32 2] [i32 3]]'))
     assert.throws(() => pe('[switch [i32 1] [i32 2] [i32 3] [i32 4]]'))
 
-    expect(pe('[switch [i32 1] [word default]]')).toBe('default')
-    expect(pe('[switch [i32 0] [[i32 1]] [word one] [word default]]')).toBe('default')
-    expect(pe('[switch [i32 1] [[i32 1]] [word one] [word default]]')).toBe('one')
+    expect(pe('[switch [i32 1] [i32 5]]')).toBe(5)
+    expect(pe('[switch [i32 0] [[i32 1]] [i32 11] [i32 12]]')).toBe(12)
+    expect(pe('[switch [i32 1] [[i32 1]] [i32 11] [i32 12]]')).toBe(11)
     expect(
       pe(`[switch [i32 0]
-      [[i32 0]] [word zero]
-      [[i32 1]] [word one]
-      [word not-01]]`),
-    ).toBe('zero')
+            [[i32 0]] [i32 10]
+            [[i32 1]] [i32 11]
+            [i32 101]]`),
+    ).toBe(10)
     expect(
       pe(`[switch [i32 1]
-        [[i32 0]] [word zero]
-        [[i32 1]] [word one]
-        [word not-01]]`),
-    ).toBe('one')
+            [[i32 0]] [i32 10]
+            [[i32 1]] [i32 11]
+            [i32 101]]`),
+    ).toBe(11)
     expect(
       pe(`[switch [i32 10]
-          [[i32 0]] [word zero]
-          [[i32 1]] [word one]
-          [word not-01]]`),
-    ).toBe('not-01')
-    expect(
-      pe(`
-    [
-      [func f [n]
-        [switch n
-          [[i32 0]] [word zero]
-          [word not-01]]
-        [i32 5]]
-      [i32 0]]`),
-    ).toBe(5)
+            [[i32 0]] [i32 10]
+            [[i32 1]] [i32 11]
+            [i32 101]]`),
+    ).toBe(101)
   })
 
   test('do', () => {
@@ -133,6 +123,7 @@ const testExp = ({ pe }) => {
     assert.throws(() => pe('[let x]'))
     assert.throws(() => pe('[let x [i32 5] x]'))
     assert.throws(() => pe('[let [[] [i32 0]]]'))
+    assert.throws(() => pe('[let [x [i32 0]] no-such]'))
 
     expect(pe('[let []]')).toBe(langUndefined)
     expect(pe('[let [x [i32 5]]]')).toBe(langUndefined)
