@@ -311,6 +311,21 @@ typedef struct intrinsic
 
 #include "intrinsics.h"
 
+int32_t eval_i32_bin_intrinsic(intrinsic_type_t t, int32_t a, int32_t b)
+{
+  switch (t)
+  {
+  case INTRINSIC_I32_ADD:
+    return a + b;
+  case INTRINSIC_I32_SUB:
+    return a - b;
+  case INTRINSIC_I32_MUL:
+    return a * b;
+  }
+  printf("Error: unknown intrinsic type\n");
+  exit(1);
+}
+
 rtval_t eval_form(const form_t *form)
 {
   switch (form->type)
@@ -356,28 +371,14 @@ rtval_t eval_form(const form_t *form)
       switch (intrinsic->type)
       {
         case INTRINSIC_I32_ADD:
+        case INTRINSIC_I32_SUB:
+        case INTRINSIC_I32_MUL:
         {
           assert(list->size == 4 && "i32.add requires exactly two arguments");
           const rtval_t arg1 = eval_form(list->cells[2]);
           const rtval_t arg2 = eval_form(list->cells[3]);
           assert(arg1.tag == rtval_i32 && arg2.tag == rtval_i32 && "i32.add requires i32 arguments");
-          return (rtval_t){.tag = rtval_i32, .i32 = arg1.i32 + arg2.i32};
-        }
-        case INTRINSIC_I32_SUB:
-        {
-          assert(list->size == 4 && "i32.sub requires exactly two arguments");
-          const rtval_t arg1 = eval_form(list->cells[2]);
-          const rtval_t arg2 = eval_form(list->cells[3]);
-          assert(arg1.tag == rtval_i32 && arg2.tag == rtval_i32 && "i32.sub requires i32 arguments");
-          return (rtval_t){.tag = rtval_i32, .i32 = arg1.i32 - arg2.i32};
-        }
-        case INTRINSIC_I32_MUL:
-        {
-          assert(list->size == 4 && "i32.mul requires exactly two arguments");
-          const rtval_t arg1 = eval_form(list->cells[2]);
-          const rtval_t arg2 = eval_form(list->cells[3]);
-          assert(arg1.tag == rtval_i32 && arg2.tag == rtval_i32 && "i32.mul requires i32 arguments");
-          return (rtval_t){.tag = rtval_i32, .i32 = arg1.i32 * arg2.i32};
+          return (rtval_t){.tag = rtval_i32, .i32 = eval_i32_bin_intrinsic(intrinsic->type, arg1.i32, arg2.i32)};
         }
       }
 
