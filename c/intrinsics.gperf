@@ -13,3 +13,4 @@ struct intrinsic;
 i32.add, INTRINSIC_I32_ADD
 i32.sub, INTRINSIC_I32_SUB
 i32.mul, INTRINSIC_I32_MUL
+i32.eq, INTRINSIC_I32_EQ

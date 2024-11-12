@@ -293,14 +293,14 @@ typedef struct special_form
   special_form_type_t type;
 } special_form_t;
 
-#include "special_forms.h"
-
 
 typedef enum
 {
   INTRINSIC_I32_ADD,
   INTRINSIC_I32_SUB,
-  INTRINSIC_I32_MUL
+  INTRINSIC_I32_MUL,
+
+  INTRINSIC_I32_EQ,
 } intrinsic_type_t;
 
 typedef struct intrinsic
@@ -309,7 +309,12 @@ typedef struct intrinsic
   intrinsic_type_t type;
 } intrinsic_t;
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-field-initializers"
+#include "special_forms.h"
+
 #include "intrinsics.h"
+#pragma clang diagnostic pop
 
 int32_t eval_i32_bin_intrinsic(intrinsic_type_t t, int32_t a, int32_t b)
 {
@@ -321,6 +326,8 @@ int32_t eval_i32_bin_intrinsic(intrinsic_type_t t, int32_t a, int32_t b)
     return a - b;
   case INTRINSIC_I32_MUL:
     return a * b;
+  case INTRINSIC_I32_EQ:
+    return a == b;
   }
   printf("Error: unknown intrinsic type\n");
   exit(1);
@@ -373,6 +380,7 @@ rtval_t eval_form(const form_t *form)
         case INTRINSIC_I32_ADD:
         case INTRINSIC_I32_SUB:
         case INTRINSIC_I32_MUL:
+        case INTRINSIC_I32_EQ:
         {
           assert(list->size == 4 && "i32.add requires exactly two arguments");
           const rtval_t arg1 = eval_form(list->cells[2]);
