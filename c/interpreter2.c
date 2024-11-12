@@ -117,7 +117,7 @@ const form_list_t *make_form_list_from_buffer(form_list_buffer_t *buffer)
 
 const form_t *parse_one(const char **start, const char *end)
 {
-  char *cur = (char*)*start;
+  char *cur = (char *)*start;
   assert(cur != nullptr && "expected non-null start");
   form_list_buffer_t stack[MAX_FORM_DEPTH];
   int depth = -1;
@@ -206,7 +206,8 @@ void print_form(const form_t *form)
 typedef enum runtime_value_tag
 {
   rtval_i32,
-  rtval_f64
+  rtval_f64,
+  rtval_undefined
 } rtval_tag;
 
 typedef struct rtval
@@ -214,8 +215,8 @@ typedef struct rtval
   rtval_tag tag;
   union
   {
-    const int32_t i32;
-    const double f64;
+    int32_t i32;
+    double f64;
   };
 } rtval_t;
 
@@ -229,6 +230,9 @@ void print_rtval(const rtval_t *val)
   case rtval_f64:
     printf("%f", val->f64);
     break;
+  case rtval_undefined:
+    printf("*undefined*");
+    break;
   }
 }
 
@@ -238,9 +242,9 @@ const word_t *get_word(const form_t *form)
   return form->word;
 }
 
-const form_list_t *get_form(const form_t *form)
+const form_list_t *get_list(const form_t *form)
 {
-  assert (form->type == T_LIST && "expected list");
+  assert(form->type == T_LIST && "expected list");
   return form->list;
 }
 
@@ -252,7 +256,7 @@ int32_t parse_i32(const char *word)
   if (errno != 0)
   {
     perror("strtol");
-    exit(1);
+    assert(false && "Error: non-integer argument for 'i32'!");
   }
   assert(*endptr == '\0' && "Error: non-integer argument for 'i32'!");
   assert(result >= INT32_MIN && result <= INT32_MAX && "Error: integer out of range for 'i32'!");
@@ -267,7 +271,7 @@ double parse_f64(const char *word)
   if (errno != 0)
   {
     perror("strtod");
-    exit(1);
+    assert(false && "Error: non-float argument for 'f64'!");
   }
   assert(*endptr == '\0' && "Error: non-float argument for 'f64'!");
   return result;
@@ -278,7 +282,9 @@ typedef enum
   SF_I32,
   SF_F64,
   SF_INTRINSIC,
-  SF_IF
+  SF_IF,
+  SF_DO,
+  SF_LET
 } special_form_type_t;
 
 typedef struct special_form
@@ -292,8 +298,34 @@ typedef enum
   INTRINSIC_I32_ADD,
   INTRINSIC_I32_SUB,
   INTRINSIC_I32_MUL,
+  INTRINSIC_I32_DIV_S,
+  INTRINSIC_I32_REM_S,
 
   INTRINSIC_I32_EQ,
+  INTRINSIC_I32_NE,
+  INTRINSIC_I32_LT_S,
+  INTRINSIC_I32_GT_S,
+  INTRINSIC_I32_LE_S,
+  INTRINSIC_I32_GE_S,
+
+  INTRINSIC_I32_AND,
+  INTRINSIC_I32_OR,
+  INTRINSIC_I32_XOR,
+  INTRINSIC_I32_SHL,
+  INTRINSIC_I32_SHR_S,
+  INTRINSIC_I32_SHR_U,
+
+  INTRINSIC_F64_ADD,
+  INTRINSIC_F64_SUB,
+  INTRINSIC_F64_MUL,
+  INTRINSIC_F64_DIV,
+
+  INTRINSIC_F64_EQ,
+  INTRINSIC_F64_NE,
+  INTRINSIC_F64_LT,
+  INTRINSIC_F64_GT,
+  INTRINSIC_F64_LE,
+  INTRINSIC_F64_GE
 } intrinsic_type_t;
 
 typedef struct intrinsic
@@ -319,19 +351,137 @@ int32_t eval_i32_bin_intrinsic(intrinsic_type_t t, int32_t a, int32_t b)
     return a - b;
   case INTRINSIC_I32_MUL:
     return a * b;
+  case INTRINSIC_I32_DIV_S:
+    return a / b;
+  case INTRINSIC_I32_REM_S:
+    return a % b;
+
   case INTRINSIC_I32_EQ:
     return a == b;
+  case INTRINSIC_I32_NE:
+    return a != b;
+  case INTRINSIC_I32_LT_S:
+    return a < b;
+  case INTRINSIC_I32_GT_S:
+    return a > b;
+  case INTRINSIC_I32_LE_S:
+    return a <= b;
+  case INTRINSIC_I32_GE_S:
+    return a >= b;
+
+  case INTRINSIC_I32_AND:
+    return a & b;
+  case INTRINSIC_I32_OR:
+    return a | b;
+  case INTRINSIC_I32_XOR:
+    return a ^ b;
+  case INTRINSIC_I32_SHL:
+    return a << b;
+  case INTRINSIC_I32_SHR_S:
+    return a >> b;
+  case INTRINSIC_I32_SHR_U:
+    return (unsigned)a >> (unsigned)b;
+  default:
+    break;
   }
   printf("Error: unknown intrinsic type\n");
   exit(1);
 }
 
-rtval_t eval_form(const form_t *form)
+double eval_f64_bin_arith_intrinsic(intrinsic_type_t t, double a, double b)
+{
+  switch (t)
+  {
+  case INTRINSIC_F64_ADD:
+    return a + b;
+  case INTRINSIC_F64_SUB:
+    return a - b;
+  case INTRINSIC_F64_MUL:
+    return a * b;
+  case INTRINSIC_F64_DIV:
+    return a / b;
+  default:
+    break;
+  }
+  printf("Error: unknown intrinsic type\n");
+  exit(1);
+}
+
+rtval_t eval_f64_bin_cmp_intrinsic(intrinsic_type_t t, double a, double b)
+{
+  switch (t)
+  {
+  case INTRINSIC_F64_EQ:
+    return (rtval_t){.tag = rtval_i32, .i32 = a == b};
+  case INTRINSIC_F64_NE:
+    return (rtval_t){.tag = rtval_i32, .i32 = a != b};
+  case INTRINSIC_F64_LT:
+    return (rtval_t){.tag = rtval_i32, .i32 = a < b};
+  case INTRINSIC_F64_GT:
+    return (rtval_t){.tag = rtval_i32, .i32 = a > b};
+  case INTRINSIC_F64_LE:
+    return (rtval_t){.tag = rtval_i32, .i32 = a <= b};
+  default:
+    break;
+  }
+  printf("Error: unknown intrinsic type\n");
+  exit(1);
+}
+
+typedef struct binding
+{
+  word_t *name;
+  rtval_t value;
+} binding_t;
+
+typedef struct env
+{
+  int len;
+  const struct binding *bindings;
+  const struct env *parent;
+} env_t;
+
+const env_t *make_env(const struct binding *bindings, int len, const env_t *parent)
+{
+  env_t *env = malloc(sizeof(env_t));
+  env->len = len;
+  env->bindings = bindings;
+  env->parent = parent;
+  return env;
+}
+
+bool word_eq(const word_t *a, const word_t *b)
+{
+  if (a->size != b->size)
+    return false;
+  return memcmp(a->chars, b->chars, a->size) == 0;
+}
+
+const rtval_t lookup(const env_t *env, const word_t *word)
+{
+  printf("lookup, look for: %s\n", word->chars);
+  const env_t *cur_env = env;
+  while (cur_env != nullptr)
+  {
+    printf("trying env %d\n", cur_env->len);
+    for (int i = cur_env->len; i --> 0;)
+    {
+      printf("lookup, trying: %s\n", cur_env->bindings[i].name->chars);
+      if (word_eq(cur_env->bindings[i].name, word))
+        return cur_env->bindings[i].value;
+    }
+    cur_env = cur_env->parent;
+  }
+  assert(false && "Error: word not found in env");
+}
+
+rtval_t eval_form(const env_t *env, const form_t *form)
 {
   switch (form->type)
   {
-  case T_WORD: {
-    assert(false && "Error: cannot evaluate word");
+  case T_WORD:
+  {
+    return lookup(env, form->word);
   }
   case T_LIST:
   {
@@ -344,12 +494,14 @@ rtval_t eval_form(const form_t *form)
     {
     case SF_I32:
     {
+      assert(list->size == 2 && "i32 requires exactly one argument");
       const word_t *arg_word = get_word(list->cells[1]);
       const int32_t arg_val = parse_i32(arg_word->chars);
       return (rtval_t){.tag = rtval_i32, .i32 = arg_val};
     }
     case SF_F64:
     {
+      assert(list->size == 2 && "f64 requires exactly one argument");
       const word_t *arg_word = get_word(list->cells[1]);
       const double arg_val = parse_f64(arg_word->chars);
       return (rtval_t){.tag = rtval_f64, .f64 = arg_val};
@@ -362,26 +514,96 @@ rtval_t eval_form(const form_t *form)
       assert(intrinsic && "unknown intrinsic");
       switch (intrinsic->type)
       {
-        case INTRINSIC_I32_ADD:
-        case INTRINSIC_I32_SUB:
-        case INTRINSIC_I32_MUL:
-        case INTRINSIC_I32_EQ:
-        {
-          assert(list->size == 4 && "intrinsic requires exactly two arguments");
-          const rtval_t arg1 = eval_form(list->cells[2]);
-          const rtval_t arg2 = eval_form(list->cells[3]);
-          assert(arg1.tag == rtval_i32 && arg2.tag == rtval_i32 && "intrinsic requires i32 arguments");
-          return (rtval_t){.tag = rtval_i32, .i32 = eval_i32_bin_intrinsic(intrinsic->type, arg1.i32, arg2.i32)};
-        }
-      }
+      case INTRINSIC_I32_ADD:
+      case INTRINSIC_I32_SUB:
+      case INTRINSIC_I32_MUL:
+      case INTRINSIC_I32_DIV_S:
+      case INTRINSIC_I32_REM_S:
 
+      case INTRINSIC_I32_EQ:
+      case INTRINSIC_I32_NE:
+      case INTRINSIC_I32_LT_S:
+      case INTRINSIC_I32_GT_S:
+      case INTRINSIC_I32_LE_S:
+      case INTRINSIC_I32_GE_S:
+
+      case INTRINSIC_I32_AND:
+      case INTRINSIC_I32_OR:
+      case INTRINSIC_I32_XOR:
+      case INTRINSIC_I32_SHL:
+      case INTRINSIC_I32_SHR_S:
+      case INTRINSIC_I32_SHR_U:
+      {
+        assert(list->size == 4 && "intrinsic requires exactly two arguments");
+        const rtval_t arg1 = eval_form(env, list->cells[2]);
+        const rtval_t arg2 = eval_form(env, list->cells[3]);
+        assert(arg1.tag == rtval_i32 && arg2.tag == rtval_i32 && "intrinsic requires i32 arguments");
+        return (rtval_t){.tag = rtval_i32, .i32 = eval_i32_bin_intrinsic(intrinsic->type, arg1.i32, arg2.i32)};
+      }
+      case INTRINSIC_F64_ADD:
+      case INTRINSIC_F64_SUB:
+      case INTRINSIC_F64_MUL:
+      case INTRINSIC_F64_DIV:
+      {
+        assert(list->size == 4 && "intrinsic requires exactly two arguments");
+        const rtval_t arg1 = eval_form(env, list->cells[2]);
+        const rtval_t arg2 = eval_form(env, list->cells[3]);
+        assert(arg1.tag == rtval_f64 && arg2.tag == rtval_f64 && "intrinsic requires f64 arguments");
+        return (rtval_t){.tag = rtval_f64, .f64 = eval_f64_bin_arith_intrinsic(intrinsic->type, arg1.f64, arg2.f64)};
+      }
+      case INTRINSIC_F64_EQ:
+      case INTRINSIC_F64_NE:
+      case INTRINSIC_F64_LT:
+      case INTRINSIC_F64_GT:
+      case INTRINSIC_F64_LE:
+      case INTRINSIC_F64_GE:
+      {
+        assert(list->size == 4 && "intrinsic requires exactly two arguments");
+        const rtval_t arg1 = eval_form(env, list->cells[2]);
+        const rtval_t arg2 = eval_form(env, list->cells[3]);
+        assert(arg1.tag == rtval_f64 && arg2.tag == rtval_f64 && "intrinsic requires f64 arguments");
+        return eval_f64_bin_cmp_intrinsic(intrinsic->type, arg1.f64, arg2.f64);
+      }
+      }
     }
     case SF_IF:
     {
       assert(list->size == 4 && "if requires exactly three arguments");
-      const rtval_t cond = eval_form(list->cells[1]);
+      const rtval_t cond = eval_form(env, list->cells[1]);
       assert(cond.tag == rtval_i32 && "if requires i32 condition");
-      return eval_form(list->cells[cond.i32 ? 2 : 3]);
+      return eval_form(env, list->cells[cond.i32 ? 2 : 3]);
+    }
+    case SF_DO:
+    {
+      if (list->size == 1)
+        return (rtval_t){.tag = rtval_undefined, .i32 = 0};
+      for (int i = 1; i < list->size - 1; i++)
+        eval_form(env, list->cells[i]);
+      return eval_form(env, list->cells[list->size - 1]);
+    }
+    case SF_LET:
+    {
+      assert(list->size >= 2 && "let requires at least two arguments");
+      const form_list_t *bindingForms = get_list(list->cells[1]);
+      assert(bindingForms->size % 2 == 0 && "let bindings must be a list of even length");
+      const int number_of_bindings = bindingForms->size / 2;
+      // const binding
+      const form_t **binding_forms = bindingForms->cells;
+      binding_t *bindingVals = number_of_bindings == 0 ? NULL : malloc(sizeof(struct binding) * number_of_bindings);
+      env_t new_env = {.parent = env, .len = 0, .bindings = bindingVals};
+      for (int i = 0; i < number_of_bindings; i++)
+      {
+        const word_t *var = get_word(binding_forms[i * 2]);
+        const rtval_t val = eval_form(&new_env, binding_forms[i * 2 + 1]);
+        binding_t binding = {.name = var, .value = val};
+        bindingVals[i] = binding;
+        new_env.len++;
+      }
+      if (list->size == 2)
+        return (rtval_t){.tag = rtval_undefined, .i32 = 0};
+      for (int i = 2; i < list->size - 1; i++)
+        eval_form(&new_env, list->cells[i]);
+      return eval_form(&new_env, list->cells[list->size - 1]);
     }
     }
     exit(1);
@@ -390,7 +612,8 @@ rtval_t eval_form(const form_t *form)
   exit(1);
 }
 
-const form_t *parse_one_string(const char* start) {
+const form_t *parse_one_string(const char *start)
+{
   // printf("Parsing: %s\n", start);
   const char *end = start + strlen(start);
   const form_t *form = parse_one(&start, end);
@@ -402,7 +625,7 @@ const form_t *parse_one_string(const char* start) {
 double parse_eval_f64(const char *start)
 {
   const form_t *form = parse_one_string(start);
-  const rtval_t result = eval_form(form);
+  const rtval_t result = eval_form(nullptr, form);
   switch (result.tag)
   {
   case rtval_f64:
@@ -410,6 +633,47 @@ double parse_eval_f64(const char *start)
     break;
   case rtval_i32:
     return result.i32;
+    break;
+
+  default:
+    break;
+  }
+  assert(false && "expected f64");
+}
+
+rtval_t *parse_eval(const char *start)
+{
+  const form_t *form = parse_one_string(start);
+  const rtval_t result = eval_form(nullptr, form);
+  rtval_t *result_ptr = malloc(sizeof(rtval_t));
+  memcpy(result_ptr, &result, sizeof(rtval_t));
+  return result_ptr;
+}
+
+const char *get_type(rtval_t *val)
+{
+  switch (val->tag)
+  {
+  case rtval_i32:
+    return "i32";
+  case rtval_f64:
+    return "f64";
+  case rtval_undefined:
+    return "undefined";
+  default:
+    return "unknown";
+  }
+}
+
+double get_f64(rtval_t *val)
+{
+  switch (val->tag)
+  {
+  case rtval_f64:
+    return val->f64;
+    break;
+  case rtval_i32:
+    return val->i32;
     break;
 
   default:
@@ -426,7 +690,7 @@ int main(int argc, char **argv)
   }
   const form_t *form = parse_one_string(argv[1]);
   print_form(form);
-  const rtval_t result = eval_form(form);
+  const rtval_t result = eval_form(nullptr, form);
   printf("\n");
   print_rtval(&result);
   printf("\n");
