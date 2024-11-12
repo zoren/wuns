@@ -106,8 +106,9 @@ const form_list_t *make_form_list_from_buffer(form_list_buffer_t *buffer)
   form_list_t *list = malloc(sizeof(form_list_t));
   ssize_t size = buffer->size;
   list->size = size;
-  const form_t **cells = malloc(sizeof(form_t *) * size);
-  memcpy(cells, buffer->cells, sizeof(form_t *) * size);
+  size_t byte_size = sizeof(form_t *) * size;
+  const form_t **cells = malloc(byte_size);
+  memcpy(cells, buffer->cells, byte_size);
   list->cells = cells;
   return list;
 }
@@ -147,9 +148,6 @@ const form_t *parse_one(char **start, const char *end)
       stack[depth].capacity = 8;
       stack[depth].size = 0;
       stack[depth].cells = malloc(sizeof(form_t *) * stack[depth].capacity);
-
-      // while (cur < end && is_whitespace(*cur)) cur++;
-      // while()
     }
     else if (c == ']')
     {
@@ -233,21 +231,13 @@ void print_rtval(const rtval_t *val)
 
 const word_t *get_word(const form_t *form)
 {
-  if (form->type != T_WORD)
-  {
-    printf("Error: expected word\n");
-    exit(1);
-  }
+  assert(form->type == T_WORD && "expected word");
   return form->word;
 }
 
 const form_list_t *get_form(const form_t *form)
 {
-  if (form->type != T_LIST)
-  {
-    printf("Error: expected list\n");
-    exit(1);
-  }
+  assert (form->type == T_LIST && "expected list");
   return form->list;
 }
 
@@ -343,18 +333,10 @@ rtval_t eval_form(const form_t *form)
   case T_LIST:
   {
     const form_list_t *list = form->list;
-    if (list->size == 0)
-    {
-      printf("Error: empty list\n");
-      exit(1);
-    }
+    assert(list->size > 0 && "empty list");
     const word_t *name = get_word(list->cells[0]);
     const struct special_form *spec = try_get_wuns_special_form(name->chars, name->size);
-    if (!spec)
-    {
-      printf("Error: unknown special form %s\n", name->chars);
-      exit(1);
-    }
+    assert(spec && "unknown special form");
     switch (spec->type)
     {
     case SF_I32:
@@ -374,7 +356,7 @@ rtval_t eval_form(const form_t *form)
       assert(list->size > 1 && "intrinsic requires at least one argument");
       const word_t *arg_word = get_word(list->cells[1]);
       const struct intrinsic *intrinsic = try_get_wuns_intrinsic(arg_word->chars, arg_word->size);
-      assert(intrinsic && "Error: unknown intrinsic");
+      assert(intrinsic && "unknown intrinsic");
       switch (intrinsic->type)
       {
         case INTRINSIC_I32_ADD:
@@ -382,10 +364,10 @@ rtval_t eval_form(const form_t *form)
         case INTRINSIC_I32_MUL:
         case INTRINSIC_I32_EQ:
         {
-          assert(list->size == 4 && "i32.add requires exactly two arguments");
+          assert(list->size == 4 && "intrinsic requires exactly two arguments");
           const rtval_t arg1 = eval_form(list->cells[2]);
           const rtval_t arg2 = eval_form(list->cells[3]);
-          assert(arg1.tag == rtval_i32 && arg2.tag == rtval_i32 && "i32.add requires i32 arguments");
+          assert(arg1.tag == rtval_i32 && arg2.tag == rtval_i32 && "intrinsic requires i32 arguments");
           return (rtval_t){.tag = rtval_i32, .i32 = eval_i32_bin_intrinsic(intrinsic->type, arg1.i32, arg2.i32)};
         }
       }
