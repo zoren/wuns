@@ -13,3 +13,4 @@ struct special_form;
 i32, SF_I32
 f64, SF_F64
 intrinsic, SF_INTRINSIC
+if, SF_IF

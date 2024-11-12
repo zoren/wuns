@@ -284,7 +284,8 @@ typedef enum
 {
   SF_I32,
   SF_F64,
-  SF_INTRINSIC
+  SF_INTRINSIC,
+  SF_IF
 } special_form_type_t;
 
 typedef struct special_form
@@ -292,7 +293,6 @@ typedef struct special_form
   char *name;
   special_form_type_t type;
 } special_form_t;
-
 
 typedef enum
 {
@@ -390,6 +390,13 @@ rtval_t eval_form(const form_t *form)
         }
       }
 
+    }
+    case SF_IF:
+    {
+      assert(list->size == 4 && "if requires exactly three arguments");
+      const rtval_t cond = eval_form(list->cells[1]);
+      assert(cond.tag == rtval_i32 && "if requires i32 condition");
+      return eval_form(list->cells[cond.i32 ? 2 : 3]);
     }
     }
     exit(1);
