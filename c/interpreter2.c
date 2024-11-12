@@ -115,9 +115,9 @@ const form_list_t *make_form_list_from_buffer(form_list_buffer_t *buffer)
   return list;
 }
 
-extern const form_t *parse_one(char **start, const char *end)
+const form_t *parse_one(const char **start, const char *end)
 {
-  char *cur = *start;
+  char *cur = (char*)*start;
   assert(cur != nullptr && "expected non-null start");
   form_list_buffer_t stack[MAX_FORM_DEPTH];
   int depth = -1;
@@ -399,14 +399,7 @@ const form_t *parse_one_string(const char* start) {
   return form;
 }
 
-const int32_t eval_i32(const form_t *form)
-{
-  const rtval_t result = eval_form(form);
-  assert(result.tag == rtval_i32 && "expected i32 result");
-  return result.i32;
-}
-
-const double parse_eval_f64(const char *start)
+double parse_eval_f64(const char *start)
 {
   const form_t *form = parse_one_string(start);
   const rtval_t result = eval_form(form);
