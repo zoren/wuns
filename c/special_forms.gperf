@@ -1,0 +1,15 @@
+%{
+#include <string.h>
+%}
+%compare-strncmp
+%language=ANSI-C
+%readonly-tables
+%enum
+%define lookup-function-name try_get_wuns_special_form
+%define hash-function-name wuns_special_form_hash
+%struct-type
+struct special_form;
+%%
+i32, SF_I32
+f64, SF_F64
+intrinsic, SF_INTRINSIC
