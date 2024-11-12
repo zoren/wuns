@@ -207,7 +207,8 @@ typedef enum runtime_value_tag
 {
   rtval_i32,
   rtval_f64,
-  rtval_undefined
+  rtval_undefined,
+  rtval_continue
 } rtval_tag;
 
 typedef struct rtval
@@ -232,6 +233,8 @@ void print_rtval(const rtval_t *val)
     break;
   case rtval_undefined:
     printf("*undefined*");
+  case rtval_continue:
+    printf("*continue*");
     break;
   }
 }
@@ -284,7 +287,9 @@ typedef enum
   SF_INTRINSIC,
   SF_IF,
   SF_DO,
-  SF_LET
+  SF_LET,
+  SF_LOOP,
+  SF_CONTINUE
 } special_form_type_t;
 
 typedef struct special_form
@@ -437,8 +442,9 @@ typedef struct binding
 typedef struct env
 {
   int len;
-  const struct binding *bindings;
+  struct binding *bindings;
   const struct env *parent;
+  const special_form_type_t special_form_type;
 } env_t;
 
 const env_t *make_env(const struct binding *bindings, int len, const env_t *parent)
@@ -459,20 +465,30 @@ bool word_eq(const word_t *a, const word_t *b)
 
 const rtval_t lookup(const env_t *env, const word_t *word)
 {
-  printf("lookup, look for: %s\n", word->chars);
   const env_t *cur_env = env;
   while (cur_env != nullptr)
   {
-    printf("trying env %d\n", cur_env->len);
-    for (int i = cur_env->len; i --> 0;)
+    for (int i = cur_env->len; i-- > 0;)
     {
-      printf("lookup, trying: %s\n", cur_env->bindings[i].name->chars);
       if (word_eq(cur_env->bindings[i].name, word))
         return cur_env->bindings[i].value;
     }
     cur_env = cur_env->parent;
   }
-  assert(false && "Error: word not found in env");
+  assert(false && "lookup: word not found in env");
+}
+
+void update_env_var(env_t *env, const word_t *word, rtval_t value)
+{
+  for(int i = env->len; i-- > 0;)
+  {
+    if (word_eq(env->bindings[i].name, word))
+    {
+      env->bindings[i].value = value;
+      return;
+    }
+  }
+  assert(false && "update_env_var: word not found in env");
 }
 
 rtval_t eval_form(const env_t *env, const form_t *form)
@@ -587,10 +603,9 @@ rtval_t eval_form(const env_t *env, const form_t *form)
       const form_list_t *bindingForms = get_list(list->cells[1]);
       assert(bindingForms->size % 2 == 0 && "let bindings must be a list of even length");
       const int number_of_bindings = bindingForms->size / 2;
-      // const binding
       const form_t **binding_forms = bindingForms->cells;
       binding_t *bindingVals = number_of_bindings == 0 ? NULL : malloc(sizeof(struct binding) * number_of_bindings);
-      env_t new_env = {.parent = env, .len = 0, .bindings = bindingVals};
+      env_t new_env = {.parent = env, .len = 0, .bindings = bindingVals, .special_form_type = SF_LET};
       for (int i = 0; i < number_of_bindings; i++)
       {
         const word_t *var = get_word(binding_forms[i * 2]);
@@ -604,6 +619,52 @@ rtval_t eval_form(const env_t *env, const form_t *form)
       for (int i = 2; i < list->size - 1; i++)
         eval_form(&new_env, list->cells[i]);
       return eval_form(&new_env, list->cells[list->size - 1]);
+    }
+    case SF_LOOP:
+    {
+      assert(list->size >= 2 && "let requires at least two arguments");
+      const form_list_t *bindingForms = get_list(list->cells[1]);
+      assert(bindingForms->size % 2 == 0 && "let bindings must be a list of even length");
+      const int number_of_bindings = bindingForms->size / 2;
+      const form_t **binding_forms = bindingForms->cells;
+      binding_t *bindingVals = number_of_bindings == 0 ? NULL : malloc(sizeof(struct binding) * number_of_bindings);
+      env_t new_env = {.parent = env, .len = 0, .bindings = bindingVals, .special_form_type = SF_LOOP};
+      for (int i = 0; i < number_of_bindings; i++)
+      {
+        const word_t *var = get_word(binding_forms[i * 2]);
+        const rtval_t val = eval_form(&new_env, binding_forms[i * 2 + 1]);
+        binding_t binding = {.name = var, .value = val};
+        bindingVals[i] = binding;
+        new_env.len++;
+      }
+      if (list->size == 2)
+        return (rtval_t){.tag = rtval_undefined, .i32 = 0};
+      while (1)
+      {
+        for (int i = 2; i < list->size - 1; i++)
+          eval_form(&new_env, list->cells[i]);
+        rtval_t res = eval_form(&new_env, list->cells[list->size - 1]);
+        if (res.tag == rtval_continue)
+          continue;
+        return res;
+      }
+    }
+    case SF_CONTINUE:
+    {
+      assert(list->size % 2 != 0 && "continue requires an even number of arguments");
+      env_t *loop_env = env;
+      while (loop_env->special_form_type != SF_LOOP)
+      {
+        loop_env = loop_env->parent;
+        assert(loop_env && "continue not in loop");
+      }
+      const int bindings_length = (list->size - 1) / 2;
+      for(int i = 1; i < list->size; i+=2){
+        const word_t *var = get_word(list->cells[i]);
+        const rtval_t val = eval_form(env, list->cells[i+1]);
+        update_env_var(loop_env, var, val);
+      }
+      return (rtval_t){.tag = rtval_continue};
     }
     }
     exit(1);

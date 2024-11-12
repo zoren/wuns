@@ -16,3 +16,5 @@ intrinsic, SF_INTRINSIC
 if, SF_IF
 do, SF_DO
 let, SF_LET
+loop, SF_LOOP
+continue, SF_CONTINUE
