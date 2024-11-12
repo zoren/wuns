@@ -1,6 +1,6 @@
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <stdbool.h>
 #include <assert.h>
 #include <errno.h>
 #include <string.h>
@@ -24,6 +24,8 @@ bool is_word_char(char c)
     return false;
   }
 }
+
+typedef long ssize_t;
 
 typedef struct word
 {
@@ -113,9 +115,10 @@ const form_list_t *make_form_list_from_buffer(form_list_buffer_t *buffer)
   return list;
 }
 
-const form_t *parse_one(char **start, const char *end)
+extern const form_t *parse_one(char **start, const char *end)
 {
   char *cur = *start;
+  assert(cur != nullptr && "expected non-null start");
   form_list_buffer_t stack[MAX_FORM_DEPTH];
   int depth = -1;
   while (cur < end)
@@ -387,6 +390,40 @@ rtval_t eval_form(const form_t *form)
   exit(1);
 }
 
+const form_t *parse_one_string(const char* start) {
+  // printf("Parsing: %s\n", start);
+  const char *end = start + strlen(start);
+  const form_t *form = parse_one(&start, end);
+  assert(form && "no form parsed");
+  print_form(form);
+  return form;
+}
+
+const int32_t eval_i32(const form_t *form)
+{
+  const rtval_t result = eval_form(form);
+  assert(result.tag == rtval_i32 && "expected i32 result");
+  return result.i32;
+}
+
+const double parse_eval_f64(const char *start)
+{
+  const form_t *form = parse_one_string(start);
+  const rtval_t result = eval_form(form);
+  switch (result.tag)
+  {
+  case rtval_f64:
+    return result.f64;
+    break;
+  case rtval_i32:
+    return result.i32;
+    break;
+
+  default:
+    break;
+  }
+}
+
 int main(int argc, char **argv)
 {
   if (argc != 2)
@@ -394,26 +431,10 @@ int main(int argc, char **argv)
     printf("Usage: %s <expression>\n", argv[0]);
     return 1;
   }
-  char *start = argv[1];
-  const char *end = argv[1] + strlen(start);
-  const form_t *form = parse_one(&start, end);
-  if (form == nullptr)
-  {
-    printf("Error: no form parsed\n");
-    return 1;
-  }
+  const form_t *form = parse_one_string(argv[1]);
   print_form(form);
   const rtval_t result = eval_form(form);
   printf("\n");
   print_rtval(&result);
   printf("\n");
-  // for (int i = 1; i < argc; i++) {
-  //   const char* name = argv[i];
-  //   const char* res = is_wuns_special_form(name, strlen(name));
-  //   if (res) {
-  //     printf("%s is a special form %i\n", name, res == name);
-  //   } else {
-  //     printf("%s is not a special form\n", name);
-  //   }
-  // }
 }
