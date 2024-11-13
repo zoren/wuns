@@ -16,6 +16,16 @@ intrinsic, SF_INTRINSIC
 if, SF_IF
 do, SF_DO
 let, SF_LET
+letfn, SF_LETFN
+type-anno, SF_TYPE_ANNO
 loop, SF_LOOP
 continue, SF_CONTINUE
 switch, SF_SWITCH
+def, SF_DEF
+defn, SF_DEFN
+defexpr, SF_DEFEXPR
+defmacro, SF_DEFMACRO
+load, SF_LOAD
+type, SF_TYPE
+import, SF_IMPORT
+export, SF_EXPORT
