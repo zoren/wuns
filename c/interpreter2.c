@@ -70,6 +70,19 @@ const word_t *make_word(const char *start, const char *end)
   return (const word_t *)word;
 }
 
+const word_t *word_copy(const word_t *word)
+{
+  const ssize_t size = word->size;
+  char *chars = malloc(size + 1);
+  memcpy(chars, word->chars, size);
+  chars[size] = '\0';
+
+  word_t *cword = malloc(sizeof(word_t));
+  cword->size = size;
+  cword->chars = chars;
+  return (const word_t *)cword;
+}
+
 const form_t *make_form_word(const word_t *word)
 {
   form_t *new_form = malloc(sizeof(form_t));
@@ -84,6 +97,48 @@ const form_t *make_form_list(const form_list_t *list)
   new_form->type = T_LIST;
   new_form->list = list;
   return new_form;
+}
+
+void form_free(const form_t *form)
+{
+  switch (form->type)
+  {
+  case T_WORD:
+    free((void *)form->word->chars);
+    free((void *)form->word);
+    break;
+  case T_LIST:
+    for (int i = 0; i < form->list->size; i++)
+    {
+      form_free((form_t *)form->list->cells[i]);
+    }
+    free((void *)form->list->cells);
+    free((void *)form->list);
+    break;
+  }
+  free((void *)form);
+}
+
+form_t *form_copy(const form_t *form)
+{
+  switch (form->type)
+  {
+  case T_WORD:
+    return (form_t *)make_form_word(word_copy(form->word));
+  case T_LIST:
+  {
+    form_list_t *list = malloc(sizeof(form_list_t));
+    list->size = form->list->size;
+    form_t **cells = malloc(sizeof(form_t *) * list->size);
+    for (int i = 0; i < list->size; i++)
+    {
+      cells[i] = form_copy(form->list->cells[i]);
+    }
+    list->cells = (const form_t **)cells;
+    return (form_t *)make_form_list(list);
+  }
+  }
+  assert(false && "unreachable");
 }
 
 typedef struct form_list_buffer
@@ -217,8 +272,18 @@ typedef enum runtime_value_tag
   rtval_i32,
   rtval_f64,
   rtval_undefined,
-  rtval_continue
+  rtval_continue,
+  rtval_func,
 } rtval_tag;
+
+typedef struct rtfunc
+{
+  const word_t *name;
+  const int arity;
+  const word_t **params;
+  const word_t *rest_param;
+  const form_list_t bodies;
+} rtfunc_t;
 
 typedef struct rtval
 {
@@ -227,6 +292,7 @@ typedef struct rtval
   {
     int32_t i32;
     double f64;
+    rtfunc_t *func;
   };
 } rtval_t;
 
@@ -242,8 +308,12 @@ void print_rtval(const rtval_t *val)
     break;
   case rtval_undefined:
     printf("*undefined*");
+    break;
   case rtval_continue:
     printf("*continue*");
+    break;
+  case rtval_func:
+    printf("[fn %s]", val->func->name->chars);
     break;
   }
 }
@@ -533,7 +603,7 @@ void def_env_set(def_env_t *denv, const word_t *word, rtval_t value)
     denv->capacity *= 2;
     denv->bindings = realloc(denv->bindings, sizeof(binding_t) * denv->capacity);
   }
-  denv->bindings[denv->size++] = (binding_t){.name = (word_t *)word, .value = value};
+  denv->bindings[denv->size++] = (binding_t){.name = (word_t *)word_copy(word), .value = value};
 }
 
 rtval_t def_env_lookup(const def_env_t *denv, const word_t *word)
@@ -922,6 +992,7 @@ int main(int argc, char **argv)
       break;
     print_form(form);
     rtval_t result = eval_top(&denv, form);
+    form_free((form_t *)form);
     printf(" => ");
     print_rtval(&result);
     printf("\n");
