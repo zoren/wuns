@@ -145,7 +145,7 @@ typedef struct form_list_buffer
 {
   ssize_t capacity;
   ssize_t size;
-  form_t **cells;
+  const form_t **cells;
 } form_list_buffer_t;
 
 void append_form(form_list_buffer_t *buffer, const form_t *form)
@@ -944,8 +944,8 @@ rtval_t eval_top(def_env_t *denv, const form_t *form)
             assert(list->size >= 4 && "defn requires at least three arguments");
             const word_t *fname = get_word(list->cells[1]);
             const form_list_t *paramForms = get_list(list->cells[2]);
-            word_t **params;
-            word_t *rest_param = nullptr;
+            const word_t **params;
+            const word_t *rest_param = nullptr;
             if (paramForms->size > 1 && strncmp(get_word(paramForms->cells[paramForms->size - 2])->chars, "..", 2) == 0)
             {
               params = malloc(sizeof(word_t *) * paramForms->size - 2);
