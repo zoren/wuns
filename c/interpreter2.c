@@ -55,7 +55,7 @@ typedef struct form
   };
 } form_t;
 
-#define MAX_FORM_DEPTH 128
+#define MAX_FORM_DEPTH 16
 
 const word_t *make_word(const char *start, const char *end)
 {
@@ -170,11 +170,21 @@ const form_list_t *make_form_list_from_buffer(form_list_buffer_t *buffer)
   return list;
 }
 
+void buffer_stack_free(form_list_buffer_t *buffer)
+{
+  for (int i = 0; i <= MAX_FORM_DEPTH; i++)
+  {
+    const form_t **cells = buffer[i].cells;
+    if (cells == nullptr) break;
+    free(cells);
+  }
+}
+
 const form_t *parse_one(const char **start, const char *end)
 {
   char *cur = (char *)*start;
   assert(cur != nullptr && "expected non-null start");
-  form_list_buffer_t stack[MAX_FORM_DEPTH];
+  form_list_buffer_t stack[MAX_FORM_DEPTH] = {0};
   int depth = -1;
   while (cur < end)
   {
@@ -189,6 +199,7 @@ const form_t *parse_one(const char **start, const char *end)
       if (depth == -1)
       {
         *start = cur;
+        buffer_stack_free(stack);
         return f;
       }
       append_form(&stack[depth], f);
@@ -200,43 +211,40 @@ const form_t *parse_one(const char **start, const char *end)
     else if (c == '[')
     {
       cur++;
-      if (depth == MAX_FORM_DEPTH)
-      {
-        printf("Error: form depth exceeded\n");
-        exit(1);
-      }
+      assert(depth < MAX_FORM_DEPTH && "form depth exceeded");
       depth++;
-      stack[depth].capacity = 8;
       stack[depth].size = 0;
-      stack[depth].cells = malloc(sizeof(form_t *) * stack[depth].capacity);
+      if (stack[depth].cells == nullptr)
+      {
+        stack[depth].capacity = 8;
+        stack[depth].cells = malloc(sizeof(form_t *) * stack[depth].capacity);
+      }
     }
     else if (c == ']')
     {
       cur++;
-      if (depth == -1)
-      {
-        printf("Error: unexpected ']'\n");
-        exit(1);
-      }
+      assert(depth >= 0 && "unexpected ']'");
       const form_list_t *list = make_form_list_from_buffer(&stack[depth]);
       depth--;
       const form_t *f = make_form_list(list);
       if (depth == -1)
       {
         *start = cur;
+        buffer_stack_free(stack);
         return f;
       }
       append_form(&stack[depth], f);
     }
     else
     {
-      printf("Error: unknown character %c\n", c);
-      exit(1);
+      assert(false && "unknown character");
     }
   }
   *start = cur;
+  buffer_stack_free(stack);
   if (depth != -1)
   {
+    // form list not closed
     return make_form_list(make_form_list_from_buffer(&stack[0]));
   }
   return nullptr;
