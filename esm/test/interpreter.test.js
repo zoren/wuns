@@ -39,7 +39,6 @@ const testExp = ({ pe }) => {
     expect(pe('[f64 1.9]')).toBe(1.9)
     expect(pe('[f64 -1.7]')).toBe(-1.7)
 
-    // assert.throws(() => pe('[f64 1E40]'))
     expect(pe('[f64 1e40]')).toBe(1e40)
     expect(pe('[f64 -1e-40]')).toBe(-1e-40)
     expect(pe('[f64 -1e308]')).toBe(-1e308)
@@ -141,7 +140,7 @@ const testExp = ({ pe }) => {
   ]
   x]`),
     ).toBe(5)
-    // expect(pe('[let [x [i32 2] x [intrinsic i32.add x [i32 3]]] x]')).toBe(5)
+    expect(pe('[let [x [i32 2] x [intrinsic i32.add x [i32 3]]] x]')).toBe(5)
 
     expect(pe('[let [x [i32 2] y [i32 5]] y]')).toBe(5)
     expect(pe('[let [x [i32 1] x [i32 2]] x]')).toBe(2)
@@ -304,6 +303,7 @@ const testTop = ({ ptse }) => {
   test('defn', async () => {
     expect(await ptse('[defn f [] [i32 5]] [f]')).toBe(5)
     expect(await ptse('[defn f [] [i32 5]] [defn g [] [f]] [g]')).toBe(5)
+    expect(await ptse('[defn f [x] [intrinsic i32.add x x]] [defn g [y] [f y]] [g [i32 4]]')).toBe(8)
     expect(await ptse('[defn inc [p] [intrinsic i32.add p [i32 1]]] [inc [i32 4]]')).toBe(5)
     expect(await ptse('[defn list [.. elements] elements] [list [i32 1] [i32 2]]')).toStrictEqual([1, 2])
     expect(
