@@ -5,7 +5,7 @@ i2.o: interpreter2.c special_forms.h intrinsics.h
 
 web: i2.o
 	emcc i2.o -o i2.html \
-	-sEXPORTED_FUNCTIONS="['_parse_one_string', '_get_f64', '_get_type', '_parse_eval', '_main']" \
+	-sEXPORTED_FUNCTIONS="['_parse_one_string', '_get_f64', '_get_type', '_parse_eval', '_parse_eval_top_forms', '_main']" \
 	-sEXPORTED_RUNTIME_METHODS="['ccall', 'cwrap']"
 
 shell: interpreter2.c special_forms.h intrinsics.h

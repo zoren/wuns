@@ -572,10 +572,23 @@ typedef struct local_stack
   };
 } local_stack_t;
 
-local_env_t* get_outer_loop(const local_stack_t *stackp) {
+const def_env_t *get_def_env(const local_stack_t *stackp)
+{
+  const local_stack_t *stack = stackp;
+  while (stack->type == ENV_LOCAL)
+  {
+    stack = stack->frame->parent;
+  }
+  return stack->def_env;
+}
+
+local_env_t *get_outer_loop(const local_stack_t *stackp)
+{
   local_stack_t *stack = (local_stack_t *)stackp;
-  while (stack->type == ENV_LOCAL) {
-    if (stack->frame->env->special_form_type == SF_LOOP) return stack->frame->env;
+  while (stack->type == ENV_LOCAL)
+  {
+    if (stack->frame->env->special_form_type == SF_LOOP)
+      return stack->frame->env;
     stack = (local_stack_t *)stack->frame->parent;
   }
   return nullptr;
@@ -658,9 +671,39 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
   const form_list_t *list = form->list;
   assert(list->size > 0 && "empty list");
   const word_t *name = try_get_word(list->cells[0]);
-  assert(name && "form application not implemented");
+  assert(name && "direct form application not implemented");
   const struct special_form *spec = try_get_wuns_special_form(name->chars, name->size);
-  assert(spec && "unknown special form");
+  if (!spec)
+  {
+    rtval_t fn = lookup(env, name);
+    assert(fn.tag == rtval_func && "expected function");
+    const rtfunc_t *func = fn.func;
+    const int arity = func->arity;
+    const int numOfArgs = list->size - 1;
+    assert(numOfArgs == arity && "wrong number of arguments");
+    binding_t *bindings = malloc(sizeof(binding_t) * arity);
+    for (int i = 0; i < numOfArgs; i++)
+    {
+      const word_t *var = func->params[i];
+      const rtval_t val = eval_exp(env, list->cells[i + 1]);
+      bindings[i] = (binding_t){.name = var, .value = val};
+    }
+    const def_env_t *denv = get_def_env(env);
+    const local_stack_t top_env = {.type = ENV_DEF, .def_env = denv};
+    local_env_t new_lenv = {.len = arity, .bindings = bindings, .special_form_type = SF_LET};
+    local_stack_t new_stack = {.type = ENV_LOCAL, .frame = &(local_stack_frame_t){.parent = &top_env, .env = &new_lenv}};
+    form_list_t bodies = func->bodies;
+    if (bodies.size == 0)
+    {
+      free(bindings);
+      return (rtval_t){.tag = rtval_undefined, .i32 = 0};
+    }
+    for (int i = 0; i < bodies.size - 1; i++)
+      eval_exp(&new_stack, bodies.cells[i]);
+    const rtval_t result = eval_exp(&new_stack, bodies.cells[bodies.size - 1]);
+    free(bindings);
+    return result;
+  }
   switch (spec->type)
   {
   case SF_I32:
@@ -865,11 +908,10 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
   case SF_TYPE:
   case SF_IMPORT:
   case SF_EXPORT:
-  {
-    assert(false && "unexpected special form in exp");
+    assert(false && "unexpected top special form in exp");
+  default:
+    assert(false && "unknown special form");
   }
-  }
-  exit(1);
 }
 
 rtval_t eval_top(def_env_t *denv, const form_t *form)
@@ -892,11 +934,53 @@ rtval_t eval_top(def_env_t *denv, const form_t *form)
           {
             assert(list->size == 3 && "def requires exactly two arguments");
             const word_t *var = get_word(list->cells[1]);
+            const word_t *cvar = word_copy(var);
             const rtval_t val = eval_exp(&env, list->cells[2]);
-            def_env_set(denv, var, val);
+            def_env_set(denv, cvar, val);
             return val;
           }
           case SF_DEFN:
+          {
+            assert(list->size >= 4 && "defn requires at least three arguments");
+            const word_t *fname = get_word(list->cells[1]);
+            const form_list_t *paramForms = get_list(list->cells[2]);
+            word_t **params;
+            word_t *rest_param = nullptr;
+            if (paramForms->size > 1 && strncmp(get_word(paramForms->cells[paramForms->size - 2])->chars, "..", 2) == 0)
+            {
+              params = malloc(sizeof(word_t *) * paramForms->size - 2);
+              for (int i = 0; i < paramForms->size - 2; i++)
+              {
+                params[i] = word_copy(get_word(paramForms->cells[i]));
+              }
+              rest_param = word_copy(get_word(paramForms->cells[paramForms->size - 1]));
+            }
+            else
+            {
+              params = malloc(sizeof(word_t *) * paramForms->size);
+              for (int i = 0; i < paramForms->size; i++)
+              {
+                params[i] = word_copy(get_word(paramForms->cells[i]));
+              }
+            }
+            const form_t **bodiesArray = malloc(sizeof(form_t *) * (list->size - 3));
+            for (int i = 3; i < list->size; i++)
+            {
+              bodiesArray[i - 3] = form_copy(list->cells[i]);
+            }
+            const form_list_t bodies = (form_list_t){.size = list->size - 3, .cells = (const form_t **)bodiesArray};
+            rtfunc_t func = (rtfunc_t){
+                .name = word_copy(fname),
+                .arity = paramForms->size,
+                .params = (const word_t **)params,
+                .rest_param = rest_param,
+                .bodies = bodies};
+            rtfunc_t *funcp = malloc(sizeof(rtfunc_t));
+            memcpy(funcp, &func, sizeof(rtfunc_t));
+            rtval_t result = (rtval_t){.tag = rtval_func, .func = funcp};
+            def_env_set(denv, fname, result);
+            return result;
+          }
           case SF_DEFEXPR:
           case SF_DEFMACRO:
           case SF_LOAD:
@@ -908,7 +992,7 @@ rtval_t eval_top(def_env_t *denv, const form_t *form)
           }
 
           default:
-            break;
+            assert(false && "unknown special form");
           }
         }
       }
@@ -969,6 +1053,28 @@ double get_f64(rtval_t *val)
   default:
     assert(false && "expected i32 or f64");
   }
+}
+
+rtval_t *parse_eval_top_forms(const char *start)
+{
+  const int initial_capacity = 128;
+  binding_t *defBindings = malloc(sizeof(binding_t) * initial_capacity);
+  def_env_t denv = (def_env_t){.size = 0, .capacity = initial_capacity, .bindings = defBindings};
+  const char *end = start + strlen(start);
+  const char **cur = &start;
+  rtval_t result = (rtval_t){.tag = rtval_undefined, .i32 = 0};
+  while (start < end)
+  {
+    const form_t *form = parse_one(cur, end);
+    if (!form)
+      break;
+    result = eval_top(&denv, form);
+    form_free((form_t *)form);
+  }
+  free(defBindings);
+  rtval_t *result_ptr = malloc(sizeof(rtval_t));
+  memcpy(result_ptr, &result, sizeof(rtval_t));
+  return result_ptr;
 }
 
 int main(int argc, char **argv)
