@@ -162,7 +162,6 @@ export const getPosition = ({ contentObj, byteOffset }) => {
 
 export const getFormPositionAsString = (formInfo) => {
   if (typeof formInfo === 'string') return formInfo
-  console.log({ formInfo })
   const { row, column } = getPosition(formInfo)
   return `${formInfo.contentObj.contentName}:${row + 1}:${column + 1}`
 }

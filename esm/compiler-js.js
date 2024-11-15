@@ -194,6 +194,8 @@ const expSpecialFormsExp = {
       throw new CompileError(e.message, tail[0])
     }
   },
+  i64: () => { throw new CompileError('i64 not implemented') },
+  f32: () => { throw new CompileError('i64 not implemented') },
   f64: (tail) => {
     if (tail.length !== 1) throw new CompileError('f64 expected one argument')
     const v = +getFormWord(tail[0])
