@@ -14,8 +14,6 @@
 
 [def-extern concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]
 
-[defexpr qlist [.. forms] forms]
-
 [def-extern concat-lists [type-scheme [a] [func [[list [list a]]] [list a]]]]
 
 [defn form-concat [.. list-forms]
