@@ -127,14 +127,16 @@ form_t *form_copy(const form_t *form)
     return (form_t *)make_form_word(word_copy(form->word));
   case T_LIST:
   {
-    form_list_t *list = malloc(sizeof(form_list_t));
-    list->size = form->list->size;
-    form_t **cells = malloc(sizeof(form_t *) * list->size);
-    for (int i = 0; i < list->size; i++)
+    const int size = form->list->size;
+    const form_t **cells = malloc(sizeof(form_t *) * size);
+    for (int i = 0; i < size; i++)
     {
       cells[i] = form_copy(form->list->cells[i]);
     }
-    list->cells = (const form_t **)cells;
+
+    form_list_t *list = malloc(sizeof(form_list_t));
+    list->size = size;
+    list->cells = cells;
     return (form_t *)make_form_list(list);
   }
   }
@@ -160,12 +162,13 @@ void append_form(form_list_buffer_t *buffer, const form_t *form)
 
 const form_list_t *make_form_list_from_buffer(form_list_buffer_t *buffer)
 {
-  form_list_t *list = malloc(sizeof(form_list_t));
   ssize_t size = buffer->size;
-  list->size = size;
   size_t byte_size = sizeof(form_t *) * size;
   const form_t **cells = malloc(byte_size);
   memcpy(cells, buffer->cells, byte_size);
+
+  form_list_t *list = malloc(sizeof(form_list_t));
+  list->size = size;
   list->cells = cells;
   return list;
 }
@@ -193,6 +196,7 @@ const form_t *parse_one(const char **start, const char *end)
     {
       const char *word_start = cur;
       cur++;
+      // todo let's put a fixed max length on words
       while (is_word_char(*cur))
         cur++;
       const form_t *f = make_form_word(make_word(word_start, (const char *)cur));
