@@ -64,11 +64,11 @@ typedef enum
 typedef struct
 {
   size_t size;
-  const struct form **cells;
+  const struct form *cells[];
 } form_list_t;
 
-void form_list_free(const form_list_t *p) {
-  free((void *)p->cells);
+void form_list_free(const form_list_t *p)
+{
   free((void *)p);
 }
 
@@ -128,19 +128,29 @@ form_t *form_copy(const form_t *form)
   case T_LIST:
   {
     const int size = form->list->size;
-    const form_t **cells = malloc(sizeof(form_t *) * size);
+    form_list_t *list = malloc(sizeof(form_list_t) + sizeof(form_t *) * size);
+    list->size = size;
     for (int i = 0; i < size; i++)
     {
-      cells[i] = form_copy(form->list->cells[i]);
+      list->cells[i] = form_copy(form->list->cells[i]);
     }
-
-    form_list_t *list = malloc(sizeof(form_list_t));
-    list->size = size;
-    list->cells = cells;
     return (form_t *)make_form_list(list);
   }
   }
   assert(false && "unreachable");
+}
+
+form_list_t *form_list_slice_copy(const form_list_t *list, size_t start, size_t end)
+{
+  assert(start <= end && end <= list->size && "invalid slice");
+  const size_t size = end - start;
+  form_list_t *new_list = malloc(sizeof(form_list_t) + sizeof(form_t *) * size);
+  new_list->size = size;
+  for (size_t i = 0; i < size; i++)
+  {
+    new_list->cells[i] = form_copy(list->cells[start + i]);
+  }
+  return new_list;
 }
 
 typedef struct form_list_buffer
@@ -164,12 +174,9 @@ const form_list_t *make_form_list_from_buffer(form_list_buffer_t *buffer)
 {
   size_t size = buffer->size;
   size_t byte_size = sizeof(form_t *) * size;
-  const form_t **cells = malloc(byte_size);
-  memcpy(cells, buffer->elements, byte_size);
-
   form_list_t *list = malloc(sizeof(form_list_t));
   list->size = size;
-  list->cells = cells;
+  memcpy(list->cells, buffer->elements, byte_size);
   return list;
 }
 
@@ -302,7 +309,7 @@ typedef struct rtfunc
   const int arity;
   const word_t **params;
   const word_t *rest_param;
-  const form_list_t bodies;
+  const form_list_t *bodies;
 } rtfunc_t;
 
 typedef struct rtval
@@ -705,15 +712,15 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
     const local_stack_t top_env = {.type = ENV_DEF, .def_env = denv};
     local_env_t new_lenv = {.len = arity, .bindings = bindings, .special_form_type = SF_LET};
     local_stack_t new_stack = {.type = ENV_LOCAL, .frame = &(local_stack_frame_t){.parent = &top_env, .env = &new_lenv}};
-    form_list_t bodies = func->bodies;
-    if (bodies.size == 0)
+    const form_list_t *bodies = func->bodies;
+    if (bodies->size == 0)
     {
       free(bindings);
       return (rtval_t){.tag = rtval_undefined, .i32 = 0};
     }
-    for (size_t i = 0; i < bodies.size - 1; i++)
-      eval_exp(&new_stack, bodies.cells[i]);
-    const rtval_t result = eval_exp(&new_stack, bodies.cells[bodies.size - 1]);
+    for (size_t i = 0; i < bodies->size - 1; i++)
+      eval_exp(&new_stack, bodies->cells[i]);
+    const rtval_t result = eval_exp(&new_stack, bodies->cells[bodies->size - 1]);
     free(bindings);
     return result;
   }
@@ -814,14 +821,13 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
     const form_list_t *bindingForms = get_list(list->cells[1]);
     assert(bindingForms->size % 2 == 0 && "let bindings must be a list of even length");
     const int number_of_bindings = bindingForms->size / 2;
-    const form_t **binding_forms = bindingForms->cells;
     binding_t *bindingVals = number_of_bindings == 0 ? NULL : malloc(sizeof(struct binding) * number_of_bindings);
     local_env_t new_lenv = {.len = 0, .bindings = bindingVals, .special_form_type = SF_LET};
     local_stack_t new_stack = {.type = ENV_LOCAL, .frame = &(local_stack_frame_t){.parent = env, .env = &new_lenv}};
     for (int i = 0; i < number_of_bindings; i++)
     {
-      const word_t *var = get_word(binding_forms[i * 2]);
-      const rtval_t val = eval_exp(&new_stack, binding_forms[i * 2 + 1]);
+      const word_t *var = get_word(bindingForms->cells[i * 2]);
+      const rtval_t val = eval_exp(&new_stack, bindingForms->cells[i * 2 + 1]);
       bindingVals[i] = (binding_t){.name = var, .value = val};
       new_lenv.len++;
     }
@@ -839,14 +845,13 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
     const form_list_t *bindingForms = get_list(list->cells[1]);
     assert(bindingForms->size % 2 == 0 && "let bindings must be a list of even length");
     const int number_of_bindings = bindingForms->size / 2;
-    const form_t **binding_forms = bindingForms->cells;
     binding_t *bindingVals = number_of_bindings == 0 ? NULL : malloc(sizeof(struct binding) * number_of_bindings);
     local_env_t new_lenv = {.len = 0, .bindings = bindingVals, .special_form_type = SF_LOOP};
     local_stack_t new_stack = {.type = ENV_LOCAL, .frame = &(local_stack_frame_t){.parent = env, .env = &new_lenv}};
     for (int i = 0; i < number_of_bindings; i++)
     {
-      const word_t *var = get_word(binding_forms[i * 2]);
-      const rtval_t val = eval_exp(&new_stack, binding_forms[i * 2 + 1]);
+      const word_t *var = get_word(bindingForms->cells[i * 2]);
+      const rtval_t val = eval_exp(&new_stack, bindingForms->cells[i * 2 + 1]);
       bindingVals[i] = (binding_t){.name = var, .value = val};
       new_lenv.len++;
     }
@@ -976,12 +981,7 @@ rtval_t eval_top(def_env_t *denv, const form_t *form)
                 params[i] = word_copy(get_word(paramForms->cells[i]));
               }
             }
-            const form_t **bodiesArray = malloc(sizeof(form_t *) * (list->size - 3));
-            for (size_t i = 3; i < list->size; i++)
-            {
-              bodiesArray[i - 3] = form_copy(list->cells[i]);
-            }
-            const form_list_t bodies = (form_list_t){.size = list->size - 3, .cells = (const form_t **)bodiesArray};
+            const form_list_t *bodies = form_list_slice_copy(list, 3, list->size);
             rtfunc_t func = (rtfunc_t){
                 .name = word_copy(fname),
                 .arity = paramForms->size,
