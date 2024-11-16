@@ -1103,6 +1103,12 @@ const char *get_type(rtval_t *val)
     return "f64";
   case rtval_undefined:
     return "undefined";
+  case rtval_continue:
+    return "continue";
+  case rtval_func:
+    return "func";
+  case rtval_list:
+    return "list";
   default:
     return "unknown";
   }
@@ -1121,6 +1127,30 @@ double get_f64(rtval_t *val)
 
   default:
     assert(false && "expected i32 or f64");
+  }
+}
+
+int32_t rt_get_size(rtval_t *val)
+{
+  switch (val->tag)
+  {
+  case rtval_list:
+    return val->list->size;
+    break;
+  default:
+    assert(false && "expected list");
+  }
+}
+
+rtval_t *rt_get_list(rtval_t *val, int index)
+{
+  switch (val->tag)
+  {
+  case rtval_list:
+    return val->list->values[index];
+    break;
+  default:
+    assert(false && "expected list");
   }
 }
 

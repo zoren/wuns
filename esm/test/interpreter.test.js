@@ -307,7 +307,8 @@ const testTop = ({ ptse }) => {
     expect(await ptse('[defn f [] [i32 5]] [defn g [] [f]] [g]')).toBe(5)
     expect(await ptse('[defn f [x] [intrinsic i32.add x x]] [defn g [y] [f y]] [g [i32 4]]')).toBe(8)
     expect(await ptse('[defn inc [p] [intrinsic i32.add p [i32 1]]] [inc [i32 4]]')).toBe(5)
-    // expect(await ptse('[defn list [.. elements] elements] [list [i32 1] [i32 2]]')).toStrictEqual([1, 2])
+    expect(await ptse('[defn list [.. elements] elements] [list [i32 1] [i32 2]]')).toStrictEqual([1, 2])
+    expect(await ptse('[defn list [.. elements] elements] [list [i32 1] [list [i32 2] [i32 3]]]')).toStrictEqual([1, [2, 3]])
     expect(
       await ptse(`
       [defn gauss-direct [n]
