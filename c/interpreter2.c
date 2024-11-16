@@ -191,7 +191,7 @@ const form_t *parse_one(const char **start, const char *end)
     {
       const char *word_start = cur;
       cur++;
-      int word_len = 1;
+      size_t word_len = 1;
       // todo let's put a fixed max length on words
       while (is_word_char(*cur))
       {
@@ -199,7 +199,7 @@ const form_t *parse_one(const char **start, const char *end)
         word_len++;
         assert(word_len < MAX_WORD_SIZE && "word size exceeded");
       }
-      const form_t *f = make_form_word(word_make(word_start, cur - word_start));
+      const form_t *f = make_form_word(word_make(word_start, word_len));
       if (depth == -1)
       {
         *start = cur;
