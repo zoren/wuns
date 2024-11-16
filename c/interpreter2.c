@@ -142,7 +142,7 @@ typedef struct form_list_buffer
 {
   ssize_t capacity;
   ssize_t size;
-  const form_t **cells;
+  const form_t **elements;
 } form_list_buffer_t;
 
 void append_form(form_list_buffer_t *buffer, const form_t *form)
@@ -150,9 +150,9 @@ void append_form(form_list_buffer_t *buffer, const form_t *form)
   if (buffer->size == buffer->capacity)
   {
     buffer->capacity *= 2;
-    buffer->cells = realloc(buffer->cells, sizeof(form_t *) * buffer->capacity);
+    buffer->elements = realloc(buffer->elements, sizeof(form_t *) * buffer->capacity);
   }
-  buffer->cells[buffer->size++] = form;
+  buffer->elements[buffer->size++] = form;
 }
 
 const form_list_t *make_form_list_from_buffer(form_list_buffer_t *buffer)
@@ -160,7 +160,7 @@ const form_list_t *make_form_list_from_buffer(form_list_buffer_t *buffer)
   ssize_t size = buffer->size;
   size_t byte_size = sizeof(form_t *) * size;
   const form_t **cells = malloc(byte_size);
-  memcpy(cells, buffer->cells, byte_size);
+  memcpy(cells, buffer->elements, byte_size);
 
   form_list_t *list = malloc(sizeof(form_list_t));
   list->size = size;
@@ -174,10 +174,10 @@ void buffer_stack_free(form_list_buffer_t *buffer)
 {
   for (int i = 0; i <= MAX_FORM_DEPTH; i++)
   {
-    const form_t **cells = buffer[i].cells;
-    if (cells == nullptr)
+    const form_t **elems = buffer[i].elements;
+    if (elems == nullptr)
       break;
-    free(cells);
+    free(elems);
   }
 }
 
@@ -221,10 +221,10 @@ const form_t *parse_one(const char **start, const char *end)
       assert(depth < MAX_FORM_DEPTH && "form depth exceeded");
       depth++;
       stack[depth].size = 0;
-      if (stack[depth].cells == nullptr)
+      if (stack[depth].elements == nullptr)
       {
         stack[depth].capacity = 8;
-        stack[depth].cells = malloc(sizeof(form_t *) * stack[depth].capacity);
+        stack[depth].elements = malloc(sizeof(form_t *) * stack[depth].capacity);
       }
     }
     else if (c == ']')
