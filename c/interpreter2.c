@@ -224,9 +224,8 @@ const form_t *parse_one(const char **start, const char *end)
     {
       cur++;
       assert(depth >= 0 && "unexpected ']'");
-      const form_list_t *list = make_form_list_from_buffer(&stack[depth]);
+      cur_form = form_list_alloc(make_form_list_from_buffer(&stack[depth]));
       depth--;
-      cur_form = form_list_alloc(list);
       if (depth == -1)
         break;
       append_form(&stack[depth], cur_form);
@@ -237,12 +236,13 @@ const form_t *parse_one(const char **start, const char *end)
     }
   }
   *start = cur;
-  if (depth != -1)
+  while (depth > -1)
   {
-    // form list not closed
-    const form_list_t *list = make_form_list_from_buffer(&stack[0]);
-    buffer_stack_free(stack);
-    return form_list_alloc(list);
+    cur_form = form_list_alloc(make_form_list_from_buffer(&stack[depth]));
+    depth--;
+    if (depth == -1)
+      break;
+    append_form(&stack[depth], cur_form);
   }
   buffer_stack_free(stack);
   return cur_form;
