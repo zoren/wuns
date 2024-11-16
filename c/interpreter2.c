@@ -61,11 +61,6 @@ typedef struct
   const struct form *cells[];
 } form_list_t;
 
-void form_list_free(const form_list_t *p)
-{
-  free((void *)p);
-}
-
 typedef struct form
 {
   enum
@@ -110,7 +105,7 @@ void form_free(const form_t *form)
     {
       form_free((form_t *)list->cells[i]);
     }
-    form_list_free(list);
+    free((void *)list);
     break;
   }
   }
