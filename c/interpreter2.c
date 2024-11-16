@@ -314,12 +314,6 @@ typedef struct rtfunc
   const form_list_t *bodies;
 } rtfunc_t;
 
-typedef struct rtval_list
-{
-  size_t size;
-  struct rtval *values[];
-} rtval_list_t;
-
 typedef struct rtval
 {
   rtval_tag tag;
@@ -331,6 +325,12 @@ typedef struct rtval
     struct rtval_list *list;
   };
 } rtval_t;
+
+typedef struct rtval_list
+{
+  size_t size;
+  struct rtval values[];
+} rtval_list_t;
 
 void print_rtval(const rtval_t *val)
 {
@@ -351,11 +351,11 @@ void print_rtval(const rtval_t *val)
       return;
     }
     printf("[");
-    print_rtval(list->values[0]);
+    print_rtval(&list->values[0]);
     for (size_t i = 1; i < list->size; i++)
     {
       printf(" ");
-      print_rtval(list->values[i]);
+      print_rtval(&list->values[i]);
     }
     printf("]");
     break;
@@ -743,16 +743,10 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
     if (func->rest_param)
     {
       int numRest = numOfArgs - arity;
-      rtval_list_t *rest = malloc(sizeof(rtval_list_t) + sizeof(rtval_t *) * numRest);
+      rtval_list_t *rest = malloc(sizeof(rtval_list_t) + sizeof(rtval_t) * numRest);
       rest->size = numRest;
       for (int i = 0; i < numRest; i++)
-      {
-        rtval_t v = eval_exp(env, list->cells[arity + i + 1]);
-        // heap alloc
-        rtval_t *v2 = malloc(sizeof(rtval_t));
-        *v2 = v;
-        rest->values[i] = v2;
-      }
+        rest->values[i] = eval_exp(env, list->cells[arity + i + 1]);
       bindings[arity] = (binding_t){.name = func->rest_param, .value = (rtval_t){.tag = rtval_list, .list = rest}};
     }
     else
@@ -1136,7 +1130,6 @@ int32_t rt_get_size(rtval_t *val)
   {
   case rtval_list:
     return val->list->size;
-    break;
   default:
     assert(false && "expected list");
   }
@@ -1147,8 +1140,9 @@ rtval_t *rt_get_list(rtval_t *val, int index)
   switch (val->tag)
   {
   case rtval_list:
-    return val->list->values[index];
-    break;
+    assert(index >= 0 && "index out of bounds");
+    assert(index < val->list->size && "index out of bounds");
+    return &val->list->values[index];
   default:
     assert(false && "expected list");
   }
