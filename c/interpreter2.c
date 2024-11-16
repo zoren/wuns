@@ -1134,7 +1134,7 @@ rtval_t *rt_get_list(rtval_t *val, int index)
   {
   case rtval_list:
     assert(index >= 0 && "index out of bounds");
-    assert(index < val->list->size && "index out of bounds");
+    assert(index < (int)val->list->size && "index out of bounds");
     return &val->list->values[index];
   default:
     assert(false && "expected list");
