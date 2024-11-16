@@ -298,9 +298,11 @@ typedef enum runtime_value_tag
 {
   rtval_i32,
   rtval_f64,
+  rtval_func,
+  rtval_list,
+  // pseudo-values not meant to be returned
   rtval_undefined,
   rtval_continue,
-  rtval_func,
 } rtval_tag;
 
 typedef struct rtfunc
@@ -312,6 +314,12 @@ typedef struct rtfunc
   const form_list_t *bodies;
 } rtfunc_t;
 
+typedef struct rtval_list
+{
+  size_t size;
+  struct rtval *values[];
+} rtval_list_t;
+
 typedef struct rtval
 {
   rtval_tag tag;
@@ -320,6 +328,7 @@ typedef struct rtval
     int32_t i32;
     double f64;
     rtfunc_t *func;
+    struct rtval_list *list;
   };
 } rtval_t;
 
@@ -333,6 +342,24 @@ void print_rtval(const rtval_t *val)
   case rtval_f64:
     printf("%f", val->f64);
     break;
+  case rtval_list:
+  {
+    rtval_list_t *list = val->list;
+    if (list->size == 0)
+    {
+      printf("[]");
+      return;
+    }
+    printf("[");
+    print_rtval(list->values[0]);
+    for (size_t i = 1; i < list->size; i++)
+    {
+      printf(" ");
+      print_rtval(list->values[i]);
+    }
+    printf("]");
+    break;
+  }
   case rtval_undefined:
     printf("*undefined*");
     break;
@@ -704,17 +731,37 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
     const rtfunc_t *func = fn.func;
     const int arity = func->arity;
     const int numOfArgs = list->size - 1;
-    assert(numOfArgs == arity && "wrong number of arguments");
-    binding_t *bindings = malloc(sizeof(binding_t) * arity);
-    for (int i = 0; i < numOfArgs; i++)
+    assert(numOfArgs >= arity && "too few arguments");
+    const int numBindings = func->rest_param ? arity + 1 : arity;
+    binding_t *bindings = malloc(sizeof(binding_t) * numBindings);
+    for (int i = 0; i < arity; i++)
     {
       const word_t *var = func->params[i];
       const rtval_t val = eval_exp(env, list->cells[i + 1]);
       bindings[i] = (binding_t){.name = var, .value = val};
     }
+    if (func->rest_param)
+    {
+      int numRest = numOfArgs - arity;
+      rtval_list_t *rest = malloc(sizeof(rtval_list_t) + sizeof(rtval_t *) * numRest);
+      rest->size = numRest;
+      for (int i = 0; i < numRest; i++)
+      {
+        rtval_t v = eval_exp(env, list->cells[arity + i + 1]);
+        // heap alloc
+        rtval_t *v2 = malloc(sizeof(rtval_t));
+        *v2 = v;
+        rest->values[i] = v2;
+      }
+      bindings[arity] = (binding_t){.name = func->rest_param, .value = (rtval_t){.tag = rtval_list, .list = rest}};
+    }
+    else
+    {
+      assert(numOfArgs == arity && "too many arguments");
+    }
     const def_env_t *denv = get_def_env(env);
     const local_stack_t top_env = {.type = ENV_DEF, .def_env = denv};
-    local_env_t new_lenv = {.len = arity, .bindings = bindings, .special_form_type = SF_LET};
+    local_env_t new_lenv = {.len = numBindings, .bindings = bindings, .special_form_type = SF_LET};
     local_stack_t new_stack = {.type = ENV_LOCAL, .frame = &(local_stack_frame_t){.parent = &top_env, .env = &new_lenv}};
     const form_list_t *bodies = func->bodies;
     if (bodies->size == 0)
@@ -970,10 +1017,12 @@ rtval_t eval_top(def_env_t *denv, const form_t *form)
             const form_list_t *paramForms = get_list(list->cells[2]);
             const word_t **params;
             const word_t *rest_param = nullptr;
+            int arity;
             if (paramForms->size > 1 && strncmp(get_word(paramForms->cells[paramForms->size - 2])->chars, "..", 2) == 0)
             {
-              params = malloc(sizeof(word_t *) * paramForms->size - 2);
-              for (size_t i = 0; i < paramForms->size - 2; i++)
+              arity = paramForms->size - 2;
+              params = malloc(sizeof(word_t *) * arity);
+              for (int i = 0; i < arity; i++)
               {
                 params[i] = word_copy(get_word(paramForms->cells[i]));
               }
@@ -981,8 +1030,9 @@ rtval_t eval_top(def_env_t *denv, const form_t *form)
             }
             else
             {
-              params = malloc(sizeof(word_t *) * paramForms->size);
-              for (size_t i = 0; i < paramForms->size; i++)
+              arity = paramForms->size;
+              params = malloc(sizeof(word_t *) * arity);
+              for (int i = 0; i < arity; i++)
               {
                 params[i] = word_copy(get_word(paramForms->cells[i]));
               }
@@ -990,7 +1040,7 @@ rtval_t eval_top(def_env_t *denv, const form_t *form)
             const form_list_t *bodies = form_list_slice_copy(list, 3, list->size);
             rtfunc_t func = (rtfunc_t){
                 .name = word_copy(fname),
-                .arity = paramForms->size,
+                .arity = arity,
                 .params = (const word_t **)params,
                 .rest_param = rest_param,
                 .bodies = bodies};
