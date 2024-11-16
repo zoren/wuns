@@ -12,6 +12,7 @@ struct special_form;
 %%
 i32, SF_I32
 f64, SF_F64
+word, SF_WORD
 intrinsic, SF_INTRINSIC
 if, SF_IF
 do, SF_DO
@@ -21,6 +22,7 @@ type-anno, SF_TYPE_ANNO
 loop, SF_LOOP
 continue, SF_CONTINUE
 switch, SF_SWITCH
+func, SF_FUNC
 def, SF_DEF
 defn, SF_DEFN
 defexpr, SF_DEFEXPR

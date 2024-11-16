@@ -397,6 +397,7 @@ typedef enum
 {
   SF_I32,
   SF_F64,
+  SF_WORD,
   SF_INTRINSIC,
   SF_IF,
   SF_DO,
@@ -406,6 +407,7 @@ typedef enum
   SF_LOOP,
   SF_CONTINUE,
   SF_SWITCH,
+  SF_FUNC,
   SF_DEF,
   SF_DEFN,
   SF_DEFEXPR,
@@ -627,6 +629,8 @@ void def_env_set(def_env_t *denv, const word_t *word, rtval_t value)
   {
     if (word_eq(denv->bindings[i].name, word))
     {
+      // here we need to free the old value, we leak memory here
+      // but it could be referenced elsewhere
       denv->bindings[i].value = value;
       return;
     }
@@ -915,6 +919,8 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
   }
   case SF_LETFN:
   case SF_TYPE_ANNO:
+  case SF_FUNC:
+  case SF_WORD:
   {
     assert(false && "not implemented");
   }
