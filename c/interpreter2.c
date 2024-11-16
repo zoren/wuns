@@ -75,7 +75,8 @@ typedef struct form
   };
 } form_t;
 
-const form_t *form_alloc(form_t f){
+const form_t *form_alloc(form_t f)
+{
   form_t *form = malloc(sizeof(form_t));
   *form = f;
   return form;
@@ -102,9 +103,7 @@ void form_free(const form_t *form)
   {
     const form_list_t *list = form->list;
     for (size_t i = 0; i < list->size; i++)
-    {
       form_free((form_t *)list->cells[i]);
-    }
     free((void *)list);
     break;
   }
