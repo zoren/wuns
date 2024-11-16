@@ -183,6 +183,7 @@ const form_t *parse_one(const char **start, const char *end)
   assert(cur != nullptr && "expected non-null start");
   form_list_buffer_t stack[MAX_FORM_DEPTH] = {0};
   int depth = -1;
+  const form_t *cur_form = nullptr;
   while (cur < end)
   {
     const char c = *cur;
@@ -198,14 +199,10 @@ const form_t *parse_one(const char **start, const char *end)
         word_len++;
         assert(word_len < MAX_WORD_SIZE && "word size exceeded");
       }
-      const form_t *f = form_word_alloc(word_make(word_start, word_len));
+      cur_form = form_word_alloc(word_make(word_start, word_len));
       if (depth == -1)
-      {
-        *start = cur;
-        buffer_stack_free(stack);
-        return f;
-      }
-      append_form(&stack[depth], f);
+        break;
+      append_form(&stack[depth], cur_form);
     }
     else if (is_whitespace(c))
     {
@@ -229,14 +226,10 @@ const form_t *parse_one(const char **start, const char *end)
       assert(depth >= 0 && "unexpected ']'");
       const form_list_t *list = make_form_list_from_buffer(&stack[depth]);
       depth--;
-      const form_t *f = form_list_alloc(list);
+      cur_form = form_list_alloc(list);
       if (depth == -1)
-      {
-        *start = cur;
-        buffer_stack_free(stack);
-        return f;
-      }
-      append_form(&stack[depth], f);
+        break;
+      append_form(&stack[depth], cur_form);
     }
     else
     {
@@ -244,13 +237,15 @@ const form_t *parse_one(const char **start, const char *end)
     }
   }
   *start = cur;
-  buffer_stack_free(stack);
   if (depth != -1)
   {
     // form list not closed
-    return form_list_alloc(make_form_list_from_buffer(&stack[0]));
+    const form_list_t *list = make_form_list_from_buffer(&stack[0]);
+    buffer_stack_free(stack);
+    return form_list_alloc(list);
   }
-  return nullptr;
+  buffer_stack_free(stack);
+  return cur_form;
 }
 
 void print_form(const form_t *form)
