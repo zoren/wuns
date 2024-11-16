@@ -27,25 +27,32 @@ bool is_word_char(char c)
 
 typedef long ssize_t;
 
-typedef struct word
+typedef struct
 {
-  ssize_t size;
-  const char *chars;
+  size_t size;
+  char chars[];
 } word_t;
+
+const word_t* word_make(const char *start, const size_t size) {
+  word_t *word = malloc(sizeof(word_t) + size + 1);
+  word->size = size;
+  memcpy(word->chars, start, size);
+  word->chars[size] = '\0';
+  return (const word_t *)word;
+}
 
 const word_t *make_word(const char *start, const char *end)
 {
   const ssize_t size = end - start;
   assert(size >= 0 && "expected positive size");
   assert(size != 0 && "expected non-empty word");
-  char *chars = malloc(size + 1);
-  memcpy(chars, start, size);
-  chars[size] = '\0';
 
-  word_t *word = malloc(sizeof(word_t));
-  word->size = size;
-  word->chars = chars;
-  return (const word_t *)word;
+  return word_make(start, size);
+}
+
+const word_t *word_copy(const word_t *word)
+{
+  return word_make(word->chars, word->size);
 }
 
 bool word_eq(const word_t *a, const word_t *b)
@@ -55,26 +62,13 @@ bool word_eq(const word_t *a, const word_t *b)
   return memcmp(a->chars, b->chars, a->size) == 0;
 }
 
-const word_t *word_copy(const word_t *word)
-{
-  const ssize_t size = word->size;
-  char *chars = malloc(size + 1);
-  memcpy(chars, word->chars, size);
-  chars[size] = '\0';
-
-  word_t *cword = malloc(sizeof(word_t));
-  cword->size = size;
-  cword->chars = chars;
-  return (const word_t *)cword;
-}
-
-typedef enum form_type
+typedef enum
 {
   T_WORD,
   T_LIST
 } form_type_t;
 
-typedef struct form_list
+typedef struct
 {
   ssize_t size;
   const struct form **cells;
@@ -111,7 +105,6 @@ void form_free(const form_t *form)
   switch (form->type)
   {
   case T_WORD:
-    free((void *)form->word->chars);
     free((void *)form->word);
     break;
   case T_LIST:
