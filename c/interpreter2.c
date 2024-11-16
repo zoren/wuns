@@ -174,7 +174,7 @@ const form_list_t *make_form_list_from_buffer(form_list_buffer_t *buffer)
 {
   size_t size = buffer->size;
   size_t byte_size = sizeof(form_t *) * size;
-  form_list_t *list = malloc(sizeof(form_list_t));
+  form_list_t *list = malloc(sizeof(form_list_t) + byte_size);
   list->size = size;
   memcpy(list->cells, buffer->elements, byte_size);
   return list;
