@@ -263,18 +263,15 @@
     [none]
     [some a]]]
 
-[def none option/none]
-[def some option/some]
-
 [defn try-get-word [form]
   [match form
-    [form/word w] [some w]
-    [form/list l] [none]]]
+    [form/word w] [option/some w]
+    [form/list l] [option/none]]]
 
 [defn try-get-list [form]
   [match form
-    [form/word w] [none]
-    [form/list l] [some l]]]
+    [form/word w] [option/none]
+    [form/list l] [option/some l]]]
 
 [todo if-let could take a pattern as argument instead of a word]
 
@@ -416,8 +413,8 @@
 
 [defn try-get [m k]
   [if [has m k]
-    [some [get m k]]
-    [none]]]
+    [option/some [get m k]]
+    [option/none]]]
 
 [defmacro try-getq [m w]
   [flist [quote try-get] m [mk-word w]]]
@@ -494,16 +491,16 @@
 
 [defn try-get-syntax-node-rec [form]
   [if-let [node [try-get-syntax-node form]]
-    [some node]
+    [option/some node]
     [match form
-      [form/word w] [none]
+      [form/word w] [option/none]
       [form/list l]
       [loop [i 0]
         [if [lt-s i [size l]]
           [if-let [node [try-get-syntax-node-rec [at l i]]]
-            [some node]
+            [option/some node]
             [continue i [inc i]]]
-          [none]]]]]]
+          [option/none]]]]]]
 
 [defn log-location [form]
   [if-let [node [try-get-syntax-node-rec form]]

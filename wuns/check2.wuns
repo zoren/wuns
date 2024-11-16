@@ -66,10 +66,10 @@
 [defn type-func [params opt-rest-param result]
   [ctype/inst [inst-type/func [func-type params opt-rest-param result [function-kind/func]]]]]
 
-[defn type-func-no-rest [params result] [type-func params [none] result]]
+[defn type-func-no-rest [params result] [type-func params [option/none] result]]
 
 [defn type-ctor [params result]
-  [ctype/inst [inst-type/func [func-type params [none] result [function-kind/ctor]]]]]
+  [ctype/inst [inst-type/func [func-type params [option/none] result [function-kind/ctor]]]]]
 
 [defn get-type-var-kind [type-var]
   [atom-get [type-var/kind type-var]]]
@@ -240,9 +240,9 @@
     [if [lt-s i [size assoc-list]]
       [let [p [at assoc-list i]]
         [if [is-identical var [pair/fst p]]
-          [some [pair/snd p]]
+          [option/some [pair/snd p]]
           [try-get-assoc-identical-go [inc i]]]]
-      [none]]]
+      [option/none]]]
     0]]
 
 [defn copy-type [subst-map t]
@@ -262,8 +262,8 @@
           [func-type
             [list-map param [func-type/params ft] [copy-type subst-map param]]
             [if-let [rest [func-type/rest-param-opt ft]]
-              [some [copy-type subst-map rest]]
-              [none]]
+              [option/some [copy-type subst-map rest]]
+              [option/none]]
             [copy-type subst-map [func-type/result ft]]
             [func-type/kind ft]]]]
 
@@ -308,8 +308,8 @@
       [type-func
         [list-map param reg-params [go param]]
         [if-let [rest-param opt-rest-param]
-          [some [go rest-param]]
-          [none]]
+          [option/some [go rest-param]]
+          [option/none]]
         [go result]]]]
     outer-syntax-type]]
 
@@ -378,7 +378,7 @@
 
 [defn try-get-var-type [gctx local-ctx var-name]
   [if-let [ltype [try-get-local-var-type local-ctx var-name]]
-    [some ltype]
+    [option/some ltype]
     [try-get [check-context/def-var-types gctx] var-name]]]
 
 [defn unify-report [gctx t1 t2 bst]
@@ -495,8 +495,8 @@
               [if-let [rest-param [bfunc/rest-param func]]
                 [let [tv [if takes-form-params type-form [generate-fresh-type-var gctx level-1]]]
                   [set-kv-map param-ctx [syntax-word/word rest-param] [mk-empty-type-scheme [type-list tv]]]
-                  [some tv]]
-                [none]]
+                  [option/some tv]]
+                [option/none]]
               return-type [go-forms level-1 func-ctx [bfunc/body func]]]
           [unify-report gctx
             gen-func-type

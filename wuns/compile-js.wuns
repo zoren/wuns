@@ -103,7 +103,7 @@
 
 [defn iife [stmt]
   [js-exp/call
-    [js-exp/arrow-stmt [list] [none] stmt]
+    [js-exp/arrow-stmt [list] [option/none] stmt]
     [list]]]
 
 [defn mk-extern [ws]
@@ -136,7 +136,9 @@
         [js-name [syntax-word/word [bfunc/name f]]
          params [bfunc/parameters f]
          js-params [list-map p params [syntax-word/word p]]
-         js-opt-rest-param [if-let [rp [bfunc/rest-param f]] [some [syntax-word/word rp]] [none]]
+         js-opt-rest-param [if-let [rp [bfunc/rest-param f]]
+                              [option/some [syntax-word/word rp]]
+                              [option/none]]
          body [bfunc/body f]]
         [js-exp/arrow-stmt js-params js-opt-rest-param [cstmt-do true body]]]]
     [func cexp [bform]
@@ -230,7 +232,7 @@
                           tag
                           [js-exp/arrow-exp
                             params
-                            [none]
+                            [option/none]
                             [js-exp/paren
                               [js-exp/object
                                 [concat
@@ -247,7 +249,7 @@
                             js-type-name
                             [js-exp/arrow-exp
                               field-names
-                              [none]
+                              [option/none]
                               [js-exp/paren
                                 [js-exp/object
                                   [list-map field-name field-names
@@ -259,7 +261,7 @@
                             [concat-words type-name-prefix field-name]
                             [js-exp/arrow-exp
                               [list [word record]]
-                              [none]
+                              [option/none]
                               [js-exp/subscript
                                 [js-exp/var [word record]]
                                 [js-exp/string field-name]]]]]]]

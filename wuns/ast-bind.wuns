@@ -174,11 +174,11 @@
 
 [defn try-get-local [lstack w]
   [match lstack
-    [local-stack/empty] [none]
+    [local-stack/empty] [option/none]
     [local-stack/frame outer lctx]
       [match [try-get [local-context/vars lctx] w]
         [option/none] [try-get-local outer w]
-        [option/some kind] [some kind]]]]
+        [option/some kind] [option/some kind]]]]
 
 [type record-desc []
   [record
@@ -214,11 +214,11 @@
 
 [defn builtin-type-arity-ok [type-name n-of-type-args]
   [switch type-name
-    [[word tuple]] [some true]
-    [[word i32] [word f64] [word word]] [some [eq n-of-type-args 0]]
-    [[word list]] [some [eq n-of-type-args 1]]
-    [[word memory]] [some [or [eq n-of-type-args 1] [eq n-of-type-args 2]]]
-    [none]]]
+    [[word tuple]] [option/some true]
+    [[word i32] [word f64] [word word]] [option/some [eq n-of-type-args 0]]
+    [[word list]] [option/some [eq n-of-type-args 1]]
+    [[word memory]] [option/some [or [eq n-of-type-args 1] [eq n-of-type-args 2]]]
+    [option/none]]]
 
 [defn is-reserved-type-name [type-name]
   [switch type-name
@@ -241,12 +241,12 @@
 
 [defn try-get-enclosing-loop-context [lstack]
   [match lstack
-    [local-stack/empty] [none]
+    [local-stack/empty] [option/none]
 
     [local-stack/frame outer lctx]
     [match [local-context/kind lctx]
-      [local-context-kind/loop] [some lctx]
-      [local-context-kind/func] [none]
+      [local-context-kind/loop] [option/some lctx]
+      [local-context-kind/func] [option/none]
 
       [try-get-enclosing-loop-context outer]]]]
 
@@ -349,10 +349,10 @@
      try-get-word-report
      [func gw [form]
       [match form
-        [form/word w] [some w]
+        [form/word w] [option/some w]
         [do
           [push-error form [quote [expected word]]]
-          [none]]]]
+          [option/none]]]]
      get-word
      [func gw [form]
       [if-let [w [try-get-word-report form]]
@@ -362,7 +362,7 @@
      [func gw [form]
       [if-let [w [try-get-word-report form]]
         [sword form]
-        [syntax-word [word ---word-not-found---] [none]]]]
+        [syntax-word [word ---word-not-found---] [option/none]]]]
      get-list
      [func gl [form]
       [match form
@@ -409,8 +409,8 @@
               [if-let [but-last-param [try-get-word [at param-list -2]]]
                 [eq-word but-last-param [word ..]]
                 false]]
-          [pair [slice param-list 0 [sub n-of-param-forms 2]] [some [last param-list]]]
-          [pair param-list [none]]]]]
+          [pair [slice param-list 0 [sub n-of-param-forms 2]] [option/some [last param-list]]]
+          [pair param-list [option/none]]]]]
     bst-to-form [transient-kv-map]
     insert-form
     [func i [form bform]
@@ -460,8 +460,8 @@
                       [btype/func
                         [list-map p [pair/fst parsed-params] [f2t p]]
                         [if-let [rest-param [pair/snd parsed-params]]
-                          [some [f2t rest-param]]
-                          [none]]
+                          [option/some [f2t rest-param]]
+                          [option/none]]
                         [f2t [third l]]]]]
 
                   [let [n-of-args [dec [size l]]]
@@ -472,7 +472,9 @@
                         [if [eq-word [word memory] fw]
                           [btype/memory
                             [sword [second l]]
-                            [if [lt-s 2 [size l]] [some [sword [third l]]] [none]]]
+                            [if [lt-s 2 [size l]]
+                              [option/some [sword [third l]]]
+                              [option/none]]]
                           [btype/apply [sword [first l]] [list-map arg [rest l] [f2t arg]]]]]
                       [do
                         [if-let [arity [try-get type-ctx fw]]
@@ -826,7 +828,7 @@
 
                 [[word match]]
                 [let
-                  [union-type-name-atom [atom [none]]
+                  [union-type-name-atom [atom [option/none]]
                    clauses
                    [list-map p [pairwise-pairs [slice l 2 [size l]]]
                     [let [pat-list [get-list [pair/fst p]]]
@@ -852,7 +854,7 @@
                                   [when-let [prev-union-type-name [atom-get union-type-name-atom]]
                                     [when-not [eq-word prev-union-type-name union-type-name]
                                       [push-error ctor-form [quote [mismatched union types]]]]]
-                                  [atom-set union-type-name-atom [some union-type-name]]
+                                  [atom-set union-type-name-atom [option/some union-type-name]]
                                   [when-not [eq [size ctor-params] [size params]]
                                     [push-error [pair/fst p] [quote [wrong number of arguments to union ctor]]]]
                                   [for i 0 [min [size ctor-params] [size params]]
@@ -868,8 +870,8 @@
                     [form-to-ast lstack [get-arg 0]]
                     clauses
                     [if [is-odd [size l]]
-                      [some [form-to-ast lstack [last l]]]
-                      [none]]]]
+                      [option/some [form-to-ast lstack [last l]]]
+                      [option/none]]]]
 
                 [[word do]]
                 [bexp/do [list-map arg [rest l] [form-to-ast lstack arg]]]

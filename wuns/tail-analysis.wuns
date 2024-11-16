@@ -27,7 +27,7 @@
     [func proc-var [bf]
       [match bf
         [bform/var w] [try-get subst [syntax-word/word w]]
-        [none]]]
+        [option/none]]]
     ast]]
 
 [defn has-dep-on-param [node-to-ldesc arg fname param-i]
