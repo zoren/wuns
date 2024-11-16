@@ -821,7 +821,7 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
     const form_list_t *bindingForms = get_list(list->cells[1]);
     assert(bindingForms->size % 2 == 0 && "let bindings must be a list of even length");
     const int number_of_bindings = bindingForms->size / 2;
-    binding_t *bindingVals = number_of_bindings == 0 ? NULL : malloc(sizeof(struct binding) * number_of_bindings);
+    binding_t *bindingVals = malloc(sizeof(struct binding) * number_of_bindings);
     local_env_t new_lenv = {.len = 0, .bindings = bindingVals, .special_form_type = SF_LET};
     local_stack_t new_stack = {.type = ENV_LOCAL, .frame = &(local_stack_frame_t){.parent = env, .env = &new_lenv}};
     for (int i = 0; i < number_of_bindings; i++)
@@ -845,7 +845,7 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
     const form_list_t *bindingForms = get_list(list->cells[1]);
     assert(bindingForms->size % 2 == 0 && "let bindings must be a list of even length");
     const int number_of_bindings = bindingForms->size / 2;
-    binding_t *bindingVals = number_of_bindings == 0 ? NULL : malloc(sizeof(struct binding) * number_of_bindings);
+    binding_t *bindingVals = malloc(sizeof(struct binding) * number_of_bindings);
     local_env_t new_lenv = {.len = 0, .bindings = bindingVals, .special_form_type = SF_LOOP};
     local_stack_t new_stack = {.type = ENV_LOCAL, .frame = &(local_stack_frame_t){.parent = env, .env = &new_lenv}};
     for (int i = 0; i < number_of_bindings; i++)
