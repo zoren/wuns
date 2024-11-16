@@ -25,8 +25,6 @@ bool is_word_char(char c)
   }
 }
 
-typedef long ssize_t;
-
 typedef struct
 {
   uint8_t size;
@@ -65,9 +63,14 @@ typedef enum
 
 typedef struct
 {
-  ssize_t size;
+  size_t size;
   const struct form **cells;
 } form_list_t;
+
+void form_list_free(const form_list_t *p) {
+  free((void *)p->cells);
+  free((void *)p);
+}
 
 typedef struct form
 {
@@ -103,13 +106,15 @@ void form_free(const form_t *form)
     free((void *)form->word);
     break;
   case T_LIST:
-    for (int i = 0; i < form->list->size; i++)
+  {
+    const form_list_t *list = form->list;
+    for (size_t i = 0; i < list->size; i++)
     {
-      form_free((form_t *)form->list->cells[i]);
+      form_free((form_t *)list->cells[i]);
     }
-    free((void *)form->list->cells);
-    free((void *)form->list);
+    form_list_free(list);
     break;
+  }
   }
   free((void *)form);
 }
@@ -140,8 +145,8 @@ form_t *form_copy(const form_t *form)
 
 typedef struct form_list_buffer
 {
-  ssize_t capacity;
-  ssize_t size;
+  size_t capacity;
+  size_t size;
   const form_t **elements;
 } form_list_buffer_t;
 
@@ -157,7 +162,7 @@ void append_form(form_list_buffer_t *buffer, const form_t *form)
 
 const form_list_t *make_form_list_from_buffer(form_list_buffer_t *buffer)
 {
-  ssize_t size = buffer->size;
+  size_t size = buffer->size;
   size_t byte_size = sizeof(form_t *) * size;
   const form_t **cells = malloc(byte_size);
   memcpy(cells, buffer->elements, byte_size);
@@ -272,7 +277,7 @@ void print_form(const form_t *form)
     }
     printf("[");
     print_form(form->list->cells[0]);
-    for (int i = 1; i < form->list->size; i++)
+    for (size_t i = 1; i < form->list->size; i++)
     {
       printf(" ");
       print_form(form->list->cells[i]);
@@ -706,7 +711,7 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
       free(bindings);
       return (rtval_t){.tag = rtval_undefined, .i32 = 0};
     }
-    for (int i = 0; i < bodies.size - 1; i++)
+    for (size_t i = 0; i < bodies.size - 1; i++)
       eval_exp(&new_stack, bodies.cells[i]);
     const rtval_t result = eval_exp(&new_stack, bodies.cells[bodies.size - 1]);
     free(bindings);
@@ -799,7 +804,7 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
   {
     if (list->size == 1)
       return (rtval_t){.tag = rtval_undefined, .i32 = 0};
-    for (int i = 1; i < list->size - 1; i++)
+    for (size_t i = 1; i < list->size - 1; i++)
       eval_exp(env, list->cells[i]);
     return eval_exp(env, list->cells[list->size - 1]);
   }
@@ -822,7 +827,7 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
     }
     if (list->size == 2)
       return (rtval_t){.tag = rtval_undefined, .i32 = 0};
-    for (int i = 2; i < list->size - 1; i++)
+    for (size_t i = 2; i < list->size - 1; i++)
       eval_exp(&new_stack, list->cells[i]);
     const rtval_t res = eval_exp(&new_stack, list->cells[list->size - 1]);
     free(bindingVals);
@@ -849,7 +854,7 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
       return (rtval_t){.tag = rtval_undefined, .i32 = 0};
     while (1)
     {
-      for (int i = 2; i < list->size - 1; i++)
+      for (size_t i = 2; i < list->size - 1; i++)
         eval_exp(&new_stack, list->cells[i]);
       rtval_t res = eval_exp(&new_stack, list->cells[list->size - 1]);
       if (res.tag == rtval_continue)
@@ -863,7 +868,7 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
     assert(list->size % 2 != 0 && "continue requires an even number of arguments");
     local_env_t *loop_env = get_outer_loop(env);
     assert(loop_env && "continue not in loop");
-    for (int i = 1; i < list->size; i += 2)
+    for (size_t i = 1; i < list->size; i += 2)
     {
       const word_t *var = get_word(list->cells[i]);
       const rtval_t val = eval_exp(env, list->cells[i + 1]);
@@ -876,10 +881,10 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
     assert(list->size >= 3 && "switch requires at least two arguments");
     assert(list->size % 2 != 0 && "switch requires an odd number of arguments");
     const rtval_t cond = eval_exp(env, list->cells[1]);
-    for (int i = 2; i < list->size - 1; i += 2)
+    for (size_t i = 2; i < list->size - 1; i += 2)
     {
       const form_list_t *case_values = get_list(list->cells[i]);
-      for (int j = 0; j < case_values->size; j++)
+      for (size_t j = 0; j < case_values->size; j++)
       {
         const rtval_t case_val = eval_exp(env, case_values->cells[j]);
         if (case_val.tag != cond.tag)
@@ -957,7 +962,7 @@ rtval_t eval_top(def_env_t *denv, const form_t *form)
             if (paramForms->size > 1 && strncmp(get_word(paramForms->cells[paramForms->size - 2])->chars, "..", 2) == 0)
             {
               params = malloc(sizeof(word_t *) * paramForms->size - 2);
-              for (int i = 0; i < paramForms->size - 2; i++)
+              for (size_t i = 0; i < paramForms->size - 2; i++)
               {
                 params[i] = word_copy(get_word(paramForms->cells[i]));
               }
@@ -966,13 +971,13 @@ rtval_t eval_top(def_env_t *denv, const form_t *form)
             else
             {
               params = malloc(sizeof(word_t *) * paramForms->size);
-              for (int i = 0; i < paramForms->size; i++)
+              for (size_t i = 0; i < paramForms->size; i++)
               {
                 params[i] = word_copy(get_word(paramForms->cells[i]));
               }
             }
             const form_t **bodiesArray = malloc(sizeof(form_t *) * (list->size - 3));
-            for (int i = 3; i < list->size; i++)
+            for (size_t i = 3; i < list->size; i++)
             {
               bodiesArray[i - 3] = form_copy(list->cells[i]);
             }
