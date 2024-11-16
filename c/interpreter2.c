@@ -29,25 +29,20 @@ typedef long ssize_t;
 
 typedef struct
 {
-  size_t size;
+  uint8_t size;
   char chars[];
 } word_t;
 
-const word_t* word_make(const char *start, const size_t size) {
+#define MAX_WORD_SIZE 127
+
+const word_t *word_make(const char *start, const size_t size)
+{
+  assert(size <= MAX_WORD_SIZE && "word size exceeded");
   word_t *word = malloc(sizeof(word_t) + size + 1);
   word->size = size;
   memcpy(word->chars, start, size);
   word->chars[size] = '\0';
   return (const word_t *)word;
-}
-
-const word_t *make_word(const char *start, const char *end)
-{
-  const ssize_t size = end - start;
-  assert(size >= 0 && "expected positive size");
-  assert(size != 0 && "expected non-empty word");
-
-  return word_make(start, size);
 }
 
 const word_t *word_copy(const word_t *word)
@@ -180,7 +175,8 @@ void buffer_stack_free(form_list_buffer_t *buffer)
   for (int i = 0; i <= MAX_FORM_DEPTH; i++)
   {
     const form_t **cells = buffer[i].cells;
-    if (cells == nullptr) break;
+    if (cells == nullptr)
+      break;
     free(cells);
   }
 }
@@ -198,10 +194,15 @@ const form_t *parse_one(const char **start, const char *end)
     {
       const char *word_start = cur;
       cur++;
+      int word_len = 1;
       // todo let's put a fixed max length on words
       while (is_word_char(*cur))
+      {
         cur++;
-      const form_t *f = make_form_word(make_word(word_start, (const char *)cur));
+        word_len++;
+        assert(word_len < MAX_WORD_SIZE && "word size exceeded");
+      }
+      const form_t *f = make_form_word(word_make(word_start, cur - word_start));
       if (depth == -1)
       {
         *start = cur;
