@@ -137,7 +137,7 @@ const form_t *form_copy(const form_t *form)
   assert(false && "unreachable");
 }
 
-typedef struct form_list_buffer
+typedef struct
 {
   size_t capacity;
   size_t size;
@@ -289,7 +289,7 @@ typedef enum runtime_value_tag
   rtval_continue,
 } rtval_tag;
 
-typedef struct rtfunc
+typedef struct
 {
   const word_t *name;
   const int arity;
@@ -298,7 +298,7 @@ typedef struct rtfunc
   const form_list_t *bodies;
 } rtfunc_t;
 
-typedef struct rtval
+typedef struct
 {
   rtval_tag tag;
   union
@@ -313,7 +313,7 @@ typedef struct rtval
 typedef struct rtval_list
 {
   size_t size;
-  struct rtval values[];
+  rtval_t values[];
 } rtval_list_t;
 
 void print_rtval(const rtval_t *val)
@@ -570,23 +570,23 @@ rtval_t eval_f64_bin_cmp_intrinsic(intrinsic_type_t t, double a, double b)
   exit(1);
 }
 
-typedef struct binding
+typedef struct
 {
   const word_t *name;
   rtval_t value;
 } binding_t;
 
-typedef struct def_env
+typedef struct
 {
   int size;
   int capacity;
   binding_t *bindings;
 } def_env_t;
 
-typedef struct local_env
+typedef struct
 {
   int len;
-  struct binding *bindings;
+  binding_t *bindings;
   const special_form_type_t special_form_type;
 } local_env_t;
 
@@ -596,7 +596,7 @@ typedef enum env_type
   ENV_LOCAL
 } env_type_t;
 
-typedef struct local_stack_frame
+typedef struct
 {
   const struct local_stack *parent;
   local_env_t *env;
@@ -850,7 +850,7 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
     const form_list_t *bindingForms = get_list(list->cells[1]);
     assert(bindingForms->size % 2 == 0 && "let bindings must be a list of even length");
     const int number_of_bindings = bindingForms->size / 2;
-    binding_t *bindingVals = malloc(sizeof(struct binding) * number_of_bindings);
+    binding_t *bindingVals = malloc(sizeof(binding_t) * number_of_bindings);
     local_env_t new_lenv = {.len = 0, .bindings = bindingVals, .special_form_type = SF_LET};
     local_stack_t new_stack = {.type = ENV_LOCAL, .frame = &(local_stack_frame_t){.parent = env, .env = &new_lenv}};
     for (int i = 0; i < number_of_bindings; i++)
@@ -874,7 +874,7 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
     const form_list_t *bindingForms = get_list(list->cells[1]);
     assert(bindingForms->size % 2 == 0 && "let bindings must be a list of even length");
     const int number_of_bindings = bindingForms->size / 2;
-    binding_t *bindingVals = malloc(sizeof(struct binding) * number_of_bindings);
+    binding_t *bindingVals = malloc(sizeof(binding_t) * number_of_bindings);
     local_env_t new_lenv = {.len = 0, .bindings = bindingVals, .special_form_type = SF_LOOP};
     local_stack_t new_stack = {.type = ENV_LOCAL, .frame = &(local_stack_frame_t){.parent = env, .env = &new_lenv}};
     for (int i = 0; i < number_of_bindings; i++)
