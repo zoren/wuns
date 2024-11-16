@@ -55,12 +55,6 @@ bool word_eq(const word_t *a, const word_t *b)
   return memcmp(a->chars, b->chars, a->size) == 0;
 }
 
-typedef enum
-{
-  T_WORD,
-  T_LIST
-} form_type_t;
-
 typedef struct
 {
   size_t size;
@@ -74,7 +68,11 @@ void form_list_free(const form_list_t *p)
 
 typedef struct form
 {
-  form_type_t type;
+  enum
+  {
+    T_WORD,
+    T_LIST
+  } type;
   union
   {
     const word_t *word;
