@@ -498,14 +498,12 @@
     [match form
       [form/word w] [none]
       [form/list l]
-      [[func go [i]
+      [loop [i 0]
         [if [lt-s i [size l]]
           [if-let [node [try-get-syntax-node-rec [at l i]]]
             [some node]
-            [go [inc i]]]
-          [none]]
-        ] 0
-      ]]]]
+            [continue i [inc i]]]
+          [none]]]]]]
 
 [defn log-location [form]
   [if-let [node [try-get-syntax-node-rec form]]
