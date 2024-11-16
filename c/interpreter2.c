@@ -33,6 +33,41 @@ typedef struct word
   const char *chars;
 } word_t;
 
+const word_t *make_word(const char *start, const char *end)
+{
+  const ssize_t size = end - start;
+  assert(size >= 0 && "expected positive size");
+  assert(size != 0 && "expected non-empty word");
+  char *chars = malloc(size + 1);
+  memcpy(chars, start, size);
+  chars[size] = '\0';
+
+  word_t *word = malloc(sizeof(word_t));
+  word->size = size;
+  word->chars = chars;
+  return (const word_t *)word;
+}
+
+bool word_eq(const word_t *a, const word_t *b)
+{
+  if (a->size != b->size)
+    return false;
+  return memcmp(a->chars, b->chars, a->size) == 0;
+}
+
+const word_t *word_copy(const word_t *word)
+{
+  const ssize_t size = word->size;
+  char *chars = malloc(size + 1);
+  memcpy(chars, word->chars, size);
+  chars[size] = '\0';
+
+  word_t *cword = malloc(sizeof(word_t));
+  cword->size = size;
+  cword->chars = chars;
+  return (const word_t *)cword;
+}
+
 typedef enum form_type
 {
   T_WORD,
@@ -54,34 +89,6 @@ typedef struct form
     const form_list_t *list;
   };
 } form_t;
-
-#define MAX_FORM_DEPTH 16
-
-const word_t *make_word(const char *start, const char *end)
-{
-  const ssize_t size = end - start;
-  char *chars = malloc(size + 1);
-  memcpy(chars, start, size);
-  chars[size] = '\0';
-
-  word_t *word = malloc(sizeof(word_t));
-  word->size = size;
-  word->chars = chars;
-  return (const word_t *)word;
-}
-
-const word_t *word_copy(const word_t *word)
-{
-  const ssize_t size = word->size;
-  char *chars = malloc(size + 1);
-  memcpy(chars, word->chars, size);
-  chars[size] = '\0';
-
-  word_t *cword = malloc(sizeof(word_t));
-  cword->size = size;
-  cword->chars = chars;
-  return (const word_t *)cword;
-}
 
 const form_t *make_form_word(const word_t *word)
 {
@@ -172,6 +179,8 @@ const form_list_t *make_form_list_from_buffer(form_list_buffer_t *buffer)
   list->cells = cells;
   return list;
 }
+
+#define MAX_FORM_DEPTH 16
 
 void buffer_stack_free(form_list_buffer_t *buffer)
 {
@@ -604,13 +613,6 @@ local_env_t *get_outer_loop(const local_stack_t *stackp)
     stack = (local_stack_t *)stack->frame->parent;
   }
   return nullptr;
-}
-
-bool word_eq(const word_t *a, const word_t *b)
-{
-  if (a->size != b->size)
-    return false;
-  return memcmp(a->chars, b->chars, a->size) == 0;
 }
 
 void def_env_set(def_env_t *denv, const word_t *word, rtval_t value)
