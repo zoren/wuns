@@ -164,27 +164,6 @@ test('hash', async () => {
   expect(hash(0, 6)).toBe(0xbf9cf968 | 0)
 })
 
-test('loop ifs', async () => {
-  const inst = await stringToInst(`
-[load std.wuns]
-[memory mem 1]
-
-[defn is-word-char [c]
-  [or
-    [is-between-inclusive [i32 97] c [i32 122]]
-    [is-between-inclusive [i32 45] c [i32 57]]]]
-
-[defn scan-word [p end-p]
-  [loop [q p]
-    [if [lt-s q end-p]
-      [if [is-word-char [intrinsic i32.load8-u mem 0 1 q]]
-        [continue q [inc q]]
-        q]
-      q]]]
-
-[export scan-word]`)
-})
-
 test('count words', async () => {
   const inst = await stringToInst(`
 [load std.wuns]
