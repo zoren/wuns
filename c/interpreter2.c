@@ -112,38 +112,30 @@ void form_free(const form_t *form)
   free((void *)form);
 }
 
-form_t *form_copy(const form_t *form)
-{
-  switch (form->type)
-  {
-  case T_WORD:
-    return (form_t *)make_form_word(word_copy(form->word));
-  case T_LIST:
-  {
-    const int size = form->list->size;
-    form_list_t *list = malloc(sizeof(form_list_t) + sizeof(form_t *) * size);
-    list->size = size;
-    for (int i = 0; i < size; i++)
-    {
-      list->cells[i] = form_copy(form->list->cells[i]);
-    }
-    return (form_t *)make_form_list(list);
-  }
-  }
-  assert(false && "unreachable");
-}
+const form_t *form_copy(const form_t *form);
 
 form_list_t *form_list_slice_copy(const form_list_t *list, size_t start, size_t end)
 {
-  assert(start <= end && end <= list->size && "invalid slice");
+  assert(start <= end && "invalid slice");
+  assert(end <= list->size && "invalid slice");
   const size_t size = end - start;
   form_list_t *new_list = malloc(sizeof(form_list_t) + sizeof(form_t *) * size);
   new_list->size = size;
   for (size_t i = 0; i < size; i++)
-  {
     new_list->cells[i] = form_copy(list->cells[start + i]);
-  }
   return new_list;
+}
+
+const form_t *form_copy(const form_t *form)
+{
+  switch (form->type)
+  {
+  case T_WORD:
+    return make_form_word(word_copy(form->word));
+  case T_LIST:
+    return make_form_list(form_list_slice_copy(form->list, 0, form->list->size));
+  }
+  assert(false && "unreachable");
 }
 
 typedef struct form_list_buffer
@@ -999,7 +991,7 @@ rtval_t eval_top(def_env_t *denv, const form_t *form)
           }
           case SF_DEFN:
           {
-            assert(list->size >= 4 && "defn requires at least three arguments");
+            assert(list->size >= 3 && "defn requires at least three arguments");
             const word_t *fname = get_word(list->cells[1]);
             const form_list_t *paramForms = get_list(list->cells[2]);
             const word_t **params;
