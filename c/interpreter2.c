@@ -75,20 +75,20 @@ typedef struct form
   };
 } form_t;
 
+const form_t *form_alloc(form_t f){
+  form_t *form = malloc(sizeof(form_t));
+  *form = f;
+  return form;
+}
+
 const form_t *make_form_word(const word_t *word)
 {
-  form_t *new_form = malloc(sizeof(form_t));
-  new_form->type = T_WORD;
-  new_form->word = word;
-  return new_form;
+  return form_alloc((form_t){T_WORD, .word = word});
 }
 
 const form_t *make_form_list(const form_list_t *list)
 {
-  form_t *new_form = malloc(sizeof(form_t));
-  new_form->type = T_LIST;
-  new_form->list = list;
-  return new_form;
+  return form_alloc((form_t){T_LIST, .list = list});
 }
 
 void form_free(const form_t *form)
