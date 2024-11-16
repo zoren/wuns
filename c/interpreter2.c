@@ -81,12 +81,12 @@ const form_t *form_alloc(form_t f){
   return form;
 }
 
-const form_t *make_form_word(const word_t *word)
+const form_t *form_word_alloc(const word_t *word)
 {
   return form_alloc((form_t){T_WORD, .word = word});
 }
 
-const form_t *make_form_list(const form_list_t *list)
+const form_t *form_list_alloc(const form_list_t *list)
 {
   return form_alloc((form_t){T_LIST, .list = list});
 }
@@ -131,9 +131,9 @@ const form_t *form_copy(const form_t *form)
   switch (form->type)
   {
   case T_WORD:
-    return make_form_word(word_copy(form->word));
+    return form_word_alloc(word_copy(form->word));
   case T_LIST:
-    return make_form_list(form_list_slice_copy(form->list, 0, form->list->size));
+    return form_list_alloc(form_list_slice_copy(form->list, 0, form->list->size));
   }
   assert(false && "unreachable");
 }
@@ -199,7 +199,7 @@ const form_t *parse_one(const char **start, const char *end)
         word_len++;
         assert(word_len < MAX_WORD_SIZE && "word size exceeded");
       }
-      const form_t *f = make_form_word(word_make(word_start, word_len));
+      const form_t *f = form_word_alloc(word_make(word_start, word_len));
       if (depth == -1)
       {
         *start = cur;
@@ -230,7 +230,7 @@ const form_t *parse_one(const char **start, const char *end)
       assert(depth >= 0 && "unexpected ']'");
       const form_list_t *list = make_form_list_from_buffer(&stack[depth]);
       depth--;
-      const form_t *f = make_form_list(list);
+      const form_t *f = form_list_alloc(list);
       if (depth == -1)
       {
         *start = cur;
@@ -249,7 +249,7 @@ const form_t *parse_one(const char **start, const char *end)
   if (depth != -1)
   {
     // form list not closed
-    return make_form_list(make_form_list_from_buffer(&stack[0]));
+    return form_list_alloc(make_form_list_from_buffer(&stack[0]));
   }
   return nullptr;
 }
