@@ -494,20 +494,20 @@ double eval_f64_bin_arith_intrinsic(intrinsic_type_t t, double a, double b)
   exit(1);
 }
 
-rtval_t eval_f64_bin_cmp_intrinsic(intrinsic_type_t t, double a, double b)
+bool eval_f64_bin_cmp_intrinsic(intrinsic_type_t t, double a, double b)
 {
   switch (t)
   {
   case INTRINSIC_F64_EQ:
-    return (rtval_t){.tag = rtval_i32, .i32 = a == b};
+    return a == b;
   case INTRINSIC_F64_NE:
-    return (rtval_t){.tag = rtval_i32, .i32 = a != b};
+    return a != b;
   case INTRINSIC_F64_LT:
-    return (rtval_t){.tag = rtval_i32, .i32 = a < b};
+    return a < b;
   case INTRINSIC_F64_GT:
-    return (rtval_t){.tag = rtval_i32, .i32 = a > b};
+    return a > b;
   case INTRINSIC_F64_LE:
-    return (rtval_t){.tag = rtval_i32, .i32 = a <= b};
+    return a <= b;
   default:
     break;
   }
@@ -756,7 +756,7 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
       const rtval_t arg1 = eval_exp(env, list->cells[2]);
       const rtval_t arg2 = eval_exp(env, list->cells[3]);
       check_exit(arg1.tag == rtval_f64 && arg2.tag == rtval_f64, "intrinsic requires f64 arguments");
-      return eval_f64_bin_cmp_intrinsic(intrinsic->type, arg1.f64, arg2.f64);
+      return (rtval_t){.tag = rtval_i32, .i32 = eval_f64_bin_cmp_intrinsic(intrinsic->type, arg1.f64, arg2.f64)};
     }
     }
   }
