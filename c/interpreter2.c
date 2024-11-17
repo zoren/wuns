@@ -192,7 +192,6 @@ const form_t *parse_one(const char **start, const char *end)
       const char *word_start = cur;
       cur++;
       size_t word_len = 1;
-      // todo let's put a fixed max length on words
       while (is_word_char(*cur))
       {
         cur++;
@@ -213,7 +212,7 @@ const form_t *parse_one(const char **start, const char *end)
       cur++;
       assert(depth < MAX_FORM_DEPTH && "form depth exceeded");
       depth++;
-      stack[depth].size = 0;
+      assert(stack[depth].size == 0 && "unexpected non-empty stack");
       if (stack[depth].elements == nullptr)
       {
         stack[depth].capacity = 8;
@@ -225,6 +224,7 @@ const form_t *parse_one(const char **start, const char *end)
       cur++;
       assert(depth >= 0 && "unexpected ']'");
       cur_form = form_list_alloc(make_form_list_from_buffer(&stack[depth]));
+      stack[depth].size = 0;
       depth--;
       if (depth == -1)
         break;
@@ -238,7 +238,9 @@ const form_t *parse_one(const char **start, const char *end)
   *start = cur;
   while (depth > -1)
   {
+    // close open lists
     cur_form = form_list_alloc(make_form_list_from_buffer(&stack[depth]));
+    stack[depth].size = 0;
     depth--;
     if (depth == -1)
       break;
