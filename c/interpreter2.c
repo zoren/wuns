@@ -87,32 +87,6 @@ void form_free(const form_t *form)
   free((void *)form);
 }
 
-const form_t *form_copy(const form_t *form);
-
-form_list_t *form_list_slice_copy(const form_list_t *list, size_t start, size_t end)
-{
-  assert(start <= end && "invalid slice");
-  assert(end <= list->size && "invalid slice");
-  const size_t size = end - start;
-  form_list_t *new_list = malloc(sizeof(form_list_t) + sizeof(form_t *) * size);
-  new_list->size = size;
-  for (size_t i = 0; i < size; i++)
-    new_list->cells[i] = form_copy(list->cells[start + i]);
-  return new_list;
-}
-
-const form_t *form_copy(const form_t *form)
-{
-  switch (form->type)
-  {
-  case T_WORD:
-    return form_word_alloc(word_copy(form->word));
-  case T_LIST:
-    return form_list_alloc(form_list_slice_copy(form->list, 0, form->list->size));
-  }
-  assert(false && "unreachable");
-}
-
 typedef struct
 {
   size_t capacity;
@@ -895,9 +869,35 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
   }
 }
 
+const form_t *form_copy(const form_t *form);
+
+form_list_t *form_list_slice_copy(const form_list_t *list, size_t start, size_t end)
+{
+  assert(start <= end && "invalid slice");
+  assert(end <= list->size && "invalid slice");
+  const size_t size = end - start;
+  form_list_t *new_list = malloc(sizeof(form_list_t) + sizeof(form_t *) * size);
+  new_list->size = size;
+  for (size_t i = 0; i < size; i++)
+    new_list->cells[i] = form_copy(list->cells[start + i]);
+  return new_list;
+}
+
+const form_t *form_copy(const form_t *form)
+{
+  switch (form->type)
+  {
+  case T_WORD:
+    return form_word_alloc(word_copy(form->word));
+  case T_LIST:
+    return form_list_alloc(form_list_slice_copy(form->list, 0, form->list->size));
+  }
+  assert(false && "unreachable");
+}
+
 rtval_t eval_top(def_env_t *denv, const form_t *form)
 {
-  const local_stack_t* env = &(local_stack_t){.type = ENV_DEF, .def_env = denv};
+  const local_stack_t *env = &(local_stack_t){.type = ENV_DEF, .def_env = denv};
   if (form->type == T_LIST)
   {
     const form_list_t *list = form->list;
