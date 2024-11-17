@@ -165,6 +165,7 @@ const form_list_t *make_form_list_from_buffer(form_list_buffer_t *buffer)
 }
 
 #define MAX_FORM_DEPTH 16
+#define INIT_BUFFER_SIZE 8
 
 const form_t *parse_one(const char **start, const char *end)
 {
@@ -204,8 +205,8 @@ const form_t *parse_one(const char **start, const char *end)
       assert(stack[depth].size == 0 && "unexpected non-empty stack");
       if (stack[depth].elements == nullptr)
       {
-        stack[depth].capacity = 8;
-        stack[depth].elements = malloc(sizeof(form_t *) * stack[depth].capacity);
+        stack[depth].capacity = INIT_BUFFER_SIZE;
+        stack[depth].elements = malloc(sizeof(form_t *) * INIT_BUFFER_SIZE);
       }
     }
     else if (c == ']')
