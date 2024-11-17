@@ -5,6 +5,8 @@
 #include <errno.h>
 #include <string.h>
 
+#include "interpreter2.h"
+
 bool is_whitespace(char c)
 {
   return c == ' ' || c == '\n';
@@ -24,12 +26,6 @@ bool is_word_char(char c)
     return false;
   }
 }
-
-typedef struct
-{
-  uint8_t size;
-  char chars[];
-} word_t;
 
 #define MAX_WORD_SIZE 127
 
@@ -54,26 +50,6 @@ bool word_eq(const word_t *a, const word_t *b)
     return false;
   return memcmp(a->chars, b->chars, a->size) == 0;
 }
-
-typedef struct
-{
-  size_t size;
-  const struct form *cells[];
-} form_list_t;
-
-typedef struct form
-{
-  enum
-  {
-    T_WORD,
-    T_LIST
-  } type;
-  union
-  {
-    const word_t *word;
-    const form_list_t *list;
-  };
-} form_t;
 
 const form_t *form_alloc(form_t f)
 {
@@ -167,6 +143,19 @@ const form_list_t *make_form_list_from_buffer(form_list_buffer_t *buffer)
 #define MAX_FORM_DEPTH 16
 #define INIT_BUFFER_SIZE 8
 
+void exitWithError(const char *message)
+{
+  if (message != NULL)
+  {
+    fprintf(stderr, "Error: %s\n", message);
+  }
+  exit(1);
+}
+
+#define check_exit(cond, message) \
+  if (!(cond))                    \
+  exitWithError(message)
+
 const form_t *parse_one(const char **start, const char *end)
 {
   char *cur = (char *)*start;
@@ -186,7 +175,7 @@ const form_t *parse_one(const char **start, const char *end)
       {
         cur++;
         word_len++;
-        assert(word_len < MAX_WORD_SIZE && "word size exceeded");
+        check_exit(word_len < MAX_WORD_SIZE, "word size exceeded");
       }
       cur_form = form_word_alloc(word_make(word_start, word_len));
       if (depth == -1)
@@ -200,8 +189,8 @@ const form_t *parse_one(const char **start, const char *end)
     else if (c == '[')
     {
       cur++;
-      assert(depth < MAX_FORM_DEPTH && "form depth exceeded");
       depth++;
+      check_exit(depth < MAX_FORM_DEPTH, "form depth exceeded");
       assert(stack[depth].size == 0 && "unexpected non-empty stack");
       if (stack[depth].elements == nullptr)
       {
@@ -212,7 +201,8 @@ const form_t *parse_one(const char **start, const char *end)
     else if (c == ']')
     {
       cur++;
-      assert(depth >= 0 && "unexpected ']'");
+      if (depth == -1)
+        break;
       cur_form = form_list_alloc(make_form_list_from_buffer(&stack[depth]));
       stack[depth].size = 0;
       depth--;
@@ -222,7 +212,7 @@ const form_t *parse_one(const char **start, const char *end)
     }
     else
     {
-      assert(false && "unknown character");
+      exitWithError("unknown character");
     }
   }
   *start = cur;
@@ -270,44 +260,6 @@ void print_form(const form_t *form)
     break;
   }
 }
-
-typedef enum runtime_value_tag
-{
-  rtval_i32,
-  rtval_f64,
-  rtval_func,
-  rtval_list,
-  // pseudo-values not meant to be returned
-  rtval_undefined,
-  rtval_continue,
-} rtval_tag;
-
-typedef struct
-{
-  const word_t *name;
-  const int arity;
-  const word_t **params;
-  const word_t *rest_param;
-  const form_list_t *bodies;
-} rtfunc_t;
-
-typedef struct
-{
-  rtval_tag tag;
-  union
-  {
-    int32_t i32;
-    double f64;
-    rtfunc_t *func;
-    struct rtval_list *list;
-  };
-} rtval_t;
-
-typedef struct rtval_list
-{
-  size_t size;
-  rtval_t values[];
-} rtval_list_t;
 
 void print_rtval(const rtval_t *val)
 {
@@ -358,13 +310,13 @@ const word_t *try_get_word(const form_t *form)
 
 const word_t *get_word(const form_t *form)
 {
-  assert(form->type == T_WORD && "expected word");
+  check_exit(form->type == T_WORD, "expected word");
   return form->word;
 }
 
 const form_list_t *get_list(const form_t *form)
 {
-  assert(form->type == T_LIST && "expected list");
+  check_exit(form->type == T_LIST, "expected list");
   return form->list;
 }
 
@@ -376,10 +328,10 @@ int32_t parse_i32(const char *word)
   if (errno != 0)
   {
     perror("strtol");
-    assert(false && "Error: non-integer argument for 'i32'!");
+    exitWithError("non-integer argument for 'i32'");
   }
-  assert(*endptr == '\0' && "Error: non-integer argument for 'i32'!");
-  assert(result >= INT32_MIN && result <= INT32_MAX && "Error: integer out of range for 'i32'!");
+  check_exit(*endptr == '\0', "non-integer argument for 'i32'");
+  check_exit(result >= INT32_MIN && result <= INT32_MAX, "integer out of range for 'i32'");
   return (int32_t)result;
 }
 
@@ -391,9 +343,9 @@ double parse_f64(const char *word)
   if (errno != 0)
   {
     perror("strtod");
-    assert(false && "Error: non-float argument for 'f64'!");
+    exitWithError("non-float argument for 'f64'");
   }
-  assert(*endptr == '\0' && "Error: non-float argument for 'f64'!");
+  check_exit(*endptr == '\0', "non-float argument for 'f64'");
   return result;
 }
 
@@ -565,19 +517,6 @@ rtval_t eval_f64_bin_cmp_intrinsic(intrinsic_type_t t, double a, double b)
 
 typedef struct
 {
-  const word_t *name;
-  rtval_t value;
-} binding_t;
-
-typedef struct
-{
-  int size;
-  int capacity;
-  binding_t *bindings;
-} def_env_t;
-
-typedef struct
-{
   int len;
   binding_t *bindings;
   const special_form_type_t special_form_type;
@@ -651,12 +590,11 @@ rtval_t def_env_lookup(const def_env_t *denv, const word_t *word)
 {
   for (int i = 0; i < denv->size; i++)
   {
-    if (word_eq(denv->bindings[i].name, word))
-    {
-      return denv->bindings[i].value;
-    }
+    binding_t binding = denv->bindings[i];
+    if (word_eq(binding.name, word))
+      return binding.value;
   }
-  assert(false && "def_env_lookup: word not found in env");
+  exitWithError("word not found in env");
 }
 
 rtval_t lookup(const local_stack_t *env, const word_t *word)
@@ -688,7 +626,7 @@ void update_env_var(local_env_t *env, const word_t *word, rtval_t value)
       return;
     }
   }
-  assert(false && "update_env_var: word not found in env");
+  exitWithError("update_env_var: word not found in env");
 }
 
 rtval_t eval_exp(const local_stack_t *env, const form_t *form)
@@ -697,18 +635,18 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
     return lookup(env, form->word);
 
   const form_list_t *list = form->list;
-  assert(list->size > 0 && "empty list");
+  check_exit(list->size > 0, "empty list");
   const word_t *name = try_get_word(list->cells[0]);
-  assert(name && "direct form application not implemented");
+  check_exit(name, "direct form application not implemented");
   const struct special_form *spec = try_get_wuns_special_form(name->chars, name->size);
   if (!spec)
   {
     rtval_t fn = lookup(env, name);
-    assert(fn.tag == rtval_func && "expected function");
+    check_exit(fn.tag == rtval_func, "expected function");
     const rtfunc_t *func = fn.func;
     const int arity = func->arity;
     const int numOfArgs = list->size - 1;
-    assert(numOfArgs >= arity && "too few arguments");
+    check_exit(numOfArgs >= arity, "too few arguments");
     const int numBindings = func->rest_param ? arity + 1 : arity;
     binding_t *bindings = malloc(sizeof(binding_t) * numBindings);
     for (int i = 0; i < arity; i++)
@@ -728,7 +666,7 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
     }
     else
     {
-      assert(numOfArgs == arity && "too many arguments");
+      check_exit(numOfArgs == arity, "too many arguments");
     }
     const def_env_t *denv = get_def_env(env);
     const local_stack_t top_env = {.type = ENV_DEF, .def_env = denv};
@@ -750,24 +688,24 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
   {
   case SF_I32:
   {
-    assert(list->size == 2 && "i32 requires exactly one argument");
+    check_exit(list->size == 2, "i32 requires exactly one argument");
     const word_t *arg_word = get_word(list->cells[1]);
     const int32_t arg_val = parse_i32(arg_word->chars);
     return (rtval_t){.tag = rtval_i32, .i32 = arg_val};
   }
   case SF_F64:
   {
-    assert(list->size == 2 && "f64 requires exactly one argument");
+    check_exit(list->size == 2, "f64 requires exactly one argument");
     const word_t *arg_word = get_word(list->cells[1]);
     const double arg_val = parse_f64(arg_word->chars);
     return (rtval_t){.tag = rtval_f64, .f64 = arg_val};
   }
   case SF_INTRINSIC:
   {
-    assert(list->size > 1 && "intrinsic requires at least one argument");
+    check_exit(list->size > 1, "intrinsic requires at least one argument");
     const word_t *arg_word = get_word(list->cells[1]);
     const struct intrinsic *intrinsic = try_get_wuns_intrinsic(arg_word->chars, arg_word->size);
-    assert(intrinsic && "unknown intrinsic");
+    check_exit(intrinsic, "unknown intrinsic");
     switch (intrinsic->type)
     {
     case INTRINSIC_I32_ADD:
@@ -790,10 +728,10 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
     case INTRINSIC_I32_SHR_S:
     case INTRINSIC_I32_SHR_U:
     {
-      assert(list->size == 4 && "intrinsic requires exactly two arguments");
+      check_exit(list->size == 4, "intrinsic requires exactly two arguments");
       const rtval_t arg1 = eval_exp(env, list->cells[2]);
       const rtval_t arg2 = eval_exp(env, list->cells[3]);
-      assert(arg1.tag == rtval_i32 && arg2.tag == rtval_i32 && "intrinsic requires i32 arguments");
+      check_exit(arg1.tag == rtval_i32 && arg2.tag == rtval_i32, "intrinsic requires i32 arguments");
       return (rtval_t){.tag = rtval_i32, .i32 = eval_i32_bin_intrinsic(intrinsic->type, arg1.i32, arg2.i32)};
     }
     case INTRINSIC_F64_ADD:
@@ -801,10 +739,10 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
     case INTRINSIC_F64_MUL:
     case INTRINSIC_F64_DIV:
     {
-      assert(list->size == 4 && "intrinsic requires exactly two arguments");
+      check_exit(list->size == 4, "intrinsic requires exactly two arguments");
       const rtval_t arg1 = eval_exp(env, list->cells[2]);
       const rtval_t arg2 = eval_exp(env, list->cells[3]);
-      assert(arg1.tag == rtval_f64 && arg2.tag == rtval_f64 && "intrinsic requires f64 arguments");
+      check_exit(arg1.tag == rtval_f64 && arg2.tag == rtval_f64, "intrinsic requires f64 arguments");
       return (rtval_t){.tag = rtval_f64, .f64 = eval_f64_bin_arith_intrinsic(intrinsic->type, arg1.f64, arg2.f64)};
     }
     case INTRINSIC_F64_EQ:
@@ -814,19 +752,19 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
     case INTRINSIC_F64_LE:
     case INTRINSIC_F64_GE:
     {
-      assert(list->size == 4 && "intrinsic requires exactly two arguments");
+      check_exit(list->size == 4, "intrinsic requires exactly two arguments");
       const rtval_t arg1 = eval_exp(env, list->cells[2]);
       const rtval_t arg2 = eval_exp(env, list->cells[3]);
-      assert(arg1.tag == rtval_f64 && arg2.tag == rtval_f64 && "intrinsic requires f64 arguments");
+      check_exit(arg1.tag == rtval_f64 && arg2.tag == rtval_f64, "intrinsic requires f64 arguments");
       return eval_f64_bin_cmp_intrinsic(intrinsic->type, arg1.f64, arg2.f64);
     }
     }
   }
   case SF_IF:
   {
-    assert(list->size == 4 && "if requires exactly three arguments");
+    check_exit(list->size == 4, "if requires exactly three arguments");
     const rtval_t cond = eval_exp(env, list->cells[1]);
-    assert(cond.tag == rtval_i32 && "if requires i32 condition");
+    check_exit(cond.tag == rtval_i32, "if requires i32 condition");
     return eval_exp(env, list->cells[cond.i32 ? 2 : 3]);
   }
   case SF_DO:
@@ -839,9 +777,9 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
   }
   case SF_LET:
   {
-    assert(list->size >= 2 && "let requires at least two arguments");
+    check_exit(list->size >= 2, "let requires at least two arguments");
     const form_list_t *bindingForms = get_list(list->cells[1]);
-    assert(bindingForms->size % 2 == 0 && "let bindings must be a list of even length");
+    check_exit(bindingForms->size % 2 == 0, "let bindings must be a list of even length");
     const int number_of_bindings = bindingForms->size / 2;
     binding_t *bindingVals = malloc(sizeof(binding_t) * number_of_bindings);
     local_env_t new_lenv = {.len = 0, .bindings = bindingVals, .special_form_type = SF_LET};
@@ -863,9 +801,9 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
   }
   case SF_LOOP:
   {
-    assert(list->size >= 2 && "let requires at least two arguments");
+    check_exit(list->size >= 2, "let requires at least two arguments");
     const form_list_t *bindingForms = get_list(list->cells[1]);
-    assert(bindingForms->size % 2 == 0 && "let bindings must be a list of even length");
+    check_exit(bindingForms->size % 2 == 0, "let bindings must be a list of even length");
     const int number_of_bindings = bindingForms->size / 2;
     binding_t *bindingVals = malloc(sizeof(binding_t) * number_of_bindings);
     local_env_t new_lenv = {.len = 0, .bindings = bindingVals, .special_form_type = SF_LOOP};
@@ -892,9 +830,9 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
   }
   case SF_CONTINUE:
   {
-    assert(list->size % 2 != 0 && "continue requires an even number of arguments");
+    check_exit(list->size % 2 != 0, "continue requires an even number of arguments");
     local_env_t *loop_env = get_outer_loop(env);
-    assert(loop_env && "continue not in loop");
+    check_exit(loop_env, "continue not in loop");
     for (size_t i = 1; i < list->size; i += 2)
     {
       const word_t *var = get_word(list->cells[i]);
@@ -905,8 +843,8 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
   }
   case SF_SWITCH:
   {
-    assert(list->size >= 3 && "switch requires at least two arguments");
-    assert(list->size % 2 != 0 && "switch requires an odd number of arguments");
+    check_exit(list->size >= 3, "switch requires at least two arguments");
+    check_exit(list->size % 2 != 0, "switch requires an odd number of arguments");
     const rtval_t cond = eval_exp(env, list->cells[1]);
     for (size_t i = 2; i < list->size - 1; i += 2)
     {
@@ -940,7 +878,7 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
   case SF_FUNC:
   case SF_WORD:
   {
-    assert(false && "not implemented");
+    exitWithError("not implemented");
   }
   case SF_DEF:
   case SF_DEFN:
@@ -950,15 +888,16 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
   case SF_TYPE:
   case SF_IMPORT:
   case SF_EXPORT:
-    assert(false && "unexpected top special form in exp");
+    exitWithError("unexpected top special form in exp");
   default:
-    assert(false && "unknown special form");
+    printf("unknown special form: %s\n", name->chars);
+    exitWithError("unknown special form");
   }
 }
 
 rtval_t eval_top(def_env_t *denv, const form_t *form)
 {
-  const local_stack_t env = {.type = ENV_DEF, .def_env = denv};
+  const local_stack_t* env = &(local_stack_t){.type = ENV_DEF, .def_env = denv};
   if (form->type == T_LIST)
   {
     const form_list_t *list = form->list;
@@ -974,16 +913,16 @@ rtval_t eval_top(def_env_t *denv, const form_t *form)
           {
           case SF_DEF:
           {
-            assert(list->size == 3 && "def requires exactly two arguments");
+            check_exit(list->size == 3, "def requires exactly two arguments");
             const word_t *var = get_word(list->cells[1]);
             const word_t *cvar = word_copy(var);
-            const rtval_t val = eval_exp(&env, list->cells[2]);
+            const rtval_t val = eval_exp(env, list->cells[2]);
             def_env_set(denv, cvar, val);
             return val;
           }
           case SF_DEFN:
           {
-            assert(list->size >= 3 && "defn requires at least three arguments");
+            check_exit(list->size >= 3, "defn requires at least three arguments");
             const word_t *fname = get_word(list->cells[1]);
             const form_list_t *paramForms = get_list(list->cells[2]);
             const word_t **params;
@@ -1028,17 +967,19 @@ rtval_t eval_top(def_env_t *denv, const form_t *form)
           case SF_IMPORT:
           case SF_EXPORT:
           {
-            assert(false && "not implemented");
+            exitWithError("not implemented");
           }
 
           default:
-            assert(false && "unknown special form");
+          {
+            return eval_exp(env, form);
+          }
           }
         }
       }
     }
   }
-  return eval_exp(&env, form);
+  return eval_exp(env, form);
 }
 
 const form_t *parse_one_string(const char *start)
@@ -1145,33 +1086,4 @@ rtval_t *parse_eval_top_forms(const char *start)
   rtval_t *result_ptr = malloc(sizeof(rtval_t));
   memcpy(result_ptr, &result, sizeof(rtval_t));
   return result_ptr;
-}
-
-int main(int argc, char **argv)
-{
-  if (argc != 2)
-  {
-    printf("Usage: %s <expression>\n", argv[0]);
-    return 1;
-  }
-
-  const int initial_capacity = 128;
-  binding_t *defBindings = malloc(sizeof(binding_t) * initial_capacity);
-  def_env_t denv = (def_env_t){.size = 0, .capacity = initial_capacity, .bindings = defBindings};
-  const char *start = argv[1];
-  const char *end = start + strlen(start);
-  const char **cur = &start;
-  while (start < end)
-  {
-    const form_t *form = parse_one(cur, end);
-    if (!form)
-      break;
-    print_form(form);
-    rtval_t result = eval_top(&denv, form);
-    form_free((form_t *)form);
-    printf(" => ");
-    print_rtval(&result);
-    printf("\n");
-  }
-  free(defBindings);
 }
