@@ -1,13 +1,15 @@
 import { langUndefined } from '../core.js'
 
-import cInterModule from '../../c/i2.js'
+import factory from '../../c/i2.js'
 
-let cParseEval = cInterModule.cwrap('parse_eval', 'number', ['string'])
-let cParseEvalTopForms = cInterModule.cwrap('parse_eval_top_forms', 'number', ['string'])
-let cGetType = cInterModule.cwrap('get_type', 'string', ['number'])
-let cGetF64 = cInterModule.cwrap('get_f64', 'number', ['number'])
-let cGetSize = cInterModule.cwrap('rt_get_size', 'number', ['number'])
-let cGetList = cInterModule.cwrap('rt_get_list', 'number', ['number', 'number'])
+const { cwrap } = await factory()
+
+let cParseEval = cwrap('parse_eval', 'number', ['string'])
+let cParseEvalTopForms = cwrap('parse_eval_top_forms', 'number', ['string'])
+let cGetType = cwrap('get_type', 'string', ['number'])
+let cGetF64 = cwrap('get_f64', 'number', ['number'])
+let cGetSize = cwrap('rt_get_size', 'number', ['number'])
+let cGetList = cwrap('rt_get_list', 'number', ['number', 'number'])
 
 const resultToString = (result) => {
   const type = cGetType(result)
