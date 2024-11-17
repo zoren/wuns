@@ -166,17 +166,6 @@ const form_list_t *make_form_list_from_buffer(form_list_buffer_t *buffer)
 
 #define MAX_FORM_DEPTH 16
 
-void buffer_stack_free(form_list_buffer_t *buffer)
-{
-  for (int i = 0; i <= MAX_FORM_DEPTH; i++)
-  {
-    const form_t **elems = buffer[i].elements;
-    if (elems == nullptr)
-      break;
-    free(elems);
-  }
-}
-
 const form_t *parse_one(const char **start, const char *end)
 {
   char *cur = (char *)*start;
@@ -246,7 +235,13 @@ const form_t *parse_one(const char **start, const char *end)
       break;
     append_form(&stack[depth], cur_form);
   }
-  buffer_stack_free(stack);
+  for (int i = 0; i < MAX_FORM_DEPTH; i++)
+  {
+    const form_t **elems = stack[i].elements;
+    if (elems == nullptr)
+      break;
+    free(elems);
+  }
   return cur_form;
 }
 
