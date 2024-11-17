@@ -56,7 +56,7 @@ char_range_t *readFileToString(const char *filename)
   // Rewind the file and read its contents
   rewind(file);
   size_t bytesRead = fread(buffer, 1, fileSize, file);
-  if (bytesRead != fileSize)
+  if (bytesRead != (size_t)fileSize)
   {
     perror("Error reading file");
     free(buffer);

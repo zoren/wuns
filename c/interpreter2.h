@@ -30,7 +30,7 @@ const form_t *parse_one(const char **start, const char *end);
 void print_form(const form_t *form);
 
 
-typedef enum runtime_value_tag
+typedef enum
 {
   rtval_i32,
   rtval_f64,

@@ -569,6 +569,7 @@ rtval_t def_env_lookup(const def_env_t *denv, const word_t *word)
       return binding.value;
   }
   exitWithError("word not found in env");
+  exit(1);
 }
 
 rtval_t lookup(const local_stack_t *env, const word_t *word)
@@ -866,6 +867,7 @@ rtval_t eval_exp(const local_stack_t *env, const form_t *form)
   default:
     printf("unknown special form: %s\n", name->chars);
     exitWithError("unknown special form");
+    exit(1);
   }
 }
 
