@@ -194,8 +194,12 @@ const expSpecialFormsExp = {
       throw new CompileError(e.message, tail[0])
     }
   },
-  i64: () => { throw new CompileError('i64 not implemented') },
-  f32: () => { throw new CompileError('i64 not implemented') },
+  i64: () => {
+    throw new CompileError('i64 not implemented')
+  },
+  f32: () => {
+    throw new CompileError('i64 not implemented')
+  },
   f64: (tail) => {
     if (tail.length !== 1) throw new CompileError('f64 expected one argument')
     const v = +getFormWord(tail[0])
@@ -531,7 +535,7 @@ const evalExpAsync = async (defEnv, jsExp) => {
       console.error(e)
       console.error(jsSrc)
       console.dir(jsExp, { depth: null })
-      throw new CompileError('SyntaxError in evalExpAsync')
+      throw new CompileError(e.constructor.name + ' in evalExpAsync: ' + e.message)
     }
     throw e
   }
