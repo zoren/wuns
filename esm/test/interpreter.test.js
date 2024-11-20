@@ -514,6 +514,52 @@ const testTop = ({ ptse }) => {
         [size-of int-or-float]`),
     ).toBe(8)
   })
+
+  test('field load store', async () => {
+    expect(
+      await ptse(`
+[type vector [a size]
+  [record
+    [size i32]
+    [elements [array a size]]]]
+
+[memory mem 1]
+
+[def p [i32 16]]
+
+[do
+  [store-field mem p [vector i32 any] size [i32 3]]
+  [load-field mem p [vector i32 any] size]]
+`),
+    ).toBe(3)
+
+    expect(
+      await ptse(`
+[type r []
+  [record
+    [f u8]]]
+
+[memory mem 1]
+
+[let [p [i32 16]]
+  [store-field mem p r f [i32 -1]]
+  [load-field mem p r f]]
+`),
+    ).toBe(255)
+    expect(
+      await ptse(`
+[type r []
+  [record
+    [f i8]]]
+
+[memory mem 1]
+
+[let [p [i32 16]]
+  [store-field mem p r f [i32 -1]]
+  [load-field mem p r f]]
+`),
+    ).toBe(-1)
+  })
 }
 
 const makeParseEvalTopsExp = (makeEvaluator) => {

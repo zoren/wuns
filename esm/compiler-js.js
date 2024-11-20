@@ -189,6 +189,7 @@ const compFunc = (tail, ctx, topContext) => {
 
 const builtInPrimitiveTypeSizes = Object.freeze({
   i8: 1,
+  u8: 1,
   i16: 2,
   i32: 4,
   i64: 8,
@@ -408,8 +409,31 @@ const makeSizer = (topContext, lctx) => {
 
 const primtiveArrays = {
   i8: { arrayName: 'Int8Array', byteSize: 1 },
-  u8: { arrayName: 'UInt8Array', byteSize: 1 },
+  u8: { arrayName: 'Uint8Array', byteSize: 1 },
   i32: { arrayName: 'Int32Array', byteSize: 4 },
+}
+
+const loadStoreFormToSub = (tail, lctx, topContext) => {
+  const [memForm, pointerForm, targetTypeForm, fieldNameForm] = tail
+  const memName = getFormWord(memForm)
+  const memDesc = topContext.defEnv.get(memName)
+  if (!memDesc) throw new CompileError('undefined memory')
+  if (memDesc.defKind !== 'memory') throw new CompileError('not a memory')
+  const fieldName = getFormWord(fieldNameForm)
+  const sizer = makeSizer(topContext, null)
+  const { offset, fieldType } = sizer.offset(targetTypeForm, fieldName)
+  if (fieldType.typeKind !== 'inst') throw new CompileError('expected field type')
+  const primArray = primtiveArrays[fieldType.typeName]
+  if (!primArray) throw new CompileError('primitive array expected')
+  const { arrayName, byteSize } = primArray
+  const arrayExp = jsNew(
+    jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer')), jsNumber(offset)]),
+  )
+  const pointer = compExp(lctx, pointerForm, topContext)
+  let addrExp = jsAdd(jsNumber(offset), pointer)
+  // need to divide by byteSize if not 1
+  if (byteSize !== 1) addrExp = jsBin('div')(addrExp, jsNumber(byteSize))
+  return jsSubscript(arrayExp, addrExp)
 }
 
 const expSpecialFormsExp = {
@@ -466,7 +490,7 @@ const expSpecialFormsExp = {
       }
       case 'i32.load8-u': {
         if (args.length !== 4) throw new CompileError('i32.load8-u expected four arguments')
-        return getMemLval('UInt8Array', 1)
+        return getMemLval('Uint8Array', 1)
       }
       case 'i32.store8': {
         if (args.length !== 5) throw new CompileError('i32.store8 expected five arguments')
@@ -501,63 +525,14 @@ const expSpecialFormsExp = {
     const type = makeTypeValidator(topContext.typeContext, [])(typeForm)
     return sizer.sizeOfExp(type)
   },
-  // offset: (tail, _, topContext) => {
-  //   if (tail.length !== 2) throw new CompileError('offset expected two arguments')
-  //   const [type, fieldForm] = tail
-  //   const field = getFormWord(fieldForm)
-  //   const sizer = makeSizer(topContext, null)
-  //   return jsNumber(sizer.offset(type, field).offset)
-  // },
   'load-field': (tail, lctx, topContext) => {
     if (tail.length !== 4) throw new CompileError('load-field expected four arguments')
-    const [memForm, pointerForm, targetTypeForm, fieldNameForm] = tail
-    const memName = getFormWord(memForm)
-    const memDesc = topContext.defEnv.get(memName)
-    if (!memDesc) throw new CompileError('undefined memory')
-    if (memDesc.defKind !== 'memory') throw new CompileError('not a memory')
-    const fieldName = getFormWord(fieldNameForm)
-    const sizer = makeSizer(topContext, null)
-    const { offset, fieldType } = sizer.offset(targetTypeForm, fieldName)
-    if (!Array.isArray(fieldType)) throw new CompileError('expected field type')
-    if (fieldType.length !== 1) throw new CompileError('expected field type')
-    const [typeName] = fieldType
-    const primArray = primtiveArrays[typeName]
-    if (!primArray) throw new CompileError('primitive array expected')
-    const { arrayName, byteSize } = primArray
-    const arrayExp = jsNew(
-      jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer')), jsNumber(offset)]),
-    )
-    const pointer = compExp(lctx, pointerForm, topContext)
-    let addrExp = jsAdd(jsNumber(offset), pointer)
-    // need to divide by byteSize if not 1
-    if (byteSize !== 1) addrExp = jsBin('div')(addrExp, jsNumber(byteSize))
-    return jsSubscript(arrayExp, addrExp)
+    return loadStoreFormToSub(tail, lctx, topContext)
   },
   'store-field': (tail, lctx, topContext) => {
-    if (tail.length !== 5) throw new CompileError('load-field expected four arguments')
-    const [memForm, pointerForm, targetTypeForm, fieldNameForm, valueForm] = tail
-    const memName = getFormWord(memForm)
-    const memDesc = topContext.defEnv.get(memName)
-    if (!memDesc) throw new CompileError('undefined memory')
-    if (memDesc.defKind !== 'memory') throw new CompileError('not a memory')
-    const fieldName = getFormWord(fieldNameForm)
-    const sizer = makeSizer(topContext, null)
-    const { offset, fieldType } = sizer.offset(targetTypeForm, fieldName)
-    if (!Array.isArray(fieldType)) throw new CompileError('expected field type')
-    if (fieldType.length !== 1) throw new CompileError('expected field type')
-    const [typeName] = fieldType
-    const primArray = primtiveArrays[typeName]
-    if (!primArray) throw new CompileError('primitive array expected')
-    const { arrayName, byteSize } = primArray
-    const arrayExp = jsNew(
-      jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer')), jsNumber(offset)]),
-    )
-    const pointer = compExp(lctx, pointerForm, topContext)
-    let addrExp = jsAdd(jsNumber(offset), pointer)
-    // need to divide by byteSize if not 1
-    if (byteSize !== 1) addrExp = jsBin('div')(addrExp, jsNumber(byteSize))
-    const jsSub = jsSubscript(arrayExp, addrExp)
-    const jsExp = jsAssignExp(jsSub, compExp(lctx, valueForm, topContext))
+    if (tail.length !== 5) throw new CompileError('store-field expected five arguments')
+    const jsSub = loadStoreFormToSub(tail, lctx, topContext)
+    const jsExp = jsAssignExp(jsSub, compExp(lctx, tail[4], topContext))
     return jsParenComma([jsExp, jsUndefined])
   },
 }
