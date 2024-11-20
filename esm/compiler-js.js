@@ -413,6 +413,7 @@ const primtiveArrays = {
   i16: { arrayName: 'Int16Array', byteSize: 2 },
   u16: { arrayName: 'Uint16Array', byteSize: 2 },
   i32: { arrayName: 'Int32Array', byteSize: 4 },
+  f64: { arrayName: 'Float64Array', byteSize: 8 },
 }
 
 const loadStoreFormToSub = (tail, lctx, topContext) => {

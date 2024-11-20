@@ -587,6 +587,20 @@ const testTop = ({ ptse }) => {
   [load-field mem p r f]]
 `),
     ).toBe(-1)
+
+    expect(
+      await ptse(`
+[type r []
+  [record
+    [f f64]]]
+
+[memory mem 1]
+
+[let [p [i32 16]]
+  [store-field mem p r f [f64 1.5]]
+  [load-field mem p r f]]
+`),
+    ).toBe(1.5)
   })
 }
 
