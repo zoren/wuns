@@ -425,16 +425,18 @@ const loadStoreFormToSub = (tail, lctx, topContext) => {
   const fieldName = getFormWord(fieldNameForm)
   const sizer = makeSizer(topContext, null)
   const { offset, fieldType } = sizer.offset(targetTypeForm, fieldName)
-  if (fieldType.typeKind !== 'inst') throw new CompileError('expected field type')
-  const primArray = primtiveArrays[fieldType.typeName]
+  const { typeKind } = fieldType
+  if (typeKind !== 'inst') throw new CompileError('expected field type')
+  const fieldTypeName = fieldType.typeName
+  const typeName = fieldTypeName === 'pointer' ? 'i32' : fieldTypeName
+  const primArray = primtiveArrays[typeName]
   if (!primArray) throw new CompileError('primitive array expected')
   const { arrayName, byteSize } = primArray
   const arrayExp = jsNew(
     jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer')), jsNumber(offset)]),
   )
   const pointer = compExp(lctx, pointerForm, topContext)
-  let addrExp = pointer
-  if (byteSize !== 1) addrExp = jsBin('div')(addrExp, jsNumber(byteSize))
+  const addrExp = byteSize === 1 ? pointer : jsBin('div')(pointer, jsNumber(byteSize))
   return jsSubscript(arrayExp, addrExp)
 }
 
