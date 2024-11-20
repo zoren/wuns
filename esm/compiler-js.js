@@ -6,6 +6,7 @@ import {
   makeTaggedValue,
   parseString,
   wordToI32,
+  makeFormList,
 } from './core.js'
 import { intrinsics } from './intrinsics.js'
 import { escapeIdentifier, jsExpToString, jsStmtToString } from './runtime-lib/js.js'
@@ -44,7 +45,9 @@ const jsArrowExpNoRest = (params, body) => jsArrowExp(params, optionNone, body)
 
 const js0 = jsNumber(0)
 const js1 = jsNumber(1)
+const js4 = jsNumber(4)
 const jsUndefined = jsVar('undefined')
+const jsMathMax = jsSubscript(jsVar('Math'), jsString('max'))
 
 const mkObject = (...args) => jsObject(args.map(([k, v]) => ({ fst: k, snd: v })))
 const mkTaggedObject = (tag, ...args) => mkObject(['tag', jsString(tag)], ['args', jsArray(args)])
@@ -161,7 +164,7 @@ const bodiesToStmts = (defEnv, ctx, tail, isTail) => {
   return stmts
 }
 
-const compFunc = (tail, ctx, defEnv) => {
+const compFunc = (tail, ctx, topContext) => {
   const name = getFormWord(tail[0])
   let parametersForms = getFormList(tail[1])
   const bodies = tail.slice(2)
@@ -180,8 +183,233 @@ const compFunc = (tail, ctx, defEnv) => {
     parameters = parametersForms.map(getFormWord)
     parametersForms.forEach((p) => setNewLocalForm(newCtx, p))
   }
-  const arrow = jsArrowStmt(parameters, restOption, jsBlock(bodiesToStmts(defEnv, newCtx, bodies, true)))
+  const arrow = jsArrowStmt(parameters, restOption, jsBlock(bodiesToStmts(topContext, newCtx, bodies, true)))
   return jsIIFE([jsConstDecl(name, arrow), jsReturn(jsVar(name))])
+}
+
+const builtInPrimitiveTypeSizes = Object.freeze({
+  i8: 1,
+  i16: 2,
+  i32: 4,
+  i64: 8,
+  f32: 4,
+  f64: 8,
+  v128: 16,
+})
+
+const typeVar = (name) => Object.freeze({ typeKind: 'var', name })
+const typeInst = (typeName, ...args) => Object.freeze({ typeKind: 'inst', typeName, args })
+const typeExp = (exp) => Object.freeze({ typeKind: 'exp', exp })
+const typeFunc = (parameters, restParameter, result) =>
+  Object.freeze({ typeKind: 'func', parameters, restParameter, result })
+
+const makeTypeValidator = (typeContext, params) => {
+  const subst = new Set(params)
+  const go = (typeForm) => {
+    {
+      const typeWord = tryGetFormWord(typeForm)
+      if (typeWord) {
+        if (subst.has(typeWord)) return typeVar(typeWord)
+        return go(makeFormList([typeForm]))
+      }
+    }
+    const typeList = getFormList(typeForm)
+    if (typeList.length === 0) throw new CompileError('empty type list')
+    const [first, ...rest] = typeList
+    const firstWord = getFormWord(first)
+    if (firstWord in builtInPrimitiveTypeSizes) {
+      if (rest.length !== 0) throw new CompileError('built-in type expected no arguments')
+      return typeInst(firstWord)
+    }
+    switch (firstWord) {
+      case 'word':
+      case 'any':
+        if (rest.length !== 0) throw new CompileError('expected no arguments')
+        return typeInst(firstWord)
+      case 'list':
+      case 'pointer': {
+        if (rest.length !== 1) throw new CompileError('expected one argument')
+        return typeInst(firstWord, go(rest[0]))
+      }
+      case 'exp': {
+        if (rest.length !== 1) throw new CompileError('exp expected one argument')
+        return typeExp(rest[0])
+      }
+      case 'array': {
+        if (rest.length !== 2) throw new CompileError('array expected two arguments')
+        const [elementTypeForm, sizeForm] = rest
+        const elementType = go(elementTypeForm)
+        const size = go(sizeForm)
+        if (Array.isArray(size) && size[0] !== 'exp') throw new CompileError('array size must be exp type')
+        return typeInst('array', elementType, size)
+      }
+      case 'func': {
+        if (rest.length < 2) throw new CompileError('func expected at least two arguments')
+        const [paramsForm, returnTypeForm] = rest
+        const params = getFormList(paramsForm)
+        if (params.length > 1 && tryGetFormWord(params.at(-2)) === '..')
+          throw new CompileError('rest parameter not implemented')
+        const returnType = go(returnTypeForm)
+        return typeFunc(params.map(go), null, returnType)
+      }
+      case 'tuple':
+        return typeInst('tuple', rest.map(go))
+    }
+    const userDef = typeContext.get(firstWord)
+    if (!userDef) throw new CompileError('unknown type: ' + firstWord)
+    const { params } = userDef
+    if (params.length !== rest.length) throw new CompileError('wrong number of type parameters')
+    return typeInst(firstWord, ...rest.map((t) => go(t)))
+  }
+  return go
+}
+
+const makeSizer = (topContext, lctx) => {
+  const { typeContext } = topContext
+  const typeToSizeNumber = (typeVarEnv, type) => {
+    switch (type.typeKind) {
+      case 'var': {
+        const newLocal = typeVarEnv.get(type.name)
+        if (newLocal === undefined) throw new CompileError('unbound type variable: ' + type.name)
+        return typeToSizeNumber(typeVarEnv, newLocal)
+      }
+      case 'inst': {
+        const { typeName, args: targs } = type
+        const builtinTypeSize = builtInPrimitiveTypeSizes[typeName]
+        if (builtinTypeSize !== undefined) {
+          if (targs.length !== 0) throw new CompileError('built-in type expected no arguments')
+          return builtinTypeSize
+        }
+        switch (typeName) {
+          case 'array': {
+            if (targs.length !== 2) throw new CompileError('array expected two arguments')
+            const [elementType, arraySizeForm] = targs
+            const elementTypeSize = typeToSizeNumber(typeVarEnv, elementType)
+            let arraySize
+            if (arraySizeForm.typeKind === 'var') {
+              arraySize = typeVarEnv.get(arraySizeForm.name)
+            } else {
+              arraySize = arraySizeForm
+            }
+            if (arraySize.typeKind !== 'exp') throw new CompileError('array size expected exp type')
+            // this may fail if the expression depends on a variable
+            const arraySizeExp = compExp(null, arraySize.exp, topContext)
+            const f = new Function('return ' + jsExpToStringSafe(arraySizeExp))
+            const arraySizeNum = f()
+            return elementTypeSize * arraySizeNum
+          }
+          case 'pointer':
+          case 'exp':
+            return 4
+          case 'any':
+            throw new CompileError('size-of any not allowed')
+        }
+        const userDef = typeContext.get(typeName)
+        if (!userDef) throw new CompileError('unknown type: ' + typeName)
+        const { params, kind } = userDef
+        const newSubst = new Map()
+        for (let i = 0; i < params.length; i++) newSubst.set(params[i], targs[i])
+        switch (kind) {
+          case 'record':
+            return userDef.fields.reduce((acc, field) => acc + typeToSizeNumber(newSubst, field.fieldType), 0)
+          case 'untagged-union':
+            return Math.max(0, ...userDef.types.map((t) => typeToSizeNumber(newSubst, t)))
+          case 'union':
+            throw new CompileError('union not allowed')
+          default:
+            throw new CompileError('unknown type kind: ' + kind)
+        }
+      }
+      case 'func':
+        throw new CompileError('size-of func not allowed')
+    }
+    throw new CompileError('unknown type kind: ' + type.typeKind)
+  }
+  const typeToSizeJSExp = (typeVarEnv, type) => {
+    if (type.typeKind !== 'inst') {
+      return jsNumber(typeToSizeNumber(typeVarEnv, type))
+    }
+    const { typeName, args: targs } = type
+    if (typeName === 'array') {
+      if (targs.length !== 2) throw new CompileError('array expected two arguments')
+      const [elementType, arraySizeForm] = targs
+      const elementTypeSize = typeToSizeJSExp(typeVarEnv, elementType)
+      let arraySize
+      if (arraySizeForm.typeKind === 'var') {
+        arraySize = typeVarEnv.get(arraySizeForm.name)
+      } else {
+        arraySize = arraySizeForm
+      }
+      if (arraySize.typeKind !== 'exp') throw new CompileError('array size expected exp type')
+      // this may fail if the expression depends on a variable
+      const arraySizeExp = compExp(lctx, arraySize.exp, topContext)
+      return jsBin('mul')(elementTypeSize, arraySizeExp)
+    }
+    const userDef = typeContext.get(typeName)
+    if (!userDef) return jsNumber(typeToSizeNumber(typeVarEnv, type))
+    const { params, kind } = userDef
+    if (params.length !== targs.length) throw new CompileError('wrong number of type parameters')
+    const newSubst = new Map()
+    for (let i = 0; i < params.length; i++) newSubst.set(params[i], targs[i])
+    switch (kind) {
+      case 'record':
+        return userDef.fields.reduce((acc, field) => jsAdd(acc, typeToSizeJSExp(newSubst, field.fieldType)), js0)
+      case 'untagged-union':
+        return userDef.types.reduce((acc, t) => jsCall(jsMathMax, [acc, typeToSizeJSExp(newSubst, t)]), js0)
+      case 'union':
+        return userDef.constructors.reduce(
+          (acc, { params }) =>
+            jsCall(jsMathMax, [acc, params.reduce((acc, p) => jsAdd(acc, typeToSizeJSExp(newSubst, p)), js0)]),
+          js0,
+        )
+      default:
+        throw new CompileError('unknown type kind: ' + kind)
+    }
+  }
+  const offset = (typeVarEnv, type, fieldName) => {
+    const optName = tryGetFormWord(type)
+    if (optName !== null) {
+      if (typeVarEnv && typeVarEnv.has(optName)) return offset(typeVarEnv, typeVarEnv.get(optName), fieldName)
+      return offset(null, makeFormList([type]), fieldName)
+    }
+    const list = tryGetFormList(type)
+    if (!list) {
+      console.error('type', type)
+      throw new CompileError('expected list')
+    }
+    if (list.length === 0) throw new CompileError('type list empty')
+    const [first, ...targs] = list
+    const firstName = getFormWord(first)
+    const userDef = typeContext.get(firstName)
+    if (!userDef) throw new CompileError('unknown type: ' + firstName)
+    const { params, kind } = userDef
+    if (params.length !== targs.length) throw new CompileError('wrong number of type parameters')
+    const newSubst = new Map()
+    for (let i = 0; i < params.length; i++) newSubst.set(params[i], targs[i])
+    switch (kind) {
+      case 'record': {
+        let offset = 0
+        for (const { name, fieldType } of userDef.fields) {
+          if (name === fieldName) return { offset, fieldType }
+          offset += typeToSizeNumber(newSubst, fieldType)
+        }
+        throw new CompileError('field not found: ' + fieldName)
+      }
+      default:
+        throw new CompileError('unknown type kind: ' + kind)
+    }
+  }
+  return {
+    // sizeOf: (type) => jsNumber(typeToSizeNumber(null, type)),
+    sizeOfExp: (type) => typeToSizeJSExp(null, type),
+    offset: (type, field) => offset(null, type, field),
+  }
+}
+
+const primtiveArrays = {
+  i8: { arrayName: 'Int8Array', byteSize: 1 },
+  u8: { arrayName: 'UInt8Array', byteSize: 1 },
+  i32: { arrayName: 'Int32Array', byteSize: 4 },
 }
 
 const expSpecialFormsExp = {
@@ -198,7 +426,7 @@ const expSpecialFormsExp = {
     throw new CompileError('i64 not implemented')
   },
   f32: () => {
-    throw new CompileError('i64 not implemented')
+    throw new CompileError('f32 not implemented')
   },
   f64: (tail) => {
     if (tail.length !== 1) throw new CompileError('f64 expected one argument')
@@ -210,8 +438,9 @@ const expSpecialFormsExp = {
     if (tail.length !== 1) throw new CompileError('word expected one argument')
     return jsString(getFormWord(tail[0]))
   },
-  intrinsic: (tail, ctx, defEnv) => {
+  intrinsic: (tail, ctx, topContext) => {
     if (tail.length < 1) throw new CompileError('intrinsic expected at least one argument')
+    const { defEnv } = topContext
     const [opForm, ...args] = tail
     const opName = getFormWord(opForm)
     const getMemLval = (arrayName, byteSize) => {
@@ -225,7 +454,7 @@ const expSpecialFormsExp = {
       const alignment = +getFormWord(alignmentForm)
       if (isNaN(alignment)) throw new CompileError('expected number')
       const arrayExp = jsNew(jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer'))]))
-      let addrExp = jsAdd(jsNumber(offset), compExp(ctx, addrForm, defEnv))
+      let addrExp = jsAdd(jsNumber(offset), compExp(ctx, addrForm, topContext))
       // need to divide by byteSize
       if (byteSize !== 1) addrExp = jsBin('div')(addrExp, jsNumber(byteSize))
       return jsSubscript(arrayExp, addrExp)
@@ -242,13 +471,13 @@ const expSpecialFormsExp = {
       case 'i32.store8': {
         if (args.length !== 5) throw new CompileError('i32.store8 expected five arguments')
         const [, , , , valueForm] = args
-        const jsExp = jsAssignExp(getMemLval('Int8Array', 1), compExp(ctx, valueForm, defEnv))
+        const jsExp = jsAssignExp(getMemLval('Int8Array', 1), compExp(ctx, valueForm, topContext))
         return jsParenComma([jsExp, jsUndefined])
       }
       case 'i32.store': {
         if (args.length !== 5) throw new CompileError('i32.store expected five arguments')
         const [, , , , valueForm] = args
-        const jsExp = jsAssignExp(getMemLval('Int32Array', 4), compExp(ctx, valueForm, defEnv))
+        const jsExp = jsAssignExp(getMemLval('Int32Array', 4), compExp(ctx, valueForm, topContext))
         return jsParenComma([jsExp, jsUndefined])
       }
     }
@@ -256,7 +485,7 @@ const expSpecialFormsExp = {
     if (args.length !== intrinsics[opName].length) throw new CompileError('wrong number of arguments')
     return opIntrinsicCall(
       opName,
-      args.map((arg) => compExp(ctx, arg, defEnv)),
+      args.map((arg) => compExp(ctx, arg, topContext)),
     )
   },
   func: compFunc,
@@ -265,6 +494,72 @@ const expSpecialFormsExp = {
     return jsTernary(...tail.map((f) => compExp(ctx, f, defEnv)))
   },
   'type-anno': (tail, ctx, defEnv) => compExp(ctx, tail[0], defEnv),
+  'size-of': (tail, lctx, topContext) => {
+    if (tail.length !== 1) throw new CompileError('size-of expected one argument')
+    const sizer = makeSizer(topContext, lctx)
+    const typeForm = tail[0]
+    const type = makeTypeValidator(topContext.typeContext, [])(typeForm)
+    return sizer.sizeOfExp(type)
+  },
+  // offset: (tail, _, topContext) => {
+  //   if (tail.length !== 2) throw new CompileError('offset expected two arguments')
+  //   const [type, fieldForm] = tail
+  //   const field = getFormWord(fieldForm)
+  //   const sizer = makeSizer(topContext, null)
+  //   return jsNumber(sizer.offset(type, field).offset)
+  // },
+  'load-field': (tail, lctx, topContext) => {
+    if (tail.length !== 4) throw new CompileError('load-field expected four arguments')
+    const [memForm, pointerForm, targetTypeForm, fieldNameForm] = tail
+    const memName = getFormWord(memForm)
+    const memDesc = topContext.defEnv.get(memName)
+    if (!memDesc) throw new CompileError('undefined memory')
+    if (memDesc.defKind !== 'memory') throw new CompileError('not a memory')
+    const fieldName = getFormWord(fieldNameForm)
+    const sizer = makeSizer(topContext, null)
+    const { offset, fieldType } = sizer.offset(targetTypeForm, fieldName)
+    if (!Array.isArray(fieldType)) throw new CompileError('expected field type')
+    if (fieldType.length !== 1) throw new CompileError('expected field type')
+    const [typeName] = fieldType
+    const primArray = primtiveArrays[typeName]
+    if (!primArray) throw new CompileError('primitive array expected')
+    const { arrayName, byteSize } = primArray
+    const arrayExp = jsNew(
+      jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer')), jsNumber(offset)]),
+    )
+    const pointer = compExp(lctx, pointerForm, topContext)
+    let addrExp = jsAdd(jsNumber(offset), pointer)
+    // need to divide by byteSize if not 1
+    if (byteSize !== 1) addrExp = jsBin('div')(addrExp, jsNumber(byteSize))
+    return jsSubscript(arrayExp, addrExp)
+  },
+  'store-field': (tail, lctx, topContext) => {
+    if (tail.length !== 5) throw new CompileError('load-field expected four arguments')
+    const [memForm, pointerForm, targetTypeForm, fieldNameForm, valueForm] = tail
+    const memName = getFormWord(memForm)
+    const memDesc = topContext.defEnv.get(memName)
+    if (!memDesc) throw new CompileError('undefined memory')
+    if (memDesc.defKind !== 'memory') throw new CompileError('not a memory')
+    const fieldName = getFormWord(fieldNameForm)
+    const sizer = makeSizer(topContext, null)
+    const { offset, fieldType } = sizer.offset(targetTypeForm, fieldName)
+    if (!Array.isArray(fieldType)) throw new CompileError('expected field type')
+    if (fieldType.length !== 1) throw new CompileError('expected field type')
+    const [typeName] = fieldType
+    const primArray = primtiveArrays[typeName]
+    if (!primArray) throw new CompileError('primitive array expected')
+    const { arrayName, byteSize } = primArray
+    const arrayExp = jsNew(
+      jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer')), jsNumber(offset)]),
+    )
+    const pointer = compExp(lctx, pointerForm, topContext)
+    let addrExp = jsAdd(jsNumber(offset), pointer)
+    // need to divide by byteSize if not 1
+    if (byteSize !== 1) addrExp = jsBin('div')(addrExp, jsNumber(byteSize))
+    const jsSub = jsSubscript(arrayExp, addrExp)
+    const jsExp = jsAssignExp(jsSub, compExp(lctx, valueForm, topContext))
+    return jsParenComma([jsExp, jsUndefined])
+  },
 }
 
 let tmpVarCounter = 0
@@ -405,7 +700,7 @@ const expSpecialFormsStmt = {
   },
 }
 
-const compExpStmt = (ctx, form, defEnv, isTail) => {
+const compExpStmt = (lctx, form, topContext, isTail) => {
   const forms = tryGetFormList(form)
   if (forms) {
     if (forms.length === 0) throw new CompileError('empty list')
@@ -414,19 +709,19 @@ const compExpStmt = (ctx, form, defEnv, isTail) => {
     if (firstWord) {
       const stmtSpecialHandler = expSpecialFormsStmt[firstWord]
       if (stmtSpecialHandler) {
-        const stmt = stmtSpecialHandler(args, ctx, defEnv, isTail)
+        const stmt = stmtSpecialHandler(args, lctx, topContext, isTail)
         return isTail ? stmt : jsExpStmt(jsIIFE([stmt]))
       }
       const expSpecialHandler = expSpecialFormsExp[firstWord]
       if (expSpecialHandler) {
-        const exp = expSpecialHandler(args, ctx, defEnv)
+        const exp = expSpecialHandler(args, lctx, topContext)
         return isTail ? jsReturn(exp) : jsExpStmt(exp)
       }
-      const desc = defEnv.get(firstWord)
-      if (desc && desc.defKind === 'defmacro') return compExpStmt(ctx, desc.value(...args), defEnv, isTail)
+      const desc = topContext.defEnv.get(firstWord)
+      if (desc && desc.defKind === 'defmacro') return compExpStmt(lctx, desc.value(...args), topContext, isTail)
     }
   }
-  const jsExp = compExp(ctx, form, defEnv)
+  const jsExp = compExp(lctx, form, topContext)
   return isTail ? jsReturn(jsExp) : jsExpStmt(jsExp)
 }
 
@@ -460,7 +755,7 @@ const jsExpToStringSafe = (js) => {
   }
 }
 
-const compExp = (ctx, form, defEnv) => {
+const compExp = (ctx, form, topContext) => {
   const word = tryGetFormWord(form)
   if (word) {
     let curCtx = ctx
@@ -468,7 +763,7 @@ const compExp = (ctx, form, defEnv) => {
       if (curCtx.has(word)) return jsVar(word)
       curCtx = curCtx.outer
     }
-    const desc = defEnv.get(word)
+    const desc = topContext.defEnv.get(word)
     if (!desc) throw new CompileError('undefined variable: ' + word, form)
     const { defKind } = desc
     if (defKind === 'defmacro') throw new CompileError('macro in value position')
@@ -485,21 +780,21 @@ const compExp = (ctx, form, defEnv) => {
   const [firstForm, ...args] = forms
   const firstWord = tryGetFormWord(firstForm)
   if (firstWord) {
-    if (firstWord === 'do') return jsIIFE(bodiesToStmts(defEnv, ctx, args, true))
+    if (firstWord === 'do') return jsIIFE(bodiesToStmts(topContext, ctx, args, true))
     if (firstWord in topSpecialForms) throw new CompileError('top special not allowed in expression form')
 
     const expSpecialHandler = expSpecialFormsExp[firstWord]
-    if (expSpecialHandler) return expSpecialHandler(args, ctx, defEnv)
+    if (expSpecialHandler) return expSpecialHandler(args, ctx, topContext)
 
     const stmtSpecialHandler = expSpecialFormsStmt[firstWord]
-    if (stmtSpecialHandler) return jsIIFE([stmtSpecialHandler(args, ctx, defEnv, true)])
+    if (stmtSpecialHandler) return jsIIFE([stmtSpecialHandler(args, ctx, topContext, true)])
 
-    const defDesc = defEnv.get(firstWord)
+    const defDesc = topContext.defEnv.get(firstWord)
     if (defDesc) {
       const { defKind, value } = defDesc
       switch (defKind) {
         case 'defmacro':
-          return compExp(ctx, value(...args), defEnv)
+          return compExp(ctx, value(...args), topContext)
         case 'defexpr':
           return jsCall(jsVar(firstWord), args.map(formToQuotedJS))
         default:
@@ -508,8 +803,8 @@ const compExp = (ctx, form, defEnv) => {
     }
   }
   return jsCall(
-    compExp(ctx, firstForm, defEnv),
-    args.map((arg) => compExp(ctx, arg, defEnv)),
+    compExp(ctx, firstForm, topContext),
+    args.map((arg) => compExp(ctx, arg, topContext)),
   )
 }
 
@@ -525,7 +820,8 @@ const importModuleElement = async (modulePath, elementName) => {
 
 const AsyncFunction = async function () {}.constructor
 
-const evalExpAsync = async (defEnv, jsExp) => {
+const evalExpAsync = async (topContext, jsExp) => {
+  const { defEnv } = topContext
   const jsSrc = jsExpToStringSafe(jsExp)
   try {
     const asyncFunc = new AsyncFunction('dynImport', ...[...defEnv.keys()].map(escapeIdentifier), 'return ' + jsSrc)
@@ -541,10 +837,11 @@ const evalExpAsync = async (defEnv, jsExp) => {
   }
 }
 
-const setDef = async (defEnv, varName, defKind, jsExp) => {
+const setDef = async (topContext, varName, defKind, jsExp) => {
+  const { defEnv } = topContext
   if (defEnv.has(varName)) throw new CompileError('redefining variable: ' + varName)
   try {
-    const value = await evalExpAsync(defEnv, jsExp)
+    const value = await evalExpAsync(topContext, jsExp)
     defEnv.set(varName, { defKind, value })
   } catch (e) {
     console.error({ varName, defKind })
@@ -553,99 +850,134 @@ const setDef = async (defEnv, varName, defKind, jsExp) => {
   }
 }
 
-const defFuncLike = async (firstWord, tail, defEnv) => {
+const defFuncLike = async (firstWord, tail, topContext) => {
   const defName = getFormWord(tail[0])
-  const exp = compFunc(tail, null, defEnv)
-  await setDef(defEnv, defName, firstWord, exp)
+  const exp = compFunc(tail, null, topContext)
+  await setDef(topContext, defName, firstWord, exp)
 }
 import { 'read-file-async' as read_file_async } from './runtime-lib/files.js'
 
 const topSpecialForms = {
-  def: async (_, tail, defEnv) => {
+  def: async (_, tail, topContext) => {
     if (tail.length !== 2) throw new CompileError('def expected two arguments')
     const varName = getFormWord(tail[0])
-    const jsExp = compExp(null, tail[1], defEnv)
-    await setDef(defEnv, varName, 'def', jsExp)
+    const jsExp = compExp(null, tail[1], topContext)
+    await setDef(topContext, varName, 'def', jsExp)
   },
   defn: defFuncLike,
   defexpr: defFuncLike,
   defmacro: defFuncLike,
-  do: async (_, tail, defEnv) => {
-    for (const form of tail) await compileTopDefEnv(defEnv, form)
+  do: async (_, tail, topContext) => {
+    for (const form of tail) await compileTopDefEnv(topContext, form)
   },
-  load: async (_, tail, defEnv) => {
+  load: async (_, tail, topContext) => {
     if (tail.length !== 1) throw new CompileError('load expects one argument')
     const relativeFilePath = getFormWord(tail[0])
     const fileContent = await read_file_async(relativeFilePath)
     const fileForms = parseString(fileContent, relativeFilePath)
-    for (const form of fileForms) await compileTopDefEnv(defEnv, form)
+    for (const form of fileForms) await compileTopDefEnv(topContext, form)
   },
-  type: async (_, forms, defEnv) => {
+  // we can make the type special form generate code that creates a tagged object with the type name and the type body
+  type: async (_, forms, topContext) => {
+    const { typeContext } = topContext
     if (forms.length % 3 !== 0) throw new CompileError('type expected triples')
     for (let i = 0; i < forms.length; i += 3) {
-      const type = getFormWord(forms[i])
-      const _typeParams = getFormList(forms[i + 1]).map(getFormWord)
+      const typeName = getFormWord(forms[i])
+      const typeParams = getFormList(forms[i + 1]).map(getFormWord)
+      if (typeContext.has(typeName)) throw new CompileError('redefining type: ' + typeName)
+      typeContext.set(typeName, { params: typeParams })
+    }
+    for (let i = 0; i < forms.length; i += 3) {
+      const typeName = getFormWord(forms[i])
+      const descObj = typeContext.get(typeName)
+      const typeParams = descObj.params
+      const typeValidator = makeTypeValidator(typeContext, typeParams)
+      const validateType = (typeForm) => typeValidator(typeForm)
+
       const body = getFormList(forms[i + 2])
-      const firstBodyWord = getFormWord(body[0])
-      const typePrefix = `${type}/`
-      switch (firstBodyWord) {
+      const typeKind = getFormWord(body[0])
+      descObj.kind = typeKind
+      const typePrefix = `${typeName}/`
+      switch (typeKind) {
         case 'union': {
+          const constructors = []
           for (let i = 1; i < body.length; i++) {
             const unionCase = getFormList(body[i])
             if (unionCase.length === 0) throw new CompileError('union case must have at least one word')
             const unionCaseName = getFormWord(unionCase[0])
             const qualName = typePrefix + unionCaseName
-            const parameters = unionCase.slice(1).map((_, i) => `p${i}`)
+            const paramtypes = unionCase.slice(1)
+            const parameters = paramtypes.map((pt, i) => {
+              validateType(pt)
+              return `p${i}`
+            })
             const ctor = jsArrowExpNoRest(parameters, mkTaggedObject(qualName, ...parameters.map((p) => jsVar(p))))
-            await setDef(defEnv, qualName, 'unionCtor', ctor)
+            await setDef(topContext, qualName, 'unionCtor', ctor)
+            constructors.push({ name: unionCaseName, params: paramtypes })
           }
+          descObj.constructors = constructors
+          break
+        }
+        case 'untagged-union': {
+          const types = []
+          for (let i = 1; i < body.length; i++) {
+            const t = body[i]
+            types.push(validateType(t))
+          }
+          descObj.types = types
           break
         }
         case 'record': {
           const fieldNames = []
+          const fields = []
           for (let i = 1; i < body.length; i++) {
             const recordField = getFormList(body[i])
-            if (recordField.length < 2) throw new CompileError('record field must have a name and a type')
+            if (recordField.length != 2) throw new CompileError('record field must have a name and a type')
             const fieldName = getFormWord(recordField[0])
             fieldNames.push(fieldName)
             const projecterName = typePrefix + fieldName
             const jsProjecter = jsArrowExpNoRest(['record'], jsSubscript(jsVar('record'), jsString(fieldName)))
-            await setDef(defEnv, projecterName, 'recordProj', jsProjecter)
+            await setDef(topContext, projecterName, 'recordProj', jsProjecter)
+            const typeForm = recordField[1]
+            const fieldType = validateType(typeForm)
+            fields.push({ name: fieldName, typeForm, fieldType })
           }
           const jsConstructor = jsArrowExpNoRest(fieldNames, mkObject(...fieldNames.map((f) => [f, jsVar(f)])))
-          await setDef(defEnv, type, 'recordCtor', jsConstructor)
+          await setDef(topContext, typeName, 'recordCtor', jsConstructor)
+          descObj.fields = fields
           break
         }
         default:
-          throw new CompileError('unexpected type body: ' + firstBodyWord)
+          throw new CompileError('unexpected type body: ' + typeKind)
       }
     }
   },
-  export: (_, forms, defEnv) => {
+  export: (_, forms, { defEnv }) => {
     for (const form of forms) {
       const exportWord = getFormWord(form)
       if (!defEnv.has(exportWord)) throw new CompileError('exported def variable not found: ' + exportWord, form)
     }
   },
-  import: async (_, tail, defEnv) => {
+  import: async (_, tail, topContext) => {
     if (tail.length !== 3) throw new CompileError('import expects three arguments')
     const importModuleName = getFormWord(tail[0])
     const importElementName = getFormWord(tail[1])
     const jsExp = jsAwait(jsCall(jsVar('dynImport'), [jsString(importModuleName), jsString(importElementName)]))
-    await setDef(defEnv, importElementName, 'import', jsExp)
+    await setDef(topContext, importElementName, 'import', jsExp)
   },
-  memory: async (_, tail, defEnv) => {
+  memory: async (_, tail, topContext) => {
     const [memoryName, memorySize] = tail.map(getFormWord)
     const initialSize = +memorySize
     if (initialSize <= 0) throw new CompileError('memory size must be positive')
     if ((initialSize !== initialSize) | 0) throw new CompileError('memory size must be an integer')
     const jsMemDesc = mkObject(['initial', jsNumber(initialSize)])
     const jsExp = jsNew(jsCall(jsSubscript(jsVar('WebAssembly'), jsString('Memory')), [jsMemDesc]))
-    await setDef(defEnv, memoryName, 'memory', jsExp)
+    await setDef(topContext, memoryName, 'memory', jsExp)
   },
 }
 
-const compileTopDefEnv = async (defEnv, form) => {
+const compileTopDefEnv = async (topContext, form) => {
+  const { defEnv } = topContext
   const forms = tryGetFormList(form)
   if (forms && forms.length > 0) {
     const [firstForm, ...args] = forms
@@ -653,14 +985,14 @@ const compileTopDefEnv = async (defEnv, form) => {
     if (firstWord) {
       const topSpecialHandler = topSpecialForms[firstWord]
       if (topSpecialHandler) {
-        await topSpecialHandler(firstWord, args, defEnv)
+        await topSpecialHandler(firstWord, args, topContext)
         return null
       }
     }
     const defDesc = defEnv.get(firstWord)
-    if (defDesc && defDesc.defKind === 'defmacro') return await compileTopDefEnv(defEnv, defDesc.value(...args))
+    if (defDesc && defDesc.defKind === 'defmacro') return await compileTopDefEnv(topContext, defDesc.value(...args))
   }
-  return compExp(null, form, defEnv)
+  return compExp(null, form, topContext)
 }
 
 export const specialForms = Object.freeze([
@@ -673,27 +1005,29 @@ export const specialForms = Object.freeze([
 
 export const makeJSCompilingEvaluator = () => {
   const defEnv = new Map()
+  const typeContext = new Map()
+  const topContext = { defEnv, typeContext }
   const evalExp = (form) => {
-    const ce = compExpStmt(null, form, defEnv, true)
+    const ce = compExpStmt(null, form, topContext, true)
     const f = new Function(jsStmtToStringSafe(ce))
     return f()
   }
   const evalTop = async (form) => {
-    const optJsExp = await compileTopDefEnv(defEnv, form)
+    const optJsExp = await compileTopDefEnv(topContext, form)
     if (optJsExp === null) return
-    if (optJsExp) return await evalExpAsync(defEnv, optJsExp)
+    if (optJsExp) return await evalExpAsync(topContext, optJsExp)
   }
   const evalTops = async (forms) => {
     let optJsExp = null
-    for (const form of forms) optJsExp = await compileTopDefEnv(defEnv, form)
-    if (optJsExp !== null) return await evalExpAsync(defEnv, optJsExp)
+    for (const form of forms) optJsExp = await compileTopDefEnv(topContext, form)
+    if (optJsExp !== null) return await evalExpAsync(topContext, optJsExp)
   }
   const evalTopsExp = async (forms) => {
     if (forms.length === 0) throw new CompileError('empty list')
-    for (let i = 0; i < forms.length - 1; i++) await compileTopDefEnv(defEnv, forms[i])
+    for (let i = 0; i < forms.length - 1; i++) await compileTopDefEnv(topContext, forms[i])
     const lastForm = forms.at(-1)
-    const jsExp = compExp(null, lastForm, defEnv)
-    return await evalExpAsync(defEnv, jsExp)
+    const jsExp = compExp(null, lastForm, topContext)
+    return await evalExpAsync(topContext, jsExp)
   }
   const getDef = (name) => {
     const desc = defEnv.get(name)
