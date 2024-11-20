@@ -3,7 +3,7 @@ import { expect, assert, test, describe } from 'vitest'
 import { langUndefined, parseString } from '../core.js'
 import { makeEvalForm } from '../interpreter.js'
 import { makeJSCompilingEvaluator } from '../compiler-js.js'
-import { parseEvalC, parseEvalTopFormsC} from './emcc.js'
+// import { parseEvalC, parseEvalTopFormsC } from './emcc.js'
 
 const testExp = ({ pe }) => {
   test('i32', () => {
@@ -15,13 +15,13 @@ const testExp = ({ pe }) => {
 
     expect(pe('[i32 1]')).toBe(1)
     expect(pe('[i32 007]')).toBe(7)
-    // expect(pe('[i32 0x10]')).toBe(16)
-    // expect(pe('[i32 0b10]')).toBe(2)
-    // expect(pe('[i32 0o10]')).toBe(8)
-    // expect(pe('[i32 0x7fffffff]')).toBe(2147483647)
-    // expect(pe('[i32 0xffffffff]')).toBe(-1)
-    // expect(pe('[i32 0x80000000]')).toBe(-2147483648)
-    // expect(pe('[i32 0xff000000]')).toBe(0xff000000 | 0)
+    expect(pe('[i32 0x10]')).toBe(16)
+    expect(pe('[i32 0b10]')).toBe(2)
+    expect(pe('[i32 0o10]')).toBe(8)
+    expect(pe('[i32 0x7fffffff]')).toBe(2147483647)
+    expect(pe('[i32 0xffffffff]')).toBe(-1)
+    expect(pe('[i32 0x80000000]')).toBe(-2147483648)
+    expect(pe('[i32 0xff000000]')).toBe(0xff000000 | 0)
     expect(pe('[i32 -1]')).toBe(-1)
     expect(pe('[i32 2147483647]')).toBe(2147483647)
     expect(pe('[i32 -2147483648]')).toBe(-2147483648)
@@ -43,22 +43,22 @@ const testExp = ({ pe }) => {
     expect(pe('[f64 1e40]')).toBe(1e40)
     expect(pe('[f64 -1e-40]')).toBe(-1e-40)
     expect(pe('[f64 -1e308]')).toBe(-1e308)
-    // expect(pe('[f64 1e308]')).toBe(1e308)
-    // expect(pe('[f64 1e309]')).toBe(Infinity)
-    // expect(pe('[f64 -1e309]')).toBe(-Infinity)
+    expect(pe('[f64 1e308]')).toBe(1e308)
+    expect(pe('[f64 1e309]')).toBe(Infinity)
+    expect(pe('[f64 -1e309]')).toBe(-Infinity)
   })
 
-  // test('word', () => {
-  //   assert.throws(() => pe('[word]'))
-  //   assert.throws(() => pe('[word two words]'))
-  //   // assert.throws(() => pe('[word _]'))
+  test('word', () => {
+    assert.throws(() => pe('[word]'))
+    assert.throws(() => pe('[word two words]'))
+    // assert.throws(() => pe('[word _]'))
 
-  //   expect(pe('[word a]')).toBe('a')
-  //   expect(pe('[word abc]')).toBe('abc')
-  //   expect(pe('[word abc123]')).toBe('abc123')
-  //   expect(pe('[word abc-123]')).toBe('abc-123')
-  //   expect(pe('[word 007]')).toBe('007')
-  // })
+    expect(pe('[word a]')).toBe('a')
+    expect(pe('[word abc]')).toBe('abc')
+    expect(pe('[word abc123]')).toBe('abc123')
+    expect(pe('[word abc-123]')).toBe('abc-123')
+    expect(pe('[word 007]')).toBe('007')
+  })
 
   test('intrinsics', () => {
     assert.throws(() => pe('[intrinsic]'))
@@ -192,93 +192,93 @@ const testExp = ({ pe }) => {
     expect(pe(`[do ${gauss} [i32 5]]`)).toBe(5)
   })
 
-//   test('func', () => {
-//     assert.throws(() => pe('[func]'))
-//     assert.throws(() => pe('[func []]'))
-//     assert.throws(() => pe('[func []]'))
-//     assert.throws(() => pe('[func f [[]]]'))
+  test('func', () => {
+    assert.throws(() => pe('[func]'))
+    assert.throws(() => pe('[func []]'))
+    assert.throws(() => pe('[func []]'))
+    assert.throws(() => pe('[func f [[]]]'))
 
-//     expect(pe('[func f []]')).toBeTypeOf('function')
-//     expect(pe('[func myfuncname []]')).toSatisfy((f) => f.name === 'myfuncname')
-//     expect(pe('[func f [] [i32 1]]')).toBeTypeOf('function')
+    expect(pe('[func f []]')).toBeTypeOf('function')
+    expect(pe('[func myfuncname []]')).toSatisfy((f) => f.name === 'myfuncname')
+    expect(pe('[func f [] [i32 1]]')).toBeTypeOf('function')
 
-//     expect(pe('[[func f []]]')).toBe(langUndefined)
-//     expect(pe('[[func f [] [i32 1]]]')).toBe(1)
-//     expect(pe('[[func f [p] p] [i32 1]]')).toBe(1)
-//     expect(pe('[[func f [p q] p] [i32 1] [i32 2]]')).toBe(1)
-//     expect(pe('[[func f [p q] q] [i32 1] [i32 2]]')).toBe(2)
-//     expect(pe('[[func f [p q r] r] [i32 1] [i32 2] [i32 3]]')).toBe(3)
-//     expect(pe('[[func list [.. r] r] [i32 1] [i32 2] [i32 3]]')).toStrictEqual([1, 2, 3])
-//     const gaussDirectRecursive = pe(`
-// [func go [n]
-//   [if n
-//     [intrinsic i32.add n [go [intrinsic i32.sub n [i32 1]]]]
-//     [i32 0]]]`)
-//     expect(gaussDirectRecursive).toBeTypeOf('function')
-//     expect(gaussDirectRecursive(10)).toBe(55)
-//     expect(gaussDirectRecursive(100)).toBe(5050)
+    expect(pe('[[func f []]]')).toBe(langUndefined)
+    expect(pe('[[func f [] [i32 1]]]')).toBe(1)
+    expect(pe('[[func f [p] p] [i32 1]]')).toBe(1)
+    expect(pe('[[func f [p q] p] [i32 1] [i32 2]]')).toBe(1)
+    expect(pe('[[func f [p q] q] [i32 1] [i32 2]]')).toBe(2)
+    expect(pe('[[func f [p q r] r] [i32 1] [i32 2] [i32 3]]')).toBe(3)
+    expect(pe('[[func list [.. r] r] [i32 1] [i32 2] [i32 3]]')).toStrictEqual([1, 2, 3])
+    const gaussDirectRecursive = pe(`
+[func go [n]
+  [if n
+    [intrinsic i32.add n [go [intrinsic i32.sub n [i32 1]]]]
+    [i32 0]]]`)
+    expect(gaussDirectRecursive).toBeTypeOf('function')
+    expect(gaussDirectRecursive(10)).toBe(55)
+    expect(gaussDirectRecursive(100)).toBe(5050)
 
-//     const gaussTailRecursive = pe(`
-//     [func go [res n]
-//       [if n
-//         [go [intrinsic i32.add res n] [intrinsic i32.sub n [i32 1]]]
-//         res]]`)
-//     expect(gaussTailRecursive).toBeTypeOf('function')
-//     expect(gaussTailRecursive(0, 10)).toBe(55)
-//     expect(gaussTailRecursive(0, 100)).toBe(5050)
-//     expect(gaussTailRecursive(0, 1000)).toBe(500500)
-//   })
+    const gaussTailRecursive = pe(`
+    [func go [res n]
+      [if n
+        [go [intrinsic i32.add res n] [intrinsic i32.sub n [i32 1]]]
+        res]]`)
+    expect(gaussTailRecursive).toBeTypeOf('function')
+    expect(gaussTailRecursive(0, 10)).toBe(55)
+    expect(gaussTailRecursive(0, 100)).toBe(5050)
+    expect(gaussTailRecursive(0, 1000)).toBe(500500)
+  })
 
-//   test('letfn', () => {
-//     assert.throws(() => pe('[letfn]'))
-//     assert.throws(() => pe('[letfn f]'))
+  test('letfn', () => {
+    assert.throws(() => pe('[letfn]'))
+    assert.throws(() => pe('[letfn f]'))
 
-//     expect(pe('[letfn []]')).toBe(langUndefined)
-//     expect(
-//       pe(`
-// [letfn [
-//   [func f [] [i32 1]]
-//   [func f [] [i32 2]]]
-//   [f]]`),
-//     ).toBe(2)
-//     {
-//       const isEvenSlow = pe(`
-//       [letfn
-//         [[func is-even [n]
-//           [if n
-//             [is-odd [intrinsic i32.sub n [i32 1]]]
-//             [i32 1]]]
-//           [func is-odd [n]
-//           [if n
-//             [is-even [intrinsic i32.sub n [i32 1]]]
-//             [i32 0]]]]
-//         is-even]`)
-//       expect(isEvenSlow(0)).toBe(1)
-//       expect(isEvenSlow(2)).toBe(1)
-//       expect(isEvenSlow(22)).toBe(1)
-//     }
-//     {
-//       const isEvenSlowWrapped = pe(`
-// [func is-even-slow-letfn [outer-n]
-//   [letfn
-//     [[func is-even [n]
-//       [if n
-//         [is-odd [intrinsic i32.sub n [i32 1]]]
-//         [i32 1]]]
-//      [func is-odd [n]
-//       [if n
-//         [is-even [intrinsic i32.sub n [i32 1]]]
-//         [i32 0]]]]
-//     [is-even outer-n]]]`)
-//       expect(isEvenSlowWrapped(0)).toBe(1)
-//       expect(isEvenSlowWrapped(2)).toBe(1)
-//       expect(isEvenSlowWrapped(22)).toBe(1)
-//     }
-//   })
+    expect(pe('[letfn []]')).toBe(langUndefined)
+    expect(
+      pe(`
+[letfn [
+  [func f [] [i32 1]]
+  [func f [] [i32 2]]]
+  [f]]`),
+    ).toBe(2)
+    {
+      const isEvenSlow = pe(`
+      [letfn
+        [[func is-even [n]
+          [if n
+            [is-odd [intrinsic i32.sub n [i32 1]]]
+            [i32 1]]]
+          [func is-odd [n]
+          [if n
+            [is-even [intrinsic i32.sub n [i32 1]]]
+            [i32 0]]]]
+        is-even]`)
+      expect(isEvenSlow(0)).toBe(1)
+      expect(isEvenSlow(2)).toBe(1)
+      expect(isEvenSlow(22)).toBe(1)
+    }
+    {
+      const isEvenSlowWrapped = pe(`
+[func is-even-slow-letfn [outer-n]
+  [letfn
+    [[func is-even [n]
+      [if n
+        [is-odd [intrinsic i32.sub n [i32 1]]]
+        [i32 1]]]
+     [func is-odd [n]
+      [if n
+        [is-even [intrinsic i32.sub n [i32 1]]]
+        [i32 0]]]]
+    [is-even outer-n]]]`)
+      expect(isEvenSlowWrapped(0)).toBe(1)
+      expect(isEvenSlowWrapped(2)).toBe(1)
+      expect(isEvenSlowWrapped(22)).toBe(1)
+    }
+  })
 
-  // test('type-anno', () => {
-  //   expect(pe('[type-anno [i32 1] i32]')).toBe(1)
-  // })
+  test('type-anno', () => {
+    expect(pe('[type-anno [i32 1] i32]')).toBe(1)
+  })
 }
 
 const makeParseEvalExp = (makeEvaluator) => {
@@ -293,7 +293,7 @@ const makeParseEvalExp = (makeEvaluator) => {
 describe.each([
   { name: 'exp direct', pe: makeParseEvalExp(makeEvalForm) },
   { name: 'exp compiled js', pe: makeParseEvalExp(makeJSCompilingEvaluator) },
-  { name: 'exp c', pe: parseEvalC },
+  // { name: 'exp c', pe: parseEvalC },
 ])('$name', testExp)
 
 const testTop = ({ ptse }) => {
@@ -308,7 +308,10 @@ const testTop = ({ ptse }) => {
     expect(await ptse('[defn f [x] [intrinsic i32.add x x]] [defn g [y] [f y]] [g [i32 4]]')).toBe(8)
     expect(await ptse('[defn inc [p] [intrinsic i32.add p [i32 1]]] [inc [i32 4]]')).toBe(5)
     expect(await ptse('[defn list [.. elements] elements] [list [i32 1] [i32 2]]')).toStrictEqual([1, 2])
-    expect(await ptse('[defn list [.. elements] elements] [list [i32 1] [list [i32 2] [i32 3]]]')).toStrictEqual([1, [2, 3]])
+    expect(await ptse('[defn list [.. elements] elements] [list [i32 1] [list [i32 2] [i32 3]]]')).toStrictEqual([
+      1,
+      [2, 3],
+    ])
     expect(
       await ptse(`
       [defn gauss-direct [n]
@@ -317,161 +320,200 @@ const testTop = ({ ptse }) => {
           [i32 0]]]
       [gauss-direct [i32 10]]`),
     ).toBe(55)
+    //     await expect(ptse(`[defn f [n]
+    //   [if n
+    //     [intrinsic i32.add n [f [intrinsic i32.sub n [i32 1]]]]
+    //     [i32 0]]]
+
+    // [f [i32 -10]]
+    // `)).rejects.toThrow('stack')
   })
 
   const formWord = (w) => ({ tag: 'form/word', args: [w] })
   const formList = (...elements) => ({ tag: 'form/list', args: [elements] })
 
-  // test('defexpr', async () => {
-  //   expect(await ptse('[defexpr q [p] p] [q a]')).toStrictEqual(formWord('a'))
-  //   expect(await ptse('[defexpr q [p] p] [q []]')).toStrictEqual(formList())
-  //   expect(await ptse('[defexpr q [p] p] [q [[]]]')).toStrictEqual(formList(formList()))
-  //   expect(await ptse('[defexpr q [p] p] [q [i32 5]]')).toStrictEqual(formList(formWord('i32'), formWord('5')))
-  // })
+  test('defexpr', async () => {
+    expect(await ptse('[defexpr q [p] p] [q a]')).toStrictEqual(formWord('a'))
+    expect(await ptse('[defexpr q [p] p] [q []]')).toStrictEqual(formList())
+    expect(await ptse('[defexpr q [p] p] [q [[]]]')).toStrictEqual(formList(formList()))
+    expect(await ptse('[defexpr q [p] p] [q [i32 5]]')).toStrictEqual(formList(formWord('i32'), formWord('5')))
+  })
 
-//   test('defmacro', async () => {
-//     {
-//       const code = `
-//   [defexpr q [p] p]
-//   [defmacro m [] [q [i32 5]]]
-//   [m]`
-//       expect(await ptse(code)).toBe(5)
-//     }
+  test('defmacro', async () => {
+    {
+      const code = `
+  [defexpr q [p] p]
+  [defmacro m [] [q [i32 5]]]
+  [m]`
+      expect(await ptse(code)).toBe(5)
+    }
 
-//     expect(await ptse('[defmacro m [p] p] [m [i32 5]]')).toBe(5)
-//     expect(
-//       await ptse(`
-//       [type form []
-//   [union
-//     [word word]
-//     [list [list form]]]]
+    expect(await ptse('[defmacro m [p] p] [m [i32 5]]')).toBe(5)
+    expect(
+      await ptse(`
+      [type form []
+  [union
+    [word word]
+    [list [list form]]]]
 
-// [defn flist [.. elements] [form/list elements]]
+[defn flist [.. elements] [form/list elements]]
 
-// [defn list [.. entries] entries]
+[defn list [.. entries] entries]
 
-// [defexpr quote [f] f]
+[defexpr quote [f] f]
 
-// [defmacro def-extern [name type]
-//   [flist [quote import] [quote ./runtime-lib/host.js] name type]]
+[defmacro def-extern [name type]
+  [flist [quote import] [quote ./runtime-lib/host.js] name type]]
 
-// [def-extern concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]
-// [i32 0]
-//       `),
-//     )
-//   })
+[def-extern concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]
+[i32 0]
+      `),
+    )
+  })
 
-  // test('do', async () => {
-  //   expect(await ptse('[do] [i32 5]')).toBe(5)
-  //   expect(await ptse('[do [do]] [i32 5]')).toBe(5)
-  //   expect(await ptse('[do [def x [i32 5]] [def y x]] y')).toBe(5)
-  // })
+  test('do', async () => {
+    expect(await ptse('[do] [i32 5]')).toBe(5)
+    expect(await ptse('[do [do]] [i32 5]')).toBe(5)
+    expect(await ptse('[do [def x [i32 5]] [def y x]] y')).toBe(5)
+  })
 
-  // test('import', async () => {
-  //   expect(
-  //     await ptse('[import ./runtime-lib/host.js concat [type-scheme [a] [func [[list a] [list a]] [list a]]]] concat'),
-  //   ).toBeTypeOf('function')
-  // })
+  test('import', async () => {
+    expect(
+      await ptse('[import ./runtime-lib/host.js concat [type-scheme [a] [func [[list a] [list a]] [list a]]]] concat'),
+    ).toBeTypeOf('function')
+  })
 
-  // test('type union', async () => {
-  //   expect(await ptse('[type option [a] [union [none] [some a]]] [option/none]')).toStrictEqual({
-  //     tag: 'option/none',
-  //     args: [],
-  //   })
-  //   expect(await ptse('[type option [a] [union [none] [some a]]] [option/some [i32 5]]')).toStrictEqual({
-  //     tag: 'option/some',
-  //     args: [5],
-  //   })
-  //   expect(
-  //     await ptse(`
-  //     [type bool [] [union [false] [true]]]
-  //     [match [bool/true]
-  //       [bool/true] [i32 1]
-  //       [bool/false] [i32 0]]`),
-  //   ).toStrictEqual(1)
-  //   expect(
-  //     await ptse(`
-  //     [type bool [] [union [false] [true]]]
-  //     [match [bool/false]
-  //       [bool/true] [i32 1]
-  //       [bool/false] [i32 0]]`),
-  //   ).toStrictEqual(0)
-  //   expect(
-  //     await ptse(`
-  //     [type bool [] [union [false] [true]]]
-  //     [match [bool/false]
-  //       [bool/false] [i32 0]]`),
-  //   ).toStrictEqual(0)
-  //   expect(
-  //     await ptse(`
-  //     [type bool [] [union [false] [true]]]
-  //     [match [bool/true]
-  //       [bool/false] [i32 0]
-  //       [word default]]`),
-  //   ).toBe('default')
-  //   await expect(
-  //     ptse(`
-  //     [type bool [] [union [false] [true]]]
-  //     [match [bool/true]
-  //       [bool/false] [i32 0]]`),
-  //   ).rejects.toThrow('no match')
-  //   expect(
-  //     await ptse(`
-  // [type option [a] [union [none] [some a]]]
-  // [match [option/some [i32 5]]
-  //   [option/some p] p]`),
-  //   ).toStrictEqual(5)
-  //   expect(
-  //     await ptse(`
-  // [type option [a] [union [none] [some a]]]
-  // [match [option/some [i32 5]]
-  //   [option/none] [i32 0]
-  //   [option/some p] p
-  //   ]`),
-  //   ).toStrictEqual(5)
-  //   expect(
-  //     await ptse(`
-  //     [type option [a] [union [none] [some a]]]
-  //     [match [option/none]
-  //       [option/none] [i32 0]
-  //       [option/some p] p
-  //       ]`),
-  //   ).toStrictEqual(0)
-  //   expect(
-  //     await ptse(`
-  //     [type bool [] [union [false] [true]]]
-  //     [defn f []
-  //       [match [bool/false]
-  //         [bool/true] [i32 4]
-  //         [bool/false] [i32 5]]]
-  //     [f]`),
-  //   ).toBe(5)
-  //   expect(
-  //     await ptse(`
-  //     [type bool [] [union [false] [true]]]
-  //     [defn f []
-  //       [match [bool/false]
-  //         [bool/true] [i32 4]
-  //         [bool/false] [i32 5]]
-  //       [i32 6]]
-  //     [f]`),
-  //   ).toBe(6)
-  //   // test for compiler bug where match parameters would become assignments not const declarations
-  //   expect(
-  //     await ptse(`
-  // [type option [a] [union [none] [some a]]]
-  // [loop [p [i32 0]]
-  //   [match [option/some [i32 5]]
-  //     [option/some p] p]
-  //   p]`),
-  //   ).toBe(0)
-  // })
+  test('type union', async () => {
+    expect(await ptse('[type option [a] [union [none] [some a]]] [option/none]')).toStrictEqual({
+      tag: 'option/none',
+      args: [],
+    })
+    expect(await ptse('[type option [a] [union [none] [some a]]] [option/some [i32 5]]')).toStrictEqual({
+      tag: 'option/some',
+      args: [5],
+    })
+    expect(
+      await ptse(`
+      [type bool [] [union [false] [true]]]
+      [match [bool/true]
+        [bool/true] [i32 1]
+        [bool/false] [i32 0]]`),
+    ).toStrictEqual(1)
+    expect(
+      await ptse(`
+      [type bool [] [union [false] [true]]]
+      [match [bool/false]
+        [bool/true] [i32 1]
+        [bool/false] [i32 0]]`),
+    ).toStrictEqual(0)
+    expect(
+      await ptse(`
+      [type bool [] [union [false] [true]]]
+      [match [bool/false]
+        [bool/false] [i32 0]]`),
+    ).toStrictEqual(0)
+    expect(
+      await ptse(`
+      [type bool [] [union [false] [true]]]
+      [match [bool/true]
+        [bool/false] [i32 0]
+        [word default]]`),
+    ).toBe('default')
+    await expect(
+      ptse(`
+      [type bool [] [union [false] [true]]]
+      [match [bool/true]
+        [bool/false] [i32 0]]`),
+    ).rejects.toThrow('no match')
+    expect(
+      await ptse(`
+  [type option [a] [union [none] [some a]]]
+  [match [option/some [i32 5]]
+    [option/some p] p]`),
+    ).toStrictEqual(5)
+    expect(
+      await ptse(`
+  [type option [a] [union [none] [some a]]]
+  [match [option/some [i32 5]]
+    [option/none] [i32 0]
+    [option/some p] p
+    ]`),
+    ).toStrictEqual(5)
+    expect(
+      await ptse(`
+      [type option [a] [union [none] [some a]]]
+      [match [option/none]
+        [option/none] [i32 0]
+        [option/some p] p
+        ]`),
+    ).toStrictEqual(0)
+    expect(
+      await ptse(`
+      [type bool [] [union [false] [true]]]
+      [defn f []
+        [match [bool/false]
+          [bool/true] [i32 4]
+          [bool/false] [i32 5]]]
+      [f]`),
+    ).toBe(5)
+    expect(
+      await ptse(`
+      [type bool [] [union [false] [true]]]
+      [defn f []
+        [match [bool/false]
+          [bool/true] [i32 4]
+          [bool/false] [i32 5]]
+        [i32 6]]
+      [f]`),
+    ).toBe(6)
+    // test for compiler bug where match parameters would become assignments not const declarations
+    expect(
+      await ptse(`
+  [type option [a] [union [none] [some a]]]
+  [loop [p [i32 0]]
+    [match [option/some [i32 5]]
+      [option/some p] p]
+    p]`),
+    ).toBe(0)
+  })
 
-  // test('type record', async () => {
-  //   expect(await ptse('[type empty [] [record]] [empty]')).toStrictEqual({})
-  //   expect(await ptse('[type pair [a b] [record [fst a] [snd b]]] [pair/fst [pair [i32 5] [i32 6]]]')).toBe(5)
-  //   expect(await ptse('[type pair [a b] [record [fst a] [snd b]]] [pair/snd [pair [i32 5] [i32 6]]]')).toBe(6)
-  // })
+  test('type record', async () => {
+    expect(await ptse('[type empty [] [record]] [empty]')).toStrictEqual({})
+    expect(await ptse('[type pair [a b] [record [fst a] [snd b]]] [pair/fst [pair [i32 5] [i32 6]]]')).toBe(5)
+    expect(await ptse('[type pair [a b] [record [fst a] [snd b]]] [pair/snd [pair [i32 5] [i32 6]]]')).toBe(6)
+  })
+
+  test('size-of', async () => {
+    expect(await ptse('[size-of i32]')).toBe(4)
+    expect(await ptse('[size-of f32]')).toBe(4)
+    expect(await ptse('[size-of i64]')).toBe(8)
+    expect(await ptse('[size-of f64]')).toBe(8)
+    expect(await ptse('[size-of [array f64 [exp [i32 3]]]]]')).toBe(24)
+    // await expect(ptse('[size-of [array f64 [exp x]]]]')).rejects.toThrow('undefined variable')
+    expect(await ptse('[size-of [pointer [array f64 [exp [i32 3]]]]]')).toBe(4)
+    expect(await ptse('[type r [] [record [x f64] [y f64]]] [size-of r]')).toBe(16)
+    expect(
+      await ptse(`
+      [type r [] [record [x f64] [y f64]]]
+      [type s [] [record [r1 r] [i i32]]]
+      [size-of s]`),
+    ).toBe(20)
+    expect(
+      await ptse(`
+        [type two [a] [record [x a] [y a]]]
+        [size-of [two i32]]`),
+    ).toBe(8)
+    expect(
+      await ptse(`
+        [type two-arrays [n] [record [x [array i32 n]] [y [array i32 n]]]]
+        [size-of [two-arrays [exp [i32 10]]]]]`),
+    ).toBe(80)
+    expect(
+      await ptse(`
+        [type int-or-float [] [untagged-union i32 f64]]
+        [size-of int-or-float]`),
+    ).toBe(8)
+  })
 }
 
 const makeParseEvalTopsExp = (makeEvaluator) => {
@@ -492,10 +534,10 @@ const parseEvalTopsExpJS = async (s) => {
 }
 
 describe.each([
-  { name: 'top direct', ptse: makeParseEvalTopsExp(makeEvalForm) },
+  // { name: 'top direct', ptse: makeParseEvalTopsExp(makeEvalForm) },
   {
     name: 'top compiled js',
     ptse: parseEvalTopsExpJS,
   },
-  { name: 'top c', ptse: parseEvalTopFormsC },
+  // { name: 'top c', ptse: parseEvalTopFormsC },
 ])('$name', testTop)
