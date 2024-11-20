@@ -191,6 +191,7 @@ const builtInPrimitiveTypeSizes = Object.freeze({
   i8: 1,
   u8: 1,
   i16: 2,
+  u16: 2,
   i32: 4,
   i64: 8,
   f32: 4,
@@ -401,7 +402,6 @@ const makeSizer = (topContext, lctx) => {
     }
   }
   return {
-    // sizeOf: (type) => jsNumber(typeToSizeNumber(null, type)),
     sizeOfExp: (type) => typeToSizeJSExp(null, type),
     offset: (type, field) => offset(null, type, field),
   }
@@ -410,6 +410,8 @@ const makeSizer = (topContext, lctx) => {
 const primtiveArrays = {
   i8: { arrayName: 'Int8Array', byteSize: 1 },
   u8: { arrayName: 'Uint8Array', byteSize: 1 },
+  i16: { arrayName: 'Int16Array', byteSize: 2 },
+  u16: { arrayName: 'Uint16Array', byteSize: 2 },
   i32: { arrayName: 'Int32Array', byteSize: 4 },
 }
 
@@ -430,8 +432,7 @@ const loadStoreFormToSub = (tail, lctx, topContext) => {
     jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer')), jsNumber(offset)]),
   )
   const pointer = compExp(lctx, pointerForm, topContext)
-  let addrExp = jsAdd(jsNumber(offset), pointer)
-  // need to divide by byteSize if not 1
+  let addrExp = pointer
   if (byteSize !== 1) addrExp = jsBin('div')(addrExp, jsNumber(byteSize))
   return jsSubscript(arrayExp, addrExp)
 }
