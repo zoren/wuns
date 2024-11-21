@@ -22,19 +22,22 @@
       [let [type-name [form-to-word [first l]]
             type-args [slice l 1 [size l]]]
         [switch type-name
-          [[word i8] [word i16] [word i32] [word any]]
+          [[word i8] [word i16] [word i32] [word f64] [word any]]
           [do
-            [assert [eq [size type-args] 0] ll invalid number of arguments]
+            [when-not [is-empty type-args]
+              [log type-args]
+              [logq-abort invalid number of arguments]]
+            [assert [eq [size type-args] 0] ll invalid number of arguments1]
             [lltype/inst type-name [list]]]
 
           [[word pointer]]
           [do
-            [assert [eq [size type-args] 1] ll invalid number of arguments]
+            [assert [eq [size type-args] 1] ll invalid number of arguments2]
             [lltype/inst type-name [list [validate-lltype type-var-env [first type-args]]]]]
 
           [[word exp]]
           [do
-            [assert [eq [size type-args] 1] ll invalid number of arguments]
+            [assert [eq [size type-args] 1] ll invalid number of arguments3]
             [lltype/exp [first type-args]]]
 
           [[word array]]
@@ -51,8 +54,9 @@
 
           [let [type-var-env [get lltype-params type-name]
                 type-params [pair/fst type-var-env]]
-            [assert [eq [pair/snd type-var-env] [size type-args]] ll invalid number of arguments]
-            [lltype/inst type-name [list-map targ type-args [validate-lltype type-params targ]]]]]]]]]
+            [assert [eq [pair/snd type-var-env] [size type-args]] ll invalid number of arguments4]
+            [lltype/inst type-name
+              [list-map targ type-args [validate-lltype type-params targ]]]]]]]]]
 
 [type lltype-decl-kind []
   [union
@@ -63,7 +67,7 @@
 [def lltypes [transient-kv-map]]
 
 [defexpr lltype [.. t]
-  [assert [eq [i32.rem-s [size t] 3] 0] ll invalid number of arguments]
+  [assert [eq [i32.rem-s [size t] 3] 0] lltype invalid number of arguments not multiple of 3]
   [for-3 i 0 [size t]
     [let
       [type-name [form-to-word [at t i]]
@@ -128,7 +132,7 @@
       [[word i16] [word u16]] 2
       [[word i32] [word u32]] 4
       [[word i64] [word f64]] 8
-      [[word exp] [word pointer]] 4
+      [[word pointer]] 4
 
       [match [get lltypes name]
         [lltype-decl-kind/record fields]
@@ -222,6 +226,101 @@
   [record
     [size i32]
     [elements [array a size]]]]
+
+[defn type-to-load-inst-name [type-name]
+  [switch type-name
+    [[word i32]] [word i32.load]
+    [[word i64]] [word i64.load]
+    [[word f32]] [word f32.load]
+    [[word f64]] [word f64.load]
+    [[word i8]] [word i32.load8-s]
+    [[word u8]] [word i32.load8-u]
+    [[word i16]] [word i32.load16-s]
+    [[word u16]] [word i32.load16-u]
+
+    [logq-abort unknown type-to-load-inst-name]]]
+
+[defn type-to-store-inst-name [type-name]
+  [switch type-name
+    [[word i32]] [word i32.store]
+    [[word i64]] [word i64.store]
+    [[word f32]] [word f32.store]
+    [[word f64]] [word f64.store]
+    [[word i8] [word u8]] [word i32.store8]
+    [[word i16] [word u16]] [word i32.store16]
+
+    [logq-abort unknown type-to-store-inst-name]]]
+
+[defn type-to-lltype [type]
+  [match type
+    [lltype/var -] [logq-abort type-to-lltype var]
+    [lltype/func - --] [logq-abort type-to-lltype func]
+    [lltype/exp -] [word i32]
+    [lltype/inst name args]
+      [switch name
+        [[word i8] [word i16] [word i32] [word f64]]
+        [do
+          [assert [is-empty args] type-to-lltype invalid number of arguments]
+          name]
+
+        [[word pointer]]
+        [do
+          [assert [eq [size args] 1] type-to-lltype invalid number of arguments]
+          [word i32]]
+
+        [logq-abort type-to-lltype unknown]]]]
+
+[defmacro load-record-field [mem pexp record-type-name-form field-form]
+  [let [p [lloffset-fn [form-to-word record-type-name-form] [form-to-word field-form]]]
+  [flist
+    [quote intrinsic]
+    [form/word [type-to-load-inst-name [type-to-lltype [pair/snd p]]]]
+    mem
+    [form/word [int-to-word [pair/fst p]]]
+    [quote 0]
+    pexp]]]
+
+[defmacro store-record-field [mem pexp record-type-name-form field-form value]
+  [let [p [lloffset-fn [form-to-word record-type-name-form] [form-to-word field-form]]]
+  [flist
+    [quote intrinsic]
+    [form/word [type-to-store-inst-name [type-to-lltype [pair/snd p]]]]
+    mem
+    [form/word [int-to-word [pair/fst p]]]
+    [quote 0]
+    pexp
+    value]]]
+
+[defmacro load-array [mem pexp array-type-element-form start-offset-form index-form]
+  [let [t [validate-lltype [set] array-type-element-form]
+        element-size [llsize-of t]]
+    [flist
+      [quote intrinsic]
+      [form/word [type-to-load-inst-name [type-to-lltype t]]]
+      mem
+      start-offset-form
+      [quote 0]
+      [flist
+        [quote intrinsic]
+        [quote i32.mul]
+        index-form
+        [flist [quote i32] [form/word [int-to-word element-size]]]]]]]
+
+[defmacro store-array [mem pexp array-type-element-form start-offset-form index-form value]
+  [let [t [validate-lltype [set] array-type-element-form]
+        element-size [llsize-of t]]
+    [flist
+      [quote intrinsic]
+      [form/word [type-to-store-inst-name [type-to-lltype t]]]
+      mem
+      start-offset-form
+      [quote 0]
+      [flist
+        [quote intrinsic]
+        [quote i32.mul]
+        index-form
+        [flist [quote i32] [form/word [int-to-word element-size]]]]
+      value]]]
 
 [memory mem 1]
 
