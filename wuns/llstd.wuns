@@ -1,3 +1,223 @@
+[load std.wuns]
+
+[def lltype-params [transient-kv-map]]
+
+[type lltype []
+  [union
+    [var word]
+    [inst word [list lltype]]
+    [exp form]
+    [func [list lltype] [option lltype] lltype]]]
+
+[defn validate-lltype [type-var-env type-form]
+  [match type-form
+    [form/word w]
+    [if [set-has type-var-env w]
+      [lltype/var w]
+      [validate-lltype type-var-env [flist type-form]]]
+
+    [form/list l]
+    [do
+      [assert [size l] not empty]
+      [let [type-name [form-to-word [first l]]
+            type-args [slice l 1 [size l]]]
+        [switch type-name
+          [[word i8] [word i16] [word i32] [word any]]
+          [do
+            [assert [eq [size type-args] 0] ll invalid number of arguments]
+            [lltype/inst type-name [list]]]
+
+          [[word pointer]]
+          [do
+            [assert [eq [size type-args] 1] ll invalid number of arguments]
+            [lltype/inst type-name [list [validate-lltype type-var-env [first type-args]]]]]
+
+          [[word exp]]
+          [do
+            [assert [eq [size type-args] 1] ll invalid number of arguments]
+            [lltype/exp [first type-args]]]
+
+          [[word array]]
+          [let [element-type-form [first type-args]
+                size-form [second type-args]
+                size-type [validate-lltype type-var-env size-form]]
+            [match size-type
+              [lltype/var -] [do]
+              [lltype/exp -] [do]
+              [logq-abort invalid size type]]
+            [lltype/inst type-name
+              [list [validate-lltype type-var-env element-type-form]
+              size-type]]]
+
+          [let [type-var-env [get lltype-params type-name]
+                type-params [pair/fst type-var-env]]
+            [assert [eq [pair/snd type-var-env] [size type-args]] ll invalid number of arguments]
+            [lltype/inst type-name [list-map targ type-args [validate-lltype type-params targ]]]]]]]]]
+
+[type lltype-decl-kind []
+  [union
+    [record [list [pair word lltype]]]
+    [tagged-union [list [pair word [list lltype]]]]
+    [untagged-union [list [list lltype]]]]]
+
+[def lltypes [transient-kv-map]]
+
+[defexpr lltype [.. t]
+  [assert [eq [i32.rem-s [size t] 3] 0] ll invalid number of arguments]
+  [for-3 i 0 [size t]
+    [let
+      [type-name [form-to-word [at t i]]
+       type-params [list-map p [form-to-list [at t [inc i]]] [form-to-word p]]
+       type-var-env [set]]
+      [when [has lltype-params type-name]
+        [log type-name]
+        [log lltype-params]
+        [logq-abort ll type already defined]]
+      [assert [not [has lltype-params type-name]] ll type already defined]
+      [for-each p type-params
+        [assert [not [set-has type-var-env p]] ll duplicate type parameter]
+        [set-add type-var-env p]]
+      [set-kv-map lltype-params type-name [pair type-var-env [size type-params]]]]]
+  [for-3 i 0 [size t]
+    [let
+      [type-name [form-to-word [at t i]]
+       type-var-env [pair/fst [get lltype-params type-name]]
+       type-body [form-to-list [at t [add i 2]]]
+       type-kind [form-to-word [first type-body]]
+       type-kind-args [rest type-body]]
+      [assert [size type-body] body empty]
+      [set-kv-map lltypes type-name
+        [switch type-kind
+          [[word record]]
+          [let [field-name-set [set]]
+            [lltype-decl-kind/record
+              [list-map field-form type-kind-args
+                [let [field [form-to-list field-form]]
+                  [assert [eq [size field] 2] ll invalid field]
+                  [let [field-name [form-to-word [at field 0]]
+                        field-type-form [at field 1]]
+                    [assert [not [set-has field-name-set field-name]] ll field name already defined]
+                    [set-add field-name-set field-name]
+                    [pair field-name [validate-lltype type-var-env field-type-form]]]]]]]
+
+          [[word tagged-union]]
+          [let [ctor-name-set [set]]
+            [lltype-decl-kind/tagged-union
+              [list-map ctor-form type-kind-args
+                [let [ctor-list [form-to-list ctor-form]]
+                  [assert [not [is-empty ctor-list]] ll invalid ctor-list]
+                  [let [ctor-name [form-to-word [first ctor-list]]]
+                    [assert [not [set-has ctor-name-set ctor-name]] ll ctor-list name already defined]
+                    [set-add ctor-name-set ctor-name]
+                    [pair ctor-name
+                      [list-map tp [rest ctor-list]
+                        [validate-lltype type-var-env tp]]]]]]]]
+
+          [[word untagged-union]]
+          [lltype-decl-kind/untagged-union
+            [list-map tp type-kind-args [validate-lltype type-var-env tp]]]
+
+          [logq-abort unknown lltype kind]]]]]]
+
+[defn llsize-of [t]
+  [match t
+    [lltype/var -] [logq-abort llsize-of var]
+    [lltype/inst name args]
+    [switch name
+      [[word i8] [word u8]] 1
+      [[word i16] [word u16]] 2
+      [[word i32] [word u32]] 4
+      [[word i64] [word f64]] 8
+      [[word exp] [word pointer]] 4
+
+      [match [get lltypes name]
+        [lltype-decl-kind/record fields]
+        [loop [i 0 csize 0]
+          [if-not [lt-s i [size fields]]
+            csize
+            [continue
+              csize [add csize [llsize-of [pair/snd [at fields i]]]]
+              i [inc i]]]]
+
+        [lltype-decl-kind/tagged-union ctors]
+        [loop [j 0 max-size 0]
+          [if-not [lt-s j [size ctors]]
+            max-size
+            [let
+              [ctor [at ctors j]
+               params [pair/snd ctor]
+               total-size
+                [loop [i 0 acc-size 0]
+                  [if-not [lt-s i [size params]]
+                    acc-size
+                    [continue
+                      acc-size [add acc-size [llsize-of [at params i]]]
+                      i [inc i]]]]]
+              [continue
+                j [inc j]
+                max-size [max max-size total-size]]]]]
+
+        [lltype-decl-kind/untagged-union types]
+        [loop [i 0 max-size 0]
+          [if-not [lt-s i [size types]]
+            max-size
+            [let
+              [type [at types i]
+               size [llsize-of type]]
+              [continue
+                i [inc i]
+                max-size [max max-size size]]]]]]]
+    [lltype/exp -] 4
+    [lltype/func args ret] [logq-abort llsize-of func]]]
+
+[defn lloffset-fn [record-type-name field-name]
+  [match [get lltypes record-type-name]
+    [lltype-decl-kind/record fields]
+    [loop [i 0
+           offset 0]
+      [let [p [at fields i]
+            type [pair/snd p]]
+        [if [eq-word field-name [pair/fst p]]
+          [pair offset type]
+          [continue
+            i [inc i]
+            offset [add offset [llsize-of type]]]]]]]]
+
+[defexpr lloffset [record-type-name-form field-form]
+  [lloffset-fn [form-to-word record-type-name-form] [form-to-word field-form]]]
+
+[lltype llvector [a size]
+  [record
+    [size i32]
+    [elements [array a size]]]]
+
+[lltype
+  word-or-list []
+  [tagged-union
+    [word [pointer [llvector i8 i32]]]
+    [list [pointer [llvector [pointer tform] i32]]]]
+
+  tform []
+  [record
+    [tag i32]
+    [data word-or-list]]]
+
+[lltype
+  form-word []
+  [record
+    [tag [exp [i32 0]]]
+    [data [pointer [llvector i8 i32]]]]
+
+  form-list []
+  [record
+    [tag [exp [i32 1]]]
+    [data [pointer [llvector [pointer uform] i32]]]]
+
+  uform []
+  [untagged-union
+    form-word
+    form-list]]
+
 [type vector [a size]
   [record
     [size i32]
@@ -39,11 +259,6 @@
 [defn array-i32-alloc [s]
   [let [p [alloc-n [size-of [array i32 [exp s]]]]]
     p]]
-
-[defexpr quote [f] f]
-
-[defmacro comment [.. -]
-  [quote [do]]]
 
 [comment
 [defn set-character [word-pointer i c]
