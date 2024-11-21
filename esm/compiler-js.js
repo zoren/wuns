@@ -164,6 +164,13 @@ const bodiesToStmts = (defEnv, ctx, tail, isTail) => {
   return stmts
 }
 
+const parseParameterForm = (form) => {
+  const parameters = getFormList(form)
+  if (parameters.length < 2 || getFormWord(parameters.at(-2)) !== '..') return { parameters }
+  const restParam = parameters.at(-1)
+  return { parameters: parameters.slice(0, -2), restParam }
+}
+
 const compFunc = (tail, ctx, topContext) => {
   const name = getFormWord(tail[0])
   let parametersForms = getFormList(tail[1])
@@ -328,9 +335,7 @@ const makeSizer = (topContext, lctx) => {
     throw new CompileError('unknown type kind: ' + type.typeKind)
   }
   const typeToSizeJSExp = (typeVarEnv, type) => {
-    if (type.typeKind !== 'inst') {
-      return jsNumber(typeToSizeNumber(typeVarEnv, type))
-    }
+    if (type.typeKind !== 'inst') return jsNumber(typeToSizeNumber(typeVarEnv, type))
     const { typeName, args: targs } = type
     if (typeName === 'array') {
       if (targs.length !== 2) throw new CompileError('array expected two arguments')
@@ -407,14 +412,14 @@ const makeSizer = (topContext, lctx) => {
   }
 }
 
-const primtiveArrays = {
+const primtiveArrays = Object.freeze({
   i8: { arrayName: 'Int8Array', byteSize: 1 },
   u8: { arrayName: 'Uint8Array', byteSize: 1 },
   i16: { arrayName: 'Int16Array', byteSize: 2 },
   u16: { arrayName: 'Uint16Array', byteSize: 2 },
   i32: { arrayName: 'Int32Array', byteSize: 4 },
   f64: { arrayName: 'Float64Array', byteSize: 8 },
-}
+})
 
 const loadStoreFormToSub = (tail, lctx, topContext) => {
   const [memForm, pointerForm, targetTypeForm, fieldNameForm] = tail
@@ -432,9 +437,7 @@ const loadStoreFormToSub = (tail, lctx, topContext) => {
   const primArray = primtiveArrays[typeName]
   if (!primArray) throw new CompileError('primitive array expected')
   const { arrayName, byteSize } = primArray
-  const arrayExp = jsNew(
-    jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer')), jsNumber(offset)]),
-  )
+  const arrayExp = jsNew(jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer')), jsNumber(offset)]))
   const pointer = compExp(lctx, pointerForm, topContext)
   const addrExp = byteSize === 1 ? pointer : jsBin('div')(pointer, jsNumber(byteSize))
   return jsSubscript(arrayExp, addrExp)
@@ -471,7 +474,8 @@ const expSpecialFormsExp = {
     const { defEnv } = topContext
     const [opForm, ...args] = tail
     const opName = getFormWord(opForm)
-    const getMemLval = (arrayName, byteSize) => {
+    const loadMem = (primtypeName) => {
+      const { arrayName, byteSize } = primtiveArrays[primtypeName]
       const [memForm, offsetForm, alignmentForm, addrForm] = args
       const memName = getFormWord(memForm)
       const memDesc = defEnv.get(memName)
@@ -487,30 +491,33 @@ const expSpecialFormsExp = {
       if (byteSize !== 1) addrExp = jsBin('div')(addrExp, jsNumber(byteSize))
       return jsSubscript(arrayExp, addrExp)
     }
-    switch (opName) {
-      case 'i32.load': {
-        if (args.length !== 4) throw new CompileError('i32.load expected four arguments')
-        return getMemLval('Int32Array', 4)
-      }
-      case 'i32.load8-u': {
-        if (args.length !== 4) throw new CompileError('i32.load8-u expected four arguments')
-        return getMemLval('Uint8Array', 1)
-      }
-      case 'i32.store8': {
-        if (args.length !== 5) throw new CompileError('i32.store8 expected five arguments')
-        const [, , , , valueForm] = args
-        const jsExp = jsAssignExp(getMemLval('Int8Array', 1), compExp(ctx, valueForm, topContext))
-        return jsParenComma([jsExp, jsUndefined])
-      }
-      case 'i32.store': {
-        if (args.length !== 5) throw new CompileError('i32.store expected five arguments')
-        const [, , , , valueForm] = args
-        const jsExp = jsAssignExp(getMemLval('Int32Array', 4), compExp(ctx, valueForm, topContext))
-        return jsParenComma([jsExp, jsUndefined])
-      }
+    const loadInstToType = {
+      'i32.load': 'i32',
+      'i32.load8-u': 'u8',
+      'i32.load8-s': 'i8',
+      'i32.load16-u': 'u16',
+      'i32.load16-s': 'i16',
     }
-    if (!intrinsics[opName]) throw new CompileError('undefined intrinsic: ' + opName)
-    if (args.length !== intrinsics[opName].length) throw new CompileError('wrong number of arguments')
+    const loadType = loadInstToType[opName]
+    if (loadType) {
+      if (args.length !== 4) throw new CompileError(opName + ' expected four arguments')
+      return loadMem(loadType)
+    }
+    const storeInstToType = {
+      'i32.store8': 'i8',
+      'i32.store16': 'i16',
+      'i32.store': 'i32',
+    }
+    const storeType = storeInstToType[opName]
+    if (storeType) {
+      if (args.length !== 5) throw new CompileError(opName + ' expected five arguments')
+      const jsExp = jsAssignExp(loadMem(storeType), compExp(ctx, args[4], topContext))
+      return jsParenComma([jsExp, jsUndefined])
+    }
+
+    const intrinsic = intrinsics[opName]
+    if (!intrinsic) throw new CompileError('undefined intrinsic: ' + opName)
+    if (args.length !== intrinsic.length) throw new CompileError('wrong number of arguments')
     return opIntrinsicCall(
       opName,
       args.map((arg) => compExp(ctx, arg, topContext)),
@@ -540,6 +547,7 @@ const expSpecialFormsExp = {
     return jsParenComma([jsExp, jsUndefined])
   },
 }
+Object.freeze(expSpecialFormsExp)
 
 let tmpVarCounter = 0
 
@@ -678,6 +686,9 @@ const expSpecialFormsStmt = {
     return jsBlock(stmts)
   },
 }
+Object.freeze(expSpecialFormsStmt)
+
+const isSpecialForm = (word) => word in expSpecialFormsExp || word in expSpecialFormsStmt
 
 const compExpStmt = (lctx, form, topContext, isTail) => {
   const forms = tryGetFormList(form)
@@ -770,7 +781,13 @@ const compExp = (ctx, form, topContext) => {
 
     const defDesc = topContext.defEnv.get(firstWord)
     if (defDesc) {
-      const { defKind, value } = defDesc
+      const { defKind, value, paramDesc } = defDesc
+      if (paramDesc) {
+        const { parameters, restParam } = paramDesc
+        const numOfArgs = args.length
+        if (numOfArgs < parameters.length) throw new CompileError('not enough arguments', form)
+        if (!restParam && numOfArgs > parameters.length) throw new CompileError('too many arguments', form)
+      }
       switch (defKind) {
         case 'defmacro':
           return compExp(ctx, value(...args), topContext)
@@ -817,11 +834,14 @@ const evalExpAsync = async (topContext, jsExp) => {
 }
 
 const setDef = async (topContext, varName, defKind, jsExp) => {
+  if (isSpecialForm(varName)) throw new CompileError('redefining special form: ' + varName)
   const { defEnv } = topContext
   if (defEnv.has(varName)) throw new CompileError('redefining variable: ' + varName)
   try {
     const value = await evalExpAsync(topContext, jsExp)
-    defEnv.set(varName, { defKind, value })
+    const defDesc = { defKind, value }
+    defEnv.set(varName, defDesc)
+    return defDesc
   } catch (e) {
     console.error({ varName, defKind })
     console.error(e)
@@ -832,7 +852,8 @@ const setDef = async (topContext, varName, defKind, jsExp) => {
 const defFuncLike = async (firstWord, tail, topContext) => {
   const defName = getFormWord(tail[0])
   const exp = compFunc(tail, null, topContext)
-  await setDef(topContext, defName, firstWord, exp)
+  const defDesc = await setDef(topContext, defName, firstWord, exp)
+  defDesc.paramDesc = parseParameterForm(tail[1])
 }
 import { 'read-file-async' as read_file_async } from './runtime-lib/files.js'
 
@@ -891,7 +912,8 @@ const topSpecialForms = {
               return `p${i}`
             })
             const ctor = jsArrowExpNoRest(parameters, mkTaggedObject(qualName, ...parameters.map((p) => jsVar(p))))
-            await setDef(topContext, qualName, 'unionCtor', ctor)
+            const defDesc = await setDef(topContext, qualName, 'unionCtor', ctor)
+            defDesc.paramDesc = { parameters }
             constructors.push({ name: unionCaseName, params: paramtypes })
           }
           descObj.constructors = constructors
@@ -941,6 +963,7 @@ const topSpecialForms = {
     if (tail.length !== 3) throw new CompileError('import expects three arguments')
     const importModuleName = getFormWord(tail[0])
     const importElementName = getFormWord(tail[1])
+    const importType = getFormList(tail[2])
     const jsExp = jsAwait(jsCall(jsVar('dynImport'), [jsString(importModuleName), jsString(importElementName)]))
     await setDef(topContext, importElementName, 'import', jsExp)
   },
@@ -969,7 +992,14 @@ const compileTopDefEnv = async (topContext, form) => {
       }
     }
     const defDesc = defEnv.get(firstWord)
-    if (defDesc && defDesc.defKind === 'defmacro') return await compileTopDefEnv(topContext, defDesc.value(...args))
+    if (defDesc && defDesc.defKind === 'defmacro') {
+      const { paramDesc } = defDesc
+      const { parameters, restParam } = paramDesc
+      const numOfArgs = args.length
+      if (numOfArgs < parameters.length) throw new CompileError('not enough arguments', form)
+      if (!restParam && numOfArgs > parameters.length) throw new CompileError('too many arguments', form)
+      return await compileTopDefEnv(topContext, defDesc.value(...args))
+    }
   }
   return compExp(null, form, topContext)
 }
@@ -997,9 +1027,9 @@ export const makeJSCompilingEvaluator = () => {
     if (optJsExp) return await evalExpAsync(topContext, optJsExp)
   }
   const evalTops = async (forms) => {
-    let optJsExp = null
-    for (const form of forms) optJsExp = await compileTopDefEnv(topContext, form)
-    if (optJsExp !== null) return await evalExpAsync(topContext, optJsExp)
+    let result = null
+    for (const form of forms) result = await evalTop(form)
+    if (result !== null) return result
   }
   const evalTopsExp = async (forms) => {
     if (forms.length === 0) throw new CompileError('empty list')
