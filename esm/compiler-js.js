@@ -67,18 +67,20 @@ const jsThrow = jsStmt('throw')
 
 const jsIIFE = (stmts) => jsCall(jsArrowStmt([], optionNone, jsBlock(stmts)), [])
 
+const jsOr0 = (exp) => jsBinIOr(exp, js0)
+
 const opIntrinsicCall = (opName, args) => {
   switch (opName) {
     case 'i32.add':
-      return jsBinIOr(jsAdd(...args), js0)
+      return jsOr0(jsAdd(...args))
     case 'i32.sub':
-      return jsBinIOr(jsSub(...args), js0)
+      return jsOr0(jsSub(...args))
     case 'i32.mul':
-      return jsBinIOr(jsBin('mul')(...args), js0)
+      return jsOr0(jsBin('mul')(...args))
     case 'i32.div-s':
-      return jsBinIOr(jsBin('div')(...args), js0)
+      return jsOr0(jsBin('div')(...args))
     case 'i32.rem-s':
-      return jsBinIOr(jsBin('rem')(...args), js0)
+      return jsOr0(jsBin('rem')(...args))
     case 'i32.and':
       return jsBin('binary-and')(...args)
     case 'i32.or':
@@ -92,11 +94,11 @@ const opIntrinsicCall = (opName, args) => {
     case 'i32.shr-u':
       return jsBin('binary-shr-u')(...args)
     case 'i32.eq':
-      return jsBinIOr(jsBin('eq')(...args), js0)
+      return jsOr0(jsBin('eq')(...args))
     case 'i32.lt-s':
-      return jsBinIOr(jsBin('lt')(...args), js0)
+      return jsOr0(jsBin('lt')(...args))
     case 'i32.le-s':
-      return jsBinIOr(jsBin('le')(...args), js0)
+      return jsOr0(jsBin('le')(...args))
 
     case 'f64.add':
       return jsAdd(...args)
@@ -418,6 +420,8 @@ const primtiveArrays = Object.freeze({
   i16: { arrayName: 'Int16Array', byteSize: 2 },
   u16: { arrayName: 'Uint16Array', byteSize: 2 },
   i32: { arrayName: 'Int32Array', byteSize: 4 },
+  i64: { arrayName: 'BigInt64Array', byteSize: 8 },
+  u64: { arrayName: 'BigUint64Array', byteSize: 8 },
   f64: { arrayName: 'Float64Array', byteSize: 8 },
 })
 
@@ -439,7 +443,7 @@ const loadStoreFormToSub = (tail, lctx, topContext) => {
   const { arrayName, byteSize } = primArray
   const arrayExp = jsNew(jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer')), jsNumber(offset)]))
   const pointer = compExp(lctx, pointerForm, topContext)
-  const addrExp = byteSize === 1 ? pointer : jsBin('div')(pointer, jsNumber(byteSize))
+  const addrExp = byteSize === 1 ? pointer : jsOr0(jsBin('div')(pointer, jsNumber(byteSize)))
   return jsSubscript(arrayExp, addrExp)
 }
 
@@ -488,7 +492,7 @@ const expSpecialFormsExp = {
       const arrayExp = jsNew(jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer'))]))
       let addrExp = jsAdd(jsNumber(offset), compExp(ctx, addrForm, topContext))
       // need to divide by byteSize
-      if (byteSize !== 1) addrExp = jsBin('div')(addrExp, jsNumber(byteSize))
+      if (byteSize !== 1) addrExp = jsOr0(jsBin('div')(addrExp, jsNumber(byteSize)))
       return jsSubscript(arrayExp, addrExp)
     }
     const loadInstToType = {
@@ -497,6 +501,7 @@ const expSpecialFormsExp = {
       'i32.load8-s': 'i8',
       'i32.load16-u': 'u16',
       'i32.load16-s': 'i16',
+      'f64.load': 'f64',
     }
     const loadType = loadInstToType[opName]
     if (loadType) {
@@ -507,6 +512,7 @@ const expSpecialFormsExp = {
       'i32.store8': 'i8',
       'i32.store16': 'i16',
       'i32.store': 'i32',
+      'f64.store': 'f64',
     }
     const storeType = storeInstToType[opName]
     if (storeType) {
