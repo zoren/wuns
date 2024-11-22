@@ -360,9 +360,13 @@
       [quote 0]
       [flist
         [quote intrinsic]
-        [quote i32.mul]
-        index-form
-        [i32-to-form element-size]]]]]
+        [quote i32.add]
+        pexp
+        [flist
+          [quote intrinsic]
+          [quote i32.mul]
+          index-form
+          [i32-to-form element-size]]]]]]
 
 [defmacro load-array [mem pexp array-type-element-form start-offset-form index-form]
   [load-array-fn mem pexp array-type-element-form start-offset-form index-form]]
@@ -378,9 +382,13 @@
       [quote 0]
       [flist
         [quote intrinsic]
-        [quote i32.mul]
-        index-form
-        [i32-to-form element-size]]
+        [quote i32.add]
+        pexp
+        [flist
+          [quote intrinsic]
+          [quote i32.mul]
+          index-form
+          [i32-to-form element-size]]]
       value]]]
 
 [defmacro store-array [mem pexp array-type-element-form start-offset-form index-form value]
@@ -409,13 +417,16 @@
     [intrinsic i32.store mem 0 4 [i32 0] [intrinsic i32.add top [align-address n-bytes]]]
     top]]
 
-[def llvector-array-offset [pair/fst [lloffset llvector elements]]]
+[def llvector-array-offset [i32-to-form-word [pair/fst [lloffset llvector elements]]]]
+
+[defn vector-size [vp]
+  [load-record-field mem vp llvector size]]
 
 [defmacro load-vector [mem p element-type-form index-form]
-  [load-array-fn mem p element-type-form [form/word [int-to-word llvector-array-offset]] index-form]]
+  [load-array-fn mem p element-type-form llvector-array-offset index-form]]
 
 [defmacro store-vector [mem p element-type-form index-form value]
-  [store-array-fn mem p element-type-form [form/word [int-to-word llvector-array-offset]] index-form value]]
+  [store-array-fn mem p element-type-form llvector-array-offset index-form value]]
 
 [defn make-abc-word []
   [let
@@ -426,11 +437,25 @@
     [store-vector mem p i8 [i32 2] [i32 67]]
   p]]
 
-[defn vector-size [vp]
-  [load-record-field mem vp llvector size]]
+[defn make-alphabet-word [n]
+  [let
+    [ type-form [flist [quote llvector] [quote i8] [flist [quote literal] [quote i32] [i32-to-form-word n]]]
+      t [validate-lltype [set] type-form]
+      s [llsize-of t]
+      p [alloc-n s]]
+    [store-record-field mem p llvector size n]
+    [for i 0 n
+      [store-vector mem p i8 i [add [i32 65] i]]]
+  p]]
 
 [defn log-word-characters [wp]
   [let [vs [vector-size wp]]
+    [when [is-negative vs]
+      [log [word is-negative] vs]]
+    [when-not [lt-s vs [i32 100]]
+      [log [word not-less-100] vs]]
+    [assert [not [is-negative vs]] log-word-characters invalid vector size negative]
+    [assert [lt-s vs [i32 100]] log-word-characters invalid vector size]
     [for i 0 vs
       [log [load-vector mem wp i8 i]]]]]
 
