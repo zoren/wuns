@@ -417,8 +417,8 @@ const primtiveArrays = Object.freeze({
   i16: { arrayName: 'Int16Array', byteSize: 2 },
   u16: { arrayName: 'Uint16Array', byteSize: 2 },
   i32: { arrayName: 'Int32Array', byteSize: 4 },
-  i64: { arrayName: 'BigInt64Array', byteSize: 8 },
-  u64: { arrayName: 'BigUint64Array', byteSize: 8 },
+  // i64: { arrayName: 'BigInt64Array', byteSize: 8 },
+  // u64: { arrayName: 'BigUint64Array', byteSize: 8 },
   f64: { arrayName: 'Float64Array', byteSize: 8 },
 })
 
@@ -440,8 +440,8 @@ const loadStoreFormToSub = (tail, lctx, topContext) => {
   const { arrayName, byteSize } = primArray
   const arrayExp = jsNew(jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer')), jsNumber(offset)]))
   const pointer = compExp(lctx, pointerForm, topContext)
-  const addrExp = byteSize === 1 ? pointer : jsOr0(jsBin('div')(pointer, jsNumber(byteSize)))
-  return jsSubscript(arrayExp, addrExp)
+  const addrExp = byteSize === 1 ? pointer : jsBin('div')(pointer, jsNumber(byteSize))
+  return jsSubscript(arrayExp, jsOr0(addrExp))
 }
 
 const expSpecialFormsExp = {
@@ -489,8 +489,8 @@ const expSpecialFormsExp = {
       const arrayExp = jsNew(jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer'))]))
       let addrExp = jsAdd(jsNumber(offset), compExp(ctx, addrForm, topContext))
       // need to divide by byteSize
-      if (byteSize !== 1) addrExp = jsOr0(jsBin('div')(addrExp, jsNumber(byteSize)))
-      return jsSubscript(arrayExp, addrExp)
+      if (byteSize !== 1) addrExp = jsBin('div')(addrExp, jsNumber(byteSize))
+      return jsSubscript(arrayExp, jsOr0(addrExp))
     }
     const loadInstToType = {
       'i32.load': 'i32',
