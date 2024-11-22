@@ -230,22 +230,30 @@
       [logq-abort llsize-of invalid literal type]]
     [lltype/func params opt-rest-param ret] [logq-abort llsize-of func]]]
 
+[defn lloffset-fn [record-type-form field-name]
+  [let [t [validate-lltype [set] record-type-form]]
+    [match t
+      [lltype/inst record-type-name args]
+      [match [get lltypes record-type-name]
+        [lltype-decl-kind/record fields]
+        [loop [i 0
+              offset 0]
+          [assert [lt-s i [size fields]] lloffset-fn invalid field name]
+          [let [p [at fields i]
+                type [pair/snd p]]
+            [if [eq-word field-name [pair/fst p]]
+              [pair offset type]
+              [let [type-params [get lltype-params record-type-name]
+                    type-params-list [lltype-parameters/parameter-list type-params]
+                    new-tv-env [transient-kv-map]]
+                [for i 0 [size args]
+                  [set-kv-map new-tv-env [at type-params-list i] [at args i]]]
+                [continue
+                  i [inc i]
+                  offset [add offset [llsize-of [instantiate-lltype new-tv-env type]]]]]]]]]]]]
 
-[defn lloffset-fn [record-type-name field-name]
-  [match [get lltypes record-type-name]
-    [lltype-decl-kind/record fields]
-    [loop [i 0
-           offset 0]
-      [let [p [at fields i]
-            type [pair/snd p]]
-        [if [eq-word field-name [pair/fst p]]
-          [pair offset type]
-          [continue
-            i [inc i]
-            offset [add offset [llsize-of type]]]]]]]]
-
-[defexpr lloffset [record-type-name-form field-form]
-  [lloffset-fn [form-to-word record-type-name-form] [form-to-word field-form]]]
+[defexpr lloffset [record-type-form field-form]
+  [lloffset-fn record-type-form [form-to-word field-form]]]
 
 [lltypexpr llvector [a size]
   [record
@@ -326,7 +334,7 @@
         [logq-abort type-to-lltype unknown]]]]
 
 [defmacro load-record-field [mem pexp record-type-name-form field-form]
-  [let [p [lloffset-fn [form-to-word record-type-name-form] [form-to-word field-form]]]
+  [let [p [lloffset-fn record-type-name-form [form-to-word field-form]]]
     [flist
       [quote intrinsic]
       [form/word [type-to-load-inst-name [type-to-lltype [pair/snd p]]]]
@@ -336,7 +344,7 @@
       pexp]]]
 
 [defmacro store-record-field [mem pexp record-type-name-form field-form value]
-  [let [p [lloffset-fn [form-to-word record-type-name-form] [form-to-word field-form]]]
+  [let [p [lloffset-fn record-type-name-form [form-to-word field-form]]]
     [flist
       [quote intrinsic]
       [form/word [type-to-store-inst-name [type-to-lltype [pair/snd p]]]]
@@ -417,10 +425,10 @@
     [intrinsic i32.store mem 0 4 [i32 0] [intrinsic i32.add top [align-address n-bytes]]]
     top]]
 
-[def llvector-array-offset [i32-to-form-word [pair/fst [lloffset llvector elements]]]]
+[def llvector-array-offset [i32-to-form-word [pair/fst [lloffset [llvector any i32] elements]]]]
 
 [defn vector-size [vp]
-  [load-record-field mem vp llvector size]]
+  [load-record-field mem vp [llvector any i32] size]]
 
 [defmacro load-vector [mem p element-type-form index-form]
   [load-array-fn mem p element-type-form llvector-array-offset index-form]]
@@ -431,7 +439,7 @@
 [defn make-abc-word []
   [let
     [p [alloc-n [size-ofexpr [llvector i8 [literal i32 3]]]]]
-    [store-record-field mem p llvector size [i32 3]]
+    [store-record-field mem p [llvector any i32] size [i32 3]]
     [store-vector mem p i8 [i32 0] [i32 65]]
     [store-vector mem p i8 [i32 1] [i32 66]]
     [store-vector mem p i8 [i32 2] [i32 67]]
@@ -443,7 +451,7 @@
       t [validate-lltype [set] type-form]
       s [llsize-of t]
       p [alloc-n s]]
-    [store-record-field mem p llvector size n]
+    [store-record-field mem p [llvector any i32] size n]
     [for i 0 n
       [store-vector mem p i8 i [add [i32 65] i]]]
   p]]
