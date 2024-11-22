@@ -2,12 +2,44 @@
 
 [def lltype-params [transient-kv-map]]
 
+[type literal-type []
+  [union
+    [i32 i32]]]
+
 [type lltype []
   [union
     [var word]
     [inst word [list lltype]]
     [exp form]
+    [literal literal-type]
     [func [list lltype] [option lltype] lltype]]]
+
+[defn instantiate-lltype [type-var-env type-form]
+  [match type-form
+    [lltype/var v]
+    [get type-var-env v]
+
+    [lltype/inst name args]
+    [lltype/inst name [list-map arg args [instantiate-lltype type-var-env arg]]]
+
+    [lltype/exp e]
+    type-form
+
+    [lltype/literal t v]
+    type-form
+
+    [lltype/func params opt-rest-param ret]
+    [lltype/func
+      [list-map p params [instantiate-lltype type-var-env p]]
+      [match opt-rest-param
+        [option/none] opt-rest-param
+        [option/some p] [option/some [instantiate-lltype type-var-env p]]]
+      [instantiate-lltype type-var-env ret]]]]
+
+[type lltype-parameters []
+  [record
+    [parameter-set [set word]]
+    [parameter-list [list word]]]]
 
 [defn validate-lltype [type-var-env type-form]
   [match type-form
@@ -27,34 +59,44 @@
             [when-not [is-empty type-args]
               [log type-args]
               [logq-abort invalid number of arguments]]
-            [assert [eq [size type-args] 0] ll invalid number of arguments1]
+            [assert [eq [size type-args] 0] validate-lltype invalid number of arguments]
             [lltype/inst type-name [list]]]
 
           [[word pointer]]
           [do
-            [assert [eq [size type-args] 1] ll invalid number of arguments2]
+            [assert [eq [size type-args] 1] validate-lltype invalid number of arguments pointer]
             [lltype/inst type-name [list [validate-lltype type-var-env [first type-args]]]]]
 
           [[word exp]]
           [do
-            [assert [eq [size type-args] 1] ll invalid number of arguments3]
+            [assert [eq [size type-args] 1] validate-lltype invalid number of arguments exp]
             [lltype/exp [first type-args]]]
+
+          [[word literal]]
+          [do
+            [assert [eq [size type-args] 2] validate-lltype invalid number of arguments literal]
+            [lltype/literal
+              [switch [form-to-word [first type-args]]
+                [[word i32]] [literal-type/i32 [word-to-int [form-to-word [second type-args]]]]
+                [logq-abort invalid literal type]]]]
 
           [[word array]]
           [let [element-type-form [first type-args]
                 size-form [second type-args]
                 size-type [validate-lltype type-var-env size-form]]
             [match size-type
-              [lltype/var -] [do]
-              [lltype/exp -] [do]
+              [lltype/literal lt]
+              [match lt
+                [literal-type/i32 i] [assert [not [is-negative i]] validate-lltype invalid array size]]
               [logq-abort invalid size type]]
             [lltype/inst type-name
-              [list [validate-lltype type-var-env element-type-form]
-              size-type]]]
+              [list
+                [validate-lltype type-var-env element-type-form]
+                size-type]]]
 
           [let [type-var-env [get lltype-params type-name]
-                type-params [pair/fst type-var-env]]
-            [assert [eq [pair/snd type-var-env] [size type-args]] ll invalid number of arguments4]
+                type-params [lltype-parameters/parameter-set type-var-env]]
+            [assert [eq [size [lltype-parameters/parameter-list type-var-env]] [size type-args]] ll invalid number of arguments4]
             [lltype/inst type-name
               [list-map targ type-args [validate-lltype type-params targ]]]]]]]]]
 
@@ -81,11 +123,11 @@
       [for-each p type-params
         [assert [not [set-has type-var-env p]] ll duplicate type parameter]
         [set-add type-var-env p]]
-      [set-kv-map lltype-params type-name [pair type-var-env [size type-params]]]]]
+      [set-kv-map lltype-params type-name [lltype-params type-var-env [size type-params]]]]]
   [for-3 i 0 [size t]
     [let
       [type-name [form-to-word [at t i]]
-       type-var-env [pair/fst [get lltype-params type-name]]
+       type-var-env [lltype-parameters/parameter-set [get lltype-params type-name]]
        type-body [form-to-list [at t [add i 2]]]
        type-kind [form-to-word [first type-body]]
        type-kind-args [rest type-body]]
@@ -134,45 +176,63 @@
       [[word i64] [word f64]] 8
       [[word pointer]] 4
 
-      [match [get lltypes name]
-        [lltype-decl-kind/record fields]
-        [loop [i 0 csize 0]
-          [if-not [lt-s i [size fields]]
-            csize
-            [continue
-              csize [add csize [llsize-of [pair/snd [at fields i]]]]
-              i [inc i]]]]
+      [[word array]]
+      [let [element-type [first args]
+            size-type [second args]]
+        [match size-type
+          [lltype/literal lt]
+          [match lt
+            [literal-type/i32 e] [mul [llsize-of element-type] e]
+            [logq-abort llsize-of invalid array size]]
 
-        [lltype-decl-kind/tagged-union ctors]
-        [loop [j 0 max-size 0]
-          [if-not [lt-s j [size ctors]]
-            max-size
-            [let
-              [ctor [at ctors j]
-               params [pair/snd ctor]
-               total-size
-                [loop [i 0 acc-size 0]
-                  [if-not [lt-s i [size params]]
-                    acc-size
-                    [continue
-                      acc-size [add acc-size [llsize-of [at params i]]]
-                      i [inc i]]]]]
-              [continue
-                j [inc j]
-                max-size [max max-size total-size]]]]]
+          [do
+            [log size-type]
+            [logq-abort llsize-of invalid array size]]]]
 
-        [lltype-decl-kind/untagged-union types]
-        [loop [i 0 max-size 0]
-          [if-not [lt-s i [size types]]
-            max-size
-            [let
-              [type [at types i]
-               size [llsize-of type]]
+      [let
+        [type-params-list [get lltype-params name]
+         new-tv-env [transient-kv-map]]
+        [match [get lltypes name]
+          [lltype-decl-kind/record fields]
+          [loop [i 0 csize 0]
+            [if-not [lt-s i [size fields]]
+              csize
               [continue
-                i [inc i]
-                max-size [max max-size size]]]]]]]
+                csize [add csize [llsize-of [pair/snd [at fields i]]]]
+                i [inc i]]]]
+
+          [lltype-decl-kind/tagged-union ctors]
+          [loop [j 0 max-size 0]
+            [if-not [lt-s j [size ctors]]
+              max-size
+              [let
+                [ctor [at ctors j]
+                params [pair/snd ctor]
+                total-size
+                  [loop [i 0 acc-size 0]
+                    [if-not [lt-s i [size params]]
+                      acc-size
+                      [continue
+                        acc-size [add acc-size [llsize-of [at params i]]]
+                        i [inc i]]]]]
+                [continue
+                  j [inc j]
+                  max-size [max max-size total-size]]]]]
+
+          [lltype-decl-kind/untagged-union types]
+          [loop [i 0 max-size 0]
+            [if-not [lt-s i [size types]]
+              max-size
+              [let
+                [type [at types i]
+                 tsize [llsize-of type]]
+                [continue
+                  i [inc i]
+                  max-size [max max-size tsize]]]]]]]]
     [lltype/exp -] 4
-    [lltype/func args ret] [logq-abort llsize-of func]]]
+    [lltype/func params opt-rest-param ret] [logq-abort llsize-of func]]]
+
+[comment
 
 [defn lloffset-fn [record-type-name field-name]
   [match [get lltypes record-type-name]
@@ -192,7 +252,7 @@
 
 [lltype llvector [a size]
   [record
-    [size i32]
+    [size size]
     [elements [array a size]]]]
 
 [lltype
@@ -291,6 +351,9 @@
     pexp
     value]]]
 
+[defexpr size-ofexpr [type-form]
+  [llsize-of [validate-lltype [set] type-form]]]
+
 [defmacro load-array [mem pexp array-type-element-form start-offset-form index-form]
   [let [t [validate-lltype [set] array-type-element-form]
         element-size [llsize-of t]]
@@ -304,7 +367,7 @@
         [quote intrinsic]
         [quote i32.mul]
         index-form
-        [flist [quote i32] [form/word [int-to-word element-size]]]]]]]
+        [i32-to-form element-size]]]]]
 
 [defmacro store-array [mem pexp array-type-element-form start-offset-form index-form value]
   [let [t [validate-lltype [set] array-type-element-form]
@@ -319,7 +382,7 @@
         [quote intrinsic]
         [quote i32.mul]
         index-form
-        [flist [quote i32] [form/word [int-to-word element-size]]]]
+        [i32-to-form element-size]]
       value]]]
 
 [memory mem 1]
@@ -340,14 +403,13 @@
 [defn alloc-n [n-bytes]
   [if [intrinsic i32.le-s n-bytes [i32 0]] [intrinsic unreachable] [do]]
   [let [top [get-top]]
-    [if [intrinsic i32.eq [get-top] [i32 0]]
-      [intrinsic unreachable]
-      [do]]
+    [when [eq top [i32 0]]
+      [intrinsic unreachable]]
     [intrinsic i32.store mem 0 4 [i32 0] [intrinsic i32.add top [align-address n-bytes]]]
     top]]
 
 [defn vector-i8-alloc [s]
-  [if [intrinsic i32.eq s [i32 0]] [intrinsic unreachable] [do]]
+  [when [intrinsic i32.eq s [i32 0]] [intrinsic unreachable]]
   [let [p [alloc-n [size-of [vector i8 [exp s]]]]]
     [store-field mem p [vector i32 any] size s]
     p]]
@@ -359,7 +421,6 @@
   [let [p [alloc-n [size-of [array i32 [exp s]]]]]
     p]]
 
-[comment
 [defn set-character [word-pointer i c]
   [if [lt-s i [i32 0]] [unreachable]]
   [let [s [intrinsic i32.load mem [offset [vector i8 [exp [i32 -1]]] size] 4 word-pointer]]
