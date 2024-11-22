@@ -131,26 +131,26 @@ const getFormList = (form) => {
 }
 
 const makeCtx = (outer, declaringForm) => {
-  if (!(outer === null || outer instanceof Set)) throw new Error('makeCtx expects null or a context')
-  const ctx = new Set()
+  if (!(outer === null || outer instanceof Map)) throw new Error('makeCtx expects null or a context')
+  const ctx = new Map()
   ctx.outer = outer
   ctx.declaringForm = declaringForm
   return ctx
 }
 
-const setNewLocal = (ctx, name) => {
+const setNewLocal = (ctx, name, desc) => {
   if (ctx.has(name)) return
-  ctx.add(name)
+  ctx.set(name, desc)
 }
 
-const setNewLocalForm = (ctx, form) => {
+const setNewLocalForm = (ctx, form, desc) => {
   const name = getFormWord(form)
   // let curCtx = ctx.outer
   // while (curCtx) {
   //   if (curCtx.has(name)) throw new CompileError('redefining variable: ' + name, form)
   //   curCtx = curCtx.outer
   // }
-  setNewLocal(ctx, name)
+  setNewLocal(ctx, name, desc)
 }
 
 const bodiesToStmts = (defEnv, ctx, tail, isTail) => {
@@ -175,24 +175,21 @@ const parseParameterForm = (form) => {
 
 const compFunc = (tail, ctx, topContext) => {
   const name = getFormWord(tail[0])
-  let parametersForms = getFormList(tail[1])
   const bodies = tail.slice(2)
   const newCtx = makeCtx(ctx, 'func')
-  setNewLocal(newCtx, name)
-  let parameters
+  const paramDesc = parseParameterForm(tail[1])
+  const { parameters, restParam } = paramDesc
+  setNewLocalForm(newCtx, tail[0], { kind: 'func-recur', paramDesc })
+  const jsParameters = parameters.map((pf) => {
+    setNewLocalForm(newCtx, pf, { kind: 'param' })
+    return getFormWord(pf)
+  })
   let restOption = optionNone
-  if (parametersForms.length >= 2 && getFormWord(parametersForms.at(-2)) === '..') {
-    const restParam = parametersForms.at(-1)
-    parametersForms = parametersForms.slice(0, -2)
-    parametersForms.forEach((p) => setNewLocalForm(newCtx, p))
-    parameters = parametersForms.map(getFormWord)
-    setNewLocalForm(newCtx, restParam)
+  if (restParam) {
+    setNewLocalForm(newCtx, restParam, { kind: 'rest-param' })
     restOption = makeOptionSome(getFormWord(restParam))
-  } else {
-    parameters = parametersForms.map(getFormWord)
-    parametersForms.forEach((p) => setNewLocalForm(newCtx, p))
   }
-  const arrow = jsArrowStmt(parameters, restOption, jsBlock(bodiesToStmts(topContext, newCtx, bodies, true)))
+  const arrow = jsArrowStmt(jsParameters, restOption, jsBlock(bodiesToStmts(topContext, newCtx, bodies, true)))
   return jsIIFE([jsConstDecl(name, arrow), jsReturn(jsVar(name))])
 }
 
@@ -593,7 +590,8 @@ const expSpecialFormsStmt = {
       if (getFormWord(firstFuncForm) !== 'func') throw new CompileError('expected func')
       const fname = getFormWord(rest[0])
       const isRedef = newCtx.has(fname)
-      setNewLocalForm(newCtx, rest[0])
+      const paramDesc = parseParameterForm(rest[1])
+      setNewLocalForm(newCtx, rest[0], { kind: 'func-recur', paramDesc })
       return [fname, rest, isRedef]
     })
     const stmts = []
@@ -784,16 +782,25 @@ const compExp = (ctx, form, topContext) => {
 
     const stmtSpecialHandler = expSpecialFormsStmt[firstWord]
     if (stmtSpecialHandler) return jsIIFE([stmtSpecialHandler(args, ctx, topContext, true)])
+    const numOfArgs = args.length
+    const checkArity = ({ parameters, restParam }) => {
+      if (numOfArgs < parameters.length) throw new CompileError('not enough arguments', form)
+      if (!restParam && numOfArgs > parameters.length) throw new CompileError('too many arguments', form)
+    }
+
+    let curCtx = ctx
+    while (curCtx) {
+      if (curCtx.has(firstWord)) {
+        const ldesc = curCtx.get(firstWord)
+        if (ldesc && ldesc.kind === 'func-recur') checkArity(ldesc.paramDesc)
+      }
+      curCtx = curCtx.outer
+    }
 
     const defDesc = topContext.defEnv.get(firstWord)
     if (defDesc) {
       const { defKind, value, paramDesc } = defDesc
-      if (paramDesc) {
-        const { parameters, restParam } = paramDesc
-        const numOfArgs = args.length
-        if (numOfArgs < parameters.length) throw new CompileError('not enough arguments', form)
-        if (!restParam && numOfArgs > parameters.length) throw new CompileError('too many arguments', form)
-      }
+      if (paramDesc) checkArity(paramDesc)
       switch (defKind) {
         case 'defmacro':
           return compExp(ctx, value(...args), topContext)
