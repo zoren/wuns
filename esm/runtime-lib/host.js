@@ -315,3 +315,19 @@ const set_to_list = (set) => {
   return Object.freeze([...set])
 }
 export { set_to_list as 'set-to-list' }
+const mem_dump = (wasmMem, start, end) => {
+  if (!(wasmMem instanceof WebAssembly.Memory)) throw new Error('mem-dump expects memory')
+  if (!isSigned32BitInteger(start)) throw new Error('mem-dump expects number: ' + start)
+  if (!isSigned32BitInteger(end)) throw new Error('mem-dump expects number: ' + end)
+  const { buffer } = wasmMem
+  if (start < 0 || start >= buffer.byteLength)
+    throw new Error('mem-dump start out of bounds: ' + start + ' ' + buffer.byteLength)
+  if (end < 0 || end > buffer.byteLength)
+    throw new Error('mem-dump end out of bounds: ' + end + ' ' + buffer.byteLength)
+  if (start > end) throw new Error('mem-dump start is greater than end: ' + start + ' ' + end)
+  const view = new Uint8Array(buffer)
+  for (let i = start; i < end; i += 16) {
+    console.log([...view.slice(i, i + 16)].map((n) => n.toString(16).padStart(2, '0')).join(' '))
+  }
+}
+export { mem_dump as 'mem-dump' }
