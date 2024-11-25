@@ -45,7 +45,7 @@ const getFormList = (form) => {
   throw new EvalError('expected list', form)
 }
 
-import { intrinsics } from './intrinsics.js'
+import { intrinsics, storeInstToType, loadInstToType, primtiveArrays } from './intrinsics.js'
 
 const doFormWord = makeFormWord('do')
 const makeDoForm = (forms) => makeFormList(makeList(doFormWord, ...forms))
@@ -143,7 +143,33 @@ export const makeEvalForm = () => {
           return getFormWord(forms[1])
         case 'intrinsic': {
           if (numOfArgs < 1) throw evalError('intrinsic expected at least one argument')
-          const f = intrinsics[getFormWord(forms[1])]
+          const instName = getFormWord(forms[1])
+          const typeToLoadStore = (type) => {
+            const { arrayName, byteSize } = primtiveArrays[type]
+            const arrayCtor = globalThis[arrayName]
+            const [, , memForm, offsetForm, alignForm] = forms
+            const mem = goExp(defEnv, memForm)
+            const offset = +getFormWord(offsetForm)
+            if (offset < 0) throw evalError('offset must be positive')
+            const align = +getFormWord(alignForm)
+            const array = new arrayCtor(mem.buffer, offset)
+            return {
+              load: (addr) => array[(addr / byteSize) | 0],
+              store: (addr, value) => (array[(addr / byteSize) | 0] = value),
+            }
+          }
+          const storeInstType = storeInstToType[instName]
+          if (storeInstType) {
+            if (numOfArgs !== 6) throw evalError('store intrinsic expected five arguments')
+            typeToLoadStore(storeInstType).store(goExp(env, forms[5]), goExp(env, forms[6]))
+            return langUndefined
+          }
+          const loadInstType = loadInstToType[instName]
+          if (loadInstType) {
+            if (numOfArgs !== 5) throw evalError('load intrinsic expected four arguments')
+            return typeToLoadStore(loadInstType).load(goExp(env, forms[5]))
+          }
+          const f = intrinsics[instName]
           if (!f) throw evalError('undefined intrinsic')
           return f(...forms.slice(2).map((arg) => goExp(env, arg)))
         }
@@ -345,6 +371,13 @@ export const makeEvalForm = () => {
           return langUndefined
         case 'defmacro':
           setDef(getFormWord(forms[1]), makeClosureOfKind('macro', forms, defEnv))
+          return langUndefined
+        case 'memory':
+          if (forms.length !== 3) throw evalError('memory expects two arguments')
+          const memName = getFormWord(forms[1])
+          const memSize = +getFormWord(forms[2])
+          const memory = new WebAssembly.Memory({ initial: memSize })
+          setDef(memName, memory)
           return langUndefined
         case 'do':
           try {

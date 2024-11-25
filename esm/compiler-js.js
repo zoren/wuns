@@ -8,7 +8,7 @@ import {
   wordToI32,
   makeFormList,
 } from './core.js'
-import { intrinsics } from './intrinsics.js'
+import { loadInstToType, storeInstToType, primtiveArrays } from './intrinsics.js'
 import { escapeIdentifier, jsExpToString, jsStmtToString } from './runtime-lib/js.js'
 
 const jsExp =
@@ -411,16 +411,17 @@ const makeSizer = (topContext, lctx) => {
   }
 }
 
-const primtiveArrays = Object.freeze({
-  i8: { arrayName: 'Int8Array', byteSize: 1 },
-  u8: { arrayName: 'Uint8Array', byteSize: 1 },
-  i16: { arrayName: 'Int16Array', byteSize: 2 },
-  u16: { arrayName: 'Uint16Array', byteSize: 2 },
-  i32: { arrayName: 'Int32Array', byteSize: 4 },
-  // i64: { arrayName: 'BigInt64Array', byteSize: 8 },
-  // u64: { arrayName: 'BigUint64Array', byteSize: 8 },
-  f64: { arrayName: 'Float64Array', byteSize: 8 },
-})
+const createPrimitiveArrayExpression = (typeName, memName, offset, pointer) => {
+  const primArray = primtiveArrays[typeName]
+  if (!primArray) throw new CompileError('primitive array expected')
+  const { arrayName, byteSize } = primArray
+  if (offset < 0) throw new CompileError('negative offset')
+  if (offset > 0x7fffffff) throw new CompileError('offset too large')
+  if (offset % byteSize !== 0) throw new CompileError('unaligned offset')
+  const arrayExp = jsNew(jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer')), jsNumber(offset)]))
+  const addrExp = byteSize === 1 ? pointer : jsBin('div')(pointer, jsNumber(byteSize))
+  return jsSubscript(arrayExp, jsOr0(addrExp))
+}
 
 const loadStoreFormToSub = (tail, lctx, topContext) => {
   const [memForm, pointerForm, targetTypeForm, fieldNameForm] = tail
@@ -435,13 +436,8 @@ const loadStoreFormToSub = (tail, lctx, topContext) => {
   if (typeKind !== 'inst') throw new CompileError('expected field type')
   const fieldTypeName = fieldType.typeName
   const typeName = fieldTypeName === 'pointer' ? 'i32' : fieldTypeName
-  const primArray = primtiveArrays[typeName]
-  if (!primArray) throw new CompileError('primitive array expected')
-  const { arrayName, byteSize } = primArray
-  const arrayExp = jsNew(jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer')), jsNumber(offset)]))
   const pointer = compExp(lctx, pointerForm, topContext)
-  const addrExp = byteSize === 1 ? pointer : jsBin('div')(pointer, jsNumber(byteSize))
-  return jsSubscript(arrayExp, jsOr0(addrExp))
+  return createPrimitiveArrayExpression(typeName, memName, offset, pointer)
 }
 
 const expSpecialFormsExp = {
@@ -476,40 +472,19 @@ const expSpecialFormsExp = {
     const [opForm, ...args] = tail
     const opName = getFormWord(opForm)
     const loadMem = (primtypeName) => {
-      const { arrayName, byteSize } = primtiveArrays[primtypeName]
       const [memForm, offsetForm, alignmentForm, addrForm] = args
       const memName = getFormWord(memForm)
       const memDesc = defEnv.get(memName)
       if (!memDesc) throw new CompileError('undefined memory')
       if (memDesc.defKind !== 'memory') throw new CompileError('not a memory')
       const offset = +getFormWord(offsetForm)
-      if (isNaN(offset)) throw new CompileError('expected number')
-      const alignment = +getFormWord(alignmentForm)
-      if (isNaN(alignment)) throw new CompileError('expected number')
-      const arrayExp = jsNew(jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer'))]))
       let addrExp = jsAdd(jsNumber(offset), compExp(ctx, addrForm, topContext))
-      // need to divide by byteSize
-      if (byteSize !== 1) addrExp = jsBin('div')(addrExp, jsNumber(byteSize))
-      return jsSubscript(arrayExp, jsOr0(addrExp))
-    }
-    const loadInstToType = {
-      'i32.load': 'i32',
-      'i32.load8-u': 'u8',
-      'i32.load8-s': 'i8',
-      'i32.load16-u': 'u16',
-      'i32.load16-s': 'i16',
-      'f64.load': 'f64',
+      return createPrimitiveArrayExpression(primtypeName, memName, offset, addrExp)
     }
     const loadType = loadInstToType[opName]
     if (loadType) {
       if (args.length !== 4) throw new CompileError(opName + ' expected four arguments')
       return loadMem(loadType)
-    }
-    const storeInstToType = {
-      'i32.store8': 'i8',
-      'i32.store16': 'i16',
-      'i32.store': 'i32',
-      'f64.store': 'f64',
     }
     const storeType = storeInstToType[opName]
     if (storeType) {
@@ -517,10 +492,6 @@ const expSpecialFormsExp = {
       const jsExp = jsAssignExp(loadMem(storeType), compExp(ctx, args[4], topContext))
       return jsParenComma([jsExp, jsUndefined])
     }
-
-    const intrinsic = intrinsics[opName]
-    if (!intrinsic) throw new CompileError('undefined intrinsic: ' + opName)
-    if (args.length !== intrinsic.length) throw new CompileError('wrong number of arguments')
     return opIntrinsicCall(
       opName,
       args.map((arg) => compExp(ctx, arg, topContext)),

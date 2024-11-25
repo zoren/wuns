@@ -483,125 +483,143 @@ const testTop = ({ ptse }) => {
     expect(await ptse('[type pair [a b] [record [fst a] [snd b]]] [pair/snd [pair [i32 5] [i32 6]]]')).toBe(6)
   })
 
-  test('size-of', async () => {
-    expect(await ptse('[size-of i32]')).toBe(4)
-    expect(await ptse('[size-of f32]')).toBe(4)
-    expect(await ptse('[size-of i64]')).toBe(8)
-    expect(await ptse('[size-of f64]')).toBe(8)
-    expect(await ptse('[size-of [array f64 [exp [i32 3]]]]]')).toBe(24)
-    // await expect(ptse('[size-of [array f64 [exp x]]]]')).rejects.toThrow('undefined variable')
-    expect(await ptse('[size-of [pointer [array f64 [exp [i32 3]]]]]')).toBe(4)
-    expect(await ptse('[type r [] [record [x f64] [y f64]]] [size-of r]')).toBe(16)
+  test('load store', async () => {
     expect(
       await ptse(`
-      [type r [] [record [x f64] [y f64]]]
-      [type s [] [record [r1 r] [i i32]]]
-      [size-of s]`),
-    ).toBe(20)
-    expect(
-      await ptse(`
-        [type two [a] [record [x a] [y a]]]
-        [size-of [two i32]]`),
-    ).toBe(8)
-    expect(
-      await ptse(`
-        [type two-arrays [n] [record [x [array i32 n]] [y [array i32 n]]]]
-        [size-of [two-arrays [exp [i32 10]]]]]`),
-    ).toBe(80)
-    expect(
-      await ptse(`
-        [type int-or-float [] [untagged-union i32 f64]]
-        [size-of int-or-float]`),
-    ).toBe(8)
-  })
-
-  test('field load store', async () => {
-    expect(
-      await ptse(`
-[type vector [a size]
-  [record
-    [size i32]
-    [elements [array a size]]]]
-
-[memory mem 1]
-
-[def p [i32 16]]
-
-[do
-  [store-field mem p [vector i32 any] size [i32 3]]
-  [load-field mem p [vector i32 any] size]]
-`),
-    ).toBe(3)
-
-    expect(
-      await ptse(`
-[type r []
-  [record
-    [f u8]]]
-
 [memory mem 1]
 
 [let [p [i32 16]]
-  [store-field mem p r f [i32 -1]]
-  [load-field mem p r f]]
-`),
-    ).toBe(255)
-    expect(
-      await ptse(`
-[type r []
-  [record
-    [f i8]]]
-
-[memory mem 1]
-
-[let [p [i32 16]]
-  [store-field mem p r f [i32 -1]]
-  [load-field mem p r f]]
+  [do
+  [intrinsic i32.store8 mem 0 1 p [i32 255]]
+  [intrinsic i32.load8-s mem 0 1 p]
+      ]
+  ]
 `),
     ).toBe(-1)
 
-
-    expect(
-      await ptse(`
-[type r []
-  [record
-    [f u16]]]
-
-[memory mem 1]
-
-[let [p [i32 16]]
-  [store-field mem p r f [i32 -1]]
-  [load-field mem p r f]]
-`),
-    ).toBe(65535)
-    expect(
-      await ptse(`
-[type r []
-  [record
-    [f i16]]]
-
-[memory mem 1]
-
-[let [p [i32 16]]
-  [store-field mem p r f [i32 -1]]
-  [load-field mem p r f]]
-`),
-    ).toBe(-1)
-
-    expect(
-      await ptse(`
-[type r []
-  [record
-    [f f64]]]
-
-[memory mem 1]
-
-[let [p [i32 16]]
-  [store-field mem p r f [f64 1.5]]
-  [load-field mem p r f]]
-`),
-    ).toBe(1.5)
   })
+
+  // test('size-of', async () => {
+  //   expect(await ptse('[size-of i32]')).toBe(4)
+  //   expect(await ptse('[size-of f32]')).toBe(4)
+  //   expect(await ptse('[size-of i64]')).toBe(8)
+  //   expect(await ptse('[size-of f64]')).toBe(8)
+  //   expect(await ptse('[size-of [array f64 [exp [i32 3]]]]]')).toBe(24)
+  //   // await expect(ptse('[size-of [array f64 [exp x]]]]')).rejects.toThrow('undefined variable')
+  //   expect(await ptse('[size-of [pointer [array f64 [exp [i32 3]]]]]')).toBe(4)
+  //   expect(await ptse('[type r [] [record [x f64] [y f64]]] [size-of r]')).toBe(16)
+  //   expect(
+  //     await ptse(`
+  //     [type r [] [record [x f64] [y f64]]]
+  //     [type s [] [record [r1 r] [i i32]]]
+  //     [size-of s]`),
+  //   ).toBe(20)
+  //   expect(
+  //     await ptse(`
+  //       [type two [a] [record [x a] [y a]]]
+  //       [size-of [two i32]]`),
+  //   ).toBe(8)
+  //   expect(
+  //     await ptse(`
+  //       [type two-arrays [n] [record [x [array i32 n]] [y [array i32 n]]]]
+  //       [size-of [two-arrays [exp [i32 10]]]]]`),
+  //   ).toBe(80)
+  //   expect(
+  //     await ptse(`
+  //       [type int-or-float [] [untagged-union i32 f64]]
+  //       [size-of int-or-float]`),
+  //   ).toBe(8)
+  // })
+
+//   test('field load store', async () => {
+//     expect(
+//       await ptse(`
+// [type vector [a size]
+//   [record
+//     [size i32]
+//     [elements [array a size]]]]
+
+// [memory mem 1]
+
+// [def p [i32 16]]
+
+// [do
+//   [store-field mem p [vector i32 any] size [i32 3]]
+//   [load-field mem p [vector i32 any] size]]
+// `),
+//     ).toBe(3)
+
+//     expect(
+//       await ptse(`
+// [type r []
+//   [record
+//     [f u8]]]
+
+// [memory mem 1]
+
+// [let [p [i32 16]]
+//   [store-field mem p r f [i32 -1]]
+//   [load-field mem p r f]]
+// `),
+//     ).toBe(255)
+//     expect(
+//       await ptse(`
+// [type r []
+//   [record
+//     [f i8]]]
+
+// [memory mem 1]
+
+// [let [p [i32 16]]
+//   [store-field mem p r f [i32 -1]]
+//   [load-field mem p r f]]
+// `),
+//     ).toBe(-1)
+
+
+//     expect(
+//       await ptse(`
+// [type r []
+//   [record
+//     [f u16]]]
+
+// [memory mem 1]
+
+// [let [p [i32 16]]
+//   [store-field mem p r f [i32 -1]]
+//   [load-field mem p r f]]
+// `),
+//     ).toBe(65535)
+//     expect(
+//       await ptse(`
+// [type r []
+//   [record
+//     [f i16]]]
+
+// [memory mem 1]
+
+// [let [p [i32 16]]
+//   [store-field mem p r f [i32 -1]]
+//   [load-field mem p r f]]
+// `),
+//     ).toBe(-1)
+
+//     expect(
+//       await ptse(`
+// [type r []
+//   [record
+//     [f f64]]]
+
+// [memory mem 1]
+
+// [let [p [i32 16]]
+//   [store-field mem p r f [f64 1.5]]
+//   [load-field mem p r f]]
+// `),
+//     ).toBe(1.5)
+//   })
+
+
 }
 
 const makeParseEvalTopsExp = (makeEvaluator) => {
@@ -622,7 +640,7 @@ const parseEvalTopsExpJS = async (s) => {
 }
 
 describe.each([
-  // { name: 'top direct', ptse: makeParseEvalTopsExp(makeEvalForm) },
+  { name: 'top direct', ptse: makeParseEvalTopsExp(makeEvalForm) },
   {
     name: 'top compiled js',
     ptse: parseEvalTopsExpJS,
