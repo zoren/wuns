@@ -488,7 +488,8 @@ const formToQuotedJS = (form) => {
 
 const jsStmtToStringSafe = (js) => {
   try {
-    return jsStmtToString(js)
+    const src = jsStmtToString(js)
+    return src
   } catch (e) {
     console.error(e)
     console.dir(js, { depth: null })
@@ -499,7 +500,8 @@ const jsStmtToStringSafe = (js) => {
 
 const jsExpToStringSafe = (js) => {
   try {
-    return jsExpToString(js)
+    const src = jsExpToString(js)
+    return src
   } catch (e) {
     console.error(e)
     console.dir(js, { depth: null })
