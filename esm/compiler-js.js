@@ -230,145 +230,6 @@ const makeTypeValidator = (typeContext, params) => {
   return go
 }
 
-const makeSizer = (topContext, lctx) => {
-  const { typeContext } = topContext
-  const typeToSizeNumber = (typeVarEnv, type) => {
-    switch (type.typeKind) {
-      case 'var': {
-        const newLocal = typeVarEnv.get(type.name)
-        if (newLocal === undefined) throw new CompileError('unbound type variable: ' + type.name)
-        return typeToSizeNumber(typeVarEnv, newLocal)
-      }
-      case 'inst': {
-        const { typeName, args: targs } = type
-        const builtinTypeSize = builtInPrimitiveTypeSizes[typeName]
-        if (builtinTypeSize !== undefined) {
-          if (targs.length !== 0) throw new CompileError('built-in type expected no arguments')
-          return builtinTypeSize
-        }
-        switch (typeName) {
-          case 'array': {
-            if (targs.length !== 2) throw new CompileError('array expected two arguments')
-            const [elementType, arraySizeForm] = targs
-            const elementTypeSize = typeToSizeNumber(typeVarEnv, elementType)
-            let arraySize
-            if (arraySizeForm.typeKind === 'var') {
-              arraySize = typeVarEnv.get(arraySizeForm.name)
-            } else {
-              arraySize = arraySizeForm
-            }
-            if (arraySize.typeKind !== 'exp') throw new CompileError('array size expected exp type')
-            // this may fail if the expression depends on a variable
-            const arraySizeExp = compExp(null, arraySize.exp, topContext)
-            const f = new Function('return ' + jsExpToStringSafe(arraySizeExp))
-            const arraySizeNum = f()
-            return elementTypeSize * arraySizeNum
-          }
-          case 'pointer':
-          case 'exp':
-            return 4
-          case 'any':
-            throw new CompileError('size-of any not allowed')
-        }
-        const userDef = typeContext.get(typeName)
-        if (!userDef) throw new CompileError('unknown type: ' + typeName)
-        const { params, kind } = userDef
-        const newSubst = new Map()
-        for (let i = 0; i < params.length; i++) newSubst.set(params[i], targs[i])
-        switch (kind) {
-          case 'record':
-            return userDef.fields.reduce((acc, field) => acc + typeToSizeNumber(newSubst, field.fieldType), 0)
-          case 'untagged-union':
-            return Math.max(0, ...userDef.types.map((t) => typeToSizeNumber(newSubst, t)))
-          case 'union':
-            throw new CompileError('union not allowed')
-          default:
-            throw new CompileError('unknown type kind: ' + kind)
-        }
-      }
-      case 'func':
-        throw new CompileError('size-of func not allowed')
-    }
-    throw new CompileError('unknown type kind: ' + type.typeKind)
-  }
-  const typeToSizeJSExp = (typeVarEnv, type) => {
-    if (type.typeKind !== 'inst') return jsNumber(typeToSizeNumber(typeVarEnv, type))
-    const { typeName, args: targs } = type
-    if (typeName === 'array') {
-      if (targs.length !== 2) throw new CompileError('array expected two arguments')
-      const [elementType, arraySizeForm] = targs
-      const elementTypeSize = typeToSizeJSExp(typeVarEnv, elementType)
-      let arraySize
-      if (arraySizeForm.typeKind === 'var') {
-        arraySize = typeVarEnv.get(arraySizeForm.name)
-      } else {
-        arraySize = arraySizeForm
-      }
-      if (arraySize.typeKind !== 'exp') throw new CompileError('array size expected exp type')
-      // this may fail if the expression depends on a variable
-      const arraySizeExp = compExp(lctx, arraySize.exp, topContext)
-      return jsBin('mul')(elementTypeSize, arraySizeExp)
-    }
-    const userDef = typeContext.get(typeName)
-    if (!userDef) return jsNumber(typeToSizeNumber(typeVarEnv, type))
-    const { params, kind } = userDef
-    if (params.length !== targs.length) throw new CompileError('wrong number of type parameters')
-    const newSubst = new Map()
-    for (let i = 0; i < params.length; i++) newSubst.set(params[i], targs[i])
-    switch (kind) {
-      case 'record':
-        return userDef.fields.reduce((acc, field) => jsAdd(acc, typeToSizeJSExp(newSubst, field.fieldType)), js0)
-      case 'untagged-union':
-        return userDef.types.reduce((acc, t) => jsCall(jsMathMax, [acc, typeToSizeJSExp(newSubst, t)]), js0)
-      case 'union':
-        return userDef.constructors.reduce(
-          (acc, { params }) =>
-            jsCall(jsMathMax, [acc, params.reduce((acc, p) => jsAdd(acc, typeToSizeJSExp(newSubst, p)), js0)]),
-          js0,
-        )
-      default:
-        throw new CompileError('unknown type kind: ' + kind)
-    }
-  }
-  const offset = (typeVarEnv, type, fieldName) => {
-    const optName = tryGetFormWord(type)
-    if (optName !== null) {
-      if (typeVarEnv && typeVarEnv.has(optName)) return offset(typeVarEnv, typeVarEnv.get(optName), fieldName)
-      return offset(null, makeFormList([type]), fieldName)
-    }
-    const list = tryGetFormList(type)
-    if (!list) {
-      console.error('type', type)
-      throw new CompileError('expected list')
-    }
-    if (list.length === 0) throw new CompileError('type list empty')
-    const [first, ...targs] = list
-    const firstName = getFormWord(first)
-    const userDef = typeContext.get(firstName)
-    if (!userDef) throw new CompileError('unknown type: ' + firstName)
-    const { params, kind } = userDef
-    if (params.length !== targs.length) throw new CompileError('wrong number of type parameters')
-    const newSubst = new Map()
-    for (let i = 0; i < params.length; i++) newSubst.set(params[i], targs[i])
-    switch (kind) {
-      case 'record': {
-        let offset = 0
-        for (const { name, fieldType } of userDef.fields) {
-          if (name === fieldName) return { offset, fieldType }
-          offset += typeToSizeNumber(newSubst, fieldType)
-        }
-        throw new CompileError('field not found: ' + fieldName)
-      }
-      default:
-        throw new CompileError('unknown type kind: ' + kind)
-    }
-  }
-  return {
-    sizeOfExp: (type) => typeToSizeJSExp(null, type),
-    offset: (type, field) => offset(null, type, field),
-  }
-}
-
 const createPrimitiveArrayExpression = (typeName, memName, offset, pointer) => {
   const primArray = primtiveArrays[typeName]
   if (!primArray) throw new CompileError('primitive array expected')
@@ -379,23 +240,6 @@ const createPrimitiveArrayExpression = (typeName, memName, offset, pointer) => {
   const arrayExp = jsNew(jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer')), jsNumber(offset)]))
   const addrExp = byteSize === 1 ? pointer : jsBin('div')(pointer, jsNumber(byteSize))
   return jsSubscript(arrayExp, jsOr0(addrExp))
-}
-
-const loadStoreFormToSub = (tail, lctx, topContext) => {
-  const [memForm, pointerForm, targetTypeForm, fieldNameForm] = tail
-  const memName = getFormWord(memForm)
-  const memDesc = topContext.defEnv.get(memName)
-  if (!memDesc) throw new CompileError('undefined memory')
-  if (memDesc.defKind !== 'memory') throw new CompileError('not a memory')
-  const fieldName = getFormWord(fieldNameForm)
-  const sizer = makeSizer(topContext, null)
-  const { offset, fieldType } = sizer.offset(targetTypeForm, fieldName)
-  const { typeKind } = fieldType
-  if (typeKind !== 'inst') throw new CompileError('expected field type')
-  const fieldTypeName = fieldType.typeName
-  const typeName = fieldTypeName === 'pointer' ? 'i32' : fieldTypeName
-  const pointer = compExp(lctx, pointerForm, topContext)
-  return createPrimitiveArrayExpression(typeName, memName, offset, pointer)
 }
 
 const expSpecialFormsExp = {
@@ -464,23 +308,6 @@ const expSpecialFormsExp = {
     return jsTernary(...tail.map((f) => compExp(ctx, f, defEnv)))
   },
   'type-anno': (tail, ctx, defEnv) => compExp(ctx, tail[0], defEnv),
-  'size-of': (tail, lctx, topContext) => {
-    if (tail.length !== 1) throw new CompileError('size-of expected one argument')
-    const sizer = makeSizer(topContext, lctx)
-    const typeForm = tail[0]
-    const type = makeTypeValidator(topContext.typeContext, [])(typeForm)
-    return sizer.sizeOfExp(type)
-  },
-  'load-field': (tail, lctx, topContext) => {
-    if (tail.length !== 4) throw new CompileError('load-field expected four arguments')
-    return loadStoreFormToSub(tail, lctx, topContext)
-  },
-  'store-field': (tail, lctx, topContext) => {
-    if (tail.length !== 5) throw new CompileError('store-field expected five arguments')
-    const jsSub = loadStoreFormToSub(tail, lctx, topContext)
-    const jsExp = jsAssignExp(jsSub, compExp(lctx, tail[4], topContext))
-    return jsParenComma([jsExp, jsUndefined])
-  },
 }
 Object.freeze(expSpecialFormsExp)
 
