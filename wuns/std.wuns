@@ -212,8 +212,10 @@
 [def-extern int-to-word [func [i32] word]]
 [def-extern word-to-int [func [word] i32]]
 
+[defn i32-to-form-word [i] [form/word [int-to-word i]]]
+
 [defn i32-to-form [i]
-  [flist [quote i32] [form/word [int-to-word i]]]]
+  [flist [quote i32] [i32-to-form-word i]]]
 
 [def-extern char-code-at [func [word i32] i32]]
 
@@ -599,3 +601,5 @@
 [def-js-extern object-get [func [js-value word] js-value]]
 [def-js-extern byte-array-from [func [js-value] byte-array]]
 [def-js-extern js-apply [func [js-value [list js-value]] js-value]]
+
+[def-extern mem-dump [func [memory i32 i32] [tuple]]]
