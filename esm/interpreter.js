@@ -23,11 +23,13 @@ import {
   makeFormWord,
   makeFormList,
   wordToI32,
+  getLocationFromForm,
 } from './core.js'
 import { 'read-file-async' as read_file_async } from './runtime-lib/files.js'
+
 class EvalError extends Error {
   constructor(message, form, innerError) {
-    super(message)
+    super(message + ':' + getLocationFromForm(form))
     this.form = form
     this.innerError = innerError
   }
