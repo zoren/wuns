@@ -47,7 +47,7 @@ const getFormList = (form) => {
   throw new EvalError('expected list', form)
 }
 
-import { intrinsics, storeInstToType, loadInstToType, primtiveArrays } from './intrinsics.js'
+import { storeInstToType, loadInstToType, primtiveArrays, intrinsicsInfo } from './intrinsics.js'
 
 const doFormWord = makeFormWord('do')
 const makeDoForm = (forms) => makeFormList(makeList(doFormWord, ...forms))
@@ -171,9 +171,19 @@ export const makeEvalForm = () => {
             if (numOfArgs !== 5) throw evalError('load intrinsic expected four arguments')
             return typeToLoadStore(loadInstType).load(goExp(env, forms[5]))
           }
-          const f = intrinsics[instName]
-          if (!f) throw evalError('undefined intrinsic')
-          return f(...forms.slice(2).map((arg) => goExp(env, arg)))
+          if (instName === 'unreachable') throw evalError('unreachable')
+          const instInfo = intrinsicsInfo[instName]
+          if (!instInfo) throw evalError('undefined intrinsic')
+          const { op, orZero } = instInfo
+          const exp = `(a ${op} b)` + (orZero ? ' | 0' : '')
+          const f = Function('a', 'b', `return (${exp})`)
+          if (forms.length !== 4) throw evalError('intrinsic expected two arguments')
+          const eargs = forms.slice(2).map((arg) => goExp(env, arg))
+          if (eargs.length !== 2) throw evalError('expected two arguments')
+          const [a, b] = eargs
+          if (typeof a !== 'number') throw new Error('first arg is not a number')
+          if (typeof b !== 'number') throw new Error('second arg is not a number')
+          return f(a, b)
         }
         // constants calculated from environment
         case 'func':

@@ -1,19 +1,3 @@
-import { setJSFunctionName } from './utils.js'
-const intrinsics = {}
-
-const pushNamedFunc = (fname, exp) => {
-  const f = Function(
-    'a',
-    'b',
-    `
-    if (typeof a !== 'number') throw new Error('${fname} first arg is not a number');
-    if (typeof b !== 'number') throw new Error('${fname} second arg is not a number');
-    return (${exp})`,
-  )
-  setJSFunctionName(f, fname)
-  intrinsics[fname] = Object.freeze(f)
-}
-
 export const intrinsicsInfo = {}
 
 const i32Instructions = [
@@ -31,11 +15,7 @@ const i32Instructions = [
   { name: 'le-s', op: '<=', alias: 'less-than-or-equal-signed' },
   { name: 'ge-s', op: '>=', alias: 'greater-than-or-equal-signed' },
 ]
-for (const { op, name } of i32Instructions) {
-  const fullName = `i32.${name}`
-  pushNamedFunc(fullName, `(a ${op} b) | 0`)
-  intrinsicsInfo[fullName] = { op, orZero: true }
-}
+for (const { op, name } of i32Instructions) intrinsicsInfo[`i32.${name}`] = { op, orZero: true }
 
 const i32BinaryInsts = [
   // these don't need to be or'd with 0 because they return i32 already
@@ -46,22 +26,15 @@ const i32BinaryInsts = [
   { name: 'shr-s', op: '>>', alias: 'bitwise-shift-right' },
   { name: 'shr-u', op: '>>>', alias: 'bitwise-shift-right-unsigned' },
 ]
-for (const { op, name } of i32BinaryInsts) {
-  const fullName = `i32.${name}`
-  pushNamedFunc(fullName, `(a ${op} b)`)
-  intrinsicsInfo[fullName] = { op }
-}
+for (const { op, name } of i32BinaryInsts) intrinsicsInfo[`i32.${name}`] = { op }
+
 const f64ArithInstructions = [
   { name: 'add', op: '+' },
   { name: 'sub', op: '-' },
   { name: 'mul', op: '*' },
   { name: 'div', op: '/' },
 ]
-for (const { op, name } of f64ArithInstructions) {
-  const fullName = `f64.${name}`
-  pushNamedFunc(fullName, `(a ${op} b)`)
-  intrinsicsInfo[fullName] = { op }
-}
+for (const { op, name } of f64ArithInstructions) intrinsicsInfo[`f64.${name}`] = { op }
 
 const f64CmpInstructions = [
   { name: 'eq', op: '===' },
@@ -72,22 +45,9 @@ const f64CmpInstructions = [
   { name: 'le', op: '<=' },
   { name: 'ge', op: '>=' },
 ]
-for (const { op, name } of f64CmpInstructions) {
-  const fullName = `f64.${name}`
-  pushNamedFunc(fullName, `(a ${op} b) | 0`)
-  intrinsicsInfo[fullName] = { op, orZero: true }
-}
+for (const { op, name } of f64CmpInstructions) intrinsicsInfo[`f64.${name}`] = { op, orZero: true }
 
-const unreachable = () => {
-  throw new Error('unreachable')
-}
-Object.freeze(unreachable)
-intrinsics.unreachable = unreachable
-
-Object.freeze(intrinsics)
 Object.freeze(intrinsicsInfo)
-
-export { intrinsics }
 
 export const primtiveArrays = Object.freeze({
   i8: { arrayName: 'Int8Array', byteSize: 1 },
