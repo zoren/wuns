@@ -451,14 +451,12 @@ const expSpecialFormsExp = {
       return jsParenComma([jsExp, jsUndefined])
     }
     if (opName === 'unreachable') return jsIIFE([jsThrow(jsString('unreachable'))])
-    const intrinsicInfo = intrinsicsInfo[opName]
-    if (intrinsicInfo) {
-      const { op, orZero } = intrinsicInfo
-      if (args.length !== 2) throw new CompileError(opName + ' expected two arguments')
-      const inst = jsBinDirect(op, compExp(ctx, args[0], topContext), compExp(ctx, args[1], topContext))
-      return orZero ? jsOr0(inst) : inst
-    }
-    throw new CompileError('unknown intrinsic: ' + opName)
+    const binIntrinsicInfo = intrinsicsInfo[opName]
+    if (!binIntrinsicInfo) throw new CompileError('unknown intrinsic: ' + opName)
+    const { op, orZero } = binIntrinsicInfo
+    if (args.length !== 2) throw new CompileError(opName + ' expected two arguments')
+    const inst = jsBinDirect(op, compExp(ctx, args[0], topContext), compExp(ctx, args[1], topContext))
+    return orZero ? jsOr0(inst) : inst
   },
   func: compFunc,
   if: (tail, ctx, defEnv) => {

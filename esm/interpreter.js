@@ -178,9 +178,8 @@ export const makeEvalForm = () => {
           const exp = `(a ${op} b)` + (orZero ? ' | 0' : '')
           const f = Function('a', 'b', `return (${exp})`)
           if (forms.length !== 4) throw evalError('intrinsic expected two arguments')
-          const eargs = forms.slice(2).map((arg) => goExp(env, arg))
-          if (eargs.length !== 2) throw evalError('expected two arguments')
-          const [a, b] = eargs
+          const a = goExp(env, forms[2])
+          const b = goExp(env, forms[3])
           if (typeof a !== 'number') throw new Error('first arg is not a number')
           if (typeof b !== 'number') throw new Error('second arg is not a number')
           return f(a, b)
