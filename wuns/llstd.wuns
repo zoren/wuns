@@ -274,12 +274,12 @@
 [lltypexpr
   form-word []
   [record
-    [tag [literal i32 0]]
+    [tag [literal i32 10]]
     [data [pointer [llvector i8 i32]]]]
 
   form-list []
   [record
-    [tag [literal i32 1]]
+    [tag [literal i32 11]]
     [data [pointer [llvector [pointer uform] i32]]]]
 
   uform []
@@ -343,8 +343,8 @@
       [quote 0]
       pexp]]]
 
-[defmacro store-record-field [mem pexp record-type-name-form field-form value]
-  [let [p [lloffset-fn record-type-name-form [form-to-word field-form]]]
+[defn store-record-field-fn [mem pexp record-type-form field-form value]
+  [let [p [lloffset-fn record-type-form [form-to-word field-form]]]
     [flist
       [quote intrinsic]
       [form/word [type-to-store-inst-name [type-to-lltype [pair/snd p]]]]
@@ -353,6 +353,9 @@
       [quote 0]
       pexp
       value]]]
+
+[defmacro store-record-field [mem pexp record-type-form field-form value]
+  [store-record-field-fn mem pexp record-type-form field-form value]]
 
 [defexpr size-ofexpr [type-form]
   [llsize-of [validate-lltype [set] type-form]]]
@@ -375,6 +378,32 @@
           [quote i32.mul]
           index-form
           [i32-to-form element-size]]]]]]
+
+[defn addr-of-array-fn [pexp array-type-element-form start-offset-form index-form]
+  [let [element-size [llsize-of [validate-lltype [set] array-type-element-form]]]
+    [flist
+      [quote intrinsic]
+      [quote i32.add]
+      [flist
+        [quote intrinsic]
+        [quote i32.add]
+        pexp
+        start-offset-form]
+      [flist
+        [quote intrinsic]
+        [quote i32.mul]
+        index-form
+        [i32-to-form element-size]]]]]
+
+[defmacro offset-it [pexp start-offset-form]
+  [flist
+    [quote intrinsic]
+    [quote i32.add]
+    pexp
+    start-offset-form]]
+
+[defmacro addr-of-array [pexp array-type-element-form start-offset-form index-form]
+  [addr-of-array-fn pexp array-type-element-form start-offset-form index-form]]
 
 [defmacro load-array [mem pexp array-type-element-form start-offset-form index-form]
   [load-array-fn mem pexp array-type-element-form start-offset-form index-form]]
@@ -436,6 +465,9 @@
 [defmacro store-vector [mem p element-type-form index-form value]
   [store-array-fn mem p element-type-form llvector-array-offset index-form value]]
 
+[defmacro addr-of-vector [p element-type-form index-form]
+  [addr-of-array-fn p element-type-form llvector-array-offset index-form]]
+
 [defn make-abc-word []
   [let
     [p [alloc-n [size-ofexpr [llvector i8 [literal i32 3]]]]]
@@ -444,6 +476,20 @@
     [store-vector mem p i8 [i32 1] [i32 66]]
     [store-vector mem p i8 [i32 2] [i32 67]]
   p]]
+
+[defmacro store-record-field-type [mem pexp record-type-form field-form value]
+  [store-record-field-fn mem pexp record-type-form field-form value]]
+
+[defn vector-alloc-i32 [n]
+  [let
+    [ type-form [flist [quote llvector] [quote i32] [flist [quote literal] [quote i32] [i32-to-form-word n]]]
+      t [validate-lltype [set] type-form]
+      s [llsize-of t]
+      p [alloc-n s]]
+    [store-record-field mem p [llvector i32 i32] size n]
+  p]]
+
+[defn vector-alloc-init [ele]]
 
 [defn make-alphabet-word [n]
   [let
@@ -467,15 +513,57 @@
     [for i 0 vs
       [log [load-vector mem wp i8 i]]]]]
 
-[comment
-[defn vector-i8-alloc [s]
-  [when [intrinsic i32.eq s [i32 0]] [intrinsic unreachable]]
-  [let [p [alloc-n [size-of [vector i8 [exp s]]]]]
-    [store-field mem p [vector i32 any] size s]
-    p]]
+[defn form-word-alloc [wp]
+  [let
+    [p [alloc-n [size-ofexpr [form-word]]]]
+    [store-record-field mem p form-word tag [i32 10]]
+    [store-record-field mem p form-word data wp]
+  p]]
 
-[defn vector-size [vp]
-  [load-field mem vp [vector i8 any] size]]
+[defn form-list-alloc [lp]
+  [let
+    [p [alloc-n [size-ofexpr [form-list]]]]
+    [store-record-field mem p form-list tag [i32 11]]
+    [store-record-field mem p form-list data lp]
+  p]]
+
+[defn make-form []
+  [let
+    [pfw [form-word-alloc [make-abc-word]]
+     lp [vector-alloc-i32 2]]
+    [store-vector mem lp [pointer uform] [i32 0] pfw]
+    [store-vector mem lp [pointer uform] [i32 1] pfw]
+    [form-list-alloc lp]]]
+
+[defn make-form-1 []
+  [let
+    [pfw [form-word-alloc [make-abc-word]]
+     lp [vector-alloc-i32 1]]
+    [store-vector mem lp [pointer uform] [i32 0] pfw]
+    [form-list-alloc lp]]]
+
+[defn uform-tag [puf]
+  [load-record-field mem puf form-word tag]]
+
+[defn log-form [puf]
+  [switch [uform-tag puf]
+    [[i32 10]]
+    [log-word-characters [load-record-field mem puf form-word data]]
+
+    [[i32 11]]
+    [let [vector [load-record-field mem puf form-list data]]
+      [for i 0 [vector-size vector]
+        [log-form [load-vector mem vector [pointer uform] i]]]]
+
+    [do
+      [log [uform-tag puf]]
+      [logq-abort log-form unknown tag]]]]
+
+[defn main []
+  [init-mem]
+  [log-form [make-form]]]
+
+[comment
 
 [defn array-i32-alloc [s]
   [let [p [alloc-n [size-of [array i32 [exp s]]]]]
