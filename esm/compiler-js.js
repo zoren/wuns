@@ -8,7 +8,7 @@ import {
   wordToI32,
   makeFormList,
 } from './core.js'
-import { loadInstToType, storeInstToType, primtiveArrays } from './intrinsics.js'
+import { loadInstToType, storeInstToType, primtiveArrays, intrinsicsInfo } from './intrinsics.js'
 import { escapeIdentifier, jsExpToString, jsStmtToString } from './runtime-lib/js.js'
 
 const jsExp =
@@ -25,8 +25,8 @@ const jsNumber = jsExp('number')
 const jsString = jsExp('string')
 const jsBinop = jsExp('binop')
 const jsBin = (s) => (a, b) => jsBinop(makeTaggedValue('binop/' + s), a, b)
+const jsBinDirect = (op, a, b) => jsExp('binop-direct')(op, a, b)
 const jsAdd = jsBin('add')
-const jsSub = jsBin('sub')
 const jsBinIOr = jsBin('binary-ior')
 const jsTernary = jsExp('ternary')
 const jsVar = jsExp('var')
@@ -68,52 +68,6 @@ const jsThrow = jsStmt('throw')
 const jsIIFE = (stmts) => jsCall(jsArrowStmt([], optionNone, jsBlock(stmts)), [])
 
 const jsOr0 = (exp) => jsBinIOr(exp, js0)
-
-const opIntrinsicCall = (opName, args) => {
-  switch (opName) {
-    case 'i32.add':
-      return jsOr0(jsAdd(...args))
-    case 'i32.sub':
-      return jsOr0(jsSub(...args))
-    case 'i32.mul':
-      return jsOr0(jsBin('mul')(...args))
-    case 'i32.div-s':
-      return jsOr0(jsBin('div')(...args))
-    case 'i32.rem-s':
-      return jsOr0(jsBin('rem')(...args))
-    case 'i32.and':
-      return jsBin('binary-and')(...args)
-    case 'i32.or':
-      return jsBinIOr(...args)
-    case 'i32.xor':
-      return jsBin('binary-xor')(...args)
-    case 'i32.shl':
-      return jsBin('binary-shl')(...args)
-    case 'i32.shr-s':
-      return jsBin('binary-shr')(...args)
-    case 'i32.shr-u':
-      return jsBin('binary-shr-u')(...args)
-    case 'i32.eq':
-      return jsOr0(jsBin('eq')(...args))
-    case 'i32.lt-s':
-      return jsOr0(jsBin('lt')(...args))
-    case 'i32.le-s':
-      return jsOr0(jsBin('le')(...args))
-    case 'i32.gt-s':
-      return jsOr0(jsBin('gt')(...args))
-    case 'i32.ge-s':
-      return jsOr0(jsBin('ge')(...args))
-
-    case 'f64.add':
-      return jsAdd(...args)
-    case 'f64.sub':
-      return jsSub(...args)
-    case 'unreachable':
-      return jsIIFE([jsThrow(jsString('unreachable'))])
-    default:
-      throw new Error('unexpected intrinsic: ' + opName)
-  }
-}
 
 class CompileError extends Error {
   constructor(message, form) {
@@ -496,10 +450,15 @@ const expSpecialFormsExp = {
       const jsExp = jsAssignExp(loadMem(storeType), compExp(ctx, args[4], topContext))
       return jsParenComma([jsExp, jsUndefined])
     }
-    return opIntrinsicCall(
-      opName,
-      args.map((arg) => compExp(ctx, arg, topContext)),
-    )
+    if (opName === 'unreachable') return jsIIFE([jsThrow(jsString('unreachable'))])
+    const intrinsicInfo = intrinsicsInfo[opName]
+    if (intrinsicInfo) {
+      const { op, orZero } = intrinsicInfo
+      if (args.length !== 2) throw new CompileError(opName + ' expected two arguments')
+      const inst = jsBinDirect(op, compExp(ctx, args[0], topContext), compExp(ctx, args[1], topContext))
+      return orZero ? jsOr0(inst) : inst
+    }
+    throw new CompileError('unknown intrinsic: ' + opName)
   },
   func: compFunc,
   if: (tail, ctx, defEnv) => {

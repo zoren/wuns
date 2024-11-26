@@ -65,6 +65,7 @@ const testExp = ({ pe }) => {
     assert.throws(() => pe('[intrinsic no-such-intrinsic]'))
     assert.throws(() => pe('[intrinsic i32.add]'))
     assert.throws(() => pe('[intrinsic i32.add [i32 1]]'))
+    assert.throws(() => pe('[intrinsic unreachable]'))
     expect(pe('[intrinsic i32.add [i32 1] [i32 2]]')).toBe(3)
     expect(pe('[intrinsic i32.and [f64 1.3] [f64 1.3]]')).toBe(1)
     expect(pe('[intrinsic i32.sub [i32 1] [i32 2]]')).toBe(-1)

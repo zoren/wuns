@@ -14,6 +14,8 @@ const pushNamedFunc = (fname, exp) => {
   intrinsics[fname] = Object.freeze(f)
 }
 
+export const intrinsicsInfo = {}
+
 const i32Instructions = [
   { name: 'add', op: '+' },
   { name: 'sub', op: '-', alias: 'subtract' },
@@ -30,7 +32,9 @@ const i32Instructions = [
   { name: 'ge-s', op: '>=', alias: 'greater-than-or-equal-signed' },
 ]
 for (const { op, name } of i32Instructions) {
-  pushNamedFunc(`i32.${name}`, `(a ${op} b) | 0`)
+  const fullName = `i32.${name}`
+  pushNamedFunc(fullName, `(a ${op} b) | 0`)
+  intrinsicsInfo[fullName] = { op, orZero: true }
 }
 
 const i32BinaryInsts = [
@@ -43,7 +47,9 @@ const i32BinaryInsts = [
   { name: 'shr-u', op: '>>>', alias: 'bitwise-shift-right-unsigned' },
 ]
 for (const { op, name } of i32BinaryInsts) {
-  pushNamedFunc(`i32.${name}`, `(a ${op} b)`)
+  const fullName = `i32.${name}`
+  pushNamedFunc(fullName, `(a ${op} b)`)
+  intrinsicsInfo[fullName] = { op }
 }
 const f64ArithInstructions = [
   { name: 'add', op: '+' },
@@ -52,7 +58,9 @@ const f64ArithInstructions = [
   { name: 'div', op: '/' },
 ]
 for (const { op, name } of f64ArithInstructions) {
-  pushNamedFunc(`f64.${name}`, `(a ${op} b)`)
+  const fullName = `f64.${name}`
+  pushNamedFunc(fullName, `(a ${op} b)`)
+  intrinsicsInfo[fullName] = { op }
 }
 
 const f64CmpInstructions = [
@@ -65,7 +73,9 @@ const f64CmpInstructions = [
   { name: 'ge', op: '>=' },
 ]
 for (const { op, name } of f64CmpInstructions) {
-  pushNamedFunc(`f64.${name}`, `(a ${op} b) | 0`)
+  const fullName = `f64.${name}`
+  pushNamedFunc(fullName, `(a ${op} b) | 0`)
+  intrinsicsInfo[fullName] = { op, orZero: true }
 }
 
 const unreachable = () => {
@@ -75,6 +85,7 @@ Object.freeze(unreachable)
 intrinsics.unreachable = unreachable
 
 Object.freeze(intrinsics)
+Object.freeze(intrinsicsInfo)
 
 export { intrinsics }
 

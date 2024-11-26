@@ -130,6 +130,8 @@ export const jsExpToString = (js) => {
     }
     case 'js-exp/subscript':
       return `${jsExpToString(arg(0))}[${jsExpToString(args[1])}]`
+    case 'js-exp/binop-direct':
+      return `(${jsExpToString(arg(1))} ${arg(0)} ${jsExpToString(arg(2))})`
     case 'js-exp/binop':
       return `(${jsExpToString(arg(1))} ${jsBinopToString(arg(0).tag)} ${jsExpToString(arg(2))})`
     case 'js-exp/ternary':
