@@ -28,7 +28,13 @@ const i32Instructions = [
   { name: 'gt-s', op: '>', alias: 'greater-than-signed' },
   { name: 'le-s', op: '<=', alias: 'less-than-or-equal-signed' },
   { name: 'ge-s', op: '>=', alias: 'greater-than-or-equal-signed' },
+]
+for (const { op, name } of i32Instructions) {
+  pushNamedFunc(`i32.${name}`, `(a ${op} b) | 0`)
+}
 
+const i32BinaryInsts = [
+  // these don't need to be or'd with 0 because they return i32 already
   { name: 'and', op: '&', alias: 'bitwise-and' },
   { name: 'or', op: '|', alias: 'bitwise-ior' },
   { name: 'xor', op: '^', alias: 'bitwise-xor' },
@@ -36,10 +42,9 @@ const i32Instructions = [
   { name: 'shr-s', op: '>>', alias: 'bitwise-shift-right' },
   { name: 'shr-u', op: '>>>', alias: 'bitwise-shift-right-unsigned' },
 ]
-for (const { op, name } of i32Instructions) {
-  pushNamedFunc(`i32.${name}`, `(a ${op} b) | 0`)
+for (const { op, name } of i32BinaryInsts) {
+  pushNamedFunc(`i32.${name}`, `(a ${op} b)`)
 }
-
 const f64ArithInstructions = [
   { name: 'add', op: '+' },
   { name: 'sub', op: '-' },
