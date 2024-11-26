@@ -99,6 +99,10 @@ const opIntrinsicCall = (opName, args) => {
       return jsOr0(jsBin('lt')(...args))
     case 'i32.le-s':
       return jsOr0(jsBin('le')(...args))
+    case 'i32.gt-s':
+      return jsOr0(jsBin('gt')(...args))
+    case 'i32.ge-s':
+      return jsOr0(jsBin('ge')(...args))
 
     case 'f64.add':
       return jsAdd(...args)
