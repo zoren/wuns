@@ -501,6 +501,16 @@ const testTop = ({ ptse }) => {
       await ptse(`
 [memory mem 1]
 
+[do
+  [intrinsic i32.store8 mem 4 1 [i32 16] [i32 255]]
+  [intrinsic i32.load8-s mem 0 1 [i32 20]]]
+`),
+    ).toBe(-1)
+
+    expect(
+      await ptse(`
+[memory mem 1]
+
 [let [p [i32 16]]
   [intrinsic i32.store8 mem 0 1 p [i32 255]]
   [intrinsic i32.load8-u mem 0 1 p]]

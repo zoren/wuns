@@ -436,7 +436,7 @@ const expSpecialFormsExp = {
       if (!memDesc) throw new CompileError('undefined memory')
       if (memDesc.defKind !== 'memory') throw new CompileError('not a memory')
       const offset = +getFormWord(offsetForm)
-      let addrExp = jsAdd(jsNumber(offset), compExp(ctx, addrForm, topContext))
+      const addrExp = compExp(ctx, addrForm, topContext)
       return createPrimitiveArrayExpression(primtypeName, memName, offset, addrExp)
     }
     const loadType = loadInstToType[opName]
