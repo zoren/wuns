@@ -504,7 +504,7 @@ const formToQuotedJS = (form) => {
   const w = tryGetFormWord(form)
   if (w) return mkTaggedObject('form/word', jsString(w))
   const forms = tryGetFormList(form)
-  if (!forms) throw new CompileError('unexpected form')
+  if (!forms) throw new Error('unexpected form', { cause: form })
   return mkTaggedObject('form/list', jsArray(forms.map(formToQuotedJS)))
 }
 
@@ -836,7 +836,7 @@ export const makeJSCompilingEvaluator = () => {
     if (result !== null) return result
   }
   const evalTopsExp = async (forms) => {
-    if (forms.length === 0) throw new CompileError('empty list')
+    if (forms.length === 0) throw new Error('no forms to evaluate')
     for (let i = 0; i < forms.length - 1; i++) await compileTopDefEnv(topContext, forms[i])
     const lastForm = forms.at(-1)
     const jsExp = compExp(null, lastForm, topContext)
