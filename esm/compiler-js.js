@@ -499,30 +499,6 @@ const formToQuotedJS = (form) => {
   return mkTaggedObject('form/list', jsArray(forms.map(formToQuotedJS)))
 }
 
-const jsStmtToStringSafe = (js) => {
-  try {
-    const src = jsStmtToString(js)
-    return src
-  } catch (e) {
-    console.error(e)
-    console.dir(js, { depth: null })
-    // return '/* error in jsStmtToStringSafe */'
-    throw e
-  }
-}
-
-const jsExpToStringSafe = (js) => {
-  try {
-    const src = jsExpToString(js)
-    return src
-  } catch (e) {
-    console.error(e)
-    console.dir(js, { depth: null })
-    // return '/* error in jsExpToStringSafe */'
-    throw e
-  }
-}
-
 const compExp = (ctx, form, topContext) => {
   const word = tryGetFormWord(form)
   if (word) {
@@ -599,6 +575,30 @@ const importModuleElement = async (modulePath, elementName) => {
   const elem = module[elementName]
   if (elem === undefined) throw new Error('imported value not found in module ' + modulePath + ' ' + elementName)
   return elem
+}
+
+const jsStmtToStringSafe = (js) => {
+  try {
+    const src = jsStmtToString(js)
+    return src
+  } catch (e) {
+    console.error(e)
+    console.dir(js, { depth: null })
+    // return '/* error in jsStmtToStringSafe */'
+    throw e
+  }
+}
+
+const jsExpToStringSafe = (js) => {
+  try {
+    const src = jsExpToString(js)
+    return src
+  } catch (e) {
+    console.error(e)
+    console.dir(js, { depth: null })
+    // return '/* error in jsExpToStringSafe */'
+    throw e
+  }
 }
 
 const AsyncFunction = async function () {}.constructor
