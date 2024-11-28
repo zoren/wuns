@@ -444,6 +444,10 @@
 
 [import ./runtime-lib/files.js read-file-async [func [word] [promise string]]]
 [import ./runtime-lib/files.js write-file-async [func [word string] [promise [tuple]]]]
+[type file-descriptor [] [union]]
+[import ./runtime-lib/files.js open [func [word] file-descriptor]]
+[import ./runtime-lib/files.js close [func [file-descriptor] [tuple]]]
+[import ./runtime-lib/files.js read-file-memory [func [file-descriptor memory i32 i32] i32]]
 
 [def-extern parse-string [func [string word] [list form]]]
 

@@ -1,4 +1,4 @@
-import { expect, assert, test, describe } from 'vitest'
+import { expect, assert, test, describe, vi } from 'vitest'
 
 import { langUndefined, parseString } from '../core.js'
 import { makeEvalForm } from '../interpreter.js'
@@ -567,6 +567,31 @@ const testTop = ({ ptse }) => {
     [intrinsic memory.size mem]]
   `),
     ).toBe(3)
+  })
+
+  test('files', async () => {
+    const spyConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {})
+    expect(
+      await ptse(`
+[memory mem 1]
+
+[import ./runtime-lib/files.js open [func [word] file-descriptor]]
+[import ./runtime-lib/files.js close [func [file-descriptor] [tuple]]]
+[import ./runtime-lib/files.js read-file-memory [func [file-descriptor memory i32 i32] i32]]
+[import ./runtime-lib/host.js memory-log-as-string [func [memory i32 i32] [tuple]]]
+
+[defn file-test []
+  [let [fd [open [word hello.wuns]]
+        s [i32 100]
+        p [i32 16]
+        r [read-file-memory fd mem p s]]
+    [close fd]
+    [memory-log-as-string mem p r]]]
+
+[file-test]
+      `),
+    ).toBe(undefined)
+    expect(spyConsoleLog).toHaveBeenCalledWith('hello wuns')
   })
 
   // test('size-of', async () => {
