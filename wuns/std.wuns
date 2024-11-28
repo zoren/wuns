@@ -3,35 +3,30 @@
     [word word]
     [list [list form]]]]
 
+[import ./runtime-lib/host.js concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]
+
+[import ./runtime-lib/host.js concat-lists [type-scheme [a] [func [[list [list a]]] [list a]]]]
+
+[import ./runtime-lib/host.js size [type-scheme [a] [func [[list a]] i32]]]
+
+[import ./runtime-lib/host.js at [type-scheme [a] [func [[list a] i32] a]]]
+
+[defn form-concat [.. list-forms]
+  [form/list [concat-lists list-forms]]]
+
 [defn flist [.. elements] [form/list elements]]
 
 [defn list [.. entries] entries]
 
 [defexpr quote [f] f]
 
-[defmacro def-extern [name type]
-  [flist [quote import] [quote ./runtime-lib/host.js] name type]]
-
-[def-extern concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]
-
-[def-extern concat-lists [type-scheme [a] [func [[list [list a]]] [list a]]]]
-
-[defn form-concat [.. list-forms]
-  [form/list [concat-lists list-forms]]]
-
 [defn mk-quote [form] [flist [quote quote] form]]
-
-[def-extern size [type-scheme [a] [func [[list a]] i32]]]
-
-[def-extern at [type-scheme [a] [func [[list a] i32] a]]]
 
 [defmacro comment [.. -]
   [quote [do]]]
 
 [defmacro todo [.. -]
   [quote [do]]]
-
-[def-extern concat-words [func [word word] word]]
 
 [defn def-instruction-fn [def-name inst-name]
   [flist
@@ -42,17 +37,21 @@
 
 [defmacro def-instruction [def-name inst-name] [def-instruction-fn def-name inst-name]]
 
-[def-extern abort [type-scheme [a] [func [[list form]] a]]]
+[import ./runtime-lib/host.js abort [type-scheme [a] [func [[list form]] a]]]
 
 [defn form-to-word [form]
   [match form
     [form/word w] w
     [abort [list [quote [form-to-word requires a word as its argument]]]]]]
 
+[import ./runtime-lib/host.js concat-words [func [word word] word]]
+
 [defmacro def-bin-i32-inst [name]
   [def-instruction-fn name [form/word [concat-words [word i32.] [form-to-word name]]]]]
 
 [def-bin-i32-inst add]
+[def-bin-i32-inst sub]
+[def-bin-i32-inst mul]
 [comment maybe introduce booleans instead of i32s for comparisons]
 [def-bin-i32-inst lt-s]
 
@@ -70,9 +69,6 @@
 [def 9  [i32 9]]
 
 [defn inc [x] [add x 1]]
-
-[def-bin-i32-inst sub]
-[def-bin-i32-inst mul]
 
 [defn dec [x] [sub x 1]]
 
@@ -125,7 +121,7 @@
 
 [defn is-word [form] [match form [form/word x] 1 0]]
 
-[def-extern list-init-func [type-scheme [a] [func [i32 [func [i32] a]] [list a]]]]
+[import ./runtime-lib/host.js list-init-func [type-scheme [a] [func [i32 [func [i32] a]] [list a]]]]
 
 [defn list-map-fn [f l]
   [list-init-func [size l] [func list-map-fn-f [i] [f [at l i]]]]]
@@ -141,7 +137,7 @@
             [form/list l] e]]
         lmsg]]]]
 
-[def-extern slice [type-scheme [a] [func [[list a] i32 i32] [list a]]]]
+[import ./runtime-lib/host.js slice [type-scheme [a] [func [[list a] i32 i32] [list a]]]]
 
 [defn rest [l] [slice l 1 [size l]]]
 
@@ -198,9 +194,9 @@
 
 [type atom [v] [union]]
 
-[def-extern atom [type-scheme [a] [func [a] [atom a]]]]
-[def-extern atom-get [type-scheme [a] [func [[atom a]] a]]]
-[def-extern atom-set [type-scheme [a] [func [[atom a] a] [tuple]]]]
+[import ./runtime-lib/host.js atom [type-scheme [a] [func [a] [atom a]]]]
+[import ./runtime-lib/host.js atom-get [type-scheme [a] [func [[atom a]] a]]]
+[import ./runtime-lib/host.js atom-set [type-scheme [a] [func [[atom a] a] [tuple]]]]
 
 [defn inc-atom [atom]
   [let [prev-val [atom-get atom]]
@@ -209,21 +205,21 @@
 
 [def word-counter [atom 0]]
 
-[def-extern char-code-to-word [func [i32] word]]
-[def-extern code-points-to-word [func [[list i32]] word]]
+[import ./runtime-lib/host.js char-code-to-word [func [i32] word]]
+[import ./runtime-lib/host.js code-points-to-word [func [[list i32]] word]]
 
 [def-instruction i32.rem-s i32.rem-s]
 [def-instruction i32.div-s i32.div-s]
 
-[def-extern int-to-word [func [i32] word]]
-[def-extern word-to-int [func [word] i32]]
+[import ./runtime-lib/host.js int-to-word [func [i32] word]]
+[import ./runtime-lib/host.js word-to-int [func [word] i32]]
 
 [defn i32-to-form-word [i] [form/word [int-to-word i]]]
 
 [defn i32-to-form [i]
   [flist [quote i32] [i32-to-form-word i]]]
 
-[def-extern char-code-at [func [word i32] i32]]
+[import ./runtime-lib/host.js char-code-at [func [word i32] i32]]
 
 [defmacro word-to-char-code [w]
   [i32-to-form [char-code-at [form-to-word w] 0]]]
@@ -233,7 +229,7 @@
 [defn is-between-inclusive [lower c upper]
   [and [le-s lower c] [le-s c upper]]]
 
-[def-extern word-byte-size [func [word] i32]]
+[import ./runtime-lib/host.js word-byte-size [func [word] i32]]
 
 [defn genword-prefix [prefix]
   [form/word [concat-words [concat-words [word gen] prefix] [int-to-word [inc-atom word-counter]]]]]
@@ -401,20 +397,20 @@
 
 [type transient-kv-map [k v] [union]]
 
-[def-extern transient-kv-map [type-scheme [k v] [func [] [transient-kv-map k v]]]]
-[def-extern set-kv-map [type-scheme [k v] [func [[transient-kv-map k v] k v] [tuple]]]]
-[def-extern kv-map-size [type-scheme [k v] [func [[transient-kv-map k v]] i32]]]
+[import ./runtime-lib/host.js transient-kv-map [type-scheme [k v] [func [] [transient-kv-map k v]]]]
+[import ./runtime-lib/host.js set-kv-map [type-scheme [k v] [func [[transient-kv-map k v] k v] [tuple]]]]
+[import ./runtime-lib/host.js kv-map-size [type-scheme [k v] [func [[transient-kv-map k v]] i32]]]
 [todo remove kv-map-values as it relies on the order of the map]
-[def-extern kv-map-values [type-scheme [k v] [func [[transient-kv-map k v]] [list v]]]]
+[import ./runtime-lib/host.js kv-map-values [type-scheme [k v] [func [[transient-kv-map k v]] [list v]]]]
 
 [defn mk-word [w] [flist [quote word] w]]
 
-[def-extern has [type-scheme [k v] [func [[transient-kv-map k v] k] i32]]]
+[import ./runtime-lib/host.js has [type-scheme [k v] [func [[transient-kv-map k v] k] i32]]]
 
 [defmacro hasq [m w]
   [flist [quote has] m [mk-word w]]]
 
-[def-extern get [type-scheme [k v] [func [[transient-kv-map k v] k] v]]]
+[import ./runtime-lib/host.js get [type-scheme [k v] [func [[transient-kv-map k v] k] v]]]
 
 [defmacro getq [m w]
   [flist [quote get] m [mk-word w]]]
@@ -434,7 +430,7 @@
   maybe we should be able to specify in the type-scheme that a is of pointer type
   we do not want to be able to compare functions with it
   and do not want to compare i32s with it]
-[def-extern is-identical [type-scheme [a] [func [a a] i32]]]
+[import ./runtime-lib/host.js is-identical [type-scheme [a] [func [a a] i32]]]
 
 [type syntax-node-location [] [record [row i32] [column i32]]]
 
@@ -449,15 +445,15 @@
 [import ./runtime-lib/files.js close [func [file-descriptor] [tuple]]]
 [import ./runtime-lib/files.js read-file-memory [func [file-descriptor memory i32 i32] i32]]
 
-[def-extern parse-string [func [string word] [list form]]]
+[import ./runtime-lib/host.js parse-string [func [string word] [list form]]]
 
 [type syntax-node [] [union]]
-[def-extern try-get-syntax-node [func [form] [option syntax-node]]]
-[def-extern syntax-node-content-name [func [syntax-node] string]]
+[import ./runtime-lib/host.js try-get-syntax-node [func [form] [option syntax-node]]]
+[import ./runtime-lib/host.js syntax-node-content-name [func [syntax-node] string]]
 
-[def-extern print [type-scheme [a] [func [a] string]]]
+[import ./runtime-lib/host.js print [type-scheme [a] [func [a] string]]]
 
-[def-extern code-point-to-string [func [i32] string]]
+[import ./runtime-lib/host.js code-point-to-string [func [i32] string]]
 
 [defmacro def-js-extern [name type]
   [flist [quote import] [quote ./runtime-lib/js.js] name type]]
@@ -476,7 +472,7 @@
     [read-file-async file-name]
     [func then [content] [parse-string content file-name]]]]
 
-[def-extern apply [type-scheme [a b] [func [[func [[list a]] b] [list a]] b]]]
+[import ./runtime-lib/host.js apply [type-scheme [a b] [func [[func [[list a]] b] [list a]] b]]]
 
 [defn log-fn [forms]
   [apply console-log [list-map f forms [print f]]]]
@@ -496,7 +492,7 @@
           [list [quote list]]
           [list-map qform qforms [flist [quote print] qform]]]]]]]
 
-[def-extern get-syntax-node-location-as-string [func [syntax-node] string]]
+[import ./runtime-lib/host.js get-syntax-node-location-as-string [func [syntax-node] string]]
 
 [defn log-node-location [node]
   [log [get-syntax-node-location-as-string node]]]
@@ -522,15 +518,15 @@
       [logq log-location unable to log location no node found]]]]
 
 [type byte-array [] [union]]
-[def-extern byte-array [func [i32] byte-array]]
-[def-extern byte-array-size [func [byte-array] i32]]
-[def-extern byte-array-get [func [byte-array i32] i32]]
-[def-extern byte-array-set [func [byte-array i32 i32] [tuple]]]
-[def-extern byte-array-log-as-string [func [byte-array] [tuple]]]
-[def-extern memory-log-as-string [func [memory i32 i32] [tuple]]]
+[import ./runtime-lib/host.js byte-array [func [i32] byte-array]]
+[import ./runtime-lib/host.js byte-array-size [func [byte-array] i32]]
+[import ./runtime-lib/host.js byte-array-get [func [byte-array i32] i32]]
+[import ./runtime-lib/host.js byte-array-set [func [byte-array i32 i32] [tuple]]]
+[import ./runtime-lib/host.js byte-array-log-as-string [func [byte-array] [tuple]]]
+[import ./runtime-lib/host.js memory-log-as-string [func [memory i32 i32] [tuple]]]
 
-[def-extern pairwise [type-scheme [a] [func [[list a]] [list [list a]]]]]
-[def-extern triplewise [type-scheme [a] [func [[list a]] [list [list a]]]]]
+[import ./runtime-lib/host.js pairwise [type-scheme [a] [func [[list a]] [list [list a]]]]]
+[import ./runtime-lib/host.js triplewise [type-scheme [a] [func [[list a]] [list [list a]]]]]
 
 [def false [i32 0]]
 [def true [i32 1]]
@@ -555,9 +551,9 @@
 
 [type growable-list [a] [union]]
 
-[def-extern growable-list [type-scheme [a] [func [] [growable-list a]]]]
-[def-extern push [type-scheme [a] [func [[growable-list a] a] [tuple]]]]
-[def-extern clone-growable-to-frozen-list [type-scheme [a] [func [[growable-list a]] [list a]]]]
+[import ./runtime-lib/host.js growable-list [type-scheme [a] [func [] [growable-list a]]]]
+[import ./runtime-lib/host.js push [type-scheme [a] [func [[growable-list a] a] [tuple]]]]
+[import ./runtime-lib/host.js clone-growable-to-frozen-list [type-scheme [a] [func [[growable-list a]] [list a]]]]
 
 [type pair [a b] [record [fst a] [snd b]]]
 
@@ -569,10 +565,10 @@
 
 [type set [a] [union]]
 
-[def-extern set [type-scheme [a] [func [] [set a]]]]
-[def-extern set-add [type-scheme [a] [func [[set a] a] [tuple]]]]
-[def-extern set-has [type-scheme [a] [func [[set a] a] i32]]]
-[def-extern set-to-list [type-scheme [a] [func [[set a]] [list a]]]]
+[import ./runtime-lib/host.js set [type-scheme [a] [func [] [set a]]]]
+[import ./runtime-lib/host.js set-add [type-scheme [a] [func [[set a] a] [tuple]]]]
+[import ./runtime-lib/host.js set-has [type-scheme [a] [func [[set a] a] i32]]]
+[import ./runtime-lib/host.js set-to-list [type-scheme [a] [func [[set a]] [list a]]]]
 
 [defn filter [l pred]
   [let [filtered [growable-list]]
@@ -613,4 +609,4 @@
 [def-js-extern byte-array-from [func [js-value] byte-array]]
 [def-js-extern js-apply [func [js-value [list js-value]] js-value]]
 
-[def-extern mem-dump [func [memory i32 i32] [tuple]]]
+[import ./runtime-lib/host.js mem-dump [func [memory i32 i32] [tuple]]]
