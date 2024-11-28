@@ -111,7 +111,7 @@ const setNewLocalForm = (ctx, form, desc) => {
   setNewLocal(ctx, name, desc)
 }
 
-const bodiesToStmts = (defEnv, ctx, tail, isTail) => {
+const compBodiesToStmts = (defEnv, ctx, tail, isTail) => {
   const stmts = []
   stmts.push(...tail.slice(0, -1).map((f) => compExpStmt(ctx, f, defEnv, false)))
   const lastStmt =
@@ -147,7 +147,7 @@ const compFunc = (tail, ctx, topContext) => {
     setNewLocalForm(newCtx, restParam, { kind: 'rest-param' })
     restOption = makeOptionSome(getFormWord(restParam))
   }
-  const arrow = jsArrowStmt(jsParameters, restOption, jsBlock(bodiesToStmts(topContext, newCtx, bodies, true)))
+  const arrow = jsArrowStmt(jsParameters, restOption, jsBlock(compBodiesToStmts(topContext, newCtx, bodies, true)))
   return jsIIFE([jsConstDecl(name, arrow), jsReturn(jsVar(name))])
 }
 
@@ -349,7 +349,7 @@ const expSpecialFormsStmt = {
       const cexp = compExp(newCtx, bindings[i + 1], defEnv)
       stmts.push(isRedef ? jsAssign(varName, cexp) : jsLetDecl(varName, cexp))
     }
-    stmts.push(...bodiesToStmts(defEnv, newCtx, bodies, isTailPos))
+    stmts.push(...compBodiesToStmts(defEnv, newCtx, bodies, isTailPos))
     return jsBlock(stmts)
   },
   letfn: (tail, ctx, defEnv, isTailPos) => {
@@ -371,7 +371,7 @@ const expSpecialFormsStmt = {
       const funcInst = compFunc(rest, newCtx, defEnv)
       stmts.push(isRedef ? jsAssign(fname, funcInst) : jsLetDecl(fname, funcInst))
     }
-    stmts.push(...bodiesToStmts(defEnv, newCtx, bodies, isTailPos))
+    stmts.push(...compBodiesToStmts(defEnv, newCtx, bodies, isTailPos))
     return jsBlock(stmts)
   },
   loop: (tail, ctx, defEnv) => {
@@ -388,7 +388,7 @@ const expSpecialFormsStmt = {
       setNewLocalForm(newCtx, bindings[i])
       initStmts.push(isRedef ? jsAssign(varName, cexp) : jsLetDecl(varName, cexp))
     }
-    const bodyStmts = bodiesToStmts(defEnv, newCtx, bodies, true)
+    const bodyStmts = compBodiesToStmts(defEnv, newCtx, bodies, true)
     return jsBlock([...initStmts, jsWhile(js1, jsBlock(bodyStmts))])
   },
   continue: (tail, ctx, defEnv, isTailPos) => {
@@ -409,7 +409,7 @@ const expSpecialFormsStmt = {
     insts.push(jsContinue)
     return jsSeq(insts)
   },
-  do: (tail, ctx, defEnv, isTailPos) => jsSeq(bodiesToStmts(defEnv, ctx, tail, isTailPos)),
+  do: (tail, ctx, defEnv, isTailPos) => jsSeq(compBodiesToStmts(defEnv, ctx, tail, isTailPos)),
   switch: (tail, ctx, defEnv) => {
     if (tail.length < 2) throw new CompileError(`special form 'switch' expected at least two arguments`)
     if (tail.length % 2 !== 0) throw new CompileError('no switch default found')
@@ -548,7 +548,7 @@ const compExp = (ctx, form, topContext) => {
   const [firstForm, ...args] = forms
   const firstWord = tryGetFormWord(firstForm)
   if (firstWord) {
-    if (firstWord === 'do') return jsIIFE(bodiesToStmts(topContext, ctx, args, true))
+    if (firstWord === 'do') return jsIIFE(compBodiesToStmts(topContext, ctx, args, true))
     if (firstWord in topSpecialForms) throw new CompileError('top special not allowed in expression form')
 
     const expSpecialHandler = expSpecialFormsExp[firstWord]
