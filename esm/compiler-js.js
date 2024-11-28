@@ -473,18 +473,23 @@ const compExpStmt = (lctx, form, topContext, isTail) => {
     const [firstForm, ...args] = forms
     const firstWord = tryGetFormWord(firstForm)
     if (firstWord) {
-      const stmtSpecialHandler = expSpecialFormsStmt[firstWord]
-      if (stmtSpecialHandler) {
-        const stmt = stmtSpecialHandler(args, lctx, topContext, isTail)
-        return isTail ? stmt : jsExpStmt(jsIIFE([stmt]))
+      try {
+        const stmtSpecialHandler = expSpecialFormsStmt[firstWord]
+        if (stmtSpecialHandler) {
+          const stmt = stmtSpecialHandler(args, lctx, topContext, isTail)
+          return isTail ? stmt : jsExpStmt(jsIIFE([stmt]))
+        }
+        const expSpecialHandler = expSpecialFormsExp[firstWord]
+        if (expSpecialHandler) {
+          const exp = expSpecialHandler(args, lctx, topContext)
+          return isTail ? jsReturn(exp) : jsExpStmt(exp)
+        }
+        const desc = topContext.defEnv.get(firstWord)
+        if (desc && desc.defKind === 'defmacro') return compExpStmt(lctx, desc.value(...args), topContext, isTail)
+      } catch (e) {
+        if (e instanceof CompileError && !e.form) e.form = form
+        throw e
       }
-      const expSpecialHandler = expSpecialFormsExp[firstWord]
-      if (expSpecialHandler) {
-        const exp = expSpecialHandler(args, lctx, topContext)
-        return isTail ? jsReturn(exp) : jsExpStmt(exp)
-      }
-      const desc = topContext.defEnv.get(firstWord)
-      if (desc && desc.defKind === 'defmacro') return compExpStmt(lctx, desc.value(...args), topContext, isTail)
     }
   }
   const jsExp = compExp(lctx, form, topContext)
@@ -524,41 +529,46 @@ const compExp = (ctx, form, topContext) => {
   const [firstForm, ...args] = forms
   const firstWord = tryGetFormWord(firstForm)
   if (firstWord) {
-    if (firstWord === 'do') return jsIIFE(compBodiesToStmts(topContext, ctx, args, true))
-    if (firstWord in topSpecialForms) throw new CompileError('top special not allowed in expression form')
+    try {
+      if (firstWord === 'do') return jsIIFE(compBodiesToStmts(topContext, ctx, args, true))
+      if (firstWord in topSpecialForms) throw new CompileError('top special not allowed in expression form')
 
-    const expSpecialHandler = expSpecialFormsExp[firstWord]
-    if (expSpecialHandler) return expSpecialHandler(args, ctx, topContext)
+      const expSpecialHandler = expSpecialFormsExp[firstWord]
+      if (expSpecialHandler) return expSpecialHandler(args, ctx, topContext)
 
-    const stmtSpecialHandler = expSpecialFormsStmt[firstWord]
-    if (stmtSpecialHandler) return jsIIFE([stmtSpecialHandler(args, ctx, topContext, true)])
-    const numOfArgs = args.length
-    const checkArity = ({ parameters, restParam }) => {
-      if (numOfArgs < parameters.length) throw new CompileError('not enough arguments', form)
-      if (!restParam && numOfArgs > parameters.length) throw new CompileError('too many arguments', form)
-    }
-
-    let curCtx = ctx
-    while (curCtx) {
-      if (curCtx.has(firstWord)) {
-        const ldesc = curCtx.get(firstWord)
-        if (ldesc && ldesc.kind === 'func-recur') checkArity(ldesc.paramDesc)
+      const stmtSpecialHandler = expSpecialFormsStmt[firstWord]
+      if (stmtSpecialHandler) return jsIIFE([stmtSpecialHandler(args, ctx, topContext, true)])
+      const numOfArgs = args.length
+      const checkArity = ({ parameters, restParam }) => {
+        if (numOfArgs < parameters.length) throw new CompileError('not enough arguments', form)
+        if (!restParam && numOfArgs > parameters.length) throw new CompileError('too many arguments', form)
       }
-      curCtx = curCtx.outer
-    }
 
-    const defDesc = topContext.defEnv.get(firstWord)
-    if (defDesc) {
-      const { defKind, value, paramDesc } = defDesc
-      if (paramDesc) checkArity(paramDesc)
-      switch (defKind) {
-        case 'defmacro':
-          return compExp(ctx, value(...args), topContext)
-        case 'defexpr':
-          return jsCall(jsVar(firstWord), args.map(formToQuotedJS))
-        default:
-          break
+      let curCtx = ctx
+      while (curCtx) {
+        if (curCtx.has(firstWord)) {
+          const ldesc = curCtx.get(firstWord)
+          if (ldesc && ldesc.kind === 'func-recur') checkArity(ldesc.paramDesc)
+        }
+        curCtx = curCtx.outer
       }
+
+      const defDesc = topContext.defEnv.get(firstWord)
+      if (defDesc) {
+        const { defKind, value, paramDesc } = defDesc
+        if (paramDesc) checkArity(paramDesc)
+        switch (defKind) {
+          case 'defmacro':
+            return compExp(ctx, value(...args), topContext)
+          case 'defexpr':
+            return jsCall(jsVar(firstWord), args.map(formToQuotedJS))
+          default:
+            break
+        }
+      }
+    } catch (e) {
+      if (e instanceof CompileError && !e.form) e.form = form
+      throw e
     }
   }
   return jsCall(
@@ -772,10 +782,15 @@ const compileTopDefEnv = async (topContext, form) => {
     const [firstForm, ...args] = forms
     const firstWord = tryGetFormWord(firstForm)
     if (firstWord) {
-      const topSpecialHandler = topSpecialForms[firstWord]
-      if (topSpecialHandler) {
-        await topSpecialHandler(firstWord, args, topContext)
-        return null
+      try {
+        const topSpecialHandler = topSpecialForms[firstWord]
+        if (topSpecialHandler) {
+          await topSpecialHandler(firstWord, args, topContext)
+          return null
+        }
+      } catch (e) {
+        if (e instanceof CompileError && !e.form) e.form = form
+        throw e
       }
     }
     const defDesc = defEnv.get(firstWord)
