@@ -284,7 +284,20 @@ const byte_array_log_as_string = (byte_array) => {
   return console.log(String.fromCharCode(...byte_array))
 }
 export { byte_array_log_as_string as 'byte-array-log-as-string' }
-
+const memory_log_as_string = (wasmMem, start, size) => {
+  if (!(wasmMem instanceof WebAssembly.Memory)) throw new Error('memory-log-as-string expects memory')
+  if (!isSigned32BitInteger(start)) throw new Error('memory-log-as-string expects number: ' + start)
+  if (!isSigned32BitInteger(size)) throw new Error('memory-log-as-string expects number: ' + size)
+  const { buffer } = wasmMem
+  if (start < 0 || start >= buffer.byteLength)
+    throw new Error('memory-log-as-string start out of bounds: ' + start + ' ' + buffer.byteLength)
+  if (size < 0 || size > buffer.byteLength)
+    throw new Error('memory-log-as-string length out of bounds: ' + size + ' ' + buffer.byteLength)
+  const view = new Uint8Array(buffer, start, size)
+  const string = new TextDecoder().decode(view)
+  console.log(string)
+}
+export { memory_log_as_string as 'memory-log-as-string' }
 const growable_list = () => []
 export { growable_list as 'growable-list' }
 export const push = (growable_list, value) => {
