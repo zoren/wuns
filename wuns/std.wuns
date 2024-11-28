@@ -151,6 +151,12 @@
     [flist [quote do]
       [flist [quote abort] [quote-list lmsg]]]]]
 
+[defmacro assert-not [cond .. lmsg]
+  [flist [quote if] cond
+    [flist [quote do]
+      [flist [quote abort] [quote-list lmsg]]]
+    [quote [do]]]]
+
 [defmacro logq-abort [.. lmsg]
   [flist [quote do]
     [flist [quote abort] [quote-list lmsg]]]]
@@ -517,6 +523,7 @@
 [def-extern byte-array-get [func [byte-array i32] i32]]
 [def-extern byte-array-set [func [byte-array i32 i32] [tuple]]]
 [def-extern byte-array-log-as-string [func [byte-array] [tuple]]]
+[def-extern memory-log-as-string [func [memory i32 i32] [tuple]]]
 
 [def-extern pairwise [type-scheme [a] [func [[list a]] [list [list a]]]]]
 [def-extern triplewise [type-scheme [a] [func [[list a]] [list [list a]]]]]
