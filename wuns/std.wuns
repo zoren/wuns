@@ -28,14 +28,14 @@
 [defmacro todo [.. -]
   [quote [do]]]
 
-[defn def-instruction-fn [def-name inst-name]
+[defn def-instruction-macro [def-name inst-name]
   [flist
-    [quote defn]
+    [quote defmacro]
     def-name
     [quote [a b]]
-    [flist [quote intrinsic] inst-name [quote a] [quote b]]]]
+    [flist [quote flist] [quote [quote intrinsic]] [mk-quote inst-name] [quote a] [quote b]]]]
 
-[defmacro def-instruction [def-name inst-name] [def-instruction-fn def-name inst-name]]
+[defmacro def-instruction [def-name inst-name] [def-instruction-macro def-name inst-name]]
 
 [import ./runtime-lib/host.js abort [type-scheme [a] [func [[list form]] a]]]
 
@@ -47,7 +47,7 @@
 [import ./runtime-lib/host.js concat-words [func [word word] word]]
 
 [defmacro def-bin-i32-inst [name]
-  [def-instruction-fn name [form/word [concat-words [word i32.] [form-to-word name]]]]]
+  [def-instruction-macro name [form/word [concat-words [word i32.] [form-to-word name]]]]]
 
 [def-bin-i32-inst add]
 [def-bin-i32-inst sub]
