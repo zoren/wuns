@@ -294,7 +294,20 @@ const expSpecialFormsExp = {
       const jsExp = jsAssignExp(loadMem(storeType), compExp(ctx, args[4], topContext))
       return jsParenComma([jsExp, jsUndefined])
     }
-    if (opName === 'unreachable') return jsIIFE([jsThrow(jsString('unreachable'))])
+
+    switch (opName) {
+      case 'unreachable':
+        return jsIIFE([jsThrow(jsString('unreachable'))])
+      case 'memory.size':
+        return jsBinDirect(
+          '>>',
+          jsSubscript(jsSubscript(jsVar(getFormWord(args[0])), jsString('buffer')), jsString('byteLength')),
+          jsNumber(16),
+        )
+      case 'memory.grow':
+        return jsCall(jsSubscript(jsVar(getFormWord(args[0])), jsString('grow')), [compExp(ctx, args[1], topContext)])
+    }
+
     const binIntrinsicInfo = intrinsicsInfo[opName]
     if (!binIntrinsicInfo) throw new CompileError('unknown intrinsic: ' + opName)
     const { op, orZero } = binIntrinsicInfo

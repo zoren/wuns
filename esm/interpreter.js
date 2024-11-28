@@ -171,7 +171,18 @@ export const makeEvalForm = () => {
             if (numOfArgs !== 5) throw evalError('load intrinsic expected four arguments')
             return typeToLoadStore(loadInstType).load(goExp(env, forms[5]))
           }
-          if (instName === 'unreachable') throw evalError('unreachable')
+
+          switch (instName) {
+            case 'unreachable':
+              throw evalError('unreachable')
+            case 'memory.size':
+              assertNumArgs(2)
+              return goExp(env, forms[2]).buffer.byteLength >> 16
+            case 'memory.grow':
+              assertNumArgs(3)
+              return (goExp(env, forms[2])).grow(goExp(env, forms[3]))
+          }
+
           const instInfo = intrinsicsInfo[instName]
           if (!instInfo) throw evalError('undefined intrinsic')
           const { op, orZero } = instInfo

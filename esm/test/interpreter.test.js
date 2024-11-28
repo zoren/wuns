@@ -544,6 +544,29 @@ const testTop = ({ ptse }) => {
   [intrinsic i32.load mem 0 1 p]]
 `),
     ).toBe(2147483647)
+    expect(
+      await ptse(`
+  [memory mem 1]
+
+  [intrinsic memory.size mem]
+  `),
+    ).toBe(1)
+    expect(
+      await ptse(`
+  [memory mem 1]
+
+  [intrinsic memory.grow mem [i32 2]]
+  `),
+    ).toBe(1)
+    expect(
+      await ptse(`
+  [memory mem 1]
+
+  [do
+    [intrinsic memory.grow mem [i32 2]]
+    [intrinsic memory.size mem]]
+  `),
+    ).toBe(3)
   })
 
   // test('size-of', async () => {
