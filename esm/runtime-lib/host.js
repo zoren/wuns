@@ -12,7 +12,7 @@ import {
   tryGetFormInfoRec,
   optionNone,
   makeOptionSome,
-  getFormPositionAsString
+  getFormPositionAsString,
 } from '../core.js'
 
 export const abort = (message) => {
@@ -230,20 +230,18 @@ const concat_lists = (lists) => {
 }
 export { concat_lists as 'concat-lists' }
 export const concat = (l1, l2) => {
-  if (!isList(l1)) {
-    console.log({l1, l2})
-    throw new Error('concat expects frozen list')
-  }
-  if (!isList(l2)) {
-    console.log({l1, l2})
-    throw new Error('concat expects frozen list')}
+  if (!isList(l1)) throw new Error('concat expects frozen list')
+  if (!isList(l2)) throw new Error('concat expects frozen list')
   return arrayToList([...l1, ...l2])
 }
 const int_to_word = (i) => stringToWord(String(i))
 export { int_to_word as 'int-to-word' }
 const word_to_int = (word) => {
   if (!isWord(word)) throw new Error('word-to-int expects word')
-  return parseInt(wordValue(word), 10)
+  const i = +wordValue(word)
+  if (Number.isNaN(i)) throw new Error('word-to-int expects integer')
+  if (i < -2147483648 || i > 2147483647) throw new Error('word-to-int expects 32-bit integer')
+  return i
 }
 export { word_to_int as 'word-to-int' }
 export const slice = (list, start, end) => {
