@@ -466,30 +466,34 @@ Object.freeze(expSpecialFormsStmt)
 
 const isSpecialForm = (word) => word in expSpecialFormsExp || word in expSpecialFormsStmt
 
-const compExpStmt = (lctx, form, topContext, isTail) => {
+const tryGetWordFirst = (form) => {
   const forms = tryGetFormList(form)
-  if (forms) {
-    if (forms.length === 0) throw new CompileError('empty list')
-    const [firstForm, ...args] = forms
-    const firstWord = tryGetFormWord(firstForm)
-    if (firstWord) {
-      try {
-        const stmtSpecialHandler = expSpecialFormsStmt[firstWord]
-        if (stmtSpecialHandler) {
-          const stmt = stmtSpecialHandler(args, lctx, topContext, isTail)
-          return isTail ? stmt : jsExpStmt(jsIIFE([stmt]))
-        }
-        const expSpecialHandler = expSpecialFormsExp[firstWord]
-        if (expSpecialHandler) {
-          const exp = expSpecialHandler(args, lctx, topContext)
-          return isTail ? jsReturn(exp) : jsExpStmt(exp)
-        }
-        const desc = topContext.defEnv.get(firstWord)
-        if (desc && desc.defKind === 'defmacro') return compExpStmt(lctx, desc.value(...args), topContext, isTail)
-      } catch (e) {
-        if (e instanceof CompileError && !e.form) e.form = form
-        throw e
+  if (!forms || forms.length === 0) return null
+  const word = tryGetFormWord(forms[0])
+  if (!word) return null
+  return { firstWord: word, args: forms.slice(1) }
+}
+
+const compExpStmt = (lctx, form, topContext, isTail) => {
+  const wordFirstForm = tryGetWordFirst(form)
+  if (wordFirstForm) {
+    const { firstWord, args } = wordFirstForm
+    try {
+      const stmtSpecialHandler = expSpecialFormsStmt[firstWord]
+      if (stmtSpecialHandler) {
+        const stmt = stmtSpecialHandler(args, lctx, topContext, isTail)
+        return isTail ? stmt : jsExpStmt(jsIIFE([stmt]))
       }
+      const expSpecialHandler = expSpecialFormsExp[firstWord]
+      if (expSpecialHandler) {
+        const exp = expSpecialHandler(args, lctx, topContext)
+        return isTail ? jsReturn(exp) : jsExpStmt(exp)
+      }
+      const desc = topContext.defEnv.get(firstWord)
+      if (desc && desc.defKind === 'defmacro') return compExpStmt(lctx, desc.value(...args), topContext, isTail)
+    } catch (e) {
+      if (e instanceof CompileError && !e.form) e.form = form
+      throw e
     }
   }
   const jsExp = compExp(lctx, form, topContext)
@@ -515,8 +519,8 @@ const compExp = (ctx, form, topContext) => {
     const desc = topContext.defEnv.get(word)
     if (!desc) throw new CompileError('undefined variable: ' + word, form)
     const { defKind } = desc
-    if (defKind === 'defmacro') throw new CompileError('macro in value position')
-    if (defKind === 'defexpr') throw new CompileError('fexpr in value position')
+    if (defKind === 'defmacro') throw new CompileError('macro in value position', form)
+    if (defKind === 'defexpr') throw new CompileError('fexpr in value position', form)
     return jsVar(word)
   }
   const forms = tryGetFormList(form)
@@ -524,14 +528,14 @@ const compExp = (ctx, form, topContext) => {
     // here we throw an Error not an CompileError as the input is not a form
     throw new Error('expected a valid form value', { cause: form })
   }
-  if (forms.length === 0) throw new CompileError('empty list')
+  if (forms.length === 0) throw new CompileError('empty list', form)
 
-  const [firstForm, ...args] = forms
-  const firstWord = tryGetFormWord(firstForm)
-  if (firstWord) {
+  const wordFirstForm = tryGetWordFirst(form)
+  if (wordFirstForm) {
+    const { firstWord, args } = wordFirstForm
     try {
       if (firstWord === 'do') return jsIIFE(compBodiesToStmts(topContext, ctx, args, true))
-      if (firstWord in topSpecialForms) throw new CompileError('top special not allowed in expression form')
+      if (firstWord in topSpecialForms) throw new CompileError('top special not allowed in expression form', form)
 
       const expSpecialHandler = expSpecialFormsExp[firstWord]
       if (expSpecialHandler) return expSpecialHandler(args, ctx, topContext)
@@ -572,8 +576,8 @@ const compExp = (ctx, form, topContext) => {
     }
   }
   return jsCall(
-    compExp(ctx, firstForm, topContext),
-    args.map((arg) => compExp(ctx, arg, topContext)),
+    compExp(ctx, forms[0], topContext),
+    forms.slice(1).map((arg) => compExp(ctx, arg, topContext)),
   )
 }
 
@@ -777,22 +781,20 @@ const topSpecialForms = {
 
 const compileTopDefEnv = async (topContext, form) => {
   const { defEnv } = topContext
-  const forms = tryGetFormList(form)
-  if (forms && forms.length > 0) {
-    const [firstForm, ...args] = forms
-    const firstWord = tryGetFormWord(firstForm)
-    if (firstWord) {
-      try {
-        const topSpecialHandler = topSpecialForms[firstWord]
-        if (topSpecialHandler) {
-          await topSpecialHandler(firstWord, args, topContext)
-          return null
-        }
-      } catch (e) {
-        if (e instanceof CompileError && !e.form) e.form = form
-        throw e
+  const wordFirstForm = tryGetWordFirst(form)
+  if (wordFirstForm) {
+    const { firstWord, args } = wordFirstForm
+    try {
+      const topSpecialHandler = topSpecialForms[firstWord]
+      if (topSpecialHandler) {
+        await topSpecialHandler(firstWord, args, topContext)
+        return null
       }
+    } catch (e) {
+      if (e instanceof CompileError && !e.form) e.form = form
+      throw e
     }
+
     const defDesc = defEnv.get(firstWord)
     if (defDesc && defDesc.defKind === 'defmacro') {
       const { paramDesc } = defDesc
