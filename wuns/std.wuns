@@ -54,6 +54,8 @@
 [def-bin-i32-inst mul]
 [comment maybe introduce booleans instead of i32s for comparisons]
 [def-bin-i32-inst lt-s]
+[def-bin-i32-inst le-s]
+[def-bin-i32-inst eq]
 
 [def -2 [i32 -2]]
 [def -1 [i32 -1]]
@@ -74,7 +76,6 @@
 
 [defn not [c] [if c 0 1]]
 
-[def-bin-i32-inst eq]
 
 [defn is-empty [form]
   [eq 0 [size form]]]
@@ -224,8 +225,6 @@
 [defmacro word-to-char-code [w]
   [i32-to-form [char-code-at [form-to-word w] 0]]]
 
-[def-bin-i32-inst le-s]
-
 [defn is-between-inclusive [lower c upper]
   [and [le-s lower c] [le-s c upper]]]
 
@@ -285,7 +284,7 @@
     [do
       [assert [eq 2 [size binding]] if-let bindings should have exactly two elements]
       [let [v [first binding] cond [second binding]]
-        [assert [is-word v] if-let-option requires a word as the first element of the first argument]
+        [assert [is-word v] if-let requires a word as the first element of the first argument]
         [flist [quote match]
           cond
           [flist [quote option/some] v] true-form
@@ -298,7 +297,7 @@
     [do
       [assert [eq 2 [size binding]] when-let bindings should have exactly two elements]
       [let [v [first binding] cond [second binding]]
-        [assert [is-word v] when-let-option requires a word as the first element of the first argument]
+        [assert [is-word v] when-let requires a word as the first element of the first argument]
         [flist [quote match]
           cond
           [flist [quote option/some] v] [form-concat [list [quote do]] forms]
