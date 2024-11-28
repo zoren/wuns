@@ -213,13 +213,7 @@ export { kv_map_values as 'kv-map-values' }
 export { print }
 const code_point_to_string = (code_point) => String.fromCodePoint(code_point)
 export { code_point_to_string as 'code-point-to-string' }
-// export const stdout_print = (v) => {
-//   process.stdout.write(print(v))
-// }
-// export const stdout_write_code_point = (code_point) => {
-//   if (typeof code_point !== 'number') throw new Error('stdout-write-code-point expects number')
-//   process.stdout.write(String.fromCodePoint(code_point))
-// }
+
 const concat_lists = (lists) => {
   const l = []
   for (const list of lists) {
