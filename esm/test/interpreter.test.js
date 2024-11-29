@@ -592,6 +592,7 @@ const testTop = ({ ptse }) => {
       `),
     ).toBe(undefined)
     expect(spyConsoleLog).toHaveBeenCalledWith('hello wuns')
+    spyConsoleLog.mockRestore()
   })
 
   // test('size-of', async () => {
