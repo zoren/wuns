@@ -66,23 +66,27 @@
     [var syntax-word]
     [literal literal]
     [intrinsic syntax-word intrinsic-args]
-
-    [func bfunc]
-
     [if bexp bexp bexp]
-    [do [list bexp]]
-    [switch bexp [list [pair [list bexp] bexp]] bexp]
-    [match bexp [list [pair match-pattern bexp]] [option bexp]]
-    [letfn [list bfunc] [list bexp]]
     [let [list [pair syntax-word bexp]] [list bexp]]
     [loop [list [pair syntax-word bexp]] [list bexp]]
     [continue [list [pair syntax-word bexp]]]
+    [do [list bexp]]
     [call bexp [list bexp]]
+
+    [switch bexp [list [pair [list bexp] bexp]] bexp]
+    [match bexp [list [pair match-pattern bexp]] [option bexp]]
+    [func bfunc]
+    [letfn [list bfunc] [list bexp]]
     [call-fexpr bexp [list form]]
     ]]
 
 [type bdefunc-kind []
   [union [func] [fexpr] [macro]]]
+
+[type data []
+  [union
+    [bytes [list syntax-word]]
+    [i32 [list syntax-word]]]]
 
 [type btop []
   [union
@@ -94,6 +98,7 @@
     [import syntax-word syntax-word btype-scheme]
     [memory syntax-word syntax-word [option syntax-word]]
     [load syntax-word]
+    [data-active syntax-word bexp [list data]]
     ]]
 
 [defn bexp-recur [f]
@@ -302,6 +307,9 @@
       ]
     [for-each btop btops
       [match btop
+        [btop/data-active name bexp datas]
+        [push ddescs btop]
+
         [btop/export snames]
         [do
           [for-each sname snames
@@ -701,6 +709,24 @@
                   [set-def name-form [def-desc/memory mem-index]]
                   [set-def-form name-form
                     [btop/memory mem-name mem-min-size [option/none]]]]
+
+                [[word data]]
+                [let
+                  [mem-name [get-sword [get-arg 1]]]
+                  [btop/data-active
+                    mem-name
+                    [form-to-ast [local-stack/empty] [get-arg 2]]
+                    [list-map a [slice l 4 [size l]]
+                      [let [dl [get-list a]]
+                        [if [is-empty dl]
+                          [push-error a [quote [data is empty]]]
+                          [let [data-first [get-word [first dl]]]
+                            [switch data-first
+                              [[word bytes]]
+                              [data/bytes [list-map b [rest dl] [get-sword b]]]
+                              [[word i32]]
+                              [data/i32 [list-map b [rest dl] [get-sword b]]]
+                              [logq-abort form-to-top data kind not recognized]]]]]]]]
 
                 [if-let [ddesc [try-get def-ctx first-word]]
                   [do

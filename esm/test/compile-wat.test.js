@@ -1,6 +1,8 @@
 import { test, expect } from 'vitest'
 
-import { stringToInst } from './wat-compile-util.js'
+import { makeStringToInst } from './wat-compile-util.js'
+
+const stringToInst = await makeStringToInst()
 
 test.each([
   ['[f64 1.5]', 1.5],
@@ -162,6 +164,108 @@ test('hash', async () => {
   // stolen from https://github.com/fnvhash/libfnv/blob/master/test/unit/basic_full.ts#L20
   'foobar'.split('').forEach((c, i) => setByte(i, c.charCodeAt(0)))
   expect(hash(0, 6)).toBe(0xbf9cf968 | 0)
+})
+
+test('data i32', async () => {
+  const inst = await stringToInst(`
+[memory mem 1]
+
+[data active mem [i32 16] [i32 -559038737]]
+
+[export mem]`)
+  const mem = inst['mem']
+  const ui32Array = new Uint32Array(mem.buffer)
+  expect(ui32Array[4]).toBe(0xdeadbeef)
+})
+
+test('data bytes', async () => {
+  const inst = await stringToInst(`
+[memory mem 1]
+
+[data active mem [i32 16] [bytes 0xef 0xbe 0xad 0xde]]
+
+[export mem]`)
+  const mem = inst['mem']
+  const ui32Array = new Uint32Array(mem.buffer)
+  expect(ui32Array[4]).toBe(0xdeadbeef)
+})
+
+test('hash word', async () => {
+  const inst = await stringToInst(`
+[load std.wuns]
+
+[memory mem 1]
+
+[def fnv-prime [i32 16777619]]
+[def fnv-offset-basis [i32 -2128831035]]
+
+[defn hash-fnv-1a-i32 [p n-bytes]
+  [let [end-p [intrinsic i32.add p n-bytes]]
+    [loop [hash fnv-offset-basis
+           q p]
+      [if [intrinsic i32.lt-s q end-p]
+        [continue
+          hash
+          [intrinsic i32.mul
+            [intrinsic i32.xor hash
+              [intrinsic i32.load8-u mem 0 1 q]]
+            fnv-prime]
+          q [intrinsic i32.add q [i32 1]]]
+        hash]]]]
+
+[defn word-size [pw]
+  [intrinsic i32.load mem 0 4 pw]]
+
+[defn word-bytes [pw]
+  [intrinsic i32.add pw [i32 4]]]
+
+[defn hash-word [pw]
+  [hash-fnv-1a-i32 [word-bytes pw] [word-size pw]]]
+
+[defmacro data-active [ba]
+  [quote [i32 0]]]
+
+[defn byte-array-concat [ba1 ba2]
+  [let
+    [n1 [byte-array-size ba1]
+     n2 [byte-array-size ba2]
+     a [byte-array [add n1 n2]]]
+    [for i 0 n1
+      [byte-array-set a i [byte-array-get ba1 i]]]
+    [for i 0 n2
+      [byte-array-set a [add i n1] [byte-array-get ba2 i]]]
+    a]]
+
+[defn word-to-vector-byte-array [w]
+  [byte-array-concat [i32-to-byte-array [word-byte-size w]] [word-to-byte-array w]]]
+
+[defn byte-array-to-bytes-form [ba]
+  [let [n [byte-array-size ba]
+        gl [growable-list]]
+    [for i 0 n
+      [push gl [i32-to-form-word [byte-array-get ba i]]]]
+    [form-concat [list [quote bytes]]
+      [clone-growable-to-frozen-list gl]]]]
+
+[defmacro data-word [mem addr w]
+  [flist [quote data] [quote active] mem addr
+    [byte-array-to-bytes-form [word-to-vector-byte-array [form-to-word w]]]]]
+
+[data-word mem [i32 16] abc]
+
+[data-word mem [i32 32] foobar]
+
+[defn foobar-size []
+  [word-size [i32 32]]]
+
+[defn foobar-hash []
+  [hash-word [i32 32]]]
+
+[export foobar-size foobar-hash]`)
+  const foobarSize = inst['foobar-size']
+  const foobarHash = inst['foobar-hash']
+  expect(foobarSize()).toBe(6)
+  expect(foobarHash()).toBe(0xbf9cf968 | 0)
 })
 
 test('count words', async () => {

@@ -50,15 +50,21 @@
     [type wat-type-basic]
     [value wat-inst]]]
 
+[type wat-data []
+  [union
+    [active word wat-inst byte-array]]]
+
 [type wat-output []
   [record
     [imports [growable-list [pair [list word] import-kind]]]
     [globals [growable-list wat-global]]
     [funcs [growable-list output-func]]
-    [exports [growable-list [pair word [pair export-kind word]]]]]]
+    [exports [growable-list [pair word [pair export-kind word]]]]
+    [datas [growable-list wat-data]]]]
 
 [defn make-wat-output []
   [wat-output
+    [growable-list]
     [growable-list]
     [growable-list]
     [growable-list]
@@ -142,6 +148,44 @@
   [if-let [f [syntax-word/opt-form sw]]
     f
     [logq-abort syntax-word-get-form expected a form]]]
+
+[defn datas-to-byte-array [datas]
+  [let
+    [n-datas [size datas]
+     total-size
+      [loop [i 0 sum 0]
+        [if [le-s n-datas i]
+          sum
+          [continue
+            sum [add sum [match [at datas i]
+                          [data/bytes bs] [size bs]
+                          [data/i32 is] [mul [size is] 4]]]
+            i [inc i]
+            ]]]
+     ba [byte-array total-size]]
+    [loop [i 0 offset 0]
+      [if [le-s n-datas i]
+        ba
+        [match [at datas i]
+          [data/bytes bs]
+          [do
+            [for j 0 [size bs]
+              [byte-array-set ba [add offset j] [word-to-int [syntax-word/word [at bs j]]]]]
+            [continue
+              i [inc i]
+              offset [add offset [size bs]]]]
+
+          [data/i32 is]
+          [do
+            [loop [j 0 sis [size is]]
+              [when [lt-s j sis]
+                [byte-array-set-byte-array ba [add offset [mul j 4]]
+                  [i32-to-byte-array [word-to-int [syntax-word/word [at is j]]]]]
+                [continue j [inc j]]]]
+            [continue
+              i [inc i]
+              offset [add offset [mul [size is] 4]]]]]]]
+      ba]]
 
 [defn translate-top-form [tctx bform]
   [let [output [translate-context/output tctx]
@@ -369,6 +413,16 @@
           [wat-output/exports output]
           [pair [syntax-word/word sname] [pair export-kind [syntax-word/word sname]]]]]]
 
+    [btop/data-active mem-name offset-form datas]
+    [do
+      [logq adding data]
+      [push
+        [wat-output/datas output]
+        [wat-data/active
+          [syntax-word/word mem-name]
+          [go offset-form]
+          [datas-to-byte-array datas]]]]
+
     [do
       [log bform]
       [logq-abort not implemented translate-top-form bform]]]]]]
@@ -412,12 +466,45 @@
   [for i 0 [word-byte-size word]
     [print-byte printer [char-code-at word i]]]]
 
+[defn int-to-hex-ascii [i]
+  [if [lt-s i [i32 10]]
+    [add i [i32 48]]
+    [add [sub i [i32 10]] [i32 97]]]]
+
+[defn i32-to-hex-bits [n-bits value]
+  [let [gl [growable-list]]
+    [loop [n-start [sub n-bits 4]
+           index [intrinsic i32.shl [i32 15] n-start]
+           i n-start]
+      [when index
+        [push gl [int-to-hex-ascii [intrinsic i32.shr-u [intrinsic i32.and value index] i]]]
+        [continue
+          index [intrinsic i32.shr-u index [i32 4]]
+          i [sub i 4]]]]
+    [code-points-to-word [clone-growable-to-frozen-list gl]]]]
+
+[defn i32-to-hex-32 [value]
+  [i32-to-hex-bits [i32 32] value]]
+
+[defn i32-to-hex-8 [value]
+  [i32-to-hex-bits [i32 8] value]]
+
+[defn print-string-chars [printer word]
+  [for i 0 [byte-array-size word]
+    [let [cc [byte-array-get word i]]
+      [if [or [lt-s cc [i32 32]] [lt-s [i32 126] cc]]
+        [do
+          [print-byte printer ascii-backslash]
+          [print-word printer [i32-to-hex-8 cc]]]
+        [print-byte printer cc]]]]]
+
 [type wat []
   [union
     [word word]
     [byte-array byte-array]
     [dollar word]
     [dqstring word]
+    [dqstring-bytes byte-array]
     [seq [list wat]]
     [list [list wat]]
     [eq-pair word word]]]
@@ -430,6 +517,7 @@
         [print-byte printer [byte-array-get ba i]]]
     [wat/dollar w] [do [print-byte printer ascii-dollar] [print-word printer w]]
     [wat/dqstring w] [do [print-byte printer ascii-double-quote] [print-word printer w] [print-byte printer ascii-double-quote]]
+    [wat/dqstring-bytes ba] [do [print-byte printer ascii-double-quote] [print-string-chars printer ba] [print-byte printer ascii-double-quote]]
     [wat/seq l]
       [do
         [when-not [is-empty l]
@@ -576,30 +664,24 @@
               [logq-abort export-to-wat unknown export kind]]]
           [wat/dollar [pair/snd kind-pair]]]]]]]
 
+[defn data-to-wat [d]
+  [match d
+    [wat-data/active mem-name offset data]
+    [wat-list
+      [wat/word [word data]]
+      [wat/dollar mem-name]
+      [wat-inst-to-out offset]
+      [wat/dqstring-bytes data]]]]
+
 [defn output-to-wat [output]
   [wat/seq
     [concat-lists
       [list
         [list-map imp [clone-growable-to-frozen-list [wat-output/imports output]] [import-to-wat imp]]
         [list-map g [clone-growable-to-frozen-list [wat-output/globals output]] [global-to-wat g]]
+        [list-map d [clone-growable-to-frozen-list [wat-output/datas output]] [data-to-wat d]]
         [list-map of [clone-growable-to-frozen-list [wat-output/funcs output]] [output-func-to-wat of]]
         [list-map e [clone-growable-to-frozen-list [wat-output/exports output]] [export-to-wat e]]]]]]
-
-[defn int-to-hex-ascii [i]
-  [if [lt-s i [i32 10]]
-    [add i [i32 48]]
-    [add [sub i [i32 10]] [i32 97]]]]
-
-[defn i32-to-hex [value]
-  [let [gl [growable-list]]
-    [loop [index [intrinsic i32.shl [i32 15] [i32 28]]
-           i [i32 28]]
-      [when index
-        [push gl [int-to-hex-ascii [intrinsic i32.shr-u [intrinsic i32.and value index] i]]]
-        [continue
-          index [intrinsic i32.shr-u index [i32 4]]
-          i [sub i 4]]]]
-    [code-points-to-word [clone-growable-to-frozen-list gl]]]]
 
 [defn translate-top-forms-async [forms]
   [let

@@ -3,6 +3,9 @@ const wabt = await wabtProm()
 
 const wat_to_byte_array = (inputBuffer) => {
   if (!(inputBuffer instanceof Uint8Array)) throw new Error('expects Uint8Array')
+  // print as string
+  // const inputString = new TextDecoder().decode(inputBuffer)
+  // console.log({ inputString })
   const module = wabt.parseWat('', inputBuffer, {
     multi_memory: true,
   })

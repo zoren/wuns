@@ -52,23 +52,24 @@ if (typeof window === 'undefined') {
     return Promise.reject(new Error('write_file_async not for web'))
   }
   const fileDescriptors = new Map()
+  let fileDescriptorIndex = 0
   open = (file_path) => {
     const file = wunsDir + file_path
     const data = moduleStrings[file]
     if (!data) throw new Error(`file not found: ${file}`)
-    const fd = fileDescriptors.size
+    const fd = fileDescriptorIndex++
     fileDescriptors.set(fd, { index: 0, data })
     return fd
   }
   close = (fd) => {
     fileDescriptors.delete(fd)
   }
+  const encoder = new TextEncoder()
   read_file_memory = (fd, memory, start, length) => {
     const file = fileDescriptors.get(fd)
     if (!file) throw new Error(`file descriptor not found: ${fd}`)
     const { index, data } = file
     const bytes = new Uint8Array(memory.buffer, start, length)
-    const encoder = new TextEncoder()
     const { read, written } = encoder.encodeInto(data.slice(index), bytes)
     file.index += read
     return written

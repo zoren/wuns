@@ -87,6 +87,11 @@ const char_code_to_word = (code_point) => stringToWord(String.fromCodePoint(code
 export { char_code_to_word as 'char-code-to-word' }
 const code_points_to_word = (code_points) => stringToWord(String.fromCodePoint(...code_points))
 export { code_points_to_word as 'code-points-to-word' }
+const word_to_byte_array = (word) => new TextEncoder().encode(wordValue(word))
+export { word_to_byte_array as 'word-to-byte-array' }
+const i32_to_byte_array = (i) => new Uint8Array(new Int32Array([i]).buffer)
+export { i32_to_byte_array as 'i32-to-byte-array' }
+
 export const size = (list) => {
   if (isList(list)) return list.length
   throw new Error('size expects list, found: ' + list + ' ' + typeof list)
@@ -279,6 +284,7 @@ const byte_array_log_as_string = (byte_array) => {
 }
 export { byte_array_log_as_string as 'byte-array-log-as-string' }
 const memory_log_as_string = (wasmMem, start, size) => {
+  // we won't be able to pass a  memory to imports when compiling to wasm...
   if (!(wasmMem instanceof WebAssembly.Memory)) throw new Error('memory-log-as-string expects memory')
   if (!isSigned32BitInteger(start)) throw new Error('memory-log-as-string expects number: ' + start)
   if (!isSigned32BitInteger(size)) throw new Error('memory-log-as-string expects number: ' + size)

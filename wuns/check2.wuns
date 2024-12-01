@@ -812,6 +812,9 @@
                     t [specialize-type-scheme [check-context/type-var-counter gctx] 0 type-scheme]]
                 [annotate gctx e t]]]]
 
+          [btop/data-active mem-name mem-addr data]
+          [do]
+
           [btop/do btops]
           [for-each btop btops
             [check-top btop]]

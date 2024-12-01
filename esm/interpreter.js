@@ -24,6 +24,7 @@ import {
   makeFormList,
   wordToI32,
   getLocationFromForm,
+  formsToBytes,
 } from './core.js'
 import { 'read-file-async' as read_file_async } from './runtime-lib/files.js'
 
@@ -180,7 +181,7 @@ export const makeEvalForm = () => {
               return goExp(env, forms[2]).buffer.byteLength >> 16
             case 'memory.grow':
               assertNumArgs(3)
-              return (goExp(env, forms[2])).grow(goExp(env, forms[3]))
+              return goExp(env, forms[2]).grow(goExp(env, forms[3]))
           }
 
           const instInfo = intrinsicsInfo[instName]
@@ -394,13 +395,14 @@ export const makeEvalForm = () => {
         case 'defmacro':
           setDef(getFormWord(forms[1]), makeClosureOfKind('macro', forms, defEnv))
           return langUndefined
-        case 'memory':
+        case 'memory': {
           if (forms.length !== 3) throw evalError('memory expects two arguments')
           const memName = getFormWord(forms[1])
           const memSize = +getFormWord(forms[2])
           const memory = new WebAssembly.Memory({ initial: memSize })
           setDef(memName, memory)
           return langUndefined
+        }
         case 'do':
           try {
             for (let i = 1; i < forms.length; i++) await evalTop(forms[i])
@@ -480,6 +482,18 @@ export const makeEvalForm = () => {
             if (!defEnv.has(exportWord)) throw evalError('exported def variable not found: ' + exportWord)
           }
           return langUndefined
+        case 'data': {
+          const [, activePassiveForm, memNameForm, addrForm, ...args] = forms
+          const activePassive = getFormWord(activePassiveForm)
+          if (activePassive !== 'active') throw evalError('active/passive expected')
+          const memName = getFormWord(memNameForm)
+          const memory = defEnv.get(memName)
+          const addr = evalExp(addrForm)
+          if (typeof addr !== 'number') throw evalError('expected address')
+          const bytes = formsToBytes(args)
+          new Uint8Array(memory.buffer, addr, bytes.length).set(bytes)
+          return langUndefined
+        }
       }
       // if (!defEnv.has(firstWord)) throw evalError('undefined variable')
       const func = defEnv.get(firstWord)

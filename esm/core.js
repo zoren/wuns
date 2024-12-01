@@ -250,3 +250,30 @@ export const getLocationFromForm = (form) => {
   const { row, column } = getPosition(formInfo)
   return `${formInfo.contentObj.contentName}:${row + 1}:${column + 1}`
 }
+
+export const formsToBytes = (forms) => {
+  const bytes = []
+  for (const form of forms) {
+    const l = tryGetFormList(form)
+    if (l.length === 0) throw new Error('data segment expected at least one byte')
+    const w = tryGetFormWord(l[0])
+    switch (w) {
+      case 'bytes':
+        for (let i = 1; i < l.length; i++) {
+          const n = +tryGetFormWord(l[i])
+          if (isNaN(n) || n < 0 || n > 255) throw new Error('expected byte')
+          bytes.push(n)
+        }
+        break
+      case 'i32':
+        for (let i = 1; i < l.length; i++) {
+          const n = wordToI32(tryGetFormWord(l[i]))
+          bytes.push(n & 0xff, (n >> 8) & 0xff, (n >> 16) & 0xff, (n >> 24) & 0xff)
+        }
+        break
+      default:
+        throw new Error('unexpected data segment')
+    }
+  }
+  return bytes
+}

@@ -569,6 +569,27 @@ const testTop = ({ ptse }) => {
     ).toBe(3)
   })
 
+  test('data segments', async() => {
+    expect(
+      await ptse(`
+  [memory mem 1]
+
+  [data active mem [i32 16] [bytes 0x39 0x05 0x00 0x00]]
+
+  [intrinsic i32.load mem 0 4 [i32 16]]
+  `),
+    ).toBe(1337)
+    expect(
+      await ptse(`
+  [memory mem 1]
+
+  [data active mem [i32 16] [i32 1337]]
+
+  [intrinsic i32.load mem 0 4 [i32 16]]
+  `),
+    ).toBe(1337)
+  })
+
   test('files', async () => {
     const spyConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {})
     expect(

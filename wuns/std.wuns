@@ -522,7 +522,14 @@
 [import ./runtime-lib/host.js byte-array-get [func [byte-array i32] i32]]
 [import ./runtime-lib/host.js byte-array-set [func [byte-array i32 i32] [tuple]]]
 [import ./runtime-lib/host.js byte-array-log-as-string [func [byte-array] [tuple]]]
+[import ./runtime-lib/host.js word-to-byte-array [func [word] byte-array]]
+[import ./runtime-lib/host.js i32-to-byte-array [func [i32] byte-array]]
 [import ./runtime-lib/host.js memory-log-as-string [func [memory i32 i32] [tuple]]]
+
+[defn byte-array-set-byte-array [ba offset src]
+  [let [src-size [byte-array-size src]]
+    [for i 0 src-size
+      [byte-array-set ba [add offset i] [byte-array-get src i]]]]]
 
 [import ./runtime-lib/host.js pairwise [type-scheme [a] [func [[list a]] [list [list a]]]]]
 [import ./runtime-lib/host.js triplewise [type-scheme [a] [func [[list a]] [list [list a]]]]]

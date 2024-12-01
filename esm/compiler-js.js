@@ -7,6 +7,8 @@ import {
   parseString,
   wordToI32,
   makeFormList,
+  isSigned32BitInteger,
+  formsToBytes,
 } from './core.js'
 import { loadInstToType, storeInstToType, primtiveArrays, intrinsicsInfo } from './intrinsics.js'
 import { escapeIdentifier, jsExpToString, jsStmtToString } from './runtime-lib/js.js'
@@ -26,7 +28,6 @@ const jsString = jsExp('string')
 const jsBinop = jsExp('binop')
 const jsBin = (s) => (a, b) => jsBinop(makeTaggedValue('binop/' + s), a, b)
 const jsBinDirect = (op, a, b) => jsExp('binop-direct')(op, a, b)
-const jsAdd = jsBin('add')
 const jsBinIOr = jsBin('binary-ior')
 const jsTernary = jsExp('ternary')
 const jsVar = jsExp('var')
@@ -45,9 +46,7 @@ const jsArrowExpNoRest = (params, body) => jsArrowExp(params, optionNone, body)
 
 const js0 = jsNumber(0)
 const js1 = jsNumber(1)
-const js4 = jsNumber(4)
 const jsUndefined = jsVar('undefined')
-const jsMathMax = jsSubscript(jsVar('Math'), jsString('max'))
 
 const mkObject = (...args) => jsObject(args.map(([k, v]) => ({ fst: k, snd: v })))
 const mkTaggedObject = (tag, ...args) => mkObject(['tag', jsString(tag)], ['args', jsArray(args)])
@@ -69,7 +68,7 @@ const jsIIFE = (stmts) => jsCall(jsArrowStmt([], optionNone, jsBlock(stmts)), []
 
 const jsOr0 = (exp) => jsBinIOr(exp, js0)
 
-class CompileError extends Error {
+export class CompileError extends Error {
   constructor(message, form) {
     super(message)
     this.form = form
@@ -273,39 +272,55 @@ const expSpecialFormsExp = {
     const { defEnv } = topContext
     const [opForm, ...args] = tail
     const opName = getFormWord(opForm)
-    const loadMem = (primtypeName) => {
-      const [memForm, offsetForm, alignmentForm, addrForm] = args
+    const intrinsicArgCount = args.length
+    const assertArity = (arity) => {
+      if (intrinsicArgCount !== arity) throw new CompileError(opName + ' expected ' + arity + ' arguments')
+    }
+    const getMemName = (memForm) => {
       const memName = getFormWord(memForm)
       const memDesc = defEnv.get(memName)
-      if (!memDesc) throw new CompileError('undefined memory')
-      if (memDesc.defKind !== 'memory') throw new CompileError('not a memory')
+      if (!memDesc) throw new CompileError('undefined memory', memForm)
+      if (memDesc.defKind !== 'memory') throw new CompileError('not a memory', memForm)
+      return memName
+    }
+    const loadMem = (primtypeName) => {
+      const [memForm, offsetForm, alignmentForm, addrForm] = args
       const offset = +getFormWord(offsetForm)
+      const alignment = +getFormWord(alignmentForm)
       const addrExp = compExp(ctx, addrForm, topContext)
-      return createPrimitiveArrayExpression(primtypeName, memName, offset, addrExp)
+      return createPrimitiveArrayExpression(primtypeName, getMemName(memForm), offset, addrExp)
     }
     const loadType = loadInstToType[opName]
     if (loadType) {
-      if (args.length !== 4) throw new CompileError(opName + ' expected four arguments')
+      assertArity(4)
       return loadMem(loadType)
     }
     const storeType = storeInstToType[opName]
     if (storeType) {
-      if (args.length !== 5) throw new CompileError(opName + ' expected five arguments')
+      assertArity(5)
       const jsExp = jsAssignExp(loadMem(storeType), compExp(ctx, args[4], topContext))
       return jsParenComma([jsExp, jsUndefined])
     }
-
     switch (opName) {
       case 'unreachable':
+        assertArity(0)
         return jsIIFE([jsThrow(jsString('unreachable'))])
       case 'memory.size':
+        assertArity(1)
         return jsBinDirect(
           '>>',
-          jsSubscript(jsSubscript(jsVar(getFormWord(args[0])), jsString('buffer')), jsString('byteLength')),
+          jsSubscript(jsSubscript(jsVar(getMemName(args[0])), jsString('buffer')), jsString('byteLength')),
           jsNumber(16),
         )
       case 'memory.grow':
-        return jsCall(jsSubscript(jsVar(getFormWord(args[0])), jsString('grow')), [compExp(ctx, args[1], topContext)])
+        assertArity(2)
+        return jsCall(jsSubscript(jsVar(getMemName(args[0])), jsString('grow')), [compExp(ctx, args[1], topContext)])
+      case 'memory.init': {
+        assertArity(5)
+        const [memForm, segmentForm, dstForm, offsetForm, lengthForm] = args
+        const memName = getMemName(memForm)
+        return
+      }
     }
 
     const binIntrinsicInfo = intrinsicsInfo[opName]
@@ -659,6 +674,20 @@ const defFuncLike = async (firstWord, tail, topContext) => {
 import { 'read-file-async' as read_file_async } from './runtime-lib/files.js'
 
 const topSpecialForms = {
+  data: async (_, forms, topContext) => {
+    const { defEnv } = topContext
+    if (forms.length < 3) throw new CompileError('data expected at least three arguments')
+    const [activePassiveForm, memNameForm, addrForm, ...args] = forms
+    const activePassive = getFormWord(activePassiveForm)
+    if (activePassive !== 'active') throw new CompileError('active/passive expected')
+    const memName = getFormWord(memNameForm)
+    const memDesc = defEnv.get(memName)
+    if (!memDesc) throw new CompileError('undefined memory', memNameForm)
+    const addrExp = compExp(null, addrForm, topContext)
+    const bytes = formsToBytes(args)
+    const addr = await evalExpAsync(topContext, addrExp)
+    new Uint8Array(memDesc.value.buffer, addr, bytes.length).set(bytes)
+  },
   def: async (_, tail, topContext) => {
     if (tail.length !== 2) throw new CompileError('def expected two arguments')
     const varName = getFormWord(tail[0])
@@ -771,8 +800,8 @@ const topSpecialForms = {
   memory: async (_, tail, topContext) => {
     const [memoryName, memorySize] = tail.map(getFormWord)
     const initialSize = +memorySize
+    if (!isSigned32BitInteger(initialSize)) throw new CompileError('memory size must be an integer')
     if (initialSize <= 0) throw new CompileError('memory size must be positive')
-    if ((initialSize !== initialSize) | 0) throw new CompileError('memory size must be an integer')
     const jsMemDesc = mkObject(['initial', jsNumber(initialSize)])
     const jsExp = jsNew(jsCall(jsSubscript(jsVar('WebAssembly'), jsString('Memory')), [jsMemDesc]))
     await setDef(topContext, memoryName, 'memory', jsExp)
