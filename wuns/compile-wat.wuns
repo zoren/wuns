@@ -415,7 +415,6 @@
 
     [btop/data-active mem-name offset-form datas]
     [do
-      [logq adding data]
       [push
         [wat-output/datas output]
         [wat-data/active
