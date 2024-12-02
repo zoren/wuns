@@ -301,7 +301,7 @@
 
         [make-type-list [syntax-word/word type-name] [list-map ta targs [go ta]]]]
 
-      [btype/memory lower opt-upper]
+      [btype/memory]
       type-memory
 
       [btype/func reg-params opt-rest-param result]
