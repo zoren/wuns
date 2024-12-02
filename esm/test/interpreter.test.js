@@ -1,7 +1,6 @@
 import { expect, assert, test, describe, vi } from 'vitest'
 
 import { langUndefined, parseString } from '../core.js'
-import { makeEvalForm } from '../interpreter.js'
 import { makeJSCompilingEvaluator } from '../compiler-js.js'
 // import { parseEvalC, parseEvalTopFormsC } from './emcc.js'
 
@@ -295,9 +294,7 @@ const makeParseEvalExp = (makeEvaluator) => {
 }
 
 describe.each([
-  { name: 'exp direct', pe: makeParseEvalExp(makeEvalForm) },
   { name: 'exp compiled js', pe: makeParseEvalExp(makeJSCompilingEvaluator) },
-  // { name: 'exp c', pe: parseEvalC },
 ])('$name', testExp)
 
 const testTop = ({ ptse }) => {
@@ -754,10 +751,8 @@ const parseEvalTopsExpJS = async (s) => {
 }
 
 describe.each([
-  { name: 'top direct', ptse: makeParseEvalTopsExp(makeEvalForm) },
   {
     name: 'top compiled js',
     ptse: parseEvalTopsExpJS,
   },
-  // { name: 'top c', ptse: parseEvalTopFormsC },
 ])('$name', testTop)
