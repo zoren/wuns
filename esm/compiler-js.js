@@ -7,8 +7,8 @@ import {
   parseString,
   wordToI32,
   makeFormList,
-  isSigned32BitInteger,
-  formsToBytes,
+  getLocationFromForm,
+  print
 } from './core.js'
 import { loadInstToType, storeInstToType, primtiveArrays, intrinsicsInfo } from './intrinsics.js'
 import { escapeIdentifier, jsExpToString, jsStmtToString } from './runtime-lib/js.js'
@@ -251,12 +251,6 @@ const expSpecialFormsExp = {
       throw new CompileError(e.message, tail[0])
     }
   },
-  i64: () => {
-    throw new CompileError('i64 not implemented')
-  },
-  f32: () => {
-    throw new CompileError('f32 not implemented')
-  },
   f64: (tail) => {
     if (tail.length !== 1) throw new CompileError('f64 expected one argument')
     const v = +getFormWord(tail[0])
@@ -335,7 +329,6 @@ const expSpecialFormsExp = {
     if (tail.length !== 3) throw new CompileError('if expected three arguments')
     return jsTernary(...tail.map((f) => compExp(ctx, f, defEnv)))
   },
-  'type-anno': (tail, ctx, defEnv) => compExp(ctx, tail[0], defEnv),
 }
 Object.freeze(expSpecialFormsExp)
 
@@ -674,20 +667,6 @@ const defFuncLike = async (firstWord, tail, topContext) => {
 import { 'read-file-async' as read_file_async } from './runtime-lib/files.js'
 
 const topSpecialForms = {
-  data: async (_, forms, topContext) => {
-    const { defEnv } = topContext
-    if (forms.length < 3) throw new CompileError('data expected at least three arguments')
-    const [activePassiveForm, memNameForm, addrForm, ...args] = forms
-    const activePassive = getFormWord(activePassiveForm)
-    if (activePassive !== 'active') throw new CompileError('active/passive expected')
-    const memName = getFormWord(memNameForm)
-    const memDesc = defEnv.get(memName)
-    if (!memDesc) throw new CompileError('undefined memory', memNameForm)
-    const addrExp = compExp(null, addrForm, topContext)
-    const bytes = formsToBytes(args)
-    const addr = await evalExpAsync(topContext, addrExp)
-    new Uint8Array(memDesc.value.buffer, addr, bytes.length).set(bytes)
-  },
   def: async (_, tail, topContext) => {
     if (tail.length !== 2) throw new CompileError('def expected two arguments')
     const varName = getFormWord(tail[0])
@@ -749,15 +728,6 @@ const topSpecialForms = {
           descObj.constructors = constructors
           break
         }
-        case 'untagged-union': {
-          const types = []
-          for (let i = 1; i < body.length; i++) {
-            const t = body[i]
-            types.push(validateType(t))
-          }
-          descObj.types = types
-          break
-        }
         case 'record': {
           const fieldNames = []
           const fields = []
@@ -783,12 +753,6 @@ const topSpecialForms = {
       }
     }
   },
-  export: (_, forms, { defEnv }) => {
-    for (const form of forms) {
-      const exportWord = getFormWord(form)
-      if (!defEnv.has(exportWord)) throw new CompileError('exported def variable not found: ' + exportWord, form)
-    }
-  },
   import: async (_, tail, topContext) => {
     if (tail.length !== 3) throw new CompileError('import expects three arguments')
     const importModuleName = getFormWord(tail[0])
@@ -796,15 +760,6 @@ const topSpecialForms = {
     const importType = getFormList(tail[2])
     const jsExp = jsAwait(jsCall(jsVar('dynImport'), [jsString(importModuleName), jsString(importElementName)]))
     await setDef(topContext, importElementName, 'import', jsExp)
-  },
-  memory: async (_, tail, topContext) => {
-    const [memoryName, memorySize] = tail.map(getFormWord)
-    const initialSize = +memorySize
-    if (!isSigned32BitInteger(initialSize)) throw new CompileError('memory size must be an integer')
-    if (initialSize <= 0) throw new CompileError('memory size must be positive')
-    const jsMemDesc = mkObject(['initial', jsNumber(initialSize)])
-    const jsExp = jsNew(jsCall(jsSubscript(jsVar('WebAssembly'), jsString('Memory')), [jsMemDesc]))
-    await setDef(topContext, memoryName, 'memory', jsExp)
   },
 }
 

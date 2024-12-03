@@ -279,9 +279,6 @@ const testExp = ({ pe }) => {
     }
   })
 
-  test('type-anno', () => {
-    expect(pe('[type-anno [i32 1] i32]')).toBe(1)
-  })
 }
 
 const makeParseEvalExp = (makeEvaluator) => {
@@ -484,134 +481,113 @@ const testTop = ({ ptse }) => {
     expect(await ptse('[type pair [a b] [record [fst a] [snd b]]] [pair/snd [pair [i32 5] [i32 6]]]')).toBe(6)
   })
 
-  test('load store', async () => {
-    expect(
-      await ptse(`
-[memory mem 1]
+//   test('load store', async () => {
+//     expect(
+//       await ptse(`
+// [memory mem 1]
 
-[let [p [i32 16]]
-  [intrinsic i32.store8 mem 0 1 p [i32 255]]
-  [intrinsic i32.load8-s mem 0 1 p]]
-`),
-    ).toBe(-1)
-    expect(
-      await ptse(`
-[memory mem 1]
+// [let [p [i32 16]]
+//   [intrinsic i32.store8 mem 0 1 p [i32 255]]
+//   [intrinsic i32.load8-s mem 0 1 p]]
+// `),
+//     ).toBe(-1)
+//     expect(
+//       await ptse(`
+// [memory mem 1]
 
-[do
-  [intrinsic i32.store8 mem 4 1 [i32 16] [i32 255]]
-  [intrinsic i32.load8-s mem 0 1 [i32 20]]]
-`),
-    ).toBe(-1)
+// [do
+//   [intrinsic i32.store8 mem 4 1 [i32 16] [i32 255]]
+//   [intrinsic i32.load8-s mem 0 1 [i32 20]]]
+// `),
+//     ).toBe(-1)
 
-    expect(
-      await ptse(`
-[memory mem 1]
+//     expect(
+//       await ptse(`
+// [memory mem 1]
 
-[let [p [i32 16]]
-  [intrinsic i32.store8 mem 0 1 p [i32 255]]
-  [intrinsic i32.load8-u mem 0 1 p]]
-`),
-    ).toBe(255)
-    expect(
-      await ptse(`
-[memory mem 1]
+// [let [p [i32 16]]
+//   [intrinsic i32.store8 mem 0 1 p [i32 255]]
+//   [intrinsic i32.load8-u mem 0 1 p]]
+// `),
+//     ).toBe(255)
+//     expect(
+//       await ptse(`
+// [memory mem 1]
 
-[let [p [i32 16]]
-  [intrinsic i32.store16 mem 0 2 p [i32 65535]]
-  [intrinsic i32.load16-u mem 0 2 p]]
-`),
-    ).toBe(65535)
-    expect(
-      await ptse(`
-[memory mem 1]
+// [let [p [i32 16]]
+//   [intrinsic i32.store16 mem 0 2 p [i32 65535]]
+//   [intrinsic i32.load16-u mem 0 2 p]]
+// `),
+//     ).toBe(65535)
+//     expect(
+//       await ptse(`
+// [memory mem 1]
 
-[let [p [i32 16]]
-  [intrinsic f64.store mem 0 8 p [f64 1.9]]
-  [intrinsic f64.load mem 0 8 p]]
-`),
-    ).toBe(1.9)
+// [let [p [i32 16]]
+//   [intrinsic f64.store mem 0 8 p [f64 1.9]]
+//   [intrinsic f64.load mem 0 8 p]]
+// `),
+//     ).toBe(1.9)
 
-    expect(
-      await ptse(`
-[memory mem 1]
+//     expect(
+//       await ptse(`
+// [memory mem 1]
 
-[let [p [i32 16]]
-  [intrinsic i32.store mem 0 1 p [i32 2147483647]]
-  [intrinsic i32.load mem 0 1 p]]
-`),
-    ).toBe(2147483647)
-    expect(
-      await ptse(`
-  [memory mem 1]
+// [let [p [i32 16]]
+//   [intrinsic i32.store mem 0 1 p [i32 2147483647]]
+//   [intrinsic i32.load mem 0 1 p]]
+// `),
+//     ).toBe(2147483647)
+//     expect(
+//       await ptse(`
+//   [memory mem 1]
 
-  [intrinsic memory.size mem]
-  `),
-    ).toBe(1)
-    expect(
-      await ptse(`
-  [memory mem 1]
+//   [intrinsic memory.size mem]
+//   `),
+//     ).toBe(1)
+//     expect(
+//       await ptse(`
+//   [memory mem 1]
 
-  [intrinsic memory.grow mem [i32 2]]
-  `),
-    ).toBe(1)
-    expect(
-      await ptse(`
-  [memory mem 1]
+//   [intrinsic memory.grow mem [i32 2]]
+//   `),
+//     ).toBe(1)
+//     expect(
+//       await ptse(`
+//   [memory mem 1]
 
-  [do
-    [intrinsic memory.grow mem [i32 2]]
-    [intrinsic memory.size mem]]
-  `),
-    ).toBe(3)
-  })
+//   [do
+//     [intrinsic memory.grow mem [i32 2]]
+//     [intrinsic memory.size mem]]
+//   `),
+//     ).toBe(3)
+//   })
 
-  test('data segments', async() => {
-    expect(
-      await ptse(`
-  [memory mem 1]
+//   test('files', async () => {
+//     const spyConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {})
+//     expect(
+//       await ptse(`
+// [memory mem 1]
 
-  [data active mem [i32 16] [bytes 0x39 0x05 0x00 0x00]]
+// [import ./runtime-lib/files.js open [func [word] file-descriptor]]
+// [import ./runtime-lib/files.js close [func [file-descriptor] [tuple]]]
+// [import ./runtime-lib/files.js read-file-memory [func [file-descriptor memory i32 i32] i32]]
+// [import ./runtime-lib/host.js memory-log-as-string [func [memory i32 i32] [tuple]]]
 
-  [intrinsic i32.load mem 0 4 [i32 16]]
-  `),
-    ).toBe(1337)
-    expect(
-      await ptse(`
-  [memory mem 1]
+// [defn file-test []
+//   [let [fd [open [word hello.wuns]]
+//         s [i32 100]
+//         p [i32 16]
+//         r [read-file-memory fd mem p s]]
+//     [close fd]
+//     [memory-log-as-string mem p r]]]
 
-  [data active mem [i32 16] [i32 1337]]
-
-  [intrinsic i32.load mem 0 4 [i32 16]]
-  `),
-    ).toBe(1337)
-  })
-
-  test('files', async () => {
-    const spyConsoleLog = vi.spyOn(console, 'log').mockImplementation(() => {})
-    expect(
-      await ptse(`
-[memory mem 1]
-
-[import ./runtime-lib/files.js open [func [word] file-descriptor]]
-[import ./runtime-lib/files.js close [func [file-descriptor] [tuple]]]
-[import ./runtime-lib/files.js read-file-memory [func [file-descriptor memory i32 i32] i32]]
-[import ./runtime-lib/host.js memory-log-as-string [func [memory i32 i32] [tuple]]]
-
-[defn file-test []
-  [let [fd [open [word hello.wuns]]
-        s [i32 100]
-        p [i32 16]
-        r [read-file-memory fd mem p s]]
-    [close fd]
-    [memory-log-as-string mem p r]]]
-
-[file-test]
-      `),
-    ).toBe(undefined)
-    expect(spyConsoleLog).toHaveBeenCalledWith('hello wuns')
-    spyConsoleLog.mockRestore()
-  })
+// [file-test]
+//       `),
+//     ).toBe(undefined)
+//     expect(spyConsoleLog).toHaveBeenCalledWith('hello wuns')
+//     spyConsoleLog.mockRestore()
+//   })
 
   // test('size-of', async () => {
   //   expect(await ptse('[size-of i32]')).toBe(4)
