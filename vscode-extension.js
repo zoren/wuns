@@ -166,10 +166,6 @@ const makeProvideDocumentSemanticTokensForms = async () => {
       intrinsic: (_headWord, tail) => {
         pushToken(tail[0], tokenTypeOperator)
       },
-      'type-anno': (_headWord, tail) => {
-        goExp(tail[0])
-        goType(tail[1])
-      },
     }
     const topSpecialForms = {
       defn: (headWord, tail) => {
@@ -195,9 +191,6 @@ const makeProvideDocumentSemanticTokensForms = async () => {
       },
       load: (_headWord, tail) => {
         if (tail.length === 1 && tryGetFormWord(tail[0])) pushToken(tail[0], stringTokenType)
-      },
-      export: (_headWord, tail) => {
-        for (const form of tail) pushToken(form, variableTokenType)
       },
       do: (_headWord, tail) => {
         for (const form of tail) goTop(form)
