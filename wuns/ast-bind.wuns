@@ -745,11 +745,7 @@
               [logq-abort direct call at top not supported]]]]]]
       [func form-to-ast [lstack form]
         [let
-          [report-error [func r [msg] [push-error form msg]]
-           assert-empty-stack [func aes []
-            [match lstack
-              [local-stack/empty] [do]
-              [local-stack/frame lvars lctx] [report-error [quote [not allowed in local context]]]]]]
+          [report-error [func r [msg] [push-error form msg]]]
           [insert-form form
           [match form
           [form/word w]
