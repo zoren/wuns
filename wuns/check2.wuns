@@ -59,7 +59,6 @@
 [def type-form [make-type [word form]]]
 
 [defn type-list [elem-type] [make-type [word list] elem-type]]
-[defn type-atom [elem-type] [make-type [word atom] elem-type]]
 
 [def type-empty-tuple [make-type [word tuple]]]
 
@@ -88,6 +87,32 @@
         [set-type-var-kind-to-type tv t2]
         t2]]
     t0]]
+
+[defn ctype-to-form [ct]
+  [match [normalize-type ct]
+    [ctype/var tv]
+    [match [atom-get [type-var/kind tv]]
+      [type-var-kind/word w] [form/word w]
+      [type-var-kind/linked -]
+      [logq-abort ctype-to-form unexpected linked type variable type should have been normalized]]
+
+    [ctype/inst inst-type]
+    [match inst-type
+      [inst-type/func ft]
+      [flist
+        [quote func]
+        [form/list
+          [if-let [rp [func-type/rest-param-opt ft]]
+              [concat
+                [list-map param [func-type/params ft] [ctype-to-form param]]
+                [list [quote ..] [ctype-to-form rp]]]
+              [list-map param [func-type/params ft] [ctype-to-form param]]]]
+        [ctype-to-form [func-type/result ft]]]
+
+      [inst-type/apply type-name type-args]
+      [flist
+        [form/word type-name]
+        [form/list [list-map targ type-args [ctype-to-form targ]]]]]]]
 
 [defn member-type-var-list [set t]
   [todo can we just use set-has here]
@@ -279,9 +304,6 @@
 [defn make-local-context [var-values lstack kind]
   [local-stack/frame lstack [local-context var-values kind]]]
 
-[defn try-get-local-var-type [local-ctx var-name]
-  [try-get-local local-ctx var-name]]
-
 [defn instantiate-syntax-type [type-var-env outer-syntax-type]
   [[func go [syntax-type]
     [match syntax-type
@@ -374,7 +396,7 @@
   [generate-fresh-type-var-atom [check-context/type-var-counter gctx] level]]
 
 [defn try-get-var-type [gctx local-ctx var-name]
-  [if-let [ltype [try-get-local-var-type local-ctx var-name]]
+  [if-let [ltype [try-get-local local-ctx var-name]]
     [option/some ltype]
     [try-get [check-context/def-var-types gctx] var-name]]]
 
@@ -382,6 +404,8 @@
   [let [info [check-context/syntax-info gctx]
         opt-form [[syntax-info/try-get-form info] [to-js-value bst]]]
     [for-each error [unify t1 t2]
+      [log [ctype-to-form t1]]
+      [log [ctype-to-form t2]]
       [report-fn gctx error opt-form]]]]
 
 [defn is-syntactic-value [bform]
@@ -399,66 +423,6 @@
   [record
     [check-exp [func [bexp] ctype]]
     [check-top [func [btop] [tuple]]]]]
-
-[defn make-get-ctype-from-form-or-annotation [type-annotations]
-  [func go [bform]
-    [match bform
-      [bexp/literal l]
-      [match l
-        [literal/i32 i] type-i32
-        [literal/f64 f] type-f64
-        [literal/word w] type-word]
-
-      [bexp/intrinsic inst-name ica]
-      [match ica
-        [intrinsic-args/bin a b]
-        [ifs
-          [is-i32-bin-inst [syntax-word/word inst-name]]
-          type-i32
-
-          [is-f64-bin-inst [syntax-word/word inst-name]]
-          type-f64
-
-          [is-f64-comp-inst [syntax-word/word inst-name]]
-          type-i32
-
-          [logq-abort bin intrinsic not implemented]]
-
-        [intrinsic-args/load memargs addr]
-        [switch [syntax-word/word inst-name]
-          [[word i32.load] [word i32.load8-u]] type-i32
-          [[word f64.load]] type-f64
-
-          [logq-abort load intrinsic not implemented]]
-
-        [intrinsic-args/store memargs addr value]
-        type-empty-tuple
-
-        [intrinsic-args/none]
-        type-empty-tuple
-
-        [logq-abort intrinsic not recognized]]
-
-      [bexp/do forms]
-      [if [is-empty forms]
-        type-empty-tuple
-        [go [last forms]]]
-
-      [bexp/let bindings forms]
-      [if [is-empty forms]
-        type-empty-tuple
-        [go [last forms]]]
-
-      [bexp/loop bindings forms]
-      [if [is-empty forms]
-        type-empty-tuple
-        [go [last forms]]]
-
-      [if-let [anno [try-get type-annotations [to-js-value bform]]]
-          anno
-          [do
-            [log bform]
-            [logq-abort get-ctype-from-form-or-annotation expected an annotation]]]]]]
 
 [defn make-checker [gctx]
   [letfn [
@@ -682,8 +646,7 @@
                           param-map [type-def/param-map t-def]
                           param-types [pair/snd ctor]
                           growable-params [growable-list]]
-                      [assert [eq [size param-types] [size match-params]] match pattern and union ctor arity mismatch]
-                      [for i 0 [size match-params]
+                      [for i 0 [min [size param-types] [size match-params]]
                         [let [pattern-var [at match-params i]
                               param-type [generate-fresh-type-var gctx level]
                               param-type-scheme [mk-empty-type-scheme param-type]]
@@ -727,7 +690,7 @@
           [btop/type decls]
           [let
             [types [check-context/types gctx]
-            def-var-types [check-context/def-var-types gctx]]
+             def-var-types [check-context/def-var-types gctx]]
             [for-each decl decls
               [let [sname [type-decl/name decl]
                     name-word [syntax-word/word sname]]
@@ -787,10 +750,6 @@
                 [mk-empty-type-scheme value-type]]]
               [set-kv-map [check-context/def-var-types gctx] [syntax-word/word var] general-val-type]]
 
-          [btop/memory name init-size opt-max]
-          [do
-            [set-kv-map [check-context/def-var-types gctx] [syntax-word/word name] [mk-empty-type-scheme type-memory]]]
-
           [btop/defunc kind f]
           [let
             [fkind
@@ -809,9 +768,6 @@
                     t [specialize-type-scheme [check-context/type-var-counter gctx] 0 type-scheme]]
                 [annotate gctx e t]]]]
 
-          [btop/data-active mem-name mem-addr data]
-          [do]
-
           [btop/do btops]
           [for-each btop btops
             [check-top btop]]
@@ -822,7 +778,10 @@
           [btop/import module-name import-name bts]
           [let [inst-type [instantiate-syntax-type-scheme [check-context/type-var-counter gctx] 1 bts]
                 general-val-type [generalize 0 inst-type]]
-            [set-kv-map [check-context/def-var-types gctx] [syntax-word/word import-name] general-val-type]]]]]
+            [set-kv-map [check-context/def-var-types gctx] [syntax-word/word import-name] general-val-type]]
+
+          [btop/exp e]
+          [go 0 [local-stack/empty] e]]]]
       [checker
         [func check-exp [bexp] [go 0 [local-stack/empty] bexp]]
         check-top]]]
@@ -938,7 +897,3 @@
            ctop [checker/check-top [make-checker gctx]]]
           [for-each btop btops [ctop btop]]
           [pair bind-errors [clone-growable-to-frozen-list [check-context/messages gctx]]]]]]]]
-
-[export check-forms check-file bind-type-check-forms]
-
-[export make-global-context-from-syntax-info make-checker]
