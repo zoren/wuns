@@ -91,6 +91,8 @@ const word_to_byte_array = (word) => new TextEncoder().encode(wordValue(word))
 export { word_to_byte_array as 'word-to-byte-array' }
 const i32_to_byte_array = (i) => new Uint8Array(new Int32Array([i]).buffer)
 export { i32_to_byte_array as 'i32-to-byte-array' }
+const f64_to_byte_array = (f) => new Uint8Array(new Float64Array([f]).buffer)
+export { f64_to_byte_array as 'f64-to-byte-array' }
 
 export const size = (list) => {
   if (isList(list)) return list.length
@@ -243,6 +245,13 @@ const word_to_int = (word) => {
   return i
 }
 export { word_to_int as 'word-to-int' }
+const word_to_f64 = (word) => {
+  if (!isWord(word)) throw new Error('word-to-f64 expects word')
+  const f = +wordValue(word)
+  if (Number.isNaN(f)) throw new Error('word-to-f64 expects number')
+  return f
+}
+export { word_to_f64 as 'word-to-f64' }
 export const slice = (list, start, end) => {
   if (!isList(list)) throw new Error('slice expects list')
   if (!isSigned32BitInteger(start)) throw new Error('slice expects number: ' + start)

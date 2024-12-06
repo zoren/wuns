@@ -214,6 +214,7 @@
 
 [import ./runtime-lib/host.js int-to-word [func [i32] word]]
 [import ./runtime-lib/host.js word-to-int [func [word] i32]]
+[import ./runtime-lib/host.js word-to-f64 [func [word] f64]]
 
 [defn i32-to-form-word [i] [form/word [int-to-word i]]]
 
@@ -524,6 +525,7 @@
 [import ./runtime-lib/host.js byte-array-log-as-string [func [byte-array] [tuple]]]
 [import ./runtime-lib/host.js word-to-byte-array [func [word] byte-array]]
 [import ./runtime-lib/host.js i32-to-byte-array [func [i32] byte-array]]
+[import ./runtime-lib/host.js f64-to-byte-array [func [f64] byte-array]]
 [import ./runtime-lib/host.js memory-log-as-string [func [memory i32 i32] [tuple]]]
 
 [defn byte-array-set-byte-array [ba offset src]
