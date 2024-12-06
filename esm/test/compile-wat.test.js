@@ -1,8 +1,31 @@
 import { test, expect } from 'vitest'
+import { parseString } from '../core.js'
+import { makeJSCompilingEvaluator, CompileError } from '../compiler-js.js'
 
-import { makeStringToInst } from './wat-compile-util.js'
+const filename = 'compile-wat.wuns'
 
-const stringToInst = await makeStringToInst()
+import formsString from '../../wuns/compile-wat.wuns?raw'
+
+const { evalTops, getDef } = makeJSCompilingEvaluator()
+try {
+  await evalTops(parseString(formsString, filename))
+} catch (e) {
+  if (e instanceof CompileError) {
+    console.error(e, e.form ?? 'no form')
+    // console.error(e.form)
+  }
+  throw e
+}
+
+const translateFormsToModule = getDef('translate-top-forms-to-module')
+const translateFormsToWatBytes = getDef('translate-top-forms-to-wat-bytes')
+
+const stringToInst = async (s, importObject) => {
+  const forms = parseString(s, 'test-content')
+  const module = translateFormsToModule(forms)
+  const { exports } = new WebAssembly.Instance(module, importObject)
+  return exports
+}
 
 test.each([
   ['[f64 1.5]', 1.5],
@@ -84,7 +107,7 @@ test('loop', async () => {
 
 test('memory', async () => {
   const inst = await stringToInst(`
-[memory mem 1]
+[memory i32 mem 1]
 [defn get [p] [intrinsic i32.load mem 0 4 p]]
 [defn set [p v] [intrinsic i32.store mem 0 4 p v]]
 [export get set]`)
@@ -99,7 +122,7 @@ test('memory', async () => {
 
 test('hash', async () => {
   const inst = await stringToInst(`
-[memory mem 1]
+[memory i32 mem 1]
 [def fnv-prime [i32 16777619]]
 [def fnv-offset-basis [i32 -2128831035]]
 
@@ -136,7 +159,7 @@ test('hash', async () => {
 
 test('data i32', async () => {
   const inst = await stringToInst(`
-[memory mem 1]
+[memory i32 mem 1]
 
 [data active mem [i32 16] [i32 -559038737]]
 
@@ -148,7 +171,7 @@ test('data i32', async () => {
 
 test('data bytes', async () => {
   const inst = await stringToInst(`
-[memory mem 1]
+[memory i32 mem 1]
 
 [data active mem [i32 16] [bytes 0xef 0xbe 0xad 0xde]]
 
@@ -161,7 +184,7 @@ test('data bytes', async () => {
 test('deref', async () => {
   {
     const inst = await stringToInst(`
-    [memory mem 1]
+    [memory i32 mem 1]
     [data active mem [i32 16] [i32 7]]
     [defn f []
       [deref
@@ -169,10 +192,20 @@ test('deref', async () => {
     [export f]`)
     expect(inst.f()).toBe(7)
   }
-
+  {
+    const forms = parseString(`
+    [memory i64 mem 1]
+    [data active mem [i64 16] [i32 7]]
+    [defn f []
+      [deref
+        [cast [pointer mem i32] [i64 16]]]]
+    [export f]`, 'test-content')
+    // for now we cannot run memory64 so we just check it's valid
+    translateFormsToWatBytes(forms)
+  }
   {
     const inst = await stringToInst(`
-    [memory mem 1]
+    [memory i32 mem 1]
     [data active mem [i32 16] [f64 1.9]]
     [defn f []
       [deref
@@ -180,7 +213,6 @@ test('deref', async () => {
     [export f]`)
     expect(inst.f()).toBe(1.9)
   }
-
 })
 
 // test('hash word', async () => {

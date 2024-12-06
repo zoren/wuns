@@ -16,6 +16,8 @@
 [type wat-inst []
   [union
     [i32.const word]
+    [i64.const word]
+    [f32.const word]
     [f64.const word]
     [local.get word]
     [local.set word wat-inst]
@@ -54,8 +56,14 @@
   [union
     [active word wat-inst byte-array]]]
 
+[type memory-kind []
+  [union
+    [i32]
+    [i64]]]
+
 [type wat-memory []
   [record
+    [kind memory-kind]
     [name word]
     [initial i32]
     [maximum [option i32]]]]
@@ -177,6 +185,8 @@
 [type llliteral []
   [union
     [i32 syntax-word]
+    [i64 syntax-word]
+    [f32 syntax-word]
     [f64 syntax-word]]]
 
 [type lltype []
@@ -338,10 +348,16 @@
             [[word i32]]
             [llexp/literal [llliteral/i32 [sword [get-arg 0]]]]
 
+            [[word i64]]
+            [llexp/literal [llliteral/i64 [sword [get-arg 0]]]]
+
+            [[word f32]]
+            [llexp/literal [llliteral/f32 [sword [get-arg 0]]]]
+
             [[word f64]]
             [llexp/literal [llliteral/f64 [sword [get-arg 0]]]]
 
-            [[word i64] [word f32] [word v128] [word word]]
+            [[word v128] [word word]]
             [logq-abort form-to-llexp not implemented [identity first-form]]
 
             [[word intrinsic]]
@@ -484,9 +500,14 @@
           [form/list fl]
           [logq-abort form-to-llexp direct calls not implemented]]]]]]
 
+[def type-f32 [make-type [word f32]]]
+[def type-i64 [make-type [word i64]]]
+
 [defn llliteral-to-type [l]
   [match l
     [llliteral/i32 -] type-i32
+    [llliteral/i64 -] type-i64
+    [llliteral/f32 -] type-f32
     [llliteral/f64 -] type-f64
     [logq-abort llliteral-to-type not implemented]]]
 
@@ -693,6 +714,7 @@
     [llexp/cast cast-type value]
     [let
       [tv [infer-llexp gctx level lctx value]]
+      [todo when casting to pointer we should check if the value is i32 or i64 depending on the memory]
       [llinstantiate-syntax-type [transient-kv-map] cast-type]]
 
     [llexp/deref value]
@@ -780,7 +802,7 @@
 
 [type lltop []
   [union
-    [memory syntax-word syntax-word [option syntax-word]]
+    [memory syntax-word memory-kind syntax-word [option syntax-word]]
     [data-active syntax-word llexp [list data]]
     [def syntax-word llexp]
     [defn syntax-word [list syntax-word] [list llexp]]
@@ -818,11 +840,15 @@
                   [logq-abort form-to-lltop data kind not recognized]]]]]]
 
         [[word memory]]
-        [let [mem-name [sword [get-arg 0]]]
-          [set-ll-def ctx [get-arg 0] [lldef-desc/memory]]
+        [let [mem-name [sword [get-arg 1]]]
+          [set-ll-def ctx [get-arg 1] [lldef-desc/memory]]
           [lltop/memory
             mem-name
-            [sword [get-arg 1]]
+            [switch [form-to-word [get-arg 0]]
+              [[word i32]] [memory-kind/i32]
+              [[word i64]] [memory-kind/i64]
+              [logq-abort form-to-lltop memory kind not recognized]]
+            [sword [get-arg 2]]
             [if [lt-s n-of-args 3] [option/none] [option/some [sword [get-arg 3]]]]]]
 
         [[word def]]
@@ -871,7 +897,7 @@
 
 [defn infer-lltop [gctx lltop]
   [match lltop
-    [lltop/memory mem-name mem-size mem-export]
+    [lltop/memory mem-name mem-kind mem-size mem-export]
     [do]
 
     [lltop/data-active mem-name mem-expr datas]
@@ -1023,7 +1049,10 @@
       [llexp/literal l]
       [match l
         [llliteral/i32 i] [wat-inst/i32.const [syntax-word/word i]]
-        [llliteral/f64 f] [wat-inst/f64.const [syntax-word/word f]]]
+        [llliteral/i64 i] [wat-inst/i64.const [syntax-word/word i]]
+        [llliteral/f32 f] [wat-inst/f32.const [syntax-word/word f]]
+        [llliteral/f64 f] [wat-inst/f64.const [syntax-word/word f]]
+        ]
 
       [llexp/do forms]
       [wat-inst/instructions [go-forms forms]]
@@ -1100,9 +1129,10 @@
         [log form]
         [logq-abort not implemented translate-form]]]]]
   [match bform
-    [lltop/memory name init-size opt-max]
+    [lltop/memory name kind init-size opt-max]
     [push [wat-output/memories output]
       [wat-memory
+        kind
         [syntax-word/word name]
         [word-to-int [syntax-word/word init-size]]
         [if-let [max opt-max]
@@ -1353,6 +1383,12 @@
     [wat-inst/i32.const w]
     [wat-list [wat/word [word i32.const]] [wat/word w]]
 
+    [wat-inst/i64.const w]
+    [wat-list [wat/word [word i64.const]] [wat/word w]]
+
+    [wat-inst/f32.const w]
+    [wat-list [wat/word [word f32.const]] [wat/word w]]
+
     [wat-inst/f64.const w]
     [wat-list [wat/word [word f64.const]] [wat/word w]]
 
@@ -1424,6 +1460,9 @@
   [wat-list
     [wat/word [word memory]]
     [wat/dollar [wat-memory/name mem]]
+    [wat/word [match [wat-memory/kind mem]
+      [memory-kind/i32] [word i32]
+      [memory-kind/i64] [word i64]]]
     [wat/word [int-to-word [wat-memory/initial mem]]]]]
 
 [defn global-to-wat [global]
@@ -1540,12 +1579,13 @@
 
 [import ./runtime-lib/wabt.js wat-to-byte-array [func [byte-array] byte-array]]
 
-[defn output-to-module [output]
+[defn output-to-wat-bytes [output]
   [let [p [empty-printer [i32 10000]]]
     [print-wat p [output-to-wat output]]
-    [let [ba [printer-to-byte-array p]
-          module [byte-array-to-wasm-module [wat-to-byte-array ba]]]
-      module]]]
+    [wat-to-byte-array [printer-to-byte-array p]]]]
+
+[defn translate-top-forms-to-wat-bytes [forms]
+  [output-to-wat-bytes [translate-top-forms-sync forms]]]
 
 [defn translate-top-forms-to-module [forms]
-  [output-to-module [translate-top-forms-sync forms]]]
+  [byte-array-to-wasm-module [output-to-wat-bytes [translate-top-forms-sync forms]]]]
