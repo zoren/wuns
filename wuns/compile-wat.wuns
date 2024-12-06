@@ -93,6 +93,7 @@
       [inst-type/apply type-name type-args]
       [switch type-name
         [[word i32]] [wat-type-basic/i32]
+        [[word pointer]] [wat-type-basic/i32]
         [[word f64]] [wat-type-basic/f64]
         [do [log it] [logq-abort not implemented translate-type inst-type/apply]]]
 
@@ -115,7 +116,7 @@
 
 [type lldef-desc []
   [union
-    [memory]
+    [memory memory-kind]
     [any]
     [func i32]]]
 
@@ -840,14 +841,16 @@
                   [logq-abort form-to-lltop data kind not recognized]]]]]]
 
         [[word memory]]
-        [let [mem-name [sword [get-arg 1]]]
-          [set-ll-def ctx [get-arg 1] [lldef-desc/memory]]
+        [let [mem-name [sword [get-arg 1]]
+              kind
+              [switch [form-to-word [get-arg 0]]
+                [[word i32]] [memory-kind/i32]
+                [[word i64]] [memory-kind/i64]
+                [logq-abort form-to-lltop memory kind not recognized]]]
+          [set-ll-def ctx [get-arg 1] [lldef-desc/memory kind]]
           [lltop/memory
             mem-name
-            [switch [form-to-word [get-arg 0]]
-              [[word i32]] [memory-kind/i32]
-              [[word i64]] [memory-kind/i64]
-              [logq-abort form-to-lltop memory kind not recognized]]
+            kind
             [sword [get-arg 2]]
             [if [lt-s n-of-args 3] [option/none] [option/some [sword [get-arg 3]]]]]]
 
@@ -1115,8 +1118,17 @@
               [switch ttarget-name
                 [[word i32]] [word i32.load]
                 [[word f64]] [word f64.load]
+                [[word pointer]]
+                [if-let [dd [try-get [llctx/lldef-ctx [llctx-from-translate tctx]] mem-name]]
+                  [match dd
+                    [lldef-desc/memory kind]
+                    [match kind
+                      [memory-kind/i32] [word i32.load]
+                      [memory-kind/i64] [word i64.load]]
 
-                [do [logq-abort not implemented translate-type inst-type/apply]]]]
+                    [logq-abort not implemented translate-top-form deref inst-type/apply]]
+                  [logq-abort not implemented translate-top-form deref inst-type/apply]]
+                [logq-abort not implemented translate-top-form deref inst-type/apply]]]
         [wat-inst/load
           [wasm-name-to-wat-byte-array load-inst-name]
           [wat-inst-memargs
@@ -1212,7 +1224,7 @@
       [let [export-kind
             [if-let [dd [try-get [llctx/lldef-ctx [llctx-from-translate tctx]] [syntax-word/word sname]]]
               [match dd
-                [lldef-desc/memory]
+                [lldef-desc/memory kind]
                 [export-kind/memory]
 
                 [lldef-desc/func arity]
