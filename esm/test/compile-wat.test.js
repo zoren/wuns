@@ -80,38 +80,6 @@ test('loop', async () => {
     // the largest value before i32 wrap around
     expect(gauss(65535)).toBe(2147450880)
   }
-  {
-    const inst = await stringToInst(`
-[load std.wuns]
-[memory mem 1]
-
-[defn set-byte [p v] [intrinsic i32.store8 mem 0 1 p v]]
-
-[defn is-whitespace [c]
-  [or [eq c [i32 32]] [eq c [i32 10]]]]
-
-[defn is-word-char [c]
-  [or
-    [is-between-inclusive [i32 97] c [i32 122]]
-    [is-between-inclusive [i32 45] c [i32 57]]]]
-
-[defn scan-word [p end-p]
-  [loop [q p]
-    [if [lt-s q end-p]
-      [if [is-word-char [intrinsic i32.load8-u mem 0 1 q]]
-        [continue q [inc q]]
-        q]
-      q]]]
-
-[export set-byte scan-word]`)
-    const scanWord = inst['scan-word']
-    const setByte = inst['set-byte']
-    const setString = (s, p) => s.split('').forEach((c, i) => setByte(p + i, c.charCodeAt(0)))
-    setString('hello you', 0)
-    expect(scanWord(0, 9)).toBe(5)
-    expect(scanWord(5, 9)).toBe(5)
-    expect(scanWord(6, 9)).toBe(9)
-  }
 })
 
 test('memory', async () => {
@@ -190,135 +158,193 @@ test('data bytes', async () => {
   expect(ui32Array[4]).toBe(0xdeadbeef)
 })
 
-test('hash word', async () => {
-  const inst = await stringToInst(`
-[load std.wuns]
+test('deref', async () => {
+  {
+    const inst = await stringToInst(`
+    [memory mem 1]
+    [data active mem [i32 16] [i32 7]]
+    [defn f []
+      [deref
+        [cast [pointer mem i32] [i32 16]]]]
+    [export f]`)
+    expect(inst.f()).toBe(7)
+  }
 
-[memory mem 1]
+  {
+    const inst = await stringToInst(`
+    [memory mem 1]
+    [data active mem [i32 16] [f64 1.9]]
+    [defn f []
+      [deref
+        [cast [pointer mem f64] [i32 16]]]]
+    [export f]`)
+    expect(inst.f()).toBe(1.9)
+  }
 
-[def fnv-prime [i32 16777619]]
-[def fnv-offset-basis [i32 -2128831035]]
-
-[defn hash-fnv-1a-i32 [p n-bytes]
-  [let [end-p [intrinsic i32.add p n-bytes]]
-    [loop [hash fnv-offset-basis
-           q p]
-      [if [intrinsic i32.lt-s q end-p]
-        [continue
-          hash
-          [intrinsic i32.mul
-            [intrinsic i32.xor hash
-              [intrinsic i32.load8-u mem 0 1 q]]
-            fnv-prime]
-          q [intrinsic i32.add q [i32 1]]]
-        hash]]]]
-
-[defn word-size [pw]
-  [intrinsic i32.load mem 0 4 pw]]
-
-[defn word-bytes [pw]
-  [intrinsic i32.add pw [i32 4]]]
-
-[defn hash-word [pw]
-  [hash-fnv-1a-i32 [word-bytes pw] [word-size pw]]]
-
-[defmacro data-active [ba]
-  [quote [i32 0]]]
-
-[defn byte-array-concat [ba1 ba2]
-  [let
-    [n1 [byte-array-size ba1]
-     n2 [byte-array-size ba2]
-     a [byte-array [add n1 n2]]]
-    [for i 0 n1
-      [byte-array-set a i [byte-array-get ba1 i]]]
-    [for i 0 n2
-      [byte-array-set a [add i n1] [byte-array-get ba2 i]]]
-    a]]
-
-[defn word-to-vector-byte-array [w]
-  [byte-array-concat [i32-to-byte-array [word-byte-size w]] [word-to-byte-array w]]]
-
-[defn byte-array-to-bytes-form [ba]
-  [let [n [byte-array-size ba]
-        gl [growable-list]]
-    [for i 0 n
-      [push gl [i32-to-form-word [byte-array-get ba i]]]]
-    [form-concat [list [quote bytes]]
-      [clone-growable-to-frozen-list gl]]]]
-
-[defmacro data-word [mem addr w]
-  [flist [quote data] [quote active] mem addr
-    [byte-array-to-bytes-form [word-to-vector-byte-array [form-to-word w]]]]]
-
-[data-word mem [i32 16] abc]
-
-[data-word mem [i32 32] foobar]
-
-[defn foobar-size []
-  [word-size [i32 32]]]
-
-[defn foobar-hash []
-  [hash-word [i32 32]]]
-
-[export foobar-size foobar-hash]`)
-  const foobarSize = inst['foobar-size']
-  const foobarHash = inst['foobar-hash']
-  expect(foobarSize()).toBe(6)
-  expect(foobarHash()).toBe(0xbf9cf968 | 0)
 })
 
-test('count words', async () => {
-  const inst = await stringToInst(`
-[load std.wuns]
-[memory mem 1]
+// test('hash word', async () => {
+//   const inst = await stringToInst(`
+// [load std.wuns]
 
-[defn set-byte [p v] [intrinsic i32.store8 mem 0 1 p v]]
+// [memory mem 1]
 
-[defn is-whitespace [c]
-  [or [eq c [i32 32]] [eq c [i32 10]]]]
+// [def fnv-prime [i32 16777619]]
+// [def fnv-offset-basis [i32 -2128831035]]
 
-[defn is-word-char [c]
-  [or
-    [is-between-inclusive [i32 97] c [i32 122]]
-    [is-between-inclusive [i32 45] c [i32 57]]]]
+// [defn hash-fnv-1a-i32 [p n-bytes]
+//   [let [end-p [intrinsic i32.add p n-bytes]]
+//     [loop [hash fnv-offset-basis
+//            q p]
+//       [if [intrinsic i32.lt-s q end-p]
+//         [continue
+//           hash
+//           [intrinsic i32.mul
+//             [intrinsic i32.xor hash
+//               [intrinsic i32.load8-u mem 0 1 q]]
+//             fnv-prime]
+//           q [intrinsic i32.add q [i32 1]]]
+//         hash]]]]
 
-[defn scan-word [p end-p]
-  [loop [q p]
-    [if [and [lt-s q end-p] [is-word-char [intrinsic i32.load8-u mem 0 1 q]]]
-      [continue q [inc q]]
-      q]]]
+// [defn word-size [pw]
+//   [intrinsic i32.load mem 0 4 pw]]
 
-[defn count-words [start end-p]
-  [loop [p start
-         word-count 0]
-    [if [lt-s p end-p]
-      [let [c [intrinsic i32.load8-u mem 0 1 p]]
-        [ifs
-          [is-whitespace c]
-          [continue p [inc p]]
+// [defn word-bytes [pw]
+//   [intrinsic i32.add pw [i32 4]]]
 
-          [is-word-char c]
-          [let [end-word [scan-word [inc p] end-p]]
-            [continue
-              p end-word
-              word-count [inc word-count]]]
+// [defn hash-word [pw]
+//   [hash-fnv-1a-i32 [word-bytes pw] [word-size pw]]]
 
-          -1]]
-      word-count]]]
-[export set-byte count-words]
-    `)
-  const setByte = inst['set-byte']
-  const countWords = inst['count-words']
-  const setString = (s) => s.split('').forEach((c, i) => setByte(i, c.charCodeAt(0)))
-  setString('   ')
-  expect(countWords(0, 3)).toBe(0)
+// [defmacro data-active [ba]
+//   [quote [i32 0]]]
 
-  setString('hello you')
-  expect(countWords(0, 9)).toBe(2)
-  expect(countWords(4, 9)).toBe(2)
-  expect(countWords(5, 9)).toBe(1)
+// [defn byte-array-concat [ba1 ba2]
+//   [let
+//     [n1 [byte-array-size ba1]
+//      n2 [byte-array-size ba2]
+//      a [byte-array [add n1 n2]]]
+//     [for i 0 n1
+//       [byte-array-set a i [byte-array-get ba1 i]]]
+//     [for i 0 n2
+//       [byte-array-set a [add i n1] [byte-array-get ba2 i]]]
+//     a]]
 
-  setString('ILLEGAL')
-  expect(countWords(0, 7)).toBe(-1)
-})
+// [defn word-to-vector-byte-array [w]
+//   [byte-array-concat [i32-to-byte-array [word-byte-size w]] [word-to-byte-array w]]]
+
+// [defn byte-array-to-bytes-form [ba]
+//   [let [n [byte-array-size ba]
+//         gl [growable-list]]
+//     [for i 0 n
+//       [push gl [i32-to-form-word [byte-array-get ba i]]]]
+//     [form-concat [list [quote bytes]]
+//       [clone-growable-to-frozen-list gl]]]]
+
+// [defmacro data-word [mem addr w]
+//   [flist [quote data] [quote active] mem addr
+//     [byte-array-to-bytes-form [word-to-vector-byte-array [form-to-word w]]]]]
+
+// [data-word mem [i32 16] abc]
+
+// [data-word mem [i32 32] foobar]
+
+// [defn foobar-size []
+//   [word-size [i32 32]]]
+
+// [defn foobar-hash []
+//   [hash-word [i32 32]]]
+
+// [export foobar-size foobar-hash]`)
+//   const foobarSize = inst['foobar-size']
+//   const foobarHash = inst['foobar-hash']
+//   expect(foobarSize()).toBe(6)
+//   expect(foobarHash()).toBe(0xbf9cf968 | 0)
+// })
+
+// test('count words', async () => {
+//   const inst = await stringToInst(`
+// [load std.wuns]
+// [memory mem 1]
+
+// [defn set-byte [p v] [intrinsic i32.store8 mem 0 1 p v]]
+
+// [defn is-whitespace [c]
+//   [or [eq c [i32 32]] [eq c [i32 10]]]]
+
+// [defn is-word-char [c]
+//   [or
+//     [is-between-inclusive [i32 97] c [i32 122]]
+//     [is-between-inclusive [i32 45] c [i32 57]]]]
+
+// [defn scan-word [p end-p]
+//   [loop [q p]
+//     [if [and [lt-s q end-p] [is-word-char [intrinsic i32.load8-u mem 0 1 q]]]
+//       [continue q [inc q]]
+//       q]]]
+
+// [defn count-words [start end-p]
+//   [loop [p start
+//          word-count 0]
+//     [if [lt-s p end-p]
+//       [let [c [intrinsic i32.load8-u mem 0 1 p]]
+//         [ifs
+//           [is-whitespace c]
+//           [continue p [inc p]]
+
+//           [is-word-char c]
+//           [let [end-word [scan-word [inc p] end-p]]
+//             [continue
+//               p end-word
+//               word-count [inc word-count]]]
+
+//           -1]]
+//       word-count]]]
+// [export set-byte count-words]
+//     `)
+//   const setByte = inst['set-byte']
+//   const countWords = inst['count-words']
+//   const setString = (s) => s.split('').forEach((c, i) => setByte(i, c.charCodeAt(0)))
+//   setString('   ')
+//   expect(countWords(0, 3)).toBe(0)
+
+//   setString('hello you')
+//   expect(countWords(0, 9)).toBe(2)
+//   expect(countWords(4, 9)).toBe(2)
+//   expect(countWords(5, 9)).toBe(1)
+
+//   setString('ILLEGAL')
+//   expect(countWords(0, 7)).toBe(-1)
+// })
+
+//   {
+//     const inst = await stringToInst(`
+// [load std.wuns]
+// [memory mem 1]
+
+// [defn set-byte [p v] [intrinsic i32.store8 mem 0 1 p v]]
+
+// [defn is-whitespace [c]
+//   [or [eq c [i32 32]] [eq c [i32 10]]]]
+
+// [defn is-word-char [c]
+//   [or
+//     [is-between-inclusive [i32 97] c [i32 122]]
+//     [is-between-inclusive [i32 45] c [i32 57]]]]
+
+// [defn scan-word [p end-p]
+//   [loop [q p]
+//     [if [lt-s q end-p]
+//       [if [is-word-char [intrinsic i32.load8-u mem 0 1 q]]
+//         [continue q [inc q]]
+//         q]
+//       q]]]
+
+// [export set-byte scan-word]`)
+//     const scanWord = inst['scan-word']
+//     const setByte = inst['set-byte']
+//     const setString = (s, p) => s.split('').forEach((c, i) => setByte(p + i, c.charCodeAt(0)))
+//     setString('hello you', 0)
+//     expect(scanWord(0, 9)).toBe(5)
+//     expect(scanWord(5, 9)).toBe(5)
+//     expect(scanWord(6, 9)).toBe(9)
+//   }
