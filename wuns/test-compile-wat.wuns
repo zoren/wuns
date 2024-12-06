@@ -1,12 +1,5 @@
 [load compile-wat.wuns]
 
-[defmacro def-wasm-extern [name type]
-  [flist [quote import] [quote ./runtime-lib/wasm.js] name type]]
-
-[type wasm-module [] [union]]
-
-[def-wasm-extern byte-array-to-wasm-module [func [byte-array] wasm-module]]
-
 [type wasm-instance [] [union]]
 
 [def-wasm-extern wasm-instantiate [func [wasm-module [object js-value]] wasm-instance]]
@@ -20,14 +13,6 @@
 [defn get-export [wasm-inst export-name]
   [get [object-to-kv-map [wasm-get-export-object wasm-inst]] export-name]]
 
-[import ./runtime-lib/wabt.js wat-to-byte-array [func [byte-array] byte-array]]
-
-[defn output-to-module [output]
-  [let [p [empty-printer [i32 10000]]]
-    [print-wat p [output-to-wat output]]
-    [let [ba [printer-to-byte-array p]
-          module [byte-array-to-wasm-module [wat-to-byte-array ba]]]
-      module]]]
 [comment
 [defexpr trans-eval-form [form]
   [let
