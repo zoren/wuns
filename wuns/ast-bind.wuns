@@ -82,11 +82,6 @@
 [type bdefunc-kind []
   [union [func] [fexpr] [macro]]]
 
-[type data []
-  [union
-    [bytes [list syntax-word]]
-    [i32 [list syntax-word]]]]
-
 [type btop []
   [union
     [defunc bdefunc-kind bfunc]
@@ -95,9 +90,8 @@
     [do [list btop]]
     [export [list syntax-word]]
     [import syntax-word syntax-word btype-scheme]
-    [memory syntax-word syntax-word [option syntax-word]]
     [load syntax-word]
-    [data-active syntax-word bexp [list data]]
+    [exp bexp]
     ]]
 
 [defn bexp-recur [f]
@@ -156,7 +150,7 @@
     [let]
     [loop]
     [letfn]
-    [func-internal-self]]]
+    [func-internal-self [pair [list form] [option form]]]]]
 
 [type local-context-kind []
   [union
@@ -204,8 +198,7 @@
     [type]
     [union-ctor union-desc i32]
     [record-ctor] [record-proj record-desc i32]
-    [import syntax-word btype-scheme]
-    [memory i32]]]
+    [import syntax-word btype-scheme]]]
 
 [type diagnostic-severity []
   [union [error] [warning] [information] [hint]]]
@@ -287,9 +280,6 @@
           [if-let [btop [tgt name]]
             [do
               [match btop
-                [btop/memory name min-size opt-max-size]
-                [do]
-
                 [btop/def k bfunc]
                 [do]
 
@@ -306,9 +296,6 @@
       ]
     [for-each btop btops
       [match btop
-        [btop/data-active name bexp datas]
-        [push ddescs btop]
-
         [btop/export snames]
         [do
           [for-each sname snames
@@ -529,7 +516,7 @@
             lctx [local-context lvars [local-context-kind/func]]
             new-lstack [local-stack/frame lstack lctx]
             counter-atom [atom 0]]
-          [set-local lvars [second form-list] [local-var-kind/func-internal-self]]
+          [set-local lvars [second form-list] [local-var-kind/func-internal-self parsed-params]]
           [for-each param regular-param-forms
             [set-local lvars param [local-var-kind/param name [inc-atom counter-atom]]]]
           [when-let [rest-param opt-rest-param]
@@ -693,34 +680,6 @@
                       module-import
                       import-type]]]
 
-                [[word memory]]
-                [let
-                  [name-form [get-arg 0]
-                   mem-name [get-sword name-form]
-                   mem-min-size [get-sword [get-arg 1]]
-                   mem-index [inc-atom mem-counter-atom]]
-                  [set-def name-form [def-desc/memory mem-index]]
-                  [set-def-form name-form
-                    [btop/memory mem-name mem-min-size [option/none]]]]
-
-                [[word data]]
-                [let
-                  [mem-name [get-sword [get-arg 1]]]
-                  [btop/data-active
-                    mem-name
-                    [form-to-ast [local-stack/empty] [get-arg 2]]
-                    [list-map a [slice l 4 [size l]]
-                      [let [dl [get-list a]]
-                        [if [is-empty dl]
-                          [push-error a [quote [data is empty]]]
-                          [let [data-first [get-word [first dl]]]
-                            [switch data-first
-                              [[word bytes]]
-                              [data/bytes [list-map b [rest dl] [get-sword b]]]
-                              [[word i32]]
-                              [data/i32 [list-map b [rest dl] [get-sword b]]]
-                              [logq-abort form-to-top data kind not recognized]]]]]]]]
-
                 [if-let [ddesc [try-get def-ctx first-word]]
                   [do
                     [set-kv-map node-to-def-desc [get-sword first-form] ddesc]
@@ -732,7 +691,7 @@
                           [form-to-top [apply macro-func [rest l]]]
                           [logq-abort form-to-top macro not found]]
 
-                        [logq-abort form-to-top func/fexpr call at top level not supported]]
+                        [btop/exp [form-to-ast [local-stack/empty] form]]]
 
                       [do
                         [report-error [quote [call at top level not supported]]]
@@ -906,9 +865,9 @@
                             be [form-to-ast new-lstack [second p]]
                             ldesc [local-var-kind/loop]]
                         [if-let [ldesc [try-get-local lstack name-word]]
-                          [push-error name [quote [let var shadows local]]]
+                          [push-error name [quote [loop var shadows local]]]
                           [when-let [ddesc [try-get def-ctx name-word]]
-                            [push-error name [quote [let var shadows def]]]]]
+                            [push-error name [quote [loop var shadows def]]]]]
                         [set-local lvars name ldesc]
                         [pair sname be]]]
                     [list-map f [slice l 2 [size l]] [form-to-ast new-lstack f]]]]
@@ -971,7 +930,18 @@
                     [list-map f [slice l 2 [size l]] [form-to-ast new-lstack f]]]]
 
                 [if-let [ldesc [try-get-local lstack first-word]]
-                  [bexp/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]
+                  [do
+                    [match [pair/fst ldesc]
+                      [local-var-kind/func-internal-self parsed-params]
+                      [let [arity [size [pair/fst parsed-params]]]
+                        [when [lt-s n-of-args arity]
+                          [report-error [quote [too few args]]]]
+                        [if-let [rest-param [pair/snd parsed-params]]
+                          [do]
+                          [when [lt-s arity n-of-args]
+                            [report-error [quote [too many args]]]]]]
+                      [do]]
+                    [bexp/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]]
                   [if-let [ddesc [try-get def-ctx first-word]]
                     [do
                       [set-kv-map node-to-def-desc [get-sword first-form] ddesc]
@@ -1022,5 +992,3 @@
             [logq-abort bind-forms errors]]
 
           btops]]]]]
-
-[export mk-form-to-ast]
