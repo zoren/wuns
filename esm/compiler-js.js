@@ -8,7 +8,7 @@ import {
   wordToI32,
   makeFormList,
   getLocationFromForm,
-  print
+  print,
 } from './core.js'
 import { loadInstToType, storeInstToType, primtiveArrays, intrinsicsInfo } from './intrinsics.js'
 import { escapeIdentifier, jsExpToString, jsStmtToString } from './runtime-lib/js.js'
@@ -255,6 +255,9 @@ const expSpecialFormsExp = {
     if (tail.length !== 1) throw new CompileError('f64 expected one argument')
     const v = +getFormWord(tail[0])
     if (isNaN(v)) throw new CompileError('expected number')
+    const stringNum = v.toPrecision(21)
+    const normalized = parseFloat(stringNum)
+    if (normalized !== v) throw new CompileError('f64 precision loss')
     return jsNumber(v)
   },
   word: (tail) => {
@@ -460,11 +463,11 @@ const expSpecialFormsStmt = {
       branchStmts.push(compExpStmt(newCtx, brach, defEnv, true))
       cases.push({ fst: [jsString(tag)], snd: jsBlock(branchStmts) })
     }
-
+    const location = getLocationFromForm(forms[0])
     const defaultCase =
       forms.length % 2 === 0
         ? compExpStmt(lctx, forms.at(-1), defEnv, true)
-        : jsThrow(jsNew(jsCall(jsVar('Error'), [jsString('no match string')])))
+        : jsThrow(jsNew(jsCall(jsVar('Error'), [jsString('no match string: ' + location)])))
     const theSwitch = jsSwitch(jsSubscript(jsVar(tmpValueVarName), jsString('tag')), cases, defaultCase)
     stmts.push(theSwitch)
     return jsBlock(stmts)
@@ -810,9 +813,21 @@ export const makeJSCompilingEvaluator = () => {
     return f()
   }
   const evalTop = async (form) => {
-    const optJsExp = await compileTopDefEnv(topContext, form)
-    if (optJsExp === null) return
-    if (optJsExp) return await evalExpAsync(topContext, optJsExp)
+    try {
+      const optJsExp = await compileTopDefEnv(topContext, form)
+      if (optJsExp === null) return
+      if (optJsExp) return await evalExpAsync(topContext, optJsExp)
+    } catch (e) {
+      if (e instanceof CompileError) {
+        let errorForm = e.form
+        if (!errorForm) errorForm = form
+        const location = getLocationFromForm(errorForm)
+        console.error(e.message, location)
+        console.error(e)
+        return
+      }
+      throw e
+    }
   }
   const evalTops = async (forms) => {
     let result = null
