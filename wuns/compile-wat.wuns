@@ -320,9 +320,7 @@
 
 [defn form-to-llexp [ctx lstack form]
   [let
-    [
-      lldef-ctx [llctx/lldef-ctx ctx]
-     ]
+    [lldef-ctx [llctx/lldef-ctx ctx]]
     [match form
       [form/word w]
       [let [sname [sword form]
@@ -537,7 +535,7 @@
     [specialize-type-scheme [llcheck-context/type-var-counter gctx] level type-scheme]
     [do
       [log w]
-      [logq-abort [quote [llvariable not found]]]
+      [logq-abort llvariable not found [identity w]]
       [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]]]]
 
 [defn llunify-report [gctx t1 t2 bst]
@@ -945,7 +943,14 @@
         [do]]]
 
     [lltop/export es]
-    [do]
+    [let [bind-ctx [llcheck-context/bind-ctx gctx]
+          lldef-ctx [llctx/lldef-ctx bind-ctx]]
+      [for-each e es
+        [match [get lldef-ctx [syntax-word/word e]]
+          [lldef-desc/memory kind] [do]
+          [do
+            [llannotate gctx e [get-specialized-var gctx 0 [local-stack/empty] [syntax-word/word e]]]
+            [do]]]]]
 ]]
 
 [defn get-ctype [gctx bform]
@@ -1512,6 +1517,7 @@
             [match [pair/fst kind-pair]
               [export-kind/func] [word func]
               [export-kind/memory] [word memory]
+              [export-kind/global] [word global]
               [logq-abort export-to-wat unknown export kind]]]
           [wat/dollar [pair/snd kind-pair]]]]]]]
 

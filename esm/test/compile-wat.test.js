@@ -193,13 +193,16 @@ test('deref', async () => {
     expect(inst.f()).toBe(7)
   }
   {
-    const forms = parseString(`
+    const forms = parseString(
+      `
     [memory i64 mem 1]
     [data active mem [i64 16] [i32 7]]
     [defn f []
       [deref
         [cast [pointer mem i32] [i64 16]]]]
-    [export f]`, 'test-content')
+    [export f]`,
+      'test-content',
+    )
     // for now we cannot run memory64 so we just check it's valid
     translateFormsToWatBytes(forms)
   }
@@ -280,21 +283,34 @@ test('hash word', async () => {
 [defn hash-word [pw]
   [hash-fnv-1a-i32 [word-bytes pw] [word-size pw]]]
 
+[data active mem [i32 8] [i32 1] [bytes 97]]
+
 [data active mem [i32 16] [i32 3] [bytes 97 98 99]]
 
 [data active mem [i32 32] [i32 6] [bytes 102 111 111 98 97 114]]
 
-[defn foobar-size []
-  [word-size [i32 32]]]
+[def a [i32 8]]
 
-[defn foobar-hash []
-  [hash-word [i32 32]]]
+[def abc [i32 16]]
 
-[export foobar-size foobar-hash]`)
-  const foobarSize = inst['foobar-size']
-  const foobarHash = inst['foobar-hash']
-  expect(foobarSize()).toBe(6)
-  expect(foobarHash()).toBe(0xbf9cf968 | 0)
+[def foobar [i32 32]]
+
+[export a abc foobar word-size hash-word]`)
+  const a = inst.a.value
+  const abc = inst.abc.value
+  const foobar = inst.foobar.value
+
+  const wordSize = inst['word-size']
+  const hashWord = inst['hash-word']
+
+  expect(wordSize(a)).toBe(1)
+  expect(hashWord(a)).toBe(0xe40c292c | 0)
+
+  expect(wordSize(abc)).toBe(3)
+  expect(hashWord(abc)).toBe(0x1a47e90b)
+
+  expect(wordSize(foobar)).toBe(6)
+  expect(hashWord(foobar)).toBe(0xbf9cf968 | 0)
 })
 
 // test('count words', async () => {
