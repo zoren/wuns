@@ -148,7 +148,8 @@
     [call syntax-word [list llexp]]
 
     [cast lltype llexp]
-    [deref llexp]]]
+    [deref llexp]
+    [assign llexp llexp]]]
 
 [defn llexp-recur [f]
   [func go [bform]
@@ -193,6 +194,9 @@
 
         [llexp/deref target]
         [go target]
+
+        [llexp/assign target value]
+        [do [go target] [go value]]
 
         [do
           [log bform]
@@ -363,6 +367,13 @@
               [assert-n-args 1]
               [llexp/deref
                 [form-to-llexp ctx lstack [get-arg 0]]]]
+
+            [[word assign]]
+            [do
+              [assert-n-args 2]
+              [llexp/assign
+                [form-to-llexp ctx lstack [get-arg 0]]
+                [form-to-llexp ctx lstack [get-arg 1]]]]
 
             [do
               [if-let [ldesc [try-get-local lstack first-word]]
@@ -616,8 +627,16 @@
           pt [type-pointer t-mem t-res]]
       [llunify-report gctx pt [infer-llexp gctx level lctx value] value]
       [llannotate gctx value pt]
-      [llannotate gctx bform t-res]
-      t-res]
+      [llannotate gctx bform t-res]]
+
+    [llexp/assign target value]
+    [let [t-res [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
+          t-mem [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
+          pt [type-pointer t-mem t-res]]
+      [llunify-report gctx pt [infer-llexp gctx level lctx target] target]
+      [llunify-report gctx t-res [infer-llexp gctx level lctx value] value]
+      [llannotate gctx target pt]
+      [llannotate gctx bform type-empty-tuple]]
 
     [do
       [log bform]
@@ -1151,10 +1170,9 @@
       [llexp/cast cast-type value]
       [go value]
 
-      [llexp/deref value]
+      [llexp/deref target]
       [let
-        [tp [normalize-type [get-ctype cctx value]]
-         pt [get-apply-type [get-ctype cctx value]]]
+        [pt [get-apply-type [get-ctype cctx target]]]
         [assert [eq-word [pair/fst pt] [word pointer]]]
         [let [ptargs [pair/snd pt]
               tmem [first ptargs]
@@ -1182,6 +1200,40 @@
             mem-name
             [word 0]
             [word 1]]
+          [go target]]]]
+
+      [llexp/assign target value]
+      [let
+        [tp [normalize-type [get-ctype cctx target]]
+         pt [get-apply-type [get-ctype cctx target]]]
+        [assert [eq-word [pair/fst pt] [word pointer]]]
+        [let [ptargs [pair/snd pt]
+              tmem [first ptargs]
+              mem-name [pair/fst [get-apply-type [first [pair/snd [get-apply-type tmem]]]]]
+              ttarget [second ptargs]
+              ttarget-name [pair/fst [get-apply-type ttarget]]
+              load-inst-name
+              [switch ttarget-name
+                [[word i32]] [word i32.store]
+                [[word f64]] [word f64.store]
+                [[word pointer]]
+                [if-let [dd [try-get [llctx/lldef-ctx [llctx-from-translate tctx]] mem-name]]
+                  [match dd
+                    [lldef-desc/memory kind]
+                    [match kind
+                      [memory-kind/i32] [word i32.store]
+                      [memory-kind/i64] [word i64.store]]
+
+                    [logq-abort not implemented translate-top-form deref inst-type/apply]]
+                  [logq-abort not implemented translate-top-form deref inst-type/apply]]
+                [logq-abort not implemented translate-top-form deref inst-type/apply]]]
+        [wat-inst/store
+          [wasm-name-to-wat-byte-array load-inst-name]
+          [wat-inst-memargs
+            mem-name
+            [word 0]
+            [word 1]]
+          [go target]
           [go value]]]]
 
       [do

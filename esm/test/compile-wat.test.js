@@ -181,6 +181,18 @@ test('data bytes', async () => {
   expect(ui32Array[4]).toBe(0xdeadbeef)
 })
 
+test('data f64', async () => {
+  const inst = await stringToInst(`
+[memory i32 mem 1]
+
+[data active mem [i32 16] [f64 1.9]]
+
+[export mem]`)
+  const mem = inst['mem']
+  const float64Array = new Float64Array(mem.buffer)
+  expect(float64Array[2]).toBe(1.9)
+})
+
 test('deref', async () => {
   {
     const inst = await stringToInst(`
@@ -253,6 +265,28 @@ test('deref', async () => {
   }
 })
 
+test('assign', async () => {
+  {
+    const inst = await stringToInst(`
+    [memory i32 mem 1]
+    [defn f []
+      [let [pi [cast [pointer mem i32] [i32 16]]]
+        [assign pi [i32 7]]
+        [deref pi]]]
+    [export f]`)
+    expect(inst.f()).toBe(7)
+  }
+  {
+    const inst = await stringToInst(`
+    [memory i32 mem 1]
+    [defn f []
+      [let [pi [cast [pointer mem f64] [i32 16]]]
+        [assign pi [f64 1.9]]
+        [deref pi]]]
+    [export f]`)
+    expect(inst.f()).toBe(1.9)
+  }
+})
 test('hash word', async () => {
   const inst = await stringToInst(`
 [memory i32 mem 1]
