@@ -277,6 +277,17 @@ test('deref', async () => {
     // for now we cannot run memory64 so we just check it's valid
     translateFormsToWatBytes(forms)
   }
+  {
+    const forms = parseString(`
+    [memory i64 mem64 1]
+    [data active mem64 [i64 32] [f64 1.9]]
+    [defn f []
+      [cast [pointer mem64 f64] [i64 32]]]
+    [defn g [] [intrinsic f64.add [deref [f]] [f64 1.1]]]
+    [export f g]`)
+    // for now we cannot run memory64 so we just check it's valid
+    translateFormsToWatBytes(forms)
+  }
 })
 
 test('assign', async () => {
@@ -301,6 +312,43 @@ test('assign', async () => {
     expect(inst.f()).toBe(1.9)
   }
 })
+
+test('records', async () => {
+  {
+    const inst = await stringToInst(`
+[type i32-point []
+  [record
+    [x i32]
+    [y i32]]]
+[memory i32 mem 1]
+[data active mem [i32 16] [i32 7] [i32 9]]
+[defn f []
+  [let [prec [cast [pointer mem i32-point] [i32 16]]]
+    [field prec y]]]
+[defn g []
+  [let [prec [cast [pointer mem i32-point] [i32 16]]]
+    [deref [field prec y]]]]
+[export f g]`)
+    expect(inst.f()).toBe(20)
+    expect(inst.g()).toBe(9)
+  }
+
+  {
+    const inst = await stringToInst(`
+[type i32-point []
+  [record
+    [x i32]
+    [y i32]]]
+[memory i32 mem 1]
+[defn f []
+  [let [prec [cast [pointer mem i32-point] [i32 16]]]
+    [assign [field prec y] [i32 9]]
+    [deref [field prec y]]]]
+[export f]`)
+    expect(inst.f()).toBe(9)
+  }
+})
+
 test('hash word', async () => {
   const inst = await stringToInst(`
 [memory i32 mem 1]
