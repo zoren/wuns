@@ -54,7 +54,6 @@
 [def type-f64 [make-type [word f64]]]
 
 [def type-word [make-type [word word]]]
-[def type-memory [make-type [word memory]]]
 
 [def type-form [make-type [word form]]]
 
@@ -110,9 +109,9 @@
         [ctype-to-form [func-type/result ft]]]
 
       [inst-type/apply type-name type-args]
-      [flist
-        [form/word type-name]
-        [form/list [list-map targ type-args [ctype-to-form targ]]]]]]]
+      [form-concat
+        [list [form/word type-name]]
+        [list-map targ type-args [ctype-to-form targ]]]]]]
 
 [defn member-type-var-list [set t]
   [todo can we just use set-has here]
@@ -517,12 +516,12 @@
              type-scheme [get [check-context/def-var-types gctx] [syntax-word/word memword]]
              t [specialize-type-scheme [check-context/type-var-counter gctx] 0 type-scheme]]
             [annotate gctx memword t]
-            [unify-report gctx type-memory t bform]
             [unify-report gctx type-i32 [go level lctx addr] addr]
             type-i32]
 
           [intrinsic-args/store memargs addr value]
           [do
+            [todo make this check mem type like for load ... or remove it entirely]
             [unify-report gctx type-i32 [go level lctx addr] addr]
             [unify-report gctx type-i32 [go level lctx value] value]
             type-empty-tuple]
