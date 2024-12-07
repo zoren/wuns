@@ -213,6 +213,41 @@ test('deref', async () => {
     [export f]`)
     expect(inst.f()).toBe(1.9)
   }
+  {
+    const inst = await stringToInst(`
+    [memory i32 mem 1]
+    [data active mem [i32 16] [i32 32]]
+    [data active mem [i32 32] [f64 1.9]]
+    [defn f []
+      [deref
+        [deref
+          [cast [pointer mem [pointer mem f64]] [i32 16]]]]]
+    [export f]`)
+    expect(inst.f()).toBe(1.9)
+  }
+  {
+    const forms = parseString(`
+    [memory i64 mem 1]
+    [data active mem [i64 16] [i32 32]]
+    [data active mem [i64 32] [f64 1.9]]
+    [defn f []
+      [deref
+        [deref
+          [cast [pointer mem [pointer mem f64]] [i64 16]]]]]
+    [export f]`)
+    // for now we cannot run memory64 so we just check it's valid
+    translateFormsToWatBytes(forms)
+  }
+  {
+    const forms = parseString(`
+    [memory i64 mem 1]
+    [defn f []
+      [deref
+        [cast [pointer mem i32] [i64 16]]]]
+    [export f]`)
+    // for now we cannot run memory64 so we just check it's valid
+    translateFormsToWatBytes(forms)
+  }
 })
 
 // test('hash word', async () => {
