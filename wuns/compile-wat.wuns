@@ -1,118 +1,9 @@
 [load check2.wuns]
 
-[type wat-type-basic []
-  [union
-    [i32]
-    [i64]
-    [f32]
-    [f64]]]
-
-[type wat-inst-memargs []
-  [record
-    [memory word]
-    [offset word]
-    [alignment word]]]
-
-[type wat-inst []
-  [union
-    [i32.const word]
-    [i64.const word]
-    [f32.const word]
-    [f64.const word]
-    [local.get word]
-    [local.set word wat-inst]
-    [global.get word]
-    [inst byte-array [list wat-inst]]
-    [load byte-array wat-inst-memargs wat-inst]
-    [store byte-array wat-inst-memargs wat-inst wat-inst]
-    [if [list wat-type-basic] wat-inst wat-inst wat-inst]
-    [call word [list wat-inst]]
-    [instructions [list wat-inst]]
-    [loop word [list wat-type-basic] wat-inst]
-    [br word]]]
-
-[type output-func []
-  [record
-    [name word]
-    [parameters [list [pair word wat-type-basic]]]
-    [locals [list [pair word wat-type-basic]]]
-    [result [list wat-type-basic]]
-    [body wat-inst]]]
-
-[type import-kind []
-  [union
-    [memory word i32]]]
-
-[type export-kind []
-  [union [func] [global] [memory]]]
-
-[type wat-global []
-  [record
-    [name word]
-    [type wat-type-basic]
-    [value wat-inst]]]
-
-[type wat-data []
-  [union
-    [active word wat-inst byte-array]]]
-
 [type memory-kind []
   [union
     [i32]
     [i64]]]
-
-[type wat-memory []
-  [record
-    [kind memory-kind]
-    [name word]
-    [initial i32]
-    [maximum [option i32]]]]
-
-[type wat-output []
-  [record
-    [imports [growable-list [pair [list word] import-kind]]]
-    [memories [growable-list wat-memory]]
-    [globals [growable-list wat-global]]
-    [funcs [growable-list output-func]]
-    [exports [growable-list [pair word [pair export-kind word]]]]
-    [datas [growable-list wat-data]]]]
-
-[defn make-wat-output []
-  [wat-output
-    [growable-list]
-    [growable-list]
-    [growable-list]
-    [growable-list]
-    [growable-list]
-    [growable-list]]]
-
-[defn translate-type [it]
-  [match [normalize-type it]
-    [ctype/inst inst-type]
-    [match inst-type
-      [inst-type/apply type-name type-args]
-      [switch type-name
-        [[word i32]] [wat-type-basic/i32]
-        [[word pointer]] [wat-type-basic/i32]
-        [[word f64]] [wat-type-basic/f64]
-        [do [log it] [logq-abort not implemented translate-type inst-type/apply]]]
-
-      [do [log it] [logq-abort not implemented translate-type inst-type/apply]]]
-    [do [log it] [logq-abort not implemented translate-type inst-type/apply]]]]
-
-[defn translate-types [it]
-  [match [normalize-type it]
-    [ctype/inst inst-type]
-    [match inst-type
-      [inst-type/apply type-name type-args]
-      [switch type-name
-        [[word i32]] [list [wat-type-basic/i32]]
-        [[word f64]] [list [wat-type-basic/f64]]
-        [[word tuple]] [list-map ta type-args [translate-type ta]]
-
-        [do [log it] [logq-abort not implemented translate-types inst-type/apply]]]
-      [do [log it] [logq-abort not implemented translate-types inst-type/apply]]]
-    [do [log it] [logq-abort not implemented translate-types inst-type/apply]]]]
 
 [type lldef-desc []
   [union
@@ -150,11 +41,6 @@
       [byte-array-set res i
         [let [c [char-code-at w i]] [if [eq c [word-to-char-code -]] ascii-underscore c]]]]
     res]]
-
-[def drop-name-byte-array [wasm-name-to-wat-byte-array [word drop]]]
-
-[defn wat-inst-drop [i]
-  [wat-inst/inst drop-name-byte-array [list i]]]
 
 [defn get-func-type [t]
   [match [normalize-type t]
@@ -715,6 +601,13 @@
     [let
       [tv [infer-llexp gctx level lctx value]]
       [todo when casting to pointer we should check if the value is i32 or i64 depending on the memory]
+      [match [normalize-type tv]
+        [ctype/inst inst-type]
+        [match inst-type
+          [inst-type/apply type-name type-args]
+          [when [eq-word type-name [word pointer]]
+            ]]]
+
       [llinstantiate-syntax-type [transient-kv-map] cast-type]]
 
     [llexp/deref value]
@@ -800,9 +693,15 @@
             ]]]
       ba]]
 
+[type lltype-decl-kind []
+  [union
+    [record [list [pair syntax-word lltype]]]
+    ]]
+
 [type lltop []
   [union
     [memory syntax-word memory-kind syntax-word [option syntax-word]]
+    [type syntax-word [list syntax-word] lltype-decl-kind]
     [data-active syntax-word llexp [list data]]
     [def syntax-word llexp]
     [defn syntax-word [list syntax-word] [list llexp]]
@@ -853,6 +752,28 @@
             [sword [get-arg 2]]
             [if [lt-s n-of-args 3] [option/none] [option/some [sword [get-arg 3]]]]]]
 
+        [[word type]]
+        [do
+          [assert-n-args 3]
+          [let
+            [type-name-form [get-arg 0]
+             type-decl-list [get-list [get-arg 2]]
+             type-env [transient-kv-map]]
+            [assert-not [is-empty type-decl-list] empty type decl list]
+            [for-each type-param [get-list [get-arg 1]]
+              [let [tp [form-to-word type-param]]
+                [assert-not [has type-env tp] duplicate type param]
+                [set-kv-map type-env tp [lltype/var [sword type-param]]]]]
+            [lltop/type [sword type-name-form] [list]
+              [switch [form-to-word [first type-decl-list]]
+                [[word record]]
+                [lltype-decl-kind/record
+                  [list-map p [rest type-decl-list]
+                    [let [ll [get-list p]]
+                      [pair [sword [first ll]] [form-to-lltype ctx type-env [second ll]]]]]]
+
+                [logq-abort form-to-lltop type kind not implemented]]]]]
+
         [[word def]]
         [let [name-form [get-arg 0]]
           [assert-n-args 2]
@@ -887,7 +808,9 @@
                 [push-error f [quote [not a defined name]]]]
               sw]]]
 
-        [logq-abort form-to-lltop not implemented]]
+        [do
+          [log form]
+          [logq-abort form-to-lltop not implemented]]]
 
       [form/list fl]
       [logq-abort direct call at top not supported]]]]
@@ -900,6 +823,9 @@
 [defn infer-lltop [gctx lltop]
   [match lltop
     [lltop/memory mem-name mem-kind mem-size mem-export]
+    [do]
+
+    [lltop/type type-name type-params type-decls]
     [do]
 
     [lltop/data-active mem-name mem-expr datas]
@@ -998,6 +924,107 @@
         [log bform]
         [logq-abort get-ctype-from-form-or-annotation expected an annotation]]]]]
 
+[type wat-type-basic []
+  [union
+    [i32]
+    [i64]
+    [f32]
+    [f64]]]
+
+[defn translate-type [it]
+  [match [normalize-type it]
+    [ctype/inst inst-type]
+    [match inst-type
+      [inst-type/apply type-name type-args]
+      [switch type-name
+        [[word i32]] [wat-type-basic/i32]
+        [[word pointer]] [wat-type-basic/i32]
+        [[word f64]] [wat-type-basic/f64]
+        [do [log it] [logq-abort not implemented translate-type inst-type/apply]]]
+
+      [do [log it] [logq-abort not implemented translate-type inst-type/apply]]]
+    [do [log it] [logq-abort not implemented translate-type inst-type/apply]]]]
+
+[defn translate-types [it]
+  [match [normalize-type it]
+    [ctype/inst inst-type]
+    [match inst-type
+      [inst-type/apply type-name type-args]
+      [switch type-name
+        [[word i32]] [list [wat-type-basic/i32]]
+        [[word f64]] [list [wat-type-basic/f64]]
+        [[word tuple]] [list-map ta type-args [translate-type ta]]
+
+        [do [log it] [logq-abort not implemented translate-types inst-type/apply]]]
+      [do [log it] [logq-abort not implemented translate-types inst-type/apply]]]
+    [do [log it] [logq-abort not implemented translate-types inst-type/apply]]]]
+
+
+[type wat-inst-memargs []
+  [record
+    [memory word]
+    [offset word]
+    [alignment word]]]
+
+[type wat-inst []
+  [union
+    [i32.const word]
+    [i64.const word]
+    [f32.const word]
+    [f64.const word]
+    [local.get word]
+    [local.set word wat-inst]
+    [global.get word]
+    [inst byte-array [list wat-inst]]
+    [load byte-array wat-inst-memargs wat-inst]
+    [store byte-array wat-inst-memargs wat-inst wat-inst]
+    [if [list wat-type-basic] wat-inst wat-inst wat-inst]
+    [call word [list wat-inst]]
+    [instructions [list wat-inst]]
+    [loop word [list wat-type-basic] wat-inst]
+    [br word]]]
+
+[type output-func []
+  [record
+    [name word]
+    [parameters [list [pair word wat-type-basic]]]
+    [locals [list [pair word wat-type-basic]]]
+    [result [list wat-type-basic]]
+    [body wat-inst]]]
+
+[type import-kind []
+  [union
+    [memory word i32]]]
+
+[type export-kind []
+  [union [func] [global] [memory]]]
+
+[type wat-global []
+  [record
+    [name word]
+    [type wat-type-basic]
+    [value wat-inst]]]
+
+[type wat-data []
+  [union
+    [active word wat-inst byte-array]]]
+
+[type wat-memory []
+  [record
+    [kind memory-kind]
+    [name word]
+    [initial i32]
+    [maximum [option i32]]]]
+
+[type wat-output []
+  [record
+    [imports [growable-list [pair [list word] import-kind]]]
+    [memories [growable-list wat-memory]]
+    [globals [growable-list wat-global]]
+    [funcs [growable-list output-func]]
+    [exports [growable-list [pair word [pair export-kind word]]]]
+    [datas [growable-list wat-data]]]]
+
 [type translate-context []
   [record
     [output wat-output]
@@ -1014,6 +1041,20 @@
     [do
       [log bst]
       [logq-abort get-annotation expected an annotation]]]]
+
+[defn make-wat-output []
+  [wat-output
+    [growable-list]
+    [growable-list]
+    [growable-list]
+    [growable-list]
+    [growable-list]
+    [growable-list]]]
+
+[def drop-name-byte-array [wasm-name-to-wat-byte-array [word drop]]]
+
+[defn wat-inst-drop [i]
+  [wat-inst/inst drop-name-byte-array [list i]]]
 
 [defn translate-top-form [tctx bform]
   [let [output [translate-context/output tctx]
@@ -1263,6 +1304,9 @@
           [syntax-word/word mem-name]
           [go offset-form]
           [datas-to-byte-array datas]]]]
+
+      [lltop/type type-name type-params type-decls]
+      [do]
 
     [do
       [log bform]
