@@ -263,6 +263,20 @@ test('deref', async () => {
     // for now we cannot run memory64 so we just check it's valid
     translateFormsToWatBytes(forms)
   }
+  {
+    const forms = parseString(`
+    [memory i32 mem32 1]
+    [memory i64 mem64 1]
+    [data active mem32 [i32 16] [i32 32]]
+    [data active mem64 [i64 32] [f64 1.9]]
+    [defn f []
+      [deref
+        [deref
+          [cast [pointer mem32 [pointer mem64 f64]] [i32 16]]]]]
+    [export f]`)
+    // for now we cannot run memory64 so we just check it's valid
+    translateFormsToWatBytes(forms)
+  }
 })
 
 test('assign', async () => {

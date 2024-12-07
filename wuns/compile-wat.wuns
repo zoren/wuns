@@ -1622,7 +1622,7 @@
     [wat-data/active mem-name offset data]
     [wat-list
       [wat/word [word data]]
-      [wat/dollar mem-name]
+      [wat-list [wat/word [word memory]] [wat/dollar mem-name]]
       [wat-inst-to-out offset]
       [wat/dqstring-bytes data]]]]
 
