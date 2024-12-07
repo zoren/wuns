@@ -491,10 +491,11 @@
                   [do
                     [match llddesc
                       [lldef-desc/func arity]
-                      [assert-n-args [add 1 arity]]
+                      [assert-n-args arity]
 
                       [logq-abort form-to-llexp not a func]]]
-                  [logq-abort form-to-llexp defs not implemented]
+                  [do
+                    [logq-abort form-to-llexp def not found [identity first-form]]]
                   ]]
                 [llexp/call [sword first-form] [list-map arg [rest l] [form-to-llexp ctx lstack arg]]]]]
 
