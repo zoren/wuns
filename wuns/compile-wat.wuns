@@ -1638,6 +1638,7 @@
     [dqstring word]
     [dqstring-bytes byte-array]
     [seq [list wat]]
+    [seq-lf [list wat]]
     [list [list wat]]
     [eq-pair word word]]]
 
@@ -1656,6 +1657,13 @@
           [print-wat printer [first l]]
           [for i 1 [size l]
             [print-byte printer ascii-space]
+            [print-wat printer [at l i]]]]]
+    [wat/seq-lf l]
+      [do
+        [when-not [is-empty l]
+          [print-wat printer [first l]]
+          [for i 1 [size l]
+            [print-byte printer ascii-line-feed]
             [print-wat printer [at l i]]]]]
     [wat/list l]
       [do
@@ -1824,7 +1832,7 @@
       [wat/dqstring-bytes data]]]]
 
 [defn output-to-wat [output]
-  [wat/seq
+  [wat/seq-lf
     [concat-lists
       [list
         [list-map imp [clone-growable-to-frozen-list [wat-output/imports output]] [import-to-wat imp]]
