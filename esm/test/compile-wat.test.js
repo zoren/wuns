@@ -397,6 +397,24 @@ test('size-of', async () => {
     expect(inst.sip()).toBe(4 + 4)
     expect(inst.sr()).toBe(8 + 8 + 4 + 4)
   }
+  {
+    const inst = await stringToInst(`
+[type point-2d [v]
+  [record
+    [x v]
+    [y v]]]
+[type r []
+  [record
+    [point-f [point-2d f64]]
+    [point-i [point-2d i32]]]]
+[defn sfp [] [size-of [point-2d f64]]]
+[defn sip [] [size-of [point-2d i32]]]
+[defn sr [] [size-of r]]
+[export sfp sip sr]`)
+    expect(inst.sfp()).toBe(8 + 8)
+    expect(inst.sip()).toBe(4 + 4)
+    expect(inst.sr()).toBe(8 + 8 + 4 + 4)
+  }
 })
 
 test('hash word', async () => {
