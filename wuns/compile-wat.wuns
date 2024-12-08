@@ -172,6 +172,7 @@
     [deref llexp]
     [assign llexp llexp]
     [field llexp syntax-word]
+    [size-of lltype]
     ]]
 
 [defn llexp-recur [f]
@@ -223,6 +224,9 @@
 
         [llexp/field target field-name]
         [go target]
+
+        [llexp/size-of t]
+        [do]
 
         [do
           [log bform]
@@ -407,6 +411,12 @@
               [llexp/field
                 [form-to-llexp ctx lstack [get-arg 0]]
                 [sword [get-arg 1]]]]
+
+            [[word size-of]]
+            [do
+              [assert-n-args 1]
+              [llexp/size-of
+                [form-to-lltype ctx [transient-kv-map] [get-arg 0]]]]
 
             [do
               [if-let [ldesc [try-get-local lstack first-word]]
@@ -743,6 +753,11 @@
             [logq-abort infer-llexp not a record type]]
 
           [logq-abort infer-llexp type not found [identity type-name]]]]]
+
+    [llexp/size-of t]
+    [do
+      [llinstantiate-syntax-type [transient-kv-map] t]
+      type-i32]
 
     [do
       [log bform]
@@ -1261,8 +1276,7 @@
         [llliteral/i32 i] [wat-inst/i32.const [syntax-word/word i]]
         [llliteral/i64 i] [wat-inst/i64.const [syntax-word/word i]]
         [llliteral/f32 f] [wat-inst/f32.const [syntax-word/word f]]
-        [llliteral/f64 f] [wat-inst/f64.const [syntax-word/word f]]
-        ]
+        [llliteral/f64 f] [wat-inst/f64.const [syntax-word/word f]]]
 
       [llexp/do forms]
       [wat-inst/instructions [go-forms forms]]
@@ -1353,29 +1367,30 @@
               mem-name [mem-name-from-mem-type tmem]
               ttarget [get-apply-type [second ptargs]]
               ttarget-name [pair/fst ttarget]
+              - [assert [is-empty [pair/snd ttarget]] translation of type args not implemented]
               bctx [llctx-from-translate tctx]
-              offset-type
+              offset
               [if-let [dd [try-get [llctx/user-types bctx] ttarget-name]]
                 [match dd
                   [user-type-desc/record field-map field-list]
                   [let
-                    [tv [transient-kv-map]]
+                    [tv-env [transient-kv-map]]
                     [loop [i 0 offset 0]
                         [if [lt-s i [size field-list]]
                           [let [fp [at field-list i]
                                 ft [field-desc/type [pair/snd fp]]]
                             [if [eq-word field-name-word [pair/fst fp]]
-                              [pair offset ft]
+                              offset
                               [continue
                                 i [inc i]
-                                offset [add offset [sizeof tv ft]]]]]
+                                offset [add offset [sizeof tv-env ft]]]]]
                           [logq-abort field not found]]]]
                   [logq-abort not a record type]]
                 [logq-abort not implemented translate-top-form field inst-type/apply]]]
         [wat-inst/inst
           [wasm-name-to-wat-byte-array [word i32.add]]
           [list
-            [wat-inst/i32.const [int-to-word [pair/fst offset-type]]]
+            [wat-inst/i32.const [int-to-word offset]]
             [go target]]]]]
 
       [llexp/assign target value]
@@ -1410,6 +1425,11 @@
             [word 1]]
           [go target]
           [go value]]]]
+
+      [llexp/size-of t]
+      [let
+        [tv [transient-kv-map]]
+        [wat-inst/i32.const [int-to-word [sizeof tv [lltype-to-lltype-desc t]]]]]
 
       [do
         [log form]
