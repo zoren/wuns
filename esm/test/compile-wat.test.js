@@ -380,6 +380,22 @@ test('records', async () => {
 test('size-of', async () => {
   {
     const inst = await stringToInst(`
+[memory i32 mem32 1]
+[defn sp32 [] [size-of [pointer mem32 i32]]]
+[export sp32]`)
+    expect(inst.sp32()).toBe(4)
+  }
+  {
+    const forms = parseString(`
+[memory i64 mem64 1]
+[defn sp64 [] [size-of [pointer mem64 i32]]]
+[export sp64]`)
+    translateFormsToWatBytes(forms)
+    // we cannot run memory64 so we just check it's valid
+    // expect(inst.sp64()).toBe(8)
+  }
+  {
+    const inst = await stringToInst(`
 [type f64-point []
   [record
     [x f64]

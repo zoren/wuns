@@ -1233,6 +1233,19 @@
       [[word i32] [word f32]] 4
       [[word i64] [word f64]] 8
       [[word v128]] [i32 16]
+      [[word pointer]]
+      [match [first type-args]
+        [lltype-desc/apply mem-name ta]
+        [if-let [dd [try-get [llctx/lldef-ctx llctx] mem-name]]
+          [match dd
+            [lldef-desc/memory kind]
+            [match kind
+              [memory-kind/i32] 4
+              [memory-kind/i64] 8]
+            [logq-abort sizeof memory not found]]
+          [logq-abort sizeof memory not found]]]
+
+      [[word tuple]] [logq-abort sizeof tuple not implemented]
       [if-let [type-params [try-get [llctx/user-type-params llctx] type-name]]
         [let
           [new-tv-env [transient-kv-map]]
