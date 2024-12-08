@@ -350,6 +350,53 @@ test('records', async () => {
 [export f]`)
     expect(inst.f()).toBe(9)
   }
+  {
+    const inst = await stringToInst(`
+[type f64-point []
+  [record
+    [x f64]
+    [y f64]]]
+[type i32-point []
+  [record
+    [x i32]
+    [y i32]]]
+[type r []
+  [record
+    [point-f f64-point]
+    [point-i i32-point]]]
+[memory i32 mem 1]
+[defn f []
+  [let [prec [cast [pointer mem r] [i32 16]]]
+    [assign [field [field prec point-i] y] [i32 9]]
+    [deref [field [field prec point-i] y]]]]
+[export f]`)
+    expect(inst.f()).toBe(9)
+  }
+})
+
+test('size-of', async () => {
+  {
+    const inst = await stringToInst(`
+[type f64-point []
+  [record
+    [x f64]
+    [y f64]]]
+[type i32-point []
+  [record
+    [x i32]
+    [y i32]]]
+[type r []
+  [record
+    [point-f f64-point]
+    [point-i i32-point]]]
+[defn sfp [] [size-of f64-point]]
+[defn sip [] [size-of i32-point]]
+[defn sr [] [size-of r]]
+[export sfp sip sr]`)
+    expect(inst.sfp()).toBe(8 + 8)
+    expect(inst.sip()).toBe(4 + 4)
+    expect(inst.sr()).toBe(8 + 8 + 4 + 4)
+  }
 })
 
 test('hash word', async () => {

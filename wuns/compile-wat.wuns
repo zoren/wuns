@@ -1221,19 +1221,34 @@
 [defn wat-inst-drop [i]
   [wat-inst/inst drop-name-byte-array [list i]]]
 
-[defn sizeof [type-env t]
+[defn sizeof [user-type-ctx type-env t]
   [match t
     [lltype-desc/var tv]
-    [logq-abort sizeof not implemented]
+    [sizeof user-type-ctx type-env [get type-env tv]]
+
     [lltype-desc/apply type-name type-args]
     [switch type-name
       [[word i32]] 4
       [[word f64]] 8
-      [logq-abort not implemented translate-top-form deref inst-type/apply]]]]
+      [if-let [type-desc [try-get user-type-ctx type-name]]
+        [match type-desc
+          [user-type-desc/record field-map field-list]
+          [loop [cur-size 0 i 0 n [size field-list]]
+            [if [lt-s i n]
+              [let [fd [at field-list i]]
+                [continue
+                  cur-size [add cur-size [sizeof user-type-ctx type-env [field-desc/type [pair/snd fd]]]]
+                  i [inc i]]]
+              cur-size]]
+          [logq-abort infer-llexp not a record type]]
+
+        [logq-abort infer-llexp type not found [identity type-name]]]
+      ]]]
 
 [defn translate-top-form [tctx bform]
   [let [output [translate-context/output tctx]
         cctx [translate-context/check-context tctx]
+        bind-ctx [llcheck-context/bind-ctx cctx]
         form-to-ldesc [llctx/form-to-ldesc [llctx-from-translate tctx]]
         type-annos [llcheck-context/type-annotations cctx]
         ldesc-to-index [transient-kv-map]
@@ -1383,7 +1398,7 @@
                               offset
                               [continue
                                 i [inc i]
-                                offset [add offset [sizeof tv-env ft]]]]]
+                                offset [add offset [sizeof [llctx/user-types bctx] tv-env ft]]]]]
                           [logq-abort field not found]]]]
                   [logq-abort not a record type]]
                 [logq-abort not implemented translate-top-form field inst-type/apply]]]
@@ -1429,7 +1444,7 @@
       [llexp/size-of t]
       [let
         [tv [transient-kv-map]]
-        [wat-inst/i32.const [int-to-word [sizeof tv [lltype-to-lltype-desc t]]]]]
+        [wat-inst/i32.const [int-to-word [sizeof [llctx/user-types bind-ctx] tv [lltype-to-lltype-desc t]]]]]
 
       [do
         [log form]
