@@ -562,6 +562,14 @@
 [defn mem-name-from-mem-type [tmem]
   [pair/fst [get-apply-type [first [pair/snd [get-apply-type tmem]]]]]]
 
+[defn get-memory-kind [llctx mem-name]
+  [if-let [dd [try-get [llctx/lldef-ctx llctx] mem-name]]
+    [match dd
+      [lldef-desc/memory kind]
+      kind
+      [logq-abort get-memory-kind not a memory desc]]
+    [logq-abort get-memory-kind not found [identity mem-name]]]]
+
 [defn infer-llexp [gctx level lctx bform]
   [match bform
     [llexp/var w]
@@ -701,19 +709,13 @@
       [switch [pair/fst inst-app-t]
         [[word pointer]]
         [let [mem-name [mem-name-from-mem-type [first [pair/snd inst-app-t]]]]
-          [if-let [dd [try-get [llctx/lldef-ctx [llcheck-context/bind-ctx gctx]] mem-name]]
-            [match dd
-              [lldef-desc/memory kind]
-              [match kind
-                [memory-kind/i32]
-                [do
-                  [todo check if value is i32 or pointer to same memory with castable target type]]
-                [memory-kind/i64]
-                [do
-                  [todo check if value is i64 or pointer to same memory with castable target type]]]
-
-              [logq-abort not implemented translate-top-form deref inst-type/apply]]
-            [logq-abort not implemented translate-top-form deref inst-type/apply]]]
+          [match [get-memory-kind [llcheck-context/bind-ctx gctx] mem-name]
+            [memory-kind/i32]
+            [do
+              [todo check if value is i32 or pointer to same memory with castable target type]]
+            [memory-kind/i64]
+            [do
+              [todo check if value is i64 or pointer to same memory with castable target type]]]]
         [do]]
 
       inst-type]
@@ -1171,20 +1173,15 @@
         [[word pointer]]
         [let
           [mem-name [mem-name-from-mem-type [first type-args]]]
-          [if-let [mem [try-get [llctx/lldef-ctx [llctx-from-translate tctx]] mem-name]]
-            [match mem
-              [lldef-desc/memory kind]
-              [match kind
-                [memory-kind/i32]
-                [do
-                  [todo check pointer memory type]
-                  [wat-type-basic/i32]]
-                [memory-kind/i64]
-                [do
-                  [todo check pointer memory type]
-                  [wat-type-basic/i64]]]
-              [logq-abort translate-type memory not found]]
-            [logq-abort translate-type memory not found]]]
+          [match [get-memory-kind [llctx-from-translate tctx] mem-name]
+            [memory-kind/i32]
+            [do
+              [todo check pointer memory type]
+              [wat-type-basic/i32]]
+            [memory-kind/i64]
+            [do
+              [todo check pointer memory type]
+              [wat-type-basic/i64]]]]
         [do [log it] [logq-abort not implemented translate-type inst-type/apply]]]
 
       [do [log it] [logq-abort not implemented translate-type inst-type/apply]]]
@@ -1237,12 +1234,9 @@
       [match [first type-args]
         [lltype-desc/apply mem-name ta]
         [if-let [dd [try-get [llctx/lldef-ctx llctx] mem-name]]
-          [match dd
-            [lldef-desc/memory kind]
-            [match kind
-              [memory-kind/i32] 4
-              [memory-kind/i64] 8]
-            [logq-abort sizeof memory not found]]
+          [match [get-memory-kind llctx mem-name]
+            [memory-kind/i32] 4
+            [memory-kind/i64] 8]
           [logq-abort sizeof memory not found]]]
 
       [[word tuple]] [logq-abort sizeof tuple not implemented]
@@ -1373,15 +1367,9 @@
                 [[word i32]] [word i32.load]
                 [[word f64]] [word f64.load]
                 [[word pointer]]
-                [if-let [dd [try-get [llctx/lldef-ctx [llctx-from-translate tctx]] [mem-name-from-mem-type [first [pair/snd target-ap-t]]]]]
-                  [match dd
-                    [lldef-desc/memory kind]
-                    [match kind
-                      [memory-kind/i32] [word i32.load]
-                      [memory-kind/i64] [word i64.load]]
-
-                    [logq-abort not implemented translate-top-form deref inst-type/apply]]
-                  [logq-abort not implemented translate-top-form deref inst-type/apply]]
+                [match [get-memory-kind [llctx-from-translate tctx] [mem-name-from-mem-type [first [pair/snd target-ap-t]]]]
+                  [memory-kind/i32] [word i32.load]
+                  [memory-kind/i64] [word i64.load]]
                 [logq-abort not implemented translate-top-form deref inst-type/apply]]]
         [wat-inst/load
           [wasm-name-to-wat-byte-array load-inst-name]
@@ -1441,15 +1429,9 @@
                 [[word i32]] [word i32.store]
                 [[word f64]] [word f64.store]
                 [[word pointer]]
-                [if-let [dd [try-get [llctx/lldef-ctx [llctx-from-translate tctx]] mem-name]]
-                  [match dd
-                    [lldef-desc/memory kind]
-                    [match kind
-                      [memory-kind/i32] [word i32.store]
-                      [memory-kind/i64] [word i64.store]]
-
-                    [logq-abort not implemented translate-top-form deref inst-type/apply]]
-                  [logq-abort not implemented translate-top-form deref inst-type/apply]]
+                [match [get-memory-kind [llctx-from-translate tctx] mem-name]
+                  [memory-kind/i32] [word i32.store]
+                  [memory-kind/i64] [word i64.store]]
                 [logq-abort not implemented translate-top-form deref inst-type/apply]]]
         [wat-inst/store
           [wasm-name-to-wat-byte-array store-inst-name]
