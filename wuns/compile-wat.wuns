@@ -108,6 +108,8 @@
   [if-let [ok [builtin-type-arity-ok type-name n-of-args]]
     [option/some ok]
     [switch type-name
+      [[word f32] [word i64] [word v128]]
+      [option/some [eq n-of-args 0]]
       [[word pointer]]
       [option/some [eq 2 n-of-args]]
       [option/none]]]]
@@ -1228,8 +1230,9 @@
 
     [lltype-desc/apply type-name type-args]
     [switch type-name
-      [[word i32]] 4
-      [[word f64]] 8
+      [[word i32] [word f32]] 4
+      [[word i64] [word f64]] 8
+      [[word v128]] [i32 16]
       [if-let [type-params [try-get [llctx/user-type-params llctx] type-name]]
         [let
           [new-tv-env [transient-kv-map]]

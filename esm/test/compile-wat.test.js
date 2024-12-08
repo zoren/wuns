@@ -47,7 +47,10 @@ test.each([
   ['[let [x [i32 2] y [i32 3]] [intrinsic i32.add x y]]', 5],
 
   ['[size-of i32]', 4],
+  ['[size-of f32]', 4],
+  ['[size-of i64]', 8],
   ['[size-of f64]', 8],
+  ['[size-of v128]', 16],
 ])('%s -> %o', async (s, expected) => {
   const m = `[defn f [] ${s}] [export f]`
   expect((await stringToInst(m)).f()).toBe(expected)
