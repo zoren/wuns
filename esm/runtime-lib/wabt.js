@@ -3,8 +3,15 @@ const wabt = await wabtProm()
 
 const wat_to_byte_array = (inputBuffer) => {
   if (!(inputBuffer instanceof Uint8Array)) throw new Error('expects Uint8Array')
-  // print as string
   try {
+    /**
+     * @typedef {import('wabt')} PWabtModule
+     * @typedef {ReturnType<PWabtModule>} WabtModuleP
+     * @typedef {WabtModuleP extends Promise<infer X> ? X : never} WabtModule2
+     * @typedef {Parameters<WabtModule2['parseWat']>} ParseWatParams
+     * @typedef {NonNullable<ParseWatParams[2]>} ParseWatOptions
+     * @type {ParseWatOptions}
+    */
     const wasmFeatures = {
       multi_memory: true,
       memory64: true,
