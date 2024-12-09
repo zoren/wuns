@@ -1258,6 +1258,29 @@
             [logq-abort infer-llexp not a record type]]]
         [logq-abort infer-llexp type not found [identity type-name]]]]]]
 
+[defn get-locals [tctx bodies]
+  [let
+    [glocals [growable-list]
+      add-binding
+      [func ab [b]
+        [let [sname [pair/fst b]
+              name [syntax-word/word sname]]
+          [push glocals [pair name [translate-type tctx [get-ctype [translate-context/check-context tctx] [pair/snd b]]]]]]]
+      proc
+      [llexp-recur
+        [func f [bform]
+          [match bform
+            [llexp/let bs body]
+            [for-each b bs [add-binding b]]
+
+            [llexp/loop bs body]
+            [for-each b bs [add-binding b]]
+
+            [do]]
+          true]]]
+    [for-each b bodies [proc b]]
+    [clone-growable-to-frozen-list glocals]]]
+
 [defn translate-top-form [tctx bform]
   [let [output [translate-context/output tctx]
         cctx [translate-context/check-context tctx]
@@ -1481,37 +1504,18 @@
           ft [get-func-type t]
           param-types [func-type/params ft]
           gparams [growable-list]
-          glocals [growable-list]
+          locals [get-locals tctx bodies]
           local-names [transient-kv-map]]
       [assert [eq [size params] [size param-types]] expected matching number of parameters and types]
       [for i 0 [size params]
         [push gparams
           [pair [syntax-word/word [at params i]] [translate-type tctx [at param-types i]]]]]
-      [let
-        [add-binding
-          [func ab [b]
-            [let [sname [pair/fst b]
-                  name [syntax-word/word sname]]
-              [push glocals [pair name [translate-type tctx [get-ctype cctx [pair/snd b]]]]]]]
-         proc
-          [llexp-recur
-            [func f [bform]
-              [match bform
-                [llexp/let bs body]
-                [for-each b bs [add-binding b]]
-
-                [llexp/loop bs body]
-                [for-each b bs [add-binding b]]
-
-                [do]]
-              true]]]
-        [for-each b bodies [proc b]]]
       [push
         [wat-output/funcs output]
         [output-func
           [syntax-word/word fname]
           [clone-growable-to-frozen-list gparams]
-          [clone-growable-to-frozen-list glocals]
+          locals
           [translate-types tctx [func-type/result ft]]
           [wat-inst/instructions [go-forms bodies]]]]]
 
