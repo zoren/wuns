@@ -1264,7 +1264,6 @@
         bind-ctx [llcheck-context/bind-ctx cctx]
         form-to-ldesc [llctx/form-to-ldesc [llctx-from-translate tctx]]
         type-annos [llcheck-context/type-annotations cctx]
-        ldesc-to-index [transient-kv-map]
         lvar-to-name
           [func lvar-to-name [lvar-sname]
             [if-let [ldesc [try-get form-to-ldesc [syntax-word-get-form lvar-sname]]]
@@ -1293,10 +1292,7 @@
       [llexp/var sw]
       [let [w [syntax-word/word sw]]
         [if-let [ldesc [try-get form-to-ldesc [syntax-word-get-form sw]]]
-          [do
-            [if-let [index [try-get ldesc-to-index ldesc]]
-              [wat-inst/local.get [concat-words w [int-to-word index]]]
-              [wat-inst/local.get w]]]
+          [wat-inst/local.get w]
           [wat-inst/global.get w]]]
 
       [llexp/literal l]
@@ -1495,18 +1491,8 @@
         [add-binding
           [func ab [b]
             [let [sname [pair/fst b]
-                  name [syntax-word/word sname]
-                  name-index
-                  [if-let [ldesc [try-get form-to-ldesc [syntax-word-get-form sname]]]
-                    [let [index [kv-map-size ldesc-to-index]]
-                      name]
-                    [do
-                      [log name]
-                      [when-let [form [syntax-word/opt-form sname]]
-                        [log-location form]
-                        ]
-                      [logq-abort translate-top-form expected a local description]]]]
-              [push glocals [pair name-index [translate-type tctx [get-ctype cctx [pair/snd b]]]]]]]
+                  name [syntax-word/word sname]]
+              [push glocals [pair name [translate-type tctx [get-ctype cctx [pair/snd b]]]]]]]
          proc
           [llexp-recur
             [func f [bform]
