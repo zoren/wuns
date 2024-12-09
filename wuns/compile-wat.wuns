@@ -177,63 +177,6 @@
     [size-of lltype]
     ]]
 
-[defn llexp-recur [f]
-  [func go [bform]
-    [when
-      [f bform]
-      [match bform
-        [llexp/var sw]
-        [do]
-
-        [llexp/literal l]
-        [do]
-
-        [llexp/intrinsic w imm-args args]
-        [for-each a args [go a]]
-
-        [llexp/call fn args]
-        [do
-          [for-each a args [go a]]]
-
-        [llexp/if c t e]
-        [do [go c] [go t] [go e]]
-
-        [llexp/do bs]
-        [for-each b bs [go b]]
-
-        [llexp/let bs body]
-        [do
-          [for-each b bs [go [pair/snd b]]]
-          [for-each b body [go b]]]
-
-        [llexp/loop bs body]
-        [do
-          [for-each b bs [go [pair/snd b]]]
-          [for-each b body [go b]]]
-
-        [llexp/continue ass]
-        [for-each as ass
-          [go [pair/snd as]]]
-
-        [llexp/cast t e]
-        [go e]
-
-        [llexp/deref target]
-        [go target]
-
-        [llexp/assign target value]
-        [do [go target] [go value]]
-
-        [llexp/field target field-name]
-        [go target]
-
-        [llexp/size-of t]
-        [do]
-
-        [do
-          [log bform]
-          [logq-abort llform-recur not implemented]]]]]]
-
 [defn set-local [ctx lvars f kind]
   [let [w [form-to-word f]]
     [when [has lvars w] [push-error f [quote [redeclaring local]]]]
@@ -1258,29 +1201,6 @@
             [logq-abort infer-llexp not a record type]]]
         [logq-abort infer-llexp type not found [identity type-name]]]]]]
 
-[defn get-locals [tctx bodies]
-  [let
-    [glocals [growable-list]
-      add-binding
-      [func ab [b]
-        [let [sname [pair/fst b]
-              name [syntax-word/word sname]]
-          [push glocals [pair name [translate-type tctx [get-ctype [translate-context/check-context tctx] [pair/snd b]]]]]]]
-      proc
-      [llexp-recur
-        [func f [bform]
-          [match bform
-            [llexp/let bs body]
-            [for-each b bs [add-binding b]]
-
-            [llexp/loop bs body]
-            [for-each b bs [add-binding b]]
-
-            [do]]
-          true]]]
-    [for-each b bodies [proc b]]
-    [clone-growable-to-frozen-list glocals]]]
-
 [defn translate-top-form [tctx bform]
   [let [output [translate-context/output tctx]
         cctx [translate-context/check-context tctx]
@@ -1295,7 +1215,14 @@
               [do
                 [log lvar-sname]
                 [logq-abort lvar-to-name expected local var]]]]
-        get-form-types [func get-form-types [form] [translate-types tctx [get-ctype cctx form]]]]
+        get-form-types [func get-form-types [form] [translate-types tctx [get-ctype cctx form]]]
+        glocals [growable-list]
+        add-binding
+        [func ab [b]
+          [push glocals
+            [pair
+              [syntax-word/word [pair/fst b]]
+              [translate-type tctx [get-ctype cctx [pair/snd b]]]]]]]
   [letfn
     [
   [func go-forms [forms]
@@ -1347,14 +1274,18 @@
       [wat-inst/instructions
         [concat
           [list-map b bindings
-            [wat-inst/local.set [lvar-to-name [pair/fst b]] [go [pair/snd b]]]]
+            [do
+              [add-binding b]
+              [wat-inst/local.set [lvar-to-name [pair/fst b]] [go [pair/snd b]]]]]
           [go-forms body]]]
 
       [llexp/loop bindings body]
       [wat-inst/instructions
         [concat
           [list-map b bindings
-            [wat-inst/local.set [lvar-to-name [pair/fst b]] [go [pair/snd b]]]]
+            [do
+              [add-binding b]
+              [wat-inst/local.set [lvar-to-name [pair/fst b]] [go [pair/snd b]]]]]
           [list
             [wat-inst/loop
               [word loop-label]
@@ -1408,24 +1339,27 @@
               mem-name [mem-name-from-mem-type tmem]
               ttarget [get-apply-type [second ptargs]]
               ttarget-name [pair/fst ttarget]
-              - [assert [is-empty [pair/snd ttarget]] translation of type args not implemented]
+              ttarget-args [pair/snd ttarget]
               bctx [llctx-from-translate tctx]
               offset
               [if-let [dd [try-get [llctx/user-types bctx] ttarget-name]]
                 [match dd
                   [user-type-desc/record field-map field-list]
                   [let
-                    [tv-env [transient-kv-map]]
+                    [type-params [get [llctx/user-type-params [llctx-from-translate tctx]] ttarget-name]
+                     new-tv-env [transient-kv-map]]
+                    [for i 0 [size ttarget-args]
+                      [set-kv-map new-tv-env [syntax-word/word [at type-params i]] [ctype-to-lltype-desc [at ttarget-args i]]]]
                     [loop [i 0 offset 0]
-                        [if [lt-s i [size field-list]]
-                          [let [fp [at field-list i]
-                                ft [field-desc/type [pair/snd fp]]]
-                            [if [eq-word field-name-word [pair/fst fp]]
-                              offset
-                              [continue
-                                i [inc i]
-                                offset [add offset [sizeof bctx tv-env ft]]]]]
-                          [logq-abort field not found]]]]
+                      [if [lt-s i [size field-list]]
+                        [let [fp [at field-list i]
+                              ft [field-desc/type [pair/snd fp]]]
+                          [if [eq-word field-name-word [pair/fst fp]]
+                            offset
+                            [continue
+                              i [inc i]
+                              offset [add offset [sizeof bctx new-tv-env ft]]]]]
+                        [logq-abort field not found]]]]
                   [logq-abort not a record type]]
                 [logq-abort not implemented translate-top-form field inst-type/apply]]]
         [wat-inst/inst
@@ -1504,20 +1438,22 @@
           ft [get-func-type t]
           param-types [func-type/params ft]
           gparams [growable-list]
-          locals [get-locals tctx bodies]
           local-names [transient-kv-map]]
       [assert [eq [size params] [size param-types]] expected matching number of parameters and types]
       [for i 0 [size params]
         [push gparams
           [pair [syntax-word/word [at params i]] [translate-type tctx [at param-types i]]]]]
-      [push
-        [wat-output/funcs output]
-        [output-func
-          [syntax-word/word fname]
-          [clone-growable-to-frozen-list gparams]
-          locals
-          [translate-types tctx [func-type/result ft]]
-          [wat-inst/instructions [go-forms bodies]]]]]
+      [comment go-forms has the side effect of adding locals so we need to run it first]
+      [let
+        [tbodies [go-forms bodies]]
+        [push
+          [wat-output/funcs output]
+          [output-func
+            [syntax-word/word fname]
+            [clone-growable-to-frozen-list gparams]
+            [clone-growable-to-frozen-list glocals]
+            [translate-types tctx [func-type/result ft]]
+            [wat-inst/instructions tbodies]]]]]
 
     [lltop/export snames]
     [for-each sname snames
