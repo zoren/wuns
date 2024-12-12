@@ -266,60 +266,8 @@ const expSpecialFormsExp = {
   },
   intrinsic: (tail, ctx, topContext) => {
     if (tail.length < 1) throw new CompileError('intrinsic expected at least one argument')
-    const { defEnv } = topContext
     const [opForm, ...args] = tail
     const opName = getFormWord(opForm)
-    const intrinsicArgCount = args.length
-    const assertArity = (arity) => {
-      if (intrinsicArgCount !== arity) throw new CompileError(opName + ' expected ' + arity + ' arguments')
-    }
-    const getMemName = (memForm) => {
-      const memName = getFormWord(memForm)
-      const memDesc = defEnv.get(memName)
-      if (!memDesc) throw new CompileError('undefined memory', memForm)
-      if (memDesc.defKind !== 'memory') throw new CompileError('not a memory', memForm)
-      return memName
-    }
-    const loadMem = (primtypeName) => {
-      const [memForm, offsetForm, alignmentForm, addrForm] = args
-      const offset = +getFormWord(offsetForm)
-      const alignment = +getFormWord(alignmentForm)
-      const addrExp = compExp(ctx, addrForm, topContext)
-      return createPrimitiveArrayExpression(primtypeName, getMemName(memForm), offset, addrExp)
-    }
-    const loadType = loadInstToType[opName]
-    if (loadType) {
-      assertArity(4)
-      return loadMem(loadType)
-    }
-    const storeType = storeInstToType[opName]
-    if (storeType) {
-      assertArity(5)
-      const jsExp = jsAssignExp(loadMem(storeType), compExp(ctx, args[4], topContext))
-      return jsParenComma([jsExp, jsUndefined])
-    }
-    switch (opName) {
-      case 'unreachable':
-        assertArity(0)
-        return jsIIFE([jsThrow(jsString('unreachable'))])
-      case 'memory.size':
-        assertArity(1)
-        return jsBinDirect(
-          '>>',
-          jsSubscript(jsSubscript(jsVar(getMemName(args[0])), jsString('buffer')), jsString('byteLength')),
-          jsNumber(16),
-        )
-      case 'memory.grow':
-        assertArity(2)
-        return jsCall(jsSubscript(jsVar(getMemName(args[0])), jsString('grow')), [compExp(ctx, args[1], topContext)])
-      case 'memory.init': {
-        assertArity(5)
-        const [memForm, segmentForm, dstForm, offsetForm, lengthForm] = args
-        const memName = getMemName(memForm)
-        return
-      }
-    }
-
     const binIntrinsicInfo = intrinsicsInfo[opName]
     if (!binIntrinsicInfo) throw new CompileError('unknown intrinsic: ' + opName)
     const { op, orZero } = binIntrinsicInfo
