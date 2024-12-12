@@ -375,6 +375,54 @@ test('records', async () => {
 [export f]`)
     expect(inst.f()).toBe(9)
   }
+  {
+    const src = `
+[memory i32 mem 1]
+
+[data active mem [i32 0] [i32 16]]
+
+[defn get-top []
+  [intrinsic i32.load mem 0 4 [i32 0]]]
+
+[defn set-top [new-top]
+  [intrinsic i32.store mem 0 4 [i32 0] new-top]]
+
+[defn alloc-n [n-bytes]
+  [let [top [get-top]]
+    [set-top [intrinsic i32.add top n-bytes]]
+    top]]
+
+[genfn alloc [target-type] [pointer mem target-type] []
+  [cast [pointer mem target-type] [alloc-n [size-of target-type]]]]
+
+[defn alloc-f64 [f]
+  [let [p [alloc [f64]]]
+    [assign p f]
+  p]]
+
+[defn alloc-i32 [i]
+  [let [p [alloc [i32]]]
+    [assign p i]
+  p]]
+
+[genfn gen-get [v] v [p [pointer mem v]]
+  [deref p]]
+
+[defn get-i32 [p] [gen-get i32 p]]
+
+[defn get-f64 [p] [gen-get f64 p]]
+
+[export alloc-f64 alloc-i32 get-i32 get-f64]`
+    const inst = await stringToInst(src)
+    const allocF64 = inst['alloc-f64']
+    const allocI32 = inst['alloc-i32']
+    const getI32 = inst['get-i32']
+    const getF64 = inst['get-f64']
+    const pi = allocI32(7)
+    expect(getI32(pi)).toBe(7)
+    const pf = allocF64(1.9)
+    expect(getF64(pf)).toBe(1.9)
+  }
 })
 
 test('size-of', async () => {
