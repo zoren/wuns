@@ -784,58 +784,6 @@
     [f64 [list syntax-word]]
     ]]
 
-[defn datas-to-byte-array [datas]
-  [let
-    [n-datas [size datas]
-     total-size
-      [loop [i 0 sum 0]
-        [if [le-s n-datas i]
-          sum
-          [continue
-            sum [add sum [match [at datas i]
-                          [data/bytes bs] [size bs]
-                          [data/i32 is] [mul [size is] 4]
-                          [data/f64 fs] [mul [size fs] 8]]]
-            i [inc i]
-            ]]]
-     ba [byte-array total-size]]
-    [loop [i 0 offset 0]
-      [if [le-s n-datas i]
-        ba
-        [match [at datas i]
-          [data/bytes bs]
-          [do
-            [for j 0 [size bs]
-              [byte-array-set ba [add offset j] [word-to-int [syntax-word/word [at bs j]]]]]
-            [continue
-              i [inc i]
-              offset [add offset [size bs]]]]
-
-          [data/i32 is]
-          [do
-            [loop [j 0 sis [size is]]
-              [when [lt-s j sis]
-                [byte-array-set-byte-array ba [add offset [mul j 4]]
-                  [i32-to-byte-array [word-to-int [syntax-word/word [at is j]]]]]
-                [continue j [inc j]]]]
-            [continue
-              i [inc i]
-              offset [add offset [mul [size is] 4]]]]
-
-          [data/f64 fs]
-          [do
-            [loop [j 0 sfs [size fs]]
-              [when [lt-s j sfs]
-                [byte-array-set-byte-array ba [add offset [mul j 8]]
-                  [f64-to-byte-array [word-to-f64 [syntax-word/word [at fs j]]]]]
-                [continue j [inc j]]]]
-            [continue
-              i [inc i]
-              offset [add offset [mul [size fs] 8]]]]
-
-            ]]]
-      ba]]
-
 [type lltype-decl-kind []
   [union
     [record [list [pair syntax-word lltype]]]
@@ -1356,6 +1304,58 @@
     [llexp/call fn [list-map a args [expand-exp env a]]]
 
     [logq-abort expand-exp not implemented [identity f]]]]
+
+[defn datas-to-byte-array [datas]
+  [let
+    [n-datas [size datas]
+     total-size
+      [loop [i 0 sum 0]
+        [if [le-s n-datas i]
+          sum
+          [continue
+            sum [add sum [match [at datas i]
+                          [data/bytes bs] [size bs]
+                          [data/i32 is] [mul [size is] 4]
+                          [data/f64 fs] [mul [size fs] 8]]]
+            i [inc i]
+            ]]]
+     ba [byte-array total-size]]
+    [loop [i 0 offset 0]
+      [if [le-s n-datas i]
+        ba
+        [match [at datas i]
+          [data/bytes bs]
+          [do
+            [for j 0 [size bs]
+              [byte-array-set ba [add offset j] [word-to-int [syntax-word/word [at bs j]]]]]
+            [continue
+              i [inc i]
+              offset [add offset [size bs]]]]
+
+          [data/i32 is]
+          [do
+            [loop [j 0 sis [size is]]
+              [when [lt-s j sis]
+                [byte-array-set-byte-array ba [add offset [mul j 4]]
+                  [i32-to-byte-array [word-to-int [syntax-word/word [at is j]]]]]
+                [continue j [inc j]]]]
+            [continue
+              i [inc i]
+              offset [add offset [mul [size is] 4]]]]
+
+          [data/f64 fs]
+          [do
+            [loop [j 0 sfs [size fs]]
+              [when [lt-s j sfs]
+                [byte-array-set-byte-array ba [add offset [mul j 8]]
+                  [f64-to-byte-array [word-to-f64 [syntax-word/word [at fs j]]]]]
+                [continue j [inc j]]]]
+            [continue
+              i [inc i]
+              offset [add offset [mul [size fs] 8]]]]
+
+            ]]]
+      ba]]
 
 [defn translate-top-form [tctx bform]
   [let [output [translate-context/output tctx]
