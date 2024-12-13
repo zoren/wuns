@@ -279,20 +279,20 @@
         [type-var-kind/linked linked-t] [copy-type subst-map linked-t]]]
 
     [ctype/inst inst-type]
-    [match inst-type
-      [inst-type/func ft]
-      [ctype/inst
+    [ctype/inst
+      [match inst-type
+        [inst-type/func ft]
         [inst-type/func
-          [func-type
-            [list-map param [func-type/params ft] [copy-type subst-map param]]
-            [if-let [rest [func-type/rest-param-opt ft]]
-              [option/some [copy-type subst-map rest]]
-              [option/none]]
-            [copy-type subst-map [func-type/result ft]]
-            [func-type/kind ft]]]]
+            [func-type
+              [list-map param [func-type/params ft] [copy-type subst-map param]]
+              [if-let [rest [func-type/rest-param-opt ft]]
+                [option/some [copy-type subst-map rest]]
+                [option/none]]
+              [copy-type subst-map [func-type/result ft]]
+              [func-type/kind ft]]]
 
-      [inst-type/apply type-name type-args]
-      [ctype/inst [inst-type/apply type-name [list-map arg type-args [copy-type subst-map arg]]]]]]]
+        [inst-type/apply type-name type-args]
+        [inst-type/apply type-name [list-map arg type-args [copy-type subst-map arg]]]]]]]
 
 [defn specialize-type-scheme [counter-atom level scheme]
   [let [subst-assoc-list
