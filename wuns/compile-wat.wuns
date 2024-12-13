@@ -1171,8 +1171,8 @@
     [local.set word wat-inst]
     [global.get word]
     [inst byte-array [list wat-inst]]
-    [load byte-array wat-inst-memargs wat-inst]
-    [store byte-array wat-inst-memargs wat-inst wat-inst]
+    [load word wat-inst-memargs wat-inst]
+    [store word wat-inst-memargs wat-inst wat-inst]
     [if [list wat-type-basic] wat-inst wat-inst wat-inst]
     [call word [list wat-inst]]
     [instructions [list wat-inst]]
@@ -1479,7 +1479,7 @@
                   [memory-kind/i64] [word i64.load]]
                 [logq-abort not implemented translate-top-form deref inst-type/apply]]]
         [wat-inst/load
-          [wasm-name-to-wat-byte-array load-inst-name]
+          load-inst-name
           [wat-inst-memargs
             mem-name
             [word 0]
@@ -1544,7 +1544,7 @@
                   [memory-kind/i64] [word i64.store]]
                 [logq-abort not implemented translate-top-form deref inst-type/apply]]]
         [wat-inst/store
-          [wasm-name-to-wat-byte-array store-inst-name]
+          store-inst-name
           [wat-inst-memargs
             mem-name
             [word 0]
@@ -1865,13 +1865,13 @@
 
     [wat-inst/load name ma addr]
     [wat-concat
-      [list [wat/byte-array name]]
+      [list [wat/word name]]
       [wat-inst-memargs-to-out ma]
       [list [wat-inst-to-out addr]]]
 
     [wat-inst/store name ma addr value]
     [wat-concat
-      [list [wat/byte-array name]]
+      [list [wat/word name]]
       [wat-inst-memargs-to-out ma]
       [list [wat-inst-to-out addr] [wat-inst-to-out value]]]
 
