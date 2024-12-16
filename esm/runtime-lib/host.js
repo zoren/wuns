@@ -331,10 +331,11 @@ const set_has = (set, value) => {
 }
 export { set_has as 'set-has' }
 const set_to_list = (set) => {
-  if (!(set instanceof Set)) throw new Error('set-to-frozen-list expects set')
+  if (!(set instanceof Set)) throw new Error('set-to-list expects set')
   return Object.freeze([...set])
 }
 export { set_to_list as 'set-to-list' }
+
 const mem_dump = (wasmMem, start, end) => {
   if (!(wasmMem instanceof WebAssembly.Memory)) throw new Error('mem-dump expects memory')
   if (!isSigned32BitInteger(start)) throw new Error('mem-dump expects number: ' + start)
