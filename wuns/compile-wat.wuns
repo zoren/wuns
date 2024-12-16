@@ -673,8 +673,8 @@
 
     [llexp/cast cast-type value]
     [let
-      [tv [infer-llexp gctx level lctx value]
-       inst-type [llinstantiate-syntax-type [infer-local-context/type-env lctx] cast-type]
+      [inst-type [llinstantiate-syntax-type [infer-local-context/type-env lctx] cast-type]
+       tv [infer-llexp gctx level lctx value]
        inst-app-t [get-apply-type inst-type]]
       [todo when casting to pointer we should check if the value is i32 or i64 depending on the memory]
       [switch [pair/fst inst-app-t]
@@ -692,6 +692,11 @@
 
       inst-type]
 
+    [llexp/size-of t]
+    [do
+      [llannotate gctx t [llinstantiate-syntax-type [infer-local-context/type-env lctx] t]]
+      type-i32]
+
     [llexp/deref value]
     [let [t-mem [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
           t-res [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
@@ -702,10 +707,10 @@
 
     [llexp/assign target value]
     [let [t-mem [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
-          t-res [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
-          pt [type-pointer t-mem t-res]]
+          t-val [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
+          pt [type-pointer t-mem t-val]]
       [llunify-report gctx pt [infer-llexp gctx level lctx target] target]
-      [llunify-report gctx t-res [infer-llexp gctx level lctx value] value]
+      [llunify-report gctx t-val [infer-llexp gctx level lctx value] value]
       [llannotate gctx target pt]
       type-empty-tuple]
 
@@ -734,11 +739,6 @@
             [logq-abort infer-llexp not a record type]]
 
           [logq-abort infer-llexp type not found [identity type-name]]]]]
-
-    [llexp/size-of t]
-    [do
-      [llinstantiate-syntax-type [infer-local-context/type-env lctx] t]
-      type-i32]
 
     [do
       [log bform]
@@ -796,7 +796,7 @@
     [set-local ctx lvars name-form [lllocal-var-kind/func-internal-self [size params]]]
     [lldefn
       [sword name-form]
-      [list]
+      [list-map tp type-params [sword tp]]
       [list-map p params
         [match p
           [form/word w]
@@ -810,7 +810,7 @@
             [assert [eq [size l] 3] form-to-lltop expected type form]
             [assert [eq-word [form-to-word [first l]] [word type]]]
             [pair [sword param-name-form] [option/some [form-to-lltype ctx type-env [third l]]]]]]]
-      [list-map b bodies [form-to-llexp-tv ctx [set] lstack b]]]]]
+      [list-map b bodies [form-to-llexp-tv ctx type-env lstack b]]]]]
 
 [defn form-to-lltop [ctx form]
   [let
@@ -860,14 +860,15 @@
             [type-name-form [get-arg 0]
              type-params [get-list [get-arg 1]]
              type-decl-list [get-list [get-arg 2]]
-             type-env [set]]
+             type-env [set]
+             type-params-sword [list-map tp type-params [sword tp]]]
             [assert-not [is-empty type-decl-list] empty type decl list]
             [for-each type-param type-params
               [let [tp [form-to-word type-param]]
                 [assert-not [set-has type-env tp] duplicate type param]
                 [set-add type-env tp]]]
-            [set-kv-map [llctx/user-type-params ctx] [form-to-word type-name-form] [list-map tp type-params [sword tp]]]
-            [lltop/type [sword type-name-form] [list-map tp type-params [sword tp]]
+            [set-kv-map [llctx/user-type-params ctx] [form-to-word type-name-form] type-params-sword]
+            [lltop/type [sword type-name-form] type-params-sword
               [switch [form-to-word [first type-decl-list]]
                 [[word record]]
                 [let [field-map [transient-kv-map]
@@ -945,19 +946,18 @@
       [level-1 1
        gfunc-type [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level-1]
        param-ctx [transient-kv-map]
+       type-env [transient-kv-map]
        func-ctx
         [infer-local-context
           [make-local-context param-ctx [local-stack/empty] [local-context-kind/func]]
-          [transient-kv-map]]
+          type-env]
        reg-params [growable-list]
-       type-env [transient-kv-map]
        fname-word [syntax-word/word [lldefn/name func]]
-       empty-tv-env [transient-kv-map]
        infer-type-params [growable-list]
        counter-atom [llcheck-context/type-var-counter gctx]]
       [set-kv-map param-ctx fname-word [mk-empty-type-scheme gfunc-type]]
       [for-each type-param [lldefn/type-params func]
-        [let [itp [make-type-var [type-var-kind/word [int-to-type-var-name [inc-atom counter-atom]]] 0]]
+        [let [itp [make-type-var [type-var-kind/word [int-to-type-var-name [inc-atom counter-atom]]] level-1]]
           [push infer-type-params itp]
           [set-kv-map type-env [syntax-word/word type-param] [ctype/var itp]]]]
       [for-each param [lldefn/params func]
@@ -1079,6 +1079,11 @@
 
 [defn wat-inst-drop [i]
   [wat-inst/inst drop-name-byte-array [list i]]]
+
+[defn wat-inst-i32.add [a b]
+  [wat-inst/inst
+    [wasm-name-to-wat-byte-array [word i32.add]]
+    [list a b]]]
 
 [defn sizeof [llctx type-env t]
   [match t
@@ -1293,6 +1298,11 @@
         i [inc i]]
       w]]]
 
+[defn specialized-name-from [tctx fname type-args]
+  [if [is-empty type-args]
+    fname
+    [concat-words fname [type-args-to-word tctx type-args]]]]
+
 [defn add-func-specialization [tctx sname]
   [let [type-args [get [llcheck-context/type-instantiations [translate-context/check-context tctx]] sname]
         fname-word [syntax-word/word sname]
@@ -1346,12 +1356,14 @@
      fname-word [syntax-word/word [lldefn/name func]]
      ts [get [llcheck-context/def-var-types [translate-context/check-context tctx]] fname-word]
      type-params [check-type-scheme/type-vars ts]
-     type-env [growable-list]
      special-func-name [if [is-empty type-args] fname-word [concat-words fname-word [type-args-to-word tctx type-args]]]
-     params [lldefn/params func]]
-  [assert [eq [size type-params] [size type-args]] expected matching number of type parameters]
-  [for i 0 [size type-params]
-    [push type-env [pair [at type-params i] [at type-args i]]]]
+     params [lldefn/params func]
+     gtype-env [growable-list]
+     - [do
+        [assert [eq [size type-params] [size type-args]] expected matching number of type parameters]
+        [for i 0 [size type-params]
+          [push gtype-env [pair [at type-params i] [at type-args i]]]]]
+     type-env [clone-growable-to-frozen-list gtype-env]]
   [letfn
     [
   [func go-forms [forms]
@@ -1503,20 +1515,63 @@
 
       [llexp/size-of t]
       [let
-        [tv [transient-kv-map]]
-        [comment use the type env here]
-        [wat-inst/i32.const [int-to-word [sizeof bind-ctx tv [lltype-to-lltype-desc t]]]]]
+        [tv [transient-kv-map]
+         type-to-size
+          [func tts [it]
+            [match [normalize-type it]
+              [ctype/var tv]
+              [if-let [subst-type [try-get-assoc-identical type-env tv]]
+                [tts subst-type]
+                [logq-abort size-of type var not found [identity tv]]]
+
+              [ctype/inst inst-type]
+              [match inst-type
+                [inst-type/apply type-name type-args]
+                [switch type-name
+                  [[word i32] [word f32]] [wat-inst/i32.const [word 4]]
+                  [[word i64] [word f64]] [wat-inst/i32.const [word 8]]
+                  [[word v128]] [wat-inst/i32.const [word 16]]
+                  [[word tuple]] [logq-abort size-of tuple not implemented]
+                  [[word pointer]]
+                  [let
+                    [mem-name [mem-name-from-mem-type [first type-args]]]
+                    [match [get-memory-kind [llctx-from-translate tctx] mem-name]
+                      [memory-kind/i32]
+                      [wat-inst/i32.const [word 4]]
+                      [memory-kind/i64]
+                      [wat-inst/i32.const [word 8]]]]
+
+                  [if-let [type-params [try-get [llctx/user-type-params bind-ctx] type-name]]
+                    [let
+                      [new-tv-env [transient-kv-map]]
+                      [assert [eq [size type-params] [size type-args]] sizeof arity mismatch]
+                      [for i 0 [size type-args]
+                        [set-kv-map new-tv-env [syntax-word/word [at type-params i]] [at type-args i]]]
+                      [match [get [llctx/user-types bind-ctx] type-name]
+                        [user-type-desc/record field-map field-list]
+                        [loop [cur-size [wat-inst/i32.const [word 0]] i 0 n [size field-list]]
+                          [if [lt-s i n]
+                            [let [fd [at field-list i]]
+                              [continue
+                                cur-size [wat-inst-i32.add cur-size [tts [llinstantiate-type-desc new-tv-env  [field-desc/type [pair/snd fd]]]]]
+                                i [inc i]]]
+                            cur-size]]
+                        [logq-abort infer-llexp not a record type]]]
+                    [logq-abort infer-llexp type not found [identity type-name]]]
+                      ]
+                [do [log it] [logq-abort not implemented size-of [identity it]]]]
+              [do [log it] [logq-abort not implemented size-of [identity it]]]]]]
+        [type-to-size [get-annotation tctx t]]]
 
       [do
         [log form]
         [logq-abort not implemented translate-form]]]]]
     [comment go-forms has the side effect of adding locals so we need to run it first]
     [let
-      [t [copy-type [clone-growable-to-frozen-list type-env] [check-type-scheme/type ts]]
+      [t [copy-type type-env [check-type-scheme/type ts]]
        ft [get-func-type t]
        param-types [func-type/params ft]
        gparams [growable-list]
-       - [comment we need to add it to the working set here for recursion]
        -- [set-add [translate-context/specialized-names-generated tctx] special-func-name]
        tbodies [go-forms [lldefn/bodies func]]]
       [assert [eq [size params] [size param-types]] expected matching number of parameters and types]
@@ -1606,15 +1661,19 @@
       [when-not [is-empty func-specializations]
         [atom-set specs-atom [growable-list]]
         [for-each func-specialization func-specializations
-          [translate-func tctx [get func-to-body [pair/fst func-specialization]] [pair/snd func-specialization]]]
+          [let [fname [pair/fst func-specialization]
+                type-args [pair/snd func-specialization]
+                func [get func-to-body fname]
+                spec-name [specialized-name-from tctx fname type-args]]
+            [when-not [set-has [translate-context/specialized-names-generated tctx] spec-name]
+              [translate-func tctx func type-args]]]]
         [continue func-specializations [clone-growable-to-frozen-list [atom-get specs-atom]]]]]]]
 
 [defn translate-top-forms-sync [forms]
   [let
     [tctx [translate-context-empty]
      gctx [translate-context/check-context tctx]
-     ctx [llcheck-context/bind-ctx gctx]
-     ]
+     ctx [llcheck-context/bind-ctx gctx]]
     [for-each form forms
       [let [btop [form-to-lltop ctx form]]
         [let [check-errors [clone-growable-to-frozen-list [llcheck-context/messages gctx]]]

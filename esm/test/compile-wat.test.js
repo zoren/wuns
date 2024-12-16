@@ -412,12 +412,12 @@ test('records', async () => {
 [genfn alloc [target-type] []
   [cast [pointer mem target-type] [alloc-n [size-of target-type]]]]
 
-[defn alloc-f64 [[type f f64]]
+[defn alloc-f [[type f f64]]
   [let [p [alloc]]
     [assign p f]
     p]]
 
-[defn alloc-i32 [[type i i32]]
+[defn alloc-i [[type i i32]]
   [let [p [alloc]]
     [assign p i]
     p]]
@@ -428,16 +428,16 @@ test('records', async () => {
 [defn get-f64 [[type p [pointer mem f64]]]
   [deref p]]
 
-[export alloc-f64 alloc-i32 get-i32 get-f64]`
-    // const inst = await stringToInst(src)
-    // const allocF64 = inst['alloc-f64']
-    // const allocI32 = inst['alloc-i32']
-    // const getI32 = inst['get-i32']
-    // const getF64 = inst['get-f64']
-    // const pi = allocI32(7)
-    // expect(getI32(pi)).toBe(7)
-    // const pf = allocF64(1.9)
-    // expect(getF64(pf)).toBe(1.9)
+[export alloc-f alloc-i get-i32 get-f64]`
+    const inst = await stringToInst(src)
+    const allocF64 = inst['alloc-f']
+    const allocI32 = inst['alloc-i']
+    const getI32 = inst['get-i32']
+    const getF64 = inst['get-f64']
+    const pi = allocI32(7)
+    expect(getI32(pi)).toBe(7)
+    const pf = allocF64(1.9)
+    expect(getF64(pf)).toBe(1.9)
   }
   // {
   //   const inst = await stringToInst(lllist)
