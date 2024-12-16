@@ -152,7 +152,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
         }
       },
       letfn: (_headWord, tail) => {
-        const [functionsForm, body] = tail
+        const [functionsForm, ...bodies] = tail
         for (const func of getListOrEmpty(functionsForm)) {
           const [head, ...tail] = getListOrEmpty(func)
           const fnHeadWord = tryGetFormWord(head)
@@ -160,7 +160,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
           pushToken(head, keywordTokenType)
           funcSpecial(fnHeadWord, tail)
         }
-        goExp(body)
+        for (const body of bodies) goExp(body)
       },
       func: funcSpecial,
       intrinsic: (_headWord, tail) => {
