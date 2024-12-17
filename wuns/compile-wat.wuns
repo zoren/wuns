@@ -1438,44 +1438,6 @@
     [wasm-name-to-wat-byte-array [word i32.add]]
     [list a b]]]
 
-[defn sizeof [llctx type-env t]
-  [match t
-    [lltype-desc/var tv]
-    [sizeof llctx type-env [get type-env tv]]
-
-    [lltype-desc/apply type-name type-args]
-    [switch type-name
-      [[word i32] [word f32]] 4
-      [[word i64] [word f64]] 8
-      [[word v128]] [i32 16]
-      [[word pointer]]
-      [match [first type-args]
-        [lltype-desc/apply mem-name ta]
-        [if-let [dd [try-get [llctx/lldef-ctx llctx] mem-name]]
-          [match [get-memory-kind llctx mem-name]
-            [memory-kind/i32] 4
-            [memory-kind/i64] 8]
-          [logq-abort sizeof memory not found]]]
-
-      [[word tuple]] [logq-abort sizeof tuple not implemented]
-      [if-let [type-params [try-get [llctx/user-type-params llctx] type-name]]
-        [let
-          [new-tv-env [transient-kv-map]]
-          [assert [eq [size type-params] [size type-args]] sizeof arity mismatch]
-          [for i 0 [size type-args]
-            [set-kv-map new-tv-env [syntax-word/word [at type-params i]] [at type-args i]]]
-          [match [get [llctx/user-types llctx] type-name]
-            [user-type-desc/record field-map field-list]
-            [loop [cur-size 0 i 0 n [size field-list]]
-              [if [lt-s i n]
-                [let [fd [at field-list i]]
-                  [continue
-                    cur-size [add cur-size [sizeof llctx new-tv-env [field-desc/type [pair/snd fd]]]]
-                    i [inc i]]]
-                cur-size]]
-            [logq-abort infer-llexp not a record type]]]
-        [logq-abort infer-llexp type not found [identity type-name]]]]]]
-
 [defn type-subst [type-env t]
   [match t
     [lltype/var w]
@@ -1683,6 +1645,11 @@
 
     [logq-abort exp-const-to-wat-inst]]]
 
+[def i32.const-0 [wat-inst/i32.const [word 0]]]
+[def i32.const-4 [wat-inst/i32.const [word 4]]]
+[def i32.const-8 [wat-inst/i32.const [word 8]]]
+[def i32.const-16 [wat-inst/i32.const [word 16]]]
+
 [defn translate-func [tctx func type-args]
   [let
     [cctx [translate-context/check-context tctx]
@@ -1711,7 +1678,55 @@
         [assert [eq [size type-params] [size type-args]] expected matching number of type parameters]
         [for i 0 [size type-params]
           [push gtype-env [pair [at type-params i] [at type-args i]]]]]
-     type-env [clone-growable-to-frozen-list gtype-env]]
+     type-env [clone-growable-to-frozen-list gtype-env]
+     type-to-size-exp
+     [func tts [it]
+      [match [normalize-type it]
+        [ctype/var tv]
+        [if-let [subst-type [try-get-assoc-identical type-env tv]]
+          [tts subst-type]
+          [logq-abort size-of type var not found [identity tv]]]
+
+        [ctype/literal l]
+        [logq-abort size-of literal not implemented]
+
+        [ctype/inst inst-type]
+        [match inst-type
+          [inst-type/func func-type]
+          [logq-abort size-of func type not implemented]
+
+          [inst-type/apply type-name type-args]
+          [switch type-name
+            [[word i32] [word f32]] i32.const-4
+            [[word i64] [word f64]] i32.const-8
+            [[word v128]] i32.const-16
+            [[word tuple]] [logq-abort size-of tuple not implemented]
+            [[word pointer]]
+            [match [get-memory-kind [llctx-from-translate tctx] [mem-name-from-mem-type [first type-args]]]
+              [memory-kind/i32]
+              i32.const-4
+              [memory-kind/i64]
+              i32.const-8]
+
+            [if-let [type-params [try-get [llctx/user-type-params bind-ctx] type-name]]
+              [let
+                [new-tv-env [transient-kv-map]]
+                [assert [eq [size type-params] [size type-args]] sizeof arity mismatch]
+                [for i 0 [size type-args]
+                  [set-kv-map new-tv-env [syntax-word/word [at type-params i]] [at type-args i]]]
+                [match [get [llctx/user-types bind-ctx] type-name]
+                  [user-type-desc/record field-map field-list]
+                  [loop [cur-size i32.const-0 i 0 n [size field-list]]
+                    [if [lt-s i n]
+                      [let [fd [at field-list i]]
+                        [continue
+                          cur-size [wat-inst-i32.add cur-size [tts [llinstantiate-type-desc new-tv-env [field-desc/type [pair/snd fd]]]]]
+                          i [inc i]]]
+                      cur-size]]
+                  [logq-abort infer-llexp not a record type]]]
+              [logq-abort infer-llexp type not found [identity type-name]]]]
+          [do [log it] [logq-abort not implemented size-of [identity it]]]]
+        [do [log it] [logq-abort not implemented size-of [identity it]]]]]]
   [letfn
     [
   [func go-forms [forms]
@@ -1825,22 +1840,24 @@
                     [target-type-params [get [llctx/user-type-params bctx] ttarget-name]
                      new-tv-env [transient-kv-map]]
                     [for i 0 [size ttarget-args]
-                      [set-kv-map new-tv-env [syntax-word/word [at target-type-params i]] [ctype-to-lltype-desc [at ttarget-args i]]]]
-                    [loop [i 0 offset 0]
+                      [set-kv-map new-tv-env [syntax-word/word [at target-type-params i]] [at ttarget-args i]]]
+                    [loop [i 0 offset i32.const-0]
                       [if [lt-s i [size field-list]]
                         [let [fp [at field-list i]]
                           [if [eq-word field-name-word [pair/fst fp]]
                             offset
                             [continue
                               i [inc i]
-                              offset [add offset [sizeof bctx new-tv-env [field-desc/type [pair/snd fp]]]]]]]
+                              offset [wat-inst-i32.add
+                                      offset
+                                      [type-to-size-exp [llinstantiate-type-desc new-tv-env [field-desc/type [pair/snd fp]]]]]]]]
                         [logq-abort field not found]]]]
                   [logq-abort not a record type]]
                 [logq-abort not implemented translate-top-form field inst-type/apply]]]
         [wat-inst/inst
           [wasm-name-to-wat-byte-array [word i32.add]]
           [list
-            [wat-inst/i32.const [int-to-word offset]]
+            offset
             [go target]]]]]
 
       [llexp/assign target value]
@@ -1862,53 +1879,7 @@
           [go value]]]
 
       [llexp/size-of t]
-      [let
-        [tv [transient-kv-map]
-         type-to-size
-          [func tts [it]
-            [match [normalize-type it]
-              [ctype/var tv]
-              [if-let [subst-type [try-get-assoc-identical type-env tv]]
-                [tts subst-type]
-                [logq-abort size-of type var not found [identity tv]]]
-
-              [ctype/inst inst-type]
-              [match inst-type
-                [inst-type/apply type-name type-args]
-                [switch type-name
-                  [[word i32] [word f32]] [wat-inst/i32.const [word 4]]
-                  [[word i64] [word f64]] [wat-inst/i32.const [word 8]]
-                  [[word v128]] [wat-inst/i32.const [word 16]]
-                  [[word tuple]] [logq-abort size-of tuple not implemented]
-                  [[word pointer]]
-                  [let
-                    [mem-name [mem-name-from-mem-type [first type-args]]]
-                    [match [get-memory-kind [llctx-from-translate tctx] mem-name]
-                      [memory-kind/i32]
-                      [wat-inst/i32.const [word 4]]
-                      [memory-kind/i64]
-                      [wat-inst/i32.const [word 8]]]]
-
-                  [if-let [type-params [try-get [llctx/user-type-params bind-ctx] type-name]]
-                    [let
-                      [new-tv-env [transient-kv-map]]
-                      [assert [eq [size type-params] [size type-args]] sizeof arity mismatch]
-                      [for i 0 [size type-args]
-                        [set-kv-map new-tv-env [syntax-word/word [at type-params i]] [at type-args i]]]
-                      [match [get [llctx/user-types bind-ctx] type-name]
-                        [user-type-desc/record field-map field-list]
-                        [loop [cur-size [wat-inst/i32.const [word 0]] i 0 n [size field-list]]
-                          [if [lt-s i n]
-                            [let [fd [at field-list i]]
-                              [continue
-                                cur-size [wat-inst-i32.add cur-size [tts [llinstantiate-type-desc new-tv-env  [field-desc/type [pair/snd fd]]]]]
-                                i [inc i]]]
-                            cur-size]]
-                        [logq-abort infer-llexp not a record type]]]
-                    [logq-abort infer-llexp type not found [identity type-name]]]]
-                [do [log it] [logq-abort not implemented size-of [identity it]]]]
-              [do [log it] [logq-abort not implemented size-of [identity it]]]]]]
-        [type-to-size [get-annotation cctx t]]]
+      [type-to-size-exp [get-annotation cctx t]]
 
       [do
         [log form]
