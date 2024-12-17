@@ -130,8 +130,8 @@ test('loop', async () => {
 test('memory', async () => {
   const inst = await stringToInst(`
 [memory i32 mem 1]
-[defn get [p] [intrinsic i32.load mem 0 4 p]]
-[defn set [p v] [intrinsic i32.store mem 0 4 p v]]
+[defn get [[type p [pointer mem i32]]] [deref p]]
+[defn set [[type p [pointer mem i32]] v] [assign p v]]
 [export get set]`)
   const { get, set } = inst
   set(0, 5)
@@ -432,11 +432,13 @@ test('records', async () => {
 
 [data active mem [i32 0] [i32 16]]
 
+[def top [cast [pointer mem i32] [i32 0]]]
+
 [defn get-top []
-  [intrinsic i32.load mem 0 4 [i32 0]]]
+  [deref top]]
 
 [defn set-top [new-top]
-  [intrinsic i32.store mem 0 4 [i32 0] new-top]]
+  [assign top new-top]]
 
 [defn alloc-n [n-bytes]
   [let [top [get-top]]
