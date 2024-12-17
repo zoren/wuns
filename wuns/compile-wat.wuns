@@ -1284,6 +1284,11 @@
             [llannotate gctx e [get-specialized-var gctx 0 [local-stack/empty] e]]
             [do]]]]]]]
 
+[defn get-annotation [cctx bst]
+  [if-let [anno [try-get [llcheck-context/type-annotations cctx] [to-js-value bst]]]
+    anno
+    [logq-abort get-annotation expected an annotation]]]
+
 [defn get-ctype [gctx bform]
   [match bform
     [llexp/literal l]
@@ -1326,9 +1331,7 @@
     [llexp/assign target value]
     type-empty-tuple
 
-    [if-let [anno [try-get [llcheck-context/type-annotations gctx] [to-js-value bform]]]
-      anno
-      [logq-abort get-ctype expected an annotation [identity bform]]]]]
+    [get-annotation gctx bform]]]
 
 [type wat-type-basic []
   [union
@@ -1607,11 +1610,6 @@
       [push gl [pair fname-word type-args]]]
     spec-name]]
 
-[defn get-annotation [tctx bst]
-  [if-let [anno [try-get [llcheck-context/type-annotations [translate-context/check-context tctx]] [to-js-value bst]]]
-    anno
-    [logq-abort get-annotation expected an annotation]]]
-
 [defn literal-to-wat-inst [l]
   [match l
     [llliteral/i32 i] [wat-inst/i32.const [syntax-word/word i]]
@@ -1855,7 +1853,7 @@
                       ]
                 [do [log it] [logq-abort not implemented size-of [identity it]]]]
               [do [log it] [logq-abort not implemented size-of [identity it]]]]]]
-        [type-to-size [get-annotation tctx t]]]
+        [type-to-size [get-annotation cctx t]]]
 
       [do
         [log form]
@@ -1921,7 +1919,7 @@
                     [export-kind/func]]
 
                   [lldef-desc/any]
-                  [match [normalize-type [get-annotation tctx sname]]
+                  [match [normalize-type [get-annotation cctx sname]]
                     [ctype/inst inst-type]
                     [match inst-type
                       [inst-type/func func-type]
