@@ -5,9 +5,14 @@
     [word word]
     [opt-form [option form]]]]
 
+[type type-literal []
+  [union
+    [memory syntax-word]]]
+
 [type lltype []
   [union
     [var syntax-word]
+    [literal type-literal]
     [apply syntax-word [list lltype]]]]
 
 [type llliteral []
@@ -49,9 +54,14 @@
     [func i32]
     ]]
 
+[type type-literal-desc []
+  [union
+    [memory word]]]
+
 [type lltype-desc []
   [union
     [var word]
+    [literal type-literal-desc]
     [apply word [list lltype-desc]]]]
 
 [type lllocal-var-kind []
@@ -120,6 +130,7 @@
   ctype []
   [union
     [var type-var]
+    [literal type-literal-desc]
     [inst inst-type]]]
 
 [defn get-type-var-kind [type-var]
@@ -146,6 +157,13 @@
       [type-var-kind/word w] [form/word w]
       [type-var-kind/linked -]
       [logq-abort ctype-to-form unexpected linked type variable type should have been normalized]]
+
+    [ctype/literal l]
+    [match l
+      [type-literal-desc/memory mem]
+      [form/word mem]
+
+      [logq-abort ctype-to-form unexpected literal type]]
 
     [ctype/inst inst-type]
     [match inst-type
@@ -191,7 +209,7 @@
   [log form]
   [log msg]
   [log-location form]
-  [logq-abort push-error error]]
+  [logq-abort push-error error [identity msg]]]
 
 [defn get-list [form]
   [match form
@@ -231,27 +249,20 @@
           [do
             [when-not [eq [size type-params] 0] [push-error form [quote [expected no type params]]]]
             [lltype/apply [sword form] [list]]]
-          [push-error form [quote [undefined type or type param]]]]]]
+          [if-let [top-desc [try-get [llctx/lldef-ctx ctx] w]]
+            [match top-desc
+              [lldef-desc/memory mk] [lltype/literal [type-literal/memory [sword form]]]
+              [push-error form [quote [undefined type or type param def not acceptable kind]]]]
+            [push-error form [quote [undefined type or type param]]]]]]]
 
     [form/list l]
     [let [sw [sword [first l]] fw [syntax-word/word sw]]
       [assert-not [eq-word fw [word type-scheme]] unexpected type-scheme]
-      [let [n-of-args [dec [size l]]]
-        [if-let [arity-ok [llbuiltin-type-arity-ok fw n-of-args]]
-          [do
-            [when-not arity-ok
-              [push-error form [quote [wrong number of type arguments to builtin]]]]
-            [switch fw
-              [[word pointer]]
-              [do
-                [lltype/apply sw
-                  [list
-                    [lltype/apply [sword [second l]] [list]]
-                    [form-to-lltype ctx type-params [third l]]]]]
-
-              [lltype/apply sw [list-map arg [rest l] [form-to-lltype ctx type-params arg]]]]]
-          [do
-            [lltype/apply sw [list-map arg [rest l] [form-to-lltype ctx type-params arg]]]]]]]]]
+      [when-let [arity-ok [llbuiltin-type-arity-ok fw [dec [size l]]]]
+        [when-not arity-ok
+          [push-error form [quote [wrong number of type arguments to builtin]]]]
+        [lltype/apply sw [list-map arg [rest l] [form-to-lltype ctx type-params arg]]]]
+      [lltype/apply sw [list-map arg [rest l] [form-to-lltype ctx type-params arg]]]]]]
 
 [defn set-local [ctx lvars f kind]
   [let [w [form-to-word f]]
@@ -523,6 +534,11 @@
 [def type-f32 [make-type [word f32]]]
 [def type-i64 [make-type [word i64]]]
 
+[defn type-memory [mem-name] [ctype/literal [type-literal-desc/memory mem-name]]]
+[defn type-pointer [mem target] [make-type [word pointer] mem target]]
+
+[def type-empty-tuple [make-type [word tuple]]]
+
 [defn type-func [params result]
   [ctype/inst [inst-type/func [func-type params result]]]]
 
@@ -600,6 +616,8 @@
         [type-var-kind/word w] t
         [type-var-kind/linked linked-t] [copy-type subst-map linked-t]]]
 
+    [ctype/literal l] t
+
     [ctype/inst inst-type]
     [ctype/inst
       [match inst-type
@@ -645,12 +663,14 @@
           [when-not [set-has ftvs tv]
             [set-add ftvs tv]]
 
+          [ctype/literal l]
+          [do]
+
           [ctype/inst inst-type]
           [match inst-type
             [inst-type/func ft]
             [do
-              [for-each param [func-type/params ft]
-                [go param]]
+              [for-each param [func-type/params ft] [go param]]
               [go [func-type/result ft]]]
 
             [inst-type/apply type-name type-args]
@@ -676,6 +696,15 @@
     [prune-level level fvs]
     [set-type-var-kind-to-type type-var type]]]
 
+[defn type-literal-desc-equals [l1 l2]
+  [match l1
+    [type-literal-desc/memory m1]
+    [match l2
+      [type-literal-desc/memory m2]
+      [eq-word m1 m2]
+
+      false]]]
+
 [defn unify [outer-t1 outer-t2]
   [let
     [errors [growable-list]
@@ -694,13 +723,31 @@
                 [link-var-to-type tv1 nt2]
                 [link-var-to-type tv2 nt1]]]
 
+            [ctype/literal l2]
+            [link-var-to-type tv1 nt2]
+
             [ctype/inst inst-type2]
             [link-var-to-type tv1 nt2]]
+
+          [ctype/literal l1]
+          [match nt2
+            [ctype/var tv2]
+            [link-var-to-type tv2 nt1]
+
+            [ctype/literal l2]
+            [when-not [type-literal-desc-equals l1 l2]
+              [push-unify-error [quote [not unifiable - different literals]]]]
+
+            [ctype/inst inst-type2]
+            [push-unify-error [quote [not unifiable - literal vs inst]]]]
 
           [ctype/inst inst-type1]
           [match nt2
             [ctype/var tv2]
             [link-var-to-type tv2 nt1]
+
+            [ctype/literal l2]
+            [push-unify-error [quote [not unifiable - inst vs literal]]]
 
             [ctype/inst inst-type2]
             [match inst-type1
@@ -744,12 +791,14 @@
   [set-kv-map [llcheck-context/type-annotations gctx] [to-js-value bst] type]
   type]
 
-[defn type-memory [mem-name] [make-type [word memory] [make-type mem-name]]]
-[defn type-pointer [mem target] [make-type [word pointer] mem target]]
-
 [defn lltype-to-lltype-desc [t]
   [match t
     [lltype/var w] [lltype-desc/var [syntax-word/word w]]
+    [lltype/literal l]
+    [lltype-desc/literal
+      [match l
+        [type-literal/memory mem]
+        [type-literal-desc/memory [syntax-word/word mem]]]]
     [lltype/apply w args] [lltype-desc/apply [syntax-word/word w] [list-map a args [lltype-to-lltype-desc a]]]]]
 
 [defn ctype-to-lltype-desc [ct]
@@ -767,6 +816,13 @@
     [lltype-desc/var tv]
     [get type-var-env tv]
 
+    [lltype-desc/literal l]
+    [match l
+      [type-literal-desc/memory mem-name]
+      [type-memory mem-name]
+
+      [logq-abort llinstantiate-type-desc not implemented]]
+
     [lltype-desc/apply type-name targs]
     [switch type-name
       [[word i32]]
@@ -781,11 +837,7 @@
       [[word pointer]]
       [let [mem [first targs] target [second targs]]
         [type-pointer
-          [match mem
-            [lltype-desc/apply mem-name mem-args]
-            [type-memory mem-name]
-
-            [logq-abort llinstantiate-type-desc unexpected mem]]
+          [llinstantiate-type-desc type-var-env mem]
           [llinstantiate-type-desc type-var-env target]]]
 
       [make-type-list
@@ -796,7 +848,14 @@
   [llinstantiate-type-desc type-var-env [lltype-to-lltype-desc syntax-type]]]
 
 [defn mem-name-from-mem-type [tmem]
-  [pair/fst [get-apply-type [first [pair/snd [get-apply-type tmem]]]]]]
+  [match [normalize-type tmem]
+    [ctype/literal l]
+    [match l
+      [type-literal-desc/memory mem-name]
+      mem-name
+
+      [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]
+    [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]]
 
 [defn get-memory-kind [llctx mem-name]
   [if-let [dd [try-get [llctx/lldef-ctx llctx] mem-name]]
@@ -815,8 +874,6 @@
   [record
     [stack [local-stack check-type-scheme]]
     [type-env [transient-kv-map word ctype]]]]
-
-[def type-empty-tuple [make-type [word tuple]]]
 
 [defn make-local-context [var-values lstack kind]
   [local-stack/frame lstack [local-context var-values kind]]]
@@ -1259,7 +1316,8 @@
           [when-let [param-t [pair/snd param]]
             [llunify-report gctx tv [llinstantiate-syntax-type type-env param-t] param]]
           [set-kv-map param-ctx [syntax-word/word [pair/fst param]] [mk-empty-type-scheme tv]]
-          [push reg-params tv]]]
+          [push reg-params tv]
+          [llannotate gctx [pair/fst param] tv]]]
       [let [return-type [infer-forms gctx level-1 func-ctx [lldefn/bodies func]]]
         [llunify-report gctx
           gfunc-type
@@ -1847,8 +1905,7 @@
                                 i [inc i]]]
                             cur-size]]
                         [logq-abort infer-llexp not a record type]]]
-                    [logq-abort infer-llexp type not found [identity type-name]]]
-                      ]
+                    [logq-abort infer-llexp type not found [identity type-name]]]]
                 [do [log it] [logq-abort not implemented size-of [identity it]]]]
               [do [log it] [logq-abort not implemented size-of [identity it]]]]]]
         [type-to-size [get-annotation cctx t]]]

@@ -223,7 +223,7 @@ test('cast', async () => {
       [deref
         [cast [pointer no-such-mem i32] [i32 16]]]]
     [export f]`),
-  ).rejects.toThrow('not found no-such-mem')
+  ).rejects.toThrow('undefined type or type param')
   await expect(
     stringToInst(`
     [memory i32 mem 1]
@@ -231,7 +231,7 @@ test('cast', async () => {
       [deref
         [cast [pointer i32 i32] [i32 16]]]]
     [export f]`),
-  ).rejects.toThrow('not found i32')
+  ).rejects.toThrow('not a memory type')
   await expect(
     stringToInst(`
     [memory i32 mem 1]
