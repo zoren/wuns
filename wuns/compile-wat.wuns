@@ -1,9 +1,9 @@
-[load check2.wuns]
+[load std.wuns]
 
-[type gen-type [type-name type-var]
-  [union
-    [var type-var]
-    [apply type-name [list [gen-type type-name type-var]]]]]
+[type syntax-word []
+  [record
+    [word word]
+    [opt-form [option form]]]]
 
 [type lltype []
   [union
@@ -96,6 +96,70 @@
         [let [c [char-code-at w i]] [if [eq c [word-to-char-code -]] ascii-underscore c]]]]
     res]]
 
+[type
+  type-var-kind []
+  [union
+    [linked ctype]
+    [word word]]
+
+  type-var []
+  [record
+    [kind [atom type-var-kind]]
+    [level [atom i32]]]
+
+  func-type []
+  [record
+    [params [list ctype]]
+    [result ctype]]
+
+  inst-type []
+  [union
+    [func func-type]
+    [apply word [list ctype]]]
+
+  ctype []
+  [union
+    [var type-var]
+    [inst inst-type]]]
+
+[defn get-type-var-kind [type-var]
+  [atom-get [type-var/kind type-var]]]
+
+[defn set-type-var-kind-to-type [type-var type]
+  [atom-set [type-var/kind type-var] [type-var-kind/linked type]]]
+
+[defn normalize-type [t0]
+  [match t0
+    [ctype/var tv]
+    [match [get-type-var-kind tv]
+      [type-var-kind/word w] t0
+      [type-var-kind/linked linked-t]
+      [let [t2 [normalize-type linked-t]]
+        [set-type-var-kind-to-type tv t2]
+        t2]]
+    t0]]
+
+[defn ctype-to-form [ct]
+  [match [normalize-type ct]
+    [ctype/var tv]
+    [match [atom-get [type-var/kind tv]]
+      [type-var-kind/word w] [form/word w]
+      [type-var-kind/linked -]
+      [logq-abort ctype-to-form unexpected linked type variable type should have been normalized]]
+
+    [ctype/inst inst-type]
+    [match inst-type
+      [inst-type/func ft]
+      [flist
+        [quote func]
+        [form/list [list-map param [func-type/params ft] [ctype-to-form param]]]
+        [ctype-to-form [func-type/result ft]]]
+
+      [inst-type/apply type-name type-args]
+      [form-concat
+        [list [form/word type-name]]
+        [list-map targ type-args [ctype-to-form targ]]]]]]
+
 [defn get-func-type [t]
   [match [normalize-type t]
     [ctype/inst inst-type]
@@ -148,6 +212,13 @@
 
 [todo we should let type params shadow builtin types in case more builtins are added]
 
+[defn sword [form]
+  [if-let [w [try-get-word form]]
+    [syntax-word
+      w
+      [option/some form]]
+    [logq-abort sword expected word]]]
+
 [defn form-to-lltype [ctx type-params form]
   [match form
     [form/word w]
@@ -189,6 +260,44 @@
     [when [has lvars w] [push-error f [quote [redeclaring local]]]]
     [set-kv-map lvars w kind]
     [set-kv-map [llctx/form-to-ldesc ctx] f kind]]]
+
+[type local-context-kind []
+  [union
+    [let]
+    [loop]
+    [letfn]
+    [match]
+    [func]]]
+
+[type local-context [v]
+  [record
+    [vars [transient-kv-map word v]]
+    [kind local-context-kind]]]
+
+[type local-stack [v]
+  [union
+    [empty]
+    [frame [local-stack v] [local-context v]]]]
+
+[defn try-get-local [lstack w]
+  [match lstack
+    [local-stack/empty] [option/none]
+
+    [local-stack/frame outer lctx]
+    [match [try-get [local-context/vars lctx] w]
+      [option/none] [try-get-local outer w]
+      [option/some kind] [option/some kind]]]]
+
+[defn try-get-enclosing-loop-context [lstack]
+  [match lstack
+    [local-stack/empty] [option/none]
+
+    [local-stack/frame outer lctx]
+    [match [local-context/kind lctx]
+      [local-context-kind/loop] [option/some lctx]
+      [local-context-kind/func] [option/none]
+
+      [try-get-enclosing-loop-context outer]]]]
 
 [defn form-to-llexp [ctxp lstack form]
   [let
@@ -407,8 +516,17 @@
 [defn form-to-llexp-tv [ctx tv-env lstack form]
   [form-to-llexp [pair ctx tv-env] lstack form]]
 
+[defn make-type-list [type-name type-args] [ctype/inst [inst-type/apply type-name type-args]]]
+
+[defn make-type [type-name .. type-args] [make-type-list type-name type-args]]
+
+[def type-i32 [make-type [word i32]]]
+[def type-f64 [make-type [word f64]]]
 [def type-f32 [make-type [word f32]]]
 [def type-i64 [make-type [word i64]]]
+
+[defn type-func [params result]
+  [ctype/inst [inst-type/func [func-type params result]]]]
 
 [defn llliteral-to-type [l]
   [match l
@@ -424,9 +542,13 @@
     [llexp/var f] 1
     0]]
 
+[type check-type-scheme []
+  [record
+    [type-vars [list type-var]]
+    [type ctype]]]
+
 [type llcheck-context []
   [record
-    [messages [growable-list check-message]]
     [def-var-types [transient-kv-map word check-type-scheme]]
     [type-var-counter [atom i32]]
     [type-annotations [transient-kv-map js-value ctype]]
@@ -435,7 +557,6 @@
 
 [defn llcheck-context-empty []
   [llcheck-context
-    [growable-list]
     [transient-kv-map]
     [atom 0]
     [transient-kv-map]
@@ -446,6 +567,52 @@
   [if-let [ltype [try-get-local local-ctx var-name]]
     [option/some ltype]
     [try-get [llcheck-context/def-var-types gctx] var-name]]]
+
+[defn make-type-var [kind level]
+  [type-var [atom kind] [atom level]]]
+
+[defn int-to-type-var-name [i]
+  [if [lt-s i [i32 26]]
+    [char-code-to-word [add [i32 97] i]]
+    [concat-words
+      [int-to-type-var-name [i32.div-s i [i32 26]]]
+      [char-code-to-word [add [i32 97] [i32.rem-s i [i32 26]]]]]]]
+
+[defn generate-fresh-type-var-atom [counter-atom level]
+  [ctype/var [make-type-var [type-var-kind/word [int-to-type-var-name [inc-atom counter-atom]]] level]]]
+
+[defn mk-empty-type-scheme [type] [check-type-scheme [list] type]]
+
+[defn try-get-assoc-identical [assoc-list var]
+  [[func try-get-assoc-identical-go [i]
+    [if [lt-s i [size assoc-list]]
+      [let [p [at assoc-list i]]
+        [if [is-identical var [pair/fst p]]
+          [option/some [pair/snd p]]
+          [try-get-assoc-identical-go [inc i]]]]
+      [option/none]]]
+    0]]
+
+[defn copy-type [subst-map t]
+  [match t
+    [ctype/var tv]
+    [if-let [subst-type [try-get-assoc-identical subst-map tv]]
+      subst-type
+      [match [get-type-var-kind tv]
+        [type-var-kind/word w] t
+        [type-var-kind/linked linked-t] [copy-type subst-map linked-t]]]
+
+    [ctype/inst inst-type]
+    [ctype/inst
+      [match inst-type
+        [inst-type/func ft]
+        [inst-type/func
+            [func-type
+              [list-map param [func-type/params ft] [copy-type subst-map param]]
+              [copy-type subst-map [func-type/result ft]]]]
+
+        [inst-type/apply type-name type-args]
+        [inst-type/apply type-name [list-map arg type-args [copy-type subst-map arg]]]]]]]
 
 [defn get-specialized-var [gctx level lctx sw]
   [if-let [scheme [lltry-get-var-type gctx lctx [syntax-word/word sw]]]
@@ -459,6 +626,114 @@
       [set-kv-map [llcheck-context/type-instantiations gctx] sw [clone-growable-to-frozen-list type-args]]
       [copy-type subst-assoc-list [check-type-scheme/type scheme]]]
     [logq-abort llvariable not found [identity sw]]]]
+
+[defn member-type-var-list [set t]
+  [todo can we just use set-has here]
+  [[func member-type-var-list-go [i]
+    [if [lt-s i [size set]]
+      [if [is-identical [at set i] t]
+        1
+        [member-type-var-list-go [inc i]]]
+      0]] 0]]
+
+[defn free-type-vars [outer-t]
+  [let
+    [ftvs [set]
+     go
+     [func go [t]
+      [let [nt [normalize-type t]]
+        [match nt
+          [ctype/var tv]
+          [when-not [set-has ftvs tv]
+            [set-add ftvs tv]]
+
+          [ctype/inst inst-type]
+          [match inst-type
+            [inst-type/func ft]
+            [do
+              [for-each param [func-type/params ft]
+                [go param]]
+              [go [func-type/result ft]]]
+
+            [inst-type/apply type-name type-args]
+            [for-each arg type-args
+              [go arg]]]]]]]
+    [go outer-t]
+    [set-to-list ftvs]]]
+
+[defn prune-level [max-level tvs]
+  [for-each tv tvs
+    [let [tvla [type-var/level tv]]
+      [atom-set tvla [min [atom-get tvla] max-level]]]]]
+
+[defn get-type-var-level [tv]
+  [atom-get [type-var/level tv]]]
+
+[defn link-var-to-type [type-var type]
+  [let
+    [level [get-type-var-level type-var]
+     fvs [free-type-vars type]]
+    [todo report instead of assert]
+    [assert [not [member-type-var-list fvs type-var]] type-var occurs in type]
+    [prune-level level fvs]
+    [set-type-var-kind-to-type type-var type]]]
+
+[defn unify [outer-t1 outer-t2]
+  [let
+    [errors [growable-list]
+     push-unify-error
+     [func push-unify-error [msg] [push errors msg]]
+     go
+     [func go [t1 t2]
+      [let [nt1 [normalize-type t1]
+            nt2 [normalize-type t2]]
+        [match nt1
+          [ctype/var tv1]
+          [match nt2
+            [ctype/var tv2]
+            [when-not [is-identical tv1 tv2]
+              [if [lt-s [get-type-var-level tv1] [get-type-var-level tv2]]
+                [link-var-to-type tv1 nt2]
+                [link-var-to-type tv2 nt1]]]
+
+            [ctype/inst inst-type2]
+            [link-var-to-type tv1 nt2]]
+
+          [ctype/inst inst-type1]
+          [match nt2
+            [ctype/var tv2]
+            [link-var-to-type tv2 nt1]
+
+            [ctype/inst inst-type2]
+            [match inst-type1
+              [inst-type/func ft1]
+              [match inst-type2
+                [inst-type/func ft2]
+                [let [type-args1 [func-type/params ft1] type-args2 [func-type/params ft2]
+                      s1 [size type-args1] s2 [size type-args2]]
+                  [for i 0 [min s1 s2]
+                    [go [at type-args1 i] [at type-args2 i]]]
+                  [when-not [eq s1 s2]
+                    [push-unify-error [quote [not unifiable - different number of parameters]]]]
+                  [go [func-type/result ft1] [func-type/result ft2]]]
+
+                [push-unify-error [quote [not unifiable - different types 0]]]]
+
+              [inst-type/apply type-name1 type-args1]
+              [match inst-type2
+                [inst-type/apply type-name2 type-args2]
+                [if [eq-word type-name1 type-name2]
+                  [if [eq [size type-args1] [size type-args2]]
+                    [for i 0 [size type-args1]
+                      [go [at type-args1 i] [at type-args2 i]]]
+                    [push-unify-error [quote [not unifiable - different number of type arguments]]]]
+                  [do
+                    [push-unify-error [quote [not unifiable - different types]]]]]
+
+                [do
+                  [push-unify-error [quote [not unifiable - different types]]]]]]]]]]]
+    [go outer-t1 outer-t2]
+    [clone-growable-to-frozen-list errors]]]
 
 [defn llunify-report [gctx t1 t2 bst]
   [for-each error [unify t1 t2]
@@ -542,6 +817,22 @@
   [record
     [stack [local-stack check-type-scheme]]
     [type-env [transient-kv-map word ctype]]]]
+
+[def type-empty-tuple [make-type [word tuple]]]
+
+[defn make-local-context [var-values lstack kind]
+  [local-stack/frame lstack [local-context var-values kind]]]
+
+[defn generalize [current-level type]
+  [let [tvs [growable-list]
+        ftvs [free-type-vars type]]
+    [for-each tv ftvs
+      [if [lt-s current-level [get-type-var-level tv]]
+        [push tvs tv]
+        [comment [logq tv not generalized [identity tv]]]
+        ]]
+    [let [fftvs [clone-growable-to-frozen-list tvs]]
+      [check-type-scheme fftvs type]]]]
 
 [defn infer-llexp [gctx level lctx bform]
   [match bform
@@ -674,7 +965,7 @@
       [spec-func-type [get-specialized-var gctx level [infer-local-context/stack lctx] fname-sword]
        arg-types [list-map-fn [func f [arg] [infer-llexp gctx level lctx arg]] args]
        t-res [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
-       t-func [type-func-no-rest arg-types t-res]]
+       t-func [type-func arg-types t-res]]
       [llunify-report gctx spec-func-type t-func bform]
       [llannotate gctx bform t-res]]
 
@@ -978,9 +1269,7 @@
             [inst-type/func
               [func-type
                 [clone-growable-to-frozen-list reg-params]
-                [option/none]
-                return-type
-                [function-kind/func]]]]
+                return-type]]]
           lltop]
         [llannotate gctx lltop gfunc-type]
         [set-kv-map [llcheck-context/def-var-types gctx] fname-word [generalize 0 gfunc-type]]]]
@@ -1681,10 +1970,6 @@
      ctx [llcheck-context/bind-ctx gctx]]
     [for-each form forms
       [let [btop [form-to-lltop ctx form]]
-        [let [check-errors [clone-growable-to-frozen-list [llcheck-context/messages gctx]]]
-          [when-not [is-empty check-errors]
-            [for-each error check-errors [log-check-message error]]
-            [logq-abort translate-top-forms-sync binding errors]]]
         [infer-lltop gctx btop]
         [translate-top-form tctx btop]]]
     [translate-funcs tctx]
