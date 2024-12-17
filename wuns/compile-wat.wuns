@@ -246,26 +246,33 @@
 
                   [[word i32.load] [word i32.load8-u]]
                   [do
-                    [todo we need to check the memory is deffed as a memory]
                     [assert-n-args 5]
-                    [llexp/intrinsic inst-sname
-                      [list
-                        [sword [get-arg 1]]
-                        [sword [get-arg 2]]
-                        [sword [get-arg 3]]]
-                      [list [form-to-llexp ctxp lstack [get-arg 4]]]]]
+                    [let [mem-name [sword [get-arg 1]]]
+                      [match [get lldef-ctx [syntax-word/word mem-name]]
+                        [lldef-desc/memory kind] [do]
+                        [push-error [get-arg 1] [quote [not a memory]]]]
+                      [llexp/intrinsic inst-sname
+                        [list
+                          mem-name
+                          [sword [get-arg 2]]
+                          [sword [get-arg 3]]]
+                        [list [form-to-llexp ctxp lstack [get-arg 4]]]]]]
 
                   [[word i32.store] [word i32.store8]]
                   [do
                     [assert-n-args 6]
-                    [llexp/intrinsic inst-sname
-                      [list
-                        [sword [get-arg 1]]
-                        [sword [get-arg 2]]
-                        [sword [get-arg 3]]]
-                      [list
-                        [form-to-llexp ctxp lstack [get-arg 4]]
-                        [form-to-llexp ctxp lstack [get-arg 5]]]]]
+                    [let [mem-name [sword [get-arg 1]]]
+                      [match [get lldef-ctx [syntax-word/word mem-name]]
+                        [lldef-desc/memory kind] [do]
+                        [push-error [get-arg 1] [quote [not a memory]]]]
+                      [llexp/intrinsic inst-sname
+                        [list
+                          [sword [get-arg 1]]
+                          [sword [get-arg 2]]
+                          [sword [get-arg 3]]]
+                        [list
+                          [form-to-llexp ctxp lstack [get-arg 4]]
+                          [form-to-llexp ctxp lstack [get-arg 5]]]]]]
 
                   [do
                     [log form]
