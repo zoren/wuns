@@ -216,6 +216,41 @@ test('data f64', async () => {
   expect(float64Array[2]).toBe(1.9)
 })
 
+test('cast', async () => {
+  await expect(
+    stringToInst(`
+    [memory i32 mem 1]
+    [defn f []
+      [deref
+        [cast [pointer no-such-mem i32] [i32 16]]]]
+    [export f]`),
+  ).rejects.toThrow('not found no-such-mem')
+  await expect(
+    stringToInst(`
+    [memory i32 mem 1]
+    [defn f []
+      [deref
+        [cast [pointer i32 i32] [i32 16]]]]
+    [export f]`),
+  ).rejects.toThrow('not found i32')
+  await expect(
+    stringToInst(`
+    [memory i32 mem 1]
+    [defn f []
+      [deref
+        [cast [pointer mem i32] [i64 16]]]]
+    [export f]`),
+  ).rejects.toThrow('can only cast i32 to pointer')
+  await expect(
+    stringToInst(`
+    [memory i64 mem 1]
+    [defn f []
+      [deref
+        [cast [pointer mem i32] [i32 16]]]]
+    [export f]`),
+  ).rejects.toThrow('can only cast i64 to pointer')
+})
+
 test('deref', async () => {
   {
     const inst = await stringToInst(`

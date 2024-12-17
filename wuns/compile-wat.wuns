@@ -675,18 +675,18 @@
     [let
       [inst-type [llinstantiate-syntax-type [infer-local-context/type-env lctx] cast-type]
        tv [infer-llexp gctx level lctx value]
-       inst-app-t [get-apply-type inst-type]]
-      [todo when casting to pointer we should check if the value is i32 or i64 depending on the memory]
-      [switch [pair/fst inst-app-t]
-        [[word pointer]]
+       inst-app-t [get-apply-type inst-type]
+       tv-type-name [pair/fst [get-apply-type tv]]]
+      [todo we allow casting i32 or i64 to pointer if the memory matches]
+      [if [and [eq-word [pair/fst inst-app-t] [word pointer]] [not [eq-word tv-type-name [word pointer]]]]
         [let [mem-name [mem-name-from-mem-type [first [pair/snd inst-app-t]]]]
           [match [get-memory-kind [llcheck-context/bind-ctx gctx] mem-name]
             [memory-kind/i32]
-            [do
-              [todo check if value is i32 or pointer to same memory with castable target type]]
+            [when-not [eq-word tv-type-name [word i32]]
+              [logq-abort can only cast i32 to pointer [identity bform]]]
             [memory-kind/i64]
-            [do
-              [todo check if value is i64 or pointer to same memory with castable target type]]]]
+            [when-not [eq-word tv-type-name [word i64]]
+              [logq-abort can only cast i64 to pointer [identity bform]]]]]
 
         [llunify-report gctx inst-type tv value]]
 
