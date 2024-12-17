@@ -790,8 +790,6 @@
      lstack [local-stack/frame [local-stack/empty] [local-context lvars [local-context-kind/let]]]]
     [for-each type-param type-params
       [set-add type-env [form-to-word type-param]]]
-    [assert-not [and [lt-s 1 [size params]] [eq-word [form-to-word [at params -2]] [word ..]]]
-      rest param not implemented]
     [set-ll-def ctx name-form [lldef-desc/func [size params]]]
     [set-local ctx lvars name-form [lllocal-var-kind/func-internal-self [size params]]]
     [lldefn
