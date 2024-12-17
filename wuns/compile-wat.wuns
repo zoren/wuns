@@ -1240,7 +1240,8 @@
     [lltop/defn func]
     [let
       [level-1 1
-       gfunc-type [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level-1]
+       counter-atom [llcheck-context/type-var-counter gctx]
+       gfunc-type [generate-fresh-type-var-atom counter-atom level-1]
        param-ctx [transient-kv-map]
        type-env [transient-kv-map]
        func-ctx
@@ -1249,15 +1250,14 @@
           type-env]
        reg-params [growable-list]
        fname-word [syntax-word/word [lldefn/name func]]
-       infer-type-params [growable-list]
-       counter-atom [llcheck-context/type-var-counter gctx]]
+       infer-type-params [growable-list]]
       [set-kv-map param-ctx fname-word [mk-empty-type-scheme gfunc-type]]
       [for-each type-param [lldefn/type-params func]
         [let [itp [make-type-var [type-var-kind/word [int-to-type-var-name [inc-atom counter-atom]]] level-1]]
           [push infer-type-params itp]
           [set-kv-map type-env [syntax-word/word type-param] [ctype/var itp]]]]
       [for-each param [lldefn/params func]
-        [let [tv [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level-1]]
+        [let [tv [generate-fresh-type-var-atom counter-atom level-1]]
           [when-let [param-t [pair/snd param]]
             [llunify-report gctx tv [llinstantiate-syntax-type type-env param-t] param]]
           [set-kv-map param-ctx [syntax-word/word [pair/fst param]] [mk-empty-type-scheme tv]]
