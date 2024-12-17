@@ -210,8 +210,6 @@
     [option/some [eq 2 n-of-args]]
     [option/none]]]
 
-[todo we should let type params shadow builtin types in case more builtins are added]
-
 [defn sword [form]
   [if-let [w [try-get-word form]]
     [syntax-word
@@ -222,13 +220,13 @@
 [defn form-to-lltype [ctx type-params form]
   [match form
     [form/word w]
-    [if-let [arity-ok [llbuiltin-type-arity-ok w 0]]
-      [do
-        [when-not arity-ok
-          [push-error form [quote [wrong number of type arguments to builtin]]]]
-        [lltype/apply [sword form] [list]]]
-      [if [set-has type-params w]
-        [lltype/var [sword form]]
+    [if [set-has type-params w]
+      [lltype/var [sword form]]
+      [if-let [arity-ok [llbuiltin-type-arity-ok w 0]]
+        [do
+          [when-not arity-ok
+            [push-error form [quote [wrong number of type arguments to builtin]]]]
+          [lltype/apply [sword form] [list]]]
         [if-let [type-params [try-get [llctx/user-type-params ctx] w]]
           [do
             [when-not [eq [size type-params] 0] [push-error form [quote [expected no type params]]]]
