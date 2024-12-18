@@ -4,7 +4,7 @@
 
 [type literal-type []
   [union
-    [i32 i32]]]
+    [i32 form]]]
 
 [type lltype []
   [union
@@ -68,7 +68,7 @@
             [assert [eq [size type-args] 2] validate-lltype invalid number of arguments literal]
             [lltype/literal
               [switch [form-to-word [first type-args]]
-                [[word i32]] [literal-type/i32 [word-to-int [form-to-word [second type-args]]]]
+                [[word i32]] [literal-type/i32 [second type-args]]
                 [logq-abort invalid literal type]]]]
 
           [[word array]]
@@ -80,6 +80,8 @@
               [lltype/literal lt]
               [match lt
                 [literal-type/i32 i] [assert [not [is-negative i]] validate-lltype invalid array size]]
+              [lltype/inst type-name args]
+              [assert [eq type-name [word i32]] validate-lltype invalid array size type]
               [logq-abort invalid size type]]
             [lltype/inst type-name
               [list
@@ -230,6 +232,67 @@
       [logq-abort llsize-of invalid literal type]]
     [lltype/func params opt-rest-param ret] [logq-abort llsize-of func]]]
 
+[defn lltype-to-size-of-form [t]
+  [match t
+    [lltype/var -] [logq-abort llsize-of var]
+    [lltype/inst name args]
+    [switch name
+      [[word i8] [word u8]] [quote [i32 1]]
+      [[word i16] [word u16]] [quote [i32 2]]
+      [[word i32] [word u32]] [quote [i32 4]]
+      [[word i64] [word f64]] [quote [i32 8]]
+      [[word pointer]] [quote [i32 4]]
+
+      [[word array]]
+      [let [element-type [first args]
+            size-type [second args]]
+        [match size-type
+          [lltype/literal lt]
+          [match lt
+            [literal-type/i32 f] [flist [quote intrinsic] [quote i32.mul] [lltype-to-size-of-form element-type] f]
+            [logq-abort llsize-of invalid array size type]]
+
+          [do
+            [log size-type]
+            [logq-abort llsize-of invalid array size]]]]
+
+      [let
+        [type-params [get lltype-params name]
+         type-params-list [lltype-parameters/parameter-list type-params]
+         new-tv-env [transient-kv-map]]
+        [for i 0 [size args]
+          [set-kv-map new-tv-env [at type-params-list i] [at args i]]]
+        [match [get lltypes name]
+          [lltype-decl-kind/record fields]
+          [loop [i 0 csize [quote [i32 0]]]
+            [if-not [lt-s i [size fields]]
+              csize
+              [continue
+                csize [flist [quote intrinsic] [quote i32.add]
+                        csize
+                        [lltype-to-size-of-form [instantiate-lltype new-tv-env [pair/snd [at fields i]]]]]
+                i [inc i]]]]
+
+          [lltype-decl-kind/tagged-union ctors]
+          [logq-abort llsize-of tagged-union]
+
+          [lltype-decl-kind/untagged-union types]
+          [loop [i 0 max-size [quote [i32 0]]]
+            [if-not [lt-s i [size types]]
+              max-size
+              [let
+                [type [at types i]
+                 tsize [lltype-to-size-of-form [instantiate-lltype new-tv-env type]]]
+                [continue
+                  i [inc i]
+                  max-size [flist [quote max] max-size tsize]]]]]]]]
+
+    [lltype/literal lt]
+    [match lt
+      [literal-type/i32 f] [quote [i32 4]]
+      [logq-abort llsize-of invalid literal type]]
+    [lltype/func params opt-rest-param ret] [logq-abort llsize-of func]]]
+
 [defn lloffset-fn [record-type-form field-name]
   [let [t [validate-lltype [set] record-type-form]]
     [match t
@@ -360,6 +423,12 @@
 [defexpr size-ofexpr [type-form]
   [llsize-of [validate-lltype [set] type-form]]]
 
+[defn size-of [type-form]
+  [lltype-to-size-of-form [validate-lltype [set] type-form]]]
+
+[defmacro msize-of [t]
+  [lltype-to-size-of-form [validate-lltype [set] t]]]
+
 [defn load-array-fn [mem pexp array-type-element-form start-offset-form index-form]
   [let [t [validate-lltype [set] array-type-element-form]
         element-size [llsize-of t]]
@@ -378,32 +447,6 @@
           [quote i32.mul]
           index-form
           [i32-to-form element-size]]]]]]
-
-[defn addr-of-array-fn [pexp array-type-element-form start-offset-form index-form]
-  [let [element-size [llsize-of [validate-lltype [set] array-type-element-form]]]
-    [flist
-      [quote intrinsic]
-      [quote i32.add]
-      [flist
-        [quote intrinsic]
-        [quote i32.add]
-        pexp
-        start-offset-form]
-      [flist
-        [quote intrinsic]
-        [quote i32.mul]
-        index-form
-        [i32-to-form element-size]]]]]
-
-[defmacro offset-it [pexp start-offset-form]
-  [flist
-    [quote intrinsic]
-    [quote i32.add]
-    pexp
-    start-offset-form]]
-
-[defmacro addr-of-array [pexp array-type-element-form start-offset-form index-form]
-  [addr-of-array-fn pexp array-type-element-form start-offset-form index-form]]
 
 [defmacro load-array [mem pexp array-type-element-form start-offset-form index-form]
   [load-array-fn mem pexp array-type-element-form start-offset-form index-form]]
@@ -433,26 +476,72 @@
 
 [memory mem 1]
 
-[defn get-top []
-  [intrinsic i32.load mem 0 4 [i32 0]]]
+[defn is-address-aligned [x]
+  [eq [i32 0] [intrinsic i32.and x [i32 3]]]]
 
-[defn init-mem []
-  [if [intrinsic i32.eq [get-top] [i32 0]]
-    [intrinsic i32.store mem 0 4 [i32 0] [i32 16]]
-    [intrinsic unreachable]]]
+[defn get-top []
+  [let [top [intrinsic i32.load mem 0 4 [i32 0]]]
+    [assert-not [is-zero top] get-top memory allocator not initialized]
+    [assert [is-address-aligned top] get-top invalid address]
+    top]]
+
+[defn set-top [new-top]
+  [intrinsic i32.store mem 0 4 [i32 0] new-top]]
+
+[def alloc-base [i32 16]]
+
+[defn alloc-init []
+  [assert [is-zero [intrinsic i32.load mem 0 4 [i32 0]]] alloc-init memory allocator already initialized]
+  [set-top alloc-base]]
 
 [defn align-address [x]
   [intrinsic i32.and
-    [intrinsic i32.add x [i32 3]]
+    [add x 3]
     [intrinsic i32.xor [i32 -1] [i32 3]]]]
 
 [defn alloc-n [n-bytes]
-  [if [intrinsic i32.le-s n-bytes [i32 0]] [intrinsic unreachable] [do]]
+  [assert [is-address-aligned n-bytes] alloc-n invalid number of bytes not aligned]
   [let [top [get-top]]
-    [when [eq top [i32 0]]
-      [intrinsic unreachable]]
-    [intrinsic i32.store mem 0 4 [i32 0] [intrinsic i32.add top [align-address n-bytes]]]
+    [set-top [add top n-bytes]]
     top]]
+
+[defn fill-mem-dead-beef [p n-bytes]
+  [assert [is-address-aligned p] fill-mem-dead-beef invalid address not aligned]
+  [assert [is-address-aligned n-bytes] fill-mem-dead-beef invalid number of bytes not aligned]
+  [loop [i p
+         end [add p n-bytes]]
+    [when [lt-s i end]
+      [intrinsic i32.store mem 0 4 i [i32 0xefbeadde]]
+      [continue i [add i 4]]]]]
+
+[defn free [p n-bytes]
+  [assert [is-address-aligned p] free invalid address not aligned]
+  [assert [is-address-aligned n-bytes] free invalid number of bytes not aligned]
+  [let [top [get-top]]
+    [assert [eq [add p n-bytes] top] free invalid address]
+    [fill-mem-dead-beef p n-bytes]
+    [set-top p]]]
+
+[defn memory-copy [mem dest src n-bytes]
+  [loop [i 0]
+    [when [lt-s i n-bytes]
+      [intrinsic i32.store8 mem 0 1 [add dest i] [intrinsic i32.load8-u mem 0 1 [add src i]]]
+      [continue i [inc i]]]]]
+
+[defn realloc [p old-n-bytes new-n-bytes]
+  [assert [is-address-aligned p] realloc invalid address not aligned]
+  [assert [is-address-aligned old-n-bytes] realloc invalid old number of bytes not aligned]
+  [assert [is-address-aligned new-n-bytes] realloc invalid new number of bytes not aligned]
+  [let [top [get-top]
+        old-top [sub top old-n-bytes]]
+    [if [eq p old-top]
+      [do
+        [set-top [add old-top new-n-bytes]]
+        p]
+      [let [new-p [alloc-n new-n-bytes]]
+        [memory-copy mem new-p p old-n-bytes]
+        [free p old-n-bytes]
+        new-p]]]]
 
 [def llvector-array-offset [i32-to-form-word [pair/fst [lloffset [llvector any i32] elements]]]]
 
@@ -460,46 +549,51 @@
   [load-record-field mem vp [llvector any i32] size]]
 
 [defmacro load-vector [mem p element-type-form index-form]
-  [load-array-fn mem p element-type-form llvector-array-offset index-form]]
+  [let [index-tmp [genword-prefix [word index]]]
+    [flist [quote let] [flist index-tmp index-form]
+      [flist [quote assert] [flist [quote le-s] [quote [i32 0]] index-tmp] [quote load-vector] [quote negative-index]]
+      [flist [quote assert] [flist [quote lt-s] index-tmp [flist [quote vector-size] p]] [quote load-vector] [quote out-of-bounds]]
+      [load-array-fn mem p element-type-form llvector-array-offset index-tmp]]]]
 
 [defmacro store-vector [mem p element-type-form index-form value]
-  [store-array-fn mem p element-type-form llvector-array-offset index-form value]]
+  [let [index-tmp [genword-prefix [word index]]]
+    [flist [quote let] [flist index-tmp index-form]
+      [flist [quote assert] [flist [quote le-s] [quote [i32 0]] index-tmp] [quote store-vector] [quote negative-index]]
+      [flist [quote assert] [flist [quote lt-s] index-tmp [flist [quote vector-size] p]] [quote store-vector] [quote out-of-bounds]]
+      [store-array-fn mem p element-type-form llvector-array-offset index-tmp value]]]]
 
-[defmacro addr-of-vector [p element-type-form index-form]
-  [addr-of-array-fn p element-type-form llvector-array-offset index-form]]
+[defmacro vector-base [p]
+  [flist [quote intrinsic] [quote i32.add] p llvector-array-offset]]
 
 [defn make-abc-word []
   [let
     [p [alloc-n [size-ofexpr [llvector i8 [literal i32 3]]]]]
     [store-record-field mem p [llvector any i32] size [i32 3]]
-    [store-vector mem p i8 [i32 0] [i32 65]]
-    [store-vector mem p i8 [i32 1] [i32 66]]
-    [store-vector mem p i8 [i32 2] [i32 67]]
+    [store-vector mem p i8 [i32 0] [word-to-char-code a]]
+    [store-vector mem p i8 [i32 1] [word-to-char-code b]]
+    [store-vector mem p i8 [i32 2] [word-to-char-code c]]
   p]]
 
 [defmacro store-record-field-type [mem pexp record-type-form field-form value]
   [store-record-field-fn mem pexp record-type-form field-form value]]
 
+[defn vector-alloc-i8 [n]
+  [let
+    [p [alloc-n [align-address [msize-of [llvector i8 [literal i32 n]]]]]]
+    [store-record-field mem p [llvector i8 i32] size n]
+  p]]
+
 [defn vector-alloc-i32 [n]
   [let
-    [ type-form [flist [quote llvector] [quote i32] [flist [quote literal] [quote i32] [i32-to-form-word n]]]
-      t [validate-lltype [set] type-form]
-      s [llsize-of t]
-      p [alloc-n s]]
+    [p [alloc-n [msize-of [llvector i32 [literal i32 n]]]]]
     [store-record-field mem p [llvector i32 i32] size n]
   p]]
 
-[defn vector-alloc-init [ele]]
-
 [defn make-alphabet-word [n]
   [let
-    [ type-form [flist [quote llvector] [quote i8] [flist [quote literal] [quote i32] [i32-to-form-word n]]]
-      t [validate-lltype [set] type-form]
-      s [llsize-of t]
-      p [alloc-n s]]
-    [store-record-field mem p [llvector any i32] size n]
+    [p [vector-alloc-i8 n]]
     [for i 0 n
-      [store-vector mem p i8 i [add [i32 65] i]]]
+      [store-vector mem p i8 i [add [word-to-char-code a] i]]]
   p]]
 
 [defn log-word-characters [wp]
@@ -559,9 +653,203 @@
       [log [uform-tag puf]]
       [logq-abort log-form unknown tag]]]]
 
+[defn is-whitespace [c]
+  [or [eq c [i32 32]] [eq c [i32 10]]]]
+
+[defn is-word-char [c]
+  [or
+    [is-between-inclusive [i32 97] c [i32 122]]
+    [is-between-inclusive [i32 45] c [i32 57]]]]
+
+[defn scan-word [bytes start]
+  [loop [s [vector-size bytes]
+         i start]
+    [if [and [lt-s i s] [is-word-char [load-vector mem bytes i8 i]]]
+      [continue i [inc i]]
+      i]]]
+
+[defn size-of-array [element-form n]
+  [size-of
+    [flist [quote array]
+      element-form
+      [flist [quote literal] [quote i32] [i32-to-form-word n]]]]]
+
+[lltypexpr llbuffer [a]
+  [record
+    [size i32]
+    [elements [pointer [llvector a i32]]]]]
+
+[defn buffer/size [pbuf]
+  [load-record-field mem pbuf [llbuffer any] size]]
+
+[defn buffer/vector [pbuf]
+  [load-record-field mem pbuf [llbuffer [pointer uform]] elements]]
+
+[defn buffer/capacity [pbuf] [vector-size [buffer/vector pbuf]]]
+
+[defn buffer-alloc [element-type init-capacity]
+  [assert [not [is-negative init-capacity]] buffer-alloc invalid capacity negative]
+  [assert-not [is-zero init-capacity] buffer-alloc invalid capacity zero]
+  [let
+    [pbuf [alloc-n [size-ofexpr [llbuffer [pointer uform]]]]
+     pvec [alloc-n [msize-of [llvector [pointer uform] [literal i32 init-capacity]]]]]
+    [store-record-field mem pbuf [llbuffer [pointer uform]] size 0]
+    [store-record-field mem pbuf [llbuffer [pointer uform]] elements pvec]
+    pbuf]]
+
+[defn buffer-append [pbuf element]
+  [let
+    [s [buffer/size pbuf]
+     elements [buffer/vector pbuf]
+     capacity [vector-size elements]]
+    [if [lt-s s capacity]
+      [do
+        [store-record-field mem pbuf [llbuffer [pointer uform]] size [inc s]]
+        [store-array mem elements [pointer uform] 0 size element]]
+      [let
+        [new-cap [mul 2 capacity]
+         new-vec [alloc-n [msize-of [llvector [pointer uform] [literal i32 new-cap]]]]]
+        ]]]
+        ]
+
+[defn buffer-to-vector [pbuf]
+  [let
+    [s [buffer/size pbuf]
+     capacity [buffer/capacity pbuf]
+     elements [load-record-field mem pbuf [llbuffer [pointer uform]] elements]]
+    [if [lt-s s capacity]
+      [do
+        [store-record-field mem pbuf [llbuffer [pointer uform]] size [inc s]]
+        ]
+      [if [eq elements 0]
+        [let [new-size [mul 2 s]]
+
+          ]
+        [logq-abort buffer-append buffer full]]]]]
+
+
+[def max-stack-size [i32 16]]
+
+[defn alloc-stack []
+  [alloc-n
+    [size-of
+      [flist [quote array]
+        [quote [llbuffer [pointer uform]]]
+        [flist [quote literal] [quote i32] [i32-to-form-word max-stack-size]]]]]]
+
+[comment store-array [mem pexp array-type-element-form start-offset-form index-form value]]
+
+[defn log-buffer [pvec]
+  [let [s [vector-size pvec]]
+    [memory-log-as-string mem [vector-base pvec] s]]]
+
+[defn parse [bytes]
+  [loop [stack [alloc-stack]
+         depth -1
+         s [vector-size bytes]
+         i 0]
+    [if [lt-s i s]
+      [let [c [load-vector mem bytes i8 i]]
+        [ifs
+          [is-word-char c]
+          [let
+            [end-word
+              [loop [j [inc i]]
+                [if [and [lt-s j s] [is-word-char [load-vector mem bytes i8 j]]]
+                  [continue j [inc j]]
+                  j]]
+             n [sub end-word i]
+             w [vector-alloc-i8 n]]
+            [for j 0 n
+              [store-vector mem w i8 j [load-vector mem bytes i8 [add i j]]]]
+            [if [eq depth [i32 -1]]
+              [form-word-alloc w]
+              [intrinsic unreachable]]]
+
+          [is-whitespace c]
+          [continue i [inc i]]
+
+          [eq c [i32 91]]
+          [do]
+
+          [eq c [i32 93]]
+          [do]
+
+          -1]]
+      -2]]
+      ]
+
+[defn byte-array-concat [ba1 ba2]
+  [let
+    [n1 [byte-array-size ba1]
+     n2 [byte-array-size ba2]
+     a [byte-array [add n1 n2]]]
+    [for i 0 n1
+      [byte-array-set a i [byte-array-get ba1 i]]]
+    [for i 0 n2
+      [byte-array-set a [add i n1] [byte-array-get ba2 i]]]
+    a]]
+
+[defn word-to-vector-byte-array [w]
+  [byte-array-concat [i32-to-byte-array [word-byte-size w]] [word-to-byte-array w]]]
+
+[def data-segments [growable-list]]
+[def data-segments-map [transient-kv-map]]
+
+[def data-segment-count [atom 0]]
+
+[def active-current-end [atom [i32 16]]]
+
+[defn byte-array-to-bytes-form [ba]
+  [let [n [byte-array-size ba]
+        gl [growable-list]]
+    [for i 0 n
+      [push gl [i32-to-form-word [byte-array-get ba i]]]]
+    [form-concat [list [quote bytes]]
+      [clone-growable-to-frozen-list gl]]]]
+
+[defmacro data-word [mem addr w]
+  [flist [quote data] [quote active] mem addr
+    [byte-array-to-bytes-form [word-to-vector-byte-array [form-to-word w]]]]]
+
+[data-word mem [i32 16] abc]
+
+[data-word mem [i32 32] foobar]
+
+[type data-segment []
+  [union
+    [passive byte-array]
+    [active i32 byte-array]]]
+
+[defn add-data-segment [segment]
+  [let [n [kv-map-size data-segments-map]]
+    [push data-segments segment]
+    [set-kv-map data-segments-map n segment]
+    n]]
+
+[defn active-word [w]
+  [let [ba [word-to-vector-byte-array w]
+        addr [atom-get active-current-end]]
+    [add-data-segment [data-segment/active addr ba]]
+    [atom-set active-current-end [add addr [align-address [byte-array-size ba]]]]
+    addr]]
+
 [defn main []
-  [init-mem]
-  [log-form [make-form]]]
+  [alloc-init]
+  [let [fd [open [word parse-test.wuns]]
+        bv [vector-alloc-i8 [i32 32]]]
+    [read-file-memory fd mem [vector-base bv] [vector-size bv]]
+    [close fd]
+    [log-form [parse bv]]]]
+
+[defn file-test []
+  [alloc-init]
+  [let [fd [open [word parse-test.wuns]]
+        s [i32 100]
+        p [i32 16]
+        r [read-file-memory fd mem p s]]
+    [close fd]
+    [memory-log-as-string mem p r]]]
 
 [comment
 
