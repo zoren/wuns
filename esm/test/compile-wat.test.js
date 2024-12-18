@@ -51,6 +51,8 @@ test.each([
   ['[size-of i64]', 8],
   ['[size-of f64]', 8],
   ['[size-of v128]', 16],
+  ['[size-of [array i32 [i32 8]]]', 32],
+  ['[size-of [array f64 [i32 8]]]', 64],
 ])('%s -> %o', async (s, expected) => {
   const m = `[defn f [] ${s}] [export f]`
   expect((await stringToInst(m)).f()).toBe(expected)
@@ -254,7 +256,7 @@ test('cast', async () => {
     [defn f [m]
       [cast [pointer m i32] [i32 16]]]
     [export f]`),
-  ).rejects.toThrow('local variable used in type')
+  ).rejects.toThrow('not a memory type')
   await expect(
     stringToInst(`
     [memory i32 mem 1]
@@ -402,7 +404,35 @@ test('records', async () => {
     expect(inst.f()).toBe(20)
     expect(inst.g()).toBe(9)
   }
-
+  {
+    const inst = await stringToInst(`
+[type rec []
+  [record
+    [a [array i32 [i32 8]]]
+    [y i32]]]
+[memory i32 mem 1]
+[defn f []
+  [let [prec [cast [pointer mem rec] [i32 16]]]
+    [field prec y]]]
+[export f]`)
+    expect(inst.f()).toBe(16 + 4 * 8)
+  }
+  {
+    const inst = await stringToInst(`
+[type vec [s]
+  [record
+    [size i32]
+    [array [array i32 s]]]]
+[memory i32 mem 1]
+[defn size []
+  [let [prec [cast [pointer mem [vec i32]] [i32 16]]]
+    [field prec size]]]
+[defn f []
+  [let [prec [cast [pointer mem [vec i32]] [i32 16]]]
+    [field prec array]]]
+[export size f]`)
+    expect(inst.f()).toBe(16 + 4)
+  }
   {
     const inst = await stringToInst(`
 [type i32-point []
@@ -502,6 +532,22 @@ test('records', async () => {
   //   // expect(inst.f()).toBe(9)
   // }
 })
+
+test('arrays', async () => {
+  {
+    const inst = await stringToInst(`
+[memory i32 mem 1]
+[data active mem [i32 16]
+  [i32 2] [i32 3] [i32 5] [i32 7] [i32 11]]
+[defn f [i]
+  [deref [index [cast [pointer mem [array i32 [i32 5]]] [i32 16]] i]]]
+[export f]`)
+    expect(inst.f(0)).toBe(2)
+    expect(inst.f(1)).toBe(3)
+    expect(inst.f(2)).toBe(5)
+    expect(inst.f(3)).toBe(7)
+    expect(inst.f(4)).toBe(11)
+  }})
 
 test('size-of', async () => {
   {

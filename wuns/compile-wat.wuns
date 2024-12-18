@@ -41,6 +41,7 @@
     [deref llexp]
     [assign llexp llexp]
     [field llexp syntax-word]
+    [index llexp llexp]
     [size-of lltype]
     ]]
 
@@ -209,7 +210,7 @@
     [[word i32] [word f64]
      [word f32] [word i64] [word v128]] [option/some [eq n-of-args 0]]
     [[word memory]] [option/some [eq n-of-args 1]]
-    [[word pointer]]
+    [[word pointer] [word array]]
     [option/some [eq 2 n-of-args]]
     [option/none]]]
 
@@ -266,6 +267,7 @@
 [def type-i64 [make-type [word i64]]]
 
 [defn type-pointer [mem target] [make-type [word pointer] mem target]]
+[defn type-array [elem-type size] [make-type [word array] elem-type size]]
 
 [def type-empty-tuple [make-type [word tuple]]]
 
@@ -805,6 +807,19 @@
 
           [logq-abort infer-llexp type not found [identity type-name]]]]]
 
+    [llexp/index target index]
+    [let
+      [ttarget [infer-llexp gctx level lctx target]
+       t-mem [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
+       t-elem [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
+       t-size [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
+       t-arr [type-array t-elem t-size]
+       pt [type-pointer t-mem t-arr]]
+      [llannotate gctx target pt]
+      [llunify-report gctx ttarget pt target]
+      [llunify-report gctx type-i32 [infer-llexp gctx level lctx index] index]
+      [llannotate gctx bform [type-pointer t-mem t-elem]]]
+
     [do
       [log bform]
       [logq-abort infer-llexp not implemented]]]]
@@ -904,7 +919,8 @@
             [lltype/apply [sword form] [list]]]
           [match [try-get-local lstack w]
             [option/some kind]
-            [push-error form [quote [form-to-lltype local variable used in type]]]
+            [lltype/literal [type-literal/exp [form-to-llexp type-params lstack form]]]
+
             [option/none]
             [if-let [top-desc [try-get lldef-ctx w]]
               [match top-desc
@@ -915,17 +931,19 @@
     [form/list l]
     [let [sw [sword [first l]] fw [syntax-word/word sw] n-of-args [dec [size l]]]
       [if-let [arity-ok [llbuiltin-type-arity-ok fw n-of-args]]
-        [when-not arity-ok [push-error form [quote [wrong number of type arguments to builtin]]]]
-        [if-let [type-params [try-get user-type-params fw]]
-          [when-not [eq [size type-params] n-of-args] [push-error form [quote [type arity mismatch]]]]
-          [push-error form [quote [undefined type]]]]]
-      [lltype/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]]]
+        [if arity-ok
+          [lltype/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]
+          [lltype/literal [type-literal/exp [form-to-llexp type-params lstack form]]]]
+        [if-let [user-type-params [try-get user-type-params fw]]
+          [do
+            [when-not [eq [size user-type-params] n-of-args] [push-error form [quote [type arity mismatch]]]]
+            [lltype/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]
+          [lltype/literal [type-literal/exp [form-to-llexp type-params lstack form]]]]]]]]
 
 [func form-to-llexp [type-var-set lstack form]
   [match form
     [form/word w]
-    [let [sname [sword form]
-          bf [llexp/var sname]]
+    [do
       [if-let [ldesc [try-get-local lstack w]]
         [set-kv-map form-to-ldesc form ldesc]
         [if-let [ddesc [try-get lldef-ctx w]]
@@ -933,7 +951,7 @@
             [lldef-desc/any] [do]
             [logq-abort only def values allowed]]
           [push-error form [quote [undefined exp word]]]]]
-      bf]
+      [llexp/var [sword form]]]
 
     [form/list l]
     [let [n-of-args [dec [size l]]
@@ -1098,6 +1116,13 @@
             [llexp/field
               [form-to-llexp type-var-set lstack [get-arg 0]]
               [sword [get-arg 1]]]]
+
+          [[word index]]
+          [do
+            [assert-n-args 2]
+            [llexp/index
+              [form-to-llexp type-var-set lstack [get-arg 0]]
+              [form-to-llexp type-var-set lstack [get-arg 1]]]]
 
           [[word size-of]]
           [do
@@ -1412,6 +1437,11 @@
     [wasm-name-to-wat-byte-array [word i32.add]]
     [list a b]]]
 
+[defn wat-inst-i32.mul [a b]
+  [wat-inst/inst
+    [wasm-name-to-wat-byte-array [word i32.mul]]
+    [list a b]]]
+
 [defn type-subst [type-env t]
   [match t
     [lltype/var w]
@@ -1652,13 +1682,14 @@
         [assert [eq [size type-params] [size type-args]] expected matching number of type parameters]
         [for i 0 [size type-params]
           [push gtype-env [pair [at type-params i] [at type-args i]]]]]
-     type-env [clone-growable-to-frozen-list gtype-env]
-     type-to-size-exp
-     [func tts [it]
+     type-env [clone-growable-to-frozen-list gtype-env]]
+  [letfn
+    [
+  [func type-to-size-exp [it]
       [match [normalize-type it]
         [ctype/var tv]
         [if-let [subst-type [try-get-assoc-identical type-env tv]]
-          [tts subst-type]
+          [type-to-size-exp subst-type]
           [logq-abort size-of type var not found [identity tv]]]
 
         [ctype/literal l]
@@ -1675,12 +1706,27 @@
             [[word i64] [word f64]] i32.const-8
             [[word v128]] i32.const-16
             [[word tuple]] [logq-abort size-of tuple not implemented]
+
             [[word pointer]]
             [match [get-memory-kind [llctx-from-translate tctx] [mem-name-from-mem-type [first type-args]]]
               [memory-kind/i32]
               i32.const-4
               [memory-kind/i64]
               i32.const-8]
+
+            [[word array]]
+            [let [size-exp
+                  [match [at type-args 1]
+                    [ctype/literal tl]
+                    [match tl
+                      [type-literal/exp e]
+                      [go e]
+
+                      [logq-abort size-of array not implemented]]
+                    [logq-abort size-of array not implemented]]]
+              [wat-inst-i32.mul
+                [type-to-size-exp [at type-args 0]]
+                size-exp]]
 
             [if-let [type-params [try-get [llctx/user-type-params bind-ctx] type-name]]
               [let
@@ -1694,15 +1740,13 @@
                     [if [lt-s i n]
                       [let [fd [at field-list i]]
                         [continue
-                          cur-size [wat-inst-i32.add cur-size [tts [llinstantiate-syntax-type new-tv-env [field-desc/type [pair/snd fd]]]]]
+                          cur-size [wat-inst-i32.add cur-size [type-to-size-exp [llinstantiate-syntax-type new-tv-env [field-desc/type [pair/snd fd]]]]]
                           i [inc i]]]
                       cur-size]]
                   [logq-abort infer-llexp not a record type]]]
               [logq-abort infer-llexp type not found [identity type-name]]]]
           [do [log it] [logq-abort not implemented size-of [identity it]]]]
-        [do [log it] [logq-abort not implemented size-of [identity it]]]]]]
-  [letfn
-    [
+        [do [log it] [logq-abort not implemented size-of [identity it]]]]]
   [func go-forms [forms]
     [if [is-empty forms]
       [list]
@@ -1801,7 +1845,6 @@
         [assert [eq-word [pair/fst pt] [word pointer]]]
         [let [ptargs [pair/snd pt]
               tmem [first ptargs]
-              mem-name [mem-name-from-mem-type tmem]
               ttarget [get-apply-type [second ptargs]]
               ttarget-name [pair/fst ttarget]
               ttarget-args [pair/snd ttarget]
@@ -1828,11 +1871,17 @@
                         [logq-abort field not found]]]]
                   [logq-abort not a record type]]
                 [logq-abort not implemented translate-top-form field inst-type/apply]]]
-        [wat-inst/inst
-          [wasm-name-to-wat-byte-array [word i32.add]]
-          [list
-            offset
-            [go target]]]]]
+        [wat-inst-i32.add offset [go target]]]]
+
+      [llexp/index target index]
+      [let
+        [pt [get-apply-type [get-ctype cctx target]]]
+        [assert [eq-word [pair/fst pt] [word pointer]]]
+        [let [ptargs [pair/snd pt]
+              array-type [second ptargs]
+              element-type [first [pair/snd [get-apply-type array-type]]]
+              offset [wat-inst-i32.mul [type-to-size-exp element-type] [go index]]]
+        [wat-inst-i32.add offset [go target]]]]
 
       [llexp/assign target value]
       [let
