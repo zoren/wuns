@@ -72,13 +72,6 @@
   [union
     [record [transient-kv-map word field-desc] [list [pair word field-desc]]]]]
 
-[type llctx []
-  [record
-    [lldef-ctx [transient-kv-map word lldef-desc]]
-    [form-to-ldesc [transient-kv-map form lllocal-var-kind]]
-    [user-type-params [transient-kv-map word [list syntax-word]]]
-    [user-types [transient-kv-map word user-type-desc]]]]
-[defn llctx-empty [] [llctx [transient-kv-map] [transient-kv-map] [transient-kv-map] [transient-kv-map]]]
 [def ascii-underscore [i32 95]]
 
 [comment wuns does not have underscores so we convert dashes to underscores]
@@ -227,12 +220,6 @@
       [option/some form]]
     [logq-abort sword expected word]]]
 
-[defn set-local [ctx lvars f kind]
-  [let [w [form-to-word f]]
-    [when [has lvars w] [push-error f [quote [redeclaring local]]]]
-    [set-kv-map lvars w kind]
-    [set-kv-map [llctx/form-to-ldesc ctx] f kind]]]
-
 [type local-context-kind []
   [union
     [let]
@@ -304,6 +291,15 @@
     [type-vars [list type-var]]
     [type ctype]]]
 
+[type llctx []
+  [record
+    [lldef-ctx [transient-kv-map word lldef-desc]]
+    [form-to-ldesc [transient-kv-map form lllocal-var-kind]]
+    [user-type-params [transient-kv-map word [list syntax-word]]]
+    [user-types [transient-kv-map word user-type-desc]]]]
+
+[defn llctx-empty [] [llctx [transient-kv-map] [transient-kv-map] [transient-kv-map] [transient-kv-map]]]
+
 [type llcheck-context []
   [record
     [def-var-types [transient-kv-map word check-type-scheme]]
@@ -318,7 +314,7 @@
     [atom 0]
     [transient-kv-map]
     [transient-kv-map]
-    [llctx [transient-kv-map] [transient-kv-map] [transient-kv-map] [transient-kv-map]]]]
+    [llctx-empty]]]
 
 [defn lltry-get-var-type [gctx local-ctx var-name]
   [if-let [ltype [try-get-local local-ctx var-name]]
@@ -849,14 +845,23 @@
     [defn lldefn]
     [export [list syntax-word]]]]
 
-[defn set-ll-def [ctx form def-desc]
-  [set-kv-map [llctx/lldef-ctx ctx] [form-to-word form] def-desc]]
-
 [defn form-to-lltop [ctx]
   [let
-    [lldef-ctx [llctx/lldef-ctx ctx]]
+    [lldef-ctx [llctx/lldef-ctx ctx]
+     form-to-ldesc [llctx/form-to-ldesc ctx]
+     user-type-params [llctx/user-type-params ctx]
+     user-types [llctx/user-types ctx]]
     [letfn
     [
+[func set-local [lvars f kind]
+  [let [w [form-to-word f]]
+    [when [has lvars w] [push-error f [quote [redeclaring local]]]]
+    [set-kv-map lvars w kind]
+    [set-kv-map form-to-ldesc f kind]]]
+
+[func set-ll-def [form def-desc]
+  [set-kv-map lldef-ctx [form-to-word form] def-desc]]
+
 [func forms-to-lldefn [name-form type-params params bodies]
   [let
     [type-env [set]
@@ -864,8 +869,8 @@
      lstack [local-stack/frame [local-stack/empty] [local-context lvars [local-context-kind/let]]]]
     [for-each type-param type-params
       [set-add type-env [form-to-word type-param]]]
-    [set-ll-def ctx name-form [lldef-desc/func [size params]]]
-    [set-local ctx lvars name-form [lllocal-var-kind/func-internal-self [size params]]]
+    [set-ll-def name-form [lldef-desc/func [size params]]]
+    [set-local lvars name-form [lllocal-var-kind/func-internal-self [size params]]]
     [lldefn
       [sword name-form]
       [list-map tp type-params [sword tp]]
@@ -873,12 +878,12 @@
         [match p
           [form/word w]
           [do
-            [set-local ctx lvars p [lllocal-var-kind/param]]
+            [set-local lvars p [lllocal-var-kind/param]]
             [pair [sword p] [option/none]]]
 
           [form/list l]
           [let [param-name-form [second l]]
-            [set-local ctx lvars param-name-form [lllocal-var-kind/param]]
+            [set-local lvars param-name-form [lllocal-var-kind/param]]
             [assert [eq [size l] 3] form-to-lltop expected type form]
             [assert [eq-word [form-to-word [first l]] [word type]]]
             [pair [sword param-name-form] [option/some [form-to-lltype [local-stack/empty] type-env [third l]]]]]]]
@@ -894,7 +899,7 @@
           [when-not arity-ok
             [push-error form [quote [wrong number of type arguments to builtin]]]]
           [lltype/apply [sword form] [list]]]
-        [if-let [type-params [try-get [llctx/user-type-params ctx] w]]
+        [if-let [type-params [try-get user-type-params w]]
           [do
             [when-not [eq [size type-params] 0] [push-error form [quote [expected no type params]]]]
             [lltype/apply [sword form] [list]]]
@@ -902,7 +907,7 @@
             [option/some kind]
             [push-error form [quote [form-to-lltype local variable used in type]]]
             [option/none]
-            [if-let [top-desc [try-get [llctx/lldef-ctx ctx] w]]
+            [if-let [top-desc [try-get lldef-ctx w]]
               [match top-desc
                 [lldef-desc/memory mk] [lltype/literal [type-literal/memory [sword form]]]
                 [push-error form [quote [undefined type or type param def not acceptable kind]]]]
@@ -912,7 +917,7 @@
     [let [sw [sword [first l]] fw [syntax-word/word sw] n-of-args [dec [size l]]]
       [if-let [arity-ok [llbuiltin-type-arity-ok fw n-of-args]]
         [when-not arity-ok [push-error form [quote [wrong number of type arguments to builtin]]]]
-        [if-let [type-params [try-get [llctx/user-type-params ctx] fw]]
+        [if-let [type-params [try-get user-type-params fw]]
           [when-not [eq [size type-params] n-of-args] [push-error form [quote [type arity mismatch]]]]
           [push-error form [quote [undefined type]]]]]
       [lltype/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]]]
@@ -923,8 +928,7 @@
     [match form
       [form/word w]
       [let [sname [sword form]
-            bf [llexp/var sname]
-            form-to-ldesc [llctx/form-to-ldesc ctx]]
+            bf [llexp/var sname]]
         [if-let [ldesc [try-get-local lstack w]]
           [set-kv-map form-to-ldesc form ldesc]
           [if-let [ddesc [try-get lldef-ctx w]]
@@ -1029,7 +1033,7 @@
                         ldesc [lllocal-var-kind/loop]]
                     [when-let [ldesc [try-get-local lstack name-word]]
                       [push-error name [quote [loop var shadows local]]]]
-                    [set-local ctx lvars name ldesc]
+                    [set-local lvars name ldesc]
                     [pair sname be]]]
                 [list-map f [slice l 2 [size l]] [form-to-llexp type-var-set new-lstack f]]]]
 
@@ -1047,7 +1051,7 @@
                         name-word [syntax-word/word sname]
                         be [form-to-llexp type-var-set lstack [pair/snd p]]]
                     [if-let [ldesc [try-get loop-vars name-word]]
-                      [set-kv-map [llctx/form-to-ldesc ctx] name ldesc]
+                      [set-kv-map form-to-ldesc name ldesc]
                       [push-error name [quote [not a loop var of the current loop]]]]
                     [pair sname be]]]]]
 
@@ -1067,7 +1071,7 @@
                         be [form-to-llexp type-var-set new-lstack [second p]]]
                     [when-let [ldesc2 [try-get-local lstack name-word]]
                       [push-error name [quote [let var shadows local]]]]
-                    [set-local ctx lvars name ldesc]
+                    [set-local lvars name ldesc]
                     [pair sname be]]]
                 [list-map f [slice l 2 [size l]] [form-to-llexp type-var-set new-lstack f]]]]
 
@@ -1162,7 +1166,7 @@
                 [[word i32]] [memory-kind/i32]
                 [[word i64]] [memory-kind/i64]
                 [logq-abort form-to-lltop memory kind not recognized]]]
-          [set-ll-def ctx [get-arg 1] [lldef-desc/memory kind]]
+          [set-ll-def [get-arg 1] [lldef-desc/memory kind]]
           [lltop/memory
             mem-name
             kind
@@ -1183,7 +1187,7 @@
               [let [tp [form-to-word type-param]]
                 [assert-not [set-has type-env tp] duplicate type param]
                 [set-add type-env tp]]]
-            [set-kv-map [llctx/user-type-params ctx] [form-to-word type-name-form] type-params-sword]
+            [set-kv-map user-type-params [form-to-word type-name-form] type-params-sword]
             [lltop/type [sword type-name-form] type-params-sword
               [switch [form-to-word [first type-decl-list]]
                 [[word record]]
@@ -1195,7 +1199,7 @@
                             fd [field-desc [form-to-lltype [local-stack/empty] type-env [second ll]]]]
                         [push field-list [pair field-name fd]]
                         [set-kv-map field-map field-name fd]]]]
-                  [set-kv-map [llctx/user-types ctx] [form-to-word type-name-form]
+                  [set-kv-map user-types [form-to-word type-name-form]
                     [user-type-desc/record field-map [clone-growable-to-frozen-list field-list]]]
                   [lltype-decl-kind/record [list]]]
 
@@ -1204,7 +1208,7 @@
         [[word def]]
         [let [name-form [get-arg 0]]
           [assert-n-args 2]
-          [set-ll-def ctx name-form [lldef-desc/any]]
+          [set-ll-def name-form [lldef-desc/any]]
           [lltop/def [sword name-form] [form-to-llexp [set] [local-stack/empty] [get-arg 1]]]]
 
         [[word defn]]
@@ -1226,7 +1230,7 @@
         [lltop/export
           [list-map f [rest l]
             [let [sw [sword f]]
-              [when-not [has [llctx/lldef-ctx ctx] [syntax-word/word sw]]
+              [when-not [has lldef-ctx [syntax-word/word sw]]
                 [push-error f [quote [not a defined name]]]]
               sw]]]
 
