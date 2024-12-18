@@ -235,35 +235,6 @@
       [option/some form]]
     [logq-abort sword expected word]]]
 
-[defn form-to-lltype [ctx type-params form]
-  [match form
-    [form/word w]
-    [if [set-has type-params w]
-      [lltype/var [sword form]]
-      [if-let [arity-ok [llbuiltin-type-arity-ok w 0]]
-        [do
-          [when-not arity-ok
-            [push-error form [quote [wrong number of type arguments to builtin]]]]
-          [lltype/apply [sword form] [list]]]
-        [if-let [type-params [try-get [llctx/user-type-params ctx] w]]
-          [do
-            [when-not [eq [size type-params] 0] [push-error form [quote [expected no type params]]]]
-            [lltype/apply [sword form] [list]]]
-          [if-let [top-desc [try-get [llctx/lldef-ctx ctx] w]]
-            [match top-desc
-              [lldef-desc/memory mk] [lltype/literal [type-literal/memory [sword form]]]
-              [push-error form [quote [undefined type or type param def not acceptable kind]]]]
-            [push-error form [quote [undefined type or type param]]]]]]]
-
-    [form/list l]
-    [let [sw [sword [first l]] fw [syntax-word/word sw]]
-      [assert-not [eq-word fw [word type-scheme]] unexpected type-scheme]
-      [when-let [arity-ok [llbuiltin-type-arity-ok fw [dec [size l]]]]
-        [when-not arity-ok
-          [push-error form [quote [wrong number of type arguments to builtin]]]]
-        [lltype/apply sw [list-map arg [rest l] [form-to-lltype ctx type-params arg]]]]
-      [lltype/apply sw [list-map arg [rest l] [form-to-lltype ctx type-params arg]]]]]]
-
 [defn set-local [ctx lvars f kind]
   [let [w [form-to-word f]]
     [when [has lvars w] [push-error f [quote [redeclaring local]]]]
@@ -274,8 +245,6 @@
   [union
     [let]
     [loop]
-    [letfn]
-    [match]
     [func]]]
 
 [type local-context [v]
@@ -296,6 +265,39 @@
     [match [try-get [local-context/vars lctx] w]
       [option/none] [try-get-local outer w]
       [option/some kind] [option/some kind]]]]
+
+[defn form-to-lltype [ctx lstack type-params form]
+  [match form
+    [form/word w]
+    [if [set-has type-params w]
+      [lltype/var [sword form]]
+      [if-let [arity-ok [llbuiltin-type-arity-ok w 0]]
+        [do
+          [when-not arity-ok
+            [push-error form [quote [wrong number of type arguments to builtin]]]]
+          [lltype/apply [sword form] [list]]]
+        [if-let [type-params [try-get [llctx/user-type-params ctx] w]]
+          [do
+            [when-not [eq [size type-params] 0] [push-error form [quote [expected no type params]]]]
+            [lltype/apply [sword form] [list]]]
+          [match [try-get-local lstack w]
+            [option/some kind]
+            [push-error form [quote [form-to-lltype local variable used in type]]]
+            [option/none]
+            [if-let [top-desc [try-get [llctx/lldef-ctx ctx] w]]
+              [match top-desc
+                [lldef-desc/memory mk] [lltype/literal [type-literal/memory [sword form]]]
+                [push-error form [quote [undefined type or type param def not acceptable kind]]]]
+              [push-error form [quote [undefined type or type param]]]]]]]]
+
+    [form/list l]
+    [let [sw [sword [first l]] fw [syntax-word/word sw] n-of-args [dec [size l]]]
+      [if-let [arity-ok [llbuiltin-type-arity-ok fw n-of-args]]
+        [when-not arity-ok [push-error form [quote [wrong number of type arguments to builtin]]]]
+        [if-let [type-params [try-get [llctx/user-type-params ctx] fw]]
+          [when-not [eq [size type-params] n-of-args] [push-error form [quote [type arity mismatch]]]]
+          [push-error form [quote [undefined type]]]]]
+      [lltype/apply sw [list-map arg [rest l] [form-to-lltype ctx lstack type-params arg]]]]]]
 
 [defn try-get-enclosing-loop-context [lstack]
   [match lstack
@@ -321,7 +323,9 @@
         [if-let [ldesc [try-get-local lstack w]]
           [set-kv-map form-to-ldesc form ldesc]
           [if-let [ddesc [try-get lldef-ctx w]]
-            [do]
+            [match ddesc
+              [lldef-desc/any] [do]
+              [logq-abort only def values allowed]]
             [push-error form [quote [undefined exp word]]]]]
         bf]
 
@@ -466,7 +470,7 @@
             [do
               [assert-n-args 2]
               [llexp/cast
-                [form-to-lltype ctx type-var-set [get-arg 0]]
+                [form-to-lltype ctx lstack type-var-set [get-arg 0]]
                 [form-to-llexp ctxp lstack [get-arg 1]]]]
 
             [[word deref]]
@@ -493,7 +497,7 @@
             [do
               [assert-n-args 1]
               [llexp/size-of
-                [form-to-lltype ctx type-var-set [get-arg 0]]]]
+                [form-to-lltype ctx lstack type-var-set [get-arg 0]]]]
 
             [do
               [if-let [ldesc [try-get-local lstack first-word]]
@@ -1160,7 +1164,7 @@
             [set-local ctx lvars param-name-form [lllocal-var-kind/param]]
             [assert [eq [size l] 3] form-to-lltop expected type form]
             [assert [eq-word [form-to-word [first l]] [word type]]]
-            [pair [sword param-name-form] [option/some [form-to-lltype ctx type-env [third l]]]]]]]
+            [pair [sword param-name-form] [option/some [form-to-lltype ctx [local-stack/empty] type-env [third l]]]]]]]
       [list-map b bodies [form-to-llexp-tv ctx type-env lstack b]]]]]
 
 [defn form-to-lltop [ctx form]
@@ -1227,7 +1231,7 @@
                   [for-each p [rest type-decl-list]
                     [let [ll [get-list p]]
                       [let [field-name [form-to-word [first ll]]
-                            fd [field-desc [lltype-to-lltype-desc [form-to-lltype ctx type-env [second ll]]]]]
+                            fd [field-desc [lltype-to-lltype-desc [form-to-lltype ctx [local-stack/empty] type-env [second ll]]]]]
                         [push field-list [pair field-name fd]]
                         [set-kv-map field-map field-name fd]]]]
                   [set-kv-map [llctx/user-types ctx] [form-to-word type-name-form]

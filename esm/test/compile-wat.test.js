@@ -248,6 +248,19 @@ test('cast', async () => {
         [cast [pointer mem i32] [i32 16]]]]
     [export f]`),
   ).rejects.toThrow('can only cast i64 to pointer')
+  await expect(
+    stringToInst(`
+    [memory i32 mem 1]
+    [defn f [m]
+      [cast [pointer m i32] [i32 16]]]
+    [export f]`),
+  ).rejects.toThrow('local variable used in type')
+  await expect(
+    stringToInst(`
+    [memory i32 mem 1]
+    [defn f [] mem]
+    [export f]`),
+  ).rejects.toThrow('only def values allowed')
 })
 
 test('deref', async () => {
