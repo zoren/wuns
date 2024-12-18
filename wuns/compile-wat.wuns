@@ -54,27 +54,17 @@
     [func i32]
     ]]
 
-[type type-literal-desc []
-  [union
-    [memory word]]]
-
-[type lltype-desc []
-  [union
-    [var word]
-    [literal type-literal-desc]
-    [apply word [list lltype-desc]]]]
-
 [type lllocal-var-kind []
   [union
     [param]
-    [param-with-type lltype-desc]
+    [param-with-type lltype]
     [let]
     [loop]
     [func-internal-self i32]]]
 
 [type field-desc []
   [record
-    [type lltype-desc]]]
+    [type lltype]]]
 
 [type user-type-desc []
   [union
@@ -130,7 +120,7 @@
   ctype []
   [union
     [var type-var]
-    [literal type-literal-desc]
+    [literal type-literal]
     [inst inst-type]]]
 
 [defn get-type-var-kind [type-var]
@@ -160,8 +150,8 @@
 
     [ctype/literal l]
     [match l
-      [type-literal-desc/memory mem]
-      [form/word mem]
+      [type-literal/memory mem]
+      [form/word [syntax-word/word mem]]
 
       [logq-abort ctype-to-form unexpected literal type]]
 
@@ -538,7 +528,6 @@
 [def type-f32 [make-type [word f32]]]
 [def type-i64 [make-type [word i64]]]
 
-[defn type-memory [mem-name] [ctype/literal [type-literal-desc/memory mem-name]]]
 [defn type-pointer [mem target] [make-type [word pointer] mem target]]
 
 [def type-empty-tuple [make-type [word tuple]]]
@@ -702,10 +691,10 @@
 
 [defn type-literal-desc-equals [l1 l2]
   [match l1
-    [type-literal-desc/memory m1]
+    [type-literal/memory m1]
     [match l2
-      [type-literal-desc/memory m2]
-      [eq-word m1 m2]
+      [type-literal/memory m2]
+      [eq-word [syntax-word/word m1] [syntax-word/word m2]]
 
       false]]]
 
@@ -795,40 +784,16 @@
   [set-kv-map [llcheck-context/type-annotations gctx] [to-js-value bst] type]
   type]
 
-[defn lltype-to-lltype-desc [t]
-  [match t
-    [lltype/var w] [lltype-desc/var [syntax-word/word w]]
-    [lltype/literal l]
-    [lltype-desc/literal
-      [match l
-        [type-literal/memory mem]
-        [type-literal-desc/memory [syntax-word/word mem]]]]
-    [lltype/apply w args] [lltype-desc/apply [syntax-word/word w] [list-map a args [lltype-to-lltype-desc a]]]]]
-
-[defn ctype-to-lltype-desc [ct]
-  [match ct
-    [ctype/inst inst-type]
-    [match inst-type
-      [inst-type/apply type-name type-args]
-      [lltype-desc/apply type-name [list-map ta type-args [ctype-to-lltype-desc ta]]]
-
-      [logq-abort ctype-to-lltype-desc not implemented]]
-    [logq-abort ctype-to-lltype-desc not implemented]]]
-
-[defn llinstantiate-type-desc [type-var-env syntax-type]
+[defn llinstantiate-syntax-type [type-var-env syntax-type]
   [match syntax-type
-    [lltype-desc/var tv]
-    [get type-var-env tv]
+    [lltype/var tv]
+    [get type-var-env [syntax-word/word tv]]
 
-    [lltype-desc/literal l]
-    [match l
-      [type-literal-desc/memory mem-name]
-      [type-memory mem-name]
+    [lltype/literal l]
+    [ctype/literal l]
 
-      [logq-abort llinstantiate-type-desc not implemented]]
-
-    [lltype-desc/apply type-name targs]
-    [switch type-name
+    [lltype/apply type-name targs]
+    [switch [syntax-word/word type-name]
       [[word i32]]
       type-i32
 
@@ -836,27 +801,24 @@
       type-f64
 
       [[word word]]
-      [logq-abort llinstantiate-type-desc not implemented]
+      [logq-abort llinstantiate-syntax-type not implemented]
 
       [[word pointer]]
       [let [mem [first targs] target [second targs]]
         [type-pointer
-          [llinstantiate-type-desc type-var-env mem]
-          [llinstantiate-type-desc type-var-env target]]]
+          [llinstantiate-syntax-type type-var-env mem]
+          [llinstantiate-syntax-type type-var-env target]]]
 
       [make-type-list
-        type-name
-        [list-map ta targs [llinstantiate-type-desc type-var-env ta]]]]]]
-
-[defn llinstantiate-syntax-type [type-var-env syntax-type]
-  [llinstantiate-type-desc type-var-env [lltype-to-lltype-desc syntax-type]]]
+        [syntax-word/word type-name]
+        [list-map ta targs [llinstantiate-syntax-type type-var-env ta]]]]]]
 
 [defn mem-name-from-mem-type [tmem]
   [match [normalize-type tmem]
     [ctype/literal l]
     [match l
-      [type-literal-desc/memory mem-name]
-      mem-name
+      [type-literal/memory mem-name]
+      [syntax-word/word mem-name]
 
       [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]
     [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]]
@@ -1091,7 +1053,7 @@
                 [for i 0 [size type-args]
                   [set-kv-map new-tv-env [syntax-word/word [at type-params i]] [at type-args i]]]
                 [llannotate gctx bform
-                  [type-pointer t-mem [llinstantiate-type-desc new-tv-env [field-desc/type fd]]]]]
+                  [type-pointer t-mem [llinstantiate-syntax-type new-tv-env [field-desc/type fd]]]]]
               [logq-abort infer-llexp field not found [identity field-name]]]
             [logq-abort infer-llexp not a record type]]
 
@@ -1231,7 +1193,7 @@
                   [for-each p [rest type-decl-list]
                     [let [ll [get-list p]]
                       [let [field-name [form-to-word [first ll]]
-                            fd [field-desc [lltype-to-lltype-desc [form-to-lltype ctx [local-stack/empty] type-env [second ll]]]]]
+                            fd [field-desc [form-to-lltype ctx [local-stack/empty] type-env [second ll]]]]
                         [push field-list [pair field-name fd]]
                         [set-kv-map field-map field-name fd]]]]
                   [set-kv-map [llctx/user-types ctx] [form-to-word type-name-form]
@@ -1724,7 +1686,7 @@
                     [if [lt-s i n]
                       [let [fd [at field-list i]]
                         [continue
-                          cur-size [wat-inst-i32.add cur-size [tts [llinstantiate-type-desc new-tv-env [field-desc/type [pair/snd fd]]]]]
+                          cur-size [wat-inst-i32.add cur-size [tts [llinstantiate-syntax-type new-tv-env [field-desc/type [pair/snd fd]]]]]
                           i [inc i]]]
                       cur-size]]
                   [logq-abort infer-llexp not a record type]]]
@@ -1854,7 +1816,7 @@
                               i [inc i]
                               offset [wat-inst-i32.add
                                       offset
-                                      [type-to-size-exp [llinstantiate-type-desc new-tv-env [field-desc/type [pair/snd fp]]]]]]]]
+                                      [type-to-size-exp [llinstantiate-syntax-type new-tv-env [field-desc/type [pair/snd fp]]]]]]]]
                         [logq-abort field not found]]]]
                   [logq-abort not a record type]]
                 [logq-abort not implemented translate-top-form field inst-type/apply]]]
