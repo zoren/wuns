@@ -853,15 +853,11 @@
   [set-kv-map [llctx/lldef-ctx ctx] [form-to-word form] def-desc]]
 
 [defn form-to-lltop [ctx]
-  [letfn
+  [let
+    [lldef-ctx [llctx/lldef-ctx ctx]]
+    [letfn
     [
-[func form-to-llexp-empty [ctx form]
-  [form-to-llexp [pair ctx [set]] [local-stack/empty] form]]
-
-[func form-to-llexp-tv [ctx tv-env lstack form]
-  [form-to-llexp [pair ctx tv-env] lstack form]]
-
-[func forms-to-lldefn [ctx name-form type-params params bodies]
+[func forms-to-lldefn [name-form type-params params bodies]
   [let
     [type-env [set]
      lvars [transient-kv-map]
@@ -885,10 +881,10 @@
             [set-local ctx lvars param-name-form [lllocal-var-kind/param]]
             [assert [eq [size l] 3] form-to-lltop expected type form]
             [assert [eq-word [form-to-word [first l]] [word type]]]
-            [pair [sword param-name-form] [option/some [form-to-lltype ctx [local-stack/empty] type-env [third l]]]]]]]
-      [list-map b bodies [form-to-llexp-tv ctx type-env lstack b]]]]]
+            [pair [sword param-name-form] [option/some [form-to-lltype [local-stack/empty] type-env [third l]]]]]]]
+      [list-map b bodies [form-to-llexp-tv type-env lstack b]]]]]
 
-[func form-to-lltype [ctx lstack type-params form]
+[func form-to-lltype [lstack type-params form]
   [match form
     [form/word w]
     [if [set-has type-params w]
@@ -919,13 +915,11 @@
         [if-let [type-params [try-get [llctx/user-type-params ctx] fw]]
           [when-not [eq [size type-params] n-of-args] [push-error form [quote [type arity mismatch]]]]
           [push-error form [quote [undefined type]]]]]
-      [lltype/apply sw [list-map arg [rest l] [form-to-lltype ctx lstack type-params arg]]]]]]
+      [lltype/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]]]
 
-[func form-to-llexp [ctxp lstack form]
+[func form-to-llexp [type-var-set lstack form]
   [let
-    [ctx1 [pair/fst ctxp]
-     lldef-ctx [llctx/lldef-ctx ctx1]
-     type-var-set [pair/snd ctxp]]
+    []
     [match form
       [form/word w]
       [let [sname [sword form]
@@ -970,12 +964,12 @@
               [if [or [is-i32-bin-inst inst-name] [is-f64-bin-inst inst-name] [is-f64-comp-inst inst-name]]
                 [do
                   [assert-n-args 3]
-                  [llexp/intrinsic inst-sname [list] [list-map arg [slice l 2 [size l]] [form-to-llexp ctxp lstack arg]]]]
+                  [llexp/intrinsic inst-sname [list] [list-map arg [slice l 2 [size l]] [form-to-llexp type-var-set lstack arg]]]]
                 [switch inst-name
                   [[word unreachable]]
                   [do
                     [assert-n-args 1]
-                    [llexp/intrinsic inst-sname [list] [list-map arg [slice l 2 [size l]] [form-to-llexp ctxp lstack arg]]]]
+                    [llexp/intrinsic inst-sname [list] [list-map arg [slice l 2 [size l]] [form-to-llexp type-var-set lstack arg]]]]
 
                   [[word i32.load] [word i32.load8-u]]
                   [do
@@ -989,7 +983,7 @@
                           mem-name
                           [sword [get-arg 2]]
                           [sword [get-arg 3]]]
-                        [list [form-to-llexp ctxp lstack [get-arg 4]]]]]]
+                        [list [form-to-llexp type-var-set lstack [get-arg 4]]]]]]
 
                   [[word i32.store] [word i32.store8]]
                   [do
@@ -1004,8 +998,8 @@
                           [sword [get-arg 2]]
                           [sword [get-arg 3]]]
                         [list
-                          [form-to-llexp ctxp lstack [get-arg 4]]
-                          [form-to-llexp ctxp lstack [get-arg 5]]]]]]
+                          [form-to-llexp type-var-set lstack [get-arg 4]]
+                          [form-to-llexp type-var-set lstack [get-arg 5]]]]]]
 
                   [do
                     [log form]
@@ -1014,10 +1008,10 @@
             [[word if]]
             [do
               [assert-n-args 3]
-              [llexp/if [form-to-llexp ctxp lstack [get-arg 0]] [form-to-llexp ctxp lstack [get-arg 1]] [form-to-llexp ctxp lstack [get-arg 2]]]]
+              [llexp/if [form-to-llexp type-var-set lstack [get-arg 0]] [form-to-llexp type-var-set lstack [get-arg 1]] [form-to-llexp type-var-set lstack [get-arg 2]]]]
 
             [[word do]]
-            [llexp/do [list-map arg [rest l] [form-to-llexp ctxp lstack arg]]]
+            [llexp/do [list-map arg [rest l] [form-to-llexp type-var-set lstack arg]]]
 
             [[word loop]]
             [let
@@ -1031,13 +1025,13 @@
                   [let [name [first p]
                         sname [sword name]
                         name-word [syntax-word/word sname]
-                        be [form-to-llexp ctxp new-lstack [second p]]
+                        be [form-to-llexp type-var-set new-lstack [second p]]
                         ldesc [lllocal-var-kind/loop]]
                     [when-let [ldesc [try-get-local lstack name-word]]
                       [push-error name [quote [loop var shadows local]]]]
                     [set-local ctx lvars name ldesc]
                     [pair sname be]]]
-                [list-map f [slice l 2 [size l]] [form-to-llexp ctxp new-lstack f]]]]
+                [list-map f [slice l 2 [size l]] [form-to-llexp type-var-set new-lstack f]]]]
 
             [[word continue]]
             [let [loop-vars
@@ -1051,7 +1045,7 @@
                   [let [name [pair/fst p]
                         sname [sword name]
                         name-word [syntax-word/word sname]
-                        be [form-to-llexp ctxp lstack [pair/snd p]]]
+                        be [form-to-llexp type-var-set lstack [pair/snd p]]]
                     [if-let [ldesc [try-get loop-vars name-word]]
                       [set-kv-map [llctx/form-to-ldesc ctx] name ldesc]
                       [push-error name [quote [not a loop var of the current loop]]]]
@@ -1070,45 +1064,45 @@
                   [let [name [first p]
                         sname [sword name]
                         name-word [syntax-word/word sname]
-                        be [form-to-llexp ctxp new-lstack [second p]]]
+                        be [form-to-llexp type-var-set new-lstack [second p]]]
                     [when-let [ldesc2 [try-get-local lstack name-word]]
                       [push-error name [quote [let var shadows local]]]]
                     [set-local ctx lvars name ldesc]
                     [pair sname be]]]
-                [list-map f [slice l 2 [size l]] [form-to-llexp ctxp new-lstack f]]]]
+                [list-map f [slice l 2 [size l]] [form-to-llexp type-var-set new-lstack f]]]]
 
             [[word cast]]
             [do
               [assert-n-args 2]
               [llexp/cast
-                [form-to-lltype ctx lstack type-var-set [get-arg 0]]
-                [form-to-llexp ctxp lstack [get-arg 1]]]]
+                [form-to-lltype lstack type-var-set [get-arg 0]]
+                [form-to-llexp type-var-set lstack [get-arg 1]]]]
 
             [[word deref]]
             [do
               [assert-n-args 1]
               [llexp/deref
-                [form-to-llexp ctxp lstack [get-arg 0]]]]
+                [form-to-llexp type-var-set lstack [get-arg 0]]]]
 
             [[word assign]]
             [do
               [assert-n-args 2]
               [llexp/assign
-                [form-to-llexp ctxp lstack [get-arg 0]]
-                [form-to-llexp ctxp lstack [get-arg 1]]]]
+                [form-to-llexp type-var-set lstack [get-arg 0]]
+                [form-to-llexp type-var-set lstack [get-arg 1]]]]
 
             [[word field]]
             [do
               [assert-n-args 2]
               [llexp/field
-                [form-to-llexp ctxp lstack [get-arg 0]]
+                [form-to-llexp type-var-set lstack [get-arg 0]]
                 [sword [get-arg 1]]]]
 
             [[word size-of]]
             [do
               [assert-n-args 1]
               [llexp/size-of
-                [form-to-lltype ctx lstack type-var-set [get-arg 0]]]]
+                [form-to-lltype lstack type-var-set [get-arg 0]]]]
 
             [do
               [if-let [ldesc [try-get-local lstack first-word]]
@@ -1116,7 +1110,7 @@
                   [lllocal-var-kind/func-internal-self arity]
                   [do
                     [assert-n-args arity]
-                    [llexp/call [sword first-form] [list-map arg [rest l] [form-to-llexp ctxp lstack arg]]]]
+                    [llexp/call [sword first-form] [list-map arg [rest l] [form-to-llexp type-var-set lstack arg]]]]
 
                   [logq-abort form-to-llexp only rec calls allowed]]
                 [if-let [llddesc [try-get lldef-ctx first-word]]
@@ -1125,7 +1119,7 @@
                       [lldef-desc/func arity]
                       [do
                         [assert-n-args arity]
-                        [llexp/call [sword first-form] [list-map arg [rest l] [form-to-llexp ctxp lstack arg]]]]
+                        [llexp/call [sword first-form] [list-map arg [rest l] [form-to-llexp type-var-set lstack arg]]]]
 
                       [logq-abort form-to-llexp not a func]]]
                   [do
@@ -1133,6 +1127,12 @@
 
           [form/list fl]
           [push-error form [quote [form-to-llexp direct calls not implemented]]]]]]]]
+
+[func form-to-llexp-empty [form]
+  [form-to-llexp [set] [local-stack/empty] form]]
+
+[func form-to-llexp-tv [tv-env lstack form]
+  [form-to-llexp tv-env lstack form]]
 
 [func form-to-lltop [form]
   [let
@@ -1148,7 +1148,7 @@
         [[word data]]
         [lltop/data-active
           [sword [get-arg 1]]
-          [form-to-llexp-empty ctx [get-arg 2]]
+          [form-to-llexp-empty [get-arg 2]]
           [list-map a [slice l 4 [size l]]
             [let [dl [get-list a]]
               [let [data-first [form-to-word [first dl]]]
@@ -1198,7 +1198,7 @@
                   [for-each p [rest type-decl-list]
                     [let [ll [get-list p]]
                       [let [field-name [form-to-word [first ll]]
-                            fd [field-desc [form-to-lltype ctx [local-stack/empty] type-env [second ll]]]]
+                            fd [field-desc [form-to-lltype [local-stack/empty] type-env [second ll]]]]
                         [push field-list [pair field-name fd]]
                         [set-kv-map field-map field-name fd]]]]
                   [set-kv-map [llctx/user-types ctx] [form-to-word type-name-form]
@@ -1211,14 +1211,14 @@
         [let [name-form [get-arg 0]]
           [assert-n-args 2]
           [set-ll-def ctx name-form [lldef-desc/any]]
-          [lltop/def [sword name-form] [form-to-llexp-empty ctx [get-arg 1]]]]
+          [lltop/def [sword name-form] [form-to-llexp-empty [get-arg 1]]]]
 
         [[word defn]]
         [let [name-form [get-arg 0]
               params [get-list [get-arg 1]]
               bodies [slice l 3 [size l]]]
           [lltop/defn
-            [forms-to-lldefn ctx name-form [list] params bodies]]]
+            [forms-to-lldefn name-form [list] params bodies]]]
 
         [[word genfn]]
         [let [name-form [get-arg 0]
@@ -1226,7 +1226,7 @@
               params [get-list [get-arg 2]]
               bodies [slice l 4 [size l]]]
           [lltop/defn
-            [forms-to-lldefn ctx name-form type-params params bodies]]]
+            [forms-to-lldefn name-form type-params params bodies]]]
 
         [[word export]]
         [lltop/export
@@ -1243,7 +1243,7 @@
       [form/list fl]
       [logq-abort direct call at top not supported]]]]
     ]
-    form-to-lltop]]
+    form-to-lltop]]]
 
 [defn infer-lltop [gctx lltop]
   [match lltop
