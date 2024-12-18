@@ -882,7 +882,7 @@
             [assert [eq [size l] 3] form-to-lltop expected type form]
             [assert [eq-word [form-to-word [first l]] [word type]]]
             [pair [sword param-name-form] [option/some [form-to-lltype [local-stack/empty] type-env [third l]]]]]]]
-      [list-map b bodies [form-to-llexp-tv type-env lstack b]]]]]
+      [list-map b bodies [form-to-llexp type-env lstack b]]]]]
 
 [func form-to-lltype [lstack type-params form]
   [match form
@@ -1128,12 +1128,6 @@
           [form/list fl]
           [push-error form [quote [form-to-llexp direct calls not implemented]]]]]]]]
 
-[func form-to-llexp-empty [form]
-  [form-to-llexp [set] [local-stack/empty] form]]
-
-[func form-to-llexp-tv [tv-env lstack form]
-  [form-to-llexp tv-env lstack form]]
-
 [func form-to-lltop [form]
   [let
     [report-error [func r [msg] [push-error form msg]]
@@ -1142,13 +1136,13 @@
      assert-n-args [func ana [n] [when-not [eq n-of-args n] [report-error [quote [expected n-of-args arguments]]]]]
      get-arg [func get-arg [i] [if [lt-s i n-of-args] [at l [inc i]] [quote 0]]]
      first-form [first l]]
-      [match first-form
+    [match first-form
       [form/word first-word]
       [switch first-word
         [[word data]]
         [lltop/data-active
           [sword [get-arg 1]]
-          [form-to-llexp-empty [get-arg 2]]
+          [form-to-llexp [set] [local-stack/empty] [get-arg 2]]
           [list-map a [slice l 4 [size l]]
             [let [dl [get-list a]]
               [let [data-first [form-to-word [first dl]]]
@@ -1211,7 +1205,7 @@
         [let [name-form [get-arg 0]]
           [assert-n-args 2]
           [set-ll-def ctx name-form [lldef-desc/any]]
-          [lltop/def [sword name-form] [form-to-llexp-empty [get-arg 1]]]]
+          [lltop/def [sword name-form] [form-to-llexp [set] [local-stack/empty] [get-arg 1]]]]
 
         [[word defn]]
         [let [name-form [get-arg 0]
