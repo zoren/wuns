@@ -308,13 +308,13 @@
     [type-instantiations [transient-kv-map syntax-word [list ctype]]]
     [bind-ctx llctx]]]
 
-[defn llcheck-context-empty []
+[defn llcheck-context-empty [bind-ctx]
   [llcheck-context
     [transient-kv-map]
     [atom 0]
     [transient-kv-map]
     [transient-kv-map]
-    [llctx-empty]]]
+    bind-ctx]]
 
 [defn lltry-get-var-type [gctx local-ctx var-name]
   [if-let [ltype [try-get-local local-ctx var-name]]
@@ -845,14 +845,13 @@
     [defn lldefn]
     [export [list syntax-word]]]]
 
-[defn form-to-lltop [ctx]
+[defn make-forms-to-btops []
   [let
-    [lldef-ctx [llctx/lldef-ctx ctx]
-     form-to-ldesc [llctx/form-to-ldesc ctx]
-     user-type-params [llctx/user-type-params ctx]
-     user-types [llctx/user-types ctx]]
-    [letfn
-    [
+    [lldef-ctx [transient-kv-map]
+     form-to-ldesc [transient-kv-map]
+     user-type-params [transient-kv-map]
+     user-types [transient-kv-map]]
+    [letfn [
 [func set-local [lvars f kind]
   [let [w [form-to-word f]]
     [when [has lvars w] [push-error f [quote [redeclaring local]]]]
@@ -1239,9 +1238,15 @@
           [logq-abort form-to-lltop not implemented]]]
 
       [form/list fl]
-      [logq-abort direct call at top not supported]]]]
-    ]
-    form-to-lltop]]]
+      [logq-abort direct call at top not supported]]]]]
+    [func forms-to-btops [forms]
+      [pair
+        [list-map form forms [form-to-lltop form]]
+        [llctx
+          lldef-ctx
+          form-to-ldesc
+          user-type-params
+          user-types]]]]]]
 
 [defn infer-lltop [gctx lltop]
   [match lltop
@@ -1529,10 +1534,10 @@
     [func-specs-to-generate [atom [growable-list [pair word [list ctype]]]]]
     ]]
 
-[defn translate-context-empty []
+[defn translate-context-empty [llcheck-context]
   [translate-context
     [make-wat-output]
-    [llcheck-context-empty]
+    llcheck-context
     [transient-kv-map]
     [transient-kv-map]
     [set]
@@ -1960,14 +1965,14 @@
 
 [defn translate-top-forms-sync [forms]
   [let
-    [tctx [translate-context-empty]
-     gctx [translate-context/check-context tctx]
-     ctx [llcheck-context/bind-ctx gctx]
-     f2l [form-to-lltop ctx]]
-    [for-each form forms
-      [let [btop [f2l form]]
-        [infer-lltop gctx btop]
-        [translate-top-form tctx btop]]]
+    [f2l [make-forms-to-btops]
+     btops-ctx-pair [f2l forms]
+     ctx [pair/snd btops-ctx-pair]
+     gctx [llcheck-context-empty ctx]
+     tctx [translate-context-empty gctx]]
+    [for-each btop [pair/fst btops-ctx-pair]
+      [infer-lltop gctx btop]
+      [translate-top-form tctx btop]]
     [translate-funcs tctx]
     [translate-context/output tctx]]]
 
