@@ -373,7 +373,7 @@
 
 [defn get-specialized-var [gctx level lctx sw]
   [if-let [scheme [lltry-get-var-type gctx lctx [syntax-word/word sw]]]
-    [let [counter-atom [llcheck-context/type-var-counter gctx]
+    [let [counter-atom [atom 0]
           type-args [growable-list]
           subst-assoc-list
           [list-map tv [check-type-scheme/type-vars scheme]
@@ -785,11 +785,11 @@
     [let
       [ttarget [infer-llexp gctx level lctx target]
        t-mem [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
-       t-res [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
-       pt [type-pointer t-mem t-res]]
+       t-rec [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
+       pt [type-pointer t-mem t-rec]]
       [llannotate gctx target pt]
       [llunify-report gctx ttarget pt target]
-      [let [app-type [get-apply-type t-res]
+      [let [app-type [get-apply-type t-rec]
             type-name [pair/fst app-type]
             type-args [pair/snd app-type]]
         [if-let [type-desc [try-get [llctx/user-types [llcheck-context/bind-ctx gctx]] type-name]]
@@ -1584,13 +1584,9 @@
         [[word i32]] [wat-type-basic/i32]
         [[word f64]] [wat-type-basic/f64]
         [[word pointer]]
-        [let
-          [mem-name [mem-name-from-mem-type [first type-args]]]
-          [match [get-memory-kind [llctx-from-translate tctx] mem-name]
-            [memory-kind/i32]
-            [wat-type-basic/i32]
-            [memory-kind/i64]
-            [wat-type-basic/i64]]]
+        [match [get-memory-kind [llctx-from-translate tctx] [mem-name-from-mem-type [first type-args]]]
+          [memory-kind/i32] [wat-type-basic/i32]
+          [memory-kind/i64] [wat-type-basic/i64]]
         [do [log it] [logq-abort not implemented translate-type [identity it]]]]
       [do [log it] [logq-abort not implemented translate-type [identity it]]]]
     [do [log it] [logq-abort not implemented translate-type [identity it]]]]]
@@ -1607,27 +1603,47 @@
       [do [log it] [logq-abort not implemented translate-types]]]
     [do [log it] [logq-abort not implemented translate-types]]]]
 
-[defn type-args-to-word [tctx type-args]
-  [loop [w [word -]
-         i 0
-         s [size type-args]]
-    [if [lt-s i s]
-      [continue
-        w [concat-words w [wat-type-basic-to-word [translate-type tctx [at type-args i]]]]
-        i [inc i]]
-      w]]]
+[defn ctype-to-name [tctx it]
+  [match [normalize-type it]
+    [ctype/var tv]
+    [match [get-type-var-kind tv]
+      [type-var-kind/word w] w
+      [type-var-kind/linked lt] [logq-abort ctype-to-name unreachable type should be normalized]]
+
+    [ctype/literal l]
+    [logq-abort ctype-to-name not implemented for literals]
+
+    [ctype/inst inst-type]
+    [match inst-type
+      [inst-type/apply type-name type-args]
+      [switch type-name
+        [[word i32] [word i64] [word f32] [word f64] [word v128]] type-name
+        [[word pointer]]
+        [match [get-memory-kind [llctx-from-translate tctx] [mem-name-from-mem-type [first type-args]]]
+          [memory-kind/i32] [word i32]
+          [memory-kind/i64] [word i64]]
+        [do [log it] [logq-abort not implemented ctype-to-name [identity it]]]]
+      [do [log it] [logq-abort not implemented ctype-to-name [identity it]]]]
+    [do [log it] [logq-abort not implemented ctype-to-name [identity it]]]]]
 
 [defn specialized-name-from [tctx fname type-args]
-  [if [is-empty type-args]
-    fname
-    [concat-words fname [type-args-to-word tctx type-args]]]]
+  [loop
+    [w fname
+     i 0
+     s [size type-args]]
+    [if [lt-s i s]
+      [continue
+        w [concat-words
+            [concat-words w [word -]]
+            [ctype-to-name tctx [at type-args i]]]
+        i [inc i]]
+      w]]]
 
 [defn add-func-specialization [tctx sname]
   [let [type-args [get [llcheck-context/type-instantiations [translate-context/check-context tctx]] sname]
         fname-word [syntax-word/word sname]
-        type-args-word [type-args-to-word tctx type-args]
         gl [atom-get [translate-context/func-specs-to-generate tctx]]
-        spec-name [if [is-empty type-args] fname-word [concat-words fname-word type-args-word]]]
+        spec-name [specialized-name-from tctx fname-word type-args]]
     [when-not [set-has [translate-context/specialized-names-generated tctx] spec-name]
       [push gl [pair fname-word type-args]]]
     spec-name]]
@@ -1675,7 +1691,7 @@
      fname-word [syntax-word/word [lldefn/name func]]
      ts [get [llcheck-context/def-var-types [translate-context/check-context tctx]] fname-word]
      type-params [check-type-scheme/type-vars ts]
-     special-func-name [if [is-empty type-args] fname-word [concat-words fname-word [type-args-to-word tctx type-args]]]
+     special-func-name [specialized-name-from tctx fname-word type-args]
      params [lldefn/params func]
      gtype-env [growable-list]
      - [do
@@ -1956,30 +1972,22 @@
 
       [lltop/export snames]
       [for-each sname snames
-        [let [export-kind
-              [if-let [dd [try-get [llctx/lldef-ctx [llctx-from-translate tctx]] [syntax-word/word sname]]]
+        [push
+          [wat-output/exports output]
+          [let [name [syntax-word/word sname]]
+            [pair
+              name
+              [if-let [dd [try-get [llctx/lldef-ctx [llctx-from-translate tctx]] name]]
                 [match dd
                   [lldef-desc/memory kind]
-                  [export-kind/memory]
+                  [pair [export-kind/memory] name]
 
                   [lldef-desc/func arity]
-                  [do
-                    [add-func-specialization tctx sname]
-                    [export-kind/func]]
+                  [pair [export-kind/func] [add-func-specialization tctx sname]]
 
                   [lldef-desc/any]
-                  [match [normalize-type [get-annotation cctx sname]]
-                    [ctype/inst inst-type]
-                    [match inst-type
-                      [inst-type/func func-type]
-                      [export-kind/func]
-
-                      [export-kind/global]]]]
-                [logq-abort export not found]]]
-          [push
-            [wat-output/exports output]
-            [pair [syntax-word/word sname]
-              [pair export-kind [syntax-word/word sname]]]]]]
+                  [pair [export-kind/global] name]]
+                [logq-abort export not found]]]]]]
 
       [lltop/data-active mem-name offset-form datas]
       [do
