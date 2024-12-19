@@ -876,33 +876,6 @@
 [func set-ll-def [form def-desc]
   [set-kv-map lldef-ctx [form-to-word form] def-desc]]
 
-[func forms-to-lldefn [name-form type-params params bodies]
-  [let
-    [type-env [set]
-     lvars [transient-kv-map]
-     lstack [local-stack/frame [local-stack/empty] [local-context lvars [local-context-kind/let]]]]
-    [for-each type-param type-params
-      [set-add type-env [form-to-word type-param]]]
-    [set-ll-def name-form [lldef-desc/func [size params]]]
-    [set-local lvars name-form [lllocal-var-kind/func-internal-self [size params]]]
-    [lldefn
-      [sword name-form]
-      [list-map tp type-params [sword tp]]
-      [list-map p params
-        [match p
-          [form/word w]
-          [do
-            [set-local lvars p [lllocal-var-kind/param]]
-            [pair [sword p] [option/none]]]
-
-          [form/list l]
-          [let [param-name-form [second l]]
-            [set-local lvars param-name-form [lllocal-var-kind/param]]
-            [assert [eq [size l] 3] form-to-lltop expected type form]
-            [assert [eq-word [form-to-word [first l]] [word type]]]
-            [pair [sword param-name-form] [option/some [form-to-lltype [local-stack/empty] type-env [third l]]]]]]]
-      [list-map b bodies [form-to-llexp type-env lstack b]]]]]
-
 [func form-to-lltype [lstack type-params form]
   [match form
     [form/word w]
@@ -939,6 +912,33 @@
             [when-not [eq [size user-type-params] n-of-args] [push-error form [quote [type arity mismatch]]]]
             [lltype/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]
           [lltype/literal [type-literal/exp [form-to-llexp type-params lstack form]]]]]]]]
+
+[func forms-to-lldefn [name-form type-params params bodies]
+  [let
+    [type-env [set]
+     lvars [transient-kv-map]
+     lstack [local-stack/frame [local-stack/empty] [local-context lvars [local-context-kind/let]]]]
+    [for-each type-param type-params
+      [set-add type-env [form-to-word type-param]]]
+    [set-ll-def name-form [lldef-desc/func [size params]]]
+    [set-local lvars name-form [lllocal-var-kind/func-internal-self [size params]]]
+    [lldefn
+      [sword name-form]
+      [list-map tp type-params [sword tp]]
+      [list-map p params
+        [match p
+          [form/word w]
+          [do
+            [set-local lvars p [lllocal-var-kind/param]]
+            [pair [sword p] [option/none]]]
+
+          [form/list l]
+          [let [param-name-form [second l]]
+            [set-local lvars param-name-form [lllocal-var-kind/param]]
+            [assert [eq [size l] 3] form-to-lltop expected type form]
+            [assert [eq-word [form-to-word [first l]] [word type]]]
+            [pair [sword param-name-form] [option/some [form-to-lltype [local-stack/empty] type-env [third l]]]]]]]
+      [list-map b bodies [form-to-llexp type-env lstack b]]]]]
 
 [func form-to-llexp [type-var-set lstack form]
   [match form
