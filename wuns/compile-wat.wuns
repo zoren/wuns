@@ -65,13 +65,9 @@
     [loop]
     [func-internal-self i32]]]
 
-[type field-desc []
-  [record
-    [type lltype]]]
-
 [type user-type-desc []
   [union
-    [record [transient-kv-map word field-desc] [list [pair word field-desc]]]]]
+    [record [transient-kv-map word lltype] [list [pair word lltype]]]]]
 
 [def ascii-underscore [i32 95]]
 
@@ -801,7 +797,7 @@
                 [for i 0 [size type-args]
                   [set-kv-map new-tv-env [syntax-word/word [at type-params i]] [at type-args i]]]
                 [llannotate gctx bform
-                  [type-pointer t-mem [llinstantiate-syntax-type new-tv-env [field-desc/type fd]]]]]
+                  [type-pointer t-mem [llinstantiate-syntax-type new-tv-env fd]]]]
               [logq-abort infer-llexp field not found [identity field-name]]]
             [logq-abort infer-llexp not a record type]]
 
@@ -1218,7 +1214,7 @@
                   [for-each p [rest type-decl-list]
                     [let [ll [get-list p]]
                       [let [field-name [form-to-word [first ll]]
-                            fd [field-desc [form-to-lltype [local-stack/empty] type-env [second ll]]]]
+                            fd [form-to-lltype [local-stack/empty] type-env [second ll]]]
                         [push field-list [pair field-name fd]]
                         [set-kv-map field-map field-name fd]]]]
                   [set-kv-map user-types [form-to-word type-name-form]
