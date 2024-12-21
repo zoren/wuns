@@ -1303,7 +1303,7 @@
 [defn infer-lltop [gctx lltop]
   [match lltop
     [lltop/memory mem-name mem-kind mem-size mem-export]
-    [set-kv-map [llcheck-context/def-var-types gctx] [syntax-word/word mem-name]]
+    [do]
 
     [lltop/type type-name type-params type-decls]
     [do]
