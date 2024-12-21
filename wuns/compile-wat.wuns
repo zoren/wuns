@@ -1417,22 +1417,10 @@
 
     [get-annotation gctx bform]]]
 
-[type wat-type-basic []
-  [union
-    [i32]
-    [i64]
-    [f32]
-    [f64]
-    [v128]]]
-
-[defn wat-type-basic-to-word [t]
-  [match t
-    [wat-type-basic/i32] [word i32]
-    [wat-type-basic/i64] [word i64]
-    [wat-type-basic/f32] [word f32]
-    [wat-type-basic/f64] [word f64]
-    [wat-type-basic/v128] [word v128]
-    [do [log t] [logq-abort wat-type-basic-to-word not implemented]]]]
+[defn wat-type-is [type-name]
+  [switch type-name
+    [[word i32] [word i64] [word f32] [word f64] [word v128]] true
+    false]]
 
 [type wat-inst-memargs []
   [record
@@ -1452,10 +1440,10 @@
     [inst byte-array [list wat-inst]]
     [load word wat-inst-memargs wat-inst]
     [store word wat-inst-memargs wat-inst wat-inst]
-    [if [list wat-type-basic] wat-inst wat-inst wat-inst]
+    [if [list word] wat-inst wat-inst wat-inst]
     [call word [list wat-inst]]
     [instructions [list wat-inst]]
-    [loop word [list wat-type-basic] wat-inst]
+    [loop word [list word] wat-inst]
     [br word]]]
 
 [def drop-name-byte-array [wasm-name-to-wat-byte-array [word drop]]]
@@ -1536,9 +1524,9 @@
 [type output-func []
   [record
     [name word]
-    [parameters [list [pair word wat-type-basic]]]
-    [locals [list [pair word wat-type-basic]]]
-    [result [list wat-type-basic]]
+    [parameters [list [pair word word]]]
+    [locals [list [pair word word]]]
+    [result [list word]]
     [body wat-inst]]]
 
 [type import-kind []
@@ -1551,7 +1539,7 @@
 [type wat-global []
   [record
     [name word]
-    [type wat-type-basic]
+    [type word]
     [value wat-inst]]]
 
 [type wat-data []
@@ -1612,14 +1600,14 @@
     [match inst-type
       [inst-type/apply type-name type-args]
       [switch type-name
-        [[word i32]] [wat-type-basic/i32]
-        [[word f64]] [wat-type-basic/f64]
-        [[word v128]] [wat-type-basic/v128]
         [[word pointer]]
         [match [get-memory-kind [llctx-from-translate tctx] [mem-name-from-mem-type [first type-args]]]
-          [memory-kind/i32] [wat-type-basic/i32]
-          [memory-kind/i64] [wat-type-basic/i64]]
-        [do [log it] [logq-abort not implemented translate-type [identity it]]]]
+          [memory-kind/i32] [word i32]
+          [memory-kind/i64] [word i64]]
+
+        [if [wat-type-is type-name]
+          type-name
+          [do [log it] [logq-abort not implemented translate-type [identity it]]]]]
       [do [log it] [logq-abort not implemented translate-type [identity it]]]]
     [do [log it] [logq-abort not implemented translate-type [identity it]]]]]
 
@@ -1881,12 +1869,12 @@
          it [copy-type type-env [second [pair/snd pt]]]]
         [assert [eq-word [pair/fst pt] [word pointer]]]
         [wat-inst/load
-          [match [translate-type tctx it]
-            [wat-type-basic/i32] [word i32.load]
-            [wat-type-basic/i64] [word i64.load]
-            [wat-type-basic/f32] [word f32.load]
-            [wat-type-basic/f64] [word f64.load]
-            [wat-type-basic/v128] [word v128.load]
+          [switch [translate-type tctx it]
+            [[word i32]] [word i32.load]
+            [[word i64]] [word i64.load]
+            [[word f32]] [word f32.load]
+            [[word f64]] [word f64.load]
+            [[word v128]] [word v128.load]
             [logq-abort not implemented deref inst-type/apply]]
           [wat-inst-memargs
             [mem-name-from-mem-type [first [pair/snd pt]]]
@@ -1945,12 +1933,12 @@
          it [copy-type type-env [second [pair/snd pt]]]]
         [assert [eq-word [pair/fst pt] [word pointer]]]
         [wat-inst/store
-          [match [translate-type tctx it]
-            [wat-type-basic/i32] [word i32.store]
-            [wat-type-basic/i64] [word i64.store]
-            [wat-type-basic/f32] [word f32.store]
-            [wat-type-basic/f64] [word f64.store]
-            [wat-type-basic/v128] [word v128.store]
+          [switch [translate-type tctx it]
+            [[word i32]] [word i32.store]
+            [[word i64]] [word i64.store]
+            [[word f32]] [word f32.store]
+            [[word f64]] [word f64.store]
+            [[word v128]] [word v128.store]
             [logq-abort not implemented assign inst-type/apply]]
           [wat-inst-memargs
             [mem-name-from-mem-type [first [pair/snd pt]]]
@@ -2247,7 +2235,7 @@
     [wat-list [wat/word [word if]]
       [wat/list
         [concat [list [wat/word [word result]]]
-          [list-map rt result-types [wat/word [wat-type-basic-to-word rt]]]]]
+          [list-map rt result-types [wat/word rt]]]]
       [wat-inst-to-out cond]
       [wat-list [wat/word [word then]] [wat-inst-to-out true]]
       [wat-list [wat/word [word else]] [wat-inst-to-out false]]]
@@ -2263,7 +2251,7 @@
       [wat/dollar loop-label]
       [wat/list
         [concat [list [wat/word [word result]]]
-          [list-map rt result-types [wat/word [wat-type-basic-to-word rt]]]]]
+          [list-map rt result-types [wat/word rt]]]]
       [wat-inst-to-out body]]
 
     [wat-inst/br w]
@@ -2292,7 +2280,7 @@
   [wat-list
     [wat/word [word global]]
     [wat/dollar [wat-global/name global]]
-    [wat/word [wat-type-basic-to-word [wat-global/type global]]]
+    [wat/word [wat-global/type global]]
     [wat-inst-to-out [wat-global/value global]]]]
 
 [defn output-func-to-wat [of]
@@ -2301,13 +2289,13 @@
       [wat/word [word func]]
       [wat/dollar [output-func/name of]]]
     [list-map p [output-func/parameters of]
-      [wat-list [wat/word [word param]] [wat/dollar [pair/fst p]] [wat/word [wat-type-basic-to-word [pair/snd p]]]]]
+      [wat-list [wat/word [word param]] [wat/dollar [pair/fst p]] [wat/word [pair/snd p]]]]
     [list
       [wat-concat
         [list [wat/word [word result]]]
-        [list-map rt [output-func/result of] [wat/word [wat-type-basic-to-word rt]]]]]
+        [list-map rt [output-func/result of] [wat/word rt]]]]
     [list-map l [output-func/locals of]
-      [wat-list [wat/word [word local]] [wat/dollar [pair/fst l]] [wat/word [wat-type-basic-to-word [pair/snd l]]]]]
+      [wat-list [wat/word [word local]] [wat/dollar [pair/fst l]] [wat/word [pair/snd l]]]]
     [list
       [wat-inst-to-out [output-func/body of]]]]]
 
