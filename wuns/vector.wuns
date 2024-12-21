@@ -1,0 +1,94 @@
+
+[type vector [a s]
+  [record
+    [size [i32]]
+    [array [array a s]]]]
+
+[memory i32 mem 1]
+
+[genfn size [a s] [[type pvec [pointer [memory mem] [vector a s]]]]
+  [deref [field pvec size]]]
+
+[def top [cast [pointer [memory mem] [i32]] [i32 0]]]
+
+[defn identity [x] x]
+
+[defn get-top []
+  [deref top]]
+
+[defn set-top [new-top]
+  [assign top new-top]]
+
+[defn alloc-init []
+  [set-top [intrinsic i32.add [get-top] [i32 16]]]]
+
+[defn alloc-n [n-bytes]
+  [let [top-val [get-top]]
+    [if [intrinsic i32.eq top-val [i32 0]] [intrinsic unreachable] [do]]
+    [set-top [intrinsic i32.add top-val n-bytes]]
+    top-val]]
+
+[genfn my-size-of [a] [[type init a]]
+  [let
+    [byte-size [size-of a]]
+    byte-size]]
+
+[genfn my-size-of-array [a] [[type init a]]
+  [let
+    [byte-size [size-of [array a [literal [i32 10]]]]]
+    byte-size]]
+
+[genfn vector-make [a] [[type size [i32]] [type init a]]
+  [let
+    [byte-size [size-of [vector a [literal size]]]
+     p [cast [pointer [memory mem] [vector a [literal size]]] [alloc-n byte-size]]]
+    [assign [field p size] size]
+    [loop [i [i32 0]]
+      [if [intrinsic i32.lt-s i size]
+        [do
+          [assign [index [field p array] i] init]
+          [continue i [intrinsic i32.add i [i32 1]]]]
+        [do]]]
+    p]]
+
+[genfn vector-byte-size [a] [[type size [i32]] [type init a]]
+  [size-of [vector a [literal size]]]]
+
+[defn vector-byte-size-int [size]
+  [vector-byte-size size [i32 0]]]
+
+[defn vector-byte-size-float [size]
+  [vector-byte-size size [f64 0]]]
+
+[defn vector-float [size]
+  [vector-make size [f64 0]]]
+
+[defn vector-int [size]
+  [vector-make size [i32 0]]]
+
+[genfn get [a s] [[type pvec [pointer [memory mem] [vector a s]]] [type i [i32]]]
+  [if [intrinsic i32.lt-s i [i32 0]] [intrinsic unreachable] [do]]
+  [if [intrinsic i32.le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
+  [deref [index [field pvec array] i]]]
+
+[genfn set [a s] [[type pvec [pointer [memory mem] [vector a s]]] [type i [i32]] [type v a]]
+  [if [intrinsic i32.lt-s i [i32 0]] [intrinsic unreachable] [do]]
+  [if [intrinsic i32.le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
+  [assign [index [field pvec array] i] v]]
+
+[defn set-float [pvec i [type v [f64]]]
+  [set pvec i v]]
+
+[genfn get-float [s] [[type pvec [pointer [memory mem] [vector [f64] s]]] i]
+  [get pvec i]]
+
+[defn set-int [pvec i [type v [i32]]]
+  [set pvec i v]]
+
+[genfn get-int [s] [[type pvec [pointer [memory mem] [vector [i32] s]]] i]
+  [get pvec i]]
+
+[export alloc-init get-top size vector-byte-size-int vector-byte-size-float
+vector-float vector-int
+get-float set-float
+get-int set-int]

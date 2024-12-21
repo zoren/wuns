@@ -1,4 +1,4 @@
-import { test, expect } from 'vitest'
+import { test, expect, assert } from 'vitest'
 import { parseString } from '../core.js'
 import { makeJSCompilingEvaluator, CompileError } from '../compiler-js.js'
 
@@ -20,8 +20,8 @@ try {
 const translateFormsToModule = getDef('translate-top-forms-to-module')
 const translateFormsToWatBytes = getDef('translate-top-forms-to-wat-bytes')
 
-const stringToInst = async (s, importObject) => {
-  const forms = parseString(s, 'test-content')
+const stringToInst = async (s, fileName = 'test-content', importObject) => {
+  const forms = parseString(s, fileName)
   const module = translateFormsToModule(forms)
   const { exports } = new WebAssembly.Instance(module, importObject)
   return exports
@@ -46,13 +46,13 @@ test.each([
   ['[let [x [i32 2]] [intrinsic i32.add x [i32 3]]]', 5],
   ['[let [x [i32 2] y [i32 3]] [intrinsic i32.add x y]]', 5],
 
-  ['[size-of i32]', 4],
-  ['[size-of f32]', 4],
-  ['[size-of i64]', 8],
-  ['[size-of f64]', 8],
-  ['[size-of v128]', 16],
-  ['[size-of [array i32 [i32 8]]]', 32],
-  ['[size-of [array f64 [i32 8]]]', 64],
+  ['[size-of [i32]]', 4],
+  ['[size-of [f32]]', 4],
+  ['[size-of [i64]]', 8],
+  ['[size-of [f64]]', 8],
+  ['[size-of [v128]]', 16],
+  ['[size-of [array [i32] [literal [i32 8]]]]', 32],
+  ['[size-of [array [f64] [literal [i32 8]]]]', 64],
 ])('%s -> %o', async (s, expected) => {
   const m = `[defn f [] ${s}] [export f]`
   expect((await stringToInst(m)).f()).toBe(expected)
@@ -79,8 +79,8 @@ test('defn generic', async () => {
     const src = `
 [defn id [x] x]
 
-[defn id-i [[type x i32]] [id x]]
-[defn id-f [[type x f64]] [id x]]
+[defn id-i [[type x [i32]]] [id x]]
+[defn id-f [[type x [f64]]] [id x]]
 
 [export id-i id-f]`
     const inst = await stringToInst(src)
@@ -132,8 +132,8 @@ test('loop', async () => {
 test('memory', async () => {
   const inst = await stringToInst(`
 [memory i32 mem 1]
-[defn get [[type p [pointer mem i32]]] [deref p]]
-[defn set [[type p [pointer mem i32]] v] [assign p v]]
+[defn get [[type p [pointer [memory mem] [i32]]]] [deref p]]
+[defn set [[type p [pointer [memory mem] [i32]]] v] [assign p v]]
 [export get set]`)
   const { get, set } = inst
   set(0, 5)
@@ -223,23 +223,24 @@ test('cast', async () => {
     [memory i32 mem 1]
     [defn f []
       [deref
-        [cast [pointer no-such-mem i32] [i32 16]]]]
+        [cast [pointer [memory no-such-mem] [i32]] [i32 16]]]]
     [export f]`),
-  ).rejects.toThrow('undefined type or type param')
+  ).rejects.toThrow('undefined exp word')
+  await expect(
+    stringToInst(`
+    [memory i32 mem 1]
+    [def c [i32 1337]]
+    [defn f []
+      [deref
+        [cast [pointer [memory c] [i32]] [i32 16]]]]
+    [export f]`),
+  ).rejects.toThrow('not a memory')
   await expect(
     stringToInst(`
     [memory i32 mem 1]
     [defn f []
       [deref
-        [cast [pointer i32 i32] [i32 16]]]]
-    [export f]`),
-  ).rejects.toThrow('not a memory type')
-  await expect(
-    stringToInst(`
-    [memory i32 mem 1]
-    [defn f []
-      [deref
-        [cast [pointer mem i32] [i64 16]]]]
+        [cast [pointer [memory mem] [i32]] [i64 16]]]]
     [export f]`),
   ).rejects.toThrow('can only cast i32 to pointer')
   await expect(
@@ -247,16 +248,16 @@ test('cast', async () => {
     [memory i64 mem 1]
     [defn f []
       [deref
-        [cast [pointer mem i32] [i32 16]]]]
+        [cast [pointer [memory mem] [i32]] [i32 16]]]]
     [export f]`),
   ).rejects.toThrow('can only cast i64 to pointer')
   await expect(
     stringToInst(`
-    [memory i32 mem 1]
+    [memory i32 m 1]
     [defn f [m]
-      [cast [pointer m i32] [i32 16]]]
+      [cast [pointer [memory m] [i32]] [i32 16]]]
     [export f]`),
-  ).rejects.toThrow('not a memory type')
+  ).rejects.toThrow('not a memory')
   await expect(
     stringToInst(`
     [memory i32 mem 1]
@@ -272,7 +273,7 @@ test('deref', async () => {
     [data active mem [i32 16] [i32 7]]
     [defn f []
       [deref
-        [cast [pointer mem i32] [i32 16]]]]
+        [cast [pointer [memory mem] [i32]] [i32 16]]]]
     [export f]`)
     expect(inst.f()).toBe(7)
   }
@@ -283,7 +284,7 @@ test('deref', async () => {
     [data active mem [i64 16] [i32 7]]
     [defn g []
       [deref
-        [cast [pointer mem i32] [i64 16]]]]
+        [cast [pointer [memory mem] [i32]] [i64 16]]]]
     [export g]`,
       'test-content',
     )
@@ -296,7 +297,7 @@ test('deref', async () => {
     [data active mem [i32 16] [f64 1.9]]
     [defn f []
       [deref
-        [cast [pointer mem f64] [i32 16]]]]
+        [cast [pointer [memory mem] [f64]] [i32 16]]]]
     [export f]`)
     expect(inst.f()).toBe(1.9)
   }
@@ -308,7 +309,7 @@ test('deref', async () => {
     [defn f []
       [deref
         [deref
-          [cast [pointer mem [pointer mem f64]] [i32 16]]]]]
+          [cast [pointer [memory mem] [pointer [memory mem] [f64]]] [i32 16]]]]]
     [export f]`)
     expect(inst.f()).toBe(1.9)
   }
@@ -320,7 +321,7 @@ test('deref', async () => {
     [defn f []
       [deref
         [deref
-          [cast [pointer mem [pointer mem f64]] [i64 16]]]]]
+          [cast [pointer [memory mem] [pointer [memory mem] [f64]]] [i64 16]]]]]
     [export f]`)
     // for now we cannot run memory64 so we just check it's valid
     translateFormsToWatBytes(forms)
@@ -330,7 +331,7 @@ test('deref', async () => {
     [memory i64 mem 1]
     [defn f []
       [deref
-        [cast [pointer mem i32] [i64 16]]]]
+        [cast [pointer [memory mem] [i32]] [i64 16]]]]
     [export f]`)
     // for now we cannot run memory64 so we just check it's valid
     translateFormsToWatBytes(forms)
@@ -344,7 +345,7 @@ test('deref', async () => {
     [defn f []
       [deref
         [deref
-          [cast [pointer mem32 [pointer mem64 f64]] [i32 16]]]]]
+          [cast [pointer [memory mem32] [pointer [memory mem64] [f64]]] [i32 16]]]]]
     [export f]`)
     // for now we cannot run memory64 so we just check it's valid
     translateFormsToWatBytes(forms)
@@ -354,7 +355,7 @@ test('deref', async () => {
     [memory i64 mem64 1]
     [data active mem64 [i64 32] [f64 1.9]]
     [defn f []
-      [cast [pointer mem64 f64] [i64 32]]]
+      [cast [pointer [memory mem64] [f64]] [i64 32]]]
     [defn g [] [intrinsic f64.add [deref [f]] [f64 1.1]]]
     [export f g]`)
     // for now we cannot run memory64 so we just check it's valid
@@ -367,7 +368,7 @@ test('assign', async () => {
     const inst = await stringToInst(`
     [memory i32 mem 1]
     [defn f []
-      [let [pi [cast [pointer mem i32] [i32 16]]]
+      [let [pi [cast [pointer [memory mem] [i32]] [i32 16]]]
         [assign pi [i32 7]]
         [deref pi]]]
     [export f]`)
@@ -377,7 +378,7 @@ test('assign', async () => {
     const inst = await stringToInst(`
     [memory i32 mem 1]
     [defn f []
-      [let [pi [cast [pointer mem f64] [i32 16]]]
+      [let [pi [cast [pointer [memory mem] [f64]] [i32 16]]]
         [assign pi [f64 1.9]]
         [deref pi]]]
     [export f]`)
@@ -390,15 +391,15 @@ test('records', async () => {
     const inst = await stringToInst(`
 [type i32-point []
   [record
-    [x i32]
-    [y i32]]]
+    [x [i32]]
+    [y [i32]]]]
 [memory i32 mem 1]
 [data active mem [i32 16] [i32 7] [i32 9]]
 [defn f []
-  [let [prec [cast [pointer mem i32-point] [i32 16]]]
+  [let [prec [cast [pointer [memory mem] [i32-point]] [i32 16]]]
     [field prec y]]]
 [defn g []
-  [let [prec [cast [pointer mem i32-point] [i32 16]]]
+  [let [prec [cast [pointer [memory mem] [i32-point]] [i32 16]]]
     [deref [field prec y]]]]
 [export f g]`)
     expect(inst.f()).toBe(20)
@@ -408,11 +409,11 @@ test('records', async () => {
     const inst = await stringToInst(`
 [type rec []
   [record
-    [a [array i32 [i32 8]]]
-    [y i32]]]
+    [a [array [i32] [literal [i32 8]]]]
+    [y [i32]]]]
 [memory i32 mem 1]
 [defn f []
-  [let [prec [cast [pointer mem rec] [i32 16]]]
+  [let [prec [cast [pointer [memory mem] [rec]] [i32 16]]]
     [field prec y]]]
 [export f]`)
     expect(inst.f()).toBe(16 + 4 * 8)
@@ -421,14 +422,14 @@ test('records', async () => {
     const inst = await stringToInst(`
 [type vec [s]
   [record
-    [size i32]
-    [array [array i32 s]]]]
+    [size [i32]]
+    [array [array [i32] s]]]]
 [memory i32 mem 1]
 [defn size []
-  [let [prec [cast [pointer mem [vec i32]] [i32 16]]]
+  [let [prec [cast [pointer [memory mem] [vec [i32]]] [i32 16]]]
     [field prec size]]]
 [defn f []
-  [let [prec [cast [pointer mem [vec i32]] [i32 16]]]
+  [let [prec [cast [pointer [memory mem] [vec [i32]]] [i32 16]]]
     [field prec array]]]
 [export size f]`)
     expect(inst.f()).toBe(16 + 4)
@@ -437,11 +438,11 @@ test('records', async () => {
     const inst = await stringToInst(`
 [type i32-point []
   [record
-    [x i32]
-    [y i32]]]
+    [x [i32]]
+    [y [i32]]]]
 [memory i32 mem 1]
 [defn f []
-  [let [prec [cast [pointer mem i32-point] [i32 16]]]
+  [let [prec [cast [pointer [memory mem] [i32-point]] [i32 16]]]
     [assign [field prec y] [i32 9]]
     [deref [field prec y]]]]
 [export f]`)
@@ -451,19 +452,19 @@ test('records', async () => {
     const inst = await stringToInst(`
 [type f64-point []
   [record
-    [x f64]
-    [y f64]]]
+    [x [f64]]
+    [y [f64]]]]
 [type i32-point []
   [record
-    [x i32]
-    [y i32]]]
+    [x [i32]]
+    [y [i32]]]]
 [type r []
   [record
-    [point-f f64-point]
-    [point-i i32-point]]]
+    [point-f [f64-point]]
+    [point-i [i32-point]]]]
 [memory i32 mem 1]
 [defn f []
-  [let [prec [cast [pointer mem r] [i32 16]]]
+  [let [prec [cast [pointer [memory mem] [r]] [i32 16]]]
     [assign [field [field prec point-i] y] [i32 9]]
     [deref [field [field prec point-i] y]]]]
 [export f]`)
@@ -475,7 +476,7 @@ test('records', async () => {
 
 [data active mem [i32 0] [i32 16]]
 
-[def top [cast [pointer mem i32] [i32 0]]]
+[def top [cast [pointer [memory mem] [i32]] [i32 0]]]
 
 [defn get-top []
   [deref top]]
@@ -489,22 +490,22 @@ test('records', async () => {
     top]]
 
 [genfn alloc [target-type] []
-  [cast [pointer mem target-type] [alloc-n [size-of target-type]]]]
+  [cast [pointer [memory mem] target-type] [alloc-n [size-of target-type]]]]
 
-[defn alloc-f [[type f f64]]
+[defn alloc-f [[type f [f64]]]
   [let [p [alloc]]
     [assign p f]
     p]]
 
-[defn alloc-i [[type i i32]]
+[defn alloc-i [[type i [i32]]]
   [let [p [alloc]]
     [assign p i]
     p]]
 
-[defn get-i32 [[type p [pointer mem i32]]]
+[defn get-i32 [[type p [pointer [memory mem] [i32]]]]
   [deref p]]
 
-[defn get-f64 [[type p [pointer mem f64]]]
+[defn get-f64 [[type p [pointer [memory mem] [f64]]]]
   [deref p]]
 
 [export alloc-f alloc-i get-i32 get-f64]`
@@ -535,32 +536,33 @@ test('records', async () => {
 
 test('arrays', async () => {
   {
-    const inst = await stringToInst(`
+    const { f } = await stringToInst(`
 [memory i32 mem 1]
 [data active mem [i32 16]
   [i32 2] [i32 3] [i32 5] [i32 7] [i32 11]]
 [defn f [i]
-  [deref [index [cast [pointer mem [array i32 [i32 5]]] [i32 16]] i]]]
+  [deref [index [cast [pointer [memory mem] [array [i32] [literal [i32 5]]]] [i32 16]] i]]]
 [export f]`)
-    expect(inst.f(0)).toBe(2)
-    expect(inst.f(1)).toBe(3)
-    expect(inst.f(2)).toBe(5)
-    expect(inst.f(3)).toBe(7)
-    expect(inst.f(4)).toBe(11)
-  }})
+    expect(f(0)).toBe(2)
+    expect(f(1)).toBe(3)
+    expect(f(2)).toBe(5)
+    expect(f(3)).toBe(7)
+    expect(f(4)).toBe(11)
+  }
+})
 
 test('size-of', async () => {
   {
     const inst = await stringToInst(`
 [memory i32 mem32 1]
-[defn sp32 [] [size-of [pointer mem32 i32]]]
+[defn sp32 [] [size-of [pointer [memory mem32] [i32]]]]
 [export sp32]`)
     expect(inst.sp32()).toBe(4)
   }
   {
     const forms = parseString(`
 [memory i64 mem64 1]
-[defn sp64 [] [size-of [pointer mem64 i32]]]
+[defn sp64 [] [size-of [pointer [memory mem64] [i32]]]]
 [export sp64]`)
     translateFormsToWatBytes(forms)
     // we cannot run memory64 so we just check it's valid
@@ -570,19 +572,19 @@ test('size-of', async () => {
     const inst = await stringToInst(`
 [type f64-point []
   [record
-    [x f64]
-    [y f64]]]
+    [x [f64]]
+    [y [f64]]]]
 [type i32-point []
   [record
-    [x i32]
-    [y i32]]]
+    [x [i32]]
+    [y [i32]]]]
 [type r []
   [record
-    [point-f f64-point]
-    [point-i i32-point]]]
-[defn sfp [] [size-of f64-point]]
-[defn sip [] [size-of i32-point]]
-[defn sr [] [size-of r]]
+    [point-f [f64-point]]
+    [point-i [i32-point]]]]
+[defn sfp [] [size-of [f64-point]]]
+[defn sip [] [size-of [i32-point]]]
+[defn sr [] [size-of [r]]]
 [export sfp sip sr]`)
     expect(inst.sfp()).toBe(8 + 8)
     expect(inst.sip()).toBe(4 + 4)
@@ -596,11 +598,11 @@ test('size-of', async () => {
     [y v]]]
 [type r []
   [record
-    [point-f [point-2d f64]]
-    [point-i [point-2d i32]]]]
-[defn sfp [] [size-of [point-2d f64]]]
-[defn sip [] [size-of [point-2d i32]]]
-[defn sr [] [size-of r]]
+    [point-f [point-2d [f64]]]
+    [point-i [point-2d [i32]]]]]
+[defn sfp [] [size-of [point-2d [f64]]]]
+[defn sip [] [size-of [point-2d [i32]]]]
+[defn sr [] [size-of [r]]]
 [export sfp sip sr]`)
     expect(inst.sfp()).toBe(8 + 8)
     expect(inst.sip()).toBe(4 + 4)
@@ -755,3 +757,56 @@ test('hash word', async () => {
 //     expect(scanWord(5, 9)).toBe(5)
 //     expect(scanWord(6, 9)).toBe(9)
 //   }
+
+import vectorWuns from '../../wuns/vector.wuns?raw'
+
+// import fs from 'fs'
+// const formsToWatText = getDef('forms-to-wat-text')
+// fs.writeFileSync('vector.wat', formsToWatText(parseString(vectorWuns, 'vector.wuns')))
+
+test('vector', async () => {
+  const inst = await stringToInst(vectorWuns, 'vector.wuns')
+  const allocInit = inst['alloc-init']
+  const vbsi = inst['vector-byte-size-int']
+  const vbsf = inst['vector-byte-size-float']
+  expect(vbsi(3)).toBe(4 + 4 * 3)
+  expect(vbsf(3)).toBe(4 + 8 * 3)
+  const getTop = inst['get-top']
+  const vectorFloat = inst['vector-float']
+  const size = inst['size']
+  allocInit()
+
+  vectorFloat(3)
+  const vf = vectorFloat(3)
+
+  expect(size(vf)).toBe(3)
+
+  const setFloat = inst['set-float']
+  const getFloat = inst['get-float']
+
+  assert.throws(() => setFloat(vf, -1, 9), 'unreachable')
+  assert.throws(() => setFloat(vf, 3, 9), 'unreachable')
+  assert.throws(() => setFloat(vf, 4, 9), 'unreachable')
+
+  setFloat(vf, 0, 3.4)
+  setFloat(vf, 1, 5.7)
+  setFloat(vf, 2, 7.9)
+
+  expect(size(vf)).toBe(3)
+
+  expect(getFloat(vf, 0)).toBe(3.4)
+  expect(getFloat(vf, 1)).toBe(5.7)
+  expect(getFloat(vf, 2)).toBe(7.9)
+
+  const vectorInt = inst['vector-int']
+  const vi = vectorInt(3)
+  expect(size(vi)).toBe(3)
+  const setInt = inst['set-int']
+  const getInt = inst['get-int']
+  setInt(vi, 0, 3)
+  setInt(vi, 1, 5)
+  setInt(vi, 2, 7)
+  expect(getInt(vi, 0)).toBe(3)
+  expect(getInt(vi, 1)).toBe(5)
+  expect(getInt(vi, 2)).toBe(7)
+})
