@@ -610,6 +610,19 @@ test('size-of', async () => {
   }
 })
 
+test('specialization', async() => {
+  const inst = await stringToInst(`
+  [defn id [x] x]
+  [defn id-int [[type x [i32]]] [id x]]
+  [defn id-float [[type x [f64]]] [id x]]
+  [export id-int id-float]`)
+
+  const idInt = inst['id-int']
+  const idFloat = inst['id-float']
+  expect(idInt(7)).toBe(7)
+  expect(idFloat(1.9)).toBe(1.9)
+})
+
 test('hash word', async () => {
   const inst = await stringToInst(`
 [memory i32 mem 1]
