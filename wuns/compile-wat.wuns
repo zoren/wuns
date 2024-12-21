@@ -861,15 +861,22 @@
     [defn lldefn]
     [export [list syntax-word]]]]
 
+[defn wat-type-is [type-name]
+  [switch type-name
+    [[word i32] [word i64] [word f32] [word f64] [word v128]] true
+    false]]
+
 [defn llbuiltin-type-arity-ok [type-name n-of-args]
   [switch type-name
     [[word tuple]] [option/some true]
-    [[word i32] [word f64]
-     [word f32] [word i64] [word v128]] [option/some [eq n-of-args 0]]
-    [[word memory] [word literal]] [option/some [eq n-of-args 1]]
-    [[word pointer] [word array]]
-    [option/some [eq 2 n-of-args]]
-    [option/none]]]
+
+    [[word literal]] [option/some [eq n-of-args 1]]
+
+    [[word pointer] [word array]] [option/some [eq 2 n-of-args]]
+
+    [if [wat-type-is type-name]
+      [option/some [eq n-of-args 0]]
+      [option/none]]]]
 
 [defn make-forms-to-btops []
   [let
@@ -1416,11 +1423,6 @@
     type-i32
 
     [get-annotation gctx bform]]]
-
-[defn wat-type-is [type-name]
-  [switch type-name
-    [[word i32] [word i64] [word f32] [word f64] [word v128]] true
-    false]]
 
 [type wat-inst-memargs []
   [record
