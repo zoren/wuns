@@ -241,8 +241,7 @@ const word_to_int = (word) => {
   if (!isWord(word)) throw new Error('word-to-int expects word')
   const i = +wordValue(word)
   if (Number.isNaN(i)) throw new Error('word-to-int expects integer')
-  if (i < -2147483648 || i > 2147483647) throw new Error('word-to-int expects 32-bit integer')
-  return i
+  return i | 0
 }
 export { word_to_int as 'word-to-int' }
 const word_to_f64 = (word) => {

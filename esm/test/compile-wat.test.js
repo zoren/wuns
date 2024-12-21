@@ -370,6 +370,18 @@ test('deref', async () => {
     // for now we cannot run memory64 so we just check it's valid
     translateFormsToWatBytes(forms)
   }
+  {
+    const inst = await stringToInst(`
+    [memory i32 mem 1]
+    [data active mem [i32 16] [i32 0xdeadbeef]]
+    [defn f [[type p [pointer [memory mem] [u8]]]]
+      [deref p]]
+    [export f]`)
+    expect(inst.f(16)).toBe(0xef)
+    expect(inst.f(17)).toBe(0xbe)
+    expect(inst.f(18)).toBe(0xad)
+    expect(inst.f(19)).toBe(0xde)
+  }
 })
 
 test('assign', async () => {
@@ -392,6 +404,62 @@ test('assign', async () => {
         [deref pi]]]
     [export f]`)
     expect(inst.f()).toBe(1.9)
+  }
+  {
+    const inst = await stringToInst(`
+    [memory i32 mem 1]
+    [defn get [[type p [pointer [memory mem] [u8]]]]
+      [deref p]]
+    [defn set [[type p [pointer [memory mem] [u8]]] [type v [i32]]]
+      [assign p v]]
+    [export get set]
+    `)
+    const { get, set } = inst
+    set(16, 0xef)
+    expect(get(16)).toBe(0xef)
+    set(17, 0xffff)
+    expect(get(17)).toBe(255)
+  }
+  {
+    const inst = await stringToInst(`
+    [memory i32 mem 1]
+    [defn get [[type p [pointer [memory mem] [s8]]]]
+      [deref p]]
+    [defn set [[type p [pointer [memory mem] [s8]]] [type v [i32]]]
+      [assign p v]]
+    [export get set]
+    `)
+    const { get, set } = inst
+    set(16, -17)
+    expect(get(16)).toBe(-17)
+  }
+  {
+    const inst = await stringToInst(`
+    [memory i32 mem 1]
+    [defn get [[type p [pointer [memory mem] [u16]]]]
+      [deref p]]
+    [defn set [[type p [pointer [memory mem] [u16]]] [type v [i32]]]
+      [assign p v]]
+    [export get set]
+    `)
+    const { get, set } = inst
+    set(16, 0xbeef)
+    expect(get(16)).toBe(0xbeef)
+  }
+  {
+    const inst = await stringToInst(`
+    [memory i32 mem 1]
+    [defn get [[type p [pointer [memory mem] [s16]]]]
+      [deref p]]
+    [defn set [[type p [pointer [memory mem] [s16]]] [type v [i32]]]
+      [assign p v]]
+    [export get set]
+    `)
+    const { get, set } = inst
+    set(16, -32123)
+    expect(get(16)).toBe(-32123)
+    set(18, 65536)
+    expect(get(18)).toBe(0)
   }
 })
 

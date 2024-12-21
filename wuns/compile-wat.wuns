@@ -72,13 +72,6 @@
 [def ascii-underscore [i32 95]]
 
 [comment wuns does not have underscores so we convert dashes to underscores]
-[defn wasm-name-to-wat-bytes [w]
-  [let [sw [word-byte-size w]
-        res [growable-list]]
-    [for i 0 sw
-      [push res
-        [let [c [char-code-at w i]] [if [eq c [word-to-char-code -]] ascii-underscore c]]]]
-    [clone-growable-to-frozen-list res]]]
 
 [defn wasm-name-to-wat-byte-array [w]
   [let [sw [word-byte-size w]
@@ -356,6 +349,7 @@
           [list-map tv [check-type-scheme/type-vars scheme]
             [let [new-tv [generate-fresh-type-var-atom-var counter-atom level]
                   ta [ctype/var new-tv]]
+              [todo do we need to copy type constraints here]
               [push type-args ta]
               [pair tv ta]]]]
       [set-kv-map [llcheck-context/type-instantiations gctx] sw [clone-growable-to-frozen-list type-args]]
@@ -600,6 +594,25 @@
     [let [fftvs [clone-growable-to-frozen-list tvs]]
       [check-type-scheme fftvs type]]]]
 
+[defn wuns-builtin-data-type-is [type-name]
+  [switch type-name
+    [[word u8] [word s8]
+     [word u16] [word s16]] true
+    false]]
+
+[defn lift-data-type [t]
+  [match [normalize-type t]
+    [ctype/inst inst-type]
+    [match inst-type
+      [inst-type/apply type-name type-args]
+      [if [wuns-builtin-data-type-is type-name]
+        type-i32
+        t]
+
+      t]
+
+    t]]
+
 [defn infer-llexp [gctx level lctx bform]
   [match bform
     [llexp/var w]
@@ -770,14 +783,14 @@
           pt [type-pointer t-mem t-res]]
       [llunify-report gctx pt [infer-llexp gctx level lctx value] value]
       [llannotate gctx value pt]
-      [llannotate gctx bform t-res]]
+      [llannotate gctx bform [lift-data-type t-res]]]
 
     [llexp/assign target value]
     [let [t-mem [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
           t-val [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
           pt [type-pointer t-mem t-val]]
       [llunify-report gctx pt [infer-llexp gctx level lctx target] target]
-      [llunify-report gctx t-val [infer-llexp gctx level lctx value] value]
+      [llunify-report gctx [lift-data-type t-val] [infer-llexp gctx level lctx value] value]
       [llannotate gctx target pt]
       type-empty-tuple]
 
@@ -872,7 +885,7 @@
 
     [[word pointer] [word array]] [option/some [eq 2 n-of-args]]
 
-    [if [wat-type-is type-name]
+    [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
       [option/some [eq n-of-args 0]]
       [option/none]]]]
 
@@ -921,7 +934,7 @@
             [when-not [eq [size user-type-params] n-of-args] [push-error form [quote [type arity mismatch]]]]
             [if-let [arity-ok [llbuiltin-type-arity-ok fw n-of-args]]
               [when-not arity-ok [push-error form [quote [type arity mismatch]]]]
-              [push-error form [list [quote [undefined type]] form]]]]
+              [push-error form [quote [undefined type]]]]]
           [lltype/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]]]]]
 
 [func form-to-llexp [type-var-set lstack form]
@@ -1439,8 +1452,8 @@
     [local.set word wat-inst]
     [global.get word]
     [inst byte-array [list wat-inst]]
-    [load word wat-inst-memargs wat-inst]
-    [store word wat-inst-memargs wat-inst wat-inst]
+    [load byte-array wat-inst-memargs wat-inst]
+    [store byte-array wat-inst-memargs wat-inst wat-inst]
     [if [list word] wat-inst wat-inst wat-inst]
     [call word [list wat-inst]]
     [instructions [list wat-inst]]
@@ -1606,7 +1619,7 @@
           [memory-kind/i32] [word i32]
           [memory-kind/i64] [word i64]]
 
-        [if [wat-type-is type-name]
+        [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
           type-name
           [do [log it] [logq-abort not implemented translate-type [identity it]]]]]
       [do [log it] [logq-abort not implemented translate-type [identity it]]]]
@@ -1870,18 +1883,46 @@
          it [copy-type type-env [second [pair/snd pt]]]]
         [assert [eq-word [pair/fst pt] [word pointer]]]
         [wat-inst/load
-          [switch [translate-type tctx it]
+          [wasm-name-to-wat-byte-array
+            [switch [translate-type tctx it]
             [[word i32]] [word i32.load]
             [[word i64]] [word i64.load]
             [[word f32]] [word f32.load]
             [[word f64]] [word f64.load]
             [[word v128]] [word v128.load]
-            [logq-abort not implemented deref inst-type/apply]]
+            [[word u8]] [word i32.load8-u]
+            [[word s8]] [word i32.load8-s]
+            [[word u16]] [word i32.load16-u]
+            [[word s16]] [word i32.load16-s]
+            [logq-abort not implemented deref inst-type/apply]]]
           [wat-inst-memargs
             [mem-name-from-mem-type [first [pair/snd pt]]]
             [word 0]
             [word 1]]
           [go target]]]
+
+      [llexp/assign target value]
+      [let
+        [pt [get-apply-type [get-ctype cctx target]]
+         it [copy-type type-env [second [pair/snd pt]]]]
+        [assert [eq-word [pair/fst pt] [word pointer]]]
+        [wat-inst/store
+          [wasm-name-to-wat-byte-array
+            [switch [translate-type tctx it]
+            [[word i32]] [word i32.store]
+            [[word i64]] [word i64.store]
+            [[word f32]] [word f32.store]
+            [[word f64]] [word f64.store]
+            [[word v128]] [word v128.store]
+            [[word u8] [word s8]] [word i32.store8]
+            [[word u16] [word s16]] [word i32.store16]
+            [logq-abort not implemented assign inst-type/apply]]]
+          [wat-inst-memargs
+            [mem-name-from-mem-type [first [pair/snd pt]]]
+            [word 0]
+            [word 1]]
+          [go target]
+          [go value]]]
 
       [llexp/field target field-name]
       [let
@@ -1928,26 +1969,6 @@
               offset [wat-inst-i32.mul [type-to-size-exp element-type] [go index]]]
         [wat-inst-i32.add offset [go target]]]]
 
-      [llexp/assign target value]
-      [let
-        [pt [get-apply-type [get-ctype cctx target]]
-         it [copy-type type-env [second [pair/snd pt]]]]
-        [assert [eq-word [pair/fst pt] [word pointer]]]
-        [wat-inst/store
-          [switch [translate-type tctx it]
-            [[word i32]] [word i32.store]
-            [[word i64]] [word i64.store]
-            [[word f32]] [word f32.store]
-            [[word f64]] [word f64.store]
-            [[word v128]] [word v128.store]
-            [logq-abort not implemented assign inst-type/apply]]
-          [wat-inst-memargs
-            [mem-name-from-mem-type [first [pair/snd pt]]]
-            [word 0]
-            [word 1]]
-          [go target]
-          [go value]]]
-
       [llexp/size-of t]
       [type-to-size-exp [get-annotation cctx t]]
 
@@ -1966,7 +1987,7 @@
       [let [tbodies [go-forms [lldefn/bodies func]]]
         [for i 0 [size params]
           [push gparams
-            [pair [syntax-word/word [pair/fst [at params i]]] [translate-type tctx [at param-types i]]]]]
+            [pair [syntax-word/word [pair/fst [at params i]]] [translate-type tctx [lift-data-type [at param-types i]]]]]]
         [push
           [wat-output/funcs [translate-context/output tctx]]
           [output-func
@@ -2219,13 +2240,13 @@
 
     [wat-inst/load name ma addr]
     [wat-concat
-      [list [wat/word name]]
+      [list [wat/byte-array name]]
       [wat-inst-memargs-to-out ma]
       [list [wat-inst-to-out addr]]]
 
     [wat-inst/store name ma addr value]
     [wat-concat
-      [list [wat/word name]]
+      [list [wat/byte-array name]]
       [wat-inst-memargs-to-out ma]
       [list [wat-inst-to-out addr] [wat-inst-to-out value]]]
 
