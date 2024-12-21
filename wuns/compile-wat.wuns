@@ -1422,7 +1422,8 @@
     [i32]
     [i64]
     [f32]
-    [f64]]]
+    [f64]
+    [v128]]]
 
 [defn wat-type-basic-to-word [t]
   [match t
@@ -1430,6 +1431,7 @@
     [wat-type-basic/i64] [word i64]
     [wat-type-basic/f32] [word f32]
     [wat-type-basic/f64] [word f64]
+    [wat-type-basic/v128] [word v128]
     [do [log t] [logq-abort wat-type-basic-to-word not implemented]]]]
 
 [type wat-inst-memargs []
@@ -1612,6 +1614,7 @@
       [switch type-name
         [[word i32]] [wat-type-basic/i32]
         [[word f64]] [wat-type-basic/f64]
+        [[word v128]] [wat-type-basic/v128]
         [[word pointer]]
         [match [get-memory-kind [llctx-from-translate tctx] [mem-name-from-mem-type [first type-args]]]
           [memory-kind/i32] [wat-type-basic/i32]
@@ -1883,6 +1886,7 @@
             [wat-type-basic/i64] [word i64.load]
             [wat-type-basic/f32] [word f32.load]
             [wat-type-basic/f64] [word f64.load]
+            [wat-type-basic/v128] [word v128.load]
             [logq-abort not implemented deref inst-type/apply]]
           [wat-inst-memargs
             [mem-name-from-mem-type [first [pair/snd pt]]]
@@ -1946,6 +1950,7 @@
             [wat-type-basic/i64] [word i64.store]
             [wat-type-basic/f32] [word f32.store]
             [wat-type-basic/f64] [word f64.store]
+            [wat-type-basic/v128] [word v128.store]
             [logq-abort not implemented assign inst-type/apply]]
           [wat-inst-memargs
             [mem-name-from-mem-type [first [pair/snd pt]]]

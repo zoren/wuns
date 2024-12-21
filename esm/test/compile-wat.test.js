@@ -130,18 +130,27 @@ test('loop', async () => {
 })
 
 test('memory', async () => {
-  const inst = await stringToInst(`
+  {
+    const inst = await stringToInst(`
 [memory i32 mem 1]
 [defn get [[type p [pointer [memory mem] [i32]]]] [deref p]]
 [defn set [[type p [pointer [memory mem] [i32]]] v] [assign p v]]
 [export get set]`)
-  const { get, set } = inst
-  set(0, 5)
-  expect(get(0)).toBe(5)
-  set(0, 6)
-  expect(get(0)).toBe(6)
-  set(4, 7)
-  expect(get(4)).toBe(7)
+    const { get, set } = inst
+    set(0, 5)
+    expect(get(0)).toBe(5)
+    set(0, 6)
+    expect(get(0)).toBe(6)
+    set(4, 7)
+    expect(get(4)).toBe(7)
+  }
+  {
+    const inst = await stringToInst(`
+[memory i32 mem 1]
+[defn get [[type p [pointer [memory mem] [v128]]]] [deref p]]
+[defn set [[type p [pointer [memory mem] [v128]]] v] [assign p v]]
+[export get set]`)
+  }
 })
 
 test('hash', async () => {
@@ -610,7 +619,7 @@ test('size-of', async () => {
   }
 })
 
-test('specialization', async() => {
+test('specialization', async () => {
   const inst = await stringToInst(`
   [defn id [x] x]
   [defn id-int [[type x [i32]]] [id x]]
