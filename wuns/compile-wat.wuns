@@ -870,8 +870,6 @@
   [switch type-name
     [[word tuple]] [option/some true]
 
-    [[word literal]] [option/some [eq n-of-args 1]]
-
     [[word pointer] [word array]] [option/some [eq 2 n-of-args]]
 
     [if [wat-type-is type-name]
@@ -903,11 +901,6 @@
 
     [form/list l]
     [let [sw [sword [first l]] fw [syntax-word/word sw] n-of-args [dec [size l]]]
-      [if-let [user-type-params [try-get user-type-params fw]]
-        [when-not [eq [size user-type-params] n-of-args] [push-error form [quote [type arity mismatch]]]]
-        [if-let [arity-ok [llbuiltin-type-arity-ok fw n-of-args]]
-          [when-not arity-ok [push-error form [quote [type arity mismatch]]]]
-          [push-error form [quote [undefined type]]]]]
       [switch fw
         [[word memory]]
         [let [w [form-to-word [second l]]]
@@ -923,7 +916,13 @@
         [[word literal]]
         [lltype/literal [type-literal/exp [form-to-llexp type-params lstack [second l]]]]
 
-        [lltype/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]]]]
+        [do
+          [if-let [user-type-params [try-get user-type-params fw]]
+            [when-not [eq [size user-type-params] n-of-args] [push-error form [quote [type arity mismatch]]]]
+            [if-let [arity-ok [llbuiltin-type-arity-ok fw n-of-args]]
+              [when-not arity-ok [push-error form [quote [type arity mismatch]]]]
+              [push-error form [list [quote [undefined type]] form]]]]
+          [lltype/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]]]]]
 
 [func form-to-llexp [type-var-set lstack form]
   [match form
