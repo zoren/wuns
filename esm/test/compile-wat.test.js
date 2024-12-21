@@ -899,4 +899,16 @@ test('vector', async () => {
   expect(getInt(vi, 0)).toBe(3)
   expect(getInt(vi, 1)).toBe(5)
   expect(getInt(vi, 2)).toBe(7)
+
+  const vectorByte = inst['vector-byte']
+  const vb = vectorByte(3)
+  expect(size(vb)).toBe(3)
+  const setByte = inst['set-byte']
+  const getByte = inst['get-byte']
+  setByte(vb, 0, 3)
+  setByte(vb, 1, 5)
+  setByte(vb, 2, 7)
+  expect(getByte(vb, 0)).toBe(3)
+  expect(getByte(vb, 1)).toBe(5)
+  expect(getByte(vb, 2)).toBe(7)
 })

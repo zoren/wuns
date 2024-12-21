@@ -66,6 +66,20 @@
 [defn vector-int [size]
   [vector-make size [i32 0]]]
 
+[defn vector-byte [size]
+  [let
+    [byte-size [size-of [vector [u8] [literal size]]]
+     p [cast [pointer [memory mem] [vector [u8] [literal size]]] [alloc-n byte-size]]
+     par [field p array]]
+    [assign [field p size] size]
+    [loop [i [i32 0]]
+      [if [intrinsic i32.lt-s i size]
+        [do
+          [assign [index par i] [i32 0]]
+          [continue i [intrinsic i32.add i [i32 1]]]]
+        [do]]]
+    p]]
+
 [genfn get [a s] [[type pvec [pointer [memory mem] [vector a s]]] [type i [i32]]]
   [if [intrinsic i32.lt-s i [i32 0]] [intrinsic unreachable] [do]]
   [if [intrinsic i32.le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
@@ -88,7 +102,14 @@
 [genfn get-int [s] [[type pvec [pointer [memory mem] [vector [i32] s]]] i]
   [get pvec i]]
 
+[genfn get-byte [s] [[type pvec [pointer [memory mem] [vector [u8] s]]] i]
+  [get pvec i]]
+
+[genfn set-byte [s] [[type pvec [pointer [memory mem] [vector [u8] s]]] i v]
+  [set pvec i v]]
+
 [export alloc-init get-top size vector-byte-size-int vector-byte-size-float
-vector-float vector-int
-get-float set-float
-get-int set-int]
+  vector-float vector-int vector-byte
+  get-float set-float
+  get-int set-int
+  get-byte set-byte]

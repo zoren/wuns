@@ -819,7 +819,7 @@
               [logq-abort infer-llexp field not found [identity field-name]]]
             [logq-abort infer-llexp not a record type]]
 
-          [logq-abort infer-llexp type not found [identity type-name]]]]]
+          [logq-abort infer-llexp field type not found [identity field-name] [identity type-name]]]]]
 
     [llexp/index target index]
     [let
@@ -1663,12 +1663,13 @@
             [match inst-type
               [inst-type/apply type-name type-args]
               [switch type-name
-                [[word i32] [word i64] [word f32] [word f64] [word v128]] type-name
                 [[word pointer]]
                 [match [get-memory-kind [llctx-from-translate tctx] [mem-name-from-mem-type [first type-args]]]
                   [memory-kind/i32] [word i32]
                   [memory-kind/i64] [word i64]]
-                [do [logq-abort not implemented ctype-to-name type-name ]]]
+                [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
+                  type-name
+                  [do [logq-abort not implemented ctype-to-name type-name ]]]]
 
               [do [logq-abort not implemented ctype-to-name]]]
             [do [logq-abort not implemented ctype-to-name]]]]
@@ -1704,6 +1705,8 @@
     [logq-abort exp-const-to-wat-inst]]]
 
 [def i32.const-0 [wat-inst/i32.const [word 0]]]
+[def i32.const-1 [wat-inst/i32.const [word 1]]]
+[def i32.const-2 [wat-inst/i32.const [word 2]]]
 [def i32.const-4 [wat-inst/i32.const [word 4]]]
 [def i32.const-8 [wat-inst/i32.const [word 8]]]
 [def i32.const-16 [wat-inst/i32.const [word 16]]]
@@ -1754,6 +1757,8 @@
 
           [inst-type/apply type-name type-args]
           [switch type-name
+            [[word u8] [word s8]] i32.const-1
+            [[word u16] [word s16]] i32.const-2
             [[word i32] [word f32]] i32.const-4
             [[word i64] [word f64]] i32.const-8
             [[word v128]] i32.const-16
@@ -1994,7 +1999,7 @@
             special-func-name
             [clone-growable-to-frozen-list gparams]
             [clone-growable-to-frozen-list glocals]
-            [translate-types tctx [func-type/result ft]]
+            [translate-types tctx [lift-data-type [func-type/result ft]]]
             [wat-inst/instructions tbodies]]]]]]]]
 
 [defn translate-top-form [tctx bform]
