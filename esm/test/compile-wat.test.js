@@ -18,14 +18,15 @@ try {
 }
 
 const translateFormsToModule = getDef('translate-top-forms-to-module')
-const translateFormsToWatBytes = getDef('translate-top-forms-to-wat-bytes')
 
 const stringToInst = async (s, fileName = 'test-content', importObject) => {
   const forms = parseString(s, fileName)
-  const module = translateFormsToModule(forms)
+  const module = await translateFormsToModule(forms)
   const { exports } = new WebAssembly.Instance(module, importObject)
   return exports
 }
+
+const translateFormsToWasmBytes = getDef('translate-top-forms-to-wasm-bytes')
 
 test.each([
   ['[f64 1.5]', 1.5],
@@ -298,7 +299,7 @@ test('deref', async () => {
       'test-content',
     )
     // for now we cannot run memory64 so we just check it's valid
-    translateFormsToWatBytes(forms)
+    await translateFormsToWasmBytes(forms)
   }
   {
     const inst = await stringToInst(`
@@ -333,7 +334,7 @@ test('deref', async () => {
           [cast [pointer [memory mem] [pointer [memory mem] [f64]]] [i64 16]]]]]
     [export f]`)
     // for now we cannot run memory64 so we just check it's valid
-    translateFormsToWatBytes(forms)
+    await translateFormsToWasmBytes(forms)
   }
   {
     const forms = parseString(`
@@ -343,7 +344,7 @@ test('deref', async () => {
         [cast [pointer [memory mem] [i32]] [i64 16]]]]
     [export f]`)
     // for now we cannot run memory64 so we just check it's valid
-    translateFormsToWatBytes(forms)
+    await translateFormsToWasmBytes(forms)
   }
   {
     const forms = parseString(`
@@ -357,7 +358,7 @@ test('deref', async () => {
           [cast [pointer [memory mem32] [pointer [memory mem64] [f64]]] [i32 16]]]]]
     [export f]`)
     // for now we cannot run memory64 so we just check it's valid
-    translateFormsToWatBytes(forms)
+    await translateFormsToWasmBytes(forms)
   }
   {
     const forms = parseString(`
@@ -368,7 +369,7 @@ test('deref', async () => {
     [defn g [] [intrinsic f64.add [deref [f]] [f64 1.1]]]
     [export f g]`)
     // for now we cannot run memory64 so we just check it's valid
-    translateFormsToWatBytes(forms)
+    await translateFormsToWasmBytes(forms)
   }
   {
     const inst = await stringToInst(`
@@ -641,7 +642,7 @@ test('size-of', async () => {
 [memory i64 mem64 1]
 [defn sp64 [] [size-of [pointer [memory mem64] [i32]]]]
 [export sp64]`)
-    translateFormsToWatBytes(forms)
+    await translateFormsToWasmBytes(forms)
     // we cannot run memory64 so we just check it's valid
     // expect(inst.sp64()).toBe(8)
   }
@@ -911,4 +912,39 @@ test('vector', async () => {
   expect(getByte(vb, 0)).toBe(3)
   expect(getByte(vb, 1)).toBe(5)
   expect(getByte(vb, 2)).toBe(7)
+
+  {
+    const parse = inst['parse']
+    const encoder = new TextEncoder()
+    const stringToByteVector = (s)=> {
+      const bytes = encoder.encode(s)
+      const vb = vectorByte(bytes.length)
+      bytes.forEach((b, i) => setByte(vb, i, b))
+      return vb
+    }
+    expect(parse(stringToByteVector(' abc '))).toEqual(3)
+    expect(parse(stringToByteVector(' abc defg '))).toEqual(3)
+    expect(parse(stringToByteVector(' a '))).toEqual(1)
+    expect(parse(stringToByteVector(' a'))).toEqual(1)
+    expect(parse(stringToByteVector('a'))).toEqual(1)
+    expect(parse(stringToByteVector('a '))).toEqual(1)
+  }
+  {
+    const growableVectorInt = inst['growable-vector-make-int']
+    const pushInt = inst['growable-vector-push-int']
+    const growableVectorToVector = inst['growable-vector-to-vector-int']
+    const gv = growableVectorInt(3)
+    // expect(size(gv)).toBe(0)
+    pushInt(gv, 3)
+    pushInt(gv, 5)
+    pushInt(gv, 7)
+    assert.throws(() => pushInt(gv, 9), 'unreachable')
+    const fixedVector = growableVectorToVector(gv)
+    expect(size(fixedVector)).toBe(3)
+    expect(getInt(fixedVector, 0)).toBe(3)
+    expect(getInt(fixedVector, 1)).toBe(5)
+    expect(getInt(fixedVector, 2)).toBe(7)
+
+  }
+
 })

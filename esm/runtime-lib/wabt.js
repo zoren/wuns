@@ -1,7 +1,7 @@
 import wabtProm from 'wabt'
 const wabt = await wabtProm()
 
-const wat_to_byte_array = (inputBuffer) => {
+const wat_to_wasm_byte_array = (inputBuffer) => {
   if (!(inputBuffer instanceof Uint8Array)) throw new Error('expects Uint8Array')
   try {
     /**
@@ -36,4 +36,4 @@ const wat_to_byte_array = (inputBuffer) => {
   }
 }
 
-export { wat_to_byte_array as 'wat-to-byte-array' }
+export { wat_to_wasm_byte_array as 'wat-to-wasm-byte-array' }

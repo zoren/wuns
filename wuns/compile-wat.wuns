@@ -516,40 +516,19 @@
   [set-kv-map [llcheck-context/type-annotations gctx] [to-js-value bst] type]
   type]
 
-[defn llinstantiate-syntax-type [type-var-env syntax-type]
+[defn instantiate-syntax-type [gctx type-var-env syntax-type]
   [[func go [st]
     [match st
       [lltype/var tv]
       [if-let [t [try-get type-var-env [syntax-word/word tv]]]
         t
-        [do
-          [when-let [form [syntax-word/opt-form tv]]
-            [log-location form]]
-          [logq-abort type-var not found [identity tv] [identity type-var-env]]]]
+        [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] 0]]
 
       [lltype/literal l]
       [ctype/literal l]
 
       [lltype/apply type-name targs]
-      [switch [syntax-word/word type-name]
-        [[word i32]]
-        type-i32
-
-        [[word f64]]
-        type-f64
-
-        [[word word]]
-        [logq-abort llinstantiate-syntax-type not implemented]
-
-        [[word pointer]]
-        [let [mem [first targs] target [second targs]]
-          [type-pointer
-            [go mem]
-            [go target]]]
-
-        [make-type-list
-          [syntax-word/word type-name]
-          [list-map ta targs [go ta]]]]]]
+      [make-type-list [syntax-word/word type-name] [list-map ta targs [go ta]]]]]
     syntax-type]]
 
 [defn mem-name-from-mem-type [tmem]
@@ -690,11 +669,12 @@
         [let
           [var [pair/fst binding]
            value [pair/snd binding]
-           val-type [infer-llexp gctx level-1 let-ctx value]
+           val-type [lift-data-type [infer-llexp gctx level-1 let-ctx value]]
            general-val-type
             [if [is-syntactic-llvalue value]
               [generalize level val-type]
               [mk-empty-type-scheme val-type]]]
+          [llannotate gctx value val-type]
           [set-kv-map var-types [syntax-word/word var] general-val-type]]]
       [if [is-empty bodies]
         type-empty-tuple
@@ -715,7 +695,7 @@
         [let
           [var [pair/fst binding]
             value [pair/snd binding]
-            val-type [infer-llexp gctx level-1 loop-ctx value]
+            val-type [lift-data-type [infer-llexp gctx level-1 loop-ctx value]]
             general-val-type [mk-empty-type-scheme val-type]]
           [llannotate gctx value val-type]
           [set-kv-map var-types [syntax-word/word var] general-val-type]]]
@@ -733,9 +713,9 @@
         [for-each assignment assignments
           [let
             [loop-vars [local-context/vars loop-context]
-              loop-var-type-scheme [get loop-vars [syntax-word/word [pair/fst assignment]]]
-              value [pair/snd assignment]
-              val-type [infer-llexp gctx level lctx value]]
+             loop-var-type-scheme [get loop-vars [syntax-word/word [pair/fst assignment]]]
+             value [pair/snd assignment]
+             val-type [infer-llexp gctx level lctx value]]
             [llunify-report gctx [check-type-scheme/type loop-var-type-scheme] val-type value]]]]
       [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]]
 
@@ -750,7 +730,7 @@
 
     [llexp/cast cast-type value]
     [let
-      [inst-type [llinstantiate-syntax-type [infer-local-context/type-env lctx] cast-type]
+      [inst-type [instantiate-syntax-type gctx [infer-local-context/type-env lctx] cast-type]
        tv [infer-llexp gctx level lctx value]
        inst-app-t [get-apply-type inst-type]
        tv-type-name [pair/fst [get-apply-type tv]]]
@@ -771,7 +751,7 @@
     [llexp/size-of t]
     [let
       [tenv [infer-local-context/type-env lctx]
-       it [llinstantiate-syntax-type tenv t]]
+       it [instantiate-syntax-type gctx tenv t]]
       [for-each tv [free-type-vars it]
         [set-add [type-var/constraints tv] type-constraint-size-of]]
       [llannotate gctx t it]
@@ -813,7 +793,7 @@
                     new-tv-env [transient-kv-map]]
                 [for i 0 [size type-args]
                   [set-kv-map new-tv-env [syntax-word/word [at type-params i]] [at type-args i]]]
-                [let [inst-field-type [llinstantiate-syntax-type new-tv-env fd]]
+                [let [inst-field-type [instantiate-syntax-type gctx new-tv-env fd]]
                   [llannotate gctx bform
                     [type-pointer t-mem inst-field-type]]]]
               [logq-abort infer-llexp field not found [identity field-name]]]
@@ -889,7 +869,9 @@
       [option/some [eq n-of-args 0]]
       [option/none]]]]
 
-[defn make-forms-to-btops []
+[load interpreter-externs.wuns]
+
+[defn make-forms-to-btops [evaluator]
   [let
     [lldef-ctx [transient-kv-map]
      form-to-ldesc [transient-kv-map]
@@ -908,9 +890,10 @@
 [func form-to-lltype [lstack type-params form]
   [match form
     [form/word w]
-    [if [set-has type-params w]
-      [lltype/var [sword form]]
-      [push-error form [quote [undefined type param]]]]
+    [do
+      [when [set-has type-params w]
+        [comment probably should add it to a context...]]
+      [lltype/var [sword form]]]
 
     [form/list l]
     [let [sw [sword [first l]] fw [syntax-word/word sw] n-of-args [dec [size l]]]
@@ -1146,7 +1129,8 @@
                       [llexp/call [sword first-form] [list-map arg [rest l] [form-to-llexp type-var-set lstack arg]]]]
 
                     [logq-abort form-to-llexp not a func]]]
-                [do
+                [if-let [macro-func [try-get-macro evaluator first-word]]
+                  [form-to-llexp type-var-set lstack [apply macro-func [rest l]]]
                   [logq-abort form-to-llexp def not found [identity first-form]]]]]]]
 
         [form/list fl]
@@ -1361,7 +1345,7 @@
       [for-each param [lldefn/params func]
         [let [tv [generate-fresh-type-var-atom counter-atom level-1]]
           [when-let [param-t [pair/snd param]]
-            [llunify-report gctx tv [llinstantiate-syntax-type type-env param-t] param]]
+            [llunify-report gctx tv [instantiate-syntax-type gctx type-env param-t] param]]
           [set-kv-map param-ctx [syntax-word/word [pair/fst param]] [mk-empty-type-scheme tv]]
           [push reg-params tv]
           [llannotate gctx [pair/fst param] tv]]]
@@ -1657,7 +1641,7 @@
               [type-var-kind/linked lt] [logq-abort ctype-to-name unreachable type should be normalized]]
 
             [ctype/literal l]
-            [logq-abort ctype-to-name not implemented for literals]
+            [word literal]
 
             [ctype/inst inst-type]
             [match inst-type
@@ -1801,7 +1785,7 @@
                         [continue
                           cur-size
                             [wat-inst-i32.add cur-size
-                              [type-to-size-exp [llinstantiate-syntax-type new-tv-env [pair/snd fd]]]]
+                              [type-to-size-exp [instantiate-syntax-type cctx new-tv-env [pair/snd fd]]]]
                           i [inc i]]]
                       cur-size]]
                   [logq-abort infer-llexp not a record type]]]
@@ -1958,7 +1942,7 @@
                               i [inc i]
                               offset [wat-inst-i32.add
                                       offset
-                                      [type-to-size-exp [llinstantiate-syntax-type new-tv-env [pair/snd fp]]]]]]]
+                                      [type-to-size-exp [instantiate-syntax-type cctx new-tv-env [pair/snd fp]]]]]]]
                         [logq-abort field not found]]]]
                   [logq-abort not a record type]]
                 [logq-abort not implemented translate-top-form field inst-type/apply]]]
@@ -2075,9 +2059,9 @@
               [translate-func tctx [get func-to-body fname] type-args]]]]
         [continue func-specializations [clone-growable-to-frozen-list [atom-get specs-atom]]]]]]]
 
-[defn translate-top-forms-sync [forms]
+[defn translate-top-forms-sync [evaluator forms]
   [let
-    [f2l [make-forms-to-btops]
+    [f2l [make-forms-to-btops evaluator]
      btops-ctx-pair [f2l forms]
      ctx [pair/snd btops-ctx-pair]
      gctx [llcheck-context-empty ctx]
@@ -2368,20 +2352,32 @@
 
 [def-wasm-extern byte-array-to-wasm-module [func [byte-array] wasm-module]]
 
-[import ./runtime-lib/wabt.js wat-to-byte-array [func [byte-array] byte-array]]
+[import ./runtime-lib/wabt.js wat-to-wasm-byte-array [func [byte-array] byte-array]]
 
-[defn forms-to-wat-text [forms]
-  [let [p [empty-printer [i32 10000]]]
-    [print-wat p [output-to-wat [translate-top-forms-sync forms]]]
-    [printer-to-byte-array p]]]
+[comment
+  [defn forms-to-wat-text [forms]
+    [let [p [empty-printer [i32 10000]]]
+      [print-wat p [output-to-wat [translate-top-forms-sync forms]]]
+      [printer-to-byte-array p]]] ]
 
-[defn output-to-wat-bytes [output]
-  [let [p [empty-printer [i32 10000]]]
+[defn make-macro-evaluator-async []
+  [let [evaluator [make-evaluator]]
+    [promise-then
+      [evaluate-top-async evaluator [quote [load std.wuns]]]
+      [func t [res]
+        evaluator]]]]
+
+[defn output-to-wasm-bytes [output]
+  [let [p [empty-printer [i32 100000]]]
     [print-wat p [output-to-wat output]]
-    [wat-to-byte-array [printer-to-byte-array p]]]]
+    [wat-to-wasm-byte-array [printer-to-byte-array p]]]]
 
-[defn translate-top-forms-to-wat-bytes [forms]
-  [output-to-wat-bytes [translate-top-forms-sync forms]]]
+[defn translate-top-forms-to-wasm-bytes [forms]
+  [promise-then
+    [make-macro-evaluator-async]
+    [func t [evaluator] [output-to-wasm-bytes [translate-top-forms-sync evaluator forms]]]]]
 
 [defn translate-top-forms-to-module [forms]
-  [byte-array-to-wasm-module [output-to-wat-bytes [translate-top-forms-sync forms]]]]
+  [promise-then
+    [translate-top-forms-to-wasm-bytes forms]
+    byte-array-to-wasm-module]]
