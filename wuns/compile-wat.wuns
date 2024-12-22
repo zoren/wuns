@@ -652,7 +652,7 @@
 
         [switch w
           [[word unreachable]]
-          type-empty-tuple
+          [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
 
           [[word i32.load] [word i32.load8-u]]
           [let
