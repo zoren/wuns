@@ -1,4 +1,4 @@
-import { expect, assert, test, describe, vi } from 'vitest'
+import { expect, assert, test, describe } from 'vitest'
 
 import { langUndefined, parseString } from '../core.js'
 import { makeJSCompilingEvaluator } from '../compiler-js.js'

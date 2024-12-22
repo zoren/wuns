@@ -599,11 +599,11 @@
               [set-kv-map var-types [syntax-word/word [bfunc/name func]] [generalize level tmp-type]]]]
           [let [tmp-types [clone-growable-to-frozen-list gtmp-types]]
             [for i 0 [size funcs]
-            [let
-              [tmp-type [at tmp-types i]
-               func [at funcs i]
-               ft [go-func level letfn-ctx func [function-kind/func]]]
-              [unify-report gctx tmp-type ft func]]]]
+              [let
+                [tmp-type [at tmp-types i]
+                 func [at funcs i]
+                 ft [go-func level letfn-ctx func [function-kind/func]]]
+                [unify-report gctx tmp-type ft func]]]]
           [go-forms level letfn-ctx bodies]]
 
         [bexp/func f]
