@@ -1,5 +1,5 @@
 const vscode = require('vscode')
-const { SemanticTokensLegend, SemanticTokensBuilder, SelectionRange, Range, Position } = vscode
+const { SemanticTokensLegend, SemanticTokensBuilder, SelectionRange, Range, Position, Uri } = vscode
 
 const makeStopWatch = () => {
   const before = performance.now()
@@ -385,17 +385,13 @@ const fsPromises = require('fs').promises
 const path = require('path')
 
 const addBindCheckActiveDocumentCommand = async (context) => {
-  const { printFormMessage, parseString, print, tryGetFormInfo, getFormInfoAsRange } = await import('./esm/core.js')
-  const { makeJSCompilingEvaluator } = await import('./esm/compiler-js.js')
-  const getRangeFromForm = (form) => {
-    const info = tryGetFormInfo(form)
-    if (!info) {
-      console.error('diagnose error no info', form)
-      return null
-    }
+  const { printFormMessage, parseString, print, tryGetFormInfo, getFormInfoAsRange, getFormInfoContentName } =
+    await import('./esm/core.js')
+  const getFormInfoAsVSCodeRange = (info) => {
     const { start, end } = getFormInfoAsRange(info)
     return new Range(pointToPosition(start), pointToPosition(end))
   }
+  const { makeJSCompilingEvaluator } = await import('./esm/compiler-js.js')
   const check2Path = path.join(context.extensionPath, 'wuns/check2.wuns')
 
   const check2 = await fsPromises.readFile(check2Path, 'ascii')
@@ -403,19 +399,31 @@ const addBindCheckActiveDocumentCommand = async (context) => {
   const { evalTops, getDef } = makeJSCompilingEvaluator()
   await evalTops(check2Forms)
 
+  const makeGetInfoFromForm = (converter) => {
+    const syntaxInfo = converter['syntax-info']
+    const tryGetMacroForm = syntaxInfo['try-get-macro-form']
+    return (form) => {
+      let info = tryGetFormInfo(form)
+      if (info) return info
+      const optMacroForm = tryGetMacroForm(form)
+      if (optMacroForm.tag !== 'option/some') throw new Error('expected macro form')
+      const macroForm = optMacroForm.args[0]
+      return tryGetFormInfo(macroForm)
+    }
+  }
+
   const makeFormToAstConverter = getDef('mk-form-to-ast')
 
   const diagnosticCollection = languages.createDiagnosticCollection('wuns-bind')
   const bindCheck = async () => {
     const document = getActiveTextEditorDocument()
     if (!document) return console.error('no active text editor')
-    const text = document.getText()
     const { fileName } = document
-    const forms = parseString(text, fileName)
+    const dirPath = path.dirname(fileName)
+    const text = document.getText()
+    const forms = parseString(text, path.basename(fileName))
     const converter = makeFormToAstConverter()
     const formToTopAsync = converter['form-to-top-async']
-    const bindErrors = converter.errors
-    const diagnosticsForFile = []
     for (const form of forms) {
       try {
         await formToTopAsync(form)
@@ -424,20 +432,21 @@ const addBindCheckActiveDocumentCommand = async (context) => {
         break
       }
     }
-    for (const error of bindErrors) {
+    const diagnostics = []
+    const getInfoFromForm = makeGetInfoFromForm(converter)
+    for (const error of converter.errors) {
       const { form, message, severity } = error
-      const range = getRangeFromForm(form)
-      if (!range) continue
+      const info = getInfoFromForm(form)
+      if (!info) continue
       const diag = new vscode.Diagnostic(
-        range,
+        getFormInfoAsVSCodeRange(info),
         'binding: ' + printFormMessage(message),
         serverityToDiagnosticSeverity(severity),
       )
-      diagnosticsForFile.push(diag)
+      diagnostics.push([Uri.file(path.join(dirPath, getFormInfoContentName(info))), [diag]])
     }
-
     diagnosticCollection.clear()
-    diagnosticCollection.set(document.uri, diagnosticsForFile)
+    diagnosticCollection.set(diagnostics)
   }
   context.subscriptions.push(
     diagnosticCollection,
@@ -450,48 +459,50 @@ const addBindCheckActiveDocumentCommand = async (context) => {
     }),
   )
 
-  const bindTypeCheckForms = getDef('bind-type-check-forms')
+  const bindTypeCheckForms = getDef('bind-type-check-forms-converter')
 
-  // const diagnosticCollection = languages.createDiagnosticCollection('wuns')
   const bindType = async () => {
     const document = getActiveTextEditorDocument()
     if (!document) return console.error('no active text editor')
-    const text = document.getText()
     const { fileName } = document
-    const forms = parseString(text, fileName)
+    const dirPath = path.dirname(fileName)
+    const infoToUri = (info) => Uri.file(path.join(dirPath, getFormInfoContentName(info)))
 
-    const diagnosticsForFile = []
-    const checkRes = await bindTypeCheckForms(forms)
-    console.log('checkRes', checkRes)
-    const bindErrors = checkRes.fst
-    for (const error of bindErrors) {
+    const text = document.getText()
+    const forms = parseString(text, path.basename(fileName))
+
+    const diagnostics = []
+    const converter = makeFormToAstConverter()
+    const checkRes = await bindTypeCheckForms(converter, forms)
+
+    const getInfoFromForm = makeGetInfoFromForm(converter)
+    for (const error of checkRes.fst) {
       const { form, message, severity } = error
-      const range = getRangeFromForm(form)
-      if (!range) continue
+      const info = getInfoFromForm(form)
+      if (!info) continue
       const diag = new vscode.Diagnostic(
-        range,
+        getFormInfoAsVSCodeRange(info),
         'binding: ' + printFormMessage(message),
         serverityToDiagnosticSeverity(severity),
       )
-      diagnosticsForFile.push(diag)
+      diagnostics.push([infoToUri(info), [diag]])
     }
     for (const error of checkRes.snd) {
       const { message, severity } = error
       const optForm = error['opt-form']
       if (optForm.tag !== 'option/some') continue
       const form = optForm.args[0]
-      const range = getRangeFromForm(form)
-      if (!range) continue
-      diagnosticsForFile.push(
-        new vscode.Diagnostic(
-          range,
-          'type check: ' + printFormMessage(message),
-          serverityToDiagnosticSeverity(severity),
-        ),
+      const info = getInfoFromForm(form)
+      if (!info) continue
+      const diag = new vscode.Diagnostic(
+        getFormInfoAsVSCodeRange(info),
+        'type check: ' + printFormMessage(message),
+        serverityToDiagnosticSeverity(severity),
       )
+      diagnostics.push([infoToUri(info), [diag]])
     }
     diagnosticCollection.clear()
-    diagnosticCollection.set(document.uri, diagnosticsForFile)
+    diagnosticCollection.set(diagnostics)
   }
   context.subscriptions.push(
     diagnosticCollection,

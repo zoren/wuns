@@ -37,7 +37,11 @@
 
 [defmacro def-instruction [def-name inst-name] [def-instruction-macro def-name inst-name]]
 
+[type string [] [union]]
+
 [import ./runtime-lib/host.js abort [type-scheme [a] [func [[list form]] a]]]
+[import ./runtime-lib/host.js abort-string [type-scheme [a] [func [string] a]]]
+[import ./runtime-lib/host.js print [type-scheme [a] [func [a] string]]]
 
 [defn form-to-word [form]
   [match form
@@ -138,6 +142,28 @@
             [form/list l] e]]
         lmsg]]]]
 
+[import ./runtime-lib/host.js char-code-to-word [func [i32] word]]
+[import ./runtime-lib/host.js char-code-to-string [func [i32] string]]
+
+[def string-space [char-code-to-string [i32 32]]]
+[import ./runtime-lib/host.js string-join [func [string [list string]] string]]
+
+[defn strings-space-join [.. l]
+  [string-join string-space l]]
+
+[defn abort-string-list [lmsg]
+  [flist
+    [quote abort-string]
+    [form-concat
+      [list [quote strings-space-join]]
+      [list-map-fn
+        [func f [e]
+          [flist [quote print]
+            [match e
+              [form/word w] [mk-quote e]
+              [form/list l] e]]]
+        lmsg]]]]
+
 [import ./runtime-lib/host.js slice [type-scheme [a] [func [[list a] i32 i32] [list a]]]]
 
 [defn rest [l] [slice l 1 [size l]]]
@@ -145,18 +171,15 @@
 [defmacro assert [cond .. lmsg]
   [flist [quote if] cond
     [quote [do]]
-    [flist [quote do]
-      [flist [quote abort] [quote-list lmsg]]]]]
+    [abort-string-list lmsg]]]
 
 [defmacro assert-not [cond .. lmsg]
   [flist [quote if] cond
-    [flist [quote do]
-      [flist [quote abort] [quote-list lmsg]]]
+    [abort-string-list lmsg]
     [quote [do]]]]
 
 [defmacro logq-abort [.. lmsg]
-  [flist [quote do]
-    [flist [quote abort] [quote-list lmsg]]]]
+  [abort-string-list lmsg]]
 
 [defexpr qword [f]
   [match f
@@ -206,7 +229,6 @@
 
 [def word-counter [atom 0]]
 
-[import ./runtime-lib/host.js char-code-to-word [func [i32] word]]
 [import ./runtime-lib/host.js code-points-to-word [func [[list i32]] word]]
 
 [def-instruction i32.rem-s i32.rem-s]
@@ -436,8 +458,6 @@
 
 [type promise [a] [union]]
 
-[type string [] [union]]
-
 [import ./runtime-lib/files.js read-file-async [func [word] [promise string]]]
 [import ./runtime-lib/files.js write-file-async [func [word string] [promise [tuple]]]]
 [type file-descriptor [] [union]]
@@ -451,8 +471,6 @@
 [import ./runtime-lib/host.js try-get-syntax-node [func [form] [option syntax-node]]]
 [import ./runtime-lib/host.js syntax-node-content-name [func [syntax-node] string]]
 
-[import ./runtime-lib/host.js print [type-scheme [a] [func [a] string]]]
-
 [import ./runtime-lib/host.js code-point-to-string [func [i32] string]]
 
 [defmacro def-js-extern [name type]
@@ -460,7 +478,7 @@
 
 [type js-value [] [union]]
 
-[def-js-extern console-log [type-scheme [a] [func [.. a] [tuple]]]]
+[def-js-extern console-log [func [.. string] [tuple]]]
 
 [def-js-extern promise-resolve [type-scheme [a] [func [a] [promise a]]]]
 [def-js-extern promise-bind [type-scheme [a b] [func [[promise a] [func [a] [promise b]]] [promise b]]]]
@@ -472,7 +490,7 @@
     [read-file-async file-name]
     [func then [content] [parse-string content file-name]]]]
 
-[import ./runtime-lib/host.js apply [type-scheme [a b] [func [[func [[list a]] b] [list a]] b]]]
+[import ./runtime-lib/host.js apply [type-scheme [a b] [func [[func [.. a] b] [list a]] b]]]
 
 [defn log-fn [forms]
   [apply console-log [list-map f forms [print f]]]]

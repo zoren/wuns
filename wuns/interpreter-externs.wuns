@@ -12,4 +12,4 @@
 [def-evaluation-extern evaluate-exp [func [evaluator form] [result tuple js-value]]]
 
 [def-evaluation-extern try-get-macro
-  [func [evaluator word] [option [func [[list form]] form]]]]
+  [func [evaluator word] [option [func [.. form] form]]]]

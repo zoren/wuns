@@ -252,7 +252,8 @@
     [try-get-ldesc [func [form] [option [pair local-var-kind form]]]]
     [try-get-def-desc [func [syntax-word] [option def-desc]]]
     [try-get-form [func [js-value] [option form]]]
-    [try-get-top [func [word] [option btop]]]]]
+    [try-get-top [func [word] [option btop]]]
+    [try-get-macro-form [func [form] [option form]]]]]
 
 [defn shake-tops [sinfo btops]
   [let [tgdd [syntax-info/try-get-def-desc sinfo]
@@ -315,6 +316,19 @@
 [defn mk-form-to-ast []
   [let
     [evaluator [make-evaluator]
+     macro-form-to-form [transient-kv-map]
+     try-expand-macro
+     [func tem [first-word args form]
+      [if-let [macro-func [try-get-macro evaluator first-word]]
+        [let [macro-form [apply macro-func args]]
+          [[func add-form [mf]
+            [set-kv-map macro-form-to-form mf form]
+            [match mf
+              [form/word w] [do]
+              [form/list l] [for-each f l [add-form f]]]]
+            macro-form]
+          [option/some macro-form]]
+        [option/none]]]
      errors [growable-list]
      push-error [func pe [form msg] [push errors [report-message msg form [diagnostic-severity/error]]]]
      def-ctx [transient-kv-map]
@@ -668,8 +682,8 @@
                       [def-desc/defunc defunc-desc]
                       [match defunc-desc
                         [bdefunc-kind/macro]
-                        [if-let [macro-func [try-get-macro evaluator first-word]]
-                          [form-to-top [apply macro-func [rest l]]]
+                        [if-let [macro-form [try-expand-macro first-word [rest l] form]]
+                          [form-to-top macro-form]
                           [logq-abort form-to-top macro not found]]
 
                         [btop/exp [form-to-ast [local-stack/empty] form]]]
@@ -933,8 +947,8 @@
                           [bexp/call-fexpr [bexp/var [get-sword first-form]] [rest l]]
 
                           [bdefunc-kind/macro]
-                          [if-let [macro-func [try-get-macro evaluator first-word]]
-                            [form-to-ast lstack [apply macro-func [rest l]]]
+                          [if-let [macro-form [try-expand-macro first-word [rest l] form]]
+                            [form-to-ast lstack macro-form]
                             [logq-abort form-to-top macro not found]]
 
                           [bexp/call [form-to-ast lstack first-form] [list-map arg [rest l] [form-to-ast lstack arg]]]]
@@ -955,7 +969,8 @@
         [func try-get-ldesc [n] [try-get node-to-ldesc n]]
         [func try-get-def-desc [n] [try-get node-to-def-desc n]]
         [func try-get-form [n] [try-get bst-to-form n]]
-        [func try-get-top [n] [try-get name-to-top n]]]]]]]
+        [func try-get-top [n] [try-get name-to-top n]]
+        [func try-get-macro-form [n] [try-get macro-form-to-form n]]]]]]]
 
 [defn bind-forms [converter forms]
   [let

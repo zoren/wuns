@@ -385,8 +385,8 @@
     syntax-info
     [transient-kv-map]]]
 
-[defn report-fn [gctx message opt-location]
-  [push [check-context/messages gctx] [check-message message opt-location [diagnostic-severity/error]]]]
+[defn report-fn [gctx message opt-form]
+  [push [check-context/messages gctx] [check-message message opt-form [diagnostic-severity/error]]]]
 
 [defn report-sword [gctx sw message]
   [push [check-context/messages gctx] [check-message message [syntax-word/opt-form sw] [diagnostic-severity/error]]]]
@@ -403,9 +403,8 @@
   [let [info [check-context/syntax-info gctx]
         opt-form [[syntax-info/try-get-form info] [to-js-value bst]]]
     [for-each error [unify t1 t2]
-      [log [ctype-to-form t1]]
-      [log [ctype-to-form t2]]
-      [report-fn gctx error opt-form]]]]
+      [push [check-context/messages gctx] [check-message [form-concat [form-to-list error] [list [ctype-to-form t1] [quote -vs-] [ctype-to-form t2]]] opt-form [diagnostic-severity/error]]]
+      ]]]
 
 [defn is-syntactic-value [bform]
   [match bform
@@ -882,10 +881,9 @@
           [func then2 [btops]
             [check-top-forms converter btops]]]]]]]
 
-[defn bind-type-check-forms [forms]
+[defn bind-type-check-forms-converter [converter forms]
   [let
-    [converter [mk-form-to-ast]
-     sinfo [form-to-ast-converter/syntax-info converter]
+    [sinfo [form-to-ast-converter/syntax-info converter]
      f2t [form-to-ast-converter/form-to-top-async converter]]
     [promise-then
       [promises-seq forms f2t]
@@ -896,3 +894,6 @@
            ctop [checker/check-top [make-checker gctx]]]
           [for-each btop btops [ctop btop]]
           [pair bind-errors [clone-growable-to-frozen-list [check-context/messages gctx]]]]]]]]
+
+[defn bind-type-check-forms [forms]
+  [bind-type-check-forms-converter [mk-form-to-ast] forms]]

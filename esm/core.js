@@ -155,6 +155,8 @@ export const getFormInfoAsRange = ({ contentObj, byteOffset, endOffset }) => {
   }
 }
 
+export const getFormInfoContentName = (formInfo) => formInfo.contentObj.contentName
+
 export const getPosition = ({ contentObj, byteOffset }) => {
   const { content } = contentObj
   return getPositionFromContentOffset(content, byteOffset)

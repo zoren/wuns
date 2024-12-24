@@ -18,7 +18,10 @@ import {
 export const abort = (message) => {
   throw new Error('abort: ' + message.map((f) => print(f)).join(' '))
 }
-
+const abort_string = (...message) => {
+  throw new Error('abort: ' + message.join(' '))
+}
+export { abort_string as 'abort-string' }
 const parse_string = (content, content_name) => {
   if (typeof content !== 'string') throw new Error('parse-string expects string')
   if (typeof content_name !== 'string') throw new Error('parse-string expects string')
@@ -82,6 +85,19 @@ const char_code_at = (word, index) => {
 export { char_code_at as 'char-code-at' }
 const concat_words = (word_1, word_2) => stringToWord(wordValue(word_1) + wordValue(word_2))
 export { concat_words as 'concat-words' }
+const string_join = (separator, strings) => {
+  if (typeof separator !== 'string') {
+    throw new Error('string-join expects string')
+  }
+  for (const s of strings) if (typeof s !== 'string') {
+
+    throw new Error('string-join expects string')
+  }
+  return strings.join(separator)
+}
+const char_code_to_string = (code_point) => (String.fromCodePoint(code_point))
+export { char_code_to_string as 'char-code-to-string' }
+export { string_join as 'string-join' }
 // todo rename code_point_to_word
 const char_code_to_word = (code_point) => stringToWord(String.fromCodePoint(code_point))
 export { char_code_to_word as 'char-code-to-word' }
