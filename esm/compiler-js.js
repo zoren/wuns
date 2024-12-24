@@ -511,7 +511,13 @@ const compExp = (ctx, form, topContext) => {
       while (curCtx) {
         if (curCtx.has(firstWord)) {
           const ldesc = curCtx.get(firstWord)
-          if (ldesc && ldesc.kind === 'func-recur') checkArity(ldesc.paramDesc)
+          if (ldesc) {
+            if (ldesc.kind === 'func-recur') checkArity(ldesc.paramDesc)
+            return jsCall(
+              compExp(ctx, forms[0], topContext),
+              forms.slice(1).map((arg) => compExp(ctx, arg, topContext)),
+            )
+          }
         }
         curCtx = curCtx.outer
       }
