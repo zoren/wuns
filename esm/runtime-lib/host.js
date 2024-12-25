@@ -279,6 +279,28 @@ const byte_array = (size) => {
   return new Uint8Array(size)
 }
 export { byte_array as 'byte-array' }
+const byte_array_resizable = (size, max_byte_size) => {
+  if (!isSigned32BitInteger(size)) throw new Error('byte-array-resizable expects number: ' + size)
+  if (!isSigned32BitInteger(max_byte_size)) throw new Error('byte-array-resizable expects number: ' + max_byte_size)
+  if (size < 0) throw new Error('byte-array-resizable expects non-negative size')
+  if (max_byte_size < 0) throw new Error('byte-array-resizable expects non-negative max_byte_size')
+  if (size > max_byte_size) throw new Error('byte-array-resizable expects size <= max_byte_size')
+  const buffer = new ArrayBuffer(size, { maxByteLength: max_byte_size })
+  return new Uint8Array(buffer)
+}
+export { byte_array_resizable as 'byte-array-resizable' }
+const byte_array_resize = (byte_array, new_size) => {
+  if (!(byte_array instanceof Uint8Array)) throw new Error('byte-array-resize expects byte array')
+  const { buffer } = byte_array
+  if (!buffer.resizable) throw new Error('byte-array-resize expects resizable byte array')
+  if (!isSigned32BitInteger(new_size)) throw new Error('byte-array-resize expects number: ' + new_size)
+  if (new_size < 0) throw new Error('byte-array-resize expects non-negative size')
+  if (new_size > buffer.maxByteLength)
+    throw new Error('byte-array-resize expects new_size <= buffer.byteLength')
+  buffer.resize(new_size)
+  return null
+}
+export { byte_array_resize as 'byte-array-resize' }
 const byte_array_size = (byte_array) => {
   if (!(byte_array instanceof Uint8Array)) throw new Error('byte-array-size expects byte array')
   return byte_array.length

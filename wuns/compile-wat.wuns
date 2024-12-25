@@ -2083,16 +2083,16 @@
 
 [type printer []
   [record
-    [bytes [atom byte-array]]
+    [bytes [byte-array]]
     [index [atom i32]]]]
 
-[defn empty-printer [init-capacity]
-  [printer [atom [byte-array init-capacity]] [atom 0]]]
+[defn empty-printer []
+  [printer [byte-array-resizable [i32 256] [i32 0x10000000]] [atom 0]]]
 
 [defn printer-to-byte-array [p]
   [let
     [ci [atom-get [printer/index p]]
-     cb [atom-get [printer/bytes p]]
+     cb [printer/bytes p]
      trimmed [byte-array ci]]
     [for i 0 ci
       [byte-array-set trimmed i [byte-array-get cb i]]]
@@ -2101,9 +2101,10 @@
 [defn print-byte [printer byte]
   [let [ia [printer/index printer]
         i [atom-get ia]
-        ba [printer/bytes printer]
-        a [atom-get ba]]
-    [assert [lt-s i [byte-array-size a]] printer buffer overflow]
+        a [printer/bytes printer]
+        cur-size [byte-array-size a]]
+    [when [le-s cur-size i]
+      [byte-array-resize a [mul [i32 2] cur-size]]]
     [byte-array-set a i byte]
     [atom-set [printer/index printer] [inc i]]]]
 
@@ -2189,6 +2190,11 @@
         [print-word printer w1]
         [print-byte printer ascii-equal]
         [print-word printer w2]]]]
+
+[defn wat-to-wat-bytes [wat]
+  [let [p [empty-printer]]
+    [print-wat p wat]
+    [printer-to-byte-array p]]]
 
 [defn wat-list [.. l] [wat/list l]]
 
@@ -2350,32 +2356,16 @@
 
 [type wasm-module [] [union]]
 
-[def-wasm-extern byte-array-to-wasm-module [func [byte-array] wasm-module]]
-
 [import ./runtime-lib/wabt.js wat-to-wasm-byte-array [func [byte-array] byte-array]]
 
-[comment
-  [defn forms-to-wat-text [forms]
-    [let [p [empty-printer [i32 10000]]]
-      [print-wat p [output-to-wat [translate-top-forms-sync forms]]]
-      [printer-to-byte-array p]]] ]
-
-[defn make-macro-evaluator-async []
+[defn translate-top-forms-to-wasm-bytes [forms]
   [let [evaluator [make-evaluator]]
     [promise-then
       [evaluate-top-async evaluator [quote [load std.wuns]]]
-      [func t [res]
-        evaluator]]]]
+      [func t [-]
+        [wat-to-wasm-byte-array [wat-to-wat-bytes [output-to-wat [translate-top-forms-sync evaluator forms]]]]]]]]
 
-[defn output-to-wasm-bytes [output]
-  [let [p [empty-printer [i32 100000]]]
-    [print-wat p [output-to-wat output]]
-    [wat-to-wasm-byte-array [printer-to-byte-array p]]]]
-
-[defn translate-top-forms-to-wasm-bytes [forms]
-  [promise-then
-    [make-macro-evaluator-async]
-    [func t [evaluator] [output-to-wasm-bytes [translate-top-forms-sync evaluator forms]]]]]
+[def-wasm-extern byte-array-to-wasm-module [func [byte-array] wasm-module]]
 
 [defn translate-top-forms-to-module [forms]
   [promise-then
