@@ -798,6 +798,7 @@ export const makeJSCompilingEvaluator = () => {
   const getDef = (name) => {
     const desc = defEnv.get(name)
     if (desc) return desc.value
+    throw new Error('def not found: ' + name)
   }
   const getDefKind = (name) => {
     const desc = defEnv.get(name)
