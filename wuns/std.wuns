@@ -408,12 +408,35 @@
                 [list [flist [quote continue] iteration-var [flist [quote add] iteration-var [quote [i32 1]]]]]]]]
           [quote [do]]]]]]]
 
+[type growable-list [a] [union]]
+
+[import ./runtime-lib/host.js growable-list [type-scheme [a] [func [] [growable-list a]]]]
+[import ./runtime-lib/host.js push [type-scheme [a] [func [[growable-list a] a] [tuple]]]]
+[import ./runtime-lib/host.js clone-growable-to-frozen-list [type-scheme [a] [func [[growable-list a]] [list a]]]]
+
 [defmacro list-map [element-var collection form]
-  [do
-    [assert [is-word element-var] list-map requires a word as the first argument]
-    [flist [quote list-map-fn]
-      [flist [quote func] [genword] [flist element-var] form]
-      collection]]]
+  [let
+    [iteration-var [genword-prefix [word it]]
+     col-var [genword-prefix [word col]]
+     col-size-var [genword-prefix [word col-size]]
+     result-var [genword-prefix [word res]]]
+    [assert [is-word element-var] for-each requires a word as the first argument]
+    [flist
+      [quote let] [flist col-var collection
+                        col-size-var [flist [quote size] col-var]
+                        result-var [quote [growable-list]]]
+      [flist
+        [quote loop] [flist iteration-var [quote [i32 0]]]
+        [flist [quote if]
+          [flist [quote lt-s] iteration-var col-size-var]
+          [flist
+            [quote let]
+            [flist element-var [flist [quote at] col-var iteration-var]]
+            [flist
+              [quote do]
+              [flist [quote push] result-var form]
+              [flist [quote continue] iteration-var [flist [quote add] iteration-var [quote [i32 1]]]]]]
+          [flist [quote clone-growable-to-frozen-list] result-var]]]]]]
 
 [defn half [x] [i32.div-s x 2]]
 
@@ -576,12 +599,6 @@
         [go [inc i]]]
       false]]
     0]]
-
-[type growable-list [a] [union]]
-
-[import ./runtime-lib/host.js growable-list [type-scheme [a] [func [] [growable-list a]]]]
-[import ./runtime-lib/host.js push [type-scheme [a] [func [[growable-list a] a] [tuple]]]]
-[import ./runtime-lib/host.js clone-growable-to-frozen-list [type-scheme [a] [func [[growable-list a]] [list a]]]]
 
 [type pair [a b] [record [fst a] [snd b]]]
 
