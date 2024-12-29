@@ -34,8 +34,7 @@
     [loop [list [pair syntax-word llexp]] [list llexp]]
     [continue [list [pair syntax-word llexp]]]
     [do [list llexp]]
-    [call syntax-word [list llexp]]
-    [call-gen syntax-word [list lltype] [list llexp]]
+    [call syntax-word [option [list lltype]] [list llexp]]
 
     [cast lltype llexp]
     [deref llexp]
@@ -54,7 +53,9 @@
   [union
     [memory memory-kind]
     [any]
-    [func i32]
+    [func
+      [option [list syntax-word]]
+      [list [pair syntax-word [option lltype]]]]
     ]]
 
 [type lllocal-var-kind []
@@ -67,101 +68,13 @@
 
 [type user-type-desc []
   [union
-    [record [transient-kv-map word lltype] [list [pair word lltype]]]]]
-
-[def ascii-underscore [i32 95]]
-
-[comment wuns does not have underscores so we convert dashes to underscores]
-
-[defn wasm-name-to-wat-byte-array [w]
-  [let [sw [word-byte-size w]
-        res [byte-array sw]]
-    [for i 0 sw
-      [byte-array-set res i
-        [let [c [char-code-at w i]] [if [eq c [word-to-char-code -]] ascii-underscore c]]]]
-    res]]
-
-[type type-constraint []
-  [union [size-of]]]
-
-[def type-constraint-size-of [type-constraint/size-of]]
-
-[type
-  type-var-kind []
-  [union
-    [linked ctype]
-    [word word]]
-
-  type-var []
-  [record
-    [kind [atom type-var-kind]]
-    [level [atom i32]]
-    [constraints [set type-constraint]]]
-
-  func-type []
-  [record
-    [params [list ctype]]
-    [result ctype]]
-
-  inst-type []
-  [union
-    [func func-type]
-    [apply word [list ctype]]]
-
-  ctype []
-  [union
-    [var type-var]
-    [literal type-literal]
-    [inst inst-type]]]
-
-[defn get-type-var-kind [type-var]
-  [atom-get [type-var/kind type-var]]]
-
-[defn copy-type-constraints [tv-dst tv-src]
-  [for-each tc [set-to-list [type-var/constraints tv-src]]
-    [set-add [type-var/constraints tv-dst] tc]]]
-
-[defn set-type-var-kind-to-type [type-var type]
-  [atom-set [type-var/kind type-var] [type-var-kind/linked type]]
-  [match type
-    [ctype/var tv2]
-    [do
-      [copy-type-constraints tv2 type-var]]
-
-    [do]]]
-
-[defn normalize-type [t0]
-  [match t0
-    [ctype/var tv]
-    [match [get-type-var-kind tv]
-      [type-var-kind/word w] t0
-      [type-var-kind/linked linked-t]
-      [let [t2 [normalize-type linked-t]]
-        [set-type-var-kind-to-type tv t2]
-        t2]]
-    t0]]
-
-[defn get-func-type [t]
-  [match [normalize-type t]
-    [ctype/inst inst-type]
-    [match inst-type
-      [inst-type/func func-type]
-      func-type
-
-      [logq-abort get-func-type expected a func type]]
-
-    [logq-abort get-func-type expected a func type]]]
-
-[defn get-apply-type [t]
-  [match [normalize-type t]
-    [ctype/inst inst-type]
-    [match inst-type
-      [inst-type/apply type-name type-args]
-      [pair type-name type-args]
-
-      [logq-abort get-apply-type expected an apply type]]
-
-    [logq-abort get-apply-type expected an apply type]]]
+    [record
+      [transient-kv-map word lltype]
+      [list [pair word lltype]]]
+    [union
+      [transient-kv-map word [list lltype]]
+      [list lltype]]
+    [alias lltype]]]
 
 [defn syntax-word-get-form [sw]
   [if-let [f [syntax-word/opt-form sw]]
@@ -224,6 +137,682 @@
 
       [try-get-enclosing-loop-context outer]]]]
 
+[defn is-syntactic-llvalue [bform]
+  [match bform
+    [llexp/literal l] 1
+    [llexp/var f] 1
+    0]]
+
+[type llctx []
+  [record
+    [lldef-ctx [transient-kv-map word lldef-desc]]
+    [form-to-ldesc [transient-kv-map form lllocal-var-kind]]
+    [user-type-params [transient-kv-map word [list syntax-word]]]
+    [user-types [transient-kv-map word user-type-desc]]
+    [bound-form-to-form [transient-kv-map js-value form]]]]
+
+[defn llctx-empty [] [llctx [transient-kv-map] [transient-kv-map] [transient-kv-map] [transient-kv-map] [transient-kv-map]]]
+
+[type data []
+  [union
+    [bytes [list syntax-word]]
+    [i32 [list syntax-word]]
+    [f64 [list syntax-word]]
+    ]]
+
+[type lldefn []
+  [record
+    [name syntax-word]
+    [type-params [option [list syntax-word]]]
+    [params [list [pair syntax-word [option lltype]]]]
+    [bodies [list llexp]]]]
+
+[type lltop []
+  [union
+    [memory syntax-word memory-kind syntax-word [option syntax-word]]
+    [type]
+    [data-active syntax-word llexp [list data]]
+    [def syntax-word llexp]
+    [defn lldefn]
+    [export [list syntax-word]]]]
+
+[defn wat-type-is [type-name]
+  [switch type-name
+    [[word i32] [word i64] [word f32] [word f64] [word v128]] true
+    false]]
+
+[defn wuns-builtin-data-type-is [type-name]
+  [switch type-name
+    [[word u8] [word s8]
+     [word u16] [word s16]] true
+    false]]
+
+[defn llbuiltin-type-arity-ok [type-name n-of-args]
+  [switch type-name
+    [[word tuple]] [option/some true]
+
+    [[word pointer] [word array]] [option/some [eq 2 n-of-args]]
+
+    [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
+      [option/some [eq n-of-args 0]]
+      [option/none]]]]
+
+[load interpreter-externs.wuns]
+
+[defn make-forms-to-btops [evaluator]
+  [let
+    [lldef-ctx [transient-kv-map]
+     form-to-ldesc [transient-kv-map]
+     user-type-params [transient-kv-map]
+     user-types [transient-kv-map]
+     bound-form-to-form [transient-kv-map]]
+    [letfn [
+[func set-local [lvars f kind]
+  [let [w [form-to-word f]]
+    [when [has lvars w] [push-error f [quote [redeclaring local]]]]
+    [set-kv-map lvars w kind]
+    [set-kv-map form-to-ldesc f kind]]]
+
+[func set-ll-def [form def-desc]
+  [set-kv-map lldef-ctx [form-to-word form] def-desc]]
+
+[func form-to-lltype [lstack type-params form]
+  [match form
+    [form/word w]
+    [do
+      [when-not [set-has type-params w]
+        [comment probably should add it to a context...]
+        [logq type var unbound [identity w]]]
+      [lltype/var [sword form]]]
+
+    [form/list l]
+    [let [sw [sword [first l]] fw [syntax-word/word sw] n-of-args [dec [size l]]]
+      [switch fw
+        [[word memory]]
+        [let [w [form-to-word [second l]]]
+          [if-let [ldesc [try-get-local lstack w]]
+            [logq-abort not a memory]
+            [if-let [ddesc [try-get lldef-ctx w]]
+              [match ddesc
+                [lldef-desc/memory k] [do]
+                [logq-abort not a memory]]
+              [push-error form [quote [undefined exp word]]]]]
+          [lltype/literal [type-literal/memory [sword [second l]]]]]
+
+        [[word literal]]
+        [lltype/literal [type-literal/exp [form-to-llexp type-params lstack [second l]]]]
+
+        [do
+          [if-let [user-type-params [try-get user-type-params fw]]
+            [when-not [eq [size user-type-params] n-of-args] [push-error form [quote [type arity mismatch]]]]
+            [if-let [arity-ok [llbuiltin-type-arity-ok fw n-of-args]]
+              [when-not arity-ok [push-error form [quote [type arity mismatch]]]]
+              [push-error form [quote [undefined type]]]]]
+          [lltype/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]]]]]
+
+[func form-to-llexp [type-var-set lstack form]
+  [let [bst [form-to-llexp0 type-var-set lstack form]]
+    [set-kv-map bound-form-to-form [to-js-value bst] form]
+    bst]]
+
+[func form-to-llexp0 [type-var-set lstack form]
+  [match form
+    [form/word w]
+    [do
+      [if-let [ldesc [try-get-local lstack w]]
+        [set-kv-map form-to-ldesc form ldesc]
+        [if-let [ddesc [try-get lldef-ctx w]]
+          [match ddesc
+            [lldef-desc/any] [do]
+            [lldef-desc/memory k] [logq-abort only def values allowed]
+            [logq-abort only def values allowed [identity form]]]
+          [push-error form [quote [undefined exp word]]]]]
+      [llexp/var [sword form]]]
+
+    [form/list l]
+    [let [n-of-args [dec [size l]]
+          assert-n-args [func ana [n] [when-not [eq n-of-args n] [push-error form [quote [expected n-of-args arguments]]]]]
+          get-arg [func get-arg [i] [if [lt-s i n-of-args] [at l [inc i]] [quote no-such-arg]]]
+          - [assert-not [is-empty l] list was empty]
+          first-form [first l]]
+      [match first-form
+        [form/word first-word]
+        [switch first-word
+          [[word i32]]
+          [llexp/literal [llliteral/i32 [sword [get-arg 0]]]]
+
+          [[word i64]]
+          [llexp/literal [llliteral/i64 [sword [get-arg 0]]]]
+
+          [[word f32]]
+          [llexp/literal [llliteral/f32 [sword [get-arg 0]]]]
+
+          [[word f64]]
+          [llexp/literal [llliteral/f64 [sword [get-arg 0]]]]
+
+          [[word v128] [word word]]
+          [logq-abort form-to-llexp not implemented [identity first-form]]
+
+          [[word intrinsic]]
+          [let [inst-sname [sword [get-arg 0]]
+                inst-name [syntax-word/word inst-sname]]
+            [if [or [is-i32-bin-inst inst-name] [is-f64-bin-inst inst-name] [is-f64-comp-inst inst-name]]
+              [do
+                [assert-n-args 3]
+                [llexp/intrinsic inst-sname [list] [list-map arg [slice l 2 [size l]] [form-to-llexp type-var-set lstack arg]]]]
+              [switch inst-name
+                [[word unreachable]]
+                [do
+                  [assert-n-args 1]
+                  [llexp/intrinsic inst-sname [list] [list-map arg [slice l 2 [size l]] [form-to-llexp type-var-set lstack arg]]]]
+
+                [[word i32.load] [word i32.load8-u]]
+                [do
+                  [assert-n-args 5]
+                  [let [mem-name [sword [get-arg 1]]]
+                    [match [get lldef-ctx [syntax-word/word mem-name]]
+                      [lldef-desc/memory kind] [do]
+                      [push-error [get-arg 1] [quote [not a memory]]]]
+                    [llexp/intrinsic inst-sname
+                      [list
+                        mem-name
+                        [sword [get-arg 2]]
+                        [sword [get-arg 3]]]
+                      [list [form-to-llexp type-var-set lstack [get-arg 4]]]]]]
+
+                [[word i32.store] [word i32.store8]]
+                [do
+                  [assert-n-args 6]
+                  [let [mem-name [sword [get-arg 1]]]
+                    [match [get lldef-ctx [syntax-word/word mem-name]]
+                      [lldef-desc/memory kind] [do]
+                      [push-error [get-arg 1] [quote [not a memory]]]]
+                    [llexp/intrinsic inst-sname
+                      [list
+                        [sword [get-arg 1]]
+                        [sword [get-arg 2]]
+                        [sword [get-arg 3]]]
+                      [list
+                        [form-to-llexp type-var-set lstack [get-arg 4]]
+                        [form-to-llexp type-var-set lstack [get-arg 5]]]]]]
+
+                [do
+                  [log form]
+                  [logq-abort form-to-llexp not implemented]]]]]
+
+          [[word if]]
+          [do
+            [assert-n-args 3]
+            [llexp/if [form-to-llexp type-var-set lstack [get-arg 0]] [form-to-llexp type-var-set lstack [get-arg 1]] [form-to-llexp type-var-set lstack [get-arg 2]]]]
+
+          [[word do]]
+          [llexp/do [list-map arg [rest l] [form-to-llexp type-var-set lstack arg]]]
+
+          [[word loop]]
+          [let
+            [bindings [get-list [get-arg 0]]
+             lvars [transient-kv-map]
+             lctx [local-context lvars [local-context-kind/loop]]
+             new-lstack [local-stack/frame lstack lctx]]
+            [when [lt-s n-of-args 2] [push-error form [quote [expected at least 2 arguments]]]]
+            [llexp/loop
+              [list-map p [pairwise bindings]
+                [let [name [first p]
+                      sname [sword name]
+                      name-word [syntax-word/word sname]
+                      be [form-to-llexp type-var-set new-lstack [second p]]
+                      ldesc [lllocal-var-kind/loop]]
+                  [when-let [ldesc [try-get-local lstack name-word]]
+                    [push-error name [quote [loop var shadows local]]]]
+                  [set-local lvars name ldesc]
+                  [pair sname be]]]
+              [list-map f [slice l 2 [size l]] [form-to-llexp type-var-set new-lstack f]]]]
+
+          [[word continue]]
+          [let [loop-vars
+                  [if-let [loop-context [try-get-enclosing-loop-context lstack]]
+                    [local-context/vars loop-context]
+                    [do
+                      [push-error form [quote [not in a loop context]]]
+                      [transient-kv-map]]]]
+            [llexp/continue
+              [list-map p [pairwise-pairs [rest l]]
+                [let [name [pair/fst p]
+                      sname [sword name]
+                      name-word [syntax-word/word sname]
+                      be [form-to-llexp type-var-set lstack [pair/snd p]]]
+                  [if-let [ldesc [try-get loop-vars name-word]]
+                    [set-kv-map form-to-ldesc name ldesc]
+                    [push-error name [quote [not a loop var of the current loop]]]]
+                  [pair sname be]]]]]
+
+          [[word let]]
+          [let
+            [bindings [get-list [get-arg 0]]
+             lvars [transient-kv-map]
+             ctx-let [local-context lvars [local-context-kind/let]]
+             new-lstack [local-stack/frame lstack ctx-let]
+             ldesc [lllocal-var-kind/let]]
+            [when [lt-s n-of-args 2] [push-error form [quote [expected at least 2 arguments]]]]
+            [llexp/let
+              [list-map p [pairwise bindings]
+                [let [name [first p]
+                      sname [sword name]
+                      name-word [syntax-word/word sname]
+                      be [form-to-llexp type-var-set new-lstack [second p]]]
+                  [when-let [ldesc2 [try-get-local lstack name-word]]
+                    [push-error name [quote [let var shadows local]]]]
+                  [set-local lvars name ldesc]
+                  [pair sname be]]]
+              [list-map f [slice l 2 [size l]] [form-to-llexp type-var-set new-lstack f]]]]
+
+          [[word cast]]
+          [do
+            [assert-n-args 2]
+            [llexp/cast
+              [form-to-lltype lstack type-var-set [get-arg 0]]
+              [form-to-llexp type-var-set lstack [get-arg 1]]]]
+
+          [[word deref]]
+          [do
+            [assert-n-args 1]
+            [llexp/deref
+              [form-to-llexp type-var-set lstack [get-arg 0]]]]
+
+          [[word assign]]
+          [do
+            [assert-n-args 2]
+            [llexp/assign
+              [form-to-llexp type-var-set lstack [get-arg 0]]
+              [form-to-llexp type-var-set lstack [get-arg 1]]]]
+
+          [[word field]]
+          [do
+            [assert-n-args 2]
+            [llexp/field
+              [form-to-llexp type-var-set lstack [get-arg 0]]
+              [sword [get-arg 1]]]]
+
+          [[word index]]
+          [do
+            [assert-n-args 2]
+            [llexp/index
+              [form-to-llexp type-var-set lstack [get-arg 0]]
+              [form-to-llexp type-var-set lstack [get-arg 1]]]]
+
+          [[word size-of]]
+          [do
+            [assert-n-args 1]
+            [llexp/size-of
+              [form-to-lltype lstack type-var-set [get-arg 0]]]]
+
+          [[word call]]
+          [do
+            [assert-n-args 3]
+            [let [fform [get-arg 0]
+                  fsword [sword fform]
+                  fword [syntax-word/word fsword]
+                  type-args [get-list [get-arg 1]]
+                  exp-args [get-list [get-arg 2]]]
+              [if-let [ldesc [try-get-local lstack fword]]
+                [logq-abort form-to-llexp explicit rec calls not implemented]
+                [if-let [llddesc [try-get lldef-ctx fword]]
+                  [match llddesc
+                    [lldef-desc/func opt-tparams params]
+                    [do
+                      [if-let [tparams opt-tparams]
+                        [when-not [eq [size tparams] [size type-args]] [push-error form [quote [type arity mismatch]]]]
+                        [push-error form [quote [expected a genfn]]]]
+                      [when-not [eq [size params] [size exp-args]] [push-error form [quote [exp arity mismatch]]]]
+                      [llexp/call fsword
+                        [option/some [list-map targ type-args [form-to-lltype lstack type-var-set targ]]]
+                        [list-map arg exp-args [form-to-llexp type-var-set lstack arg]]]]
+
+                    [logq-abort form-to-llexp not a func]]
+                  [if-let [macro-func [try-get-macro evaluator fword]]
+                    [logq-abort form-to-llexp explicit macro call not implemented]
+                    [logq-abort form-to-llexp def not found [identity fword]]]]]]]
+
+          [if-let [ldesc [try-get-local lstack first-word]]
+            [match ldesc
+              [lllocal-var-kind/func-internal-self arity]
+              [do
+                [assert-n-args arity]
+                [llexp/call [sword first-form] [option/none] [list-map arg [rest l] [form-to-llexp type-var-set lstack arg]]]]
+
+              [logq-abort form-to-llexp only rec calls allowed]]
+            [if-let [llddesc [try-get lldef-ctx first-word]]
+              [match llddesc
+                [lldef-desc/func opt-tparams params]
+                [do
+                  [when-let [tparams opt-tparams]
+                    [push-error form [quote [expected type args for genfn]]]]
+                  [assert-n-args [size params]]
+                  [llexp/call [sword first-form] [option/none] [list-map arg [rest l] [form-to-llexp type-var-set lstack arg]]]]
+
+                [logq-abort form-to-llexp not a func]]
+              [if-let [macro-func [try-get-macro evaluator first-word]]
+                [form-to-llexp type-var-set lstack [apply macro-func [rest l]]]
+                [logq-abort form-to-llexp def not found [identity first-form]]]]]]
+
+        [form/list fl]
+        [push-error form [quote [form-to-llexp direct calls not implemented]]]]]]]
+
+[func form-to-param [lvars type-env p]
+  [match p
+    [form/word w]
+    [do
+      [set-local lvars p [lllocal-var-kind/param]]
+      [pair [sword p] [option/none]]]
+
+    [form/list l]
+    [do
+      [assert [eq [size l] 3] form-to-lltop expected type form]
+      [assert [eq-word [form-to-word [first l]] [word type]]]
+      [let [param-name-form [second l]
+            t [form-to-lltype [local-stack/empty] type-env [third l]]]
+        [set-local lvars param-name-form [lllocal-var-kind/param-with-type t]]
+        [pair [sword param-name-form] [option/some t]]]]]]
+
+[func form-to-lltop [form]
+  [let
+    [report-error [func r [msg] [push-error form msg]]
+     l [form-to-list form]
+     n-of-args [dec [size l]]
+     assert-n-args [func ana [n] [when-not [eq n-of-args n] [report-error [quote [expected n-of-args arguments]]]]]
+     get-arg [func get-arg [i] [if [lt-s i n-of-args] [at l [inc i]] [quote 0]]]
+     first-form [first l]]
+    [match first-form
+      [form/word first-word]
+      [switch first-word
+        [[word data]]
+        [lltop/data-active
+          [sword [get-arg 1]]
+          [form-to-llexp [set] [local-stack/empty] [get-arg 2]]
+          [list-map a [slice l 4 [size l]]
+            [let [dl [get-list a]]
+              [let [data-first [form-to-word [first dl]]]
+                [switch data-first
+                  [[word bytes]]
+                  [data/bytes [list-map b [rest dl] [sword b]]]
+                  [[word i32]]
+                  [data/i32 [list-map b [rest dl] [sword b]]]
+                  [[word f64]]
+                  [data/f64 [list-map b [rest dl] [sword b]]]
+                  [logq-abort form-to-lltop data kind not recognized]]]]]]
+
+        [[word memory]]
+        [let [mem-name [sword [get-arg 1]]
+              kind
+              [switch [form-to-word [get-arg 0]]
+                [[word i32]] [memory-kind/i32]
+                [[word i64]] [memory-kind/i64]
+                [logq-abort form-to-lltop memory kind not recognized]]]
+          [set-ll-def [get-arg 1] [lldef-desc/memory kind]]
+          [lltop/memory
+            mem-name
+            kind
+            [sword [get-arg 2]]
+            [if [lt-s n-of-args 3] [option/none] [option/some [sword [get-arg 3]]]]]]
+
+        [[word type]]
+        [let
+          [triples [triplewise [rest l]]]
+          [for-each triple triples
+            [set-kv-map
+              user-type-params
+              [form-to-word [first triple]]
+              [list-map tp [get-list [second triple]] [sword tp]]]]
+          [for-each triple triples
+            [let
+              [type-name-form [first triple]
+               type-params [get-list [second triple]]
+               type-decl-list [get-list [third triple]]
+               type-env [set]]
+              [assert-not [is-empty type-decl-list] empty type decl list]
+              [for-each type-param type-params
+                [let [tp [form-to-word type-param]]
+                  [assert-not [set-has type-env tp] duplicate type param]
+                  [set-add type-env tp]]]
+              [set-kv-map user-types [form-to-word type-name-form]
+                [switch [form-to-word [first type-decl-list]]
+                  [[word record]]
+                  [let [field-map [transient-kv-map]
+                        field-list [growable-list]]
+                    [for-each p [rest type-decl-list]
+                      [let [ll [get-list p]]
+                        [let [field-name [form-to-word [first ll]]
+                              fd [form-to-lltype [local-stack/empty] type-env [second ll]]]
+                          [push field-list [pair field-name fd]]
+                          [set-kv-map field-map field-name fd]]]]
+                      [user-type-desc/record field-map [clone-growable-to-frozen-list field-list]]]
+
+                  [[word union]]
+                  [let [ctor-map [transient-kv-map]
+                        ctor-glist [growable-list]]
+                    [for-each ctor-form [rest type-decl-list]
+                      [let [ctor-list [form-to-list ctor-form]]
+                        [push ctor-glist [form-to-lltype [local-stack/empty] type-env ctor-form]]
+                        [set-kv-map
+                          ctor-map
+                          [form-to-word [first ctor-list]]
+                          [list-map t [rest ctor-list]
+                            [form-to-lltype [local-stack/empty] type-env t]]]]]
+                    [user-type-desc/union ctor-map [clone-growable-to-frozen-list ctor-glist]]]
+
+                  [[word alias]]
+                  [user-type-desc/alias [form-to-lltype [local-stack/empty] type-env [second type-decl-list]]]
+
+                  [logq-abort form-to-lltop type kind not implemented [first type-decl-list]]]]]]
+              [lltop/type]]
+
+        [[word def]]
+        [let [name-form [get-arg 0]]
+          [assert-n-args 2]
+          [set-ll-def name-form [lldef-desc/any]]
+          [lltop/def [sword name-form] [form-to-llexp [set] [local-stack/empty] [get-arg 1]]]]
+
+        [[word defn]]
+        [let
+          [name-form [get-arg 0]
+           params-list [get-list [get-arg 1]]
+           bodies [slice l 3 [size l]]
+           type-env [set]
+           lvars [transient-kv-map]
+           lstack [local-stack/frame [local-stack/empty] [local-context lvars [local-context-kind/func]]]
+           params [list-map p params-list [form-to-param lvars type-env p]]]
+          [set-ll-def name-form [lldef-desc/func [option/none] params]]
+          [lltop/defn
+            [lldefn
+              [sword name-form]
+              [option/none]
+              params
+              [list-map b bodies [form-to-llexp [set] lstack b]]]]]
+
+        [[word genfn]]
+        [let
+          [name-form [get-arg 0]
+           type-params-list [get-list [get-arg 1]]
+           params-list [get-list [get-arg 2]]
+           bodies [slice l 4 [size l]]
+           type-env [set]
+           lvars [transient-kv-map]
+           lstack [local-stack/frame [local-stack/empty] [local-context lvars [local-context-kind/func]]]
+           tparams [list-map tp type-params-list [sword tp]]]
+          [for-each type-param type-params-list
+            [set-add type-env [form-to-word type-param]]]
+          [let
+            [params [list-map p params-list [form-to-param lvars type-env p]]]
+            [set-ll-def name-form [lldef-desc/func [option/some tparams] params]]
+            [lltop/defn
+              [lldefn
+                [sword name-form]
+                [option/some tparams]
+                params
+                [list-map b bodies [form-to-llexp type-env lstack b]]]]]]
+
+        [[word export]]
+        [lltop/export
+          [list-map f [rest l]
+            [let [sw [sword f]]
+              [when-not [has lldef-ctx [syntax-word/word sw]]
+                [push-error f [quote [not a defined name]]]]
+              sw]]]
+
+        [do
+          [log form]
+          [logq-abort form-to-lltop not implemented]]]
+
+      [form/list fl]
+      [logq-abort direct call at top not supported]]]]]
+    [func forms-to-btops [forms]
+      [pair
+        [list-map form forms [form-to-lltop form]]
+        [llctx
+          lldef-ctx
+          form-to-ldesc
+          user-type-params
+          user-types
+          bound-form-to-form]]]]]]
+
+[type type-constraint []
+  [union
+    [size-of]
+    [literal]]]
+
+[def type-constraint-size-of [type-constraint/size-of]]
+
+[type
+  type-var-kind []
+  [union
+    [linked ctype]
+    [word word]]
+
+  type-var []
+  [record
+    [kind [atom type-var-kind]]
+    [level [atom i32]]
+    [constraints [set type-constraint]]]
+
+  func-type []
+  [record
+    [params [list ctype]]
+    [result ctype]]
+
+  inst-type []
+  [union
+    [func func-type]
+    [apply word [list ctype]]]
+
+  ctype []
+  [union
+    [var type-var]
+    [literal type-literal]
+    [inst inst-type]]]
+
+[defn get-type-var-kind [type-var]
+  [atom-get [type-var/kind type-var]]]
+
+[defn copy-type-constraints [tv-dst tv-src]
+  [for-each tc [set-to-list [type-var/constraints tv-src]]
+    [set-add [type-var/constraints tv-dst] tc]]]
+
+[defn set-type-var-kind-to-type [type-var type]
+  [atom-set [type-var/kind type-var] [type-var-kind/linked type]]
+  [match type
+    [ctype/var tv2]
+    [do
+      [copy-type-constraints tv2 type-var]]
+
+    [do]]]
+
+[defn normalize-type [t0]
+  [match t0
+    [ctype/var tv]
+    [match [get-type-var-kind tv]
+      [type-var-kind/word w] t0
+      [type-var-kind/linked linked-t]
+      [let [t2 [normalize-type linked-t]]
+        [set-type-var-kind-to-type tv t2]
+        t2]]
+    t0]]
+
+[defn form-to-print-form [e]
+  [match e
+    [llexp/literal l]
+    [match l
+      [llliteral/i32 sw] [form/list [list [quote i32] [form/word [syntax-word/word sw]]]]
+      [llliteral/f64 sw] [form/list [list [quote f64] [form/word [syntax-word/word sw]]]]
+
+      [logq-abort form-to-print-form unexpected literal type]]
+
+    [llexp/var v] [form/word [syntax-word/word v]]
+
+    [logq-abort form-to-print-form unexpected form type]]]
+
+[defn ctype-to-print-form [ct]
+  [match [normalize-type ct]
+    [ctype/var tv]
+    [match [get-type-var-kind tv]
+      [type-var-kind/word w] [form/word w]
+      [type-var-kind/linked -]
+      [logq-abort ctype-to-print-form unexpected linked type variable type should have been normalized]]
+
+    [ctype/literal tl]
+    [match tl
+      [type-literal/memory sw] [form/list [list [quote memory] [form/word [syntax-word/word sw]]]]
+      [type-literal/exp e]
+      [form/list [list [quote literal] [form-to-print-form e]]]]
+
+    [ctype/inst inst-type]
+    [match inst-type
+      [inst-type/func ft]
+      [flist
+        [quote func]
+        [form/list [list-map param [func-type/params ft] [ctype-to-print-form param]]]
+        [ctype-to-print-form [func-type/result ft]]]
+
+      [inst-type/apply type-name type-args]
+      [form-concat
+        [list [form/word type-name]]
+        [list-map targ type-args [ctype-to-print-form targ]]]]]]
+
+[defn get-func-type [t]
+  [let [nt [normalize-type t]]
+    [match nt
+    [ctype/inst inst-type]
+    [match inst-type
+      [inst-type/func func-type]
+      func-type
+
+      [logq-abort get-func-type expected a func type [identity nt]]]
+
+    [logq-abort get-func-type expected a func type [identity nt]]]]]
+
+[defn try-get-apply-type [t]
+  [let [nt [normalize-type t]]
+    [match nt
+      [ctype/inst inst-type]
+      [match inst-type
+        [inst-type/apply type-name type-args]
+        [option/some [pair type-name type-args]]
+
+        [option/none]]
+
+      [option/none]]]]
+
+[defn get-apply-type [t msg]
+  [let [nt [normalize-type t]]
+    [match nt
+      [ctype/inst inst-type]
+      [match inst-type
+        [inst-type/apply type-name type-args]
+        [pair type-name type-args]
+
+        [logq-abort get-apply-type expected an apply type 0 [identity nt] [identity msg]]]
+
+      [logq-abort get-apply-type expected an apply type 1 [identity nt] [identity msg]]]]]
+
 [defn make-type-list [type-name type-args] [ctype/inst [inst-type/apply type-name type-args]]]
 
 [defn make-type [type-name .. type-args] [make-type-list type-name type-args]]
@@ -241,33 +830,10 @@
 [defn type-func [params result]
   [ctype/inst [inst-type/func [func-type params result]]]]
 
-[defn llliteral-to-type [l]
-  [match l
-    [llliteral/i32 -] type-i32
-    [llliteral/i64 -] type-i64
-    [llliteral/f32 -] type-f32
-    [llliteral/f64 -] type-f64
-    [logq-abort llliteral-to-type not implemented]]]
-
-[defn is-syntactic-llvalue [bform]
-  [match bform
-    [llexp/literal l] 1
-    [llexp/var f] 1
-    0]]
-
 [type check-type-scheme []
   [record
     [type-vars [list type-var]]
     [type ctype]]]
-
-[type llctx []
-  [record
-    [lldef-ctx [transient-kv-map word lldef-desc]]
-    [form-to-ldesc [transient-kv-map form lllocal-var-kind]]
-    [user-type-params [transient-kv-map word [list syntax-word]]]
-    [user-types [transient-kv-map word user-type-desc]]]]
-
-[defn llctx-empty [] [llctx [transient-kv-map] [transient-kv-map] [transient-kv-map] [transient-kv-map]]]
 
 [type llcheck-context []
   [record
@@ -347,8 +913,7 @@
           type-args [growable-list]
           subst-assoc-list
           [list-map tv [check-type-scheme/type-vars scheme]
-            [let [new-tv [generate-fresh-type-var-atom-var counter-atom level]
-                  ta [ctype/var new-tv]]
+            [let [ta [generate-fresh-type-var-atom counter-atom level]]
               [todo do we need to copy type constraints here]
               [push type-args ta]
               [pair tv ta]]]]
@@ -387,8 +952,7 @@
               [go [func-type/result ft]]]
 
             [inst-type/apply type-name type-args]
-            [for-each arg type-args
-              [go arg]]]]]]]
+            [for-each arg type-args [go arg]]]]]]]
     [go outer-t]
     [set-to-list ftvs]]]
 
@@ -420,7 +984,25 @@
 
     false]]
 
-[defn unify [outer-t1 outer-t2]
+[defn mem-name-from-mem-type [tmem]
+  [match [normalize-type tmem]
+    [ctype/literal l]
+    [match l
+      [type-literal/memory mem-name]
+      [syntax-word/word mem-name]
+
+      [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]
+    [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]]
+
+[defn get-memory-kind [llctx mem-name]
+  [if-let [dd [try-get [llctx/lldef-ctx llctx] mem-name]]
+    [match dd
+      [lldef-desc/memory kind]
+      kind
+      [logq-abort get-memory-kind not a memory desc]]
+    [logq-abort get-memory-kind not found [identity mem-name]]]]
+
+[defn unify [gctx outer-t1 outer-t2]
   [let
     [errors [growable-list]
      push-unify-error
@@ -451,6 +1033,7 @@
 
             [ctype/literal l2]
             [when-not [type-literal-desc-equals l1 l2]
+              [log l1 l2]
               [push-unify-error [quote [not unifiable - different literals]]]]
 
             [ctype/inst inst-type2]
@@ -487,30 +1070,64 @@
                     [for i 0 [size type-args1]
                       [go [at type-args1 i] [at type-args2 i]]]
                     [push-unify-error [quote [not unifiable - different number of type arguments]]]]
-                  [do
-                    [push-unify-error [quote [not unifiable - different types]]]]]
+                    [do
+                      [if-let [user-desc [try-get [llctx/user-types [llcheck-context/bind-ctx gctx]] type-name1]]
+                        [match user-desc
+                          [user-type-desc/alias aliased-type]
+                          [logq-abort unify error aliased type not expanded]
 
-                [do
-                  [push-unify-error [quote [not unifiable - different types]]]]]]]]]]]
+                          [user-type-desc/union union-ctor-map ctor-list]
+                          [if-let [ctor-args [try-get union-ctor-map type-name2]]
+                            [assert [is-empty ctor-args] not implemented]
+                            [push-unify-error [quote [not unifiable - different constructors]]]]
+
+                          [push-unify-error [quote [not unifiable - different types]]]]
+                        [do
+                          [if [eq-word type-name1 [word pointer]]
+                            [let [mem-type [normalize-type [first type-args1]]]
+                              [match mem-type
+                                [ctype/literal l]
+                                [match l
+                                  [type-literal/memory mem-name]
+                                  [match [get-memory-kind [llcheck-context/bind-ctx gctx] [syntax-word/word mem-name]]
+                                    [memory-kind/i32] [go type-i32 nt2]
+                                    [memory-kind/i64] [go type-i64 nt2]
+                                    [push-unify-error [quote [not unifiable - different memory types]]]]
+
+                                  [push-unify-error [quote [unify not a memory type1]]]]
+
+                                [do
+                                  [logq mem-type [identity mem-type]]
+                                  [push-unify-error [quote [unify not a memory type2]]]]]]
+                            [push-unify-error [quote [not unifiable - different types]]]
+                            ]]]
+                          [push-unify-error [quote [not unifiable - different types]]]]]
+                ]]]]]]]
     [go outer-t1 outer-t2]
     [clone-growable-to-frozen-list errors]]]
 
 [defn llunify-report [gctx t1 t2 bst]
-  [for-each error [unify t1 t2]
-    [log bst]
-    [logq-abort llunify-report error [identity error] [identity t1] [identity t2]]]]
+  [for-each error [unify gctx t1 t2]
+    [logq bst [identity bst]]
+    [log-location [get [llctx/bound-form-to-form [llcheck-context/bind-ctx gctx]] [to-js-value bst]]]
+    [logq-abort llunify-report error [identity error] [ctype-to-print-form t1] -vs- [ctype-to-print-form t2] ---form--- [identity bst]]]]
 
-[defn test-typing []
-  [let
-    [
-      counter-atom [atom 0]
-      tv1 [generate-fresh-type-var-atom-var counter-atom 0]
-      tv2 [generate-fresh-type-var-atom-var counter-atom 1]
-      t1 [ctype/var tv1]
-      t2 [ctype/var tv2]
-    ]
-    [set-add [type-var/constraints tv2] type-constraint-size-of]
-    [unify t1 t2]]]
+[defn get-specialized-var-type-args [gctx level lctx sw type-args]
+  [if-let [scheme [lltry-get-var-type gctx lctx [syntax-word/word sw]]]
+    [let [counter-atom [atom 0]
+          type-params [check-type-scheme/type-vars scheme]
+          gassoc [growable-list]]
+      [logq get-specialized-var-type-args [identity level] [identity sw] [identity type-args]]
+      [assert [eq [size type-params] [size type-args]] arity mismatch]
+      [for i 0 [size type-args]
+        [let
+          [given-ta [at type-args i]
+           ta [generate-fresh-type-var-atom counter-atom level]]
+
+          [push gassoc [pair [at type-params i] ta]]]]
+      [set-kv-map [llcheck-context/type-instantiations gctx] sw type-args]
+      [copy-type [clone-growable-to-frozen-list gassoc] [check-type-scheme/type scheme]]]
+    [logq-abort llvariable not found [identity sw]]]]
 
 [defn llannotate [gctx bst type]
   [set-kv-map [llcheck-context/type-annotations gctx] [to-js-value bst] type]
@@ -522,37 +1139,29 @@
       [lltype/var tv]
       [if-let [t [try-get type-var-env [syntax-word/word tv]]]
         t
-        [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] 0]]
+        [logq-abort instantiate-syntax-type type var not found [identity tv]]]
 
       [lltype/literal l]
       [ctype/literal l]
 
       [lltype/apply type-name targs]
-      [make-type-list [syntax-word/word type-name] [list-map ta targs [go ta]]]]]
+      [let [tnw [syntax-word/word type-name]
+            inst-args [list-map ta targs [go ta]]]
+        [if-let [user-desc [try-get [llctx/user-types [llcheck-context/bind-ctx gctx]] tnw]]
+          [match user-desc
+            [user-type-desc/alias aliased-type]
+            [let [type-params [get [llctx/user-type-params [llcheck-context/bind-ctx gctx]] tnw]
+                  new-type-env [transient-kv-map]]
+              [assert [eq [size type-params] [size inst-args]] instantiate-syntax-type expected equal number of type params and type args]
+              [for i 0 [size type-params]
+                [set-kv-map new-type-env [syntax-word/word [at type-params i]] [at inst-args i]]]
+              [let [r [instantiate-syntax-type gctx new-type-env aliased-type]]
+                [logq instantiating alias [identity tnw] [identity new-type-env] [ctype-to-print-form r]]
+                r]]
+
+            [make-type-list tnw inst-args]]
+          [make-type-list tnw inst-args]]]]]
     syntax-type]]
-
-[defn mem-name-from-mem-type [tmem]
-  [match [normalize-type tmem]
-    [ctype/literal l]
-    [match l
-      [type-literal/memory mem-name]
-      [syntax-word/word mem-name]
-
-      [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]
-    [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]]
-
-[defn get-memory-kind [llctx mem-name]
-  [if-let [dd [try-get [llctx/lldef-ctx llctx] mem-name]]
-    [match dd
-      [lldef-desc/memory kind]
-      kind
-      [logq-abort get-memory-kind not a memory desc]]
-    [logq-abort get-memory-kind not found [identity mem-name]]]]
-
-[defn memory-kind-to-type-name [k]
-  [match k
-    [memory-kind/i32] [word i32]
-    [memory-kind/i64] [word i64]]]
 
 [type infer-local-context []
   [record
@@ -573,12 +1182,6 @@
     [let [fftvs [clone-growable-to-frozen-list tvs]]
       [check-type-scheme fftvs type]]]]
 
-[defn wuns-builtin-data-type-is [type-name]
-  [switch type-name
-    [[word u8] [word s8]
-     [word u16] [word s16]] true
-    false]]
-
 [defn lift-data-type [t]
   [match [normalize-type t]
     [ctype/inst inst-type]
@@ -592,10 +1195,28 @@
 
     t]]
 
+[defn make-type-env [llctx type-name type-args]
+  [let [type-params [get [llctx/user-type-params llctx] type-name]
+        new-tv-env [transient-kv-map]]
+    [assert [eq [size type-params] [size type-args]] make-type-env expected equal number of type params and type args]
+    [for i 0 [size type-args]
+      [set-kv-map new-tv-env [syntax-word/word [at type-params i]] [at type-args i]]]
+    new-tv-env]]
+
+[defn llliteral-to-type [l]
+  [match l
+    [llliteral/i32 -] type-i32
+    [llliteral/i64 -] type-i64
+    [llliteral/f32 -] type-f32
+    [llliteral/f64 -] type-f64
+    [logq-abort llliteral-to-type not implemented]]]
+
 [defn infer-llexp [gctx level lctx bform]
   [match bform
     [llexp/var w]
-    [get-specialized-var gctx level [infer-local-context/stack lctx] w]
+    [let [t [get-specialized-var gctx level [infer-local-context/stack lctx] w]]
+      [logq var inst type [syntax-word/word w] [ctype-to-print-form t]]
+      [llannotate gctx bform t]]
 
     [llexp/literal l]
     [llliteral-to-type l]
@@ -719,9 +1340,17 @@
             [llunify-report gctx [check-type-scheme/type loop-var-type-scheme] val-type value]]]]
       [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]]
 
-    [llexp/call fname-sword args]
+    [llexp/call fname-sword opt-type-args args]
     [let
-      [spec-func-type [get-specialized-var gctx level [infer-local-context/stack lctx] fname-sword]
+      [spec-func-type
+        [if-let [type-args opt-type-args]
+          [let [ctype-args [growable-list]]
+            [for i 0 [size type-args]
+              [let [ta [instantiate-syntax-type gctx [infer-local-context/type-env lctx] [at type-args i]]]
+                [push ctype-args ta]]]
+            [logq infer-llexp call [syntax-word/word fname-sword] [clone-growable-to-frozen-list ctype-args]]
+            [get-specialized-var-type-args gctx level [infer-local-context/stack lctx] fname-sword [clone-growable-to-frozen-list ctype-args]]]
+          [get-specialized-var gctx level [infer-local-context/stack lctx] fname-sword]]
        arg-types [list-map-fn [func f [arg] [infer-llexp gctx level lctx arg]] args]
        t-res [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
        t-func [type-func arg-types t-res]]
@@ -732,19 +1361,18 @@
     [let
       [inst-type [instantiate-syntax-type gctx [infer-local-context/type-env lctx] cast-type]
        tv [infer-llexp gctx level lctx value]
-       inst-app-t [get-apply-type inst-type]
-       tv-type-name [pair/fst [get-apply-type tv]]]
+       inst-app-t [get-apply-type inst-type [word cast]]
+       tv-type-name [pair/fst [get-apply-type tv [word cast1]]]]
       [todo we allow casting i32 or i64 to pointer if the memory matches]
       [if [and [eq-word [pair/fst inst-app-t] [word pointer]] [not [eq-word tv-type-name [word pointer]]]]
-        [let [mem-name [mem-name-from-mem-type [first [pair/snd inst-app-t]]]]
-          [match [get-memory-kind [llcheck-context/bind-ctx gctx] mem-name]
-            [memory-kind/i32]
-            [when-not [eq-word tv-type-name [word i32]]
-              [logq-abort can only cast i32 to pointer [identity bform]]]
-            [memory-kind/i64]
-            [when-not [eq-word tv-type-name [word i64]]
-              [logq-abort can only cast i64 to pointer [identity bform]]]]]
+        [match [get-memory-kind [llcheck-context/bind-ctx gctx] [mem-name-from-mem-type [first [pair/snd inst-app-t]]]]
+          [memory-kind/i32]
+          [when-not [eq-word tv-type-name [word i32]]
+            [logq-abort can only cast i32 to pointer [identity bform]]]
 
+          [memory-kind/i64]
+          [when-not [eq-word tv-type-name [word i64]]
+            [logq-abort can only cast i64 to pointer [identity bform]]]]
         [llunify-report gctx inst-type tv value]]
       [llannotate gctx bform inst-type]]
 
@@ -752,6 +1380,7 @@
     [let
       [tenv [infer-local-context/type-env lctx]
        it [instantiate-syntax-type gctx tenv t]]
+      [todo if there is a free type var inside a [pointer m tv] we should not add a constraint on it]
       [for-each tv [free-type-vars it]
         [set-add [type-var/constraints tv] type-constraint-size-of]]
       [llannotate gctx t it]
@@ -760,9 +1389,8 @@
     [llexp/deref value]
     [let [t-mem [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
           t-res [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
-          pt [type-pointer t-mem t-res]]
-      [llunify-report gctx pt [infer-llexp gctx level lctx value] value]
-      [llannotate gctx value pt]
+          t-val [infer-llexp gctx level lctx value]]
+      [llunify-report gctx [type-pointer t-mem t-res] t-val value]
       [llannotate gctx bform [lift-data-type t-res]]]
 
     [llexp/assign target value]
@@ -770,7 +1398,23 @@
           t-val [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
           pt [type-pointer t-mem t-val]]
       [llunify-report gctx pt [infer-llexp gctx level lctx target] target]
-      [llunify-report gctx [lift-data-type t-val] [infer-llexp gctx level lctx value] value]
+      [match [normalize-type t-val]
+        [ctype/literal tl]
+        [match value
+          [llexp/literal el]
+          [match el
+            [llliteral/i32 ei]
+            [match tl
+              [type-literal/exp tlei32]
+              [match tlei32
+                [llexp/literal e] [do]
+
+                [do]]
+              [do]]]
+
+          [logq-abort infer-llexp cannot assign literal to non-literal [identity bform]]]
+
+        [llunify-report gctx [lift-data-type t-val] [infer-llexp gctx level lctx value] value]]
       [llannotate gctx target pt]
       type-empty-tuple]
 
@@ -780,24 +1424,37 @@
        t-mem [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
        t-rec [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
        pt [type-pointer t-mem t-rec]]
-      [llannotate gctx target pt]
+[comment        [llannotate gctx target pt] ]
       [llunify-report gctx ttarget pt target]
-      [let [app-type [get-apply-type t-rec]
-            type-name [pair/fst app-type]
-            type-args [pair/snd app-type]]
+[comment        [llannotate gctx bform
+        [type-pointer t-mem inst-field-type]] ]
+      [if-let [apt [try-get-apply-type t-rec]]
+        [do]
+        [do
+          [log-location [get [llctx/bound-form-to-form [llcheck-context/bind-ctx gctx]] [to-js-value bform]]]
+          [logq-abort infer-llexp not implemented]]]
+      [let
+        [app-type [get-apply-type t-rec [pair [word infer-field] field-name]]
+         type-name [pair/fst app-type]
+         type-args [pair/snd app-type]
+         new-tv-env [make-type-env [llcheck-context/bind-ctx gctx] type-name type-args]]
         [if-let [type-desc [try-get [llctx/user-types [llcheck-context/bind-ctx gctx]] type-name]]
           [match type-desc
             [user-type-desc/record field-map field-list]
             [if-let [fd [try-get field-map [syntax-word/word field-name]]]
-              [let [type-params [get [llctx/user-type-params [llcheck-context/bind-ctx gctx]] type-name]
-                    new-tv-env [transient-kv-map]]
-                [for i 0 [size type-args]
-                  [set-kv-map new-tv-env [syntax-word/word [at type-params i]] [at type-args i]]]
-                [let [inst-field-type [instantiate-syntax-type gctx new-tv-env fd]]
-                  [llannotate gctx bform
-                    [type-pointer t-mem inst-field-type]]]]
+              [llannotate gctx bform
+                [type-pointer t-mem [instantiate-syntax-type gctx new-tv-env fd]]]
               [logq-abort infer-llexp field not found [identity field-name]]]
-            [logq-abort infer-llexp not a record type]]
+
+            [user-type-desc/union ctor-map ctor-types]
+            [let [inst-field-type [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]]
+              [for-each ctor-type ctor-types
+                [instantiate-syntax-type gctx new-tv-env ctor-type]
+                [logq-abort not imple]
+                ]
+              inst-field-type]
+
+            [logq-abort infer-llexp not a union or record type]]
 
           [logq-abort infer-llexp field type not found [identity field-name] [identity type-name]]]]]
 
@@ -809,7 +1466,7 @@
        t-size [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
        t-arr [type-array t-elem t-size]
        pt [type-pointer t-mem t-arr]]
-      [llannotate gctx target pt]
+[comment        [llannotate gctx target pt] ]
       [llunify-report gctx ttarget pt target]
       [llunify-report gctx type-i32 [infer-llexp gctx level lctx index] index]
       [llannotate gctx bform [type-pointer t-mem t-elem]]]
@@ -826,489 +1483,12 @@
         [infer-llexp gctx level lctx [at bodies i]]]
       [infer-llexp gctx level lctx [last bodies]]]]]
 
-[type data []
-  [union
-    [bytes [list syntax-word]]
-    [i32 [list syntax-word]]
-    [f64 [list syntax-word]]
-    ]]
-
-[type lltype-decl-kind []
-  [union
-    [record [list [pair syntax-word lltype]]]
-    ]]
-
-[type lldefn []
-  [record
-    [name syntax-word]
-    [type-params [list syntax-word]]
-    [params [list [pair syntax-word [option lltype]]]]
-    [bodies [list llexp]]]]
-
-[type lltop []
-  [union
-    [memory syntax-word memory-kind syntax-word [option syntax-word]]
-    [type syntax-word [list syntax-word] lltype-decl-kind]
-    [data-active syntax-word llexp [list data]]
-    [def syntax-word llexp]
-    [defn lldefn]
-    [export [list syntax-word]]]]
-
-[defn wat-type-is [type-name]
-  [switch type-name
-    [[word i32] [word i64] [word f32] [word f64] [word v128]] true
-    false]]
-
-[defn llbuiltin-type-arity-ok [type-name n-of-args]
-  [switch type-name
-    [[word tuple]] [option/some true]
-
-    [[word pointer] [word array]] [option/some [eq 2 n-of-args]]
-
-    [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
-      [option/some [eq n-of-args 0]]
-      [option/none]]]]
-
-[load interpreter-externs.wuns]
-
-[defn make-forms-to-btops [evaluator]
-  [let
-    [lldef-ctx [transient-kv-map]
-     form-to-ldesc [transient-kv-map]
-     user-type-params [transient-kv-map]
-     user-types [transient-kv-map]]
-    [letfn [
-[func set-local [lvars f kind]
-  [let [w [form-to-word f]]
-    [when [has lvars w] [push-error f [quote [redeclaring local]]]]
-    [set-kv-map lvars w kind]
-    [set-kv-map form-to-ldesc f kind]]]
-
-[func set-ll-def [form def-desc]
-  [set-kv-map lldef-ctx [form-to-word form] def-desc]]
-
-[func form-to-lltype [lstack type-params form]
-  [match form
-    [form/word w]
-    [do
-      [when [set-has type-params w]
-        [comment probably should add it to a context...]]
-      [lltype/var [sword form]]]
-
-    [form/list l]
-    [let [sw [sword [first l]] fw [syntax-word/word sw] n-of-args [dec [size l]]]
-      [switch fw
-        [[word memory]]
-        [let [w [form-to-word [second l]]]
-          [if-let [ldesc [try-get-local lstack w]]
-            [logq-abort not a memory]
-            [if-let [ddesc [try-get lldef-ctx w]]
-              [match ddesc
-                [lldef-desc/memory k] [do]
-                [logq-abort not a memory]]
-              [push-error form [quote [undefined exp word]]]]]
-          [lltype/literal [type-literal/memory [sword [second l]]]]]
-
-        [[word literal]]
-        [lltype/literal [type-literal/exp [form-to-llexp type-params lstack [second l]]]]
-
-        [do
-          [if-let [user-type-params [try-get user-type-params fw]]
-            [when-not [eq [size user-type-params] n-of-args] [push-error form [quote [type arity mismatch]]]]
-            [if-let [arity-ok [llbuiltin-type-arity-ok fw n-of-args]]
-              [when-not arity-ok [push-error form [quote [type arity mismatch]]]]
-              [push-error form [quote [undefined type]]]]]
-          [lltype/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]]]]]
-
-[func form-to-llexp [type-var-set lstack form]
-  [match form
-    [form/word w]
-    [do
-      [if-let [ldesc [try-get-local lstack w]]
-        [set-kv-map form-to-ldesc form ldesc]
-        [if-let [ddesc [try-get lldef-ctx w]]
-          [match ddesc
-            [lldef-desc/any] [do]
-            [lldef-desc/memory k] [logq-abort only def values allowed]
-            [logq-abort only def values allowed [identity form]]]
-          [push-error form [quote [undefined exp word]]]]]
-      [llexp/var [sword form]]]
-
-    [form/list l]
-    [let [n-of-args [dec [size l]]
-          assert-n-args [func ana [n] [when-not [eq n-of-args n] [push-error form [quote [expected n-of-args arguments]]]]]
-          get-arg [func get-arg [i] [if [lt-s i n-of-args] [at l [inc i]] [quote no-such-arg]]]
-          - [assert-not [is-empty l] list was empty]
-          first-form [first l]]
-      [match first-form
-        [form/word first-word]
-        [switch first-word
-          [[word i32]]
-          [llexp/literal [llliteral/i32 [sword [get-arg 0]]]]
-
-          [[word i64]]
-          [llexp/literal [llliteral/i64 [sword [get-arg 0]]]]
-
-          [[word f32]]
-          [llexp/literal [llliteral/f32 [sword [get-arg 0]]]]
-
-          [[word f64]]
-          [llexp/literal [llliteral/f64 [sword [get-arg 0]]]]
-
-          [[word v128] [word word]]
-          [logq-abort form-to-llexp not implemented [identity first-form]]
-
-          [[word intrinsic]]
-          [let [inst-sname [sword [get-arg 0]]
-                inst-name [syntax-word/word inst-sname]]
-            [if [or [is-i32-bin-inst inst-name] [is-f64-bin-inst inst-name] [is-f64-comp-inst inst-name]]
-              [do
-                [assert-n-args 3]
-                [llexp/intrinsic inst-sname [list] [list-map arg [slice l 2 [size l]] [form-to-llexp type-var-set lstack arg]]]]
-              [switch inst-name
-                [[word unreachable]]
-                [do
-                  [assert-n-args 1]
-                  [llexp/intrinsic inst-sname [list] [list-map arg [slice l 2 [size l]] [form-to-llexp type-var-set lstack arg]]]]
-
-                [[word i32.load] [word i32.load8-u]]
-                [do
-                  [assert-n-args 5]
-                  [let [mem-name [sword [get-arg 1]]]
-                    [match [get lldef-ctx [syntax-word/word mem-name]]
-                      [lldef-desc/memory kind] [do]
-                      [push-error [get-arg 1] [quote [not a memory]]]]
-                    [llexp/intrinsic inst-sname
-                      [list
-                        mem-name
-                        [sword [get-arg 2]]
-                        [sword [get-arg 3]]]
-                      [list [form-to-llexp type-var-set lstack [get-arg 4]]]]]]
-
-                [[word i32.store] [word i32.store8]]
-                [do
-                  [assert-n-args 6]
-                  [let [mem-name [sword [get-arg 1]]]
-                    [match [get lldef-ctx [syntax-word/word mem-name]]
-                      [lldef-desc/memory kind] [do]
-                      [push-error [get-arg 1] [quote [not a memory]]]]
-                    [llexp/intrinsic inst-sname
-                      [list
-                        [sword [get-arg 1]]
-                        [sword [get-arg 2]]
-                        [sword [get-arg 3]]]
-                      [list
-                        [form-to-llexp type-var-set lstack [get-arg 4]]
-                        [form-to-llexp type-var-set lstack [get-arg 5]]]]]]
-
-                [do
-                  [log form]
-                  [logq-abort form-to-llexp not implemented]]]]]
-
-          [[word if]]
-          [do
-            [assert-n-args 3]
-            [llexp/if [form-to-llexp type-var-set lstack [get-arg 0]] [form-to-llexp type-var-set lstack [get-arg 1]] [form-to-llexp type-var-set lstack [get-arg 2]]]]
-
-          [[word do]]
-          [llexp/do [list-map arg [rest l] [form-to-llexp type-var-set lstack arg]]]
-
-          [[word loop]]
-          [let
-            [bindings [get-list [get-arg 0]]
-              lvars [transient-kv-map]
-              lctx [local-context lvars [local-context-kind/loop]]
-              new-lstack [local-stack/frame lstack lctx]]
-            [when [lt-s n-of-args 2] [push-error form [quote [expected at least 2 arguments]]]]
-            [llexp/loop
-              [list-map p [pairwise bindings]
-                [let [name [first p]
-                      sname [sword name]
-                      name-word [syntax-word/word sname]
-                      be [form-to-llexp type-var-set new-lstack [second p]]
-                      ldesc [lllocal-var-kind/loop]]
-                  [when-let [ldesc [try-get-local lstack name-word]]
-                    [push-error name [quote [loop var shadows local]]]]
-                  [set-local lvars name ldesc]
-                  [pair sname be]]]
-              [list-map f [slice l 2 [size l]] [form-to-llexp type-var-set new-lstack f]]]]
-
-          [[word continue]]
-          [let [loop-vars
-                  [if-let [loop-context [try-get-enclosing-loop-context lstack]]
-                    [local-context/vars loop-context]
-                    [do
-                      [push-error form [quote [not in a loop context]]]
-                      [transient-kv-map]]]]
-            [llexp/continue
-              [list-map p [pairwise-pairs [rest l]]
-                [let [name [pair/fst p]
-                      sname [sword name]
-                      name-word [syntax-word/word sname]
-                      be [form-to-llexp type-var-set lstack [pair/snd p]]]
-                  [if-let [ldesc [try-get loop-vars name-word]]
-                    [set-kv-map form-to-ldesc name ldesc]
-                    [push-error name [quote [not a loop var of the current loop]]]]
-                  [pair sname be]]]]]
-
-          [[word let]]
-          [let
-            [bindings [get-list [get-arg 0]]
-              lvars [transient-kv-map]
-              ctx-let [local-context lvars [local-context-kind/let]]
-              new-lstack [local-stack/frame lstack ctx-let]
-              ldesc [lllocal-var-kind/let]]
-            [when [lt-s n-of-args 2] [push-error form [quote [expected at least 2 arguments]]]]
-            [llexp/let
-              [list-map p [pairwise bindings]
-                [let [name [first p]
-                      sname [sword name]
-                      name-word [syntax-word/word sname]
-                      be [form-to-llexp type-var-set new-lstack [second p]]]
-                  [when-let [ldesc2 [try-get-local lstack name-word]]
-                    [push-error name [quote [let var shadows local]]]]
-                  [set-local lvars name ldesc]
-                  [pair sname be]]]
-              [list-map f [slice l 2 [size l]] [form-to-llexp type-var-set new-lstack f]]]]
-
-          [[word cast]]
-          [do
-            [assert-n-args 2]
-            [llexp/cast
-              [form-to-lltype lstack type-var-set [get-arg 0]]
-              [form-to-llexp type-var-set lstack [get-arg 1]]]]
-
-          [[word deref]]
-          [do
-            [assert-n-args 1]
-            [llexp/deref
-              [form-to-llexp type-var-set lstack [get-arg 0]]]]
-
-          [[word assign]]
-          [do
-            [assert-n-args 2]
-            [llexp/assign
-              [form-to-llexp type-var-set lstack [get-arg 0]]
-              [form-to-llexp type-var-set lstack [get-arg 1]]]]
-
-          [[word field]]
-          [do
-            [assert-n-args 2]
-            [llexp/field
-              [form-to-llexp type-var-set lstack [get-arg 0]]
-              [sword [get-arg 1]]]]
-
-          [[word index]]
-          [do
-            [assert-n-args 2]
-            [llexp/index
-              [form-to-llexp type-var-set lstack [get-arg 0]]
-              [form-to-llexp type-var-set lstack [get-arg 1]]]]
-
-          [[word size-of]]
-          [do
-            [assert-n-args 1]
-            [llexp/size-of
-              [form-to-lltype lstack type-var-set [get-arg 0]]]]
-
-          [do
-            [if-let [ldesc [try-get-local lstack first-word]]
-              [match ldesc
-                [lllocal-var-kind/func-internal-self arity]
-                [do
-                  [assert-n-args arity]
-                  [llexp/call [sword first-form] [list-map arg [rest l] [form-to-llexp type-var-set lstack arg]]]]
-
-                [logq-abort form-to-llexp only rec calls allowed]]
-              [if-let [llddesc [try-get lldef-ctx first-word]]
-                [do
-                  [match llddesc
-                    [lldef-desc/func arity]
-                    [do
-                      [assert-n-args arity]
-                      [llexp/call [sword first-form] [list-map arg [rest l] [form-to-llexp type-var-set lstack arg]]]]
-
-                    [logq-abort form-to-llexp not a func]]]
-                [if-let [macro-func [try-get-macro evaluator first-word]]
-                  [form-to-llexp type-var-set lstack [apply macro-func [rest l]]]
-                  [logq-abort form-to-llexp def not found [identity first-form]]]]]]]
-
-        [form/list fl]
-        [push-error form [quote [form-to-llexp direct calls not implemented]]]]]]]
-
-[func form-to-lltop [form]
-  [let
-    [report-error [func r [msg] [push-error form msg]]
-     l [form-to-list form]
-     n-of-args [dec [size l]]
-     assert-n-args [func ana [n] [when-not [eq n-of-args n] [report-error [quote [expected n-of-args arguments]]]]]
-     get-arg [func get-arg [i] [if [lt-s i n-of-args] [at l [inc i]] [quote 0]]]
-     first-form [first l]]
-    [match first-form
-      [form/word first-word]
-      [switch first-word
-        [[word data]]
-        [lltop/data-active
-          [sword [get-arg 1]]
-          [form-to-llexp [set] [local-stack/empty] [get-arg 2]]
-          [list-map a [slice l 4 [size l]]
-            [let [dl [get-list a]]
-              [let [data-first [form-to-word [first dl]]]
-                [switch data-first
-                  [[word bytes]]
-                  [data/bytes [list-map b [rest dl] [sword b]]]
-                  [[word i32]]
-                  [data/i32 [list-map b [rest dl] [sword b]]]
-                  [[word f64]]
-                  [data/f64 [list-map b [rest dl] [sword b]]]
-                  [logq-abort form-to-lltop data kind not recognized]]]]]]
-
-        [[word memory]]
-        [let [mem-name [sword [get-arg 1]]
-              kind
-              [switch [form-to-word [get-arg 0]]
-                [[word i32]] [memory-kind/i32]
-                [[word i64]] [memory-kind/i64]
-                [logq-abort form-to-lltop memory kind not recognized]]]
-          [set-ll-def [get-arg 1] [lldef-desc/memory kind]]
-          [lltop/memory
-            mem-name
-            kind
-            [sword [get-arg 2]]
-            [if [lt-s n-of-args 3] [option/none] [option/some [sword [get-arg 3]]]]]]
-
-        [[word type]]
-        [do
-          [assert-n-args 3]
-          [let
-            [type-name-form [get-arg 0]
-             type-params [get-list [get-arg 1]]
-             type-decl-list [get-list [get-arg 2]]
-             type-env [set]
-             type-params-sword [list-map tp type-params [sword tp]]]
-            [assert-not [is-empty type-decl-list] empty type decl list]
-            [for-each type-param type-params
-              [let [tp [form-to-word type-param]]
-                [assert-not [set-has type-env tp] duplicate type param]
-                [set-add type-env tp]]]
-            [set-kv-map user-type-params [form-to-word type-name-form] type-params-sword]
-            [lltop/type [sword type-name-form] type-params-sword
-              [switch [form-to-word [first type-decl-list]]
-                [[word record]]
-                [let [field-map [transient-kv-map]
-                      field-list [growable-list]]
-                  [for-each p [rest type-decl-list]
-                    [let [ll [get-list p]]
-                      [let [field-name [form-to-word [first ll]]
-                            fd [form-to-lltype [local-stack/empty] type-env [second ll]]]
-                        [push field-list [pair field-name fd]]
-                        [set-kv-map field-map field-name fd]]]]
-                  [set-kv-map user-types [form-to-word type-name-form]
-                    [user-type-desc/record field-map [clone-growable-to-frozen-list field-list]]]
-                  [lltype-decl-kind/record [list]]]
-
-                [logq-abort form-to-lltop type kind not implemented]]]]]
-
-        [[word def]]
-        [let [name-form [get-arg 0]]
-          [assert-n-args 2]
-          [set-ll-def name-form [lldef-desc/any]]
-          [lltop/def [sword name-form] [form-to-llexp [set] [local-stack/empty] [get-arg 1]]]]
-
-        [[word defn]]
-        [let
-          [name-form [get-arg 0]
-           params [get-list [get-arg 1]]
-           bodies [slice l 3 [size l]]
-           type-env [set]
-           lvars [transient-kv-map]
-           lstack [local-stack/frame [local-stack/empty] [local-context lvars [local-context-kind/func]]]]
-          [set-ll-def name-form [lldef-desc/func [size params]]]
-          [set-local lvars name-form [lllocal-var-kind/func-internal-self [size params]]]
-          [lltop/defn
-            [lldefn
-              [sword name-form]
-              [list]
-              [list-map p params
-                [match p
-                  [form/word w]
-                  [do
-                    [set-local lvars p [lllocal-var-kind/param]]
-                    [pair [sword p] [option/none]]]
-
-                  [form/list l]
-                  [do
-                    [assert [eq [size l] 3] form-to-lltop expected type form]
-                    [assert [eq-word [form-to-word [first l]] [word type]]]
-                    [let [param-name-form [second l]
-                          t [form-to-lltype [local-stack/empty] type-env [third l]]]
-                      [set-local lvars param-name-form [lllocal-var-kind/param-with-type t]]
-                      [pair [sword param-name-form] [option/some t]]]]]]
-              [list-map b bodies [form-to-llexp [set] lstack b]]]]]
-
-        [[word genfn]]
-        [let
-          [name-form [get-arg 0]
-           type-params [get-list [get-arg 1]]
-           params [get-list [get-arg 2]]
-           bodies [slice l 4 [size l]]
-           type-env [set]
-           lvars [transient-kv-map]
-           lstack [local-stack/frame [local-stack/empty] [local-context lvars [local-context-kind/func]]]]
-          [for-each type-param type-params
-            [set-add type-env [form-to-word type-param]]]
-          [set-ll-def name-form [lldef-desc/func [size params]]]
-          [set-local lvars name-form [lllocal-var-kind/func-internal-self [size params]]]
-          [lltop/defn
-            [lldefn
-              [sword name-form]
-              [list-map tp type-params [sword tp]]
-              [list-map p params
-                [match p
-                  [form/word w]
-                  [do
-                    [set-local lvars p [lllocal-var-kind/param]]
-                    [pair [sword p] [option/none]]]
-
-                  [form/list l]
-                  [do
-                    [assert [eq [size l] 3] form-to-lltop expected type form]
-                    [assert [eq-word [form-to-word [first l]] [word type]]]
-                    [let [param-name-form [second l]
-                          t [form-to-lltype [local-stack/empty] type-env [third l]]]
-                      [set-local lvars param-name-form [lllocal-var-kind/param-with-type t]]
-                      [pair [sword param-name-form] [option/some t]]]]]]
-              [list-map b bodies [form-to-llexp type-env lstack b]]]]]
-
-        [[word export]]
-        [lltop/export
-          [list-map f [rest l]
-            [let [sw [sword f]]
-              [when-not [has lldef-ctx [syntax-word/word sw]]
-                [push-error f [quote [not a defined name]]]]
-              sw]]]
-
-        [do
-          [log form]
-          [logq-abort form-to-lltop not implemented]]]
-
-      [form/list fl]
-      [logq-abort direct call at top not supported]]]]]
-    [func forms-to-btops [forms]
-      [pair
-        [list-map form forms [form-to-lltop form]]
-        [llctx
-          lldef-ctx
-          form-to-ldesc
-          user-type-params
-          user-types]]]]]]
-
 [defn infer-lltop [gctx lltop]
   [match lltop
     [lltop/memory mem-name mem-kind mem-size mem-export]
     [do]
 
-    [lltop/type type-name type-params type-decls]
+    [lltop/type]
     [do]
 
     [lltop/data-active mem-name mem-expr datas]
@@ -1330,26 +1510,28 @@
        gfunc-type [generate-fresh-type-var-atom counter-atom level-1]
        param-ctx [transient-kv-map]
        type-env [transient-kv-map]
-       func-ctx
-        [infer-local-context
-          [make-local-context param-ctx [local-stack/empty] [local-context-kind/func]]
-          type-env]
        reg-params [growable-list]
        fname-word [syntax-word/word [lldefn/name func]]
        infer-type-params [growable-list]]
+      [when-let [type-params [lldefn/type-params func]]
+        [for-each type-param type-params
+          [let [itp [generate-fresh-type-var-atom-var counter-atom level-1]]
+            [push infer-type-params itp]
+            [set-kv-map type-env [syntax-word/word type-param] [ctype/var itp]]]]]
       [set-kv-map param-ctx fname-word [mk-empty-type-scheme gfunc-type]]
-      [for-each type-param [lldefn/type-params func]
-        [let [itp [generate-fresh-type-var-atom counter-atom level-1]]
-          [push infer-type-params itp]
-          [set-kv-map type-env [syntax-word/word type-param] itp]]]
       [for-each param [lldefn/params func]
         [let [tv [generate-fresh-type-var-atom counter-atom level-1]]
           [when-let [param-t [pair/snd param]]
             [llunify-report gctx tv [instantiate-syntax-type gctx type-env param-t] param]]
           [set-kv-map param-ctx [syntax-word/word [pair/fst param]] [mk-empty-type-scheme tv]]
           [push reg-params tv]
+          [logq type param [syntax-word/word [pair/fst param]] [ctype-to-print-form tv]]
           [llannotate gctx [pair/fst param] tv]]]
-      [let [return-type [infer-forms gctx level-1 func-ctx [lldefn/bodies func]]]
+      [let [func-ctx
+            [infer-local-context
+              [make-local-context param-ctx [local-stack/empty] [local-context-kind/func]]
+              type-env]
+            return-type [infer-forms gctx level-1 func-ctx [lldefn/bodies func]]]
         [llunify-report gctx
           gfunc-type
           [ctype/inst
@@ -1359,7 +1541,22 @@
                 return-type]]]
           lltop]
         [llannotate gctx lltop gfunc-type]
-        [set-kv-map [llcheck-context/def-var-types gctx] fname-word [generalize 0 gfunc-type]]]]
+        [let
+          [ts
+            [if-let [type-params [lldefn/type-params func]]
+              [let [tps [clone-growable-to-frozen-list infer-type-params]
+                    ets [check-type-scheme tps gfunc-type]]
+                [logq defn has explicit type params
+                  [identity fname-word]
+                  [list-map tp type-params [syntax-word/word tp]]
+                  [identity  ets]]
+                ets]
+              [generalize 0 gfunc-type]]]
+          [logq defn type-scheme [identity ts]]
+          [set-kv-map
+            [llcheck-context/def-var-types gctx]
+            fname-word
+            ts]]]]
 
     [lltop/export es]
     [let [bind-ctx [llcheck-context/bind-ctx gctx]
@@ -1374,7 +1571,7 @@
 [defn get-annotation [cctx bst]
   [if-let [anno [try-get [llcheck-context/type-annotations cctx] [to-js-value bst]]]
     anno
-    [logq-abort get-annotation expected an annotation]]]
+    [logq-abort get-annotation expected an annotation [identity bst]]]]
 
 [defn get-ctype [gctx bform]
   [match bform
@@ -1444,6 +1641,18 @@
     [loop word [list word] wat-inst]
     [br word]]]
 
+[def ascii-underscore [i32 95]]
+
+[comment wuns does not have underscores so we convert dashes to underscores]
+
+[defn wasm-name-to-wat-byte-array [w]
+  [let [sw [word-byte-size w]
+        res [byte-array sw]]
+    [for i 0 sw
+      [byte-array-set res i
+        [let [c [char-code-at w i]] [if [eq c [word-to-char-code -]] ascii-underscore c]]]]
+    res]]
+
 [def drop-name-byte-array [wasm-name-to-wat-byte-array [word drop]]]
 
 [defn wat-inst-drop [i]
@@ -1458,16 +1667,6 @@
   [wat-inst/inst
     [wasm-name-to-wat-byte-array [word i32.mul]]
     [list a b]]]
-
-[defn type-subst [type-env t]
-  [match t
-    [lltype/var w]
-    [if-let [env-t [try-get type-env [syntax-word/word w]]]
-      env-t
-      t]
-
-    [lltype/apply w args]
-    [lltype/apply w [list-map a args [type-subst type-env a]]]]]
 
 [defn datas-to-byte-array [datas]
   [let
@@ -1594,6 +1793,8 @@
 
 [defn translate-type [tctx it]
   [match [normalize-type it]
+    [ctype/literal l] [word i32]
+
     [ctype/inst inst-type]
     [match inst-type
       [inst-type/apply type-name type-args]
@@ -1653,7 +1854,7 @@
                   [memory-kind/i64] [word i64]]
                 [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
                   type-name
-                  [do [logq-abort not implemented ctype-to-name type-name ]]]]
+                  [do [logq-abort not implemented ctype-to-name [identity type-name] ]]]]
 
               [do [logq-abort not implemented ctype-to-name]]]
             [do [logq-abort not implemented ctype-to-name]]]]
@@ -1729,10 +1930,10 @@
         [ctype/var tv]
         [if-let [subst-type [try-get-assoc-identical type-env tv]]
           [type-to-size-exp subst-type]
-          [logq-abort size-of type var not found [identity tv]]]
+          [logq-abort size-of type var not found [identity tv] [identity type-env]]]
 
         [ctype/literal l]
-        [logq-abort size-of literal not implemented]
+        i32.const-4
 
         [ctype/inst inst-type]
         [match inst-type
@@ -1771,27 +1972,26 @@
                 [type-to-size-exp [at type-args 0]]
                 size-exp]]
 
-            [if-let [type-params [try-get [llctx/user-type-params bind-ctx] type-name]]
-              [let
-                [new-tv-env [transient-kv-map]]
-                [assert [eq [size type-params] [size type-args]] sizeof arity mismatch]
-                [for i 0 [size type-args]
-                  [set-kv-map new-tv-env [syntax-word/word [at type-params i]] [at type-args i]]]
-                [match [get [llctx/user-types bind-ctx] type-name]
-                  [user-type-desc/record field-map field-list]
-                  [loop [cur-size i32.const-0 i 0 n [size field-list]]
-                    [if [lt-s i n]
-                      [let [fd [at field-list i]]
-                        [continue
-                          cur-size
-                            [wat-inst-i32.add cur-size
-                              [type-to-size-exp [instantiate-syntax-type cctx new-tv-env [pair/snd fd]]]]
-                          i [inc i]]]
-                      cur-size]]
-                  [logq-abort infer-llexp not a record type]]]
-              [logq-abort infer-llexp type not found [identity type-name]]]]
+            [let
+              [new-tv-env [make-type-env bind-ctx type-name type-args]]
+              [match [get [llctx/user-types bind-ctx] type-name]
+                [user-type-desc/record field-map field-list]
+                [loop [cur-size i32.const-0 i 0 n [size field-list]]
+                  [if [lt-s i n]
+                    [let [fd [at field-list i]]
+                      [continue
+                        cur-size
+                          [wat-inst-i32.add cur-size
+                            [type-to-size-exp [instantiate-syntax-type cctx new-tv-env [pair/snd fd]]]]
+                        i [inc i]]]
+                    cur-size]]
+                [logq-abort infer-llexp not a record type]]]]
           [do [log it] [logq-abort not implemented size-of [identity it]]]]
         [do [log it] [logq-abort not implemented size-of [identity it]]]]]
+  [func type-to-size-exp1 [t]
+    [let [nt [normalize-type t]]
+[comment        [logq type-to-size-exp [identity nt]] ]
+      [type-to-size-exp nt]]]
   [func go-forms [forms]
     [if [is-empty forms]
       [list]
@@ -1830,7 +2030,7 @@
         [wasm-name-to-wat-byte-array [syntax-word/word inst-name]]
         [list-map arg args [go arg]]]
 
-      [llexp/call w args]
+      [llexp/call w opt-type-args args]
       [wat-inst/call [add-func-specialization tctx w] [list-map a args [go a]]]
 
       [llexp/let bindings body]
@@ -1868,7 +2068,7 @@
 
       [llexp/deref target]
       [let
-        [pt [get-apply-type [get-ctype cctx target]]
+        [pt [get-apply-type [get-ctype cctx target] [word deref]]
          it [copy-type type-env [second [pair/snd pt]]]]
         [assert [eq-word [pair/fst pt] [word pointer]]]
         [wat-inst/load
@@ -1892,7 +2092,7 @@
 
       [llexp/assign target value]
       [let
-        [pt [get-apply-type [get-ctype cctx target]]
+        [pt [get-apply-type [get-ctype cctx target] [word assign]]
          it [copy-type type-env [second [pair/snd pt]]]]
         [assert [eq-word [pair/fst pt] [word pointer]]]
         [wat-inst/store
@@ -1915,12 +2115,12 @@
 
       [llexp/field target field-name]
       [let
-        [pt [get-apply-type [get-ctype cctx target]]
+        [pt [get-apply-type [get-ctype cctx target] [word field]]
          field-name-word [syntax-word/word field-name]]
         [assert [eq-word [pair/fst pt] [word pointer]]]
         [let [ptargs [pair/snd pt]
               tmem [first ptargs]
-              ttarget [get-apply-type [second ptargs]]
+              ttarget [get-apply-type [second ptargs] [word field1]]
               ttarget-name [pair/fst ttarget]
               ttarget-args [pair/snd ttarget]
               bctx [llctx-from-translate tctx]
@@ -1942,7 +2142,7 @@
                               i [inc i]
                               offset [wat-inst-i32.add
                                       offset
-                                      [type-to-size-exp [instantiate-syntax-type cctx new-tv-env [pair/snd fp]]]]]]]
+                                      [type-to-size-exp1 [instantiate-syntax-type cctx new-tv-env [pair/snd fp]]]]]]]
                         [logq-abort field not found]]]]
                   [logq-abort not a record type]]
                 [logq-abort not implemented translate-top-form field inst-type/apply]]]
@@ -1950,16 +2150,16 @@
 
       [llexp/index target index]
       [let
-        [pt [get-apply-type [get-ctype cctx target]]]
+        [pt [get-apply-type [get-ctype cctx target] [word index]]]
         [assert [eq-word [pair/fst pt] [word pointer]]]
         [let [ptargs [pair/snd pt]
               array-type [second ptargs]
-              element-type [first [pair/snd [get-apply-type array-type]]]
-              offset [wat-inst-i32.mul [type-to-size-exp element-type] [go index]]]
+              element-type [first [pair/snd [get-apply-type array-type [word index1]]]]
+              offset [wat-inst-i32.mul [type-to-size-exp1 element-type] [go index]]]
         [wat-inst-i32.add offset [go target]]]]
 
       [llexp/size-of t]
-      [type-to-size-exp [get-annotation cctx t]]
+      [type-to-size-exp1 [get-annotation cctx t]]
 
       [do
         [log form]
@@ -2024,8 +2224,12 @@
                   [lldef-desc/memory kind]
                   [pair [export-kind/memory] name]
 
-                  [lldef-desc/func arity]
-                  [pair [export-kind/func] [add-func-specialization tctx sname]]
+                  [lldef-desc/func opt-tparams params]
+                  [do
+                    [if-let [tparams opt-tparams]
+                      [logq-abort export genfn not implemented]
+                      [do]]
+                    [pair [export-kind/func] [add-func-specialization tctx sname]]]
 
                   [lldef-desc/any]
                   [pair [export-kind/global] name]]
@@ -2040,14 +2244,23 @@
             [exp-const-to-wat-inst offset-form]
             [datas-to-byte-array datas]]]]
 
-      [lltop/type type-name type-params type-decls]
+      [lltop/type]
       [do]
 
       [logq-abort not implemented translate-top-form [identity bform]]]]]
 
-[defn translate-funcs [tctx]
-  [let [specs-atom [translate-context/func-specs-to-generate tctx]
-        func-to-body [translate-context/function-name-to-body tctx]]
+[defn translate-top-forms-sync [evaluator forms]
+  [let
+    [f2l [make-forms-to-btops evaluator]
+     btops-ctx-pair [f2l forms]
+     ctx [pair/snd btops-ctx-pair]
+     gctx [llcheck-context-empty ctx]
+     tctx [translate-context-empty gctx]
+     specs-atom [translate-context/func-specs-to-generate tctx]
+     func-to-body [translate-context/function-name-to-body tctx]]
+    [for-each btop [pair/fst btops-ctx-pair]
+      [infer-lltop gctx btop]
+      [translate-top-form tctx btop]]
     [loop [func-specializations [clone-growable-to-frozen-list [atom-get specs-atom]]]
       [when-not [is-empty func-specializations]
         [atom-set specs-atom [growable-list]]
@@ -2056,21 +2269,12 @@
                 type-args [list-map t [pair/snd func-specialization] [normalize-type t]]
                 spec-name [specialized-name-from tctx fname type-args]]
             [when-not [set-has [translate-context/specialized-names-generated tctx] spec-name]
+              [comment
+                [log]
+                [logq translating [identity spec-name] [identity type-args]]]
               [translate-func tctx [get func-to-body fname] type-args]]]]
-        [continue func-specializations [clone-growable-to-frozen-list [atom-get specs-atom]]]]]]]
-
-[defn translate-top-forms-sync [evaluator forms]
-  [let
-    [f2l [make-forms-to-btops evaluator]
-     btops-ctx-pair [f2l forms]
-     ctx [pair/snd btops-ctx-pair]
-     gctx [llcheck-context-empty ctx]
-     tctx [translate-context-empty gctx]]
-    [for-each btop [pair/fst btops-ctx-pair]
-      [infer-lltop gctx btop]
-      [translate-top-form tctx btop]]
-    [translate-funcs tctx]
-    [translate-context/output tctx]]]
+        [continue func-specializations [clone-growable-to-frozen-list [atom-get specs-atom]]]]]
+    tctx]]
 
 [def ascii-line-feed [i32 10]]
 [def ascii-space [i32 32]]
@@ -2358,12 +2562,22 @@
 
 [import ./runtime-lib/wabt.js wat-to-wasm-byte-array [func [byte-array] byte-array]]
 
-[defn translate-top-forms-to-wasm-bytes [forms]
+[defn make-init-evaluator-async []
   [let [evaluator [make-evaluator]]
     [promise-then
       [evaluate-top-async evaluator [quote [load std.wuns]]]
-      [func t [-]
-        [wat-to-wasm-byte-array [wat-to-wat-bytes [output-to-wat [translate-top-forms-sync evaluator forms]]]]]]]]
+      [func t [-] evaluator]]]]
+
+[defn translate-top-forms-to-tctx [forms]
+  [promise-then
+    [make-init-evaluator-async]
+    [func t [evaluator] [translate-top-forms-sync evaluator forms]]]]
+
+[defn translate-top-forms-to-wasm-bytes [forms]
+  [promise-then
+    [translate-top-forms-to-tctx forms]
+    [func t [tctx]
+      [wat-to-wasm-byte-array [wat-to-wat-bytes [output-to-wat [translate-context/output tctx]]]]]]]
 
 [def-wasm-extern byte-array-to-wasm-module [func [byte-array] wasm-module]]
 
@@ -2371,3 +2585,151 @@
   [promise-then
     [translate-top-forms-to-wasm-bytes forms]
     byte-array-to-wasm-module]]
+
+[comment
+  we could do type predicates like
+[defn form-word-is [[type f [pointer [memory mem] [form]]]]
+  [cast
+    [type-predicate f [form-word]]
+    [eq [deref [field f tag]] [i32 0]]]]
+
+[defn form-list-is [[type f [pointer [memory mem] [form]]]]
+  [cast
+    [type-predicate f [form-list]]
+    [eq [deref [field f tag]] [i32 1]]]]
+
+]
+
+[comment
+
+
+[type growable-vector [a]
+  [record
+    [size [i32]]
+    [capacity [i32]]
+    [parray [pointer [memory mem] [array a s]]]]]
+
+[genfn growable-vector-make [a] [[type init-capacity [i32]]]
+  [let
+    [p [cast [pointer [memory mem] [growable-vector a]] [alloc-n [size-of [growable-vector a]]]]
+     parray [cast [pointer [memory mem] [array a s]] [alloc-n [size-of [array a [literal init-capacity]]]]]]
+    [assign [field p size] [i32 0]]
+    [assign [field p capacity] init-capacity]
+    [assign [field p parray] parray]
+    p]]
+
+[defn growable-vector-push [[type pgvec [pointer [memory mem] [growable-vector a]]] [type elem a]]
+  [let
+    [cur-size [deref [field pgvec size]]
+     cur-capacity [deref [field pgvec capacity]]
+     parray [deref [field pgvec parray]]]
+    [when [eq cur-size cur-capacity]
+      [intrinsic unreachable]]
+    [assign [index parray cur-size] elem]
+    [assign [field pgvec size] [inc cur-size]]]]
+
+[defn growable-vector-to-vector [[type pgvec [pointer [memory mem] [growable-vector a]]]]
+  [let
+    [size [deref [field pgvec size]]
+     arr [deref [field pgvec parray]]
+     pvector [call vector-make-no-init [a] [size]]]
+    [for i [i32 0] size
+      [call set [a] [pvector i [deref [index arr i]]]]]
+    pvector]]
+
+[defn growable-vector-make-int [init-capacity]
+  [cast [pointer [memory mem] [growable-vector [i32]]] [call growable-vector-make [[i32]] [init-capacity]]]]
+
+[defn growable-vector-push-int [[type pgvec [pointer [memory mem] [growable-vector [i32]]]] elem]
+  [growable-vector-push pgvec elem]]
+
+[defn growable-vector-to-vector-int [[type pgvec [pointer [memory mem] [growable-vector [i32]]]]]
+  [growable-vector-to-vector pgvec]]
+
+[export growable-vector-make-int growable-vector-push-int growable-vector-to-vector-int]
+
+[defn is-between-inclusive [lower c upper]
+  [and [le-s lower c] [le-s c upper]]]
+
+[defn is-whitespace [c]
+  [or [eq c [i32 32]] [eq c [i32 10]]]]
+
+[defn is-word-char [c]
+  [or
+    [is-between-inclusive [i32 97] c [i32 122]]
+    [is-between-inclusive [i32 45] c [i32 57]]]]
+
+
+[type form-word []
+  [record
+    [tag [literal [i32 0]]]
+    [word [pvector [u8]]]]]
+
+[type
+  form-list []
+  [record
+    [tag [literal [i32 1]]]
+    [forms [pvector [pointer [memory mem] [form]]]]]
+
+  form []
+  [union
+    [form-word]
+    [form-list]]]
+
+[defn form-word-make [byte-vector]
+  [let [p [cast [pointer [memory mem] [form-word]] [alloc-n [size-of [form-word]]]]]
+    [assign [field p tag] [i32 0]]
+    [assign [field p word] byte-vector]
+    p]]
+
+[defn make-stack []
+  [call growable-vector-make [[form-word]] [[i32 16]]]]
+
+[genfn vector-slice [s] [[type pvec [pvector [u8]]] start end]
+  [let
+    [sz [sub end start]
+     p [call vector-make-no-init [[u8]] [sz]]]
+    [for i [i32 0] sz
+      [set-byte p i [get-byte pvec [add start i]]]]
+    p]]
+
+[defn dvector-slice [pvec start end]
+  [call vector-slice [[u8]] [pvec start end]]]
+
+[defn parse [[type bytes [pointer [memory mem] [pvector [u8]]]]]
+  [loop
+    [n-of-bytes [size bytes]
+     i [i32 0]
+     start [i32 -1]]
+    [if [lt-s i n-of-bytes]
+      [let [c [get-byte bytes i]]
+        [ifs
+          [is-whitespace c]
+          [if [lt-s start [i32 0]]
+            [continue i [inc i]]
+            [form-word-make [dvector-slice bytes start i]]]
+
+          [is-word-char c]
+          [if [lt-s start [i32 0]]
+            [continue
+              start i
+              i [inc i]]
+            [continue
+              i [inc i]]]
+
+          [eq c [i32 91]]
+          [intrinsic unreachable]
+
+          [eq c [i32 93]]
+          [intrinsic unreachable]
+
+          [intrinsic unreachable]]]
+      [if [lt-s start [i32 0]]
+        [cast [pointer [memory mem] [form-word]] [i32 0]]
+        [form-word-make [dvector-slice bytes start i]]]]]]
+
+[memory i32 mem 1]
+[genfn g [t] [] [size-of [pointer [memory mem] t]]]
+[defn f [] [call g [[i32]] []]]
+
+ ]
