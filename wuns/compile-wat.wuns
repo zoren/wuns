@@ -790,7 +790,7 @@
   [if-let [at [try-get-apply-type t]]
     [if [eq-word [word tuple] [pair/fst at]]
       [pair/snd at]
-      [logq-abort get-tuple-types]]
+      [list t]]
     [logq-abort get-tuple-types]]]
 
 [defn get-func-type [t]
@@ -822,7 +822,10 @@
 [def type-empty-tuple [type-tuple-list [list]]]
 
 [defn type-func [params result]
-  [make-type [word func] [type-tuple-list params] result]]
+  [make-type [word func]
+    [if [eq [size params] 1]
+      [first params]
+      [type-tuple-list params]] result]]
 
 [type check-type-scheme []
   [record
