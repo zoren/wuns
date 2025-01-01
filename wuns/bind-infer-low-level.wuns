@@ -771,15 +771,6 @@
       [list [form/word type-name]]
       [list-map targ type-args [ctype-to-print-form targ]]]]]
 
-[defn scheme-to-form [scheme]
-  [if [and [is-empty [check-type-scheme/named-type-params scheme]] [is-empty [check-type-scheme/type-vars scheme]]]
-    [ctype-to-print-form [check-type-scheme/type scheme]]
-    [let [tv-to-name [transient-kv-map]]
-      [for-each p [check-type-scheme/named-type-params scheme]
-        [set-kv-map tv-to-name [pair/snd p] [pair/fst p]]]
-      [flist [quote scheme] [] ]]]]
-
-
 [defn try-get-apply-type [t]
   [match [normalize-type t]
     [ctype/apply type-name type-args]
@@ -792,7 +783,7 @@
     [if [eq-word [word tuple] [pair/fst at]]
       [pair/snd at]
       [list t]]
-    [logq-abort get-tuple-types]]]
+    [list t]]]
 
 [defn get-func-type [t]
   [if-let [at [try-get-apply-type t]]
@@ -833,6 +824,39 @@
     [named-type-params [list [pair word type-var]]]
     [type-vars [list type-var]]
     [type ctype]]]
+
+[defn scheme-to-form [scheme]
+  [if [and [is-empty [check-type-scheme/named-type-params scheme]] [is-empty [check-type-scheme/type-vars scheme]]]
+    [ctype-to-print-form [check-type-scheme/type scheme]]
+    [let [tv-to-name [transient-kv-map]
+          type-param-names [growable-list]]
+      [for-each p [check-type-scheme/named-type-params scheme]
+        [push type-param-names [form/word [pair/fst p]]]
+        [set-kv-map tv-to-name [pair/snd p] [pair/fst p]]]
+      [flist [quote scheme]
+        [form/list [clone-growable-to-frozen-list type-param-names]]
+        [[func go [ct]
+          [let [nt [normalize-type ct]]
+            [match nt
+            [ctype/var tv]
+            [if-let [name [try-get tv-to-name tv]]
+              [form/word name]
+              [logq-abort scheme-to-form type var not found]]
+
+            [ctype/literal tl]
+            [match tl
+              [type-literal/memory sw] [flist [quote memory] [form/word [syntax-word/word sw]]]
+              [type-literal/exp e] [flist [quote literal] [form-to-print-form e]]]
+
+            [ctype/apply type-name type-args]
+            [if [eq-word [word func] type-name]
+              [let [fn [get-func-type nt]]
+                [flist [quote func] [form/list [list-map arg [pair/fst fn] [go arg]]] [go [pair/snd fn]]]]
+              [form-concat
+                [list [form/word type-name]]
+                [list-map targ type-args [go targ]]]]]]]
+              [check-type-scheme/type scheme]
+              ]]]]]
 
 [type llcheck-context []
   [record
@@ -1586,11 +1610,17 @@
     [defn id-float [p] [call id [[f64]] [p]]]
     ]
     dvt [llcheck-context/def-var-types gctx]]
-  [get dvt [word id]]
 [comment    [scheme [t] [func [t] t]]
   [func [[i32]] [i32]]
   [func [[f64]] [f64]] ]
-  ]]
+  [list
+    [scheme-to-form [get dvt [word id]]]
+    [scheme-to-form [get dvt [word id-int]]]
+    [scheme-to-form [get dvt [word id-float]]]
+    ]
+
+  ]
+  ]
 
 [defn test-unify []
   [let
