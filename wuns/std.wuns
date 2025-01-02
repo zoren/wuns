@@ -148,6 +148,8 @@
 [def string-space [char-code-to-string [i32 32]]]
 [import ./runtime-lib/host.js string-join [func [string [list string]] string]]
 
+[import ./runtime-lib/host.js word-join [func [word [list word]] word]]
+
 [defn strings-space-join [.. l]
   [string-join string-space l]]
 

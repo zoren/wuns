@@ -1,0 +1,53 @@
+[load bind-infer-low-level.wuns]
+
+[defn test-infer-fn [forms]
+  [infer-top-forms [make-evaluator] forms]]
+
+[defexpr test-infer [.. forms]
+  [test-infer-fn forms]]
+
+[defn test-it []
+  [let [gctx [test-infer
+    [genfn id [t] [[type p t]] p]
+    [defn id-int [p] [call id [[i32]] [p]]]
+    [defn id-float [p] [call id [[f64]] [p]]]]
+    dvt [llcheck-context/def-var-types gctx]]
+  [list
+    [scheme-to-form [get dvt [word id]]]
+    [scheme-to-form [get dvt [word id-int]]]
+    [scheme-to-form [get dvt [word id-float]]]
+    ]]]
+[defn test-it2 []
+  [let [gctx [test-infer
+    [defn id [p] p]
+    [defn id-int [[type p [i32]]] [id p]]
+    [defn id-float [[type p [f64]]] [id p]]]
+    dvt [llcheck-context/def-var-types gctx]]
+  [list
+    [scheme-to-form [get dvt [word id]]]
+    [scheme-to-form [get dvt [word id-int]]]
+    [scheme-to-form [get dvt [word id-float]]]
+    ]]]
+[defn test-it3 []
+  [let [gctx [test-infer
+    [genfn sz [t] [] [size-of t]]
+    [defn sz-int [] [call sz [[i32]] []]]
+    [defn sz-float [] [call sz [[f64]] []]]
+    ]
+    dvt [llcheck-context/def-var-types gctx]]
+  [list
+    [scheme-to-form [get dvt [word sz]]]
+    [scheme-to-form [get dvt [word sz-int]]]
+    [scheme-to-form [get dvt [word sz-float]]]
+    ]]]
+
+[defn test-unify []
+  [let
+    [counter-atom [atom 0]
+     tv1 [generate-fresh-type-var-atom-var counter-atom 0]
+     tv2 [generate-fresh-type-var-atom-var counter-atom 1]
+     t1 [ctype/var tv1]
+     t2 [ctype/var tv2]
+     gctx [llcheck-context-empty [llctx-empty]]]
+    [set-add [type-var/constraints tv2] type-constraint-size-of]
+    [pair [unify gctx t1 t2] [pair t1 t2]]]]

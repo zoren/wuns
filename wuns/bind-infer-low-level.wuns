@@ -751,25 +751,6 @@
       [int-to-type-var-name [i32.div-s i [i32 26]]]
       [char-code-to-word [add [i32 97] [i32.rem-s i [i32 26]]]]]]]
 
-[defn ctype-to-print-form [ct]
-  [match [normalize-type ct]
-    [ctype/var tv]
-    [match [get-type-var-kind tv]
-      [type-var-kind/unlinked i]
-      [form/word [int-to-type-var-name i]]
-
-      [type-var-kind/linked -]
-      [logq-abort ctype-to-print-form unexpected linked type variable type should have been normalized]]
-
-    [ctype/literal tl]
-    [match tl
-      [type-literal/memory sw] [flist [quote memory] [form/word [syntax-word/word sw]]]
-      [type-literal/exp e] [flist [quote literal] [form-to-print-form e]]]
-
-    [ctype/apply type-name type-args]
-    [form-concat
-      [list [form/word type-name]]
-      [list-map targ type-args [ctype-to-print-form targ]]]]]
 
 [defn try-get-apply-type [t]
   [match [normalize-type t]
@@ -826,37 +807,58 @@
     [type ctype]]]
 
 [defn scheme-to-form [scheme]
-  [if [and [is-empty [check-type-scheme/named-type-params scheme]] [is-empty [check-type-scheme/type-vars scheme]]]
-    [ctype-to-print-form [check-type-scheme/type scheme]]
-    [let [tv-to-name [transient-kv-map]
-          type-param-names [growable-list]]
-      [for-each p [check-type-scheme/named-type-params scheme]
-        [push type-param-names [form/word [pair/fst p]]]
-        [set-kv-map tv-to-name [pair/snd p] [pair/fst p]]]
-      [flist [quote scheme]
-        [form/list [clone-growable-to-frozen-list type-param-names]]
+  [let [tv-to-name [transient-kv-map]
+        used-tv-names [set]
+        type-param-names [growable-list]
+        counter-atom [atom 0]]
+    [for-each p [check-type-scheme/named-type-params scheme]
+      [let [tv-name [pair/fst p]
+            tv [pair/snd p]]
+        [logq constraints [type-var/constraints tv]]
+        [push
+          type-param-names
+          [if [set-has [type-var/constraints tv] type-constraint-size-of]
+            [flist [quote constraint] [form/word tv-name] [quote size-of]]
+            [form/word tv-name]]]
+        [set-add used-tv-names tv-name]
+        [set-kv-map tv-to-name tv tv-name]]]
+    [let
+      [t
         [[func go [ct]
-          [let [nt [normalize-type ct]]
-            [match nt
-            [ctype/var tv]
-            [if-let [name [try-get tv-to-name tv]]
-              [form/word name]
-              [logq-abort scheme-to-form type var not found]]
+        [let [nt [normalize-type ct]]
+          [match nt
+          [ctype/var tv]
+          [if-let [name [try-get tv-to-name tv]]
+            [form/word name]
+            [loop [gen-tv-name [int-to-type-var-name [inc-atom counter-atom]]]
+              [if [set-has used-tv-names gen-tv-name]
+                [continue]
+                [let [f [form/word gen-tv-name]]
+                  [push type-param-names f]
+                  [set-add used-tv-names gen-tv-name]
+                  [set-kv-map tv-to-name tv gen-tv-name]
+                  f]]]]
 
-            [ctype/literal tl]
-            [match tl
-              [type-literal/memory sw] [flist [quote memory] [form/word [syntax-word/word sw]]]
-              [type-literal/exp e] [flist [quote literal] [form-to-print-form e]]]
+          [ctype/literal tl]
+          [match tl
+            [type-literal/memory sw] [flist [quote memory] [form/word [syntax-word/word sw]]]
+            [type-literal/exp e] [flist [quote literal] [form-to-print-form e]]]
 
-            [ctype/apply type-name type-args]
-            [if [eq-word [word func] type-name]
-              [let [fn [get-func-type nt]]
-                [flist [quote func] [form/list [list-map arg [pair/fst fn] [go arg]]] [go [pair/snd fn]]]]
-              [form-concat
-                [list [form/word type-name]]
-                [list-map targ type-args [go targ]]]]]]]
-              [check-type-scheme/type scheme]
-              ]]]]]
+          [ctype/apply type-name type-args]
+          [if [eq-word [word func] type-name]
+            [let [fn [get-func-type nt]]
+              [flist [quote func] [form/list [list-map arg [pair/fst fn] [go arg]]] [go [pair/snd fn]]]]
+            [form-concat
+              [list [form/word type-name]]
+              [list-map targ type-args [go targ]]]]]]]
+            [check-type-scheme/type scheme]]
+        tps [clone-growable-to-frozen-list type-param-names]]
+    [if [is-empty tps]
+      t
+      [flist [quote scheme] [form/list tps] t]]]]]
+
+[defn ctype-to-print-form [ct]
+  [scheme-to-form [check-type-scheme [list] [list] ct]]]
 
 [type llcheck-context []
   [record
@@ -1087,15 +1089,14 @@
   [set-kv-map [llcheck-context/type-annotations gctx] [to-js-value bst] type]
   type]
 
-[defn instantiate-syntax-type-no-env [gctx level syntax-type]
+[defn instantiate-syntax-type-env [gctx level type-env syntax-type]
   [[func go [st]
     [match st
       [lltype/var tv]
-      [ctype/var
-        [make-type-var
-          [type-var-kind/unlinked
-            [inc-atom [llcheck-context/type-var-counter gctx]]]
-          level]]
+      [let [tvw [syntax-word/word tv]]
+        [if [starts-with-dash tvw]
+          [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
+          [get type-env tvw]]]
 
       [lltype/literal l]
       [ctype/literal l]
@@ -1107,26 +1108,13 @@
             [user-type-desc/alias aliased-type]
             [let
               [user-type-params [get [llctx/user-type-params [llcheck-context/bind-ctx gctx]] tnw]
-               type-env [transient-kv-map]]
-              [for i 0 [size user-type-params]
-                [set-kv-map type-env [syntax-word/word [at user-type-params i]] [at targs i]]]
-              [instantiate-syntax-type-no-env gctx level
-                [[func subst [t]
-                  [match t
-                    [lltype/var tv]
-                    [let [tvw [syntax-word/word tv]]
-                      [if [starts-with-dash tvw]
-                        t
-                        [get type-env tvw]]]
+               param-type-env [transient-kv-map]]
+              [assert [eq [size user-type-params] [size targs]] arity mismatch]
 
-                    [lltype/literal l] t
-
-                    [lltype/apply alias-name alias-args]
-                    [lltype/apply alias-name [list-map arg alias-args [subst arg]]]]]
-                  aliased-type]]]
+              [instantiate-syntax-type-env gctx level param-type-env aliased-type]]]
 
             [make-type-list tnw [list-map ta targs [go ta]]]]
-          [make-type-list tnw [list-map ta targs [go ta]]]]]]]
+          [make-type-list tnw [list-map ta targs [go ta]]]]]]
     syntax-type]]
 
 [type infer-local-context []
@@ -1329,7 +1317,7 @@
     [let
       [spec-func-type
         [if-let [type-args opt-type-args]
-          [let [ctype-args [list-map type-arg type-args [instantiate-syntax-type-no-env gctx level type-arg]]]
+          [let [ctype-args [list-map type-arg type-args [instantiate-syntax-type-env gctx level [infer-local-context/type-env lctx] type-arg]]]
             [do
               [logq call [syntax-word/word fname-sword] [identity ctype-args]]
               [get-specialized-var-type-args
@@ -1345,7 +1333,7 @@
 
     [llexp/cast cast-type value]
     [let
-      [inst-type [instantiate-syntax-type-no-env gctx level cast-type]
+      [inst-type [instantiate-syntax-type-env gctx level [infer-local-context/type-env lctx] cast-type]
        tv [infer-llexp gctx level lctx value]
        inst-app-t [get-apply-type inst-type [word cast]]
        tv-type-name [pair/fst [get-apply-type tv [word cast1]]]]
@@ -1365,9 +1353,10 @@
     [llexp/size-of t]
     [let
       [tenv [infer-local-context/type-env lctx]
-       it [instantiate-syntax-type-no-env gctx level t]]
+       it [instantiate-syntax-type-env gctx level tenv t]]
       [todo if there is a free type var inside a [pointer m tv] we should not add a constraint on it]
       [for-each tv [free-type-vars it]
+        [logq adding size-of type constraint [identity tv]]
         [set-add [type-var/constraints tv] type-constraint-size-of]]
       [llannotate gctx t it]
       type-i32]
@@ -1427,13 +1416,13 @@
             [user-type-desc/record field-map field-list]
             [if-let [fd [try-get field-map [syntax-word/word field-name]]]
               [llannotate gctx bform
-                [type-pointer t-mem [instantiate-syntax-type-no-env gctx level fd]]]
+                [type-pointer t-mem [instantiate-syntax-type-env gctx level [infer-local-context/type-env lctx] fd]]]
               [logq-abort infer-llexp field not found [identity field-name]]]
 
             [user-type-desc/union ctor-map ctor-types]
             [let [inst-field-type [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]]
               [for-each ctor-type ctor-types
-                [instantiate-syntax-type-no-env gctx level ctor-type]
+                [instantiate-syntax-type-env gctx level [infer-local-context/type-env lctx] ctor-type]
                 [logq-abort not imple]
                 ]
               inst-field-type]
@@ -1466,29 +1455,6 @@
       [for i 0 [dec [size bodies]]
         [infer-llexp gctx level lctx [at bodies i]]]
       [infer-llexp gctx level lctx [last bodies]]]]]
-
-[defn instantiate-syntax-type-env [gctx level type-env syntax-type]
-  [[func go [st]
-    [match st
-      [lltype/var tv]
-      [let [tvw [syntax-word/word tv]]
-        [if [starts-with-dash tvw]
-          [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
-          [get type-env tvw]]]
-
-      [lltype/literal l]
-      [ctype/literal l]
-
-      [lltype/apply type-name targs]
-      [let [tnw [syntax-word/word type-name]]
-        [if-let [user-desc [try-get [llctx/user-types [llcheck-context/bind-ctx gctx]] tnw]]
-          [match user-desc
-            [user-type-desc/alias aliased-type]
-            [logq-abort instantiate-syntax-type-env alias not implemented]
-
-            [make-type-list tnw [list-map ta targs [go ta]]]]
-          [make-type-list tnw [list-map ta targs [go ta]]]]]]]
-    syntax-type]]
 
 [defn infer-lltop [gctx lltop]
   [match lltop
@@ -1523,11 +1489,12 @@
       [when-let [type-params [lldefn/type-params func]]
         [for-each type-param type-params
           [let [tpw [syntax-word/word type-param]
-                itp [generate-fresh-type-var-atom-var counter-atom level-1]]
+                itp [generate-fresh-type-var-atom-var counter-atom 0]]
             [push named-type-params [pair tpw itp]]
             [set-kv-map type-env tpw [ctype/var itp]]]]]
       [set-kv-map param-ctx fname-word [mk-empty-type-scheme gfunc-type]]
-      [logq /defn [identity fname-word]]
+      [logq /defn-name [identity fname-word]]
+      [logq /defn-tvs [identity type-env]]
       [for-each param [lldefn/params func]
         [let
           [t
@@ -1562,8 +1529,9 @@
                 [check-type-scheme/type-vars ts-no-name]
                 [check-type-scheme/type ts-no-name]]
               ts-no-name]]
-          [logq /defn [identity fname-word] [check-type-scheme/type-vars ts] [ctype-to-print-form
-            [check-type-scheme/type ts]]]
+          [logq /defn [scheme-to-form ts]]
+          [for-each ntp [clone-growable-to-frozen-list named-type-params]
+            [logq type-param [pair/fst ntp] [identity [pair/snd ntp]]]]
           [logq /defn-params [clone-growable-to-frozen-list reg-params]]
           [log]
           [set-kv-map
@@ -1596,39 +1564,3 @@
     [for-each btop [pair/fst btops-ctx-pair]
       [infer-lltop gctx btop]]
     gctx]]
-
-[defn test-infer-fn [forms]
-  [infer-top-forms [make-evaluator] forms]]
-
-[defexpr test-infer [.. forms]
-  [test-infer-fn forms]]
-
-[defn test-it []
-  [let [gctx [test-infer
-    [genfn id [t] [[type p t]] p]
-    [defn id-int [p] [call id [[i32]] [p]]]
-    [defn id-float [p] [call id [[f64]] [p]]]
-    ]
-    dvt [llcheck-context/def-var-types gctx]]
-[comment    [scheme [t] [func [t] t]]
-  [func [[i32]] [i32]]
-  [func [[f64]] [f64]] ]
-  [list
-    [scheme-to-form [get dvt [word id]]]
-    [scheme-to-form [get dvt [word id-int]]]
-    [scheme-to-form [get dvt [word id-float]]]
-    ]
-
-  ]
-  ]
-
-[defn test-unify []
-  [let
-    [counter-atom [atom 0]
-     tv1 [generate-fresh-type-var-atom-var counter-atom 0]
-     tv2 [generate-fresh-type-var-atom-var counter-atom 1]
-     t1 [ctype/var tv1]
-     t2 [ctype/var tv2]
-     gctx [llcheck-context-empty [llctx-empty]]]
-    [set-add [type-var/constraints tv2] type-constraint-size-of]
-    [pair [unify gctx t1 t2] [pair t1 t2]]]]
