@@ -44,6 +44,14 @@
     [def-type-of sz [scheme [[constraint t size-of]] [func [] [i32]]]]
     [def-type-of sz-int [func [] [i32]]]
     [def-type-of sz-float [func [] [i32]]]]
+  [comment pointers are the same size regardless of the type of the target]
+  [test [
+      [memory i32 mem 1]
+      [genfn sz [t] [] [size-of [pointer [memory mem] t]]]
+      [defn sz-pint [] [call sz [[i32]] []]]]
+    [def-type-of sz [scheme [t] [func [] [i32]]]]
+    [def-type-of sz-pint [func [] [i32]]]]
+
     ]
 
 [defn test-unify []

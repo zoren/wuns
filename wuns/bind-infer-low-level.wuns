@@ -1348,10 +1348,25 @@
     [llexp/size-of t]
     [let
       [tenv [infer-local-context/type-env lctx]
-       it [instantiate-syntax-type-env gctx level tenv t]]
-      [todo if there is a free type var inside a [pointer m tv] we should not add a constraint on it]
-      [for-each tv [free-type-vars it]
-        [set-add [type-var/constraints tv] type-constraint-size-of]]
+       it [instantiate-syntax-type-env gctx level tenv t]
+       go
+       [func go [t]
+        [let [nt [normalize-type t]]
+          [match nt
+            [ctype/var tv]
+            [set-add [type-var/constraints tv] type-constraint-size-of]
+
+            [ctype/literal l]
+            [do]
+
+            [ctype/apply type-name type-args]
+            [switch type-name
+              [[word pointer]] [do]
+              [[word func]] [logq-abort func does not have a size]
+              [[word tuple]] [logq-abort tuple does not have a size]
+
+              [for-each arg type-args [go arg]]]]]]]
+      [go it]
       [llannotate gctx t it]
       type-i32]
 
