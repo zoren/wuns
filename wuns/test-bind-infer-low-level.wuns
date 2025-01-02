@@ -6,40 +6,45 @@
 [defexpr test-infer [.. forms]
   [test-infer-fn forms]]
 
-[defn test-it []
-  [let [gctx [test-infer
-    [genfn id [t] [[type p t]] p]
-    [defn id-int [p] [call id [[i32]] [p]]]
-    [defn id-float [p] [call id [[f64]] [p]]]]
-    dvt [llcheck-context/def-var-types gctx]]
-  [list
-    [scheme-to-form [get dvt [word id]]]
-    [scheme-to-form [get dvt [word id-int]]]
-    [scheme-to-form [get dvt [word id-float]]]
-    ]]]
-[defn test-it2 []
-  [let [gctx [test-infer
-    [defn id [p] p]
-    [defn id-int [[type p [i32]]] [id p]]
-    [defn id-float [[type p [f64]]] [id p]]]
-    dvt [llcheck-context/def-var-types gctx]]
-  [list
-    [scheme-to-form [get dvt [word id]]]
-    [scheme-to-form [get dvt [word id-int]]]
-    [scheme-to-form [get dvt [word id-float]]]
-    ]]]
-[defn test-it3 []
-  [let [gctx [test-infer
-    [genfn sz [t] [] [size-of t]]
-    [defn sz-int [] [call sz [[i32]] []]]
-    [defn sz-float [] [call sz [[f64]] []]]
+[defexpr test [first-form .. asserts]
+  [let [gctx [infer-top-forms [make-evaluator] [form-to-list first-form]]]
+    [for-each ass asserts
+      [let [ass-list [form-to-list ass]
+            ass-name [form-to-word [first ass-list]]]
+        [switch ass-name
+          [[word def-type-of]]
+          [let [sch [scheme-to-form [get [llcheck-context/def-var-types gctx] [form-to-word [second ass-list]]]]]
+            [when-not
+            [eq-form
+              sch
+              [third ass-list]]
+            [logq-abort test assert fail expected [third ass-list] got [identity sch]]]]
+
+          [logq-abort test kind unknown]]]]]]
+
+[defn run-tests []
+  [test [
+      [genfn id [t] [[type p t]] p]
+      [defn id-int [p] [call id [[i32]] [p]]]
+      [defn id-float [p] [call id [[f64]] [p]]]]
+    [def-type-of id [scheme [t] [func [t] t]]]
+    [def-type-of id-int [func [[i32]] [i32]]]
+    [def-type-of id-float [func [[f64]] [f64]]]]
+  [test [
+      [defn id [p] p]
+      [defn id-int [[type p [i32]]] [id p]]
+      [defn id-float [[type p [f64]]] [id p]]]
+    [def-type-of id [scheme [a] [func [a] a]]]
+    [def-type-of id-int [func [[i32]] [i32]]]
+    [def-type-of id-float [func [[f64]] [f64]]]]
+  [test [
+      [genfn sz [t] [] [size-of t]]
+      [defn sz-int [] [call sz [[i32]] []]]
+      [defn sz-float [] [call sz [[f64]] []]]]
+    [def-type-of sz [scheme [[constraint t size-of]] [func [] [i32]]]]
+    [def-type-of sz-int [func [] [i32]]]
+    [def-type-of sz-float [func [] [i32]]]]
     ]
-    dvt [llcheck-context/def-var-types gctx]]
-  [list
-    [scheme-to-form [get dvt [word sz]]]
-    [scheme-to-form [get dvt [word sz-int]]]
-    [scheme-to-form [get dvt [word sz-float]]]
-    ]]]
 
 [defn test-unify []
   [let
