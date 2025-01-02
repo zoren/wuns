@@ -992,14 +992,9 @@
           [match nt2
             [ctype/var tv2]
             [when-not [is-identical tv1 tv2]
-              [todo handle named type vars here]
-              [let [l1 [get-type-var-level tv1]
-                    l2 [get-type-var-level tv2]]
-                [if
-                  [lt-s l1 l2]
-                  [link-var-to-type tv1 nt2]
-
-                  [link-var-to-type tv2 nt1]]]]
+              [if [lt-s [get-type-var-level tv1] [get-type-var-level tv2]]
+                [link-var-to-type tv1 nt2]
+                [link-var-to-type tv2 nt1]]]
 
             [ctype/literal l2]
             [link-var-to-type tv1 nt2]
