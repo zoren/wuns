@@ -932,16 +932,6 @@
 [defn get-type-var-level [tv]
   [atom-get [type-var/level tv]]]
 
-[defn link-var-to-type [type-var type]
-  [let
-    [level [get-type-var-level type-var]
-     fvs-set [free-type-vars-set type]
-     fvs [set-to-list fvs-set]]
-    [todo report instead of assert]
-    [assert [not [set-has fvs-set type-var]] type-var occurs in type]
-    [prune-level level fvs]
-    [set-type-var-kind-to-type type-var type]]]
-
 [defn type-literal-desc-equals [l1 l2]
   [match l1
     [type-literal/memory mem1]
@@ -983,6 +973,17 @@
     [errors [growable-list]
      push-unify-error
      [func push-unify-error [msg] [push errors msg]]
+     link-var-to-type
+     [func link-var-to-type [type-var type]
+      [let
+        [level [get-type-var-level type-var]
+         fvs-set [free-type-vars-set type]
+         fvs [set-to-list fvs-set]]
+        [if [set-has fvs-set type-var]
+          [push-unify-error [quote [occurs check failed]]]
+          [do
+            [prune-level level fvs]
+            [set-type-var-kind-to-type type-var type]]]]]
      go
      [func go [t1 t2]
       [let [nt1 [normalize-type t1]
