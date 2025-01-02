@@ -996,10 +996,6 @@
                 [link-var-to-type tv1 nt2]
                 [link-var-to-type tv2 nt1]]]
 
-            [ctype/literal l2]
-            [link-var-to-type tv1 nt2]
-
-            [ctype/apply tn2 tas2]
             [link-var-to-type tv1 nt2]]
 
           [ctype/literal l1]
@@ -1029,38 +1025,32 @@
                 [for i 0 [size type-args1]
                   [go [at type-args1 i] [at type-args2 i]]]
                 [push-unify-error [quote [not unifiable - different number of type arguments]]]]
-                [do
-                  [if-let [user-desc [try-get [llctx/user-types [llcheck-context/bind-ctx gctx]] type-name1]]
-                    [match user-desc
-                      [user-type-desc/alias aliased-type]
-                      [logq-abort unify error aliased type not expanded]
+              [if-let [user-desc [try-get [llctx/user-types [llcheck-context/bind-ctx gctx]] type-name1]]
+                [match user-desc
+                  [user-type-desc/alias aliased-type]
+                  [logq-abort unify error aliased type not expanded]
 
-                      [user-type-desc/union union-ctor-map ctor-list]
-                      [if-let [ctor-args [try-get union-ctor-map type-name2]]
-                        [assert [is-empty ctor-args] not implemented]
-                        [push-unify-error [quote [not unifiable - different constructors]]]]
+                  [user-type-desc/union union-ctor-map ctor-list]
+                  [if-let [ctor-args [try-get union-ctor-map type-name2]]
+                    [assert [is-empty ctor-args] not implemented]
+                    [push-unify-error [quote [not unifiable - different constructors]]]]
 
-                      [push-unify-error [quote [not unifiable - different types]]]]
-                    [do
-                      [if [eq-word type-name1 [word pointer]]
-                        [let [mem-type [normalize-type [first type-args1]]]
-                          [match mem-type
-                            [ctype/literal l]
-                            [match l
-                              [type-literal/memory mem-name]
-                              [match [get-memory-kind [llcheck-context/bind-ctx gctx] [syntax-word/word mem-name]]
-                                [memory-kind/i32] [go type-i32 nt2]
-                                [memory-kind/i64] [go type-i64 nt2]
-                                [push-unify-error [quote [not unifiable - different memory types]]]]
+                  [push-unify-error [quote [not unifiable - different types]]]]
+                [if [eq-word type-name1 [word pointer]]
+                  [let [mem-type [normalize-type [first type-args1]]]
+                    [match mem-type
+                      [ctype/literal l1]
+                      [match l1
+                        [type-literal/memory mem-name1]
+                        [match [get-memory-kind [llcheck-context/bind-ctx gctx] [syntax-word/word mem-name1]]
+                          [memory-kind/i32] [go type-i32 nt2]
+                          [memory-kind/i64] [go type-i64 nt2]
+                          [push-unify-error [quote [not unifiable - different memory types]]]]
 
-                              [push-unify-error [quote [unify not a memory type1]]]]
+                        [push-unify-error [quote [unify not a memory type1]]]]
 
-                            [do
-                              [logq mem-type [identity mem-type]]
-                              [push-unify-error [quote [unify not a memory type2]]]]]]
-                        [push-unify-error [quote [not unifiable - different types]]]
-                        ]]]
-                      [push-unify-error [quote [not unifiable - different types]]]]]]]]]]
+                      [push-unify-error [quote [unify not a memory type2]]]]]
+                  [push-unify-error [quote [not unifiable - different types]]]]]]]]]]]
     [go outer-t1 outer-t2]
     [clone-growable-to-frozen-list errors]]]
 
