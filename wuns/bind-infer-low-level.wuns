@@ -774,10 +774,10 @@
       [logq-abort get-func-type expected a func type [identity t]]]
     [logq-abort get-func-type expected a func type [identity t]]]]
 
-[defn get-apply-type [t msg]
+[defn get-apply-type [t]
   [if-let [at [try-get-apply-type t]]
     at
-    [logq-abort get-apply-type expected an apply type [identity t] [identity msg]]]]
+    [logq-abort get-apply-type expected an apply type [identity t]]]]
 
 [defn make-type-list [type-name type-args] [ctype/apply type-name type-args]]
 
@@ -1320,8 +1320,8 @@
     [let
       [inst-type [instantiate-syntax-type-env gctx level [infer-local-context/type-env lctx] cast-type]
        tv [infer-llexp gctx level lctx value]
-       inst-app-t [get-apply-type inst-type [word cast]]
-       tv-type-name [pair/fst [get-apply-type tv [word cast1]]]]
+       inst-app-t [get-apply-type inst-type]
+       tv-type-name [pair/fst [get-apply-type tv]]]
       [todo we allow casting i32 or i64 to pointer if the memory matches]
       [if [and [eq-word [pair/fst inst-app-t] [word pointer]] [not [eq-word tv-type-name [word pointer]]]]
         [match [get-memory-kind [llcheck-context/bind-ctx gctx] [mem-name-from-mem-type [first [pair/snd inst-app-t]]]]
@@ -1408,7 +1408,7 @@
           [log-location [get [llctx/bound-form-to-form [llcheck-context/bind-ctx gctx]] [to-js-value bform]]]
           [logq-abort infer-llexp not implemented]]]
       [let
-        [app-type [get-apply-type t-rec [pair [word infer-field] field-name]]
+        [app-type [get-apply-type t-rec]
          type-name [pair/fst app-type]]
         [if-let [type-desc [try-get [llctx/user-types [llcheck-context/bind-ctx gctx]] type-name]]
           [match type-desc
