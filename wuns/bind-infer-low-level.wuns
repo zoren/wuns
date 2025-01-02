@@ -814,7 +814,6 @@
     [for-each p [check-type-scheme/named-type-params scheme]
       [let [tv-name [pair/fst p]
             tv [pair/snd p]]
-        [logq constraints [type-var/constraints tv]]
         [push
           type-param-names
           [if [set-has [type-var/constraints tv] type-constraint-size-of]
@@ -1318,16 +1317,12 @@
       [spec-func-type
         [if-let [type-args opt-type-args]
           [let [ctype-args [list-map type-arg type-args [instantiate-syntax-type-env gctx level [infer-local-context/type-env lctx] type-arg]]]
-            [do
-              [logq call [syntax-word/word fname-sword] [identity ctype-args]]
-              [get-specialized-var-type-args
-                gctx level [infer-local-context/stack lctx] fname-sword ctype-args]]]
+            [get-specialized-var-type-args
+              gctx level [infer-local-context/stack lctx] fname-sword ctype-args]]
           [get-specialized-var gctx level [infer-local-context/stack lctx] fname-sword]]
        arg-types [list-map-fn [func f [arg] [infer-llexp gctx level lctx arg]] args]
        t-res [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
        t-func [type-func arg-types t-res]]
-      [logq infer call spec [syntax-word/word fname-sword] [ctype-to-print-form spec-func-type]]
-      [logq infer call tfun [syntax-word/word fname-sword] [ctype-to-print-form t-func]]
       [llunify-report gctx spec-func-type t-func bform]
       [llannotate gctx bform t-res]]
 
@@ -1356,7 +1351,6 @@
        it [instantiate-syntax-type-env gctx level tenv t]]
       [todo if there is a free type var inside a [pointer m tv] we should not add a constraint on it]
       [for-each tv [free-type-vars it]
-        [logq adding size-of type constraint [identity tv]]
         [set-add [type-var/constraints tv] type-constraint-size-of]]
       [llannotate gctx t it]
       type-i32]
@@ -1493,8 +1487,6 @@
             [push named-type-params [pair tpw itp]]
             [set-kv-map type-env tpw [ctype/var itp]]]]]
       [set-kv-map param-ctx fname-word [mk-empty-type-scheme gfunc-type]]
-      [logq /defn-name [identity fname-word]]
-      [logq /defn-tvs [identity type-env]]
       [for-each param [lldefn/params func]
         [let
           [t
@@ -1502,7 +1494,6 @@
               [instantiate-syntax-type-env gctx level-1 type-env param-t]
               [generate-fresh-type-var-atom counter-atom level-1]]
            pn [syntax-word/word [pair/fst param]]]
-          [logq /defn-param [identity pn] [identity t]]
           [set-kv-map param-ctx pn [mk-empty-type-scheme t]]
           [push reg-params t]
           [llannotate gctx [pair/fst param] t]]]
@@ -1529,11 +1520,6 @@
                 [check-type-scheme/type-vars ts-no-name]
                 [check-type-scheme/type ts-no-name]]
               ts-no-name]]
-          [logq /defn [scheme-to-form ts]]
-          [for-each ntp [clone-growable-to-frozen-list named-type-params]
-            [logq type-param [pair/fst ntp] [identity [pair/snd ntp]]]]
-          [logq /defn-params [clone-growable-to-frozen-list reg-params]]
-          [log]
           [set-kv-map
             [llcheck-context/def-var-types gctx]
             fname-word
