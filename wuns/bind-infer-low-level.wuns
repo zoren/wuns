@@ -906,16 +906,7 @@
     [ctype/apply type-name [list-map arg type-args [go arg]]]]]
     outer-t]]
 
-[defn member-type-var-list [set t]
-  [todo can we just use set-has here]
-  [[func member-type-var-list-go [i]
-    [if [lt-s i [size set]]
-      [if [is-identical [at set i] t]
-        1
-        [member-type-var-list-go [inc i]]]
-      0]] 0]]
-
-[defn free-type-vars [outer-t]
+[defn free-type-vars-set [outer-t]
   [let
     [ftvs [set]
      go
@@ -923,8 +914,7 @@
       [let [nt [normalize-type t]]
         [match nt
           [ctype/var tv]
-          [when-not [set-has ftvs tv]
-            [set-add ftvs tv]]
+          [set-add ftvs tv]
 
           [ctype/literal l]
           [do]
@@ -932,7 +922,7 @@
           [ctype/apply type-name type-args]
           [for-each arg type-args [go arg]]]]]]
     [go outer-t]
-    [set-to-list ftvs]]]
+    ftvs]]
 
 [defn prune-level [max-level tvs]
   [for-each tv tvs
@@ -945,9 +935,10 @@
 [defn link-var-to-type [type-var type]
   [let
     [level [get-type-var-level type-var]
-     fvs [free-type-vars type]]
+     fvs-set [free-type-vars-set type]
+     fvs [set-to-list fvs-set]]
     [todo report instead of assert]
-    [assert [not [member-type-var-list fvs type-var]] type-var occurs in type]
+    [assert [not [set-has fvs-set type-var]] type-var occurs in type]
     [prune-level level fvs]
     [set-type-var-kind-to-type type-var type]]]
 
@@ -1125,9 +1116,8 @@
   [local-stack/frame lstack [local-context var-values kind]]]
 
 [defn generalize [current-level type]
-  [let [tvs [growable-list]
-        ftvs [free-type-vars type]]
-    [for-each tv ftvs
+  [let [tvs [growable-list]]
+    [for-each tv [set-to-list [free-type-vars-set type]]
       [if [lt-s current-level [get-type-var-level tv]]
         [push tvs tv]
         [comment [logq tv not generalized [identity tv]]]
