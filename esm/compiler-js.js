@@ -803,7 +803,6 @@ export const makeJSCompilingEvaluator = () => {
   const getDefKind = (name) => {
     const desc = defEnv.get(name)
     if (desc) return desc.defKind
-    throw new Error('def not found: ' + name)
   }
   const getDefNames = () => defEnv.keys()
   const tryGetMacro = (name) => {
