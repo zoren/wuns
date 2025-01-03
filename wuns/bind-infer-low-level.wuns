@@ -731,13 +731,6 @@
         t2]]
     t0]]
 
-[defn int-to-type-var-name [i]
-  [if [lt-s i [i32 26]]
-    [char-code-to-word [add [i32 97] i]]
-    [concat-words
-      [int-to-type-var-name [i32.div-s i [i32 26]]]
-      [char-code-to-word [add [i32 97] [i32.rem-s i [i32 26]]]]]]]
-
 [defn make-type-list [type-name type-args] [ctype/apply type-name type-args]]
 
 [defn make-type [type-name .. type-args] [make-type-list type-name type-args]]
@@ -967,6 +960,13 @@
   [if-let [at [try-get-apply-type t]]
     at
     [logq-abort get-apply-type expected an apply type [identity t]]]]
+
+[defn int-to-type-var-name [i]
+  [if [lt-s i [i32 26]]
+    [char-code-to-word [add [i32 97] i]]
+    [concat-words
+      [int-to-type-var-name [i32.div-s i [i32 26]]]
+      [char-code-to-word [add [i32 97] [i32.rem-s i [i32 26]]]]]]]
 
 [defn scheme-to-form [scheme]
   [let [tv-to-name [transient-kv-map]
