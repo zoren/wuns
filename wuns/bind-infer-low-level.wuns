@@ -681,8 +681,7 @@
 
 [type type-constraint []
   [union
-    [data]
-    [literal]]]
+    [data]]]
 
 [def type-constraint-data [type-constraint/data]]
 
@@ -752,16 +751,8 @@
       [first params]
       [type-tuple-list params]] result]]
 
-[type check-type-scheme []
-  [record
-    [named-type-params [list [pair word type-var]]]
-    [type-vars [list type-var]]
-    [type ctype]]]
-
 [defn make-type-var [kind level]
   [type-var [atom kind] [atom level] [set]]]
-
-[defn mk-empty-type-scheme [type] [check-type-scheme [list] [list] type]]
 
 [defn free-type-vars-set [outer-t]
   [let
@@ -807,6 +798,14 @@
       kind
       [logq-abort get-memory-kind not a memory desc]]
     [logq-abort get-memory-kind not found [identity mem-name]]]]
+
+[type check-type-scheme []
+  [record
+    [named-type-params [list [pair word type-var]]]
+    [type-vars [list type-var]]
+    [type ctype]]]
+
+[defn mk-empty-type-scheme [type] [check-type-scheme [list] [list] type]]
 
 [type llcheck-context []
   [record
