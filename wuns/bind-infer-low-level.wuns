@@ -738,34 +738,6 @@
       [int-to-type-var-name [i32.div-s i [i32 26]]]
       [char-code-to-word [add [i32 97] [i32.rem-s i [i32 26]]]]]]]
 
-
-[defn try-get-apply-type [t]
-  [match [normalize-type t]
-    [ctype/apply type-name type-args]
-    [option/some [pair type-name type-args]]
-
-    [option/none]]]
-
-[defn get-tuple-types [t]
-  [if-let [at [try-get-apply-type t]]
-    [if [eq-word [word tuple] [pair/fst at]]
-      [pair/snd at]
-      [list t]]
-    [list t]]]
-
-[defn get-func-type [t]
-  [if-let [at [try-get-apply-type t]]
-    [if [eq-word [word func] [pair/fst at]]
-      [let [type-args [pair/snd at]]
-        [pair [get-tuple-types [first type-args]] [second type-args]]]
-      [logq-abort get-func-type expected a func type [identity t]]]
-    [logq-abort get-func-type expected a func type [identity t]]]]
-
-[defn get-apply-type [t]
-  [if-let [at [try-get-apply-type t]]
-    at
-    [logq-abort get-apply-type expected an apply type [identity t]]]]
-
 [defn make-type-list [type-name type-args] [ctype/apply type-name type-args]]
 
 [defn make-type [type-name .. type-args] [make-type-list type-name type-args]]
@@ -793,35 +765,8 @@
     [type-vars [list type-var]]
     [type ctype]]]
 
-[type llcheck-context []
-  [record
-    [def-var-types [transient-kv-map word check-type-scheme]]
-    [type-var-counter [atom i32]]
-    [type-annotations [transient-kv-map js-value ctype]]
-    [type-instantiations [transient-kv-map syntax-word [list ctype]]]
-    [bind-ctx llctx]]]
-
-[defn llcheck-context-empty [bind-ctx]
-  [llcheck-context
-    [transient-kv-map]
-    [atom 0]
-    [transient-kv-map]
-    [transient-kv-map]
-    bind-ctx]]
-
-[defn lltry-get-var-type [gctx local-ctx var-name]
-  [if-let [ltype [try-get-local local-ctx var-name]]
-    [option/some ltype]
-    [try-get [llcheck-context/def-var-types gctx] var-name]]]
-
 [defn make-type-var [kind level]
   [type-var [atom kind] [atom level] [set]]]
-
-[defn generate-fresh-type-var-atom-var [counter-atom level]
-  [make-type-var [type-var-kind/unlinked [inc-atom counter-atom]] level]]
-
-[defn generate-fresh-type-var-atom [counter-atom level]
-  [ctype/var [generate-fresh-type-var-atom-var counter-atom level]]]
 
 [defn mk-empty-type-scheme [type] [check-type-scheme [list] [list] type]]
 
@@ -869,6 +814,22 @@
       kind
       [logq-abort get-memory-kind not a memory desc]]
     [logq-abort get-memory-kind not found [identity mem-name]]]]
+
+[type llcheck-context []
+  [record
+    [def-var-types [transient-kv-map word check-type-scheme]]
+    [type-var-counter [atom i32]]
+    [type-annotations [transient-kv-map js-value ctype]]
+    [type-instantiations [transient-kv-map syntax-word [list ctype]]]
+    [bind-ctx llctx]]]
+
+[defn llcheck-context-empty [bind-ctx]
+  [llcheck-context
+    [transient-kv-map]
+    [atom 0]
+    [transient-kv-map]
+    [transient-kv-map]
+    bind-ctx]]
 
 [defn unify [gctx outer-t1 outer-t2]
   [let
@@ -980,6 +941,33 @@
 
     [logq-abort form-to-print-form unexpected form type]]]
 
+[defn try-get-apply-type [t]
+  [match [normalize-type t]
+    [ctype/apply type-name type-args]
+    [option/some [pair type-name type-args]]
+
+    [option/none]]]
+
+[defn get-tuple-types [t]
+  [if-let [at [try-get-apply-type t]]
+    [if [eq-word [word tuple] [pair/fst at]]
+      [pair/snd at]
+      [list t]]
+    [list t]]]
+
+[defn get-func-type [t]
+  [if-let [at [try-get-apply-type t]]
+    [if [eq-word [word func] [pair/fst at]]
+      [let [type-args [pair/snd at]]
+        [pair [get-tuple-types [first type-args]] [second type-args]]]
+      [logq-abort get-func-type expected a func type [identity t]]]
+    [logq-abort get-func-type expected a func type [identity t]]]]
+
+[defn get-apply-type [t]
+  [if-let [at [try-get-apply-type t]]
+    at
+    [logq-abort get-apply-type expected an apply type [identity t]]]]
+
 [defn scheme-to-form [scheme]
   [let [tv-to-name [transient-kv-map]
         used-tv-names [set]
@@ -1042,6 +1030,12 @@
 [defn llannotate [gctx bst type]
   [set-kv-map [llcheck-context/type-annotations gctx] [to-js-value bst] type]
   type]
+
+[defn generate-fresh-type-var-atom-var [counter-atom level]
+  [make-type-var [type-var-kind/unlinked [inc-atom counter-atom]] level]]
+
+[defn generate-fresh-type-var-atom [counter-atom level]
+  [ctype/var [generate-fresh-type-var-atom-var counter-atom level]]]
 
 [defn instantiate-syntax-type-env [gctx level type-env syntax-type]
   [[func go [st]
@@ -1122,6 +1116,11 @@
     [ctype/apply type-name type-args]
     [ctype/apply type-name [list-map arg type-args [go arg]]]]]
     outer-t]]
+
+[defn lltry-get-var-type [gctx local-ctx var-name]
+  [if-let [ltype [try-get-local local-ctx var-name]]
+    [option/some ltype]
+    [try-get [llcheck-context/def-var-types gctx] var-name]]]
 
 [defn get-specialized-var [gctx level lctx sw]
   [if-let [scheme [lltry-get-var-type gctx lctx [syntax-word/word sw]]]
