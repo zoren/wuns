@@ -877,16 +877,6 @@
 
     false]]
 
-[defn mem-name-from-mem-type [tmem]
-  [match [normalize-type tmem]
-    [ctype/literal l]
-    [match l
-      [type-literal/memory mem-name]
-      [syntax-word/word mem-name]
-
-      [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]
-    [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]]
-
 [defn get-memory-kind [llctx mem-name]
   [if-let [dd [try-get [llctx/lldef-ctx llctx] mem-name]]
     [match dd
@@ -894,13 +884,6 @@
       kind
       [logq-abort get-memory-kind not a memory desc]]
     [logq-abort get-memory-kind not found [identity mem-name]]]]
-
-[defn get-type-var-id [tv1]
-  [match [get-type-var-kind tv1]
-    [type-var-kind/unlinked id1]
-    id1
-
-    [logq-abort get-type-var-id unexpected linked type var]]]
 
 [defn unify [gctx outer-t1 outer-t2]
   [let
@@ -998,7 +981,6 @@
                   [push-unify-error [quote [not unifiable - different types]]]]]]]]]]]
     [go outer-t1 outer-t2]
     [clone-growable-to-frozen-list errors]]]
-
 
 [defn form-to-print-form [e]
   [match e
@@ -1201,6 +1183,16 @@
             [logq-abort aliases should have been expanded]]
           ]]]]
     type]]
+
+[defn mem-name-from-mem-type [tmem]
+  [match [normalize-type tmem]
+    [ctype/literal l]
+    [match l
+      [type-literal/memory mem-name]
+      [syntax-word/word mem-name]
+
+      [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]
+    [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]]
 
 [defn infer-llexp [gctx level lctx bform]
   [match bform
