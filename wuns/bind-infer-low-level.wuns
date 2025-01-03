@@ -167,10 +167,16 @@
     [params [list [pair syntax-word [option lltype]]]]
     [bodies [list llexp]]]]
 
+[type user-type []
+  [record
+    [name syntax-word]
+    [params [list syntax-word]]
+    [desc user-type-desc]]]
+
 [type lltop []
   [union
     [memory syntax-word memory-kind syntax-word [option syntax-word]]
-    [type]
+    [type [list user-type]]
     [data-active syntax-word llexp [list data]]
     [def syntax-word llexp]
     [defn lldefn]
@@ -561,7 +567,8 @@
 
         [[word type]]
         [let
-          [triples [triplewise [rest l]]]
+          [triples [triplewise [rest l]]
+           descs [growable-list]]
           [for-each triple triples
             [set-kv-map
               user-type-params
@@ -578,8 +585,9 @@
                 [let [tp [form-to-word type-param]]
                   [assert-not [set-has type-env tp] duplicate type param]
                   [set-add type-env tp]]]
-              [set-kv-map user-types [form-to-word type-name-form]
-                [switch [form-to-word [first type-decl-list]]
+              [let
+                [desc
+                 [switch [form-to-word [first type-decl-list]]
                   [[word record]]
                   [let [field-map [transient-kv-map]
                         field-list [growable-list]]
@@ -607,8 +615,10 @@
                   [[word alias]]
                   [user-type-desc/alias [form-to-lltype [local-stack/empty] type-env [second type-decl-list]]]
 
-                  [logq-abort form-to-lltop type kind not implemented [first type-decl-list]]]]]]
-              [lltop/type]]
+                  [logq-abort form-to-lltop type kind not implemented [first type-decl-list]]]]
+                [push descs [user-type [sword type-name-form] [list-map tp type-params [sword tp]] desc]]
+                [set-kv-map user-types [form-to-word type-name-form] desc]]]]
+              [lltop/type [clone-growable-to-frozen-list descs]]]
 
         [[word def]]
         [let [name-form [get-arg 0]]
@@ -807,18 +817,29 @@
 
 [defn mk-empty-type-scheme [type] [check-type-scheme [list] [list] type]]
 
+[type ctype-desc-kind []
+  [union
+    [record [list [pair word ctype]]]]]
+
+[type ctype-desc []
+  [record
+    [type-params [list type-var]]
+    [desc ctype-desc-kind]]]
+
 [type llcheck-context []
   [record
     [def-var-types [transient-kv-map word check-type-scheme]]
     [type-var-counter [atom i32]]
     [type-annotations [transient-kv-map js-value ctype]]
     [type-instantiations [transient-kv-map syntax-word [list ctype]]]
+    [user-types [transient-kv-map word ctype-desc]]
     [bind-ctx llctx]]]
 
 [defn llcheck-context-empty [bind-ctx]
   [llcheck-context
     [transient-kv-map]
     [atom 0]
+    [transient-kv-map]
     [transient-kv-map]
     [transient-kv-map]
     bind-ctx]]
@@ -1156,30 +1177,25 @@
       [do]
 
       [ctype/apply type-name type-args]
-      [switch type-name
-        [[word pointer]] [do]
-        [[word func]] [logq-abort func does not have a size]
-        [[word tuple]] [logq-abort tuple does not have a size]
+      [if-let [cuser-desc [try-get [llcheck-context/user-types gctx] type-name]]
+        [let
+          [type-params [ctype-desc/type-params cuser-desc]
+           tenv [transient-kv-map]]
+          [for i 0 [size type-args]
+            [set-kv-map tenv [at type-params i] [at type-args i]]]
+          [match [ctype-desc/desc cuser-desc]
+            [ctype-desc-kind/record field-list]
+            [for-each field field-list
+              [go [copy-type-proper tenv [pair/snd field]]]]]]
+        [switch type-name
+          [[word pointer]] [do]
+          [[word func]] [logq-abort func does not have a size]
+          [[word tuple]] [logq-abort tuple does not have a size]
 
-        [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
-          [do]
-          [if-let [user-desc [try-get [llctx/user-types [llcheck-context/bind-ctx gctx]] type-name]]
-            [match user-desc
-              [user-type-desc/alias aliased-type]
-              [logq-abort aliases should have been expanded]
-
-              [user-type-desc/record field-map field-list]
-              [let [type-params [get [llctx/user-type-params [llcheck-context/bind-ctx gctx]] type-name]
-                    tenv [transient-kv-map]]
-                [assert [eq [size type-params] [size type-args]] arity mismatch]
-                [for i 0 [size type-args]
-                  [set-kv-map tenv [syntax-word/word [at type-params i]] [at type-args i]]]
-                [for-each field field-list
-                  [go [instantiate-syntax-type-env gctx 0 tenv [pair/snd field]]]]]
-
-              [for-each arg type-args [go arg]]]
-            [logq-abort aliases should have been expanded]]
-          ]]]]
+          [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
+            [do]
+            [logq-abort not implemented]
+            ]]]]]
     type]]
 
 [defn mem-name-from-mem-type [tmem]
@@ -1461,8 +1477,36 @@
     [lltop/memory mem-name mem-kind mem-size mem-export]
     [do]
 
-    [lltop/type]
-    [do]
+    [lltop/type type-descs]
+    [for-each type-desc type-descs
+      [let
+        [name [user-type/name type-desc]
+         params [user-type/params type-desc]
+         desc [user-type/desc type-desc]
+         type-env [transient-kv-map]
+         ctype-params [growable-list]]
+        [for-each param params
+          [let [tv [generate-fresh-type-var-atom-var [llcheck-context/type-var-counter gctx] 0]]
+            [push ctype-params tv]
+            [set-kv-map
+              type-env
+              [syntax-word/word param]
+              [ctype/var tv]]]]
+        [set-kv-map [llcheck-context/user-types gctx] [syntax-word/word name]
+          [ctype-desc [clone-growable-to-frozen-list ctype-params]
+            [match desc
+              [user-type-desc/alias aliased-type]
+              [logq-abort alias not implemented]
+
+              [user-type-desc/record field-map field-list]
+              [ctype-desc-kind/record
+                [list-map fp field-list
+                  [pair
+                    [pair/fst fp]
+                    [instantiate-syntax-type-env gctx 0 type-env [pair/snd fp]]]]]
+
+              [user-type-desc/union ctor-map ctor-list]
+              [logq-abort union not implemented]]]]]]
 
     [lltop/data-active mem-name mem-expr datas]
     [do]

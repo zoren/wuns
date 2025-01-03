@@ -60,11 +60,11 @@
       [type rec [t] [record [f t]]]
       [defn sz-rec [] [size-of [rec [i32]]]]]
     [def-type-of sz-rec [func [] [i32]]]]
-    [test [
+  [test [
       [type rec [t] [record [sz [i32]] [f t]]]
-      [genfn sz [t] [] [size-of [rec t]]]
+      [genfn sz [u] [] [size-of [rec u]]]
       [defn sz-rec [] [size-of [rec [i32]]]]]
-    [def-type-of sz [scheme [[constraint t data]] [func [] [i32]]]]]
+    [def-type-of sz [scheme [[constraint u data]] [func [] [i32]]]]]
   [comment pointers are the same size regardless of the type of the target - type variables]
   [test [
       [memory i32 mem 1]
