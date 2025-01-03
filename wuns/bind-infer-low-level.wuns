@@ -1057,6 +1057,38 @@
 [defn generate-fresh-type-var-atom [counter-atom level]
   [ctype/var [generate-fresh-type-var-atom-var counter-atom level]]]
 
+[defn copy-type-proper [proper-subst-map outer-t]
+  [[func go [t] [match t
+    [ctype/var tv]
+    [if-let [subst-t [try-get proper-subst-map tv]]
+      subst-t
+      [match [get-type-var-kind tv]
+        [type-var-kind/unlinked id] t
+        [type-var-kind/linked linked-t] [go linked-t]]]
+
+    [ctype/literal l] t
+
+    [ctype/apply type-name type-args]
+    [ctype/apply type-name [list-map arg type-args [go arg]]]]]
+    outer-t]]
+
+[defn try-instantiate-user-type [gctx type-name type-args]
+  [if-let [cuser-desc [try-get [llcheck-context/user-types gctx] type-name]]
+    [let
+      [type-params [ctype-desc/type-params cuser-desc]
+       tenv [transient-kv-map]]
+      [for i 0 [size type-args]
+        [set-kv-map tenv [at type-params i] [at type-args i]]]
+      [match [ctype-desc/desc cuser-desc]
+        [ctype-desc-kind/record field-list]
+        [option/some
+          [ctype-desc-kind/record
+            [list-map field field-list
+              [pair [pair/fst field] [copy-type-proper tenv [pair/snd field]]]]]]
+
+        [option/none]]]
+    [option/none]]]
+
 [defn instantiate-syntax-type-env [gctx level type-env syntax-type]
   [[func go [st]
     [match st
@@ -1070,20 +1102,12 @@
       [ctype/literal l]
 
       [lltype/apply type-name targs]
-      [let [tnw [syntax-word/word type-name]]
-        [if-let [user-desc [try-get [llctx/user-types [llcheck-context/bind-ctx gctx]] tnw]]
-          [match user-desc
-            [user-type-desc/alias aliased-type]
-            [let
-              [user-type-params [get [llctx/user-type-params [llcheck-context/bind-ctx gctx]] tnw]
-               param-type-env [transient-kv-map]]
-              [assert [eq [size user-type-params] [size targs]] arity mismatch]
-              [for i 0 [size targs]
-                [set-kv-map param-type-env [syntax-word/word [at user-type-params i]] [go [at targs i]]]]
-              [instantiate-syntax-type-env gctx level param-type-env aliased-type]]
-
-            [make-type-list tnw [list-map ta targs [go ta]]]]
-          [make-type-list tnw [list-map ta targs [go ta]]]]]]]
+      [let [tnw [syntax-word/word type-name]
+            type-args [list-map ta targs [go ta]]]
+        [if-let [cuser-desc [try-instantiate-user-type gctx tnw type-args]]
+          [make-type-list tnw [list-map ta targs [go ta]]]
+          [make-type-list tnw [list-map ta targs [go ta]]]
+          ]]]]
     syntax-type]]
 
 [type infer-local-context []
@@ -1122,21 +1146,6 @@
     [llliteral/f64 -] type-f64
     [logq-abort llliteral-to-type not implemented]]]
 
-[defn copy-type-proper [proper-subst-map outer-t]
-  [[func go [t] [match t
-    [ctype/var tv]
-    [if-let [subst-t [try-get proper-subst-map tv]]
-      subst-t
-      [match [get-type-var-kind tv]
-        [type-var-kind/unlinked id] t
-        [type-var-kind/linked linked-t] [go linked-t]]]
-
-    [ctype/literal l] t
-
-    [ctype/apply type-name type-args]
-    [ctype/apply type-name [list-map arg type-args [go arg]]]]]
-    outer-t]]
-
 [defn lltry-get-var-type [gctx local-ctx var-name]
   [if-let [ltype [try-get-local local-ctx var-name]]
     [option/some ltype]
@@ -1166,23 +1175,6 @@
       [set-kv-map [llcheck-context/type-instantiations gctx] sw type-args]
       [copy-type-proper type-env [check-type-scheme/type scheme]]]
     [logq-abort llvariable not found [identity sw]]]]
-
-[defn try-instantiate-user-type [gctx type-name type-args]
-  [if-let [cuser-desc [try-get [llcheck-context/user-types gctx] type-name]]
-    [let
-      [type-params [ctype-desc/type-params cuser-desc]
-       tenv [transient-kv-map]]
-      [for i 0 [size type-args]
-        [set-kv-map tenv [at type-params i] [at type-args i]]]
-      [match [ctype-desc/desc cuser-desc]
-        [ctype-desc-kind/record field-list]
-        [option/some
-          [ctype-desc-kind/record
-            [list-map field field-list
-              [pair [pair/fst field] [copy-type-proper tenv [pair/snd field]]]]]]
-
-        [option/none]]]
-    [option/none]]]
 
 [defn constrain-type-data [gctx type]
   [[func go [t]
