@@ -731,19 +731,6 @@
         t2]]
     t0]]
 
-[defn form-to-print-form [e]
-  [match e
-    [llexp/literal l]
-    [match l
-      [llliteral/i32 sw] [form/list [list [quote i32] [form/word [syntax-word/word sw]]]]
-      [llliteral/f64 sw] [form/list [list [quote f64] [form/word [syntax-word/word sw]]]]
-
-      [logq-abort form-to-print-form unexpected literal type]]
-
-    [llexp/var v] [form/word [syntax-word/word v]]
-
-    [logq-abort form-to-print-form unexpected form type]]]
-
 [defn int-to-type-var-name [i]
   [if [lt-s i [i32 26]]
     [char-code-to-word [add [i32 97] i]]
@@ -805,59 +792,6 @@
     [named-type-params [list [pair word type-var]]]
     [type-vars [list type-var]]
     [type ctype]]]
-
-[defn scheme-to-form [scheme]
-  [let [tv-to-name [transient-kv-map]
-        used-tv-names [set]
-        type-param-names [growable-list]
-        counter-atom [atom 0]]
-    [for-each p [check-type-scheme/named-type-params scheme]
-      [let [tv-name [pair/fst p]
-            tv [pair/snd p]]
-        [push
-          type-param-names
-          [if [set-has [type-var/constraints tv] type-constraint-data]
-            [flist [quote constraint] [form/word tv-name] [quote data]]
-            [form/word tv-name]]]
-        [set-add used-tv-names tv-name]
-        [set-kv-map tv-to-name tv tv-name]]]
-    [let
-      [t
-        [[func go [ct]
-        [let [nt [normalize-type ct]]
-          [match nt
-          [ctype/var tv]
-          [if-let [name [try-get tv-to-name tv]]
-            [form/word name]
-            [loop [gen-tv-name [int-to-type-var-name [inc-atom counter-atom]]]
-              [if [set-has used-tv-names gen-tv-name]
-                [continue]
-                [let [f [form/word gen-tv-name]]
-                  [push type-param-names f]
-                  [set-add used-tv-names gen-tv-name]
-                  [set-kv-map tv-to-name tv gen-tv-name]
-                  f]]]]
-
-          [ctype/literal tl]
-          [match tl
-            [type-literal/memory sw] [flist [quote memory] [form/word [syntax-word/word sw]]]
-            [type-literal/exp e] [flist [quote literal] [form-to-print-form e]]]
-
-          [ctype/apply type-name type-args]
-          [if [eq-word [word func] type-name]
-            [let [fn [get-func-type nt]]
-              [flist [quote func] [form/list [list-map arg [pair/fst fn] [go arg]]] [go [pair/snd fn]]]]
-            [form-concat
-              [list [form/word type-name]]
-              [list-map targ type-args [go targ]]]]]]]
-            [check-type-scheme/type scheme]]
-        tps [clone-growable-to-frozen-list type-param-names]]
-    [if [is-empty tps]
-      t
-      [flist [quote scheme] [form/list tps] t]]]]]
-
-[defn ctype-to-print-form [ct]
-  [scheme-to-form [check-type-scheme [list] [list] ct]]]
 
 [type llcheck-context []
   [record
@@ -1064,6 +998,73 @@
                   [push-unify-error [quote [not unifiable - different types]]]]]]]]]]]
     [go outer-t1 outer-t2]
     [clone-growable-to-frozen-list errors]]]
+
+
+[defn form-to-print-form [e]
+  [match e
+    [llexp/literal l]
+    [match l
+      [llliteral/i32 sw] [form/list [list [quote i32] [form/word [syntax-word/word sw]]]]
+      [llliteral/f64 sw] [form/list [list [quote f64] [form/word [syntax-word/word sw]]]]
+
+      [logq-abort form-to-print-form unexpected literal type]]
+
+    [llexp/var v] [form/word [syntax-word/word v]]
+
+    [logq-abort form-to-print-form unexpected form type]]]
+
+[defn scheme-to-form [scheme]
+  [let [tv-to-name [transient-kv-map]
+        used-tv-names [set]
+        type-param-names [growable-list]
+        counter-atom [atom 0]]
+    [for-each p [check-type-scheme/named-type-params scheme]
+      [let [tv-name [pair/fst p]
+            tv [pair/snd p]]
+        [push
+          type-param-names
+          [if [set-has [type-var/constraints tv] type-constraint-data]
+            [flist [quote constraint] [form/word tv-name] [quote data]]
+            [form/word tv-name]]]
+        [set-add used-tv-names tv-name]
+        [set-kv-map tv-to-name tv tv-name]]]
+    [let
+      [t
+        [[func go [ct]
+        [let [nt [normalize-type ct]]
+          [match nt
+          [ctype/var tv]
+          [if-let [name [try-get tv-to-name tv]]
+            [form/word name]
+            [loop [gen-tv-name [int-to-type-var-name [inc-atom counter-atom]]]
+              [if [set-has used-tv-names gen-tv-name]
+                [continue]
+                [let [f [form/word gen-tv-name]]
+                  [push type-param-names f]
+                  [set-add used-tv-names gen-tv-name]
+                  [set-kv-map tv-to-name tv gen-tv-name]
+                  f]]]]
+
+          [ctype/literal tl]
+          [match tl
+            [type-literal/memory sw] [flist [quote memory] [form/word [syntax-word/word sw]]]
+            [type-literal/exp e] [flist [quote literal] [form-to-print-form e]]]
+
+          [ctype/apply type-name type-args]
+          [if [eq-word [word func] type-name]
+            [let [fn [get-func-type nt]]
+              [flist [quote func] [form/list [list-map arg [pair/fst fn] [go arg]]] [go [pair/snd fn]]]]
+            [form-concat
+              [list [form/word type-name]]
+              [list-map targ type-args [go targ]]]]]]]
+            [check-type-scheme/type scheme]]
+        tps [clone-growable-to-frozen-list type-param-names]]
+    [if [is-empty tps]
+      t
+      [flist [quote scheme] [form/list tps] t]]]]]
+
+[defn ctype-to-print-form [ct]
+  [scheme-to-form [check-type-scheme [list] [list] ct]]]
 
 [defn llunify-report [gctx t1 t2 bst]
   [for-each error [unify gctx t1 t2]
