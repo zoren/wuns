@@ -1220,6 +1220,15 @@
       [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]
     [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]]
 
+[defn try-assoc-get [l k]
+  [loop [s [size l] i 0]
+    [if [lt-s i s]
+      [let [p [at l i]]
+        [if [eq-word [pair/fst p] k]
+          [option/some [pair/snd p]]
+          [continue i [inc i]]]]
+      [option/none]]]]
+
 [defn infer-llexp [gctx level lctx bform]
   [match bform
     [llexp/var sw]
@@ -1426,7 +1435,8 @@
       [ttarget [infer-llexp gctx level lctx target]
        t-mem [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
        t-rec [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
-       pt [type-pointer t-mem t-rec]]
+       pt [type-pointer t-mem t-rec]
+       field-name-word [syntax-word/word field-name]]
 [comment        [llannotate gctx target pt] ]
       [llunify-report gctx ttarget pt target]
 [comment        [llannotate gctx bform
@@ -1439,23 +1449,16 @@
       [let
         [app-type [get-apply-type t-rec]
          type-name [pair/fst app-type]]
-        [if-let [type-desc [try-get [llctx/user-types [llcheck-context/bind-ctx gctx]] type-name]]
-          [match type-desc
-            [user-type-desc/record field-map field-list]
-            [if-let [fd [try-get field-map [syntax-word/word field-name]]]
-              [llannotate gctx bform
-                [type-pointer t-mem [instantiate-syntax-type-env gctx level [infer-local-context/type-env lctx] fd]]]
-              [logq-abort infer-llexp field not found [identity field-name]]]
+        [if-let [inst-cuser-desc [try-instantiate-user-type gctx type-name [pair/snd app-type]]]
+          [match inst-cuser-desc
+            [ctype-desc-kind/record field-list]
+            [llannotate gctx bform
+              [type-pointer t-mem
+                [if-let [ft [try-assoc-get field-list field-name-word]]
+                  ft
+                  [logq-abort not found]]]]
 
-            [user-type-desc/union ctor-map ctor-types]
-            [let [inst-field-type [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]]
-              [for-each ctor-type ctor-types
-                [instantiate-syntax-type-env gctx level [infer-local-context/type-env lctx] ctor-type]
-                [logq-abort not imple]
-                ]
-              inst-field-type]
-
-            [logq-abort infer-llexp not a union or record type]]
+            [logq-abort infer-llexp field type not found [identity field-name] [identity type-name]]]
 
           [logq-abort infer-llexp field type not found [identity field-name] [identity type-name]]]]]
 

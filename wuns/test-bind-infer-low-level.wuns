@@ -65,6 +65,39 @@
       [genfn sz [u] [] [size-of [rec u]]]
       [defn sz-rec [] [size-of [rec [i32]]]]]
     [def-type-of sz [scheme [[constraint u data]] [func [] [i32]]]]]
+  [test [
+      [type i32-point []
+        [record
+          [x [i32]]
+          [y [i32]]]]
+      [memory i32 mem 1]
+      [defn f []
+        [let [prec [cast [pointer [memory mem] [i32-point]] [i32 16]]]
+          [field prec y]]]]
+      [def-type-of f [func [] [pointer [memory mem] [i32]]]]]
+  [test [
+      [type vec [s]
+        [record
+          [size [i32]]
+          [array [array [i32] s]]]]
+      [memory i32 mem 1]
+      [defn psize [[type prec [pointer [memory mem] [vec [i32]]]]]
+        [field prec size]]]
+    [def-type-of psize [func [[pointer [memory mem] [vec [i32]]]] [pointer [memory mem] [i32]]]]]
+  [test [
+      [type point-2d [v]
+        [record
+          [x v]
+          [y v]]]
+      [type r []
+        [record
+          [point-f [point-2d [f64]]]
+          [point-i [point-2d [i32]]]]]
+      [memory i32 mem 1]
+      [defn f [[type prec [pointer [memory mem] [r]]]]
+        [field [field prec point-i] x]]]
+    [def-type-of f [func [[pointer [memory mem] [r]]] [pointer [memory mem] [i32]]]]
+    ]
   [comment pointers are the same size regardless of the type of the target - type variables]
   [test [
       [memory i32 mem 1]
