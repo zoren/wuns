@@ -1167,6 +1167,23 @@
       [copy-type-proper type-env [check-type-scheme/type scheme]]]
     [logq-abort llvariable not found [identity sw]]]]
 
+[defn try-instantiate-user-type [gctx type-name type-args]
+  [if-let [cuser-desc [try-get [llcheck-context/user-types gctx] type-name]]
+    [let
+      [type-params [ctype-desc/type-params cuser-desc]
+       tenv [transient-kv-map]]
+      [for i 0 [size type-args]
+        [set-kv-map tenv [at type-params i] [at type-args i]]]
+      [match [ctype-desc/desc cuser-desc]
+        [ctype-desc-kind/record field-list]
+        [option/some
+          [ctype-desc-kind/record
+            [list-map field field-list
+              [pair [pair/fst field] [copy-type-proper tenv [pair/snd field]]]]]]
+
+        [option/none]]]
+    [option/none]]]
+
 [defn constrain-type-data [gctx type]
   [[func go [t]
     [match t
@@ -1177,16 +1194,11 @@
       [do]
 
       [ctype/apply type-name type-args]
-      [if-let [cuser-desc [try-get [llcheck-context/user-types gctx] type-name]]
-        [let
-          [type-params [ctype-desc/type-params cuser-desc]
-           tenv [transient-kv-map]]
-          [for i 0 [size type-args]
-            [set-kv-map tenv [at type-params i] [at type-args i]]]
-          [match [ctype-desc/desc cuser-desc]
-            [ctype-desc-kind/record field-list]
-            [for-each field field-list
-              [go [copy-type-proper tenv [pair/snd field]]]]]]
+      [if-let [inst-cuser-desc [try-instantiate-user-type gctx type-name type-args]]
+        [match inst-cuser-desc
+          [ctype-desc-kind/record field-list]
+          [for-each field field-list
+            [go [pair/snd field]]]]
         [switch type-name
           [[word pointer]] [do]
           [[word func]] [logq-abort func does not have a size]
