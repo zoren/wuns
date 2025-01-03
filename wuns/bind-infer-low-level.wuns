@@ -819,7 +819,8 @@
 
 [type ctype-desc-kind []
   [union
-    [record [list [pair word ctype]]]]]
+    [record [list [pair word ctype]]]
+    [alias ctype]]]
 
 [type ctype-desc []
   [record
@@ -1058,28 +1059,38 @@
   [ctype/var [generate-fresh-type-var-atom-var counter-atom level]]]
 
 [defn copy-type-proper [proper-subst-map outer-t]
-  [[func go [t] [match t
-    [ctype/var tv]
-    [if-let [subst-t [try-get proper-subst-map tv]]
-      subst-t
-      [match [get-type-var-kind tv]
-        [type-var-kind/unlinked id] t
-        [type-var-kind/linked linked-t] [go linked-t]]]
+  [[func go [t]
+    [match t
+      [ctype/var tv]
+      [if-let [subst-t [try-get proper-subst-map tv]]
+        subst-t
+        [match [get-type-var-kind tv]
+          [type-var-kind/unlinked id] t
+          [type-var-kind/linked linked-t] [go linked-t]]]
 
-    [ctype/literal l] t
+      [ctype/literal l] t
 
-    [ctype/apply type-name type-args]
-    [ctype/apply type-name [list-map arg type-args [go arg]]]]]
+      [ctype/apply type-name type-args]
+      [ctype/apply type-name [list-map arg type-args [go arg]]]]]
     outer-t]]
+
+[defn cuser-desc-to-env [cuser-desc type-args]
+  [let
+    [type-params [ctype-desc/type-params cuser-desc]
+     tenv [transient-kv-map]]
+    [assert [eq [size type-params] [size type-args]] make-type-env expected equal number of type params and type args]
+    [for i 0 [size type-args]
+      [set-kv-map tenv [at type-params i] [at type-args i]]]
+    tenv]]
 
 [defn try-instantiate-user-type [gctx type-name type-args]
   [if-let [cuser-desc [try-get [llcheck-context/user-types gctx] type-name]]
     [let
-      [type-params [ctype-desc/type-params cuser-desc]
-       tenv [transient-kv-map]]
-      [for i 0 [size type-args]
-        [set-kv-map tenv [at type-params i] [at type-args i]]]
+      [tenv [cuser-desc-to-env cuser-desc type-args]]
       [match [ctype-desc/desc cuser-desc]
+        [ctype-desc-kind/alias at]
+        [option/some [ctype-desc-kind/alias [copy-type-proper tenv at]]]
+
         [ctype-desc-kind/record field-list]
         [option/some
           [ctype-desc-kind/record
@@ -1088,6 +1099,20 @@
 
         [option/none]]]
     [option/none]]]
+
+[defn make-expander [gctx]
+  [func go [t]
+    [match t
+      [ctype/apply type-name type-args]
+      [if-let [inst-desc [try-instantiate-user-type gctx type-name type-args]]
+        [match inst-desc
+          [ctype-desc-kind/alias at]
+          [go at]
+
+          [ctype/apply type-name [list-map arg type-args [go arg]]]]
+        [ctype/apply type-name [list-map arg type-args [go arg]]]]
+
+      t]]]
 
 [defn instantiate-syntax-type-env [gctx level type-env syntax-type]
   [[func go [st]
@@ -1101,12 +1126,19 @@
       [lltype/literal l]
       [ctype/literal l]
 
-      [lltype/apply type-name targs]
+      [lltype/apply type-name type-args]
       [let [tnw [syntax-word/word type-name]
-            type-args [list-map ta targs [go ta]]]
-        [if-let [cuser-desc [try-instantiate-user-type gctx tnw type-args]]
-          [make-type-list tnw [list-map ta targs [go ta]]]
-          [make-type-list tnw [list-map ta targs [go ta]]]
+            ctype-args [list-map type-arg type-args [go type-arg]]]
+        [if-let [cuser-desc [try-get [llcheck-context/user-types gctx] tnw]]
+          [match [ctype-desc/desc cuser-desc]
+            [ctype-desc-kind/alias at]
+            [let [new-type-env [cuser-desc-to-env cuser-desc ctype-args]]
+              [copy-type-proper new-type-env at]]
+
+            [make-type-list tnw ctype-args]]
+          [do
+            [todo check or constrain params for array and pointer to be literals / memories / data]
+            [make-type-list tnw ctype-args]]
           ]]]]
     syntax-type]]
 
@@ -1186,11 +1218,16 @@
       [do]
 
       [ctype/apply type-name type-args]
-      [if-let [inst-cuser-desc [try-instantiate-user-type gctx type-name type-args]]
-        [match inst-cuser-desc
-          [ctype-desc-kind/record field-list]
-          [for-each field field-list
-            [go [pair/snd field]]]]
+      [if-let [cuser-desc [try-get [llcheck-context/user-types gctx] type-name]]
+        [let
+          [tenv [cuser-desc-to-env cuser-desc type-args]]
+          [match [ctype-desc/desc cuser-desc]
+            [ctype-desc-kind/alias at]
+            [go [copy-type-proper tenv at]]
+
+            [ctype-desc-kind/record field-list]
+            [for-each field field-list
+              [go [copy-type-proper tenv [pair/snd field]]]]]]
         [switch type-name
           [[word pointer]] [do]
           [[word func]] [logq-abort func does not have a size]
@@ -1439,15 +1476,19 @@
           [log-location [get [llctx/bound-form-to-form [llcheck-context/bind-ctx gctx]] [to-js-value bform]]]
           [logq-abort infer-llexp not implemented]]]
       [let
-        [app-type [get-apply-type t-rec]
-         type-name [pair/fst app-type]]
-        [if-let [inst-cuser-desc [try-instantiate-user-type gctx type-name [pair/snd app-type]]]
-          [match inst-cuser-desc
+        [app-type [get-apply-type [[make-expander gctx] t-rec]]
+         type-name [pair/fst app-type]
+         type-args [pair/snd app-type]]
+        [if-let [inst-cuser-desc [try-get [llcheck-context/user-types gctx] type-name]]
+          [match [ctype-desc/desc inst-cuser-desc]
+            [ctype-desc-kind/alias aliased-type]
+            [logq-abort infer-llexp aliased type not expanded]
+
             [ctype-desc-kind/record field-list]
             [llannotate gctx bform
               [type-pointer t-mem
                 [if-let [ft [try-assoc-get field-list field-name-word]]
-                  ft
+                  [copy-type-proper [cuser-desc-to-env inst-cuser-desc type-args] ft]
                   [logq-abort not found]]]]
 
             [logq-abort infer-llexp field type not found [identity field-name] [identity type-name]]]
@@ -1503,7 +1544,7 @@
           [ctype-desc [clone-growable-to-frozen-list ctype-params]
             [match desc
               [user-type-desc/alias aliased-type]
-              [logq-abort alias not implemented]
+              [ctype-desc-kind/alias [instantiate-syntax-type-env gctx 0 type-env aliased-type]]
 
               [user-type-desc/record field-map field-list]
               [ctype-desc-kind/record
