@@ -825,21 +825,6 @@
 
 [defn mk-empty-type-scheme [type] [check-type-scheme [list] [list] type]]
 
-[defn copy-type-proper [proper-subst-map outer-t]
-  [[func go [t] [match t
-    [ctype/var tv]
-    [if-let [subst-t [try-get proper-subst-map tv]]
-      subst-t
-      [match [get-type-var-kind tv]
-        [type-var-kind/unlinked id] t
-        [type-var-kind/linked linked-t] [go linked-t]]]
-
-    [ctype/literal l] t
-
-    [ctype/apply type-name type-args]
-    [ctype/apply type-name [list-map arg type-args [go arg]]]]]
-    outer-t]]
-
 [defn free-type-vars-set [outer-t]
   [let
     [ftvs [set]
@@ -1122,6 +1107,21 @@
     [llliteral/f32 -] type-f32
     [llliteral/f64 -] type-f64
     [logq-abort llliteral-to-type not implemented]]]
+
+[defn copy-type-proper [proper-subst-map outer-t]
+  [[func go [t] [match t
+    [ctype/var tv]
+    [if-let [subst-t [try-get proper-subst-map tv]]
+      subst-t
+      [match [get-type-var-kind tv]
+        [type-var-kind/unlinked id] t
+        [type-var-kind/linked linked-t] [go linked-t]]]
+
+    [ctype/literal l] t
+
+    [ctype/apply type-name type-args]
+    [ctype/apply type-name [list-map arg type-args [go arg]]]]]
+    outer-t]]
 
 [defn get-specialized-var [gctx level lctx sw]
   [if-let [scheme [lltry-get-var-type gctx lctx [syntax-word/word sw]]]
