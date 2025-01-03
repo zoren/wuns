@@ -6,23 +6,31 @@
 [defexpr test-infer [.. forms]
   [test-infer-fn forms]]
 
+[def number-of-tests [atom 0]]
+
+[def number-of-asserts [atom 0]]
+
 [defexpr test [first-form .. asserts]
   [let [gctx [infer-top-forms [make-evaluator] [form-to-list first-form]]]
+    [inc-atom number-of-tests]
     [for-each ass asserts
       [let [ass-list [form-to-list ass]
             ass-name [form-to-word [first ass-list]]]
+        [inc-atom number-of-asserts]
         [switch ass-name
           [[word def-type-of]]
           [let [sch [scheme-to-form [get [llcheck-context/def-var-types gctx] [form-to-word [second ass-list]]]]]
             [when-not
-            [eq-form
-              sch
-              [third ass-list]]
+              [eq-form
+                sch
+                [third ass-list]]
             [logq-abort test assert fail expected [third ass-list] got [identity sch]]]]
 
           [logq-abort test kind unknown]]]]]]
 
 [defn run-tests []
+  [test [[defn inc [x] [intrinsic i32.add x [i32 1]]]]
+    [def-type-of inc [func [[i32]] [i32]]]]
   [test [
       [genfn id [t] [[type p t]] p]
       [defn id-int [p] [call id [[i32]] [p]]]
@@ -41,18 +49,31 @@
       [genfn sz [t] [] [size-of t]]
       [defn sz-int [] [call sz [[i32]] []]]
       [defn sz-float [] [call sz [[f64]] []]]]
-    [def-type-of sz [scheme [[constraint t size-of]] [func [] [i32]]]]
+    [def-type-of sz [scheme [[constraint t data]] [func [] [i32]]]]
     [def-type-of sz-int [func [] [i32]]]
     [def-type-of sz-float [func [] [i32]]]]
-  [comment pointers are the same size regardless of the type of the target]
+  [test [
+      [type rec [] [record [a [i32]] [b [f64]]]]
+      [defn sz-rec [] [size-of [rec]]]]
+    [def-type-of sz-rec [func [] [i32]]]]
+  [test [
+      [type rec [t] [record [f t]]]
+      [defn sz-rec [] [size-of [rec [i32]]]]]
+    [def-type-of sz-rec [func [] [i32]]]]
+    [test [
+      [type rec [t] [record [sz [i32]] [f t]]]
+      [genfn sz [t] [] [size-of [rec t]]]
+      [defn sz-rec [] [size-of [rec [i32]]]]]
+    [def-type-of sz [scheme [[constraint t data]] [func [] [i32]]]]]
+  [comment pointers are the same size regardless of the type of the target - type variables]
   [test [
       [memory i32 mem 1]
       [genfn sz [t] [] [size-of [pointer [memory mem] t]]]
       [defn sz-pint [] [call sz [[i32]] []]]]
     [def-type-of sz [scheme [t] [func [] [i32]]]]
     [def-type-of sz-pint [func [] [i32]]]]
+    [logq tests run [atom-get number-of-tests] asserts [atom-get number-of-asserts]]]
 
-    ]
 
 [defn test-unify []
   [let
@@ -62,5 +83,5 @@
      t1 [ctype/var tv1]
      t2 [ctype/var tv2]
      gctx [llcheck-context-empty [llctx-empty]]]
-    [set-add [type-var/constraints tv2] type-constraint-size-of]
+    [set-add [type-var/constraints tv2] type-constraint-data]
     [pair [unify gctx t1 t2] [pair t1 t2]]]]

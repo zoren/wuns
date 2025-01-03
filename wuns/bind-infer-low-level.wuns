@@ -681,10 +681,10 @@
 
 [type type-constraint []
   [union
-    [size-of]
+    [data]
     [literal]]]
 
-[def type-constraint-size-of [type-constraint/size-of]]
+[def type-constraint-data [type-constraint/data]]
 
 [type
   type-var-kind []
@@ -816,8 +816,8 @@
             tv [pair/snd p]]
         [push
           type-param-names
-          [if [set-has [type-var/constraints tv] type-constraint-size-of]
-            [flist [quote constraint] [form/word tv-name] [quote size-of]]
+          [if [set-has [type-var/constraints tv] type-constraint-data]
+            [flist [quote constraint] [form/word tv-name] [quote data]]
             [form/word tv-name]]]
         [set-add used-tv-names tv-name]
         [set-kv-map tv-to-name tv tv-name]]]
@@ -978,12 +978,22 @@
       [let
         [level [get-type-var-level type-var]
          fvs-set [free-type-vars-set type]
-         fvs [set-to-list fvs-set]]
+         fvs [set-to-list fvs-set]
+         type-var-constraints [type-var/constraints type-var]]
         [if [set-has fvs-set type-var]
           [push-unify-error [quote [occurs check failed]]]
           [do
             [prune-level level fvs]
-            [set-type-var-kind-to-type type-var type]]]]]
+            [set-type-var-kind-to-type type-var type]]]
+        [match type
+          [ctype/var otv]
+          [do]
+
+          [ctype/literal l]
+          [do]
+
+          [ctype/apply type-name type-args]
+          [do]]]]
      go
      [func go [t1 t2]
       [let [nt1 [normalize-type t1]
@@ -1086,11 +1096,12 @@
               [user-type-params [get [llctx/user-type-params [llcheck-context/bind-ctx gctx]] tnw]
                param-type-env [transient-kv-map]]
               [assert [eq [size user-type-params] [size targs]] arity mismatch]
-
-              [instantiate-syntax-type-env gctx level param-type-env aliased-type]]]
+              [for i 0 [size targs]
+                [set-kv-map param-type-env [syntax-word/word [at user-type-params i]] [go [at targs i]]]]
+              [instantiate-syntax-type-env gctx level param-type-env aliased-type]]
 
             [make-type-list tnw [list-map ta targs [go ta]]]]
-          [make-type-list tnw [list-map ta targs [go ta]]]]]]
+          [make-type-list tnw [list-map ta targs [go ta]]]]]]]
     syntax-type]]
 
 [type infer-local-context []
@@ -1153,6 +1164,42 @@
       [set-kv-map [llcheck-context/type-instantiations gctx] sw type-args]
       [copy-type-proper type-env [check-type-scheme/type scheme]]]
     [logq-abort llvariable not found [identity sw]]]]
+
+[defn constrain-type-data [gctx type]
+  [[func go [t]
+    [match t
+      [ctype/var tv]
+      [set-add [type-var/constraints tv] type-constraint-data]
+
+      [ctype/literal l]
+      [do]
+
+      [ctype/apply type-name type-args]
+      [switch type-name
+        [[word pointer]] [do]
+        [[word func]] [logq-abort func does not have a size]
+        [[word tuple]] [logq-abort tuple does not have a size]
+
+        [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
+          [do]
+          [if-let [user-desc [try-get [llctx/user-types [llcheck-context/bind-ctx gctx]] type-name]]
+            [match user-desc
+              [user-type-desc/alias aliased-type]
+              [logq-abort aliases should have been expanded]
+
+              [user-type-desc/record field-map field-list]
+              [let [type-params [get [llctx/user-type-params [llcheck-context/bind-ctx gctx]] type-name]
+                    tenv [transient-kv-map]]
+                [assert [eq [size type-params] [size type-args]] arity mismatch]
+                [for i 0 [size type-args]
+                  [set-kv-map tenv [syntax-word/word [at type-params i]] [at type-args i]]]
+                [for-each field field-list
+                  [go [instantiate-syntax-type-env gctx 0 tenv [pair/snd field]]]]]
+
+              [for-each arg type-args [go arg]]]
+            [logq-abort aliases should have been expanded]]
+          ]]]]
+    type]]
 
 [defn infer-llexp [gctx level lctx bform]
   [match bform
@@ -1302,7 +1349,7 @@
        tv [infer-llexp gctx level lctx value]
        inst-app-t [get-apply-type inst-type]
        tv-type-name [pair/fst [get-apply-type tv]]]
-      [todo we allow casting i32 or i64 to pointer if the memory matches]
+      [comment we allow casting i32 or i64 to pointer if the memory matches]
       [if [and [eq-word [pair/fst inst-app-t] [word pointer]] [not [eq-word tv-type-name [word pointer]]]]
         [match [get-memory-kind [llcheck-context/bind-ctx gctx] [mem-name-from-mem-type [first [pair/snd inst-app-t]]]]
           [memory-kind/i32]
@@ -1318,25 +1365,8 @@
     [llexp/size-of t]
     [let
       [tenv [infer-local-context/type-env lctx]
-       it [instantiate-syntax-type-env gctx level tenv t]
-       go
-       [func go [t]
-        [let [nt [normalize-type t]]
-          [match nt
-            [ctype/var tv]
-            [set-add [type-var/constraints tv] type-constraint-size-of]
-
-            [ctype/literal l]
-            [do]
-
-            [ctype/apply type-name type-args]
-            [switch type-name
-              [[word pointer]] [do]
-              [[word func]] [logq-abort func does not have a size]
-              [[word tuple]] [logq-abort tuple does not have a size]
-
-              [for-each arg type-args [go arg]]]]]]]
-      [go it]
+       it [instantiate-syntax-type-env gctx level tenv t]]
+      [constrain-type-data gctx it]
       [llannotate gctx t it]
       type-i32]
 
