@@ -920,19 +920,6 @@
     [go outer-t1 outer-t2]
     [clone-growable-to-frozen-list errors]]]
 
-[defn form-to-print-form [e]
-  [match e
-    [llexp/literal l]
-    [match l
-      [llliteral/i32 sw] [form/list [list [quote i32] [form/word [syntax-word/word sw]]]]
-      [llliteral/f64 sw] [form/list [list [quote f64] [form/word [syntax-word/word sw]]]]
-
-      [logq-abort form-to-print-form unexpected literal type]]
-
-    [llexp/var v] [form/word [syntax-word/word v]]
-
-    [logq-abort form-to-print-form unexpected form type]]]
-
 [defn try-get-apply-type [t]
   [match [normalize-type t]
     [ctype/apply type-name type-args]
@@ -1002,7 +989,20 @@
           [ctype/literal tl]
           [match tl
             [type-literal/memory sw] [flist [quote memory] [form/word [syntax-word/word sw]]]
-            [type-literal/exp e] [flist [quote literal] [form-to-print-form e]]]
+            [type-literal/exp e]
+            [flist
+              [quote literal]
+              [match e
+                [llexp/literal l]
+                [match l
+                  [llliteral/i32 sw] [form/list [list [quote i32] [form/word [syntax-word/word sw]]]]
+                  [llliteral/f64 sw] [form/list [list [quote f64] [form/word [syntax-word/word sw]]]]
+
+                  [logq-abort scheme-to-form unexpected literal type]]
+
+                [llexp/var v] [form/word [syntax-word/word v]]
+
+                [logq-abort scheme-to-form unexpected form type]]]]
 
           [ctype/apply type-name type-args]
           [if [eq-word [word func] type-name]
