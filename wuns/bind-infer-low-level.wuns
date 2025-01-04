@@ -1249,14 +1249,53 @@
       [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]
     [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]]
 
-[defn try-assoc-get [l k]
-  [loop [s [size l] i 0]
-    [if [lt-s i s]
-      [let [p [at l i]]
-        [if [eq-word [pair/fst p] k]
-          [option/some [pair/snd p]]
-          [continue i [inc i]]]]
-      [option/none]]]]
+[defn check-cast [gctx inst-type tv bform]
+  [let
+    [bctx [llcheck-context/bind-ctx gctx]]
+    [[func go [upper-type lower-type]
+      [match upper-type
+        [ctype/var upper-tv]
+        [do]
+
+        [ctype/literal upper-literal]
+        [match lower-type
+          [ctype/literal lower-literal]
+          [when-not [type-literal-desc-equals upper-literal lower-literal]
+            [logq-abort check-cast literals not equal]]
+
+          [logq-abort check-cast not implemented upper literal [identity lower-type] [identity upper-literal]]]
+
+
+        [ctype/apply upper-name upper-args]
+        [match lower-type
+          [ctype/var lower-tv]
+          [do]
+
+          [ctype/literal lower-literal]
+          [logq-abort check-cast not implemented lower literal]
+
+          [ctype/apply lower-name lower-args]
+          [ifs
+            [eq-word upper-name lower-name]
+            [do
+              [assert [eq [size upper-args] [size lower-args]] arity mismatch in cast]
+              [for i 0 [size upper-args]
+                [go [at upper-args i] [at lower-args i]]]]
+
+            [and [eq-word upper-name [word pointer]] [not [eq-word lower-name [word pointer]]]]
+            [match [get-memory-kind bctx [mem-name-from-mem-type [first upper-args]]]
+              [memory-kind/i32]
+              [when-not [eq-word lower-name [word i32]]
+                [logq-abort can only cast i32 to pointer [identity bform]]]
+
+              [memory-kind/i64]
+              [when-not [eq-word lower-name [word i64]]
+                [logq-abort can only cast i64 to pointer [identity bform]]]]
+
+            [todo
+              we need to do something here to check if the types are compatible
+              [llunify-report gctx inst-type tv value]]]]]]
+    inst-type tv]]]
 
 [defn infer-llexp [gctx level lctx bform]
   [match bform
@@ -1403,20 +1442,8 @@
     [llexp/cast cast-type value]
     [let
       [inst-type [instantiate-syntax-type-env gctx level [infer-local-context/type-env lctx] cast-type]
-       tv [infer-llexp gctx level lctx value]
-       inst-app-t [get-apply-type inst-type]
-       tv-type-name [pair/fst [get-apply-type tv]]]
-      [comment we allow casting i32 or i64 to pointer if the memory matches]
-      [if [and [eq-word [pair/fst inst-app-t] [word pointer]] [not [eq-word tv-type-name [word pointer]]]]
-        [match [get-memory-kind [llcheck-context/bind-ctx gctx] [mem-name-from-mem-type [first [pair/snd inst-app-t]]]]
-          [memory-kind/i32]
-          [when-not [eq-word tv-type-name [word i32]]
-            [logq-abort can only cast i32 to pointer [identity bform]]]
-
-          [memory-kind/i64]
-          [when-not [eq-word tv-type-name [word i64]]
-            [logq-abort can only cast i64 to pointer [identity bform]]]]
-        [llunify-report gctx inst-type tv value]]
+       tv [infer-llexp gctx level lctx value]]
+      [check-cast gctx inst-type tv bform]
       [llannotate gctx bform inst-type]]
 
     [llexp/size-of t]
@@ -1487,7 +1514,7 @@
             [ctype-desc-kind/record field-list]
             [llannotate gctx bform
               [type-pointer t-mem
-                [if-let [ft [try-assoc-get field-list field-name-word]]
+                [if-let [ft [try-assoc-list-get field-list field-name-word]]
                   [copy-type-proper [cuser-desc-to-env inst-cuser-desc type-args] ft]
                   [logq-abort not found]]]]
 

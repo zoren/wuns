@@ -610,6 +610,15 @@
       [push gl [pair [at l i] [at l [inc i]]]]]
     [clone-growable-to-frozen-list gl]]]
 
+[defn try-assoc-list-get [l k]
+  [loop [s [size l] i 0]
+    [if [lt-s i s]
+      [let [p [at l i]]
+        [if [eq-word [pair/fst p] k]
+          [option/some [pair/snd p]]
+          [continue i [inc i]]]]
+      [option/none]]]]
+
 [type set [a] [union]]
 
 [import ./runtime-lib/host.js set [type-scheme [a] [func [] [set a]]]]

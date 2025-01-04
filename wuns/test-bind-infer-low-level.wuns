@@ -28,6 +28,15 @@
 
           [logq-abort test kind unknown]]]]]]
 
+[defn test-vector-file []
+  [promise-then
+    [read-parse-file-async [word vector.wuns]]
+    [func t [forms]
+      [promise-then
+        [make-init-evaluator-async]
+        [func u [evaluator]
+          [infer-top-forms evaluator forms]]]]]]
+
 [defn run-tests []
   [test [[defn inc [x] [intrinsic i32.add x [i32 1]]]]
     [def-type-of inc [func [[i32]] [i32]]]]
