@@ -114,6 +114,27 @@
       [defn sz-pint [] [call sz [[i32]] []]]]
     [def-type-of sz [scheme [t] [func [] [i32]]]]
     [def-type-of sz-pint [func [] [i32]]]]
+  [test [
+[type vector-data [a s]
+  [record
+    [size [i32]]
+    [array [array a s]]]]
+
+[memory i32 mem 1]
+
+[type pvector [v]
+  [alias
+    [pointer [memory mem] [vector-data v -s]]]]
+
+[genfn get [a] [[type pvec [pvector a]] [type i [i32]]]
+  [if [intrinsic i32.lt-s i [i32 0]] [intrinsic unreachable] [do]]
+  [if [intrinsic i32.le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
+  [deref [index [field pvec array] i]]]
+
+[defn get-float [[type pvec [pvector [f64]]] i]
+  [call get [[f64]] [pvec i]]]
+  ]]
+
     [logq tests run [atom-get number-of-tests] asserts [atom-get number-of-asserts]]]
 
 

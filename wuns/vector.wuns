@@ -5,11 +5,11 @@
 
 [memory i32 mem 1]
 
-[type pvector [a]
+[type pvector [v]
   [alias
-    [pointer [memory mem] [vector-data a s]]]]
+    [pointer [memory mem] [vector-data v -s]]]]
 
-[defn size [[type pvec [pvector a]]]
+[defn size [[type pvec [pvector -a]]]
   [deref [field pvec size]]]
 
 [def top [cast [pointer [memory mem] [i32]] [i32 0]]]
@@ -31,14 +31,11 @@
     [set-top [intrinsic i32.add top-val n-bytes]]
     top-val]]
 
-[genfn alloc [a] []
-  [cast [pointer [memory mem] a] [alloc-n [size-of a]]]]
-
-[genfn vector-make-no-init [a] [[type size [i32]]]
+[genfn vector-make-no-init [elem-type] [[type size [i32]]]
   [let
-    [p [call alloc [[vector-data a [literal size]]] []]]
+    [p [alloc [vector-data elem-type [literal size]]]]
     [assign [field p size] size]
-    [cast [pvector a] p]]]
+    [cast [pvector elem-type] p]]]
 
 [defn inc [x]
   [intrinsic i32.add x [i32 1]]]
@@ -50,7 +47,7 @@
       [when [lt-s i size]
         [assign [index [field p array] i] init]
         [continue i [inc i]]]]
-    [cast [pvector a] p]]]
+    p]]
 
 [defn vector-float [size]
   [call vector-make-init [[f64]] [size [f64 0]]]]
@@ -100,6 +97,82 @@
   vector-float vector-int vector-byte
   get-float set-float
   get-int set-int
-  get-byte set-byte
+  get-byte set-byte]
 
-  ]
+[type growable-vector [a]
+  [record
+    [size [i32]]
+    [capacity [i32]]
+    [parray [pointer [memory mem] [array a -s]]]]]
+
+[genfn growable-vector-make [a] [[type init-capacity [i32]]]
+  [let
+    [p [alloc [growable-vector a]]
+     parray [cast [pointer [memory mem] [array a -s]] [alloc [array a [literal init-capacity]]]]]
+    [assign [field p size] [i32 0]]
+    [assign [field p capacity] init-capacity]
+    [assign [field p parray] parray]
+    p]]
+
+[genfn growable-vector-push [a] [[type pgvec [pointer [memory mem] [growable-vector a]]] [type elem a]]
+  [let
+    [cur-size [deref [field pgvec size]]
+     cur-capacity [deref [field pgvec capacity]]
+     parray [deref [field pgvec parray]]]
+    [when [eq cur-size cur-capacity]
+      [intrinsic unreachable]]
+    [assign [index parray cur-size] elem]
+    [assign [field pgvec size] [inc cur-size]]]]
+
+[genfn growable-vector-to-vector [a] [[type pgvec [pointer [memory mem] [growable-vector a]]]]
+  [let
+    [size [deref [field pgvec size]]
+     arr [deref [field pgvec parray]]
+     pvector [call vector-make-no-init [a] [size]]]
+    [for i [i32 0] size
+      [call set [a] [pvector i [deref [index arr i]]]]]
+    pvector]]
+
+[defn growable-vector-make-int [init-capacity]
+  [cast [pointer [memory mem] [growable-vector [i32]]] [call growable-vector-make [[i32]] [init-capacity]]]]
+
+[defn growable-vector-push-int [[type pgvec [pointer [memory mem] [growable-vector [i32]]]] elem]
+  [call growable-vector-push [[i32]] [pgvec elem]]]
+
+[defn growable-vector-to-vector-int [[type pgvec [pointer [memory mem] [growable-vector [i32]]]]]
+  [call growable-vector-to-vector [[i32]] [pgvec]]]
+
+[export growable-vector-make-int growable-vector-push-int growable-vector-to-vector-int]
+
+[defn is-between-inclusive [lower c upper]
+  [and [le-s lower c] [le-s c upper]]]
+
+[defn is-whitespace [c]
+  [or [eq c [i32 32]] [eq c [i32 10]]]]
+
+[defn is-word-char [c]
+  [or
+    [is-between-inclusive [i32 97] c [i32 122]]
+    [is-between-inclusive [i32 45] c [i32 57]]]]
+
+[type form-word []
+  [record
+    [tag [literal [i32 0]]]
+    [word [pvector [u8]]]]]
+
+[defn form-word-make [byte-vector]
+  [let [p [alloc [form-word]]]
+    [assign [field p tag] [i32 0]]
+    [assign [field p word] byte-vector]
+    p]]
+
+[genfn vector-slice [s] [[type pvec [pvector [u8]]] start end]
+  [let
+    [sz [sub end start]
+     p [call vector-make-no-init [[u8]] [sz]]]
+    [for i [i32 0] sz
+      [set-byte p i [get-byte pvec [add start i]]]]
+    p]]
+
+[defn dvector-slice [pvec start end]
+  [call vector-slice [[u8]] [pvec start end]]]

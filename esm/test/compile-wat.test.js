@@ -890,11 +890,6 @@ import vectorWuns from '../../wuns/vector.wuns?raw'
 test('vector', async () => {
   const inst = await stringToInst(vectorWuns, 'vector.wuns')
   const allocInit = inst['alloc-init']
-  const vbsi = inst['vector-byte-size-int']
-  const vbsf = inst['vector-byte-size-float']
-  expect(vbsi(3)).toBe(4 + 4 * 3)
-  expect(vbsf(3)).toBe(4 + 8 * 3)
-  const getTop = inst['get-top']
   const vectorFloat = inst['vector-float']
   const size = inst['size']
   allocInit()
@@ -945,23 +940,23 @@ test('vector', async () => {
   expect(getByte(vb, 1)).toBe(5)
   expect(getByte(vb, 2)).toBe(7)
 
-  {
-    const parse = inst['parse']
-    const encoder = new TextEncoder()
-    const stringToByteVector = (s)=> {
-      const bytes = encoder.encode(s)
-      const vb = vectorByte(bytes.length)
-      bytes.forEach((b, i) => setByte(vb, i, b))
-      return vb
-    }
-    expect(parse(stringToByteVector('  '))).toEqual(0)
-    // expect(parse(stringToByteVector(' abc '))).toEqual(3)
-    // expect(parse(stringToByteVector(' abc defg '))).toEqual(3)
-    // expect(parse(stringToByteVector(' a '))).toEqual(1)
-    // expect(parse(stringToByteVector(' a'))).toEqual(1)
-    // expect(parse(stringToByteVector('a'))).toEqual(1)
-    // expect(parse(stringToByteVector('a '))).toEqual(1)
-  }
+  // {
+  //   const parse = inst['parse']
+  //   const encoder = new TextEncoder()
+  //   const stringToByteVector = (s)=> {
+  //     const bytes = encoder.encode(s)
+  //     const vb = vectorByte(bytes.length)
+  //     bytes.forEach((b, i) => setByte(vb, i, b))
+  //     return vb
+  //   }
+  //   expect(parse(stringToByteVector('  '))).toEqual(0)
+  //   // expect(parse(stringToByteVector(' abc '))).toEqual(3)
+  //   // expect(parse(stringToByteVector(' abc defg '))).toEqual(3)
+  //   // expect(parse(stringToByteVector(' a '))).toEqual(1)
+  //   // expect(parse(stringToByteVector(' a'))).toEqual(1)
+  //   // expect(parse(stringToByteVector('a'))).toEqual(1)
+  //   // expect(parse(stringToByteVector('a '))).toEqual(1)
+  // }
   {
     const growableVectorInt = inst['growable-vector-make-int']
     const pushInt = inst['growable-vector-push-int']

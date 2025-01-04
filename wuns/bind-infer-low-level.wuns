@@ -348,7 +348,7 @@
 
                 [do
                   [log form]
-                  [logq-abort form-to-llexp not implemented]]]]]
+                  [logq-abort form-to-llexp not implemented [identity form]]]]]]
 
           [[word if]]
           [do
@@ -1120,7 +1120,7 @@
       [lltype/var tv]
       [let [tvw [syntax-word/word tv]]
         [if [starts-with-dash tvw]
-          [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
+          [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] [i32 -2147483648]]
           [get type-env tvw]]]
 
       [lltype/literal l]
@@ -1185,9 +1185,11 @@
 
 [defn get-specialized-var [gctx level lctx sw]
   [if-let [scheme [lltry-get-var-type gctx lctx [syntax-word/word sw]]]
-    [let [type-params [check-type-scheme/type-vars scheme]
+    [let [named-type-params [check-type-scheme/named-type-params scheme]
+          type-params [check-type-scheme/type-vars scheme]
           type-env [transient-kv-map]
           type-args [growable-list]]
+      [assert [is-empty named-type-params] arity mismatch]
       [for i 0 [size type-params]
         [let [tp [at type-params i]
               ta [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]]
@@ -1197,13 +1199,29 @@
       [copy-type-proper type-env [check-type-scheme/type scheme]]]
     [logq-abort llvariable not found [identity sw]]]]
 
+[defn unwrap-type-var-links [tv]
+  [loop [cur tv]
+    [match [get-type-var-kind cur]
+      [type-var-kind/linked linked-t]
+      [match linked-t
+        [ctype/var tv2]
+        [if [is-identical tv tv2]
+          tv
+          [continue cur tv2]]
+
+        [logq-abort unwrap-type-var-links not a linked type var]]
+
+      [type-var-kind/unlinked id]
+      cur]]]
+
 [defn get-specialized-var-type-args [gctx level lctx sw type-args]
   [if-let [scheme [lltry-get-var-type gctx lctx [syntax-word/word sw]]]
-    [let [type-params [check-type-scheme/named-type-params scheme]
+    [let [named-type-params [check-type-scheme/named-type-params scheme]
+          type-params [check-type-scheme/type-vars scheme]
           type-env [transient-kv-map]]
-      [assert [eq [size type-params] [size type-args]] arity mismatch]
+      [assert [eq [size named-type-params] [size type-args]] arity mismatch]
       [for i 0 [size type-args]
-        [set-kv-map type-env [pair/snd [at type-params i]] [at type-args i]]]
+        [set-kv-map type-env [unwrap-type-var-links [pair/snd [at named-type-params i]]] [at type-args i]]]
       [set-kv-map [llcheck-context/type-instantiations gctx] sw type-args]
       [copy-type-proper type-env [check-type-scheme/type scheme]]]
     [logq-abort llvariable not found [identity sw]]]]
@@ -1232,10 +1250,11 @@
           [[word pointer]] [do]
           [[word func]] [logq-abort func does not have a size]
           [[word tuple]] [logq-abort tuple does not have a size]
+          [[word array]] [go [first type-args]]
 
           [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
             [do]
-            [logq-abort not implemented]
+            [logq-abort not implemented [identity type-name]]
             ]]]]]
     type]]
 
@@ -1429,7 +1448,10 @@
     [let
       [spec-func-type
         [if-let [type-args opt-type-args]
-          [let [ctype-args [list-map type-arg type-args [instantiate-syntax-type-env gctx level [infer-local-context/type-env lctx] type-arg]]]
+          [let [tenv [infer-local-context/type-env lctx]
+                ctype-args
+                [list-map type-arg type-args
+                  [instantiate-syntax-type-env gctx level tenv type-arg]]]
             [get-specialized-var-type-args
               gctx level [infer-local-context/stack lctx] fname-sword ctype-args]]
           [get-specialized-var gctx level [infer-local-context/stack lctx] fname-sword]]
@@ -1483,7 +1505,6 @@
           [logq-abort infer-llexp cannot assign literal to non-literal [identity bform]]]
 
         [llunify-report gctx [lift-data-type t-val] [infer-llexp gctx level lctx value] value]]
-      [llannotate gctx target pt]
       type-empty-tuple]
 
     [llexp/field target field-name]
@@ -1493,10 +1514,7 @@
        t-rec [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
        pt [type-pointer t-mem t-rec]
        field-name-word [syntax-word/word field-name]]
-[comment        [llannotate gctx target pt] ]
       [llunify-report gctx ttarget pt target]
-[comment        [llannotate gctx bform
-        [type-pointer t-mem inst-field-type]] ]
       [if-let [apt [try-get-apply-type t-rec]]
         [do]
         [do
@@ -1512,11 +1530,12 @@
             [logq-abort infer-llexp aliased type not expanded]
 
             [ctype-desc-kind/record field-list]
-            [llannotate gctx bform
-              [type-pointer t-mem
-                [if-let [ft [try-assoc-list-get field-list field-name-word]]
-                  [copy-type-proper [cuser-desc-to-env inst-cuser-desc type-args] ft]
-                  [logq-abort not found]]]]
+            [let [t-target
+                  [if-let [ft [try-assoc-list-get field-list field-name-word]]
+                    [copy-type-proper [cuser-desc-to-env inst-cuser-desc type-args] ft]
+                    [logq-abort not found]]
+                  t-pointer [type-pointer t-mem t-target]]
+              [llannotate gctx bform t-pointer]]
 
             [logq-abort infer-llexp field type not found [identity field-name] [identity type-name]]]
 
@@ -1530,7 +1549,6 @@
        t-size [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
        t-arr [type-array t-elem t-size]
        pt [type-pointer t-mem t-arr]]
-[comment        [llannotate gctx target pt] ]
       [llunify-report gctx ttarget pt target]
       [llunify-report gctx type-i32 [infer-llexp gctx level lctx index] index]
       [llannotate gctx bform [type-pointer t-mem t-elem]]]
@@ -1663,7 +1681,7 @@
 [defn make-init-evaluator-async []
   [let [evaluator [make-evaluator]]
     [promise-then
-      [evaluate-top-async evaluator [quote [load std.wuns]]]
+      [evaluate-top-async evaluator [quote [load llmacro.wuns]]]
       [func t [-] evaluator]]]]
 
 [defn infer-top-forms [evaluator forms]
