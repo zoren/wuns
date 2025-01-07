@@ -973,4 +973,13 @@ test('vector', async () => {
     expect(getInt(fixedVector, 1)).toBe(5)
     expect(getInt(fixedVector, 2)).toBe(7)
   }
+  {
+    const formWordMake = inst['form-word-make']
+    const formListMake = inst['form-list-make']
+    const formGetTag = inst['form-get-tag']
+    const w = formWordMake(3)
+    const l = formListMake(3)
+    expect(formGetTag(w)).toBe(10)
+    expect(formGetTag(l)).toBe(11)
+  }
 })

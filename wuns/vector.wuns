@@ -75,6 +75,14 @@
   [if [le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
   [assign [index [field pvec array] i] v]]
 
+[genfn vector-slice [s] [[type pvec [pvector s]] start end]
+  [let
+    [sz [sub end start]
+     p [call vector-make-no-init [s] [sz]]]
+    [for i [i32 0] sz
+      [call set [s] [p i [call get [s] [pvec [add start i]]]]]]
+    p]]
+
 [defn set-float [pvec i [type v [f64]]]
   [call set [[f64]] [pvec i v]]]
 
@@ -92,6 +100,9 @@
 
 [defn get-byte [[type pvec [pvector [u8]]] i]
   [call get [[u8]] [pvec i]]]
+
+[defn vector-slice-byte [pvec start end]
+  [call vector-slice [[u8]] [pvec start end]]]
 
 [export alloc-init get-top size
   vector-float vector-int vector-byte
@@ -155,24 +166,38 @@
     [is-between-inclusive [i32 97] c [i32 122]]
     [is-between-inclusive [i32 45] c [i32 57]]]]
 
+[type word []
+  [alias [pvector [u8]]]]
+
 [type form-word []
   [record
-    [tag [literal [i32 0]]]
-    [word [pvector [u8]]]]]
+    [tag [literal [i32 10]]]
+    [word [word]]]]
 
-[defn form-word-make [byte-vector]
+[type
+  form-list []
+  [record
+    [tag [literal [i32 11]]]
+    [forms [pvector [pointer [memory mem] [form]]]]]
+
+  form []
+  [union
+    [form-word]
+    [form-list]]]
+
+[defn form-word-make [word]
   [let [p [alloc [form-word]]]
-    [assign [field p tag] [i32 0]]
-    [assign [field p word] byte-vector]
-    p]]
+    [assign [field p tag] [i32 10]]
+    [assign [field p word] word]
+    [cast [pointer [memory mem] [form]] p]]]
 
-[genfn vector-slice [s] [[type pvec [pvector [u8]]] start end]
-  [let
-    [sz [sub end start]
-     p [call vector-make-no-init [[u8]] [sz]]]
-    [for i [i32 0] sz
-      [set-byte p i [get-byte pvec [add start i]]]]
-    p]]
+[defn form-list-make [forms]
+  [let [p [alloc [form-list]]]
+    [assign [field p tag] [i32 11]]
+    [assign [field p forms] forms]
+    [cast [pointer [memory mem] [form]] p]]]
 
-[defn dvector-slice [pvec start end]
-  [call vector-slice [[u8]] [pvec start end]]]
+[defn form-get-tag [[type form [pointer [memory mem] [form]]]]
+  [deref [field form tag]]]
+
+[export form-word-make form-list-make form-get-tag]
