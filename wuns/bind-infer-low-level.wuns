@@ -1159,9 +1159,6 @@
     [stack [local-stack check-type-scheme]]
     [type-env [transient-kv-map word ctype]]]]
 
-[defn make-local-context [var-values lstack kind]
-  [local-stack/frame lstack [local-context var-values kind]]]
-
 [defn generalize [current-level type]
   [let [tvs [growable-list]]
     [for-each tv [set-to-list [free-type-vars-set type]]
@@ -1398,7 +1395,9 @@
     [let
       [var-types [transient-kv-map]
        let-ctx [infer-local-context
-                  [make-local-context var-types [infer-local-context/stack lctx] [local-context-kind/let]]
+                  [local-stack/frame
+                    [infer-local-context/stack lctx]
+                    [local-context var-types [local-context-kind/let]]]
                   [infer-local-context/type-env lctx]]
        level-1 [inc level]]
       [for-each binding bindings
@@ -1424,7 +1423,7 @@
       [var-types [transient-kv-map]
        loop-ctx
         [infer-local-context
-          [make-local-context var-types [infer-local-context/stack lctx] [local-context-kind/loop]]
+          [local-stack/frame [infer-local-context/stack lctx] [local-context var-types [local-context-kind/loop]]]
           [infer-local-context/type-env lctx]]
        level-1 [inc level]]
       [for-each binding bindings
@@ -1689,7 +1688,7 @@
           [llannotate gctx [pair/fst param] t]]]
       [let [func-ctx
             [infer-local-context
-              [make-local-context param-ctx [local-stack/empty] [local-context-kind/func]]
+              [local-stack/frame [local-stack/empty] [local-context param-ctx [local-context-kind/func]]]
               type-env]
             return-type [infer-forms gctx level-1 func-ctx [lldefn/bodies func]]
             ct
