@@ -89,9 +89,10 @@ const string_join = (separator, strings) => {
   if (typeof separator !== 'string') {
     throw new Error('string-join expects string')
   }
-  for (const s of strings) if (typeof s !== 'string') {
-    throw new Error('string-join expects string')
-  }
+  for (const s of strings)
+    if (typeof s !== 'string') {
+      throw new Error('string-join expects string')
+    }
   return strings.join(separator)
 }
 export { string_join as 'string-join' }
@@ -99,13 +100,14 @@ const word_join = (separator, strings) => {
   if (typeof separator !== 'string') {
     throw new Error('word-join expects string')
   }
-  for (const s of strings) if (typeof s !== 'string') {
-    throw new Error('word-join expects string')
-  }
+  for (const s of strings)
+    if (typeof s !== 'string') {
+      throw new Error('word-join expects string')
+    }
   return strings.join(separator)
 }
 export { word_join as 'word-join' }
-const char_code_to_string = (code_point) => (String.fromCodePoint(code_point))
+const char_code_to_string = (code_point) => String.fromCodePoint(code_point)
 export { char_code_to_string as 'char-code-to-string' }
 // todo rename code_point_to_word
 const char_code_to_word = (code_point) => stringToWord(String.fromCodePoint(code_point))
@@ -304,8 +306,7 @@ const byte_array_resize = (byte_array, new_size) => {
   if (!buffer.resizable) throw new Error('byte-array-resize expects resizable byte array')
   if (!isSigned32BitInteger(new_size)) throw new Error('byte-array-resize expects number: ' + new_size)
   if (new_size < 0) throw new Error('byte-array-resize expects non-negative size')
-  if (new_size > buffer.maxByteLength)
-    throw new Error('byte-array-resize expects new_size <= buffer.byteLength')
+  if (new_size > buffer.maxByteLength) throw new Error('byte-array-resize expects new_size <= buffer.byteLength')
   buffer.resize(new_size)
   return null
 }
