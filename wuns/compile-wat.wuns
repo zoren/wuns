@@ -54,65 +54,71 @@
       [ctype/var tv]
       [logq-abort size-of type var not bound [identity tv]]
 
-      [ctype/literal l]
-      int-const-4
+      [ctype/inst inst]
+      [match inst
+        [ctype-inst/literal l]
+        int-const-4
 
-      [ctype/apply type-name type-args]
-      [switch type-name
-        [[word u8] [word s8]] int-const-1
-        [[word u16] [word s16]] int-const-2
-        [[word i32] [word f32]] int-const-4
-        [[word i64] [word f64]] int-const-8
-        [[word v128]] int-const-16
-        [[word tuple]] [logq-abort size-of tuple not implemented]
+        [ctype-inst/apply type-name type-args]
+        [switch type-name
+          [[word u8] [word s8]] int-const-1
+          [[word u16] [word s16]] int-const-2
+          [[word i32] [word f32]] int-const-4
+          [[word i64] [word f64]] int-const-8
+          [[word v128]] int-const-16
+          [[word tuple]] [logq-abort size-of tuple not implemented]
 
-        [[word pointer]]
-        [do
-          [assert [eq 2 [size type-args]]]
-          [match [get-memory-kind [llcheck-context/bind-ctx check-ctx] [mem-name-from-mem-type [first type-args]]]
-            [memory-kind/i32]
-            int-const-4
-            [memory-kind/i64]
-            int-const-8]]
+          [[word pointer]]
+          [do
+            [assert [eq 2 [size type-args]]]
+            [match [get-memory-kind [llcheck-context/bind-ctx check-ctx] [mem-name-from-mem-type [first type-args]]]
+              [memory-kind/i32]
+              int-const-4
+              [memory-kind/i64]
+              int-const-8]]
 
-        [[word array]]
-        [let [size-exp
-          [match [at type-args 1]
-            [ctype/literal l]
-            [match l
-              [ctype-literal/exp e]
-              [integer-exp/exp e]
+          [[word array]]
+          [let [size-exp
+            [match [at type-args 1]
+              [ctype/var tv]
+              [logq-abort size-of array not implemented [at type-args 1]]
 
-              [ctype-literal/i32 i]
-              [integer-exp/const i]
+              [ctype/inst inst]
+              [match inst
+                [ctype-inst/literal l]
+                [match l
+                  [ctype-literal/exp e]
+                  [integer-exp/exp e]
 
-              [ctype-literal/memory m]
-              [logq-abort size-of not implemented memory literal]]
+                  [ctype-literal/i32 i]
+                  [integer-exp/const i]
 
-            [ctype/var tv]
-            [logq-abort size-of array not implemented [at type-args 1]]
+                  [ctype-literal/memory m]
+                  [logq-abort size-of not implemented memory literal]]
 
-            [logq-abort size-of array not implemented [at type-args 1]]]]
-          [int-exp-mul
-            [type-to-size [first type-args]]
-            size-exp]]
+                [logq-abort size-of not implemented]]
 
-        [if-let [inst-cuser-desc [try-get [llcheck-context/user-types check-ctx] type-name]]
-          [match [ctype-desc/desc inst-cuser-desc]
-            [ctype-desc-kind/record field-list]
-            [let
-              [new-tv-env [cuser-desc-to-env inst-cuser-desc type-args]]
-              [loop [cur-size int-const-0 i 0 n [size field-list]]
-                [if [lt-s i n]
-                  [let [fd [at field-list i]]
-                    [continue
-                      cur-size
-                        [int-exp-add cur-size
-                          [type-to-size [copy-type-proper new-tv-env [pair/snd fd]]]]
-                      i [inc i]]]
-                  cur-size]]]
-            [logq-abort size-of not a record type [identity type-name]]]
-          [logq-abort size-of not a user type]]]]]]
+              [logq-abort size-of array not implemented [at type-args 1]]]]
+            [int-exp-mul
+              [type-to-size [first type-args]]
+              size-exp]]
+
+          [if-let [inst-cuser-desc [try-get [llcheck-context/user-types check-ctx] type-name]]
+            [match [ctype-desc/desc inst-cuser-desc]
+              [ctype-desc-kind/record field-list]
+              [let
+                [new-tv-env [cuser-desc-to-env inst-cuser-desc type-args]]
+                [loop [cur-size int-const-0 i 0 n [size field-list]]
+                  [if [lt-s i n]
+                    [let [fd [at field-list i]]
+                      [continue
+                        cur-size
+                          [int-exp-add cur-size
+                            [type-to-size [copy-type-proper new-tv-env [pair/snd fd]]]]
+                        i [inc i]]]
+                    cur-size]]]
+              [logq-abort size-of not a record type [identity type-name]]]
+            [logq-abort size-of not a user type]]]]]]]
 
 [defn get-annotation [cctx bst]
   [if-let [anno [try-get [llcheck-context/type-annotations cctx] [to-js-value bst]]]
@@ -339,47 +345,58 @@
 
 [defn translate-type [tctx it]
   [match [normalize-type it]
-    [ctype/literal l] [word i32]
+    [ctype/var tv]
+    [logq-abort translate-type not implemented type var [identity tv]]
 
-    [ctype/apply type-name type-args]
-    [switch type-name
-      [[word pointer]]
-      [match [get-memory-kind [llctx-from-translate tctx] [mem-name-from-mem-type [first type-args]]]
-        [memory-kind/i32] [word i32]
-        [memory-kind/i64] [word i64]]
+    [ctype/inst inst]
+    [match inst
+      [ctype-inst/literal l] [word i32]
 
-      [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
-        type-name
-        [do [log it] [logq-abort not implemented translate-type [identity it]]]]]
+      [ctype-inst/apply type-name type-args]
+      [switch type-name
+        [[word pointer]]
+        [match [get-memory-kind [llctx-from-translate tctx] [mem-name-from-mem-type [first type-args]]]
+          [memory-kind/i32] [word i32]
+          [memory-kind/i64] [word i64]]
 
-    [ctype/anon kind]
-    [match kind
-      [ctype-desc-kind/union utypes]
-      [translate-type tctx [first utypes]]]
+        [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
+          type-name
+          [logq-abort not implemented translate-type [identity it]]]]
 
-    [do [log it] [logq-abort not implemented translate-type [identity it]]]]]
+      [ctype-inst/anon kind]
+      [match kind
+        [ctype-desc-kind/union utypes]
+        [translate-type tctx [first utypes]]
+
+        [logq-abort not implemented translate-type [identity it]]]
+
+      [logq-abort not implemented translate-type [identity it]]]]]
 
 [defn translate-types [tctx it]
   [let [nt [normalize-type it]]
-    [match [normalize-type it]
-      [ctype/apply type-name type-args]
-      [switch type-name
-        [[word tuple]]
-        [do
-          [when-not [is-empty type-args]
-            [logq translate-types tuple [identity type-args]]]
-          [list-map ta type-args [translate-type tctx ta]]]
+    [match nt
+      [ctype/var tv] [logq-abort translate-types not implemented [identity nt]]
 
-        [list [translate-type tctx nt]]]
+      [ctype/inst inst]
+      [match inst
+        [ctype-inst/apply type-name type-args]
+        [switch type-name
+          [[word tuple]]
+          [do
+            [when-not [is-empty type-args]
+              [logq translate-types tuple [identity type-args]]]
+            [list-map ta type-args [translate-type tctx ta]]]
 
-      [ctype/anon kind]
-      [match kind
-        [ctype-desc-kind/union utypes]
-        [list [translate-type tctx [first utypes]]]
+          [list [translate-type tctx nt]]]
 
-        [logq-abort translate-types not implemented [identity kind]]]
+        [ctype-inst/anon kind]
+        [match kind
+          [ctype-desc-kind/union utypes]
+          [list [translate-type tctx [first utypes]]]
 
-      [do [log it] [logq-abort not implemented translate-types [identity it]]]]]]
+          [logq-abort translate-types not implemented [identity kind]]]
+
+        [do [log it] [logq-abort not implemented translate-types [identity it]]]]]]]
 
 [defn specialized-name-from [tctx fname type-args]
   [loop
@@ -396,22 +413,24 @@
 
             [type-var-kind/linked lt] [logq-abort ctype-to-name unreachable type should be normalized]]
 
-          [ctype/literal l]
-          [word literal]
+          [ctype/inst inst]
+          [match inst
+            [ctype-inst/literal l]
+            [word literal]
 
-          [ctype/apply type-name type-args]
-          [switch type-name
-            [[word pointer]]
-            [match [get-memory-kind [llctx-from-translate tctx] [mem-name-from-mem-type [first type-args]]]
-              [memory-kind/i32] [word i32]
-              [memory-kind/i64] [word i64]]
-            [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
-              type-name
-              [word-join
-                [word -]
-                [list-map ta type-args [t2n ta]]]]]
+            [ctype-inst/apply type-name type-args]
+            [switch type-name
+              [[word pointer]]
+              [match [get-memory-kind [llctx-from-translate tctx] [mem-name-from-mem-type [first type-args]]]
+                [memory-kind/i32] [word i32]
+                [memory-kind/i64] [word i64]]
+              [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
+                type-name
+                [word-join
+                  [word -]
+                  [list-map ta type-args [t2n ta]]]]]
 
-            [do [logq-abort not implemented ctype-to-name]]]]]
+              [do [logq-abort not implemented ctype-to-name]]]]]]
     [if [lt-s i s]
       [let
         [tn [t2n [at type-args i]]]
