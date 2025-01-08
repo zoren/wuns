@@ -92,7 +92,7 @@
 
 [defn is-odd [x] [i32.bitwise-and x 1]]
 
-[defn is-negative [x] [lt-s x 0]]
+[defmacro is-negative [x] [flist [quote lt-s] x [quote [i32 0]]]]
 
 [defn min [a b] [if [lt-s a b] a b]]
 [defn max [a b] [if [lt-s a b] b a]]

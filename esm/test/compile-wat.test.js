@@ -84,7 +84,6 @@ test('genfn', async () => {
 
 [defn id-int [[type i [i32]]]
   [call gid [[i32]] [i]]]`)
-
 })
 
 test('defn', async () => {
@@ -940,23 +939,64 @@ test('vector', async () => {
   expect(getByte(vb, 1)).toBe(5)
   expect(getByte(vb, 2)).toBe(7)
 
-  // {
-  //   const parse = inst['parse']
-  //   const encoder = new TextEncoder()
-  //   const stringToByteVector = (s)=> {
-  //     const bytes = encoder.encode(s)
-  //     const vb = vectorByte(bytes.length)
-  //     bytes.forEach((b, i) => setByte(vb, i, b))
-  //     return vb
-  //   }
-  //   expect(parse(stringToByteVector('  '))).toEqual(0)
-  //   // expect(parse(stringToByteVector(' abc '))).toEqual(3)
-  //   // expect(parse(stringToByteVector(' abc defg '))).toEqual(3)
-  //   // expect(parse(stringToByteVector(' a '))).toEqual(1)
-  //   // expect(parse(stringToByteVector(' a'))).toEqual(1)
-  //   // expect(parse(stringToByteVector('a'))).toEqual(1)
-  //   // expect(parse(stringToByteVector('a '))).toEqual(1)
-  // }
+  const pwordToString = (p) => {
+    const s = size(p)
+    const bytes = new Uint8Array(s)
+    for (let i = 0; i < s; i++) {
+      bytes[i] = getByte(p, i)
+    }
+    return String.fromCharCode(...bytes)
+  }
+  {
+    const parse = inst['parse']
+    const formGetTag = inst['form-get-tag']
+    const formGetWord = inst['form-get-word']
+    const formGetList = inst['form-get-list']
+    const encoder = new TextEncoder()
+    const stringToByteVector = (s) => {
+      const bytes = encoder.encode(s)
+      const vb = vectorByte(bytes.length)
+      bytes.forEach((b, i) => setByte(vb, i, b))
+      return vb
+    }
+
+    const expectForm = (actualPointer, expectedForm) => {
+      if (expectedForm === null) {
+        expect(actualPointer).toBe(0)
+      } else if (typeof expectedForm === 'string') {
+        const actualWord = formGetWord(actualPointer)
+        expect(pwordToString(actualWord)).toEqual(expectedForm)
+      } else if (Array.isArray(expectedForm)) {
+        const actualList = formGetList(actualPointer)
+        expect(size(actualList)).toEqual(expectedForm.length)
+        for (let i = 0; i < expectedForm.length; i++) {
+          expectForm(getInt(actualList, i), expectedForm[i])
+        }
+      } else {
+        console.log({ expectedForm })
+        throw new Error('unreachable')
+      }
+    }
+    expectForm(parse(stringToByteVector('')), null)
+    expectForm(parse(stringToByteVector(' ')), null)
+    expectForm(parse(stringToByteVector(' \n')), null)
+    expectForm(parse(stringToByteVector(' \n\n ')), null)
+    expectForm(parse(stringToByteVector(' abc ')), 'abc')
+    expectForm(parse(stringToByteVector('abc ')), 'abc')
+    expectForm(parse(stringToByteVector('abc')), 'abc')
+    expectForm(parse(stringToByteVector('abc')), 'abc')
+    expectForm(parse(stringToByteVector(' abc hej ')), 'abc')
+    expectForm(parse(stringToByteVector(' abc [] ')), 'abc')
+    expectForm(parse(stringToByteVector(' abc [] ')), 'abc')
+    expectForm(parse(stringToByteVector(' abc[] ')), 'abc')
+    expectForm(parse(stringToByteVector(' abc-def ')), 'abc-def')
+    expectForm(parse(stringToByteVector(' -1337.34 ')), '-1337.34')
+
+    expectForm(parse(stringToByteVector(' [abc def] ')), ['abc', 'def'])
+    expectForm(parse(stringToByteVector(' [abc] ')), ['abc'])
+    expectForm(parse(stringToByteVector(' [a] ')), ['a'])
+    expectForm(parse(stringToByteVector(' [] ')), [])
+  }
   {
     const growableVectorInt = inst['growable-vector-make-int']
     const pushInt = inst['growable-vector-push-int']
