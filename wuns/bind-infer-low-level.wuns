@@ -948,6 +948,9 @@
             [ctype/apply tn2 tas2]
             [push-unify-error [quote [not unifiable - literal vs inst]]]]
 
+          [ctype/anon kind1]
+          [do]
+
           [ctype/apply type-name1 type-args1]
           [match nt2
             [ctype/var tv2]
