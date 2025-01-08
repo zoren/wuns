@@ -1694,7 +1694,6 @@
        gfunc-type [generate-fresh-type-var-atom counter-atom level-1]
        param-ctx [transient-kv-map]
        type-env [transient-kv-map]
-       reg-params [growable-list]
        fname-word [syntax-word/word [lldefn/name func]]
        named-type-params [growable-list]]
       [when-let [type-params [lldefn/type-params func]]
@@ -1704,20 +1703,22 @@
             [push named-type-params [pair tpw itp]]
             [set-kv-map type-env tpw [ctype/var itp]]]]]
       [set-kv-map param-ctx fname-word [mk-empty-type-scheme gfunc-type]]
-      [for-each param [lldefn/params func]
-        [let
-          [t
-            [if-let [param-t [pair/snd param]]
-              [instantiate-syntax-type-env gctx level-1 type-env param-t]
-              [generate-fresh-type-var-atom counter-atom level-1]]
-           pn [syntax-word/word [pair/fst param]]]
-          [set-kv-map param-ctx pn [mk-empty-type-scheme t]]
-          [push reg-params t]
-          [llannotate gctx [pair/fst param] t]]]
-      [let [return-type [infer-func gctx level-1 type-env param-ctx [lldefn/bodies func]]
+      [let [reg-params
+            [list-map param [lldefn/params func]
+              [let
+                [t
+                  [if-let [param-t [pair/snd param]]
+                    [instantiate-syntax-type-env gctx level-1 type-env param-t]
+                    [generate-fresh-type-var-atom counter-atom level-1]]]
+                [set-kv-map
+                  param-ctx
+                  [syntax-word/word [pair/fst param]]
+                  [mk-empty-type-scheme t]]
+                t]]
+            return-type [infer-func gctx level-1 type-env param-ctx [lldefn/bodies func]]
             ct
             [type-func
-              [clone-growable-to-frozen-list reg-params]
+              reg-params
               return-type]]
         [llunify-report gctx
           gfunc-type
