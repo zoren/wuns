@@ -165,6 +165,14 @@
     [params [list [pair syntax-word [option lltype]]]]
     [bodies [list llexp]]]]
 
+[type type-predicate []
+  [record
+    [name syntax-word]
+    [type-params [option [list syntax-word]]]
+    [parameter [pair syntax-word [option lltype]]]
+    [predicate-type lltype]
+    [bodies [list llexp]]]]
+
 [type user-type []
   [record
     [name syntax-word]
@@ -178,6 +186,7 @@
     [data-active syntax-word llexp [list data]]
     [def syntax-word llexp]
     [defn lldefn]
+    [type-predicate type-predicate]
     [export [list syntax-word]]]]
 
 [defn wat-type-is [type-name]
@@ -654,6 +663,27 @@
             [option/some [list-map tp type-params-list [sword tp]]]
             params-list
             bodies]]
+
+        [[word type-predicate]]
+        [let
+          [name-form [get-arg 0]
+           opt-type-params [option/none]
+           param-list [get-list [get-arg 1]]
+           predicate-type-form [get-arg 2]
+           bodies [slice l 4 [size l]]
+           type-env [set]
+           lvars [transient-kv-map]
+           lstack [local-stack/frame [local-stack/empty] [local-context lvars [local-context-kind/func]]]]
+          [assert [eq [size param-list] 1] type-predicate expected one param]
+          [set-ll-def name-form [lldef-desc/func [option/none]
+            [list-map p param-list [form-to-param lvars type-env p]]]]
+          [lltop/type-predicate
+            [type-predicate
+              [sword name-form]
+              opt-type-params
+              [form-to-param lvars type-env [first param-list]]
+              [form-to-lltype lstack type-env predicate-type-form]
+              [list-map b bodies [form-to-llexp [set] lstack b]]]]]
 
         [[word export]]
         [lltop/export
@@ -1154,11 +1184,6 @@
           ]]]]
     syntax-type]]
 
-[type infer-local-context []
-  [record
-    [stack [local-stack check-type-scheme]]
-    [type-env [transient-kv-map word ctype]]]]
-
 [defn generalize [current-level type]
   [let [tvs [growable-list]]
     [for-each tv [set-to-list [free-type-vars-set type]]
@@ -1323,6 +1348,11 @@
       [logq-abort const-eval only i32 supported]]
 
     [logq-abort const-eval only literal supported [identity exp]]]]
+
+[type infer-local-context []
+  [record
+    [stack [local-stack check-type-scheme]]
+    [type-env [transient-kv-map word ctype]]]]
 
 [defn infer-llexp [gctx level lctx bform]
   [match bform
@@ -1570,13 +1600,16 @@
       [log bform]
       [logq-abort infer-llexp not implemented]]]]
 
-[defn infer-forms [gctx level lctx bodies]
+[defn infer-func [gctx level type-env param-ctx bodies]
   [if [is-empty bodies]
     type-empty-tuple
-    [do
+    [let [func-ctx
+      [infer-local-context
+        [local-stack/frame [local-stack/empty] [local-context param-ctx [local-context-kind/func]]]
+        type-env]]
       [for i 0 [dec [size bodies]]
-        [infer-llexp gctx level lctx [at bodies i]]]
-      [infer-llexp gctx level lctx [last bodies]]]]]
+        [infer-llexp gctx level func-ctx [at bodies i]]]
+      [infer-llexp gctx level func-ctx [last bodies]]]]]
 
 [defn infer-lltop [gctx lltop]
   [match lltop
@@ -1686,11 +1719,7 @@
           [set-kv-map param-ctx pn [mk-empty-type-scheme t]]
           [push reg-params t]
           [llannotate gctx [pair/fst param] t]]]
-      [let [func-ctx
-            [infer-local-context
-              [local-stack/frame [local-stack/empty] [local-context param-ctx [local-context-kind/func]]]
-              type-env]
-            return-type [infer-forms gctx level-1 func-ctx [lldefn/bodies func]]
+      [let [return-type [infer-func gctx level-1 type-env param-ctx [lldefn/bodies func]]
             ct
             [type-func
               [clone-growable-to-frozen-list reg-params]
