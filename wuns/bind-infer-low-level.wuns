@@ -522,6 +522,24 @@
         [set-local lvars param-name-form [lllocal-var-kind/param-with-type t]]
         [pair [sword param-name-form] [option/some t]]]]]]
 
+[func gen-defn-helper [name-form opt-t-params params-list bodies]
+  [let
+    [type-env [set]
+     lvars [transient-kv-map]
+     lstack [local-stack/frame [local-stack/empty] [local-context lvars [local-context-kind/func]]]]
+    [when-let [type-param-swords opt-t-params]
+      [for-each type-param type-param-swords
+        [set-add type-env [syntax-word/word type-param]]]]
+    [let
+      [params [list-map p params-list [form-to-param lvars type-env p]]]
+      [set-ll-def name-form [lldef-desc/func opt-t-params params]]
+      [lltop/defn
+        [lldefn
+          [sword name-form]
+          opt-t-params
+          params
+          [list-map b bodies [form-to-llexp type-env lstack b]]]]]]]
+
 [func form-to-lltop [form]
   [let
     [report-error [func r [msg] [push-error form msg]]
@@ -618,40 +636,24 @@
         [let
           [name-form [get-arg 0]
            params-list [get-list [get-arg 1]]
-           bodies [slice l 3 [size l]]
-           type-env [set]
-           lvars [transient-kv-map]
-           lstack [local-stack/frame [local-stack/empty] [local-context lvars [local-context-kind/func]]]
-           params [list-map p params-list [form-to-param lvars type-env p]]]
-          [set-ll-def name-form [lldef-desc/func [option/none] params]]
-          [lltop/defn
-            [lldefn
-              [sword name-form]
-              [option/none]
-              params
-              [list-map b bodies [form-to-llexp type-env lstack b]]]]]
+           bodies [slice l 3 [size l]]]
+          [gen-defn-helper
+            name-form
+            [option/none]
+            params-list
+            bodies]]
 
         [[word genfn]]
         [let
           [name-form [get-arg 0]
            type-params-list [get-list [get-arg 1]]
            params-list [get-list [get-arg 2]]
-           bodies [slice l 4 [size l]]
-           type-env [set]
-           lvars [transient-kv-map]
-           lstack [local-stack/frame [local-stack/empty] [local-context lvars [local-context-kind/func]]]
-           tparams [list-map tp type-params-list [sword tp]]]
-          [for-each type-param type-params-list
-            [set-add type-env [form-to-word type-param]]]
-          [let
-            [params [list-map p params-list [form-to-param lvars type-env p]]]
-            [set-ll-def name-form [lldef-desc/func [option/some tparams] params]]
-            [lltop/defn
-              [lldefn
-                [sword name-form]
-                [option/some tparams]
-                params
-                [list-map b bodies [form-to-llexp type-env lstack b]]]]]]
+           bodies [slice l 4 [size l]]]
+          [gen-defn-helper
+            name-form
+            [option/some [list-map tp type-params-list [sword tp]]]
+            params-list
+            bodies]]
 
         [[word export]]
         [lltop/export
