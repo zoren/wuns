@@ -1139,21 +1139,6 @@
         [option/none]]]
     [option/none]]]
 
-[defn expand-alias [gctx outer-t]
-  [[func go [t]
-    [match t
-      [ctype/apply type-name type-args]
-      [if-let [inst-desc [try-instantiate-user-type gctx type-name type-args]]
-        [match inst-desc
-          [ctype-desc-kind/alias at]
-          [go at]
-
-          [ctype/apply type-name [list-map arg type-args [go arg]]]]
-        [ctype/apply type-name [list-map arg type-args [go arg]]]]
-
-      t]]
-  outer-t]]
-
 [defn instantiate-syntax-type-env [gctx level type-env syntax-type]
   [[func go [st]
     [match st
@@ -1577,7 +1562,7 @@
         [do
           [log-location [get [llctx/bound-form-to-form [llcheck-context/bind-ctx gctx]] [to-js-value bform]]]
           [logq-abort infer-llexp not implemented]]]
-      [llannotate gctx bform [type-it [get-apply-type [expand-alias gctx t-rec]]]]]
+      [llannotate gctx bform [type-it [get-apply-type t-rec]]]]
 
     [llexp/index target index]
     [let
