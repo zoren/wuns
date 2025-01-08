@@ -629,7 +629,7 @@
               [sword name-form]
               [option/none]
               params
-              [list-map b bodies [form-to-llexp [set] lstack b]]]]]
+              [list-map b bodies [form-to-llexp type-env lstack b]]]]]
 
         [[word genfn]]
         [let
