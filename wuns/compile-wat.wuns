@@ -59,6 +59,20 @@
         [ctype-inst/literal l]
         int-const-4
 
+        [ctype-inst/anon kind]
+        [match kind
+          [ctype-user-inst-kind/record field-list]
+          [loop [cur-size int-const-0 i 0 n [size field-list]]
+            [if [lt-s i n]
+              [let [fd [at field-list i]]
+                [continue
+                  cur-size
+                    [int-exp-add cur-size
+                      [type-to-size [pair/snd fd]]]
+                  i [inc i]]]
+              cur-size]]
+          [logq-abort size-of not a record type [identity kind]]]
+
         [ctype-inst/apply type-name type-args]
         [switch type-name
           [[word u8] [word s8]] int-const-1
@@ -365,7 +379,7 @@
 
       [ctype-inst/anon kind]
       [match kind
-        [ctype-desc-kind/union utypes]
+        [ctype-user-inst-kind/union utypes]
         [translate-type tctx [first utypes]]
 
         [logq-abort not implemented translate-type [identity it]]]
@@ -391,7 +405,7 @@
 
         [ctype-inst/anon kind]
         [match kind
-          [ctype-desc-kind/union utypes]
+          [ctype-user-inst-kind/union utypes]
           [list [translate-type tctx [first utypes]]]
 
           [logq-abort translate-types not implemented [identity kind]]]
@@ -650,12 +664,11 @@
         [let [ptargs [pair/snd pt]
               get-offset
               [func g-off [ttarget]
-                [let [app-type-pair [get-apply-type ttarget]]
-                  [if-let [inst-cuser-desc [try-get [llcheck-context/user-types cctx] [pair/fst app-type-pair]]]
-                  [let
-                    [new-tv-env [cuser-desc-to-env inst-cuser-desc [pair/snd app-type-pair]]]
-                    [match [ctype-desc/desc inst-cuser-desc]
-                      [ctype-desc-kind/record field-list]
+                [let [inst [if-let [i [try-get-inst-type ttarget]] i [logq-abort type not an inst]]]
+                  [match inst
+                    [ctype-inst/anon kind]
+                    [match kind
+                      [ctype-user-inst-kind/record field-list]
                       [loop [i 0 offset int-const-0]
                         [if [lt-s i [size field-list]]
                           [let [fp [at field-list i]]
@@ -666,10 +679,10 @@
                                 offset [int-exp-add
                                           offset
                                           [type-to-size-exp1
-                                            [copy-type-proper new-tv-env [pair/snd fp]]]]]]]
+                                            [pair/snd fp]]]]]]
                           [logq-abort field not found]]]
 
-                      [ctype-desc-kind/union utypes]
+                      [ctype-user-inst-kind/union utypes]
                       [let [fo [g-off [first utypes]]]
                         [if-let [first-offset [try-get-int-const fo]]
                           [for i 1 [size utypes]
@@ -680,8 +693,7 @@
                           [logq-abort field not at constant offset]]
                         fo]
 
-                      [logq-abort field not a record type [identity inst-cuser-desc]]]]
-                    [logq-abort type not found]]]]]
+                      [logq-abort field not a record or union type [identity ttarget]]]]]]]
           [wat-inst-i32.add [integer-exp-to-wat-inst [get-offset [second ptargs]]] [go target]]]]
 
       [llexp/index target index]

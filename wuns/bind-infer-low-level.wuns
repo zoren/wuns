@@ -742,15 +742,15 @@
   [union
     [literal ctype-literal]
     [apply word [list ctype]]
-    [anon ctype-desc-kind]]
+    [anon ctype-user-inst-kind]]
 
-  ctype-desc-kind []
+  ctype-user-inst-kind []
   [union
     [record [list [pair word ctype]]]
-    [union [list ctype]]
-    [alias ctype]]]
+    [union [list ctype]]]]
 
-[defn type-union [types] [ctype/inst [ctype-inst/anon [ctype-desc-kind/union types]]]]
+[defn type-union [types] [ctype/inst [ctype-inst/anon [ctype-user-inst-kind/union types]]]]
+[defn type-record [fields] [ctype/inst [ctype-inst/anon [ctype-user-inst-kind/record fields]]]]
 
 [defn get-type-var-kind [type-var]
   [atom-get [type-var/kind type-var]]]
@@ -825,14 +825,11 @@
 
             [ctype-inst/anon kind]
             [match kind
-              [ctype-desc-kind/union types]
+              [ctype-user-inst-kind/union types]
               [for-each ut types [go ut]]
 
-              [ctype-desc-kind/record fields]
-              [for-each p fields [go [pair/snd p]]]
-
-              [ctype-desc-kind/alias at]
-              [go at]]]]]]]
+              [ctype-user-inst-kind/record fields]
+              [for-each p fields [go [pair/snd p]]]]]]]]]
     [go outer-t]
     ftvs]]
 
@@ -877,6 +874,12 @@
     [type ctype]]]
 
 [defn mk-empty-type-scheme [type] [check-type-scheme [list] [list] type]]
+
+[type ctype-desc-kind []
+  [union
+    [record [list [pair word ctype]]]
+    [union [list ctype]]
+    [alias ctype]]]
 
 [type ctype-desc []
   [record
@@ -969,23 +972,46 @@
                     [for i 0 [size type-args1]
                       [go [at type-args1 i] [at type-args2 i]]]
                     [push-unify-error [quote [not unifiable - different number of type arguments]]]]
-                  [if-let [user-desc [try-get [llctx/user-types [llcheck-context/bind-ctx gctx]] type-name1]]
-                    [match user-desc
-                      [user-type-desc/alias aliased-type]
-                      [logq-abort unify error aliased type not expanded]
-
-                      [push-unify-error [quote [not unifiable - different types]]]]
-                    [if [eq-word type-name1 [word pointer]]
-                      [let [mem-name [mem-name-from-mem-type [first type-args1]]]
-                        [match [get-memory-kind [llcheck-context/bind-ctx gctx] mem-name]
-                          [memory-kind/i32] [go type-i32 nt2]
-                          [memory-kind/i64] [go type-i64 nt2]
-                          [push-unify-error [quote [not unifiable - different memory types]]]]]
-                      [push-unify-error [quote [not unifiable - different types]]]]]]
+                  [if [eq-word type-name1 [word pointer]]
+                    [let [mem-name [mem-name-from-mem-type [first type-args1]]]
+                      [match [get-memory-kind [llcheck-context/bind-ctx gctx] mem-name]
+                        [memory-kind/i32] [go type-i32 nt2]
+                        [memory-kind/i64] [go type-i64 nt2]
+                        [push-unify-error [quote [not unifiable - different memory types]]]]]
+                    [push-unify-error [quote [not unifiable - different types]]]]]
 
                 [do]]
 
-                [push-unify-error [quote [not unifiable - literal vs non-literal]]]]]]]]]
+                [ctype-inst/anon kind1]
+                [match inst2
+                  [ctype-inst/anon kind2]
+                  [match kind1
+                    [ctype-user-inst-kind/union types1]
+                    [match kind2
+                      [ctype-user-inst-kind/union types2]
+                      [if [eq [size types1] [size types2]]
+                        [for i 0 [size types1]
+                          [go [at types1 i] [at types2 i]]]
+                        [push-unify-error [quote [not unifiable - different number of union types]]]]
+
+                      [push-unify-error [quote [not unifiable - union vs non-union]]]]
+
+                    [ctype-user-inst-kind/record fields1]
+                    [match kind2
+                      [ctype-user-inst-kind/record fields2]
+                      [if [eq [size fields1] [size fields2]]
+                        [for i 0 [size fields1]
+                          [let [f1 [at fields1 i]
+                                f2 [at fields2 i]]
+                            [go [pair/snd f1] [pair/snd f2]]]]
+                        [push-unify-error [quote [not unifiable - different number of record fields]]]]
+
+                      [push-unify-error [quote [not unifiable - record vs non-record]]]]
+
+                    [push-unify-error [quote [not unifiable - union vs non-union]]]]
+                  [push-unify-error [quote [not unifiable - anon vs non-anon]]]]
+
+                [push-unify-error [quote [not unifiable - literal vs non-literal1]]]]]]]]]
     [go outer-t1 outer-t2]
     [clone-growable-to-frozen-list errors]]]
 
@@ -1073,7 +1099,8 @@
               [ctype-literal/i32 i]
               [flist
                 [quote literal]
-                [form/list [list [quote i32] [form/word [int-to-word i]]]]]]
+                [form/list [list [quote i32] [form/word [int-to-word i]]]]]
+              [ctype-literal/exp e] [flist [quote exp] [quote exp]]]
 
             [ctype-inst/apply type-name type-args]
             [if [eq-word [word func] type-name]
@@ -1081,7 +1108,17 @@
                 [flist [quote func] [form/list [list-map arg [pair/fst fn] [go arg]]] [go [pair/snd fn]]]]
               [form-concat
                 [list [form/word type-name]]
-                [list-map targ type-args [go targ]]]]]]]]
+                [list-map targ type-args [go targ]]]]
+
+            [ctype-inst/anon kind]
+            [match kind
+              [ctype-user-inst-kind/union types]
+              [form-concat [list [quote union]]
+                [list-map ut types [go ut]]]
+
+              [ctype-user-inst-kind/record fields]
+              [form-concat [list [quote record]]
+                [list-map p fields [flist [form/word [pair/fst p]] [go [pair/snd p]]]]]]]]]]
             [check-type-scheme/type scheme]]
         tps [clone-growable-to-frozen-list type-param-names]]
     [if [is-empty tps]
@@ -1128,16 +1165,11 @@
 
         [ctype-inst/anon kind]
         [match kind
-          [ctype-desc-kind/union types]
+          [ctype-user-inst-kind/union types]
           [type-union [list-map ut types [go ut]]]
 
-          [ctype-desc-kind/record fields]
-          [ctype/inst
-            [ctype-inst/anon
-              [ctype-desc-kind/record [list-map p fields [pair [pair/fst p] [go [pair/snd p]]]]]]]
-
-          [ctype-desc-kind/alias at]
-          [go at]]]]]
+          [ctype-user-inst-kind/record fields]
+          [type-record [list-map p fields [pair [pair/fst p] [go [pair/snd p]]]]]]]]]
     outer-t]]
 
 [defn cuser-desc-to-env [cuser-desc type-args]
@@ -1149,48 +1181,58 @@
       [set-kv-map tenv [at type-params i] [at type-args i]]]
     tenv]]
 
-[defn try-instantiate-user-type [gctx type-name type-args]
-  [if-let [cuser-desc [try-get [llcheck-context/user-types gctx] type-name]]
-    [let
-      [tenv [cuser-desc-to-env cuser-desc type-args]]
-      [match [ctype-desc/desc cuser-desc]
-        [ctype-desc-kind/alias at]
-        [option/some [ctype-desc-kind/alias [copy-type-proper tenv at]]]
+[defn const-eval [exp]
+  [match exp
+    [llexp/literal l]
+    [match l
+      [llliteral/i32 sw] [word-to-int [syntax-word/word sw]]
+      [logq-abort const-eval only i32 supported]]
 
-        [ctype-desc-kind/record field-list]
-        [option/some
-          [ctype-desc-kind/record
-            [list-map field field-list
-              [pair [pair/fst field] [copy-type-proper tenv [pair/snd field]]]]]]
+    [logq-abort const-eval only literal supported [identity exp]]]]
 
-        [option/none]]]
-    [option/none]]]
+[type should-const-eval []
+  [union
+    [no]
+    [yes]]]
 
-[defn instantiate-syntax-type-env [gctx type-env syntax-type]
-  [[func go [st]
-    [match st
-      [lltype/var tv]
-      [let [tvw [syntax-word/word tv]]
-        [if [starts-with-dash tvw]
-          [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] [i32 -2147483648]]
-          [get type-env tvw]]]
+[defn instantiate-syntax-type-env [gctx type-env should-const-eval]
+  [let
+    [counter [llcheck-context/type-var-counter gctx]
+     user-types [llcheck-context/user-types gctx]]
+    [func go [st]
+      [match st
+        [lltype/var tv]
+        [let [tvw [syntax-word/word tv]]
+          [if [starts-with-dash tvw]
+            [generate-fresh-type-var-atom counter [i32 -2147483648]]
+            [get type-env tvw]]]
 
-      [lltype/literal l]
-      [type-literal
-        [match l
-          [type-literal/memory m] [ctype-literal/memory [syntax-word/word m]]
-          [type-literal/exp e] [ctype-literal/exp e]]]
+        [lltype/literal l]
+        [type-literal
+          [match l
+            [type-literal/memory m] [ctype-literal/memory [syntax-word/word m]]
+            [type-literal/exp e]
+            [match should-const-eval
+              [should-const-eval/no] [ctype-literal/exp e]
+              [should-const-eval/yes] [ctype-literal/i32 [const-eval e]]]]]
 
-      [lltype/apply type-name type-args]
-      [let [tnw [syntax-word/word type-name]
-            ctype-args [list-map type-arg type-args [go type-arg]]]
-        [if-let [cuser-desc [try-get [llcheck-context/user-types gctx] tnw]]
-          [make-type-list tnw ctype-args]
-          [do
-            [todo check or constrain params for array and pointer to be literals / memories / data]
-            [make-type-list tnw ctype-args]]
-          ]]]]
-    syntax-type]]
+        [lltype/apply type-name type-args]
+        [let [tnw [syntax-word/word type-name]
+              ctype-args [list-map type-arg type-args [go type-arg]]]
+          [if-let [cuser-desc [try-get user-types tnw]]
+            [let [new-type-env [cuser-desc-to-env cuser-desc ctype-args]]
+              [match [ctype-desc/desc cuser-desc]
+                [ctype-desc-kind/alias at]
+                [copy-type-proper new-type-env at]
+
+                [ctype-desc-kind/union utypes]
+                [type-union [list-map ut utypes [copy-type-proper new-type-env ut]]]
+
+                [ctype-desc-kind/record fields]
+                [type-record [list-map fp fields [pair [pair/fst fp] [copy-type-proper new-type-env [pair/snd fp]]]]]]]
+            [do
+              [todo check or constrain params for array and pointer to be literals / memories / data]
+              [make-type-list tnw ctype-args]]]]]]]]
 
 [defn generalize [current-level type]
   [let [tvs [growable-list]]
@@ -1280,14 +1322,14 @@
         [ctype-inst/literal l]
         [do]
 
+        [ctype-inst/anon kind]
+        [do]
+
         [ctype-inst/apply type-name type-args]
         [if-let [cuser-desc [try-get [llcheck-context/user-types gctx] type-name]]
           [let
             [tenv [cuser-desc-to-env cuser-desc type-args]]
             [match [ctype-desc/desc cuser-desc]
-              [ctype-desc-kind/alias at]
-              [go [copy-type-proper tenv at]]
-
               [ctype-desc-kind/record field-list]
               [for-each field field-list
                 [go [copy-type-proper tenv [pair/snd field]]]]]]
@@ -1325,6 +1367,9 @@
 
             [logq-abort check-cast not implemented upper literal [identity lower-type] [identity upper-literal]]]
 
+          [ctype-inst/anon kind]
+          [do]
+
           [ctype-inst/apply upper-name upper-args]
           [match lower-type
             [ctype/var lower-tv]
@@ -1358,22 +1403,14 @@
                   [llunify-report gctx inst-type tv value]]]]]]]]
     inst-type tv]]]
 
-[defn const-eval [exp]
-  [match exp
-    [llexp/literal l]
-    [match l
-      [llliteral/i32 sw] [word-to-int [syntax-word/word sw]]
-      [logq-abort const-eval only i32 supported]]
-
-    [logq-abort const-eval only literal supported [identity exp]]]]
-
 [type infer-local-context []
   [record
     [stack [local-stack check-type-scheme]]
     [type-env [transient-kv-map word ctype]]]]
 
 [defn infer-llexp1 [gctx type-env]
-[func go [level stack bform]
+[let [instantiate-syntax-type [instantiate-syntax-type-env gctx type-env [should-const-eval/no]]]
+  [func go [level stack bform]
   [match bform
     [llexp/var sw]
     [let [t [get-specialized-var gctx level stack sw]]
@@ -1504,7 +1541,7 @@
         [if-let [type-args opt-type-args]
           [let [ctype-args
                 [list-map type-arg type-args
-                  [instantiate-syntax-type-env gctx type-env type-arg]]]
+                  [instantiate-syntax-type type-arg]]]
             [get-specialized-var-type-args
               gctx level stack fname-sword ctype-args]]
           [get-specialized-var gctx level stack fname-sword]]
@@ -1516,14 +1553,14 @@
 
     [llexp/cast cast-type value]
     [let
-      [inst-type [instantiate-syntax-type-env gctx type-env cast-type]
+      [inst-type [instantiate-syntax-type cast-type]
       tv [go level stack value]]
       [check-cast gctx inst-type tv bform]
       [llannotate gctx bform inst-type]]
 
     [llexp/size-of t]
     [let
-      [it [instantiate-syntax-type-env gctx type-env t]]
+      [it [instantiate-syntax-type t]]
       [constrain-type-data gctx it]
       [llannotate gctx t it]
       type-i32]
@@ -1560,39 +1597,31 @@
     [llexp/field target field-name]
     [let
       [ttarget [go level stack target]
-      t-mem [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
-      t-rec [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
-      pt [type-pointer t-mem t-rec]
-      field-name-word [syntax-word/word field-name]
-      type-it
-        [func ti [ctor]
-          [let
-            [type-name [pair/fst ctor]
-             type-args [pair/snd ctor]]
-            [if-let [inst-cuser-desc [try-get [llcheck-context/user-types gctx] type-name]]
-              [match [ctype-desc/desc inst-cuser-desc]
-                [ctype-desc-kind/alias aliased-type]
-                [logq-abort infer-llexp aliased type not expanded]
+       t-mem [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
+       t-rec [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
+       pt [type-pointer t-mem t-rec]
+       field-name-word [syntax-word/word field-name]
+       type-it
+        [func ti [ctor-type]
+          [let [nt [normalize-type ctor-type]]
+            [match nt
+              [ctype/inst inst]
+              [match inst
+                [ctype-inst/anon kind]
+                [match kind
+                  [ctype-user-inst-kind/record field-list]
+                  [if-let [ft [try-assoc-list-get field-list field-name-word]]
+                    ft
+                    [logq-abort not found]]
 
-                [ctype-desc-kind/record field-list]
-                [if-let [ft [try-assoc-list-get field-list field-name-word]]
-                  [copy-type-proper [cuser-desc-to-env inst-cuser-desc type-args] ft]
-                  [logq-abort not found]]
+                  [ctype-user-inst-kind/union ctors]
+                  [let [field-types [list-map ct ctors [ti ct]]]
+                    [if [eq 1 [size field-types]] [first field-types] [type-union field-types]]]]
+                [logq-abort infer-llexp field type not found [identity field-name] [normalize-type ctor-type]]]
 
-                [ctype-desc-kind/union ctors]
-                [let [field-types [list-map ctor-type ctors [ti [get-apply-type ctor-type]]]]
-                  [if [eq 1 [size field-types]] [first field-types] [type-union field-types]]]
-
-                [logq-abort infer-llexp field type not found [identity field-name] [identity type-name]]]
-
-              [logq-abort infer-llexp field type not found [identity field-name] [identity type-name]]]]]]
+              [logq-abort infer-llexp field type not found [identity field-name] [normalize-type ctor-type]]]]]]
       [llunify-report gctx ttarget pt target]
-      [if-let [apt [try-get-apply-type t-rec]]
-        [do]
-        [do
-          [log-location [get [llctx/bound-form-to-form [llcheck-context/bind-ctx gctx]] [to-js-value bform]]]
-          [logq-abort infer-llexp not implemented]]]
-      [llannotate gctx bform [type-pointer t-mem [type-it [get-apply-type t-rec]]]]]
+      [llannotate gctx bform [type-pointer t-mem [type-it t-rec]]]]
 
     [llexp/index target index]
     [let
@@ -1606,9 +1635,7 @@
       [llunify-report gctx type-i32 [go level stack index] index]
       [llannotate gctx bform [type-pointer t-mem t-elem]]]
 
-    [do
-      [log bform]
-      [logq-abort infer-llexp not implemented]]]]]
+    [logq-abort infer-llexp not implemented [identity bform]]]]]]
 
 [defn infer-llexp-entry [gctx level type-env lstack bform]
   [[infer-llexp1 gctx type-env] level lstack bform]]
@@ -1636,7 +1663,7 @@
          type-env [transient-kv-map]
          ctype-params [growable-list]
          instantiate-type
-         [func inst-type [st] [instantiate-syntax-type-env gctx type-env st]]]
+         [instantiate-syntax-type-env gctx type-env [should-const-eval/yes]]]
         [for-each param params
           [let [tv [generate-fresh-type-var-atom-var [llcheck-context/type-var-counter gctx] 0]]
             [push ctype-params tv]
@@ -1683,6 +1710,7 @@
        gfunc-type [generate-fresh-type-var-atom counter-atom level-1]
        param-ctx [transient-kv-map]
        type-env [transient-kv-map]
+       inst-syntax-type [instantiate-syntax-type-env gctx type-env [should-const-eval/yes]]
        fname-word [syntax-word/word [lldefn/name func]]
        named-type-params [growable-list]]
       [when-let [type-params [lldefn/type-params func]]
@@ -1697,7 +1725,7 @@
               [let
                 [t
                   [if-let [param-t [pair/snd param]]
-                    [instantiate-syntax-type-env gctx type-env param-t]
+                    [inst-syntax-type param-t]
                     [generate-fresh-type-var-atom counter-atom level-1]]]
                 [set-kv-map
                   param-ctx
