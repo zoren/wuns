@@ -1006,7 +1006,9 @@
                         [for i 0 [size fields1]
                           [let [f1 [at fields1 i]
                                 f2 [at fields2 i]]
-                            [go [pair/snd f1] [pair/snd f2]]]]
+                            [if [eq-word [pair/fst f1] [pair/fst f2]]
+                              [go [pair/snd f1] [pair/snd f2]]
+                              [push-unify-error [quote [not unifiable - different record field names]]]]]]
                         [push-unify-error [quote [not unifiable - different number of record fields]]]]
 
                       [push-unify-error [quote [not unifiable - record vs non-record]]]]
