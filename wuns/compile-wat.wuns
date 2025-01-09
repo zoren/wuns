@@ -490,11 +490,12 @@
          [pair
            [syntax-word/word [pair/fst b]]
            [translate-type tctx [get-ctype cctx [pair/snd b]]]]]]
-     fname-word [syntax-word/word [lldefn/name func]]
+     signature [lldefn/signature func]
+     fname-word [syntax-word/word [func-sig/name signature]]
      ts [get [llcheck-context/def-var-types [translate-context/check-context tctx]] fname-word]
      special-func-name [specialized-name-from tctx fname-word type-args]
      type-env [transient-kv-map]]
-  [if-let [fn-tps [lldefn/type-params func]]
+  [if-let [fn-tps [func-sig/type-params signature]]
     [let [type-params [check-type-scheme/named-type-params ts]]
       [assert [eq [size type-params] [size type-args]]
         expected matching number of type parameters and type arguments
@@ -715,7 +716,7 @@
        ft [get-func-type t]
        param-types [pair/fst ft]
        gparams [growable-list]
-       params [lldefn/params func]]
+       params [func-sig/params signature]]
       [set-add [translate-context/specialized-names-generated tctx] special-func-name]
       [let [tbodies [go-forms [lldefn/bodies func]]]
         [assert [eq [size params] [size param-types]] expected matching number of parameters and types]
@@ -764,7 +765,7 @@
 
       [lltop/defn func]
       [set-kv-map [translate-context/function-name-to-body tctx]
-        [syntax-word/word [lldefn/name func]] func]
+        [syntax-word/word [func-sig/name [lldefn/signature func]]] func]
 
       [lltop/export snames]
       [for-each sname snames
@@ -778,9 +779,9 @@
                   [lldef-desc/memory kind]
                   [pair [export-kind/memory] name]
 
-                  [lldef-desc/func opt-tparams params]
+                  [lldef-desc/func fsig]
                   [do
-                    [if-let [tparams opt-tparams]
+                    [if-let [tparams [func-sig/type-params fsig]]
                       [logq-abort export genfn not implemented]
                       [do]]
                     [pair [export-kind/func] [add-func-specialization tctx sname]]]

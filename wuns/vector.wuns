@@ -206,17 +206,21 @@
 [defn form-get-tag [[type form [pointer [memory mem] [form]]]]
   [deref [field form tag]]]
 
+[type-predicate form-is-word [[type form [pointer [memory mem] [form]]]] [pointer [memory mem] [form-word]]
+  [eq [deref [field form tag]] [i32 10]]]
+
+[type-predicate form-is-list [[type form [pointer [memory mem] [form]]]] [pointer [memory mem] [form-list]]
+  [eq [deref [field form tag]] [i32 11]]]
+
 [defn form-get-word [[type form [pointer [memory mem] [form]]]]
-  [let [tag [form-get-tag form]]
-    [if [eq tag [i32 10]]
-      [deref [field [cast [pointer [memory mem] [form-word]] form] word]]
-      [intrinsic unreachable]]]]
+  [if [form-is-word form]
+    [deref [field form word]]
+    [intrinsic unreachable]]]
 
 [defn form-get-list [[type form [pointer [memory mem] [form]]]]
-  [let [tag [form-get-tag form]]
-    [if [eq tag [i32 11]]
-      [deref [field [cast [pointer [memory mem] [form-list]] form] forms]]
-      [intrinsic unreachable]]]]
+  [if [form-is-list form]
+    [deref [field form forms]]
+    [intrinsic unreachable]]]
 
 [export form-word-make form-list-make form-get-tag form-get-word form-get-list]
 

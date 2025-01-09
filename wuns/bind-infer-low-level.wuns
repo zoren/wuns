@@ -49,14 +49,24 @@
     [i32]
     [i64]]]
 
+[type func-kind []
+  [union
+    [defn]
+    [genfn]
+    [type-predicate lltype]]]
+
+[type func-sig []
+  [record
+    [name syntax-word]
+    [type-params [option [list syntax-word]]]
+    [params [list [pair syntax-word [option lltype]]]]
+    [kind func-kind]]]
+
 [type lldef-desc []
   [union
     [memory memory-kind]
     [any]
-    [func
-      [option [list syntax-word]]
-      [list [pair syntax-word [option lltype]]]]
-    ]]
+    [func func-sig]]]
 
 [type lllocal-var-kind []
   [union
@@ -103,7 +113,8 @@
   [union
     [let]
     [loop]
-    [func]]]
+    [func]
+    [type-predicate]]]
 
 [type local-context [v]
   [record
@@ -141,16 +152,6 @@
     [llexp/var f] 1
     0]]
 
-[type llctx []
-  [record
-    [lldef-ctx [transient-kv-map word lldef-desc]]
-    [form-to-ldesc [transient-kv-map form lllocal-var-kind]]
-    [user-type-params [transient-kv-map word [list syntax-word]]]
-    [user-types [transient-kv-map word user-type-desc]]
-    [bound-form-to-form [transient-kv-map js-value form]]]]
-
-[defn llctx-empty [] [llctx [transient-kv-map] [transient-kv-map] [transient-kv-map] [transient-kv-map] [transient-kv-map]]]
-
 [type data []
   [union
     [bytes [list syntax-word]]
@@ -160,18 +161,18 @@
 
 [type lldefn []
   [record
-    [name syntax-word]
-    [type-params [option [list syntax-word]]]
-    [params [list [pair syntax-word [option lltype]]]]
+    [signature func-sig]
     [bodies [list llexp]]]]
 
-[type type-predicate []
+[type llctx []
   [record
-    [name syntax-word]
-    [type-params [option [list syntax-word]]]
-    [parameter [pair syntax-word [option lltype]]]
-    [predicate-type lltype]
-    [bodies [list llexp]]]]
+    [lldef-ctx [transient-kv-map word lldef-desc]]
+    [form-to-ldesc [transient-kv-map form lllocal-var-kind]]
+    [user-type-params [transient-kv-map word [list syntax-word]]]
+    [user-types [transient-kv-map word user-type-desc]]
+    [bound-form-to-form [transient-kv-map js-value form]]]]
+
+[defn llctx-empty [] [llctx [transient-kv-map] [transient-kv-map] [transient-kv-map] [transient-kv-map] [transient-kv-map]]]
 
 [type user-type []
   [record
@@ -186,7 +187,6 @@
     [data-active syntax-word llexp [list data]]
     [def syntax-word llexp]
     [defn lldefn]
-    [type-predicate type-predicate]
     [export [list syntax-word]]]]
 
 [defn wat-type-is [type-name]
@@ -478,12 +478,12 @@
                 [logq-abort form-to-llexp explicit rec calls not implemented]
                 [if-let [llddesc [try-get lldef-ctx fword]]
                   [match llddesc
-                    [lldef-desc/func opt-tparams params]
+                    [lldef-desc/func func-sig]
                     [do
-                      [if-let [tparams opt-tparams]
+                      [if-let [tparams [func-sig/type-params func-sig]]
                         [when-not [eq [size tparams] [size type-args]] [push-error form [quote [type arity mismatch]]]]
                         [push-error form [quote [expected a genfn]]]]
-                      [when-not [eq [size params] [size exp-args]] [push-error form [quote [exp arity mismatch]]]]
+                      [when-not [eq [size [func-sig/params func-sig]] [size exp-args]] [push-error form [quote [exp arity mismatch]]]]
                       [llexp/call fsword
                         [option/some [list-map targ type-args [form-to-lltype lstack type-var-set targ]]]
                         [list-map arg exp-args [form-to-llexp type-var-set lstack arg]]]]
@@ -503,11 +503,11 @@
               [logq-abort form-to-llexp only rec calls allowed]]
             [if-let [llddesc [try-get lldef-ctx first-word]]
               [match llddesc
-                [lldef-desc/func opt-tparams params]
+                [lldef-desc/func func-sig]
                 [do
-                  [when-let [tparams opt-tparams]
+                  [when-let [tparams [func-sig/type-params func-sig]]
                     [push-error form [quote [expected type args for genfn]]]]
-                  [assert-n-args [size params]]
+                  [assert-n-args [size [func-sig/params func-sig]]]
                   [llexp/call [sword first-form] [option/none] [list-map arg [rest l] [form-to-llexp type-var-set lstack arg]]]]
 
                 [logq-abort form-to-llexp not a func]]
@@ -534,7 +534,7 @@
         [set-local lvars param-name-form [lllocal-var-kind/param-with-type t]]
         [pair [sword param-name-form] [option/some t]]]]]]
 
-[func gen-defn-helper [name-form opt-t-params params-list bodies]
+[func gen-defn-helper [name-form opt-t-params params-list bodies kind]
   [let
     [type-env [set]
      lvars [transient-kv-map]
@@ -543,14 +543,15 @@
       [for-each type-param type-param-swords
         [set-add type-env [syntax-word/word type-param]]]]
     [let
-      [params [list-map p params-list [form-to-param lvars type-env p]]]
-      [set-ll-def name-form [lldef-desc/func opt-t-params params]]
+      [params [list-map p params-list [form-to-param lvars type-env p]]
+       sig [func-sig
+              [sword name-form]
+              opt-t-params
+              params
+              kind]]
+      [set-ll-def name-form [lldef-desc/func sig]]
       [lltop/defn
-        [lldefn
-          [sword name-form]
-          opt-t-params
-          params
-          [list-map b bodies [form-to-llexp type-env lstack b]]]]]]]
+        [lldefn sig [list-map b bodies [form-to-llexp type-env lstack b]]]]]]]
 
 [func form-to-lltop [form]
   [let
@@ -653,7 +654,8 @@
             name-form
             [option/none]
             params-list
-            bodies]]
+            bodies
+            [func-kind/defn]]]
 
         [[word genfn]]
         [let
@@ -665,28 +667,26 @@
             name-form
             [option/some [list-map tp type-params-list [sword tp]]]
             params-list
-            bodies]]
+            bodies
+            [func-kind/genfn]]]
 
         [[word type-predicate]]
         [let
           [name-form [get-arg 0]
            opt-type-params [option/none]
-           param-list [get-list [get-arg 1]]
+           params-list [get-list [get-arg 1]]
            predicate-type-form [get-arg 2]
            bodies [slice l 4 [size l]]
            type-env [set]
            lvars [transient-kv-map]
            lstack [local-stack/frame [local-stack/empty] [local-context lvars [local-context-kind/func]]]]
-          [assert [eq [size param-list] 1] type-predicate expected one param]
-          [set-ll-def name-form [lldef-desc/func [option/none]
-            [list-map p param-list [form-to-param lvars type-env p]]]]
-          [lltop/type-predicate
-            [type-predicate
-              [sword name-form]
-              opt-type-params
-              [form-to-param lvars type-env [first param-list]]
-              [form-to-lltype lstack type-env predicate-type-form]
-              [list-map b bodies [form-to-llexp [set] lstack b]]]]]
+          [assert [eq [size params-list] 1] type-predicate expected one param]
+          [gen-defn-helper
+            name-form
+            opt-type-params
+            params-list
+            bodies
+            [func-kind/type-predicate [form-to-lltype lstack type-env predicate-type-form]]]]
 
         [[word export]]
         [lltop/export
@@ -1405,6 +1405,26 @@
     [stack [local-stack check-type-scheme]]
     [type-env [transient-kv-map word ctype]]]]
 
+[defn try-get-call-type-predicate-env [gctx e stack]
+  [match e
+    [llexp/call fname-sword opt-type-args args]
+    [if [eq [size args] 1]
+      [match [first args]
+        [llexp/var sw]
+        [match [get [llctx/lldef-ctx [llcheck-context/bind-ctx gctx]] [syntax-word/word fname-sword]]
+          [lldef-desc/func func-sig]
+          [match [func-sig/kind func-sig]
+            [func-kind/type-predicate pred-type]
+            [let [var-types [transient-kv-map]
+                  t [[instantiate-syntax-type-env gctx [transient-kv-map] [should-const-eval/yes]] pred-type]]
+              [set-kv-map var-types [syntax-word/word sw] [mk-empty-type-scheme t]]
+              [local-stack/frame stack [local-context var-types [local-context-kind/type-predicate]]]]
+            stack]
+          stack]
+        stack]
+      stack]
+    stack]]
+
 [defn infer-llexp1 [gctx type-env]
 [let [instantiate-syntax-type [instantiate-syntax-type-env gctx type-env [should-const-eval/no]]]
   [func go [level stack bform]
@@ -1468,8 +1488,9 @@
     [llexp/if cond then else]
     [let
       [cond-type [go level stack cond]
-      then-type [go level stack then]
-      else-type [go level stack else]]
+       stack-rebound [try-get-call-type-predicate-env gctx cond stack]
+       then-type [go level stack-rebound then]
+       else-type [go level stack else]]
       [llunify-report gctx type-i32 cond-type cond]
       [llunify-report gctx then-type else-type then]
       [llannotate gctx bform then-type]]
@@ -1708,9 +1729,10 @@
        param-ctx [transient-kv-map]
        type-env [transient-kv-map]
        inst-syntax-type [instantiate-syntax-type-env gctx type-env [should-const-eval/yes]]
-       fname-word [syntax-word/word [lldefn/name func]]
+       signature [lldefn/signature func]
+       fname-word [syntax-word/word [func-sig/name signature]]
        opt-named-type-params
-       [if-let [type-params [lldefn/type-params func]]
+       [if-let [type-params [func-sig/type-params signature]]
          [option/some
           [list-map type-param type-params
             [let [tpw [syntax-word/word type-param]
@@ -1719,16 +1741,16 @@
               [pair tpw itp]]]]
          [option/none]]]
       [set-kv-map param-ctx fname-word [mk-empty-type-scheme gfunc-type]]
-      [let [reg-params
-            [list-map param [lldefn/params func]
-              [let
-                [t [if-let [param-t [pair/snd param]]
-                    [inst-syntax-type param-t]
-                    [generate-fresh-type-var-atom counter-atom level-1]]]
-                [set-kv-map param-ctx [syntax-word/word [pair/fst param]] [mk-empty-type-scheme t]]
-                t]]
-            return-type [infer-func gctx level-1 type-env param-ctx [lldefn/bodies func]]
-            ct [type-func reg-params return-type]]
+      [let [ct
+            [type-func
+              [list-map param [func-sig/params signature]
+                [let
+                  [t [if-let [param-t [pair/snd param]]
+                      [inst-syntax-type param-t]
+                      [generate-fresh-type-var-atom counter-atom level-1]]]
+                  [set-kv-map param-ctx [syntax-word/word [pair/fst param]] [mk-empty-type-scheme t]]
+                  t]]
+              [infer-func gctx level-1 type-env param-ctx [lldefn/bodies func]]]]
         [llunify-report gctx gfunc-type ct lltop]
         [llannotate gctx lltop ct]
         [let
