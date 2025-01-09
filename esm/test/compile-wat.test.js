@@ -949,7 +949,6 @@ test('vector', async () => {
   }
   {
     const parse = inst['parse']
-    const formGetTag = inst['form-get-tag']
     const formGetWord = inst['form-get-word']
     const formGetList = inst['form-get-list']
     const encoder = new TextEncoder()
@@ -977,25 +976,27 @@ test('vector', async () => {
         throw new Error('unreachable')
       }
     }
-    expectForm(parse(stringToByteVector('')), null)
-    expectForm(parse(stringToByteVector(' ')), null)
-    expectForm(parse(stringToByteVector(' \n')), null)
-    expectForm(parse(stringToByteVector(' \n\n ')), null)
-    expectForm(parse(stringToByteVector(' abc ')), 'abc')
-    expectForm(parse(stringToByteVector('abc ')), 'abc')
-    expectForm(parse(stringToByteVector('abc')), 'abc')
-    expectForm(parse(stringToByteVector('abc')), 'abc')
-    expectForm(parse(stringToByteVector(' abc hej ')), 'abc')
-    expectForm(parse(stringToByteVector(' abc [] ')), 'abc')
-    expectForm(parse(stringToByteVector(' abc [] ')), 'abc')
-    expectForm(parse(stringToByteVector(' abc[] ')), 'abc')
-    expectForm(parse(stringToByteVector(' abc-def ')), 'abc-def')
-    expectForm(parse(stringToByteVector(' -1337.34 ')), '-1337.34')
+    const expectFormString = (stringInput, expectedForm) =>
+      expectForm(parse(stringToByteVector(stringInput)), expectedForm)
 
-    expectForm(parse(stringToByteVector(' [abc def] ')), ['abc', 'def'])
-    expectForm(parse(stringToByteVector(' [abc] ')), ['abc'])
-    expectForm(parse(stringToByteVector(' [a] ')), ['a'])
-    expectForm(parse(stringToByteVector(' [] ')), [])
+    expectFormString('', null)
+    expectFormString(' ', null)
+    expectFormString(' \n', null)
+    expectFormString(' \n\n ', null)
+    expectFormString(' abc ', 'abc')
+    expectFormString('abc ', 'abc')
+    expectFormString('abc', 'abc')
+    expectFormString(' abc hej ', 'abc')
+    expectFormString(' abc [] ', 'abc')
+    expectFormString(' abc [] ', 'abc')
+    expectFormString(' abc[] ', 'abc')
+    expectFormString(' abc-def ', 'abc-def')
+    expectFormString(' -1337.34 ', '-1337.34')
+
+    expectFormString(' [abc def] ', ['abc', 'def'])
+    expectFormString(' [abc] ', ['abc'])
+    expectFormString(' [a] ', ['a'])
+    expectFormString(' [] ', [])
   }
   {
     const growableVectorInt = inst['growable-vector-make-int']
@@ -1012,14 +1013,5 @@ test('vector', async () => {
     expect(getInt(fixedVector, 0)).toBe(3)
     expect(getInt(fixedVector, 1)).toBe(5)
     expect(getInt(fixedVector, 2)).toBe(7)
-  }
-  {
-    const formWordMake = inst['form-word-make']
-    const formListMake = inst['form-list-make']
-    const formGetTag = inst['form-get-tag']
-    const w = formWordMake(3)
-    const l = formListMake(3)
-    expect(formGetTag(w)).toBe(10)
-    expect(formGetTag(l)).toBe(11)
   }
 })

@@ -1191,7 +1191,9 @@
     [no]
     [yes]]]
 
-[defn instantiate-syntax-type-env [gctx type-env should-const-eval]
+[def i32-min [i32 -2147483648]]
+
+[defn instantiate-syntax-type-env [gctx type-env should-const-eval level]
   [let
     [counter [llcheck-context/type-var-counter gctx]
      user-types [llcheck-context/user-types gctx]]
@@ -1200,7 +1202,7 @@
         [lltype/var tv]
         [let [tvw [syntax-word/word tv]]
           [if [starts-with-dash tvw]
-            [generate-fresh-type-var-atom counter [i32 -2147483648]]
+            [generate-fresh-type-var-atom counter level]
             [get type-env tvw]]]
 
         [lltype/literal l]
@@ -1416,7 +1418,7 @@
           [match [func-sig/kind func-sig]
             [func-kind/type-predicate pred-type]
             [let [var-types [transient-kv-map]
-                  t [[instantiate-syntax-type-env gctx [transient-kv-map] [should-const-eval/yes]] pred-type]]
+                  t [[instantiate-syntax-type-env gctx [transient-kv-map] [should-const-eval/yes] i32-min] pred-type]]
               [set-kv-map var-types [syntax-word/word sw] [mk-empty-type-scheme t]]
               [local-stack/frame stack [local-context var-types [local-context-kind/type-predicate]]]]
             stack]
@@ -1426,7 +1428,7 @@
     stack]]
 
 [defn infer-llexp1 [gctx type-env]
-[let [instantiate-syntax-type [instantiate-syntax-type-env gctx type-env [should-const-eval/no]]]
+[let [instantiate-syntax-type [instantiate-syntax-type-env gctx type-env [should-const-eval/no] i32-min]]
   [func go [level stack bform]
   [match bform
     [llexp/var sw]
@@ -1681,7 +1683,7 @@
          type-env [transient-kv-map]
          ctype-params [growable-list]
          instantiate-type
-         [instantiate-syntax-type-env gctx type-env [should-const-eval/yes]]]
+         [instantiate-syntax-type-env gctx type-env [should-const-eval/yes] i32-min]]
         [for-each param params
           [let [tv [generate-fresh-type-var-atom-var [llcheck-context/type-var-counter gctx] 0]]
             [push ctype-params tv]
@@ -1728,7 +1730,7 @@
        gfunc-type [generate-fresh-type-var-atom counter-atom level-1]
        param-ctx [transient-kv-map]
        type-env [transient-kv-map]
-       inst-syntax-type [instantiate-syntax-type-env gctx type-env [should-const-eval/yes]]
+       inst-syntax-type [instantiate-syntax-type-env gctx type-env [should-const-eval/yes] level-1]
        signature [lldefn/signature func]
        fname-word [syntax-word/word [func-sig/name signature]]
        opt-named-type-params
