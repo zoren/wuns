@@ -1166,7 +1166,7 @@
         [option/none]]]
     [option/none]]]
 
-[defn instantiate-syntax-type-env [gctx level type-env syntax-type]
+[defn instantiate-syntax-type-env [gctx type-env syntax-type]
   [[func go [st]
     [match st
       [lltype/var tv]
@@ -1185,12 +1185,7 @@
       [let [tnw [syntax-word/word type-name]
             ctype-args [list-map type-arg type-args [go type-arg]]]
         [if-let [cuser-desc [try-get [llcheck-context/user-types gctx] tnw]]
-          [match [ctype-desc/desc cuser-desc]
-            [ctype-desc-kind/alias at]
-            [let [new-type-env [cuser-desc-to-env cuser-desc ctype-args]]
-              [copy-type-proper new-type-env at]]
-
-            [make-type-list tnw ctype-args]]
+          [make-type-list tnw ctype-args]
           [do
             [todo check or constrain params for array and pointer to be literals / memories / data]
             [make-type-list tnw ctype-args]]
@@ -1509,7 +1504,7 @@
         [if-let [type-args opt-type-args]
           [let [ctype-args
                 [list-map type-arg type-args
-                  [instantiate-syntax-type-env gctx level type-env type-arg]]]
+                  [instantiate-syntax-type-env gctx type-env type-arg]]]
             [get-specialized-var-type-args
               gctx level stack fname-sword ctype-args]]
           [get-specialized-var gctx level stack fname-sword]]
@@ -1521,14 +1516,14 @@
 
     [llexp/cast cast-type value]
     [let
-      [inst-type [instantiate-syntax-type-env gctx level type-env cast-type]
+      [inst-type [instantiate-syntax-type-env gctx type-env cast-type]
       tv [go level stack value]]
       [check-cast gctx inst-type tv bform]
       [llannotate gctx bform inst-type]]
 
     [llexp/size-of t]
     [let
-      [it [instantiate-syntax-type-env gctx level type-env t]]
+      [it [instantiate-syntax-type-env gctx type-env t]]
       [constrain-type-data gctx it]
       [llannotate gctx t it]
       type-i32]
@@ -1641,34 +1636,7 @@
          type-env [transient-kv-map]
          ctype-params [growable-list]
          instantiate-type
-         [func go [st]
-          [match st
-            [lltype/var tv]
-            [let [tvw [syntax-word/word tv]]
-              [if [starts-with-dash tvw]
-                [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] [i32 -2147483648]]
-                [get type-env tvw]]]
-
-            [lltype/literal l]
-            [type-literal
-              [match l
-                [type-literal/memory m] [ctype-literal/memory [syntax-word/word m]]
-                [type-literal/exp e] [ctype-literal/i32 [const-eval e]]]]
-
-            [lltype/apply type-name type-args]
-            [let [tnw [syntax-word/word type-name]
-                  ctype-args [list-map type-arg type-args [go type-arg]]]
-              [if-let [cuser-desc [try-get [llcheck-context/user-types gctx] tnw]]
-                [match [ctype-desc/desc cuser-desc]
-                  [ctype-desc-kind/alias at]
-                  [let [new-type-env [cuser-desc-to-env cuser-desc ctype-args]]
-                    [copy-type-proper new-type-env at]]
-
-                  [make-type-list tnw ctype-args]]
-                [do
-                  [todo check or constrain params for array and pointer to be literals / memories / data]
-                  [make-type-list tnw ctype-args]]
-                ]]]]]
+         [func inst-type [st] [instantiate-syntax-type-env gctx type-env st]]]
         [for-each param params
           [let [tv [generate-fresh-type-var-atom-var [llcheck-context/type-var-counter gctx] 0]]
             [push ctype-params tv]
@@ -1729,7 +1697,7 @@
               [let
                 [t
                   [if-let [param-t [pair/snd param]]
-                    [instantiate-syntax-type-env gctx level-1 type-env param-t]
+                    [instantiate-syntax-type-env gctx type-env param-t]
                     [generate-fresh-type-var-atom counter-atom level-1]]]
                 [set-kv-map
                   param-ctx
