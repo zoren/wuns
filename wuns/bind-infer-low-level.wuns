@@ -259,6 +259,9 @@
         [[word literal]]
         [lltype/literal [type-literal/exp [form-to-llexp type-params lstack [second l]]]]
 
+        [[word record] [word union]]
+        [logq-abort form-to-lltype anonymous records and unions not implemented]
+
         [do
           [if-let [user-type-params [try-get user-type-params fw]]
             [when-not [eq [size user-type-params] n-of-args] [push-error form [quote [type arity mismatch]]]]
@@ -1323,26 +1326,24 @@
         [do]
 
         [ctype-inst/anon kind]
-        [do]
+        [match kind
+          [ctype-user-inst-kind/union types]
+          [for-each ut types [go ut]]
+
+          [ctype-user-inst-kind/record fields]
+          [for-each p fields [go [pair/snd p]]]]
 
         [ctype-inst/apply type-name type-args]
-        [if-let [cuser-desc [try-get [llcheck-context/user-types gctx] type-name]]
-          [let
-            [tenv [cuser-desc-to-env cuser-desc type-args]]
-            [match [ctype-desc/desc cuser-desc]
-              [ctype-desc-kind/record field-list]
-              [for-each field field-list
-                [go [copy-type-proper tenv [pair/snd field]]]]]]
-          [switch type-name
-            [[word pointer]] [do]
-            [[word func]] [logq-abort func does not have a size]
-            [[word tuple]] [logq-abort tuple does not have a size]
-            [[word array]] [go [first type-args]]
+        [switch type-name
+          [[word pointer]] [do]
+          [[word func]] [logq-abort func does not have a size]
+          [[word tuple]] [logq-abort tuple does not have a size]
+          [[word array]] [go [first type-args]]
 
-            [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
-              [do]
-              [logq-abort not implemented [identity type-name]]
-              ]]]]]]
+          [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
+            [do]
+            [logq-abort not implemented [identity type-name]]
+            ]]]]]
     type]]
 
 [defn check-cast [gctx inst-type tv bform]
