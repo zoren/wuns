@@ -1573,33 +1573,31 @@
         [func ti [ctor]
           [let
             [type-name [pair/fst ctor]
-            type-args [pair/snd ctor]]
+             type-args [pair/snd ctor]]
             [if-let [inst-cuser-desc [try-get [llcheck-context/user-types gctx] type-name]]
-            [match [ctype-desc/desc inst-cuser-desc]
-              [ctype-desc-kind/alias aliased-type]
-              [logq-abort infer-llexp aliased type not expanded]
+              [match [ctype-desc/desc inst-cuser-desc]
+                [ctype-desc-kind/alias aliased-type]
+                [logq-abort infer-llexp aliased type not expanded]
 
-              [ctype-desc-kind/record field-list]
-              [let [t-target
-                    [if-let [ft [try-assoc-list-get field-list field-name-word]]
-                      [copy-type-proper [cuser-desc-to-env inst-cuser-desc type-args] ft]
-                      [logq-abort not found]]]
-                [type-pointer t-mem t-target]]
+                [ctype-desc-kind/record field-list]
+                [if-let [ft [try-assoc-list-get field-list field-name-word]]
+                  [copy-type-proper [cuser-desc-to-env inst-cuser-desc type-args] ft]
+                  [logq-abort not found]]
 
-              [ctype-desc-kind/union ctors]
-              [let [field-types [list-map ctor-type ctors [ti [get-apply-type ctor-type]]]]
-                [type-pointer t-mem [if [eq 1 [size field-types]] [first field-types] [type-union field-types]]]]
+                [ctype-desc-kind/union ctors]
+                [let [field-types [list-map ctor-type ctors [ti [get-apply-type ctor-type]]]]
+                  [if [eq 1 [size field-types]] [first field-types] [type-union field-types]]]
 
-              [logq-abort infer-llexp field type not found [identity field-name] [identity type-name]]]
+                [logq-abort infer-llexp field type not found [identity field-name] [identity type-name]]]
 
-            [logq-abort infer-llexp field type not found [identity field-name] [identity type-name]]]]]]
+              [logq-abort infer-llexp field type not found [identity field-name] [identity type-name]]]]]]
       [llunify-report gctx ttarget pt target]
       [if-let [apt [try-get-apply-type t-rec]]
         [do]
         [do
           [log-location [get [llctx/bound-form-to-form [llcheck-context/bind-ctx gctx]] [to-js-value bform]]]
           [logq-abort infer-llexp not implemented]]]
-      [llannotate gctx bform [type-it [get-apply-type t-rec]]]]
+      [llannotate gctx bform [type-pointer t-mem [type-it [get-apply-type t-rec]]]]]
 
     [llexp/index target index]
     [let
