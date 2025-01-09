@@ -611,19 +611,6 @@ test('records', async () => {
     expect(getTop()).toBe(28)
     expect(getF64(pf)).toBe(1.9)
   }
-  // {
-  //   const inst = await stringToInst(lllist)
-  //   // const getTop = inst['get-top']
-  //   // const setTop = inst['set-top']
-  //   // const allocN = inst['alloc-n']
-  //   const cons = inst.cons
-  //   const l = cons(1, 0)
-  //   expect(l).toBe(16)
-  //   // expect(getTop()).toBe(16)
-  //   // expect(allocN(4)).toBe(16)
-  //   // expect(getTop()).toBe(20)
-  //   // expect(inst.f()).toBe(9)
-  // }
 })
 
 test('arrays', async () => {
@@ -791,94 +778,6 @@ test('hash word', async () => {
   expect(wordSize(foobar)).toBe(6)
   expect(hashWord(foobar)).toBe(0xbf9cf968 | 0)
 })
-
-// test('count words', async () => {
-//   const inst = await stringToInst(`
-// [load std.wuns]
-// [memory mem 1]
-
-// [defn set-byte [p v] [intrinsic i32.store8 mem 0 1 p v]]
-
-// [defn is-whitespace [c]
-//   [or [eq c [i32 32]] [eq c [i32 10]]]]
-
-// [defn is-word-char [c]
-//   [or
-//     [is-between-inclusive [i32 97] c [i32 122]]
-//     [is-between-inclusive [i32 45] c [i32 57]]]]
-
-// [defn scan-word [p end-p]
-//   [loop [q p]
-//     [if [and [lt-s q end-p] [is-word-char [intrinsic i32.load8-u mem 0 1 q]]]
-//       [continue q [inc q]]
-//       q]]]
-
-// [defn count-words [start end-p]
-//   [loop [p start
-//          word-count 0]
-//     [if [lt-s p end-p]
-//       [let [c [intrinsic i32.load8-u mem 0 1 p]]
-//         [ifs
-//           [is-whitespace c]
-//           [continue p [inc p]]
-
-//           [is-word-char c]
-//           [let [end-word [scan-word [inc p] end-p]]
-//             [continue
-//               p end-word
-//               word-count [inc word-count]]]
-
-//           -1]]
-//       word-count]]]
-// [export set-byte count-words]
-//     `)
-//   const setByte = inst['set-byte']
-//   const countWords = inst['count-words']
-//   const setString = (s) => s.split('').forEach((c, i) => setByte(i, c.charCodeAt(0)))
-//   setString('   ')
-//   expect(countWords(0, 3)).toBe(0)
-
-//   setString('hello you')
-//   expect(countWords(0, 9)).toBe(2)
-//   expect(countWords(4, 9)).toBe(2)
-//   expect(countWords(5, 9)).toBe(1)
-
-//   setString('ILLEGAL')
-//   expect(countWords(0, 7)).toBe(-1)
-// })
-
-//   {
-//     const inst = await stringToInst(`
-// [load std.wuns]
-// [memory mem 1]
-
-// [defn set-byte [p v] [intrinsic i32.store8 mem 0 1 p v]]
-
-// [defn is-whitespace [c]
-//   [or [eq c [i32 32]] [eq c [i32 10]]]]
-
-// [defn is-word-char [c]
-//   [or
-//     [is-between-inclusive [i32 97] c [i32 122]]
-//     [is-between-inclusive [i32 45] c [i32 57]]]]
-
-// [defn scan-word [p end-p]
-//   [loop [q p]
-//     [if [lt-s q end-p]
-//       [if [is-word-char [intrinsic i32.load8-u mem 0 1 q]]
-//         [continue q [inc q]]
-//         q]
-//       q]]]
-
-// [export set-byte scan-word]`)
-//     const scanWord = inst['scan-word']
-//     const setByte = inst['set-byte']
-//     const setString = (s, p) => s.split('').forEach((c, i) => setByte(p + i, c.charCodeAt(0)))
-//     setString('hello you', 0)
-//     expect(scanWord(0, 9)).toBe(5)
-//     expect(scanWord(5, 9)).toBe(5)
-//     expect(scanWord(6, 9)).toBe(9)
-//   }
 
 import vectorWuns from '../../wuns/vector.wuns?raw'
 
