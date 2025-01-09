@@ -120,17 +120,12 @@
           [if-let [inst-cuser-desc [try-get [llcheck-context/user-types check-ctx] type-name]]
             [match [ctype-desc/desc inst-cuser-desc]
               [ctype-desc-kind/record field-list]
-              [let
-                [new-tv-env [cuser-desc-to-env inst-cuser-desc type-args]]
-                [loop [cur-size int-const-0 i 0 n [size field-list]]
-                  [if [lt-s i n]
-                    [let [fd [at field-list i]]
-                      [continue
-                        cur-size
-                          [int-exp-add cur-size
-                            [type-to-size [copy-type-proper new-tv-env [pair/snd fd]]]]
-                        i [inc i]]]
-                    cur-size]]]
+              [loop [cur-size int-const-0 i 0 n [size field-list]]
+                [if [lt-s i n]
+                  [continue
+                    cur-size [int-exp-add cur-size [type-to-size [pair/snd [at field-list i]]]]
+                    i [inc i]]
+                  cur-size]]
               [logq-abort size-of not a record type [identity type-name]]]
             [logq-abort size-of not a user type]]]]]]]
 

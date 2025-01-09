@@ -1177,15 +1177,6 @@
           [type-record [list-map p fields [pair [pair/fst p] [go [pair/snd p]]]]]]]]]
     outer-t]]
 
-[defn cuser-desc-to-env [cuser-desc type-args]
-  [let
-    [type-params [ctype-desc/type-params cuser-desc]
-     tenv [transient-kv-map]]
-    [assert [eq [size type-params] [size type-args]] make-type-env expected equal number of type params and type args]
-    [for i 0 [size type-args]
-      [set-kv-map tenv [at type-params i] [at type-args i]]]
-    tenv]]
-
 [defn const-eval [exp]
   [match exp
     [llexp/literal l]
@@ -1222,10 +1213,13 @@
               [should-const-eval/yes] [ctype-literal/i32 [const-eval e]]]]]
 
         [lltype/apply type-name type-args]
-        [let [tnw [syntax-word/word type-name]
-              ctype-args [list-map type-arg type-args [go type-arg]]]
+        [let [tnw [syntax-word/word type-name]]
           [if-let [cuser-desc [try-get user-types tnw]]
-            [let [new-type-env [cuser-desc-to-env cuser-desc ctype-args]]
+            [let [type-params [ctype-desc/type-params cuser-desc]
+                  new-type-env [transient-kv-map]]
+              [assert [eq [size type-params] [size type-args]] make-type-env expected equal number of type params and type args]
+              [for i 0 [size type-args]
+                [set-kv-map new-type-env [at type-params i] [go [at type-args i]]]]
               [match [ctype-desc/desc cuser-desc]
                 [ctype-desc-kind/alias at]
                 [copy-type-proper new-type-env at]
@@ -1237,7 +1231,7 @@
                 [type-record [list-map fp fields [pair [pair/fst fp] [copy-type-proper new-type-env [pair/snd fp]]]]]]]
             [do
               [todo check or constrain params for array and pointer to be literals / memories / data]
-              [make-type-list tnw ctype-args]]]]]]]]
+              [make-type-list tnw [list-map arg type-args [go arg]]]]]]]]]]
 
 [defn generalize [current-level type]
   [let [tvs [growable-list]]
@@ -1728,24 +1722,14 @@
       [let [reg-params
             [list-map param [lldefn/params func]
               [let
-                [t
-                  [if-let [param-t [pair/snd param]]
+                [t [if-let [param-t [pair/snd param]]
                     [inst-syntax-type param-t]
                     [generate-fresh-type-var-atom counter-atom level-1]]]
-                [set-kv-map
-                  param-ctx
-                  [syntax-word/word [pair/fst param]]
-                  [mk-empty-type-scheme t]]
+                [set-kv-map param-ctx [syntax-word/word [pair/fst param]] [mk-empty-type-scheme t]]
                 t]]
             return-type [infer-func gctx level-1 type-env param-ctx [lldefn/bodies func]]
-            ct
-            [type-func
-              reg-params
-              return-type]]
-        [llunify-report gctx
-          gfunc-type
-          ct
-          lltop]
+            ct [type-func reg-params return-type]]
+        [llunify-report gctx gfunc-type ct lltop]
         [llannotate gctx lltop ct]
         [let
           [ts-no-name [generalize 0 ct]
