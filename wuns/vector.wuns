@@ -78,6 +78,18 @@
   [if [le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
   [deref [index [field pvec array] i]]]
 
+[defn vector-eq-u8 [[type pvec1 [pvector [u8]]] [type pvec2 [pvector [u8]]]]
+  [or
+    [is-identical pvec1 pvec2]
+    [and
+      [eq [size pvec1] [size pvec2]]
+      [loop [n [size pvec1] i [i32 0] pa1 [field pvec1 array] pa2 [field pvec2 array]]
+        [if [le-s n i]
+          [i32 1]
+          [if [eq [deref [index pa1 i]] [deref [index pa2 i]]]
+            [continue i [inc i]]
+            [i32 0]]]]]]]
+
 [genfn set [a] [[type pvec [pvector a]] [type i [i32]] [type v a]]
   [if [lt-s i [i32 0]] [intrinsic unreachable] [do]]
   [if [le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
@@ -116,7 +128,8 @@
   vector-float vector-int vector-byte
   get-float set-float
   get-int set-int
-  get-byte set-byte]
+  get-byte set-byte
+  vector-eq-u8]
 
 [type growable-vector [a]
   [record

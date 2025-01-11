@@ -143,4 +143,14 @@ test('vector', async () => {
     // stolen from https://github.com/fnvhash/libfnv/blob/master/test/unit/basic_full.ts#L20
     expect(vectorByteHash(stringToByteVector('foobar'))).toBe(0xbf9cf968 | 0)
   }
+  {
+    const vectorByteEqual = inst['vector-eq-u8']
+    const foo = stringToByteVector('foo')
+    const foobar = stringToByteVector('foobar')
+    const foobar2 = stringToByteVector('foobar')
+    expect(vectorByteEqual(foo, foobar)).toBe(0)
+    expect(vectorByteEqual(foobar, foo)).toBe(0)
+    expect(vectorByteEqual(foobar, foobar)).toBe(1)
+    expect(vectorByteEqual(foobar, foobar2)).toBe(1)
+  }
 })
