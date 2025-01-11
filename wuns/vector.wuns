@@ -333,3 +333,22 @@
           [intrinsic unreachable]]]]]]
 
 [export parse]
+
+[def fnv-prime [i32 16777619]]
+[def fnv-offset-basis [i32 2166136261]]
+
+[defn vector-u8-hash-fnv-1a-i32 [[type bytes [pvector [u8]]]]
+  [loop [n [size bytes]
+         ar [field bytes array]
+         i [i32 0]
+         hash fnv-offset-basis]
+    [if [le-s n i]
+      hash
+      [continue
+        hash
+        [mul
+          [intrinsic i32.xor hash [deref [index ar i]]]
+          fnv-prime]
+        i [inc i]]]]]
+
+[export vector-u8-hash-fnv-1a-i32]

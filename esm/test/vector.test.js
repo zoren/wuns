@@ -59,7 +59,13 @@ test('vector', async () => {
   expect(getByte(vb, 0)).toBe(3)
   expect(getByte(vb, 1)).toBe(5)
   expect(getByte(vb, 2)).toBe(7)
-
+  const encoder = new TextEncoder()
+  const stringToByteVector = (s) => {
+    const bytes = encoder.encode(s)
+    const vb = vectorByte(bytes.length)
+    bytes.forEach((b, i) => setByte(vb, i, b))
+    return vb
+  }
   const pwordToString = (p) => {
     const s = size(p)
     const bytes = new Uint8Array(s)
@@ -72,13 +78,6 @@ test('vector', async () => {
     const parse = inst['parse']
     const formGetWord = inst['form-get-word']
     const formGetList = inst['form-get-list']
-    const encoder = new TextEncoder()
-    const stringToByteVector = (s) => {
-      const bytes = encoder.encode(s)
-      const vb = vectorByte(bytes.length)
-      bytes.forEach((b, i) => setByte(vb, i, b))
-      return vb
-    }
 
     const expectForm = (actualPointer, expectedForm) => {
       if (expectedForm === null) {
@@ -134,5 +133,14 @@ test('vector', async () => {
     expect(getInt(fixedVector, 0)).toBe(3)
     expect(getInt(fixedVector, 1)).toBe(5)
     expect(getInt(fixedVector, 2)).toBe(7)
+  }
+  {
+    const vectorByteHash = inst['vector-u8-hash-fnv-1a-i32']
+    // hashing no characters should return offset basis
+    expect(vectorByteHash(stringToByteVector(''))).toBe(-2128831035)
+    // stolen from https://github.com/fnvhash/libfnv/blob/master/test/unit/basic_full.ts#L13
+    expect(vectorByteHash(stringToByteVector('a'))).toBe(0xe40c292c | 0)
+    // stolen from https://github.com/fnvhash/libfnv/blob/master/test/unit/basic_full.ts#L20
+    expect(vectorByteHash(stringToByteVector('foobar'))).toBe(0xbf9cf968 | 0)
   }
 })
