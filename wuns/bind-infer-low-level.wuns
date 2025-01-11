@@ -780,9 +780,6 @@
     [record [list [pair word ctype]]]
     [union [list ctype]]]]
 
-[defn type-union [types] [ctype/inst [ctype-inst/anon [ctype-user-inst-kind/union types]]]]
-[defn type-record [fields] [ctype/inst [ctype-inst/anon [ctype-user-inst-kind/record fields]]]]
-
 [defn get-type-var-kind [type-var]
   [atom-get [type-var/kind type-var]]]
 
@@ -809,6 +806,42 @@
         [set-type-var-kind-to-type tv t2]
         t2]]
     t0]]
+
+[defn free-type-vars-set [outer-t]
+  [let
+    [ftvs [set]
+     go
+     [func go [t]
+      [let [nt [normalize-type t]]
+        [match nt
+          [ctype/var tv]
+          [set-add ftvs tv]
+
+          [ctype/inst inst]
+          [match inst
+            [ctype-inst/literal l]
+            [do]
+
+            [ctype-inst/apply type-name type-args]
+            [for-each arg type-args [go arg]]
+
+            [ctype-inst/anon kind]
+            [match kind
+              [ctype-user-inst-kind/union types]
+              [for-each ut types [go ut]]
+
+              [ctype-user-inst-kind/record fields]
+              [for-each p fields [go [pair/snd p]]]]]]]]]
+    [go outer-t]
+    ftvs]]
+
+[defn prune-level [max-level tvs]
+  [for-each tv tvs
+    [let [tvla [type-var/level tv]]
+      [atom-set tvla [min [atom-get tvla] max-level]]]]]
+
+[defn get-type-var-level [tv]
+  [atom-get [type-var/level tv]]]
 
 [defn type-literal [tl] [ctype/inst [ctype-inst/literal tl]]]
 
@@ -849,44 +882,11 @@
 [defn type-func [params result]
   [make-type [word func] [type-tuple-list-no-singleton params] result]]
 
+[defn type-union [types] [ctype/inst [ctype-inst/anon [ctype-user-inst-kind/union types]]]]
+[defn type-record [fields] [ctype/inst [ctype-inst/anon [ctype-user-inst-kind/record fields]]]]
+
 [defn make-type-var [kind level]
   [type-var [atom kind] [atom level] [set]]]
-
-[defn free-type-vars-set [outer-t]
-  [let
-    [ftvs [set]
-     go
-     [func go [t]
-      [let [nt [normalize-type t]]
-        [match nt
-          [ctype/var tv]
-          [set-add ftvs tv]
-
-          [ctype/inst inst]
-          [match inst
-            [ctype-inst/literal l]
-            [do]
-
-            [ctype-inst/apply type-name type-args]
-            [for-each arg type-args [go arg]]
-
-            [ctype-inst/anon kind]
-            [match kind
-              [ctype-user-inst-kind/union types]
-              [for-each ut types [go ut]]
-
-              [ctype-user-inst-kind/record fields]
-              [for-each p fields [go [pair/snd p]]]]]]]]]
-    [go outer-t]
-    ftvs]]
-
-[defn prune-level [max-level tvs]
-  [for-each tv tvs
-    [let [tvla [type-var/level tv]]
-      [atom-set tvla [min [atom-get tvla] max-level]]]]]
-
-[defn get-type-var-level [tv]
-  [atom-get [type-var/level tv]]]
 
 [defn type-literal-desc-equals [l1 l2]
   [match l1
