@@ -266,38 +266,6 @@
               offset [add offset [mul [size fs] 8]]]]]]]
       ba]]
 
-[type output-func []
-  [record
-    [name word]
-    [parameters [list [pair word word]]]
-    [locals [list [pair word word]]]
-    [result [list word]]
-    [body wat-inst]]]
-
-[type import-kind []
-  [union
-    [memory word i32]]]
-
-[type export-kind []
-  [union [func] [global] [memory]]]
-
-[type wat-global []
-  [record
-    [name word]
-    [type word]
-    [value wat-inst]]]
-
-[type wat-data []
-  [union
-    [active word wat-inst byte-array]]]
-
-[type wat-memory []
-  [record
-    [kind memory-kind]
-    [name word]
-    [initial i32]
-    [maximum [option i32]]]]
-
 [type translate-context []
   [record
     [check-context llcheck-context]
@@ -434,6 +402,14 @@
 [def i32.const-4 [wat-inst/i32.const [word 4]]]
 [def i32.const-8 [wat-inst/i32.const [word 8]]]
 [def i32.const-16 [wat-inst/i32.const [word 16]]]
+
+[type output-func []
+  [record
+    [name word]
+    [parameters [list [pair word word]]]
+    [locals [list [pair word word]]]
+    [result [list word]]
+    [body wat-inst]]]
 
 [defn translate-func [tctx func type-args]
   [let
@@ -714,6 +690,30 @@
     [when-not [set-has [translate-context/specialized-names-generated tctx] spec-name]
       [push gl [pair fname-word type-args]]]
     spec-name]]
+
+[type import-kind []
+  [union
+    [memory word i32]]]
+
+[type wat-memory []
+  [record
+    [kind memory-kind]
+    [name word]
+    [initial i32]
+    [maximum [option i32]]]]
+
+[type wat-global []
+  [record
+    [name word]
+    [type word]
+    [value wat-inst]]]
+
+[type export-kind []
+  [union [func] [global] [memory]]]
+
+[type wat-data []
+  [union
+    [active word wat-inst byte-array]]]
 
 [type wat-output []
   [record
