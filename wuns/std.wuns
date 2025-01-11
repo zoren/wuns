@@ -92,7 +92,7 @@
 
 [defn is-odd [x] [i32.bitwise-and x 1]]
 
-[defn is-negative [x] [lt-s x 0]]
+[defmacro is-negative [x] [flist [quote lt-s] x [quote [i32 0]]]]
 
 [defn min [a b] [if [lt-s a b] a b]]
 [defn max [a b] [if [lt-s a b] b a]]
@@ -147,6 +147,8 @@
 
 [def string-space [char-code-to-string [i32 32]]]
 [import ./runtime-lib/host.js string-join [func [string [list string]] string]]
+
+[import ./runtime-lib/host.js word-join [func [word [list word]] word]]
 
 [defn strings-space-join [.. l]
   [string-join string-space l]]
@@ -608,6 +610,15 @@
       [push gl [pair [at l i] [at l [inc i]]]]]
     [clone-growable-to-frozen-list gl]]]
 
+[defn try-assoc-list-get [l k]
+  [loop [s [size l] i 0]
+    [if [lt-s i s]
+      [let [p [at l i]]
+        [if [eq-word [pair/fst p] k]
+          [option/some [pair/snd p]]
+          [continue i [inc i]]]]
+      [option/none]]]]
+
 [type set [a] [union]]
 
 [import ./runtime-lib/host.js set [type-scheme [a] [func [] [set a]]]]
@@ -655,22 +666,3 @@
 [def-js-extern js-apply [func [js-value [list js-value]] js-value]]
 
 [import ./runtime-lib/host.js mem-dump [func [memory i32 i32] [tuple]]]
-
-[defn is-i32-bin-inst [w2]
-  [switch w2
-    [[word i32.add] [word i32.sub] [word i32.mul] [word i32.rem-s] [word i32.div-s]
-     [word i32.and] [word i32.or] [word i32.xor]
-     [word i32.shl] [word i32.shr-s] [word i32.shr-u]
-     [word i32.eq] [word i32.lt-s] [word i32.le-s]]
-    true
-    false]]
-
-[defn is-f64-bin-inst [w2]
-  [switch w2
-    [[word f64.add] [word f64.sub] [word f64.mul]] true
-    false]]
-
-[defn is-f64-comp-inst [w2]
-  [switch w2
-    [[word f64.eq] [word f64.lt] [word f64.le]] true
-    false]]

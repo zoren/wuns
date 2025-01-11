@@ -52,19 +52,16 @@
     [byte-array-set ba [add base i] [char-code-at w i]]]]
 
 [defexpr module-async [.. forms]
-  [promise-then
-    [translate-top-forms-async forms]
-    [func then [output] [output-to-module output]]]]
+  [translate-top-forms-to-module forms]]
 
 [defn test-exp-eq-fn [expected form-to-translate]
   [promise-then
-    [translate-top-forms-async
+    [translate-top-forms-to-module
       [list
         [flist [quote defn] [quote f] [quote []] form-to-translate]
         [quote [export f]]]]
-    [func then [output]
-      [let [mod [output-to-module output]
-            inst [wasm-instantiate mod empty-object]
+    [func then [mod]
+      [let [inst [wasm-instantiate mod empty-object]
             f [get-export inst [word f]]
             actual [js-apply f [list]]
             js-expected [to-js-value expected]]
@@ -83,12 +80,29 @@
       [assert [eq 2 [size binding]] let-async bindings should have exactly two elements]
       [let [v [first binding] aform [second binding]]
         [assert [is-word v] let-async requires a word as the first element of the first argument]
-        [flist [quote promise-bind]
+        [flist [quote promise-then]
           aform
           [form-concat
             [list [quote func] [quote then] [flist v]]
             bodies]]]]
     [logq-abort let-async requires a list as the first argument]]]
+
+[defexpr translate-context-async [.. forms]
+  [promise-then
+    [make-init-evaluator-async]
+    [func t [ev]
+      [let [tctx [translate-top-forms-sync ev forms]]
+        [pair
+          [translate-context/specialized-names-generated tctx]
+          [translate-context/func-specs-to-generate tctx]]]]]]
+
+[defn test-compile-specialization []
+  [translate-context-async
+  [genfn id [t tt] [[type p t]] [size-of tt] p]
+  [defn id-int [[type x [i32]]] [id x]]
+  [defn id-float [[type x [f64]]] [id x]]
+  [export id-int id-float]
+    ]]
 
 [defn test []
   [test-exp-eq [i32 1] [i32 1]]
@@ -97,7 +111,7 @@
   [comment if]
   [test-exp-eq [i32 5] [if [i32 0] [i32 7] [i32 5]]]
   [test-exp-eq [i32 5] [if [i32 1] [i32 5] [i32 9]]]
-  [comment  [test-assert-undefined [trans-eval-form [if [i32 1] [do] [do]]]] ]
+  [comment [test-assert-undefined [trans-eval-form [if [i32 1] [do] [do]]]] ]
 
   [comment intrinsics]
   [test-exp-eq [i32 5] [intrinsic i32.add [i32 2] [i32 3]]]
@@ -105,7 +119,7 @@
   [test-exp-eq [i32 15] [intrinsic i32.mul [i32 5] [i32 3]]]
 
   [comment parameters]
-  [promise-bind
+  [promise-then
     [module-async [defn not [b] [if b [i32 0] [i32 1]]] [export not]]
     [func then [m]
       [let [i [wasm-instantiate m empty-object]
@@ -255,3 +269,16 @@
     ]
  ]
 ]]
+[comment
+[defn test-typing []
+  [let
+    [
+      counter-atom [atom 0]
+      tv1 [generate-fresh-type-var-atom-var counter-atom 0]
+      tv2 [generate-fresh-type-var-atom-var counter-atom 1]
+      t1 [ctype/var tv1]
+      t2 [ctype/var tv2]
+    ]
+    [set-add [type-var/constraints tv2] type-constraint-size-of]
+    [unify t1 t2]]]
+     ]

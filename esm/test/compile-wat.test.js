@@ -1,32 +1,6 @@
 import { test, expect, assert } from 'vitest'
+import { stringToInst, translateFormsToWasmBytes} from './test-util.js'
 import { parseString } from '../core.js'
-import { makeJSCompilingEvaluator, CompileError } from '../compiler-js.js'
-
-const filename = 'compile-wat.wuns'
-
-import formsString from '../../wuns/compile-wat.wuns?raw'
-
-const { evalTops, getDef } = makeJSCompilingEvaluator()
-try {
-  await evalTops(parseString(formsString, filename))
-} catch (e) {
-  if (e instanceof CompileError) {
-    console.error(e, e.form ?? 'no form')
-    // console.error(e.form)
-  }
-  throw e
-}
-
-const translateFormsToModule = getDef('translate-top-forms-to-module')
-
-const stringToInst = async (s, fileName = 'test-content', importObject) => {
-  const forms = parseString(s, fileName)
-  const module = await translateFormsToModule(forms)
-  const { exports } = new WebAssembly.Instance(module, importObject)
-  return exports
-}
-
-const translateFormsToWasmBytes = getDef('translate-top-forms-to-wasm-bytes')
 
 test.each([
   ['[f64 1.5]', 1.5],
@@ -59,6 +33,33 @@ test.each([
   expect((await stringToInst(m)).f()).toBe(expected)
 })
 
+test.each([
+  ['[memory i32 mem 1] [genfn g [t] [] [size-of [pointer [memory mem] t]]] [defn f [] [call g [[i32]] []]]', 4],
+  // ['[memory i64 mem 1] [genfn f [t] [] [size-of [pointer [memory mem] t]]]', 8],
+])('%s -> %o', async (s, expected) => {
+  const m = `${s} [export f]`
+  expect((await stringToInst(m)).f()).toBe(expected)
+})
+
+test('genfn', async () => {
+  const inst0 = await stringToInst(`
+    [defn id [p] p]
+
+    [defn id-float [[type f [f64]]]
+      [id f]]
+
+    [defn id-int [[type i [i32]]]
+      [id i]]`)
+  const inst = await stringToInst(`
+[genfn gid [a] [[type p a]] p]
+
+[defn id-float [[type f [f64]]]
+  [call gid [[f64]] [f]]]
+
+[defn id-int [[type i [i32]]]
+  [call gid [[i32]] [i]]]`)
+})
+
 test('defn', async () => {
   expect((await stringToInst('[defn f [] [i32 4]] [export f]')).f()).toBe(4)
   const inst = await stringToInst(`
@@ -73,23 +74,6 @@ test('defn', async () => {
   expect(abs(-4)).toBe(4)
   expect(abs(-2147483647)).toBe(2147483647)
   expect(abs(-2147483648)).toBe(-2147483648)
-})
-
-test('defn generic', async () => {
-  {
-    const src = `
-[defn id [x] x]
-
-[defn id-i [[type x [i32]]] [id x]]
-[defn id-f [[type x [f64]]] [id x]]
-
-[export id-i id-f]`
-    const inst = await stringToInst(src)
-    const idI32 = inst['id-i']
-    const idF64 = inst['id-f']
-    expect(idF64(1.9)).toBe(1.9)
-    expect(idI32(7)).toBe(7)
-  }
 })
 
 test('recursion', async () => {
@@ -571,13 +555,13 @@ test('records', async () => {
   [cast [pointer [memory mem] target-type] [alloc-n [size-of target-type]]]]
 
 [defn alloc-f [[type f [f64]]]
-  [let [p [alloc]]
+  [let [p [call alloc [[f64]] []]]
     [assign p f]
     p]]
 
-[defn alloc-i [[type i [i32]]]
-  [let [p [alloc]]
-    [assign p i]
+[defn alloc-i [[type ip [i32]]]
+  [let [p [call alloc [[i32]] []]]
+    [assign p ip]
     p]]
 
 [defn get-i32 [[type p [pointer [memory mem] [i32]]]]
@@ -586,30 +570,21 @@ test('records', async () => {
 [defn get-f64 [[type p [pointer [memory mem] [f64]]]]
   [deref p]]
 
-[export alloc-f alloc-i get-i32 get-f64]`
+[export alloc-f alloc-i get-i32 get-f64 get-top]`
     const inst = await stringToInst(src)
     const allocF64 = inst['alloc-f']
     const allocI32 = inst['alloc-i']
     const getI32 = inst['get-i32']
     const getF64 = inst['get-f64']
+    const getTop = inst['get-top']
+    expect(getTop()).toBe(16)
     const pi = allocI32(7)
+    expect(getTop()).toBe(20)
     expect(getI32(pi)).toBe(7)
     const pf = allocF64(1.9)
+    expect(getTop()).toBe(28)
     expect(getF64(pf)).toBe(1.9)
   }
-  // {
-  //   const inst = await stringToInst(lllist)
-  //   // const getTop = inst['get-top']
-  //   // const setTop = inst['set-top']
-  //   // const allocN = inst['alloc-n']
-  //   const cons = inst.cons
-  //   const l = cons(1, 0)
-  //   expect(l).toBe(16)
-  //   // expect(getTop()).toBe(16)
-  //   // expect(allocN(4)).toBe(16)
-  //   // expect(getTop()).toBe(20)
-  //   // expect(inst.f()).toBe(9)
-  // }
 })
 
 test('arrays', async () => {
@@ -701,6 +676,23 @@ test('specialization', async () => {
   expect(idFloat(1.9)).toBe(1.9)
 })
 
+test('defn generic', async () => {
+  {
+    const src = `
+[defn id [x] x]
+
+[defn id-i [[type x [i32]]] [id x]]
+[defn id-f [[type x [f64]]] [id x]]
+
+[export id-i id-f]`
+    const inst = await stringToInst(src)
+    const idI32 = inst['id-i']
+    const idF64 = inst['id-f']
+    expect(idF64(1.9)).toBe(1.9)
+    expect(idI32(7)).toBe(7)
+  }
+})
+
 test('hash word', async () => {
   const inst = await stringToInst(`
 [memory i32 mem 1]
@@ -759,192 +751,4 @@ test('hash word', async () => {
 
   expect(wordSize(foobar)).toBe(6)
   expect(hashWord(foobar)).toBe(0xbf9cf968 | 0)
-})
-
-// test('count words', async () => {
-//   const inst = await stringToInst(`
-// [load std.wuns]
-// [memory mem 1]
-
-// [defn set-byte [p v] [intrinsic i32.store8 mem 0 1 p v]]
-
-// [defn is-whitespace [c]
-//   [or [eq c [i32 32]] [eq c [i32 10]]]]
-
-// [defn is-word-char [c]
-//   [or
-//     [is-between-inclusive [i32 97] c [i32 122]]
-//     [is-between-inclusive [i32 45] c [i32 57]]]]
-
-// [defn scan-word [p end-p]
-//   [loop [q p]
-//     [if [and [lt-s q end-p] [is-word-char [intrinsic i32.load8-u mem 0 1 q]]]
-//       [continue q [inc q]]
-//       q]]]
-
-// [defn count-words [start end-p]
-//   [loop [p start
-//          word-count 0]
-//     [if [lt-s p end-p]
-//       [let [c [intrinsic i32.load8-u mem 0 1 p]]
-//         [ifs
-//           [is-whitespace c]
-//           [continue p [inc p]]
-
-//           [is-word-char c]
-//           [let [end-word [scan-word [inc p] end-p]]
-//             [continue
-//               p end-word
-//               word-count [inc word-count]]]
-
-//           -1]]
-//       word-count]]]
-// [export set-byte count-words]
-//     `)
-//   const setByte = inst['set-byte']
-//   const countWords = inst['count-words']
-//   const setString = (s) => s.split('').forEach((c, i) => setByte(i, c.charCodeAt(0)))
-//   setString('   ')
-//   expect(countWords(0, 3)).toBe(0)
-
-//   setString('hello you')
-//   expect(countWords(0, 9)).toBe(2)
-//   expect(countWords(4, 9)).toBe(2)
-//   expect(countWords(5, 9)).toBe(1)
-
-//   setString('ILLEGAL')
-//   expect(countWords(0, 7)).toBe(-1)
-// })
-
-//   {
-//     const inst = await stringToInst(`
-// [load std.wuns]
-// [memory mem 1]
-
-// [defn set-byte [p v] [intrinsic i32.store8 mem 0 1 p v]]
-
-// [defn is-whitespace [c]
-//   [or [eq c [i32 32]] [eq c [i32 10]]]]
-
-// [defn is-word-char [c]
-//   [or
-//     [is-between-inclusive [i32 97] c [i32 122]]
-//     [is-between-inclusive [i32 45] c [i32 57]]]]
-
-// [defn scan-word [p end-p]
-//   [loop [q p]
-//     [if [lt-s q end-p]
-//       [if [is-word-char [intrinsic i32.load8-u mem 0 1 q]]
-//         [continue q [inc q]]
-//         q]
-//       q]]]
-
-// [export set-byte scan-word]`)
-//     const scanWord = inst['scan-word']
-//     const setByte = inst['set-byte']
-//     const setString = (s, p) => s.split('').forEach((c, i) => setByte(p + i, c.charCodeAt(0)))
-//     setString('hello you', 0)
-//     expect(scanWord(0, 9)).toBe(5)
-//     expect(scanWord(5, 9)).toBe(5)
-//     expect(scanWord(6, 9)).toBe(9)
-//   }
-
-import vectorWuns from '../../wuns/vector.wuns?raw'
-
-// import fs from 'fs'
-// const formsToWatText = getDef('forms-to-wat-text')
-// fs.writeFileSync('vector.wat', formsToWatText(parseString(vectorWuns, 'vector.wuns')))
-
-test('vector', async () => {
-  const inst = await stringToInst(vectorWuns, 'vector.wuns')
-  const allocInit = inst['alloc-init']
-  const vbsi = inst['vector-byte-size-int']
-  const vbsf = inst['vector-byte-size-float']
-  expect(vbsi(3)).toBe(4 + 4 * 3)
-  expect(vbsf(3)).toBe(4 + 8 * 3)
-  const getTop = inst['get-top']
-  const vectorFloat = inst['vector-float']
-  const size = inst['size']
-  allocInit()
-
-  vectorFloat(3)
-  const vf = vectorFloat(3)
-
-  expect(size(vf)).toBe(3)
-
-  const setFloat = inst['set-float']
-  const getFloat = inst['get-float']
-
-  assert.throws(() => setFloat(vf, -1, 9), 'unreachable')
-  assert.throws(() => setFloat(vf, 3, 9), 'unreachable')
-  assert.throws(() => setFloat(vf, 4, 9), 'unreachable')
-
-  setFloat(vf, 0, 3.4)
-  setFloat(vf, 1, 5.7)
-  setFloat(vf, 2, 7.9)
-
-  expect(size(vf)).toBe(3)
-
-  expect(getFloat(vf, 0)).toBe(3.4)
-  expect(getFloat(vf, 1)).toBe(5.7)
-  expect(getFloat(vf, 2)).toBe(7.9)
-
-  const vectorInt = inst['vector-int']
-  const vi = vectorInt(3)
-  expect(size(vi)).toBe(3)
-  const setInt = inst['set-int']
-  const getInt = inst['get-int']
-  setInt(vi, 0, 3)
-  setInt(vi, 1, 5)
-  setInt(vi, 2, 7)
-  expect(getInt(vi, 0)).toBe(3)
-  expect(getInt(vi, 1)).toBe(5)
-  expect(getInt(vi, 2)).toBe(7)
-
-  const vectorByte = inst['vector-byte']
-  const vb = vectorByte(3)
-  expect(size(vb)).toBe(3)
-  const setByte = inst['set-byte']
-  const getByte = inst['get-byte']
-  setByte(vb, 0, 3)
-  setByte(vb, 1, 5)
-  setByte(vb, 2, 7)
-  expect(getByte(vb, 0)).toBe(3)
-  expect(getByte(vb, 1)).toBe(5)
-  expect(getByte(vb, 2)).toBe(7)
-
-  {
-    const parse = inst['parse']
-    const encoder = new TextEncoder()
-    const stringToByteVector = (s)=> {
-      const bytes = encoder.encode(s)
-      const vb = vectorByte(bytes.length)
-      bytes.forEach((b, i) => setByte(vb, i, b))
-      return vb
-    }
-    expect(parse(stringToByteVector(' abc '))).toEqual(3)
-    expect(parse(stringToByteVector(' abc defg '))).toEqual(3)
-    expect(parse(stringToByteVector(' a '))).toEqual(1)
-    expect(parse(stringToByteVector(' a'))).toEqual(1)
-    expect(parse(stringToByteVector('a'))).toEqual(1)
-    expect(parse(stringToByteVector('a '))).toEqual(1)
-  }
-  {
-    const growableVectorInt = inst['growable-vector-make-int']
-    const pushInt = inst['growable-vector-push-int']
-    const growableVectorToVector = inst['growable-vector-to-vector-int']
-    const gv = growableVectorInt(3)
-    // expect(size(gv)).toBe(0)
-    pushInt(gv, 3)
-    pushInt(gv, 5)
-    pushInt(gv, 7)
-    assert.throws(() => pushInt(gv, 9), 'unreachable')
-    const fixedVector = growableVectorToVector(gv)
-    expect(size(fixedVector)).toBe(3)
-    expect(getInt(fixedVector, 0)).toBe(3)
-    expect(getInt(fixedVector, 1)).toBe(5)
-    expect(getInt(fixedVector, 2)).toBe(7)
-
-  }
-
 })

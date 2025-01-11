@@ -1,0 +1,150 @@
+[load bind-infer-low-level.wuns]
+
+[defn test-infer-fn [forms]
+  [infer-top-forms [make-evaluator] forms]]
+
+[defexpr test-infer [.. forms]
+  [test-infer-fn forms]]
+
+[def number-of-tests [atom 0]]
+
+[def number-of-asserts [atom 0]]
+
+[defexpr test [first-form .. asserts]
+  [let [gctx [infer-top-forms [make-evaluator] [form-to-list first-form]]]
+    [inc-atom number-of-tests]
+    [for-each ass asserts
+      [let [ass-list [form-to-list ass]
+            ass-name [form-to-word [first ass-list]]]
+        [inc-atom number-of-asserts]
+        [switch ass-name
+          [[word def-type-of]]
+          [let [sch [scheme-to-form [get [llcheck-context/def-var-types gctx] [form-to-word [second ass-list]]]]]
+            [when-not
+              [eq-form
+                sch
+                [third ass-list]]
+            [logq-abort test assert fail expected [third ass-list] got [identity sch]]]]
+
+          [logq-abort test kind unknown]]]]]]
+
+[defn test-vector-file []
+  [promise-then
+    [read-parse-file-async [word vector.wuns]]
+    [func t [forms]
+      [promise-then
+        [make-init-evaluator-async]
+        [func u [evaluator]
+          [infer-top-forms evaluator forms]]]]]]
+
+[defn run-tests []
+  [test [[defn inc [x] [intrinsic i32.add x [i32 1]]]]
+    [def-type-of inc [func [[i32]] [i32]]]]
+  [test [
+      [genfn id [t] [[type p t]] p]
+      [defn id-int [p] [call id [[i32]] [p]]]
+      [defn id-float [p] [call id [[f64]] [p]]]]
+    [def-type-of id [scheme [t] [func [t] t]]]
+    [def-type-of id-int [func [[i32]] [i32]]]
+    [def-type-of id-float [func [[f64]] [f64]]]]
+  [test [
+      [defn id [p] p]
+      [defn id-int [[type p [i32]]] [id p]]
+      [defn id-float [[type p [f64]]] [id p]]]
+    [def-type-of id [scheme [a] [func [a] a]]]
+    [def-type-of id-int [func [[i32]] [i32]]]
+    [def-type-of id-float [func [[f64]] [f64]]]]
+  [test [
+      [genfn sz [t] [] [size-of t]]
+      [defn sz-int [] [call sz [[i32]] []]]
+      [defn sz-float [] [call sz [[f64]] []]]]
+    [def-type-of sz [scheme [[constraint t data]] [func [] [i32]]]]
+    [def-type-of sz-int [func [] [i32]]]
+    [def-type-of sz-float [func [] [i32]]]]
+  [test [
+      [type rec [] [record [a [i32]] [b [f64]]]]
+      [defn sz-rec [] [size-of [rec]]]]
+    [def-type-of sz-rec [func [] [i32]]]]
+  [test [
+      [type rec [t] [record [f t]]]
+      [defn sz-rec [] [size-of [rec [i32]]]]]
+    [def-type-of sz-rec [func [] [i32]]]]
+  [test [
+      [type rec [t] [record [sz [i32]] [f t]]]
+      [genfn sz [u] [] [size-of [rec u]]]
+      [defn sz-rec [] [size-of [rec [i32]]]]]
+    [def-type-of sz [scheme [[constraint u data]] [func [] [i32]]]]]
+  [test [
+      [type i32-point []
+        [record
+          [x [i32]]
+          [y [i32]]]]
+      [memory i32 mem 1]
+      [defn f []
+        [let [prec [cast [pointer [memory mem] [i32-point]] [i32 16]]]
+          [field prec y]]]]
+      [def-type-of f [func [] [pointer [memory mem] [i32]]]]]
+  [test [
+      [type vec [s]
+        [record
+          [size [i32]]
+          [array [array [i32] s]]]]
+      [memory i32 mem 1]
+      [defn psize [[type prec [pointer [memory mem] [vec [i32]]]]]
+        [field prec size]]]
+    [def-type-of psize [func [[pointer [memory mem] [vec [i32]]]] [pointer [memory mem] [i32]]]]]
+  [test [
+      [type point-2d [v]
+        [record
+          [x v]
+          [y v]]]
+      [type r []
+        [record
+          [point-f [point-2d [f64]]]
+          [point-i [point-2d [i32]]]]]
+      [memory i32 mem 1]
+      [defn f [[type prec [pointer [memory mem] [r]]]]
+        [field [field prec point-i] x]]]
+    [def-type-of f [func [[pointer [memory mem] [r]]] [pointer [memory mem] [i32]]]]
+    ]
+  [comment pointers are the same size regardless of the type of the target - type variables]
+  [test [
+      [memory i32 mem 1]
+      [genfn sz [t] [] [size-of [pointer [memory mem] t]]]
+      [defn sz-pint [] [call sz [[i32]] []]]]
+    [def-type-of sz [scheme [t] [func [] [i32]]]]
+    [def-type-of sz-pint [func [] [i32]]]]
+  [test [
+[type vector-data [a s]
+  [record
+    [size [i32]]
+    [array [array a s]]]]
+
+[memory i32 mem 1]
+
+[type pvector [v]
+  [alias
+    [pointer [memory mem] [vector-data v -s]]]]
+
+[genfn get [a] [[type pvec [pvector a]] [type i [i32]]]
+  [if [intrinsic i32.lt-s i [i32 0]] [intrinsic unreachable] [do]]
+  [if [intrinsic i32.le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
+  [deref [index [field pvec array] i]]]
+
+[defn get-float [[type pvec [pvector [f64]]] i]
+  [call get [[f64]] [pvec i]]]
+  ]]
+
+    [logq tests run [atom-get number-of-tests] asserts [atom-get number-of-asserts]]]
+
+
+[defn test-unify []
+  [let
+    [counter-atom [atom 0]
+     tv1 [generate-fresh-type-var-atom-var counter-atom 0]
+     tv2 [generate-fresh-type-var-atom-var counter-atom 1]
+     t1 [ctype/var tv1]
+     t2 [ctype/var tv2]
+     gctx [llcheck-context-empty [llctx-empty]]]
+    [set-add [type-var/constraints tv2] type-constraint-data]
+    [pair [unify gctx t1 t2] [pair t1 t2]]]]

@@ -714,7 +714,7 @@ const topSpecialForms = {
     if (tail.length !== 3) throw new CompileError('import expects three arguments')
     const importModuleName = getFormWord(tail[0])
     const importElementName = getFormWord(tail[1])
-    const importType = getFormList(tail[2])
+    const _importType = getFormList(tail[2])
     const jsExp = jsAwait(jsCall(jsVar('dynImport'), [jsString(importModuleName), jsString(importElementName)]))
     await setDef(topContext, importElementName, 'import', jsExp)
   },
