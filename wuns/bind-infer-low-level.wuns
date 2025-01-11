@@ -212,6 +212,24 @@
 
 [load interpreter-externs.wuns]
 
+[def intrinsic-types-map
+  [let [name-to-pair [transient-kv-map] i32 [word i32] bool i32 f64 [word f64]]
+    [let [i32i32-to-i32 [pair [list i32 i32] i32]]
+      [for-each name [list [word i32.add] [word i32.sub] [word i32.mul] [word i32.rem-s] [word i32.div-s]
+                           [word i32.and] [word i32.or] [word i32.xor]
+                           [word i32.shl] [word i32.shr-s] [word i32.shr-u]]
+        [set-kv-map name-to-pair name i32i32-to-i32]]]
+    [let [i32i32-to-boolean [pair [list i32 i32] bool]]
+      [for-each name [list [word i32.eq] [word i32.ne] [word i32.lt-s] [word i32.le-s] [word i32.gt-s] [word i32.ge-s]]
+        [set-kv-map name-to-pair name i32i32-to-boolean]]]
+    [let [f64f64-to-f64 [pair [list f64 f64] f64]]
+      [for-each name [list [word f64.add] [word f64.sub] [word f64.mul]]
+        [set-kv-map name-to-pair name f64f64-to-f64]]]
+    [let [f64f64-to-boolean [pair [list f64 f64] bool]]
+      [for-each name [list [word f64.eq] [word f64.ne] [word f64.lt] [word f64.le] [word f64.gt] [word f64.ge]]
+        [set-kv-map name-to-pair name f64f64-to-boolean]]]
+    name-to-pair]]
+
 [defn starts-with-dash [w]
   [eq [char-code-at w 0] [word-to-char-code -]]]
 
@@ -316,9 +334,9 @@
           [[word intrinsic]]
           [let [inst-sname [sword [get-arg 0]]
                 inst-name [syntax-word/word inst-sname]]
-            [if [or [is-i32-bin-inst inst-name] [is-f64-bin-inst inst-name] [is-f64-comp-inst inst-name]]
+            [if-let [intrinsic-pair [try-get intrinsic-types-map inst-name]]
               [do
-                [assert-n-args 3]
+                [assert-n-args [inc [size [pair/fst intrinsic-pair]]]]
                 [llexp/intrinsic inst-sname [list] [list-map arg [slice l 2 [size l]] [form-to-llexp type-var-set lstack arg]]]]
               [switch inst-name
                 [[word unreachable]]
@@ -789,9 +807,19 @@
 [defn make-type [type-name .. type-args] [make-type-list type-name type-args]]
 
 [def type-i32 [make-type [word i32]]]
+[def type-boolean type-i32]
 [def type-f64 [make-type [word f64]]]
 [def type-f32 [make-type [word f32]]]
 [def type-i64 [make-type [word i64]]]
+
+[defn make-type-hash-cons [type-name]
+  [switch type-name
+    [[word i32]] type-i32
+    [[word i64]] type-i64
+    [[word f32]] type-f32
+    [[word f64]] type-f64
+    [[word boolean]] type-boolean
+    [logq-abort make-type-hash-cons not implemented [identity type-name]]]]
 
 [defn type-pointer [mem target] [make-type [word pointer] mem target]]
 [defn type-array [elem-type size] [make-type [word array] elem-type size]]
@@ -1448,24 +1476,13 @@
 
     [llexp/intrinsic inst-name imm-args iargs]
     [let [w [syntax-word/word inst-name]]
-      [ifs
-        [is-i32-bin-inst w]
-        [let [a [at iargs 0] b [at iargs 1]]
-          [llunify-report gctx type-i32 [go level stack a] a]
-          [llunify-report gctx type-i32 [go level stack b] b]
-          type-i32]
-
-        [is-f64-bin-inst w]
-        [let [a [at iargs 0] b [at iargs 1]]
-          [llunify-report gctx type-f64 [go level stack a] a]
-          [llunify-report gctx type-f64 [go level stack b] b]
-          type-f64]
-
-        [is-f64-comp-inst w]
-        [let [a [at iargs 0] b [at iargs 1]]
-          [llunify-report gctx type-f64 [go level stack a] a]
-          [llunify-report gctx type-f64 [go level stack b] b]
-          type-i32]
+      [if-let [param-result-bin-pair [try-get intrinsic-types-map w]]
+        [let [param-types [pair/fst param-result-bin-pair]]
+          [assert [eq [size param-types] [size iargs]] arity mismatch]
+          [for i 0 [size param-types]
+            [let [a [at iargs i]]
+              [llunify-report gctx [make-type-hash-cons [at param-types i]] [go level stack a] a]]]
+          [make-type-hash-cons [pair/snd param-result-bin-pair]]]
 
         [switch w
           [[word unreachable]]

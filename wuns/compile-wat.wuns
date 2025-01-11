@@ -143,16 +143,8 @@
       [logq-abort get-ctype literal not implemented]]
 
     [llexp/intrinsic inst-name imm ica]
-    [ifs
-      [is-i32-bin-inst [syntax-word/word inst-name]]
-      type-i32
-
-      [is-f64-bin-inst [syntax-word/word inst-name]]
-      type-f64
-
-      [is-f64-comp-inst [syntax-word/word inst-name]]
-      type-i32
-
+    [if-let [param-return-pair [try-get intrinsic-types-map [syntax-word/word inst-name]]]
+      [make-type-hash-cons [pair/snd param-return-pair]]
       [logq-abort intrinsic not implemented]]
 
     [llexp/do forms]

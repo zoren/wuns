@@ -666,22 +666,3 @@
 [def-js-extern js-apply [func [js-value [list js-value]] js-value]]
 
 [import ./runtime-lib/host.js mem-dump [func [memory i32 i32] [tuple]]]
-
-[defn is-i32-bin-inst [w2]
-  [switch w2
-    [[word i32.add] [word i32.sub] [word i32.mul] [word i32.rem-s] [word i32.div-s]
-     [word i32.and] [word i32.or] [word i32.xor]
-     [word i32.shl] [word i32.shr-s] [word i32.shr-u]
-     [word i32.eq] [word i32.lt-s] [word i32.le-s]]
-    true
-    false]]
-
-[defn is-f64-bin-inst [w2]
-  [switch w2
-    [[word f64.add] [word f64.sub] [word f64.mul]] true
-    false]]
-
-[defn is-f64-comp-inst [w2]
-  [switch w2
-    [[word f64.eq] [word f64.lt] [word f64.le]] true
-    false]]
