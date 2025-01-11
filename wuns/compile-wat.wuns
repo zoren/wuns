@@ -1050,6 +1050,15 @@
     [wat/word [wat-global/type global]]
     [wat-inst-to-out [wat-global/value global]]]]
 
+[defn data-to-wat [d]
+  [match d
+    [wat-data/active mem-name offset data]
+    [wat-list
+      [wat/word [word data]]
+      [wat-list [wat/word [word memory]] [wat/dollar mem-name]]
+      [wat-inst-to-out offset]
+      [wat/dqstring-bytes data]]]]
+
 [defn output-func-to-wat [of]
   [wat-concat
     [list
@@ -1080,15 +1089,6 @@
               [export-kind/global] [word global]
               [logq-abort export-to-wat unknown export kind]]]
           [wat/dollar [pair/snd kind-pair]]]]]]]
-
-[defn data-to-wat [d]
-  [match d
-    [wat-data/active mem-name offset data]
-    [wat-list
-      [wat/word [word data]]
-      [wat-list [wat/word [word memory]] [wat/dollar mem-name]]
-      [wat-inst-to-out offset]
-      [wat/dqstring-bytes data]]]]
 
 [defn output-to-wat [output]
   [wat/seq-lf
