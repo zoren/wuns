@@ -186,6 +186,7 @@
     [local.get word]
     [local.set word wat-inst]
     [global.get word]
+    [inst-word word [list wat-inst]]
     [inst byte-array [list wat-inst]]
     [load byte-array wat-inst-memargs wat-inst]
     [store byte-array wat-inst-memargs wat-inst wat-inst]
@@ -207,20 +208,13 @@
         [let [c [char-code-at w i]] [if [eq c [word-to-char-code -]] ascii-underscore c]]]]
     res]]
 
-[def drop-name-byte-array [wasm-name-to-wat-byte-array [word drop]]]
+[defn wat-inst-word [inst-name .. args]
+  [wat-inst/inst-word inst-name args]]
 
-[defn wat-inst-drop [i]
-  [wat-inst/inst drop-name-byte-array [list i]]]
+[defn wat-inst-drop [i] [wat-inst-word [word drop] i]]
 
-[defn wat-inst-i32.add [a b]
-  [wat-inst/inst
-    [wasm-name-to-wat-byte-array [word i32.add]]
-    [list a b]]]
-
-[defn wat-inst-i32.mul [a b]
-  [wat-inst/inst
-    [wasm-name-to-wat-byte-array [word i32.mul]]
-    [list a b]]]
+[defn wat-inst-i32.add [a b] [wat-inst-word [word i32.add] a b]]
+[defn wat-inst-i32.mul [a b] [wat-inst-word [word i32.mul] a b]]
 
 [defn datas-to-byte-array [datas]
   [let
@@ -700,6 +694,16 @@
       [llexp/size-of t]
       [integer-exp-to-wat-inst [type-to-size-exp1 [get-annotation cctx t]]]
 
+      [llexp/is-identical p1 p2]
+      [let
+        [pt [get-apply-type [get-ctype cctx p1]]
+         mem-kind [get-memory-kind [llcheck-context/bind-ctx cctx] [mem-name-from-mem-type [first [pair/snd pt]]]]]
+        [wat-inst-word
+          [match mem-kind
+            [memory-kind/i32] [word i32.eq]
+            [memory-kind/i64] [word i64.eq]]
+            [go p1] [go p2]]]
+
       [do
         [log form]
         [logq-abort not implemented translate-form]]]]]
@@ -969,9 +973,13 @@
     [wat-inst/f64.const w]
     [wat-list [wat/word [word f64.const]] [wat/word w]]
 
-    [wat-inst/inst w args]
+    [wat-inst/inst-word w args]
     [wat-concat
-      [list [wat/byte-array w]] [list-map a args [wat-inst-to-out a]]]
+      [list [wat/word w]] [list-map a args [wat-inst-to-out a]]]
+
+    [wat-inst/inst ba args]
+    [wat-concat
+      [list [wat/byte-array ba]] [list-map a args [wat-inst-to-out a]]]
 
     [wat-inst/local.get w]
     [wat-list [wat/word [word local.get]] [wat/dollar w]]

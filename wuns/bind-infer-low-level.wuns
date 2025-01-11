@@ -42,6 +42,7 @@
     [field llexp syntax-word]
     [index llexp llexp]
     [size-of lltype]
+    [is-identical llexp llexp]
     ]]
 
 [type memory-kind []
@@ -483,6 +484,13 @@
             [assert-n-args 1]
             [llexp/size-of
               [form-to-lltype lstack type-var-set [get-arg 0]]]]
+
+          [[word is-identical]]
+          [do
+            [assert-n-args 2]
+            [llexp/is-identical
+              [form-to-llexp type-var-set lstack [get-arg 0]]
+              [form-to-llexp type-var-set lstack [get-arg 1]]]]
 
           [[word call]]
           [do
@@ -1601,6 +1609,16 @@
       [constrain-type-data gctx it]
       [llannotate gctx t it]
       type-i32]
+
+    [llexp/is-identical p1 p2]
+    [let
+      [t1 [go level stack p1]
+       t2 [go level stack p2]
+       tp [type-pointer [fresh-type-var] [fresh-type-var]]]
+      [comment check p1 and p1 are pointer in the same memory with the same target type]
+      [llunify-report gctx t1 tp bform]
+      [llunify-report gctx t2 tp bform]
+      type-boolean]
 
     [llexp/deref value]
     [let [t-mem [fresh-type-var]
