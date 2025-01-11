@@ -298,24 +298,6 @@
     [initial i32]
     [maximum [option i32]]]]
 
-[type wat-output []
-  [record
-    [imports [growable-list [pair [list word] import-kind]]]
-    [memories [growable-list wat-memory]]
-    [globals [growable-list wat-global]]
-    [funcs [growable-list output-func]]
-    [exports [growable-list [pair word [pair export-kind word]]]]
-    [datas [growable-list wat-data]]]]
-
-[defn make-wat-output []
-  [wat-output
-    [growable-list]
-    [growable-list]
-    [growable-list]
-    [growable-list]
-    [growable-list]
-    [growable-list]]]
-
 [type translate-context []
   [record
     [check-context llcheck-context]
@@ -733,6 +715,15 @@
       [push gl [pair fname-word type-args]]]
     spec-name]]
 
+[type wat-output []
+  [record
+    [imports [growable-list [pair [list word] import-kind]]]
+    [memories [growable-list wat-memory]]
+    [globals [growable-list wat-global]]
+    [funcs [growable-list output-func]]
+    [exports [growable-list [pair word [pair export-kind word]]]]
+    [datas [growable-list wat-data]]]]
+
 [defn translate-top-forms-sync [evaluator forms]
   [let
     [f2l [make-forms-to-btops evaluator]
@@ -740,14 +731,19 @@
      bind-ctx [pair/snd btops-ctx-pair]
      gctx [llcheck-context-empty bind-ctx]
      tctx [translate-context-empty gctx]
-     output [make-wat-output]
+     imports [growable-list]
+     memories [growable-list]
+     globals [growable-list]
+     funcs [growable-list]
+     exports [growable-list]
+     datas [growable-list]
      specs-atom [translate-context/func-specs-to-generate tctx]
      func-to-body [translate-context/function-name-to-body tctx]]
     [for-each btop [pair/fst btops-ctx-pair]
       [infer-lltop gctx btop]
       [match btop
         [lltop/memory name kind init-size opt-max]
-        [push [wat-output/memories output]
+        [push memories
           [wat-memory
             kind
             [syntax-word/word name]
@@ -757,7 +753,7 @@
               [option/none]]]]
 
         [lltop/def name value]
-        [push [wat-output/globals output]
+        [push globals
           [wat-global
             [syntax-word/word name]
             [translate-type bind-ctx [get-ctype gctx value]]
@@ -770,7 +766,7 @@
         [lltop/export snames]
         [for-each sname snames
           [push
-            [wat-output/exports output]
+            exports
             [let [name [syntax-word/word sname]]
               [pair
                 name
@@ -790,13 +786,13 @@
                     [pair [export-kind/global] name]]
                   [logq-abort export not found]]]]]]
 
-        [lltop/data-active mem-name offset-form datas]
+        [lltop/data-active mem-name offset-form ds]
         [push
-          [wat-output/datas output]
+          datas
           [wat-data/active
             [syntax-word/word mem-name]
             [exp-const-to-wat-inst offset-form]
-            [datas-to-byte-array datas]]]
+            [datas-to-byte-array ds]]]
 
         [lltop/type decls]
         [do]
@@ -811,10 +807,16 @@
                 spec-name [specialized-name-from bind-ctx fname type-args]]
             [when-not [set-has [translate-context/specialized-names-generated tctx] spec-name]
               [push
-                [wat-output/funcs output]
+                funcs
                 [translate-func tctx [get func-to-body fname] type-args]]]]]
         [continue func-specializations [clone-growable-to-frozen-list [atom-get specs-atom]]]]]
-    output]]
+    [wat-output
+      imports
+      memories
+      globals
+      funcs
+      exports
+      datas]]]
 
 [def ascii-line-feed [i32 10]]
 [def ascii-space [i32 32]]
