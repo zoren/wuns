@@ -134,41 +134,42 @@
     anno
     [logq-abort get-annotation expected an annotation [identity bst]]]]
 
-[defn get-ctype [gctx bform]
-  [match bform
-    [llexp/literal l]
-    [match l
-      [llliteral/i32 i] type-i32
-      [llliteral/f64 f] type-f64
-      [logq-abort get-ctype literal not implemented]]
+[defn get-ctype [gctx outer-bform]
+  [letfn [
+    [func form-to-ctype [bform]
+      [match bform
+        [llexp/literal l]
+        [match l
+          [llliteral/i32 i] type-i32
+          [llliteral/f64 f] type-f64
+          [logq-abort get-ctype literal not implemented]]
 
-    [llexp/intrinsic inst-name imm ica]
-    [if-let [param-return-pair [try-get intrinsic-types-map [syntax-word/word inst-name]]]
-      [make-type-hash-cons [pair/snd param-return-pair]]
-      [logq-abort intrinsic not implemented]]
+        [llexp/intrinsic inst-name imm ica]
+        [if-let [param-return-pair [try-get intrinsic-types-map [syntax-word/word inst-name]]]
+          [make-type-hash-cons [pair/snd param-return-pair]]
+          [logq-abort intrinsic not implemented]]
 
-    [llexp/do forms]
-    [if [is-empty forms]
-      type-empty-tuple
-      [get-ctype gctx [last forms]]]
+        [llexp/do forms]
+        [forms-to-ctype forms]
 
-    [llexp/let bindings forms]
-    [if [is-empty forms]
-      type-empty-tuple
-      [get-ctype gctx [last forms]]]
+        [llexp/let bindings forms]
+        [forms-to-ctype forms]
 
-    [llexp/loop bindings forms]
-    [if [is-empty forms]
-      type-empty-tuple
-      [get-ctype gctx [last forms]]]
+        [llexp/loop bindings forms]
+        [forms-to-ctype forms]
 
-    [llexp/assign target value]
-    type-empty-tuple
+        [llexp/assign target value]
+        type-empty-tuple
 
-    [llexp/size-of t]
-    type-i32
+        [llexp/size-of t]
+        type-i32
 
-    [get-annotation gctx bform]]]
+        [get-annotation gctx bform]]]
+    [func forms-to-ctype [forms]
+      [if [is-empty forms]
+        type-empty-tuple
+        [form-to-ctype [last forms]]]]]
+  [form-to-ctype outer-bform]]]
 
 [type wat-inst-memargs []
   [record

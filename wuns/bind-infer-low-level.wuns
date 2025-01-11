@@ -714,9 +714,7 @@
                 [push-error f [quote [not a defined name]]]]
               sw]]]
 
-        [do
-          [log form]
-          [logq-abort form-to-lltop not implemented]]]
+        [logq-abort form-to-lltop not implemented [identity form]]]
 
       [form/list fl]
       [logq-abort direct call at top not supported]]]]]
@@ -1455,9 +1453,11 @@
       stack]
     stack]]
 
-[defn infer-llexp1 [gctx type-env]
-[let [instantiate-syntax-type [instantiate-syntax-type-env gctx type-env [should-const-eval/no] i32-min]]
+[defn infer-llexp [gctx type-env]
+  [let [instantiate-syntax-type [instantiate-syntax-type-env gctx type-env [should-const-eval/no] i32-min]
+        type-var-counter [llcheck-context/type-var-counter gctx]]
   [func go [level stack bform]
+  [let [fresh-type-var [func ftv [] [generate-fresh-type-var-atom type-var-counter level]]]
   [match bform
     [llexp/var sw]
     [let [t [get-specialized-var gctx level stack sw]]
@@ -1486,7 +1486,7 @@
 
         [switch w
           [[word unreachable]]
-          [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
+          [fresh-type-var]
 
           [[word i32.load] [word i32.load8-u]]
           [let
@@ -1570,7 +1570,7 @@
             value [pair/snd assignment]
             val-type [go level stack value]]
             [llunify-report gctx [check-type-scheme/type loop-var-type-scheme] val-type value]]]]
-      [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]]
+      [fresh-type-var]]
 
     [llexp/call fname-sword opt-type-args args]
     [let
@@ -1583,7 +1583,7 @@
               gctx level stack fname-sword ctype-args]]
           [get-specialized-var gctx level stack fname-sword]]
       arg-types [list-map-fn [func f [arg] [go level stack arg]] args]
-      t-res [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
+      t-res [fresh-type-var]
       t-func [type-func arg-types t-res]]
       [llunify-report gctx spec-func-type t-func bform]
       [llannotate gctx bform t-res]]
@@ -1603,15 +1603,16 @@
       type-i32]
 
     [llexp/deref value]
-    [let [t-mem [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
-          t-res [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
+    [let [t-mem [fresh-type-var]
+          t-res [fresh-type-var]
           t-val [go level stack value]]
       [llunify-report gctx [type-pointer t-mem t-res] t-val value]
-      [llannotate gctx bform [lift-data-type t-res]]]
+      [let [lifted [lift-data-type t-res]]
+        [llannotate gctx bform lifted]]]
 
     [llexp/assign target value]
-    [let [t-mem [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
-          t-val [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
+    [let [t-mem [fresh-type-var]
+          t-val [fresh-type-var]
           pt [type-pointer t-mem t-val]]
       [llunify-report gctx pt [go level stack target] target]
       [if-let [inst [try-get-inst-type [normalize-type t-val]]]
@@ -1634,8 +1635,8 @@
     [llexp/field target field-name]
     [let
       [ttarget [go level stack target]
-       t-mem [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
-       t-rec [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
+       t-mem [fresh-type-var]
+       t-rec [fresh-type-var]
        pt [type-pointer t-mem t-rec]
        field-name-word [syntax-word/word field-name]
        type-it
@@ -1662,25 +1663,22 @@
 
     [llexp/index target index]
     [let
-      [ttarget [go level stack target]
-      t-mem [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
-      t-elem [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
-      t-size [generate-fresh-type-var-atom [llcheck-context/type-var-counter gctx] level]
-      t-arr [type-array t-elem t-size]
-      pt [type-pointer t-mem t-arr]]
-      [llunify-report gctx ttarget pt target]
-      [llunify-report gctx type-i32 [go level stack index] index]
+      [t-mem [fresh-type-var]
+       t-elem [fresh-type-var]
+       pt [type-pointer t-mem [type-array t-elem [fresh-type-var]]]]
+      [llunify-report gctx [go level stack target] pt target]
+      [llunify-report gctx [go level stack index] type-i32 index]
       [llannotate gctx bform [type-pointer t-mem t-elem]]]
 
-    [logq-abort infer-llexp not implemented [identity bform]]]]]]
+    [logq-abort infer-llexp not implemented [identity bform]]]]]]]
 
 [defn infer-llexp-entry [gctx level type-env lstack bform]
-  [[infer-llexp1 gctx type-env] level lstack bform]]
+  [[infer-llexp gctx type-env] level lstack bform]]
 
 [defn infer-func [gctx level type-env param-ctx bodies]
   [if [is-empty bodies]
     type-empty-tuple
-    [let [f [infer-llexp1 gctx type-env]
+    [let [f [infer-llexp gctx type-env]
           lstack [local-stack/frame [local-stack/empty] [local-context param-ctx [local-context-kind/func]]]]
       [for i 0 [dec [size bodies]]
         [f level lstack [at bodies i]]]
