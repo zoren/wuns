@@ -1,5 +1,5 @@
 import { test, expect, assert } from 'vitest'
-import { stringToInst, translateFormsToWasmBytes} from './test-util.js'
+import { stringToInst, translateFormsToWasmBytes } from './test-util.js'
 import { parseString } from '../core.js'
 
 test.each([
@@ -690,6 +690,25 @@ test('defn generic', async () => {
     const idF64 = inst['id-f']
     expect(idF64(1.9)).toBe(1.9)
     expect(idI32(7)).toBe(7)
+  }
+})
+
+test('tuples', async () => {
+  {
+    const inst = await stringToInst(`
+    [defn two-tuple [[type a [i32]]] [tuple a a]]
+    [export two-tuple]`)
+    const twoTuple = inst['two-tuple']
+    const tt = twoTuple(7)
+    expect(tt).toStrictEqual([7, 7])
+  }
+  {
+    const inst = await stringToInst(`
+    [defn two-tuple [] [tuple [i32 5] [f64 1.9]]]
+    [export two-tuple]`)
+    const twoTuple = inst['two-tuple']
+    const tt = twoTuple()
+    expect(tt).toStrictEqual([5, 1.9])
   }
 })
 

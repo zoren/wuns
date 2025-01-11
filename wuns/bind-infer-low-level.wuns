@@ -43,6 +43,7 @@
     [index llexp llexp]
     [size-of lltype]
     [is-identical llexp llexp]
+    [tuple [list llexp]]
     ]]
 
 [type memory-kind []
@@ -492,6 +493,9 @@
               [form-to-llexp type-var-set lstack [get-arg 0]]
               [form-to-llexp type-var-set lstack [get-arg 1]]]]
 
+          [[word tuple]]
+          [llexp/tuple [list-map arg [rest l] [form-to-llexp type-var-set lstack arg]]]
+
           [[word call]]
           [do
             [assert-n-args 3]
@@ -829,15 +833,21 @@
 
 [defn type-pointer [mem target] [make-type [word pointer] mem target]]
 [defn type-array [elem-type size] [make-type [word array] elem-type size]]
-[defn type-tuple-list [types] [make-type-list [word tuple] types]]
 
-[def type-empty-tuple [type-tuple-list [list]]]
+[def type-empty-tuple [make-type [word tuple]]]
+
+[defn type-tuple-list-no-singleton [types]
+  [ifs
+    [eq [size types] 0]
+    type-empty-tuple
+
+    [eq [size types] 1]
+    [first types]
+
+    [make-type-list [word tuple] types]]]
 
 [defn type-func [params result]
-  [make-type [word func]
-    [if [eq [size params] 1]
-      [first params]
-      [type-tuple-list params]] result]]
+  [make-type [word func] [type-tuple-list-no-singleton params] result]]
 
 [defn make-type-var [kind level]
   [type-var [atom kind] [atom level] [set]]]
@@ -1619,6 +1629,9 @@
       [llunify-report gctx t1 tp bform]
       [llunify-report gctx t2 tp bform]
       type-boolean]
+
+    [llexp/tuple values]
+    [type-tuple-list-no-singleton [list-map-fn [func f [v] [go level stack v]] values]]
 
     [llexp/deref value]
     [let [t-mem [fresh-type-var]

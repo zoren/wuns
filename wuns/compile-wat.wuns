@@ -656,6 +656,9 @@
             [memory-kind/i64] [word i64.eq]]
             [go p1] [go p2]]]
 
+      [llexp/tuple values]
+      [wat-inst/instructions [list-map value values [go value]]]
+
       [do
         [log form]
         [logq-abort not implemented translate-form]]]]]
