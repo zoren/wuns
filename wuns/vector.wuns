@@ -73,7 +73,7 @@
   [if [le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
   [deref [index [field pvec array] i]]]
 
-[defn get-def [[type pvec [pvector -a]] [type i [i32]]]
+[defn vector-get [[type pvec [pvector -a]] [type i [i32]]]
   [if [lt-s i [i32 0]] [intrinsic unreachable] [do]]
   [if [le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
   [deref [index [field pvec array] i]]]
@@ -260,7 +260,7 @@
       [loop [i [i32 0] n [size forms] r [i32 0]]
         [if [lt-s i n]
           [continue
-            r [inc [max r [form-depth [get-def forms i]]]]
+            r [inc [max r [form-depth [vector-get forms i]]]]
             i [inc i]]
           r]]]
 
