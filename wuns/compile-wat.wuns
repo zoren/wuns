@@ -335,11 +335,7 @@
     [set]
     [atom [growable-list]]]]
 
-[defn llctx-from-translate [tctx]
-  [llcheck-context/bind-ctx
-     [translate-context/check-context tctx]]]
-
-[defn translate-type [tctx it]
+[defn translate-type [bind-ctx it]
   [match [normalize-type it]
     [ctype/var tv]
     [logq-abort translate-type not implemented type var [identity tv]]
@@ -351,7 +347,7 @@
       [ctype-inst/apply type-name type-args]
       [switch type-name
         [[word pointer]]
-        [match [get-memory-kind [llctx-from-translate tctx] [mem-name-from-mem-type [first type-args]]]
+        [match [get-memory-kind bind-ctx [mem-name-from-mem-type [first type-args]]]
           [memory-kind/i32] [word i32]
           [memory-kind/i64] [word i64]]
 
@@ -362,13 +358,13 @@
       [ctype-inst/anon kind]
       [match kind
         [ctype-user-inst-kind/union utypes]
-        [translate-type tctx [first utypes]]
+        [translate-type bind-ctx [first utypes]]
 
         [logq-abort not implemented translate-type [identity it]]]
 
       [logq-abort not implemented translate-type [identity it]]]]]
 
-[defn translate-types [tctx it]
+[defn translate-types [bind-ctx it]
   [let [nt [normalize-type it]]
     [match nt
       [ctype/var tv] [logq-abort translate-types not implemented [identity nt]]
@@ -381,20 +377,20 @@
           [do
             [when-not [is-empty type-args]
               [logq translate-types tuple [identity type-args]]]
-            [list-map ta type-args [translate-type tctx ta]]]
+            [list-map ta type-args [translate-type bind-ctx ta]]]
 
-          [list [translate-type tctx nt]]]
+          [list [translate-type bind-ctx nt]]]
 
         [ctype-inst/anon kind]
         [match kind
           [ctype-user-inst-kind/union utypes]
-          [list [translate-type tctx [first utypes]]]
+          [list [translate-type bind-ctx [first utypes]]]
 
           [logq-abort translate-types not implemented [identity kind]]]
 
         [do [log it] [logq-abort not implemented translate-types [identity it]]]]]]]
 
-[defn specialized-name-from [tctx fname type-args]
+[defn specialized-name-from [bind-ctx fname type-args]
   [loop
     [w fname
      i 0
@@ -417,7 +413,7 @@
             [ctype-inst/apply type-name type-args]
             [switch type-name
               [[word pointer]]
-              [match [get-memory-kind [llctx-from-translate tctx] [mem-name-from-mem-type [first type-args]]]
+              [match [get-memory-kind bind-ctx [mem-name-from-mem-type [first type-args]]]
                 [memory-kind/i32] [word i32]
                 [memory-kind/i64] [word i64]]
               [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
@@ -469,18 +465,18 @@
          [if-let [ldesc [try-get form-to-ldesc [syntax-word-get-form lvar-sname]]]
            [syntax-word/word lvar-sname]
            [logq-abort lvar-to-name expected local var [identity lvar-sname]]]]
-     get-form-types [func get-form-types [form] [translate-types tctx [get-ctype cctx form]]]
+     get-form-types [func get-form-types [form] [translate-types bind-ctx [get-ctype cctx form]]]
      glocals [growable-list]
      add-binding
      [func ab [b]
        [push glocals
          [pair
            [syntax-word/word [pair/fst b]]
-           [translate-type tctx [get-ctype cctx [pair/snd b]]]]]]
+           [translate-type bind-ctx [get-ctype cctx [pair/snd b]]]]]]
      signature [lldefn/signature func]
      fname-word [syntax-word/word [func-sig/name signature]]
-     ts [get [llcheck-context/def-var-types [translate-context/check-context tctx]] fname-word]
-     special-func-name [specialized-name-from tctx fname-word type-args]
+     ts [get [llcheck-context/def-var-types cctx] fname-word]
+     special-func-name [specialized-name-from bind-ctx fname-word type-args]
      type-env [transient-kv-map]]
   [if-let [fn-tps [func-sig/type-params signature]]
     [let [type-params [check-type-scheme/named-type-params ts]]
@@ -500,7 +496,7 @@
           spec-type-args [list-map ta tas [copy-type-proper type-env ta]]
           called-fname-word [syntax-word/word sname]
           gl [atom-get [translate-context/func-specs-to-generate tctx]]
-          spec-name [specialized-name-from tctx called-fname-word spec-type-args]]
+          spec-name [specialized-name-from bind-ctx called-fname-word spec-type-args]]
       [when-not [set-has [translate-context/specialized-names-generated tctx] spec-name]
         [push gl [pair called-fname-word spec-type-args]]]
       spec-name]]
@@ -599,7 +595,7 @@
         [assert [eq-word [pair/fst pt] [word pointer]]]
         [wat-inst/load
           [wasm-name-to-wat-byte-array
-            [switch [translate-type tctx it]
+            [switch [translate-type bind-ctx it]
             [[word i32]] [word i32.load]
             [[word i64]] [word i64.load]
             [[word f32]] [word f32.load]
@@ -623,7 +619,7 @@
         [assert [eq-word [pair/fst pt] [word pointer]]]
         [wat-inst/store
           [wasm-name-to-wat-byte-array
-            [switch [translate-type tctx it]
+            [switch [translate-type bind-ctx it]
             [[word i32]] [word i32.store]
             [[word i64]] [word i64.store]
             [[word f32]] [word f32.store]
@@ -697,7 +693,7 @@
       [llexp/is-identical p1 p2]
       [let
         [pt [get-apply-type [get-ctype cctx p1]]
-         mem-kind [get-memory-kind [llcheck-context/bind-ctx cctx] [mem-name-from-mem-type [first [pair/snd pt]]]]]
+         mem-kind [get-memory-kind bind-ctx [mem-name-from-mem-type [first [pair/snd pt]]]]]
         [wat-inst-word
           [match mem-kind
             [memory-kind/i32] [word i32.eq]
@@ -719,21 +715,24 @@
         [assert [eq [size params] [size param-types]] expected matching number of parameters and types]
         [for i 0 [size params]
           [push gparams
-            [pair [syntax-word/word [pair/fst [at params i]]] [translate-type tctx [lift-data-type [at param-types i]]]]]]
+            [pair
+              [syntax-word/word [pair/fst [at params i]]]
+              [translate-type bind-ctx [lift-data-type [at param-types i]]]]]]
         [push
           [wat-output/funcs [translate-context/output tctx]]
           [output-func
             special-func-name
             [clone-growable-to-frozen-list gparams]
             [clone-growable-to-frozen-list glocals]
-            [translate-types tctx [lift-data-type [pair/snd ft]]]
+            [translate-types bind-ctx [lift-data-type [pair/snd ft]]]
             [wat-inst/instructions tbodies]]]]]]]]
 
 [defn add-func-specialization [tctx sname]
-  [let [type-args [get [llcheck-context/type-instantiations [translate-context/check-context tctx]] sname]
+  [let [cctx [translate-context/check-context tctx]
+        type-args [get [llcheck-context/type-instantiations cctx] sname]
         fname-word [syntax-word/word sname]
         gl [atom-get [translate-context/func-specs-to-generate tctx]]
-        spec-name [specialized-name-from tctx fname-word type-args]]
+        spec-name [specialized-name-from [llcheck-context/bind-ctx cctx] fname-word type-args]]
     [when-not [set-has [translate-context/specialized-names-generated tctx] spec-name]
       [push gl [pair fname-word type-args]]]
     spec-name]]
@@ -741,7 +740,8 @@
 [defn translate-top-form [tctx bform]
   [let
     [output [translate-context/output tctx]
-     cctx [translate-context/check-context tctx]]
+     cctx [translate-context/check-context tctx]
+     bind-ctx [llcheck-context/bind-ctx cctx]]
     [match bform
       [lltop/memory name kind init-size opt-max]
       [push [wat-output/memories output]
@@ -757,7 +757,7 @@
       [push [wat-output/globals output]
         [wat-global
           [syntax-word/word name]
-          [translate-type tctx [get-ctype cctx value]]
+          [translate-type bind-ctx [get-ctype cctx value]]
           [exp-const-to-wat-inst value]]]
 
       [lltop/defn func]
@@ -771,7 +771,7 @@
           [let [name [syntax-word/word sname]]
             [pair
               name
-              [if-let [dd [try-get [llctx/lldef-ctx [llctx-from-translate tctx]] name]]
+              [if-let [dd [try-get [llctx/lldef-ctx bind-ctx] name]]
                 [match dd
                   [lldef-desc/memory kind]
                   [pair [export-kind/memory] name]
@@ -805,8 +805,8 @@
   [let
     [f2l [make-forms-to-btops evaluator]
      btops-ctx-pair [f2l forms]
-     ctx [pair/snd btops-ctx-pair]
-     gctx [llcheck-context-empty ctx]
+     bind-ctx [pair/snd btops-ctx-pair]
+     gctx [llcheck-context-empty bind-ctx]
      tctx [translate-context-empty gctx]
      specs-atom [translate-context/func-specs-to-generate tctx]
      func-to-body [translate-context/function-name-to-body tctx]]
@@ -819,7 +819,7 @@
         [for-each func-specialization func-specializations
           [let [fname [pair/fst func-specialization]
                 type-args [list-map t [pair/snd func-specialization] [normalize-type t]]
-                spec-name [specialized-name-from tctx fname type-args]]
+                spec-name [specialized-name-from bind-ctx fname type-args]]
             [when-not [set-has [translate-context/specialized-names-generated tctx] spec-name]
               [translate-func tctx [get func-to-body fname] type-args]]]]
         [continue func-specializations [clone-growable-to-frozen-list [atom-get specs-atom]]]]]
