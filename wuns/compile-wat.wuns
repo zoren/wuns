@@ -318,7 +318,6 @@
 
 [type translate-context []
   [record
-    [output wat-output]
     [check-context llcheck-context]
     [function-name-to-typearg-specializations [transient-kv-map word [set word]]]
     [function-name-to-body [transient-kv-map word lldefn]]
@@ -328,7 +327,6 @@
 
 [defn translate-context-empty [llcheck-context]
   [translate-context
-    [make-wat-output]
     llcheck-context
     [transient-kv-map]
     [transient-kv-map]
@@ -718,14 +716,12 @@
             [pair
               [syntax-word/word [pair/fst [at params i]]]
               [translate-type bind-ctx [lift-data-type [at param-types i]]]]]]
-        [push
-          [wat-output/funcs [translate-context/output tctx]]
-          [output-func
-            special-func-name
-            [clone-growable-to-frozen-list gparams]
-            [clone-growable-to-frozen-list glocals]
-            [translate-types bind-ctx [lift-data-type [pair/snd ft]]]
-            [wat-inst/instructions tbodies]]]]]]]]
+        [output-func
+          special-func-name
+          [clone-growable-to-frozen-list gparams]
+          [clone-growable-to-frozen-list glocals]
+          [translate-types bind-ctx [lift-data-type [pair/snd ft]]]
+          [wat-inst/instructions tbodies]]]]]]]
 
 [defn add-func-specialization [tctx sname]
   [let [cctx [translate-context/check-context tctx]
@@ -737,70 +733,6 @@
       [push gl [pair fname-word type-args]]]
     spec-name]]
 
-[defn translate-top-form [tctx bform]
-  [let
-    [output [translate-context/output tctx]
-     cctx [translate-context/check-context tctx]
-     bind-ctx [llcheck-context/bind-ctx cctx]]
-    [match bform
-      [lltop/memory name kind init-size opt-max]
-      [push [wat-output/memories output]
-        [wat-memory
-          kind
-          [syntax-word/word name]
-          [word-to-int [syntax-word/word init-size]]
-          [if-let [max opt-max]
-            [option/some [word-to-int [syntax-word/word max]]]
-            [option/none]]]]
-
-      [lltop/def name value]
-      [push [wat-output/globals output]
-        [wat-global
-          [syntax-word/word name]
-          [translate-type bind-ctx [get-ctype cctx value]]
-          [exp-const-to-wat-inst value]]]
-
-      [lltop/defn func]
-      [set-kv-map [translate-context/function-name-to-body tctx]
-        [syntax-word/word [func-sig/name [lldefn/signature func]]] func]
-
-      [lltop/export snames]
-      [for-each sname snames
-        [push
-          [wat-output/exports output]
-          [let [name [syntax-word/word sname]]
-            [pair
-              name
-              [if-let [dd [try-get [llctx/lldef-ctx bind-ctx] name]]
-                [match dd
-                  [lldef-desc/memory kind]
-                  [pair [export-kind/memory] name]
-
-                  [lldef-desc/func fsig]
-                  [do
-                    [if-let [tparams [func-sig/type-params fsig]]
-                      [logq-abort export genfn not implemented]
-                      [do]]
-                    [pair [export-kind/func] [add-func-specialization tctx sname]]]
-
-                  [lldef-desc/any]
-                  [pair [export-kind/global] name]]
-                [logq-abort export not found]]]]]]
-
-      [lltop/data-active mem-name offset-form datas]
-      [do
-        [push
-          [wat-output/datas output]
-          [wat-data/active
-            [syntax-word/word mem-name]
-            [exp-const-to-wat-inst offset-form]
-            [datas-to-byte-array datas]]]]
-
-      [lltop/type decls]
-      [do]
-
-      [logq-abort not implemented translate-top-form [identity bform]]]]]
-
 [defn translate-top-forms-sync [evaluator forms]
   [let
     [f2l [make-forms-to-btops evaluator]
@@ -808,11 +740,68 @@
      bind-ctx [pair/snd btops-ctx-pair]
      gctx [llcheck-context-empty bind-ctx]
      tctx [translate-context-empty gctx]
+     output [make-wat-output]
      specs-atom [translate-context/func-specs-to-generate tctx]
      func-to-body [translate-context/function-name-to-body tctx]]
     [for-each btop [pair/fst btops-ctx-pair]
       [infer-lltop gctx btop]
-      [translate-top-form tctx btop]]
+      [match btop
+        [lltop/memory name kind init-size opt-max]
+        [push [wat-output/memories output]
+          [wat-memory
+            kind
+            [syntax-word/word name]
+            [word-to-int [syntax-word/word init-size]]
+            [if-let [max opt-max]
+              [option/some [word-to-int [syntax-word/word max]]]
+              [option/none]]]]
+
+        [lltop/def name value]
+        [push [wat-output/globals output]
+          [wat-global
+            [syntax-word/word name]
+            [translate-type bind-ctx [get-ctype gctx value]]
+            [exp-const-to-wat-inst value]]]
+
+        [lltop/defn func]
+        [set-kv-map [translate-context/function-name-to-body tctx]
+          [syntax-word/word [func-sig/name [lldefn/signature func]]] func]
+
+        [lltop/export snames]
+        [for-each sname snames
+          [push
+            [wat-output/exports output]
+            [let [name [syntax-word/word sname]]
+              [pair
+                name
+                [if-let [dd [try-get [llctx/lldef-ctx bind-ctx] name]]
+                  [match dd
+                    [lldef-desc/memory kind]
+                    [pair [export-kind/memory] name]
+
+                    [lldef-desc/func fsig]
+                    [do
+                      [if-let [tparams [func-sig/type-params fsig]]
+                        [logq-abort export genfn not implemented]
+                        [do]]
+                      [pair [export-kind/func] [add-func-specialization tctx sname]]]
+
+                    [lldef-desc/any]
+                    [pair [export-kind/global] name]]
+                  [logq-abort export not found]]]]]]
+
+        [lltop/data-active mem-name offset-form datas]
+        [push
+          [wat-output/datas output]
+          [wat-data/active
+            [syntax-word/word mem-name]
+            [exp-const-to-wat-inst offset-form]
+            [datas-to-byte-array datas]]]
+
+        [lltop/type decls]
+        [do]
+
+        [logq-abort not implemented translate-top-form [identity btop]]]]
     [loop [func-specializations [clone-growable-to-frozen-list [atom-get specs-atom]]]
       [when-not [is-empty func-specializations]
         [atom-set specs-atom [growable-list]]
@@ -821,9 +810,11 @@
                 type-args [list-map t [pair/snd func-specialization] [normalize-type t]]
                 spec-name [specialized-name-from bind-ctx fname type-args]]
             [when-not [set-has [translate-context/specialized-names-generated tctx] spec-name]
-              [translate-func tctx [get func-to-body fname] type-args]]]]
+              [push
+                [wat-output/funcs output]
+                [translate-func tctx [get func-to-body fname] type-args]]]]]
         [continue func-specializations [clone-growable-to-frozen-list [atom-get specs-atom]]]]]
-    tctx]]
+    output]]
 
 [def ascii-line-feed [i32 10]]
 [def ascii-space [i32 32]]
@@ -1123,8 +1114,8 @@
 [defn translate-top-forms-to-wasm-bytes [forms]
   [promise-then
     [translate-top-forms-to-tctx forms]
-    [func t [tctx]
-      [wat-to-wasm-byte-array [wat-to-wat-bytes [output-to-wat [translate-context/output tctx]]]]]]]
+    [func t [output]
+      [wat-to-wasm-byte-array [wat-to-wat-bytes [output-to-wat output]]]]]]
 
 [def-wasm-extern byte-array-to-wasm-module [func [byte-array] wasm-module]]
 
