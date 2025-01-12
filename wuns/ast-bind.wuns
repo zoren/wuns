@@ -400,14 +400,6 @@
         [when-let [ddesc opt-ddesc] [set-kv-map node-to-def-desc sw ddesc]]
         opt-ddesc]]
     type-ctx [transient-kv-map]
-    set-type
-    [func st [f arity]
-      [let [w [get-word f]]
-        [if [is-reserved-type-name w]
-          [push-error f [quote [type name is reserved]]]
-          [do
-            [when [has type-ctx w] [push-error f [quote [redefing type]]]]
-            [set-kv-map type-ctx w arity]]]]]
     parse-param-list
     [func ppl [param-list]
       [let
@@ -605,15 +597,25 @@
 
                 [[word type]]
                 [let
-                  [triples [triplewise [rest l]]
-                   -
-                   [for-each triple triples
-                     [set-type [first triple] [size [get-list [second triple]]]]]
-                   fb
+                  [gtriples [growable-list]]
+                  [for-3 i 1 [size l]
+                    [let [f [at l i]
+                          w [get-word f]
+                          type-params-list [get-list [at l [inc i]]]]
+                      [if [is-reserved-type-name w]
+                        [push-error f [quote [type name is reserved]]]
+                        [do
+                          [when [has type-ctx w] [push-error f [quote [redefing type]]]]
+                          [set-kv-map type-ctx w [size type-params-list]]]]
+                      [push gtriples [pair f [pair type-params-list [at l [add 2 i]]]]]]]
+
                     [btop/type
-                      [list-map triple triples
+                      [list-map triple [clone-growable-to-frozen-list gtriples]
                         [let
-                          [type-name-form [first triple]
+                          [type-name-form [pair/fst triple]
+                           param-form-pair [pair/snd triple]
+                           param-list [pair/fst param-form-pair]
+                           type-decl-form [pair/snd param-form-pair]
                            stype-name [get-sword type-name-form]
                            type-name [syntax-word/word stype-name]
                            type-prefix [concat-words type-name [word /]]
@@ -623,14 +625,14 @@
                               [when [has def-ctx full-name]
                                 [report-error [quote [redefining type thing]]]]
                               [set-kv-map def-ctx full-name desc]]]
-                           param-pair [form-to-type-param-list [second triple]]
+                           param-pair [form-to-type-param-list param-list]
                            type-params [pair/fst param-pair]
                            type-params-map [pair/snd param-pair]
                            form-to-type-with-params [mk-form-to-type type-params-map]]
                           [type-decl
                             stype-name
                             type-params
-                            [match [third triple]
+                            [match type-decl-form
                               [form/list fl]
                               [do
                                 [assert [not [is-empty fl]] type decl kind form is empty]
@@ -665,13 +667,13 @@
                                       [def-prefix
                                         [syntax-word/word [pair/fst [at fields i]]]
                                         [def-desc/record-proj lrecord-desc i]]]
-                                    [set-def [first triple] [def-desc/record-ctor]]
+                                    [set-def type-name-form [def-desc/record-ctor]]
                                     [type-decl-kind/record fields]]
 
                                   [logq-abort unknown type kind]]]
 
-                              [logq-abort form-to-type-decl-kind not implemented]]]]]]]
-                  fb]
+                              [logq-abort form-to-type-decl-kind not implemented]]]]]]
+                  ]
 
                 [[word export]]
                 [btop/export

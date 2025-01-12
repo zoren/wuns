@@ -160,13 +160,6 @@ const list_reverse = (list) => {
   return arrayToList([...list].reverse())
 }
 export { list_reverse as 'list-reverse' }
-export const triplewise = (list) => {
-  if (!isList(list)) throw new Error('triplewise expects list')
-  const len = list.length
-  const triples = []
-  for (let i = 0; i < len - 2; i += 3) triples.push(arrayToList([list[i], list[i + 1], list[i + 2]]))
-  return arrayToList(triples)
-}
 const freeze_mutable_list = (mutable_list) => {
   if (!isList(mutable_list)) throw new Error('freeze-mutable-list expects array')
   if (!isMutable(mutable_list)) throw new Error('freeze-mutable-list expects mutable list')
