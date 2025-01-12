@@ -419,7 +419,12 @@
       [push gl [pair fname-word type-args]]]
     spec-name]]
 
-[defn translate-func [tctx func type-args]
+[type translator []
+  [record
+    [get-locals [func [] [list [pair word word]]]]
+    [go-forms [func [[list llexp]] [list wat-inst]]]]]
+
+[defn make-translator [tctx type-env]
   [let
     [cctx [translate-context/check-context tctx]
      bind-ctx [llcheck-context/bind-ctx cctx]
@@ -436,24 +441,7 @@
        [push glocals
          [pair
            [syntax-word/word [pair/fst b]]
-           [translate-type bind-ctx [get-ctype cctx [pair/snd b]]]]]]
-     signature [lldefn/signature func]
-     fname-word [syntax-word/word [func-sig/name signature]]
-     ts [get [llcheck-context/def-var-types cctx] fname-word]
-     special-func-name [specialized-name-from bind-ctx fname-word type-args]
-     type-env [transient-kv-map]]
-  [if-let [fn-tps [func-sig/type-params signature]]
-    [let [type-params [check-type-scheme/named-type-params ts]]
-      [assert [eq [size type-params] [size type-args]]
-        expected matching number of type parameters and type arguments
-        [identity type-params] [identity type-args]]
-      [for i 0 [size type-params]
-        [set-kv-map type-env [unwrap-type-var-links [pair/snd [at type-params i]]] [at type-args i]]]]
-    [let [type-params [check-type-scheme/type-vars ts]]
-      [assert [eq [size type-params] [size type-args]] expected matching number of type parameters and type arguments]
-      [for i 0 [size type-params]
-        [set-kv-map type-env [at type-params i] [at type-args i]]]]]
-
+           [translate-type bind-ctx [get-ctype cctx [pair/snd b]]]]]]]
   [letfn [
   [func integer-exp-to-wat-inst [e]
     [match e
@@ -663,13 +651,46 @@
       [do
         [log form]
         [logq-abort not implemented translate-form]]]]]
+    [translator [func get-locals [] [clone-growable-to-frozen-list glocals]] go-forms]]]]
+
+[defn translate-func [tctx func type-args]
+  [let
+    [cctx [translate-context/check-context tctx]
+     bind-ctx [llcheck-context/bind-ctx cctx]
+     form-to-ldesc [llctx/form-to-ldesc bind-ctx]
+     lvar-to-name
+       [func lvar-to-name [lvar-sname]
+         [if-let [ldesc [try-get form-to-ldesc [syntax-word-get-form lvar-sname]]]
+           [syntax-word/word lvar-sname]
+           [logq-abort lvar-to-name expected local var [identity lvar-sname]]]]
+     get-form-types [func get-form-types [form] [translate-types bind-ctx [get-ctype cctx form]]]
+     signature [lldefn/signature func]
+     fname-word [syntax-word/word [func-sig/name signature]]
+     ts [get [llcheck-context/def-var-types cctx] fname-word]
+     type-env [transient-kv-map]]
+  [if-let [fn-tps [func-sig/type-params signature]]
+    [let [type-params [check-type-scheme/named-type-params ts]]
+      [assert [eq [size type-params] [size type-args]]
+        expected matching number of type parameters and type arguments
+        [identity type-params] [identity type-args]]
+      [for i 0 [size type-params]
+        [set-kv-map type-env [unwrap-type-var-links [pair/snd [at type-params i]]] [at type-args i]]]]
+    [let [type-params [check-type-scheme/type-vars ts]]
+      [assert [eq [size type-params] [size type-args]] expected matching number of type parameters and type arguments]
+      [for i 0 [size type-params]
+        [set-kv-map type-env [at type-params i] [at type-args i]]]]]
+
+  [do
     [comment go-forms has the side effect of adding locals so we need to run it first]
     [let
       [t [copy-type-proper type-env [check-type-scheme/type ts]]
        ft [get-func-type t]
        param-types [pair/fst ft]
        gparams [growable-list]
-       params [func-sig/params signature]]
+       params [func-sig/params signature]
+       special-func-name [specialized-name-from bind-ctx fname-word type-args]
+       ltranslator [make-translator tctx type-env]
+       go-forms [translator/go-forms ltranslator]]
       [set-add [translate-context/specialized-names-generated tctx] special-func-name]
       [let [tbodies [go-forms [lldefn/bodies func]]]
         [assert [eq [size params] [size param-types]] expected matching number of parameters and types]
@@ -681,7 +702,7 @@
         [output-func
           special-func-name
           [clone-growable-to-frozen-list gparams]
-          [clone-growable-to-frozen-list glocals]
+          [[translator/get-locals ltranslator]]
           [translate-types bind-ctx [lift-data-type [pair/snd ft]]]
           [wat-inst/instructions tbodies]]]]]]]
 
