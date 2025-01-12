@@ -1672,7 +1672,6 @@
             [type-record
               [list-map p fields
                 [pair [syntax-word/word [pair/fst p]] [infer-data [pair/snd p]]]]]]]]
-      [llannotate gctx type it]
       [llunify-report gctx [infer-data init-exp] it init-exp]
       [llannotate gctx bform [type-pointer t-mem it]]]
 

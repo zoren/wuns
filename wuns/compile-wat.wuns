@@ -687,17 +687,13 @@
                 [logq-abort not implemented data [identity exp]]]
 
               [data-exp/record fields]
-              [concat-byte-arrays [list-map f fields [data-exp-to-byte-array [pair/snd f]]]]]]]
+              [concat-byte-arrays [list-map f fields [data-exp-to-byte-array [pair/snd f]]]]]]
+         data-bytes [data-exp-to-byte-array exp]]
         [push
           [translate-context/datas tctx]
-          [wat-data/active mem-name pointer-inst [data-exp-to-byte-array exp]]]
-        [match [type-to-size-exp1 [get-annotation cctx syntax-type]]
-          [integer-exp/const size]
-          [do
-            [atom-set current-offset-atom [add size offset]]
-            pointer-inst]
-
-          [logq-abort data size not constant [identity syntax-type]]]]
+          [wat-data/active mem-name pointer-inst data-bytes]]
+        [atom-set current-offset-atom [add [byte-array-size data-bytes] offset]]
+        pointer-inst]
 
       [logq-abort not implemented translate-form [identity form]]]]]
     [translator
