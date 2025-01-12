@@ -411,6 +411,14 @@
     [result [list word]]
     [body wat-inst]]]
 
+[defn add-func-specialization-to-work-set [tctx sname type-args]
+  [let [fname-word [syntax-word/word sname]
+        gl [atom-get [translate-context/func-specs-to-generate tctx]]
+        spec-name [specialized-name-from [llcheck-context/bind-ctx [translate-context/check-context tctx]] fname-word type-args]]
+    [when-not [set-has [translate-context/specialized-names-generated tctx] spec-name]
+      [push gl [pair fname-word type-args]]]
+    spec-name]]
+
 [defn translate-func [tctx func type-args]
   [let
     [cctx [translate-context/check-context tctx]
@@ -447,16 +455,6 @@
         [set-kv-map type-env [at type-params i] [at type-args i]]]]]
 
   [letfn [
-  [func add-func-specialization [sname]
-    [let [tas [get [llcheck-context/type-instantiations cctx] sname]
-          spec-type-args [list-map ta tas [copy-type-proper type-env ta]]
-          called-fname-word [syntax-word/word sname]
-          gl [atom-get [translate-context/func-specs-to-generate tctx]]
-          spec-name [specialized-name-from bind-ctx called-fname-word spec-type-args]]
-      [when-not [set-has [translate-context/specialized-names-generated tctx] spec-name]
-        [push gl [pair called-fname-word spec-type-args]]]
-      spec-name]]
-
   [func integer-exp-to-wat-inst [e]
     [match e
       [integer-exp/const i] [wat-inst/i32.const [int-to-word i]]
@@ -508,8 +506,11 @@
         [wasm-name-to-wat-byte-array [syntax-word/word inst-name]]
         [list-map arg args [go arg]]]
 
-      [llexp/call w opt-type-args args]
-      [wat-inst/call [add-func-specialization w] [list-map a args [go a]]]
+      [llexp/call sname opt-type-args args]
+      [let [tas [get [llcheck-context/type-instantiations cctx] sname]
+            spec-type-args [list-map ta tas [copy-type-proper type-env ta]]
+            spec-name [add-func-specialization-to-work-set tctx sname spec-type-args]]
+        [wat-inst/call spec-name [list-map a args [go a]]]]
 
       [llexp/let bindings body]
       [wat-inst/instructions
@@ -684,16 +685,6 @@
           [translate-types bind-ctx [lift-data-type [pair/snd ft]]]
           [wat-inst/instructions tbodies]]]]]]]
 
-[defn add-func-specialization [tctx sname]
-  [let [cctx [translate-context/check-context tctx]
-        type-args [get [llcheck-context/type-instantiations cctx] sname]
-        fname-word [syntax-word/word sname]
-        gl [atom-get [translate-context/func-specs-to-generate tctx]]
-        spec-name [specialized-name-from [llcheck-context/bind-ctx cctx] fname-word type-args]]
-    [when-not [set-has [translate-context/specialized-names-generated tctx] spec-name]
-      [push gl [pair fname-word type-args]]]
-    spec-name]]
-
 [type import-kind []
   [union
     [memory word i32]]]
@@ -779,11 +770,14 @@
                     [pair [export-kind/memory] name]
 
                     [lldef-desc/func fsig]
-                    [do
+                    [let
+                      [cctx [translate-context/check-context tctx]
+                       type-args [get [llcheck-context/type-instantiations cctx] sname]
+                       spec-name [add-func-specialization-to-work-set tctx sname type-args]]
                       [if-let [tparams [func-sig/type-params fsig]]
                         [logq-abort export genfn not implemented]
                         [do]]
-                      [pair [export-kind/func] [add-func-specialization tctx sname]]]
+                      [pair [export-kind/func] spec-name]]
 
                     [lldef-desc/any]
                     [pair [export-kind/global] name]]
