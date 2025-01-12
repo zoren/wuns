@@ -322,10 +322,7 @@
         [ctype-inst/apply type-name type-args]
         [switch type-name
           [[word tuple]]
-          [do
-            [when-not [is-empty type-args]
-              [logq translate-types tuple [identity type-args]]]
-            [list-map ta type-args [translate-type bind-ctx ta]]]
+          [list-map ta type-args [translate-type bind-ctx ta]]
 
           [list [translate-type bind-ctx nt]]]
 
@@ -386,16 +383,6 @@
     [llliteral/f32 f] [wat-inst/f32.const [syntax-word/word f]]
     [llliteral/f64 f] [wat-inst/f64.const [syntax-word/word f]]]]
 
-[defn exp-const-to-wat-inst [value]
-  [match value
-    [llexp/cast t e]
-    [exp-const-to-wat-inst e]
-
-    [llexp/literal l]
-    [literal-to-wat-inst l]
-
-    [logq-abort exp-const-to-wat-inst]]]
-
 [def i32.const-0 [wat-inst/i32.const [word 0]]]
 [def i32.const-1 [wat-inst/i32.const [word 1]]]
 [def i32.const-2 [wat-inst/i32.const [word 2]]]
@@ -422,7 +409,8 @@
 [type translator []
   [record
     [get-locals [func [] [list [pair word word]]]]
-    [go-forms [func [[list llexp]] [list wat-inst]]]]]
+    [exps [func [[list llexp]] [list wat-inst]]]
+    [exp [func [llexp] wat-inst]]]]
 
 [defn make-translator [tctx type-env]
   [let
@@ -600,10 +588,7 @@
                               offset
                               [continue
                                 i [inc i]
-                                offset [int-exp-add
-                                          offset
-                                          [type-to-size-exp1
-                                            [pair/snd fp]]]]]]
+                                offset [int-exp-add offset [type-to-size-exp1 [pair/snd fp]]]]]]
                           [logq-abort field not found]]]
 
                       [ctype-user-inst-kind/union utypes]
@@ -648,10 +633,11 @@
       [llexp/tuple values]
       [wat-inst/instructions [list-map value values [go value]]]
 
-      [do
-        [log form]
-        [logq-abort not implemented translate-form]]]]]
-    [translator [func get-locals [] [clone-growable-to-frozen-list glocals]] go-forms]]]]
+      [logq-abort not implemented translate-form [identity form]]]]]
+    [translator
+      [func get-locals [] [clone-growable-to-frozen-list glocals]]
+      go-forms
+      go]]]]
 
 [defn translate-func [tctx func type-args]
   [let
@@ -679,32 +665,29 @@
       [assert [eq [size type-params] [size type-args]] expected matching number of type parameters and type arguments]
       [for i 0 [size type-params]
         [set-kv-map type-env [at type-params i] [at type-args i]]]]]
-
-  [do
-    [comment go-forms has the side effect of adding locals so we need to run it first]
-    [let
-      [t [copy-type-proper type-env [check-type-scheme/type ts]]
-       ft [get-func-type t]
-       param-types [pair/fst ft]
-       gparams [growable-list]
-       params [func-sig/params signature]
-       special-func-name [specialized-name-from bind-ctx fname-word type-args]
-       ltranslator [make-translator tctx type-env]
-       go-forms [translator/go-forms ltranslator]]
-      [set-add [translate-context/specialized-names-generated tctx] special-func-name]
-      [let [tbodies [go-forms [lldefn/bodies func]]]
-        [assert [eq [size params] [size param-types]] expected matching number of parameters and types]
-        [for i 0 [size params]
-          [push gparams
-            [pair
-              [syntax-word/word [pair/fst [at params i]]]
-              [translate-type bind-ctx [lift-data-type [at param-types i]]]]]]
-        [output-func
-          special-func-name
-          [clone-growable-to-frozen-list gparams]
-          [[translator/get-locals ltranslator]]
-          [translate-types bind-ctx [lift-data-type [pair/snd ft]]]
-          [wat-inst/instructions tbodies]]]]]]]
+  [let
+    [t [copy-type-proper type-env [check-type-scheme/type ts]]
+     ft [get-func-type t]
+     param-types [pair/fst ft]
+     gparams [growable-list]
+     params [func-sig/params signature]
+     special-func-name [specialized-name-from bind-ctx fname-word type-args]
+     ltranslator [make-translator tctx type-env]]
+    [assert [eq [size params] [size param-types]] expected matching number of parameters and types]
+    [set-add [translate-context/specialized-names-generated tctx] special-func-name]
+    [for i 0 [size params]
+      [push gparams
+        [pair
+          [syntax-word/word [pair/fst [at params i]]]
+          [translate-type bind-ctx [lift-data-type [at param-types i]]]]]]
+    [comment translation has the side effect of adding locals so we need to run it first]
+    [let [tbodies [[translator/exps ltranslator] [lldefn/bodies func]]]
+      [output-func
+        special-func-name
+        [clone-growable-to-frozen-list gparams]
+        [[translator/get-locals ltranslator]]
+        [translate-types bind-ctx [lift-data-type [pair/snd ft]]]
+        [wat-inst/instructions tbodies]]]]]]
 
 [type import-kind []
   [union
@@ -753,7 +736,8 @@
      exports [growable-list]
      datas [growable-list]
      specs-atom [translate-context/func-specs-to-generate tctx]
-     func-to-body [translate-context/function-name-to-body tctx]]
+     func-to-body [translate-context/function-name-to-body tctx]
+     exp-const-to-wat-inst [translator/exp [make-translator tctx [transient-kv-map]]]]
     [for-each btop [pair/fst btops-ctx-pair]
       [infer-lltop gctx btop]
       [match btop
