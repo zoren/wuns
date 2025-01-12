@@ -335,7 +335,14 @@
 
           [[word intrinsic]]
           [let [inst-sname [sword [get-arg 0]]
-                inst-name [syntax-word/word inst-sname]]
+                inst-name [syntax-word/word inst-sname]
+                parse-mem-args
+                [func pma []
+                  [let [mem-name [sword [get-arg 1]]]
+                    [match [get lldef-ctx [syntax-word/word mem-name]]
+                      [lldef-desc/memory kind] [do]
+                      [push-error [get-arg 1] [quote [not a memory]]]]
+                    [list mem-name [sword [get-arg 2]] [sword [get-arg 3]]]]]]
             [if-let [intrinsic-pair [try-get intrinsic-types-map inst-name]]
               [do
                 [assert-n-args [inc [size [pair/fst intrinsic-pair]]]]
@@ -349,32 +356,18 @@
                 [[word i32.load] [word i32.load8-u]]
                 [do
                   [assert-n-args 5]
-                  [let [mem-name [sword [get-arg 1]]]
-                    [match [get lldef-ctx [syntax-word/word mem-name]]
-                      [lldef-desc/memory kind] [do]
-                      [push-error [get-arg 1] [quote [not a memory]]]]
-                    [llexp/intrinsic inst-sname
-                      [list
-                        mem-name
-                        [sword [get-arg 2]]
-                        [sword [get-arg 3]]]
-                      [list [form-to-llexp type-var-set lstack [get-arg 4]]]]]]
+                  [llexp/intrinsic inst-sname
+                    [parse-mem-args]
+                    [list [form-to-llexp type-var-set lstack [get-arg 4]]]]]
 
                 [[word i32.store] [word i32.store8]]
                 [do
                   [assert-n-args 6]
-                  [let [mem-name [sword [get-arg 1]]]
-                    [match [get lldef-ctx [syntax-word/word mem-name]]
-                      [lldef-desc/memory kind] [do]
-                      [push-error [get-arg 1] [quote [not a memory]]]]
-                    [llexp/intrinsic inst-sname
-                      [list
-                        [sword [get-arg 1]]
-                        [sword [get-arg 2]]
-                        [sword [get-arg 3]]]
-                      [list
-                        [form-to-llexp type-var-set lstack [get-arg 4]]
-                        [form-to-llexp type-var-set lstack [get-arg 5]]]]]]
+                  [llexp/intrinsic inst-sname
+                    [parse-mem-args]
+                    [list
+                      [form-to-llexp type-var-set lstack [get-arg 4]]
+                      [form-to-llexp type-var-set lstack [get-arg 5]]]]]
 
                 [do
                   [log form]
