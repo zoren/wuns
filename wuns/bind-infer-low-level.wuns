@@ -44,8 +44,13 @@
     [size-of lltype]
     [is-identical llexp llexp]
     [tuple [list llexp]]
-    [data syntax-word lltype llexp]
-    ]]
+    [data syntax-word lltype data-exp]
+    ]
+
+    data-exp []
+    [union
+      [exp llexp]
+      [record [list [pair syntax-word data-exp]]]]]
 
 [type memory-kind []
   [union
@@ -303,6 +308,23 @@
       [push-error form [quote [not a memory]]]]
     mem-name]]
 
+[func form-to-data [type-var-set lstack]
+  [func go [form]
+    [match form
+      [form/list l]
+      [let [first-form [first l]
+            first-word [form-to-word first-form]]
+        [switch first-word
+          [[word record]]
+          [data-exp/record [list-map ll [rest l] [let [p [get-list ll]] [pair [sword [first p]] [go [second p]]]]]]
+
+          [[word array]]
+          [logq-abort not implemented]
+
+          [data-exp/exp [form-to-llexp type-var-set lstack form]]]]
+
+      [data-exp/exp [form-to-llexp type-var-set lstack form]]]]]
+
 [func form-to-llexp0 [type-var-set lstack form]
   [match form
     [form/word w]
@@ -499,7 +521,7 @@
             [llexp/data
               [check-get-mem-name [get-arg 0]]
               [form-to-lltype lstack type-var-set [get-arg 1]]
-              [form-to-llexp type-var-set lstack [get-arg 2]]]]
+              [[form-to-data type-var-set lstack] [get-arg 2]]]]
 
           [[word call]]
           [do
@@ -1478,6 +1500,7 @@
 [defn infer-llexp [gctx type-env]
   [let [instantiate-syntax-type [instantiate-syntax-type-env gctx type-env [should-const-eval/no] i32-min]
         type-var-counter [llcheck-context/type-var-counter gctx]]
+  [letfn [
   [func go [level stack bform]
   [let [fresh-type-var [func ftv [] [generate-fresh-type-var-atom type-var-counter level]]]
   [match bform
@@ -1640,9 +1663,17 @@
     [llexp/data mem-name type init-exp]
     [let
       [it [instantiate-syntax-type type]
-       t-mem [type-literal [ctype-literal/memory [syntax-word/word mem-name]]]]
+       t-mem [type-literal [ctype-literal/memory [syntax-word/word mem-name]]]
+       infer-data
+        [func infer-data [data-exp]
+          [match data-exp
+            [data-exp/exp e] [go level stack e]
+            [data-exp/record fields]
+            [type-record
+              [list-map p fields
+                [pair [syntax-word/word [pair/fst p]] [infer-data [pair/snd p]]]]]]]]
       [llannotate gctx type it]
-      [llunify-report gctx [go level stack init-exp] it init-exp]
+      [llunify-report gctx [infer-data init-exp] it init-exp]
       [llannotate gctx bform [type-pointer t-mem it]]]
 
     [llexp/deref value]
@@ -1713,7 +1744,8 @@
       [llunify-report gctx [go level stack index] type-i32 index]
       [llannotate gctx bform [type-pointer t-mem t-elem]]]
 
-    [logq-abort infer-llexp not implemented [identity bform]]]]]]]
+    [logq-abort infer-llexp not implemented [identity bform]]]]]]
+  go]]]
 
 [defn infer-llexp-entry [gctx level type-env lstack bform]
   [[infer-llexp gctx type-env] level lstack bform]]

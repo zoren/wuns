@@ -211,7 +211,6 @@ test('data f64', async () => {
   expect(float64Array[2]).toBe(1.9)
 })
 
-
 test('data exp', async () => {
   const inst = await stringToInst(`
 [memory i32 mem 1]
@@ -224,7 +223,7 @@ test('data exp', async () => {
 [defn f2 [] [data mem [f64] [f64 3.9]]]
 [defn get-float [[type p [pointer [memory mem] [f64]]]] [deref p]]
 
-[export mem i1 i2 f1 f2 get-int get-float]`)
+[export i1 i2 f1 f2 get-int get-float]`)
   const getInt = inst['get-int']
   const getFloat = inst['get-float']
   const { i1, i2, f1, f2 } = inst
@@ -237,6 +236,26 @@ test('data exp', async () => {
   expect(f2()).toBe(32)
   expect(getFloat(f1())).toBe(4.7)
   expect(getFloat(f2())).toBe(3.9)
+})
+
+test('data exp record', async () => {
+  const inst = await stringToInst(`
+[memory i32 mem 1]
+
+[type r [] [record [x [f64]] [y [f64]]]]
+
+[defn ri [] [data mem [r] [record [x [f64 1.9]] [y [f64 2.7]]]]]
+
+[defn get-x [[type p [pointer [memory mem] [r]]]] [deref [field p x]]]
+[defn get-y [[type p [pointer [memory mem] [r]]]] [deref [field p y]]]
+
+[export ri get-x get-y]`)
+  const { ri } = inst
+  const getX = inst['get-x']
+  const getY = inst['get-y']
+  const mem = ri()
+  expect(getX(mem)).toBe(1.9)
+  expect(getY(mem)).toBe(2.7)
 })
 
 test('cast', async () => {

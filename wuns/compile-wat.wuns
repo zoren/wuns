@@ -266,6 +266,25 @@
               offset [add offset [mul [size fs] 8]]]]]]]
       ba]]
 
+[defn concat-byte-arrays [byte-arrays]
+  [let [total-size
+    [loop [i 0 sum 0]
+      [if [le-s [size byte-arrays] i]
+        sum
+        [continue
+          sum [add sum [byte-array-size [at byte-arrays i]]]
+          i [inc i]]]]
+    result [byte-array total-size]]
+    [loop [i 0 offset 0]
+      [if [le-s [size byte-arrays] i]
+        result
+        [let [bs [at byte-arrays i]]
+          [for j 0 [byte-array-size bs]
+            [byte-array-set result [add offset j] [byte-array-get bs j]]]
+          [continue
+            i [inc i]
+            offset [add offset [byte-array-size bs]]]]]]]]
+
 [type wat-data []
   [union
     [active word wat-inst byte-array]]]
@@ -650,23 +669,28 @@
             new-offset-atom]]
          offset [atom-get current-offset-atom]
          pointer-inst [ctor [int-to-word offset]]
-         exp-to-byte-array
-          [func exp-to-byte-array [exp]
-            [match exp
-              [llexp/literal l]
-              [match l
-                [llliteral/i32 i]
-                [i32-to-byte-array [word-to-int [syntax-word/word i]]]
+         data-exp-to-byte-array
+          [func data-exp-to-byte-array [data-exp]
+            [match data-exp
+              [data-exp/exp exp]
+              [match exp
+                [llexp/literal l]
+                [match l
+                  [llliteral/i32 i]
+                  [i32-to-byte-array [word-to-int [syntax-word/word i]]]
 
-                [llliteral/f64 i]
-                [f64-to-byte-array [word-to-f64 [syntax-word/word i]]]
+                  [llliteral/f64 i]
+                  [f64-to-byte-array [word-to-f64 [syntax-word/word i]]]
+
+                  [logq-abort not implemented data [identity exp]]]
 
                 [logq-abort not implemented data [identity exp]]]
 
-              [logq-abort not implemented data [identity exp]]]]]
+              [data-exp/record fields]
+              [concat-byte-arrays [list-map f fields [data-exp-to-byte-array [pair/snd f]]]]]]]
         [push
           [translate-context/datas tctx]
-          [wat-data/active mem-name pointer-inst [exp-to-byte-array exp]]]
+          [wat-data/active mem-name pointer-inst [data-exp-to-byte-array exp]]]
         [match [type-to-size-exp1 [get-annotation cctx syntax-type]]
           [integer-exp/const size]
           [do
