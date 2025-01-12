@@ -33,7 +33,7 @@
 
 [defn alloc-n [n-bytes]
   [let [top-val [get-top]]
-    [if [eq top-val 0] [intrinsic unreachable] [do]]
+    [when [eq top-val 0] [intrinsic unreachable]]
     [set-top [add top-val n-bytes]]
     top-val]]
 
@@ -77,10 +77,15 @@
   [if [le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
   [deref [index [field pvec array] i]]]
 
-[defn vector-get [[type pvec [pvector -a]] [type i [i32]]]
+[defn vector-get [[type pvec [pvector -a]] i]
   [if [lt-s i 0] [intrinsic unreachable] [do]]
   [if [le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
   [deref [index [field pvec array] i]]]
+
+[defn vector-set [[type pvec [pvector -a]] i v]
+  [when [lt-s i 0] [intrinsic unreachable]]
+  [if [le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
+  [assign [index [field pvec array] i] v]]
 
 [defn vector-eq-u8 [[type pvec1 [pvector [u8]]] [type pvec2 [pvector [u8]]]]
   [or
@@ -108,16 +113,16 @@
     p]]
 
 [defn set-float [pvec i [type v [f64]]]
-  [call set [[f64]] [pvec i v]]]
+  [vector-set pvec i v]]
 
 [defn get-float [[type pvec [pvector [f64]]] i]
-  [call get [[f64]] [pvec i]]]
+  [vector-get pvec i]]
 
 [defn set-int [pvec i [type v [i32]]]
-  [call set [[i32]] [pvec i v]]]
+  [vector-set pvec i v]]
 
 [defn get-int [[type pvec [pvector [i32]]] i]
-  [call get [[i32]] [pvec i]]]
+  [vector-get pvec i]]
 
 [defn set-byte [[type pvec [pvector [u8]]] i v]
   [call set [[u8]] [pvec i v]]]
