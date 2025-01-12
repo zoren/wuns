@@ -687,7 +687,10 @@
                 [logq-abort not implemented data [identity exp]]]
 
               [data-exp/record fields]
-              [concat-byte-arrays [list-map f fields [data-exp-to-byte-array [pair/snd f]]]]]]
+              [concat-byte-arrays [list-map f fields [data-exp-to-byte-array [pair/snd f]]]]
+
+              [data-exp/array elems]
+              [concat-byte-arrays [list-map e elems [data-exp-to-byte-array e]]]]]
          data-bytes [data-exp-to-byte-array exp]]
         [push
           [translate-context/datas tctx]

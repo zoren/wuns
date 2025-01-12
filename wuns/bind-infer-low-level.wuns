@@ -50,7 +50,8 @@
     data-exp []
     [union
       [exp llexp]
-      [record [list [pair syntax-word data-exp]]]]]
+      [record [list [pair syntax-word data-exp]]]
+      [array [list data-exp]]]]
 
 [type memory-kind []
   [union
@@ -319,7 +320,7 @@
           [data-exp/record [list-map ll [rest l] [let [p [get-list ll]] [pair [sword [first p]] [go [second p]]]]]]
 
           [[word array]]
-          [logq-abort not implemented]
+          [data-exp/array [list-map e [rest l] [go e]]]
 
           [data-exp/exp [form-to-llexp type-var-set lstack form]]]]
 
@@ -1669,7 +1670,12 @@
             [data-exp/record fields]
             [type-record
               [list-map p fields
-                [pair [syntax-word/word [pair/fst p]] [infer-data [pair/snd p]]]]]]]]
+                [pair [syntax-word/word [pair/fst p]] [infer-data [pair/snd p]]]]]
+            [data-exp/array elements]
+            [let [t-elem [fresh-type-var]]
+              [for-each element elements
+                [llunify-report gctx t-elem [infer-data element] element]]
+              [type-array t-elem [type-literal [ctype-literal/i32 [size elements]]]]]]]]
       [llannotate gctx bform [type-pointer t-mem [infer-data init-exp]]]]
 
     [llexp/deref value]

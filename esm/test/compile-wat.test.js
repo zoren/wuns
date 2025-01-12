@@ -258,6 +258,46 @@ test('data exp record', async () => {
   expect(getY(mem)).toBe(2.7)
 })
 
+test('data exp array', async () => {
+  const inst = await stringToInst(`
+[memory i32 mem 1]
+
+[defn ar [] [data mem [array [f64 1.9] [f64 2.7]]]]
+
+[defn get [[type p [pointer [memory mem] [array [f64] -s]]] i] [deref [index p i]]]
+
+[export ar get]`)
+  const { ar, get } = inst
+  const a = ar()
+  expect(get(a, 0)).toBe(1.9)
+  expect(get(a, 1)).toBe(2.7)
+})
+
+
+test('data exp vector', async () => {
+  const inst = await stringToInst(`
+[type vector-data [a s]
+  [record
+    [size [i32]]
+    [array [array a s]]]]
+
+[memory i32 mem 1]
+
+[defn vec [] [data mem [record [size [i32 2]] [array [array [i32 3] [i32 5]]]]]]
+
+[defn size [[type p [pointer [memory mem] [vector-data -a -s]]]] [deref [field p size]]]
+
+[defn get [[type p [pointer [memory mem] [vector-data [i32] -s]]] i] [deref [index [field p array] i]]]
+
+[export vec size get]`)
+  const { vec, size, get } = inst
+  const a = vec()
+  expect(size(a)).toBe(2)
+  expect(get(a, 0)).toBe(3)
+  expect(get(a, 1)).toBe(5)
+})
+
+
 test('cast', async () => {
   await expect(
     stringToInst(`
