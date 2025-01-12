@@ -266,6 +266,10 @@
               offset [add offset [mul [size fs] 8]]]]]]]
       ba]]
 
+[type wat-data []
+  [union
+    [active word wat-inst byte-array]]]
+
 [type translate-context []
   [record
     [check-context llcheck-context]
@@ -273,15 +277,19 @@
     [function-name-to-body [transient-kv-map word lldefn]]
     [specialized-names-generated [set word]]
     [func-specs-to-generate [atom [growable-list [pair word [list ctype]]]]]
+    [data-active [transient-kv-map word [atom i32]]]
+    [datas [growable-list wat-data]]
     ]]
 
-[defn translate-context-empty [llcheck-context]
+[defn translate-context-empty [llcheck-context datas]
   [translate-context
     llcheck-context
     [transient-kv-map]
     [transient-kv-map]
     [set]
-    [atom [growable-list]]]]
+    [atom [growable-list]]
+    [transient-kv-map]
+    datas]]
 
 [defn translate-type [bind-ctx it]
   [match [normalize-type it]
@@ -389,14 +397,6 @@
 [def i32.const-4 [wat-inst/i32.const [word 4]]]
 [def i32.const-8 [wat-inst/i32.const [word 8]]]
 [def i32.const-16 [wat-inst/i32.const [word 16]]]
-
-[type output-func []
-  [record
-    [name word]
-    [parameters [list [pair word word]]]
-    [locals [list [pair word word]]]
-    [result [list word]]
-    [body wat-inst]]]
 
 [defn add-func-specialization-to-work-set [tctx sname type-args]
   [let [fname-word [syntax-word/word sname]
@@ -633,11 +633,61 @@
       [llexp/tuple values]
       [wat-inst/instructions [list-map value values [go value]]]
 
+      [llexp/data smem-name syntax-type exp]
+      [let
+        [mem-name [syntax-word/word smem-name]
+         ctor
+          [match [get-memory-kind bind-ctx mem-name]
+            [memory-kind/i32] wat-inst/i32.const
+            [memory-kind/i64] wat-inst/i64.const]
+         data-active [translate-context/data-active tctx]
+         current-offset-atom
+         [if-let [offset-atom [try-get data-active mem-name]]
+          offset-atom
+          [let [init-offset [i32 16]
+                new-offset-atom [atom init-offset]]
+            [set-kv-map data-active mem-name new-offset-atom]
+            new-offset-atom]]
+         offset [atom-get current-offset-atom]
+         pointer-inst [ctor [int-to-word offset]]
+         exp-to-byte-array
+          [func exp-to-byte-array [exp]
+            [match exp
+              [llexp/literal l]
+              [match l
+                [llliteral/i32 i]
+                [i32-to-byte-array [word-to-int [syntax-word/word i]]]
+
+                [llliteral/f64 i]
+                [f64-to-byte-array [word-to-f64 [syntax-word/word i]]]
+
+                [logq-abort not implemented data [identity exp]]]
+
+              [logq-abort not implemented data [identity exp]]]]]
+        [push
+          [translate-context/datas tctx]
+          [wat-data/active mem-name pointer-inst [exp-to-byte-array exp]]]
+        [match [type-to-size-exp1 [get-annotation cctx syntax-type]]
+          [integer-exp/const size]
+          [do
+            [atom-set current-offset-atom [add size offset]]
+            pointer-inst]
+
+          [logq-abort data size not constant [identity syntax-type]]]]
+
       [logq-abort not implemented translate-form [identity form]]]]]
     [translator
       [func get-locals [] [clone-growable-to-frozen-list glocals]]
       go-forms
       go]]]]
+
+[type output-func []
+  [record
+    [name word]
+    [parameters [list [pair word word]]]
+    [locals [list [pair word word]]]
+    [result [list word]]
+    [body wat-inst]]]
 
 [defn translate-func [tctx func type-args]
   [let
@@ -709,10 +759,6 @@
 [type export-kind []
   [union [func] [global] [memory]]]
 
-[type wat-data []
-  [union
-    [active word wat-inst byte-array]]]
-
 [type wat-output []
   [record
     [imports [growable-list [pair [list word] import-kind]]]
@@ -728,13 +774,13 @@
      btops-ctx-pair [f2l forms]
      bind-ctx [pair/snd btops-ctx-pair]
      gctx [llcheck-context-empty bind-ctx]
-     tctx [translate-context-empty gctx]
+     datas [growable-list]
+     tctx [translate-context-empty gctx datas]
      imports [growable-list]
      memories [growable-list]
      globals [growable-list]
      funcs [growable-list]
      exports [growable-list]
-     datas [growable-list]
      specs-atom [translate-context/func-specs-to-generate tctx]
      func-to-body [translate-context/function-name-to-body tctx]
      exp-const-to-wat-inst [translator/exp [make-translator tctx [transient-kv-map]]]]

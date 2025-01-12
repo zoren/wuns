@@ -211,6 +211,34 @@ test('data f64', async () => {
   expect(float64Array[2]).toBe(1.9)
 })
 
+
+test('data exp', async () => {
+  const inst = await stringToInst(`
+[memory i32 mem 1]
+
+[defn i1 [] [data mem [i32] [i32 3]]]
+[defn i2 [] [data mem [i32] [i32 7]]]
+[defn get-int [[type p [pointer [memory mem] [i32]]]] [deref p]]
+
+[defn f1 [] [data mem [f64] [f64 4.7]]]
+[defn f2 [] [data mem [f64] [f64 3.9]]]
+[defn get-float [[type p [pointer [memory mem] [f64]]]] [deref p]]
+
+[export mem i1 i2 f1 f2 get-int get-float]`)
+  const getInt = inst['get-int']
+  const getFloat = inst['get-float']
+  const { i1, i2, f1, f2 } = inst
+  expect(i1()).toBe(16)
+  expect(i2()).toBe(20)
+  expect(getInt(i1())).toBe(3)
+  expect(getInt(i2())).toBe(7)
+
+  expect(f1()).toBe(24)
+  expect(f2()).toBe(32)
+  expect(getFloat(f1())).toBe(4.7)
+  expect(getFloat(f2())).toBe(3.9)
+})
+
 test('cast', async () => {
   await expect(
     stringToInst(`
