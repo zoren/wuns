@@ -160,13 +160,6 @@ const list_reverse = (list) => {
   return arrayToList([...list].reverse())
 }
 export { list_reverse as 'list-reverse' }
-export const pairwise = (list) => {
-  if (!isList(list)) throw new Error('pairwise expects list')
-  const len = list.length
-  const pairs = []
-  for (let i = 0; i < len - 1; i += 2) pairs.push(arrayToList([list[i], list[i + 1]]))
-  return arrayToList(pairs)
-}
 export const triplewise = (list) => {
   if (!isList(list)) throw new Error('triplewise expects list')
   const len = list.length

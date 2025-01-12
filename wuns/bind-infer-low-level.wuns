@@ -389,11 +389,11 @@
              new-lstack [local-stack/frame lstack lctx]]
             [when [lt-s n-of-args 2] [push-error form [quote [expected at least 2 arguments]]]]
             [llexp/loop
-              [list-map p [pairwise bindings]
-                [let [name [first p]
+              [list-map p [pairwise-pairs bindings]
+                [let [name [pair/fst p]
                       sname [sword name]
                       name-word [syntax-word/word sname]
-                      be [form-to-llexp type-var-set new-lstack [second p]]
+                      be [form-to-llexp type-var-set new-lstack [pair/snd p]]
                       ldesc [lllocal-var-kind/loop]]
                   [when-let [ldesc [try-get-local lstack name-word]]
                     [push-error name [quote [loop var shadows local]]]]
@@ -428,11 +428,11 @@
              ldesc [lllocal-var-kind/let]]
             [when [lt-s n-of-args 2] [push-error form [quote [expected at least 2 arguments]]]]
             [llexp/let
-              [list-map p [pairwise bindings]
-                [let [name [first p]
+              [list-map p [pairwise-pairs bindings]
+                [let [name [pair/fst p]
                       sname [sword name]
                       name-word [syntax-word/word sname]
-                      be [form-to-llexp type-var-set new-lstack [second p]]]
+                      be [form-to-llexp type-var-set new-lstack [pair/snd p]]]
                   [when-let [ldesc2 [try-get-local lstack name-word]]
                     [push-error name [quote [let var shadows local]]]]
                   [set-local lvars name ldesc]
@@ -619,18 +619,17 @@
 
         [[word type]]
         [let
-          [triples [triplewise [rest l]]
-           descs [growable-list]]
-          [for-each triple triples
+          [descs [growable-list]]
+          [for-3 i 1 [size l]
             [set-kv-map
               user-type-params
-              [form-to-word [first triple]]
-              [list-map tp [get-list [second triple]] [sword tp]]]]
-          [for-each triple triples
+              [form-to-word [at l i]]
+              [list-map tp [get-list [at l [inc i]]] [sword tp]]]]
+          [for-3 i 1 [size l]
             [let
-              [type-name-form [first triple]
-               type-params [get-list [second triple]]
-               type-decl-list [get-list [third triple]]
+              [type-name-form [at l i]
+               type-params [get-list [at l [inc i]]]
+               type-decl-list [get-list [at l [add 2 i]]]
                type-env [set]]
               [assert-not [is-empty type-decl-list] empty type decl list]
               [for-each type-param type-params
@@ -660,7 +659,7 @@
                   [logq-abort form-to-lltop type kind not implemented [first type-decl-list]]]]
                 [push descs [user-type [sword type-name-form] [list-map tp type-params [sword tp]] desc]]
                 [set-kv-map user-types [form-to-word type-name-form] desc]]]]
-              [lltop/type [clone-growable-to-frozen-list descs]]]
+          [lltop/type [clone-growable-to-frozen-list descs]]]
 
         [[word def]]
         [let [name-form [get-arg 0]]

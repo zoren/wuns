@@ -808,10 +808,10 @@
                   [when-not [is-odd [size l]] [report-error [quote [expected even number of arguments]]]]
                   [bexp/switch
                     [form-to-ast lstack [get-arg 0]]
-                    [list-map p [pairwise [slice l 2 [dec [size l]]]]
+                    [list-map p [pairwise-pairs [slice l 2 [dec [size l]]]]
                       [pair
-                        [list-map v [get-list [first p]] [form-to-ast lstack v]]
-                        [form-to-ast lstack [second p]]]]
+                        [list-map v [get-list [pair/fst p]] [form-to-ast lstack v]]
+                        [form-to-ast lstack [pair/snd p]]]]
                       [form-to-ast lstack [last l]]]]
 
                 [[word match]]
@@ -872,11 +872,11 @@
                    new-lstack [local-stack/frame lstack lctx]]
                   [when [lt-s n-of-args 2] [report-error [quote [expected at least 2 arguments]]]]
                   [bexp/loop
-                    [list-map p [pairwise bindings]
-                      [let [name [first p]
+                    [list-map p [pairwise-pairs bindings]
+                      [let [name [pair/fst p]
                             sname [get-sword name]
                             name-word [get-word name]
-                            be [form-to-ast new-lstack [second p]]
+                            be [form-to-ast new-lstack [pair/snd p]]
                             ldesc [local-var-kind/loop]]
                         [if-let [ldesc [try-get-local lstack name-word]]
                           [push-error name [quote [loop var shadows local]]]
@@ -913,11 +913,11 @@
                    ldesc [local-var-kind/let]]
                   [when [lt-s n-of-args 2] [report-error [quote [expected at least 2 arguments]]]]
                   [bexp/let
-                    [list-map p [pairwise bindings]
-                      [let [name [first p]
+                    [list-map p [pairwise-pairs bindings]
+                      [let [name [pair/fst p]
                             sname [get-sword name]
                             name-word [get-word name]
-                            be [form-to-ast new-lstack [second p]]]
+                            be [form-to-ast new-lstack [pair/snd p]]]
                         [if-let [ldesc [try-get-local lstack name-word]]
                           [push-error name [quote [let var shadows local]]]
                           [when-let [ddesc [try-get def-ctx name-word]]
