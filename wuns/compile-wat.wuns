@@ -75,8 +75,8 @@
 
         [ctype-inst/apply type-name type-args]
         [switch type-name
-          [[word u8] [word s8]] int-const-1
-          [[word u16] [word s16]] int-const-2
+          [[word u8] [word i8]] int-const-1
+          [[word u16] [word i16]] int-const-2
           [[word i32] [word f32]] int-const-4
           [[word i64] [word f64]] int-const-8
           [[word v128]] int-const-16
@@ -558,9 +558,9 @@
             [[word f64]] [word f64.load]
             [[word v128]] [word v128.load]
             [[word u8]] [word i32.load8-u]
-            [[word s8]] [word i32.load8-s]
+            [[word i8]] [word i32.load8-s]
             [[word u16]] [word i32.load16-u]
-            [[word s16]] [word i32.load16-s]
+            [[word i16]] [word i32.load16-s]
             [logq-abort not implemented deref inst-type/apply]]]
           [wat-inst-memargs
             [mem-name-from-mem-type [first [pair/snd pt]]]
@@ -581,8 +581,8 @@
             [[word f32]] [word f32.store]
             [[word f64]] [word f64.store]
             [[word v128]] [word v128.store]
-            [[word u8] [word s8]] [word i32.store8]
-            [[word u16] [word s16]] [word i32.store16]
+            [[word u8] [word i8]] [word i32.store8]
+            [[word u16] [word i16]] [word i32.store16]
             [logq-abort not implemented assign inst-type/apply]]]
           [wat-inst-memargs
             [mem-name-from-mem-type [first [pair/snd pt]]]

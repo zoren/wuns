@@ -198,8 +198,8 @@
 
 [defn wuns-builtin-data-type-is [type-name]
   [switch type-name
-    [[word u8] [word s8]
-     [word u16] [word s16]] true
+    [[word u8] [word i8]
+     [word u16] [word i16]] true
     false]]
 
 [defn llbuiltin-type-arity-ok [type-name n-of-args]

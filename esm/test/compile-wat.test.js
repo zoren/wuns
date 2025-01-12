@@ -408,9 +408,9 @@ test('assign', async () => {
   {
     const inst = await stringToInst(`
     [memory i32 mem 1]
-    [defn get [[type p [pointer [memory mem] [s8]]]]
+    [defn get [[type p [pointer [memory mem] [i8]]]]
       [deref p]]
-    [defn set [[type p [pointer [memory mem] [s8]]] [type v [i32]]]
+    [defn set [[type p [pointer [memory mem] [i8]]] [type v [i32]]]
       [assign p v]]
     [export get set]
     `)
@@ -434,9 +434,9 @@ test('assign', async () => {
   {
     const inst = await stringToInst(`
     [memory i32 mem 1]
-    [defn get [[type p [pointer [memory mem] [s16]]]]
+    [defn get [[type p [pointer [memory mem] [i16]]]]
       [deref p]]
-    [defn set [[type p [pointer [memory mem] [s16]]] [type v [i32]]]
+    [defn set [[type p [pointer [memory mem] [i16]]] [type v [i32]]]
       [assign p v]]
     [export get set]
     `)

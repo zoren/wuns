@@ -1,3 +1,9 @@
+[def 0 [i32 0]]
+[def 1 [i32 1]]
+
+[def false [i32 0]]
+[def true [i32 1]]
+
 [type vector-data [a s]
   [record
     [size [i32]]
@@ -23,12 +29,12 @@
   [assign top new-top]]
 
 [defn alloc-init []
-  [set-top [intrinsic i32.add [get-top] [i32 16]]]]
+  [set-top [add [get-top] [i32 16]]]]
 
 [defn alloc-n [n-bytes]
   [let [top-val [get-top]]
-    [if [intrinsic i32.eq top-val [i32 0]] [intrinsic unreachable] [do]]
-    [set-top [intrinsic i32.add top-val n-bytes]]
+    [if [eq top-val 0] [intrinsic unreachable] [do]]
+    [set-top [add top-val n-bytes]]
     top-val]]
 
 [genfn vector-make-no-init [elem-type] [[type size [i32]]]
@@ -37,16 +43,14 @@
     [assign [field p size] size]
     [cast [pvector elem-type] p]]]
 
-[defn inc [x]
-  [intrinsic i32.add x [i32 1]]]
+[defn inc [x] [add x 1]]
 
-[defn dec [x]
-  [intrinsic i32.sub x [i32 1]]]
+[defn dec [x] [sub x 1]]
 
 [genfn vector-make-init [a] [[type size [i32]] [type init a]]
   [let
     [p [call vector-make-no-init [a] [size]]]
-    [loop [i [i32 0]]
+    [loop [i 0]
       [when [lt-s i size]
         [assign [index [field p array] i] init]
         [continue i [inc i]]]]
@@ -56,25 +60,25 @@
   [call vector-make-init [[f64]] [size [f64 0]]]]
 
 [defn vector-int [size]
-  [call vector-make-init [[i32]] [size [i32 0]]]]
+  [call vector-make-init [[i32]] [size 0]]]
 
 [defn vector-byte [size]
   [let
     [p [call vector-make-no-init [[u8]] [size]]
      par [field p array]]
-    [loop [i [i32 0]]
+    [loop [i 0]
       [when [lt-s i size]
-        [assign [index par i] [i32 0]]
+        [assign [index par i] 0]
         [continue i [inc i]]]]
     p]]
 
 [genfn get [a] [[type pvec [pvector a]] [type i [i32]]]
-  [if [lt-s i [i32 0]] [intrinsic unreachable] [do]]
+  [if [lt-s i 0] [intrinsic unreachable] [do]]
   [if [le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
   [deref [index [field pvec array] i]]]
 
 [defn vector-get [[type pvec [pvector -a]] [type i [i32]]]
-  [if [lt-s i [i32 0]] [intrinsic unreachable] [do]]
+  [if [lt-s i 0] [intrinsic unreachable] [do]]
   [if [le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
   [deref [index [field pvec array] i]]]
 
@@ -83,15 +87,15 @@
     [is-identical pvec1 pvec2]
     [and
       [eq [size pvec1] [size pvec2]]
-      [loop [n [size pvec1] i [i32 0] pa1 [field pvec1 array] pa2 [field pvec2 array]]
+      [loop [n [size pvec1] i 0 pa1 [field pvec1 array] pa2 [field pvec2 array]]
         [if [le-s n i]
-          [i32 1]
+          true
           [if [eq [deref [index pa1 i]] [deref [index pa2 i]]]
             [continue i [inc i]]
-            [i32 0]]]]]]]
+            false]]]]]]
 
 [genfn set [a] [[type pvec [pvector a]] [type i [i32]] [type v a]]
-  [if [lt-s i [i32 0]] [intrinsic unreachable] [do]]
+  [if [lt-s i 0] [intrinsic unreachable] [do]]
   [if [le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
   [assign [index [field pvec array] i] v]]
 
@@ -99,7 +103,7 @@
   [let
     [sz [sub end start]
      p [call vector-make-no-init [s] [sz]]]
-    [for i [i32 0] sz
+    [for i 0 sz
       [call set [s] [p i [call get [s] [pvec [add start i]]]]]]
     p]]
 
@@ -141,7 +145,7 @@
   [let
     [p [alloc [growable-vector a]]
      parray [cast [pointer [memory mem] [array a -s]] [alloc [array a [literal init-capacity]]]]]
-    [assign [field p size] [i32 0]]
+    [assign [field p size] 0]
     [assign [field p capacity] init-capacity]
     [assign [field p parray] parray]
     p]]
@@ -161,12 +165,12 @@
     [size [deref [field pgvec size]]
      arr [deref [field pgvec parray]]
      pvector [call vector-make-no-init [a] [size]]]
-    [for i [i32 0] size
+    [for i 0 size
       [call set [a] [pvector i [deref [index arr i]]]]]
     pvector]]
 
 [defn growable-vector-reset [[type pgvec [pointer [memory mem] [growable-vector -a]]]]
-  [assign [field pgvec size] [i32 0]]]
+  [assign [field pgvec size] 0]]
 
 [defn growable-vector-make-int [init-capacity]
   [call growable-vector-make [[i32]] [init-capacity]]]
@@ -253,11 +257,11 @@
 [defn form-depth [form]
   [ifs
     [form-is-word form]
-    [i32 1]
+    1
 
     [form-is-list form]
     [let [forms [deref [field form forms]]]
-      [loop [i [i32 0] n [size forms] r [i32 0]]
+      [loop [i 0 n [size forms] r 0]
         [if [lt-s i n]
           [continue
             r [inc [max r [form-depth [vector-get forms i]]]]
@@ -282,7 +286,7 @@
 
 [defn make-stack [init-capacity]
   [let [parray [alloc [parser-stack]]]
-    [for i [i32 0] [i32 16]
+    [for i 0 [i32 16]
       [assign [index parray i] [call growable-vector-make [[pointer [memory mem] [form]]] [init-capacity]]]]
     parray]]
 
@@ -300,13 +304,13 @@
   [loop
     [stack [make-stack [i32 16]]
      n-of-bytes [size bytes]
-     i [i32 0]
+     i 0
      stack-index [i32 -1]]
     [if-not [lt-s i n-of-bytes]
       [if [is-negative stack-index]
-        [cast [pointer [memory mem] [form]] [i32 0]]
+        [cast [pointer [memory mem] [form]] 0]
         [do
-          [when-not [eq [i32 0] stack-index] [intrinsic unreachable]]
+          [when-not [eq 0 stack-index] [intrinsic unreachable]]
           [form-list-make [call growable-vector-to-vector [[pointer [memory mem] [form]]] [[deref [index stack stack-index]]]]]]]
       [let [c [get-byte bytes i]]
         [ifs
@@ -336,7 +340,7 @@
             [let [gvec [deref [index stack stack-index]]
                   form-vector [call growable-vector-to-vector [[pointer [memory mem] [form]]] [gvec]]]
               [growable-vector-reset gvec]
-              [if [eq stack-index [i32 0]]
+              [if [eq stack-index 0]
                 [form-list-make form-vector]
                 [do
                   [continue
@@ -353,7 +357,7 @@
 [defn vector-u8-hash-fnv-1a-i32 [[type bytes [pvector [u8]]]]
   [loop [n [size bytes]
          ar [field bytes array]
-         i [i32 0]
+         i 0
          hash fnv-offset-basis]
     [if [le-s n i]
       hash
