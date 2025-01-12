@@ -578,6 +578,8 @@
     [for i 0 src-size
       [byte-array-set ba [add offset i] [byte-array-get src i]]]]]
 
+[import ./runtime-lib/host.js triplewise [type-scheme [a] [func [[list a]] [list [list a]]]]]
+
 [def false [i32 0]]
 [def true [i32 1]]
 
