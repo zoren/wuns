@@ -44,7 +44,7 @@
     [size-of lltype]
     [is-identical llexp llexp]
     [tuple [list llexp]]
-    [data syntax-word lltype data-exp]
+    [data syntax-word data-exp]
     ]
 
     data-exp []
@@ -517,11 +517,10 @@
 
           [[word data]]
           [do
-            [assert-n-args 3]
+            [assert-n-args 2]
             [llexp/data
               [check-get-mem-name [get-arg 0]]
-              [form-to-lltype lstack type-var-set [get-arg 1]]
-              [[form-to-data type-var-set lstack] [get-arg 2]]]]
+              [[form-to-data type-var-set lstack] [get-arg 1]]]]
 
           [[word call]]
           [do
@@ -1660,10 +1659,9 @@
     [llexp/tuple values]
     [type-tuple-list-no-singleton [list-map-fn [func f [v] [go level stack v]] values]]
 
-    [llexp/data mem-name type init-exp]
+    [llexp/data mem-name init-exp]
     [let
-      [it [instantiate-syntax-type type]
-       t-mem [type-literal [ctype-literal/memory [syntax-word/word mem-name]]]
+      [t-mem [type-literal [ctype-literal/memory [syntax-word/word mem-name]]]
        infer-data
         [func infer-data [data-exp]
           [match data-exp
@@ -1672,8 +1670,7 @@
             [type-record
               [list-map p fields
                 [pair [syntax-word/word [pair/fst p]] [infer-data [pair/snd p]]]]]]]]
-      [llunify-report gctx [infer-data init-exp] it init-exp]
-      [llannotate gctx bform [type-pointer t-mem it]]]
+      [llannotate gctx bform [type-pointer t-mem [infer-data init-exp]]]]
 
     [llexp/deref value]
     [let [t-mem [fresh-type-var]

@@ -215,12 +215,12 @@ test('data exp', async () => {
   const inst = await stringToInst(`
 [memory i32 mem 1]
 
-[defn i1 [] [data mem [i32] [i32 3]]]
-[defn i2 [] [data mem [i32] [i32 7]]]
+[defn i1 [] [data mem [i32 3]]]
+[defn i2 [] [data mem [i32 7]]]
 [defn get-int [[type p [pointer [memory mem] [i32]]]] [deref p]]
 
-[defn f1 [] [data mem [f64] [f64 4.7]]]
-[defn f2 [] [data mem [f64] [f64 3.9]]]
+[defn f1 [] [data mem [f64 4.7]]]
+[defn f2 [] [data mem [f64 3.9]]]
 [defn get-float [[type p [pointer [memory mem] [f64]]]] [deref p]]
 
 [export i1 i2 f1 f2 get-int get-float]`)
@@ -244,7 +244,7 @@ test('data exp record', async () => {
 
 [type r [] [record [x [f64]] [y [f64]]]]
 
-[defn ri [] [data mem [r] [record [x [f64 1.9]] [y [f64 2.7]]]]]
+[defn ri [] [data mem [record [x [f64 1.9]] [y [f64 2.7]]]]]
 
 [defn get-x [[type p [pointer [memory mem] [r]]]] [deref [field p x]]]
 [defn get-y [[type p [pointer [memory mem] [r]]]] [deref [field p y]]]

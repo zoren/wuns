@@ -652,7 +652,7 @@
       [llexp/tuple values]
       [wat-inst/instructions [list-map value values [go value]]]
 
-      [llexp/data smem-name syntax-type exp]
+      [llexp/data smem-name exp]
       [let
         [mem-name [syntax-word/word smem-name]
          ctor
