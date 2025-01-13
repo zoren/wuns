@@ -12,17 +12,28 @@
     [f32 syntax-word]
     [f64 syntax-word]]]
 
+[type primitive-type []
+  [record
+    [prefix word]
+    [bits i32]
+    [name word]]]
+
 [type
   type-literal []
   [union
     [memory syntax-word]
     [exp llexp]]
 
+  type-inst []
+  [union
+    [literal type-literal]
+    [primitive primitive-type]
+    [apply syntax-word [list lltype]]]
+
   lltype []
   [union
     [var syntax-word]
-    [literal type-literal]
-    [apply syntax-word [list lltype]]]
+    [inst type-inst]]
 
   llexp []
   [union
@@ -198,26 +209,27 @@
     [defn lldefn]
     [export [list syntax-word]]]]
 
-[defn wat-type-is [type-name]
-  [switch type-name
-    [[word i32] [word i64] [word f32] [word f64] [word v128]] true
-    false]]
+[def primitive-types-by-name
+  [let [m [transient-kv-map]]
+    [for-each prefix-bits [list
+        [pair [word i] [i32 32]]
+        [pair [word i] [i32 64]]
 
-[defn wuns-builtin-data-type-is [type-name]
-  [switch type-name
-    [[word u8] [word i8]
-     [word u16] [word i16]] true
-    false]]
+        [pair [word f] [i32 32]]
+        [pair [word f] [i32 64]]
 
-[defn llbuiltin-type-arity-ok [type-name n-of-args]
-  [switch type-name
-    [[word tuple]] [option/some true]
+        [pair [word i] [i32 8]]
+        [pair [word u] [i32 8]]
 
-    [[word pointer] [word array]] [option/some [eq 2 n-of-args]]
+        [pair [word i] [i32 16]]
+        [pair [word u] [i32 16]]
 
-    [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
-      [option/some [eq n-of-args 0]]
-      [option/none]]]]
+        [pair [word v] [i32 128]]]
+      [let [prefix [pair/fst prefix-bits]
+            bits [pair/snd prefix-bits]
+            name [concat-words prefix [int-to-word bits]]]
+        [set-kv-map m name [primitive-type prefix bits name]]]]
+    m]]
 
 [load interpreter-externs.wuns]
 
@@ -271,31 +283,45 @@
 
     [form/list l]
     [let [sw [sword [first l]] fw [syntax-word/word sw] n-of-args [dec [size l]]]
-      [switch fw
-        [[word memory]]
-        [let [w [form-to-word [second l]]]
-          [if-let [ldesc [try-get-local lstack w]]
-            [logq-abort not a memory]
-            [if-let [ddesc [try-get lldef-ctx w]]
-              [match ddesc
-                [lldef-desc/memory k] [do]
-                [logq-abort not a memory]]
-              [push-error form [quote [undefined exp word]]]]]
-          [lltype/literal [type-literal/memory [sword [second l]]]]]
-
-        [[word literal]]
-        [lltype/literal [type-literal/exp [form-to-llexp type-params lstack [second l]]]]
-
-        [[word record] [word union]]
-        [logq-abort form-to-lltype anonymous records and unions not implemented]
-
-        [do
-          [if-let [user-type-params [try-get user-type-params fw]]
+      [lltype/inst
+        [if-let [user-type-params [try-get user-type-params fw]]
+          [do
             [when-not [eq [size user-type-params] n-of-args] [push-error form [quote [type arity mismatch]]]]
-            [if-let [arity-ok [llbuiltin-type-arity-ok fw n-of-args]]
-              [when-not arity-ok [push-error form [quote [type arity mismatch]]]]
-              [push-error form [quote [undefined type]]]]]
-          [lltype/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]]]]]
+            [type-inst/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]
+          [switch fw
+            [[word memory]]
+            [let [w [form-to-word [second l]]]
+              [if-let [ldesc [try-get-local lstack w]]
+                [logq-abort not a memory]
+                [if-let [ddesc [try-get lldef-ctx w]]
+                  [match ddesc
+                    [lldef-desc/memory k] [do]
+                    [logq-abort not a memory]]
+                  [push-error form [quote [undefined exp word]]]]]
+              [type-inst/literal [type-literal/memory [sword [second l]]]]]
+
+            [[word literal]]
+            [type-inst/literal [type-literal/exp [form-to-llexp type-params lstack [second l]]]]
+
+            [[word record] [word union]]
+            [logq-abort form-to-lltype anonymous records and unions not implemented]
+
+            [[word tuple]]
+            [type-inst/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]
+
+            [[word array] [word pointer]]
+            [do
+              [when-not [eq n-of-args 2] [push-error form [quote [expected 2 arguments]]]]
+              [type-inst/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]
+
+            [do
+              [if-let [pt [try-get primitive-types-by-name fw]]
+                [do
+                  [when-not [eq n-of-args 0] [push-error form [quote [type arity mismatch]]]]
+                  [type-inst/primitive pt]]
+                [do
+                  [push-error form [quote [undefined type]]]
+                  [type-inst/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]]]]]]]]]
 
 [func form-to-llexp [type-var-set lstack form]
   [let [bst [form-to-llexp0 type-var-set lstack form]]
@@ -798,6 +824,7 @@
   ctype-inst []
   [union
     [literal ctype-literal]
+    [primitive primitive-type]
     [apply word [list ctype]]
     [anon ctype-user-inst-kind]]
 
@@ -848,6 +875,9 @@
             [ctype-inst/literal l]
             [do]
 
+            [ctype-inst/primitive pt]
+            [do]
+
             [ctype-inst/apply type-name type-args]
             [for-each arg type-args [go arg]]
 
@@ -875,11 +905,11 @@
 
 [defn make-type [type-name .. type-args] [make-type-list type-name type-args]]
 
-[def type-i32 [make-type [word i32]]]
+[def type-i32 [ctype/inst [ctype-inst/primitive [get primitive-types-by-name [word i32]]]]]
 [def type-boolean type-i32]
-[def type-f64 [make-type [word f64]]]
-[def type-f32 [make-type [word f32]]]
-[def type-i64 [make-type [word i64]]]
+[def type-f64 [ctype/inst [ctype-inst/primitive [get primitive-types-by-name [word f64]]]]]
+[def type-f32 [ctype/inst [ctype-inst/primitive [get primitive-types-by-name [word f32]]]]]
+[def type-i64 [ctype/inst [ctype-inst/primitive [get primitive-types-by-name [word i64]]]]]
 
 [defn make-type-hash-cons [type-name]
   [switch type-name
@@ -1037,6 +1067,26 @@
 
                 [push-unify-error [quote [not unifiable - literal vs non-literal]]]]
 
+              [ctype-inst/primitive pt1]
+              [match inst2
+                [ctype-inst/primitive pt2]
+                [when-not [is-identical pt1 pt2]
+                  [push-unify-error [quote [not unifiable - different primitives]]]]
+
+                [ctype-inst/anon kind2]
+                [match kind2
+                  [ctype-user-inst-kind/union utypes2]
+                  [for-each ut2 utypes2
+                    [match ut2
+                      [ctype/inst ui2]
+                      [do]
+                      [do]
+                      ]]
+
+                  [push-unify-error [quote [not unifiable - union vs non-union]]]]
+
+                [push-unify-error [quote [not unifiable - primitive vs non-primitive]]]]
+
               [ctype-inst/apply type-name1 type-args1]
               [match inst2
                 [ctype-inst/apply type-name2 type-args2]
@@ -1177,6 +1227,9 @@
                 [form/list [list [quote i32] [form/word [int-to-word i]]]]]
               [ctype-literal/exp e] [flist [quote exp] [quote exp]]]
 
+            [ctype-inst/primitive pt]
+            [form/word [primitive-type/name pt]]
+
             [ctype-inst/apply type-name type-args]
             [if [eq-word [word func] type-name]
               [let [fn [get-func-type nt]]
@@ -1234,6 +1287,7 @@
       [ctype/inst inst]
       [match inst
         [ctype-inst/literal l] t
+        [ctype-inst/primitive pt] t
 
         [ctype-inst/apply type-name type-args]
         [make-type-list type-name [list-map arg type-args [go arg]]]
@@ -1275,35 +1329,40 @@
             [generate-fresh-type-var-atom counter level]
             [get type-env tvw]]]
 
-        [lltype/literal l]
-        [type-literal
-          [match l
-            [type-literal/memory m] [ctype-literal/memory [syntax-word/word m]]
-            [type-literal/exp e]
-            [match should-const-eval
-              [should-const-eval/no] [ctype-literal/exp e]
-              [should-const-eval/yes] [ctype-literal/i32 [const-eval e]]]]]
+        [lltype/inst inst]
+        [match inst
+          [type-inst/literal l]
+          [type-literal
+            [match l
+              [type-literal/memory m] [ctype-literal/memory [syntax-word/word m]]
+              [type-literal/exp e]
+              [match should-const-eval
+                [should-const-eval/no] [ctype-literal/exp e]
+                [should-const-eval/yes] [ctype-literal/i32 [const-eval e]]]]]
 
-        [lltype/apply type-name type-args]
-        [let [tnw [syntax-word/word type-name]]
-          [if-let [cuser-desc [try-get user-types tnw]]
-            [let [type-params [ctype-desc/type-params cuser-desc]
-                  new-type-env [transient-kv-map]]
-              [assert [eq [size type-params] [size type-args]] make-type-env expected equal number of type params and type args]
-              [for i 0 [size type-args]
-                [set-kv-map new-type-env [at type-params i] [go [at type-args i]]]]
-              [match [ctype-desc/desc cuser-desc]
-                [ctype-desc-kind/alias at]
-                [copy-type-proper new-type-env at]
+          [type-inst/primitive pt]
+          [ctype/inst [ctype-inst/primitive pt]]
 
-                [ctype-desc-kind/union utypes]
-                [type-union [list-map ut utypes [copy-type-proper new-type-env ut]]]
+          [type-inst/apply type-name type-args]
+          [let [tnw [syntax-word/word type-name]]
+            [if-let [cuser-desc [try-get user-types tnw]]
+              [let [type-params [ctype-desc/type-params cuser-desc]
+                    new-type-env [transient-kv-map]]
+                [assert [eq [size type-params] [size type-args]] make-type-env expected equal number of type params and type args]
+                [for i 0 [size type-args]
+                  [set-kv-map new-type-env [at type-params i] [go [at type-args i]]]]
+                [match [ctype-desc/desc cuser-desc]
+                  [ctype-desc-kind/alias at]
+                  [copy-type-proper new-type-env at]
 
-                [ctype-desc-kind/record fields]
-                [type-record [list-map fp fields [pair [pair/fst fp] [copy-type-proper new-type-env [pair/snd fp]]]]]]]
-            [do
-              [todo check or constrain params for array and pointer to be literals / memories / data]
-              [make-type-list tnw [list-map arg type-args [go arg]]]]]]]]]]
+                  [ctype-desc-kind/union utypes]
+                  [type-union [list-map ut utypes [copy-type-proper new-type-env ut]]]
+
+                  [ctype-desc-kind/record fields]
+                  [type-record [list-map fp fields [pair [pair/fst fp] [copy-type-proper new-type-env [pair/snd fp]]]]]]]
+              [do
+                [todo check or constrain params for array and pointer to be literals / memories / data]
+                [make-type-list tnw [list-map arg type-args [go arg]]]]]]]]]]]
 
 [defn generalize [current-level type]
   [let [tvs [growable-list]]
@@ -1314,8 +1373,14 @@
 
 [todo see if we can lift to data types in the compiler instead of during type-cheking]
 [defn lift-data-type [t]
-  [if-let [p [try-get-apply-type t]]
-    [if [wuns-builtin-data-type-is [pair/fst p]] type-i32 t]
+  [match [normalize-type t]
+    [ctype/inst inst]
+    [match inst
+      [ctype-inst/primitive pt]
+      [if [lt-s [primitive-type/bits pt] [i32 32]]
+        type-i32
+        t]
+      t]
     t]]
 
 [defn make-type-env [llctx type-name type-args]
@@ -1393,6 +1458,9 @@
         [ctype-inst/literal l]
         [do]
 
+        [ctype-inst/primitive pt]
+        [do]
+
         [ctype-inst/anon kind]
         [match kind
           [ctype-user-inst-kind/union types]
@@ -1408,10 +1476,7 @@
           [[word tuple]] [logq-abort tuple does not have a size]
           [[word array]] [go [first type-args]]
 
-          [if [or [wat-type-is type-name] [wuns-builtin-data-type-is type-name]]
-            [do]
-            [logq-abort not implemented [identity type-name]]
-            ]]]]]
+          [logq-abort not implemented [identity type-name]]]]]]
     type]]
 
 [defn check-cast [gctx inst-type tv bform]
@@ -1449,6 +1514,17 @@
               [ctype-inst/literal lower-literal]
               [logq-abort check-cast not implemented lower literal]
 
+              [ctype-inst/primitive lower-primitive]
+              [let [lower-name [primitive-type/name lower-primitive]]
+                [match [get-memory-kind bctx [mem-name-from-mem-type [first upper-args]]]
+                  [memory-kind/i32]
+                  [when-not [eq-word lower-name [word i32]]
+                    [logq-abort can only cast i32 to pointer [identity bform]]]
+
+                  [memory-kind/i64]
+                  [when-not [eq-word lower-name [word i64]]
+                    [logq-abort can only cast i64 to pointer [identity bform]]]]]
+
               [ctype-inst/apply lower-name lower-args]
               [ifs
                 [eq-word upper-name lower-name]
@@ -1469,7 +1545,9 @@
 
                 [todo
                   we need to do something here to check if the types are compatible
-                  [llunify-report gctx inst-type tv value]]]]]]]]
+                  [llunify-report gctx inst-type tv value]]]
+
+                [logq-abort check-cast not implemented [identity lower-inst]]]]]]]
     inst-type tv]]]
 
 [type infer-local-context []
