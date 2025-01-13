@@ -330,14 +330,13 @@
                 [form-to-lltype lstack type-params [at l 1]]
                 [form-to-lltype lstack type-params [at l 2]]]]
 
-            [do
-              [if-let [pt [try-get primitive-types-by-name fw]]
-                [do
-                  [when-not [eq n-of-args 0] [push-error form [quote [type arity mismatch]]]]
-                  [type-inst/primitive pt]]
-                [do
-                  [push-error form [quote [undefined type]]]
-                  [type-inst/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]]]]]]]]]
+            [if-let [pt [try-get primitive-types-by-name fw]]
+              [do
+                [when-not [eq n-of-args 0] [push-error form [quote [type arity mismatch]]]]
+                [type-inst/primitive pt]]
+              [do
+                [push-error form [quote [undefined type]]]
+                [type-inst/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]]]]]]]]
 
 [func form-to-llexp [type-var-set lstack form]
   [let [bst [form-to-llexp0 type-var-set lstack form]]

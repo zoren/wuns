@@ -317,15 +317,6 @@
         [memory-kind/i32] [word i32]
         [memory-kind/i64] [word i64]]
 
-      [ctype-inst/apply type-name type-args]
-      [switch type-name
-        [[word pointer]]
-        [match [get-memory-kind bind-ctx [mem-name-from-mem-type [first type-args]]]
-          [memory-kind/i32] [word i32]
-          [memory-kind/i64] [word i64]]
-
-        [logq-abort not implemented translate-type [identity it]]]
-
       [ctype-inst/anon kind]
       [match kind
         [ctype-user-inst-kind/union utypes]
