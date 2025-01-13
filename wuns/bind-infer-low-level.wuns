@@ -236,7 +236,10 @@
 [load interpreter-externs.wuns]
 
 [def intrinsic-types-map
-  [let [name-to-pair [transient-kv-map] i32 [word i32] bool i32 f64 [word f64]]
+  [let [name-to-pair [transient-kv-map]
+        i32 [get primitive-types-by-name [word i32]]
+        bool i32
+        f64 [get primitive-types-by-name [word f64]]]
     [let [i32i32-to-i32 [pair [list i32 i32] i32]]
       [for-each name [list [word i32.add] [word i32.sub] [word i32.mul] [word i32.rem-s] [word i32.div-s]
                            [word i32.and] [word i32.or] [word i32.xor]
@@ -922,15 +925,6 @@
 [def type-f64 [ctype/inst [ctype-inst/primitive [get primitive-types-by-name [word f64]]]]]
 [def type-f32 [ctype/inst [ctype-inst/primitive [get primitive-types-by-name [word f32]]]]]
 [def type-i64 [ctype/inst [ctype-inst/primitive [get primitive-types-by-name [word i64]]]]]
-
-[defn make-type-hash-cons [type-name]
-  [switch type-name
-    [[word i32]] type-i32
-    [[word i64]] type-i64
-    [[word f32]] type-f32
-    [[word f64]] type-f64
-    [[word boolean]] type-boolean
-    [logq-abort make-type-hash-cons not implemented [identity type-name]]]]
 
 [defn type-pointer [mem target] [make-type [word pointer] mem target]]
 [defn type-array [elem-type size] [make-type [word array] elem-type size]]
@@ -1647,8 +1641,8 @@
           [assert [eq [size param-types] [size iargs]] arity mismatch]
           [for i 0 [size param-types]
             [let [a [at iargs i]]
-              [llunify-report gctx [make-type-hash-cons [at param-types i]] [go level stack a] a]]]
-          [make-type-hash-cons [pair/snd param-result-bin-pair]]]
+              [llunify-report gctx [ctype/inst [ctype-inst/primitive [at param-types i]]] [go level stack a] a]]]
+          [ctype/inst [ctype-inst/primitive [pair/snd param-result-bin-pair]]]]
 
         [switch w
           [[word unreachable]]

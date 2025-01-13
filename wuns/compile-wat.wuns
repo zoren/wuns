@@ -149,7 +149,7 @@
 
         [llexp/intrinsic inst-name imm ica]
         [if-let [param-return-pair [try-get intrinsic-types-map [syntax-word/word inst-name]]]
-          [make-type-hash-cons [pair/snd param-return-pair]]
+          [ctype/inst [ctype-inst/primitive [pair/snd param-return-pair]]]
           [logq-abort intrinsic not implemented]]
 
         [llexp/do forms]
