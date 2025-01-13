@@ -29,6 +29,7 @@
     [literal type-literal]
     [primitive primitive-type]
     [tuple [list lltype]]
+    [func [list lltype] lltype]
     [apply syntax-word [list lltype]]]
 
   lltype []
@@ -827,6 +828,7 @@
     [literal ctype-literal]
     [primitive primitive-type]
     [tuple [list ctype]]
+    [func [list ctype] ctype]
     [apply word [list ctype]]
     [anon ctype-user-inst-kind]]
 
@@ -882,6 +884,11 @@
 
             [ctype-inst/tuple types]
             [for-each arg types [go arg]]
+
+            [ctype-inst/func param-types result-type]
+            [do
+              [for-each arg param-types [go arg]]
+              [go result-type]]
 
             [ctype-inst/apply type-name type-args]
             [for-each arg type-args [go arg]]
@@ -941,7 +948,7 @@
     [ctype/inst [ctype-inst/tuple types]]]]
 
 [defn type-func [params result]
-  [make-type [word func] [type-tuple-list-no-singleton params] result]]
+  [ctype/inst [ctype-inst/func params result]]]
 
 [defn type-union [types] [ctype/inst [ctype-inst/anon [ctype-user-inst-kind/union types]]]]
 [defn type-record [fields] [ctype/inst [ctype-inst/anon [ctype-user-inst-kind/record fields]]]]
@@ -1101,6 +1108,17 @@
                   [push-unify-error [quote [not unifiable - different number of tuple types]]]]
                 [push-unify-error [quote [not unifiable - tuple vs non-tuple]]]]
 
+              [ctype-inst/func param-types1 result-type1]
+              [match inst2
+                [ctype-inst/func param-types2 result-type2]
+                [do
+                  [when-not [eq [size param-types1] [size param-types2]]
+                    [push-unify-error [quote [not unifiable - different number of func params]]]]
+                  [for i 0 [min [size param-types1] [size param-types2]]
+                    [go [at param-types1 i] [at param-types2 i]]]
+                  [go result-type1 result-type2]]
+                [push-unify-error [quote [not unifiable - func vs non-func]]]]
+
               [ctype-inst/apply type-name1 type-args1]
               [match inst2
                 [ctype-inst/apply type-name2 type-args2]
@@ -1180,10 +1198,10 @@
     [list t]]]
 
 [defn get-func-type [t]
-  [if-let [at [try-get-apply-type t]]
-    [if [eq-word [word func] [pair/fst at]]
-      [let [type-args [pair/snd at]]
-        [pair [get-tuple-types [first type-args]] [second type-args]]]
+  [if-let [inst [try-get-inst-type t]]
+    [match inst
+      [ctype-inst/func ps r]
+      [pair ps r]
       [logq-abort get-func-type expected a func type [identity t]]]
     [logq-abort get-func-type expected a func type [identity t]]]]
 
@@ -1245,13 +1263,16 @@
             [ctype-inst/primitive pt]
             [form/word [primitive-type/name pt]]
 
+            [ctype-inst/func param-types result-type]
+            [flist
+              [quote func]
+              [form/list [list-map pt param-types [go pt]]]
+              [go result-type]]
+
             [ctype-inst/apply type-name type-args]
-            [if [eq-word [word func] type-name]
-              [let [fn [get-func-type nt]]
-                [flist [quote func] [form/list [list-map arg [pair/fst fn] [go arg]]] [go [pair/snd fn]]]]
-              [form-concat
-                [list [form/word type-name]]
-                [list-map targ type-args [go targ]]]]
+            [form-concat
+              [list [form/word type-name]]
+              [list-map targ type-args [go targ]]]
 
             [ctype-inst/anon kind]
             [match kind
@@ -1306,6 +1327,9 @@
 
         [ctype-inst/tuple types]
         [ctype/inst [ctype-inst/tuple [list-map arg types [go arg]]]]
+
+        [ctype-inst/func param-types result-type]
+        [ctype/inst [ctype-inst/func [list-map pt param-types [go pt]] [go result-type]]]
 
         [ctype-inst/apply type-name type-args]
         [make-type-list type-name [list-map arg type-args [go arg]]]
@@ -1493,8 +1517,6 @@
         [ctype-inst/apply type-name type-args]
         [switch type-name
           [[word pointer]] [do]
-          [[word func]] [logq-abort func does not have a size]
-          [[word tuple]] [logq-abort tuple does not have a size]
           [[word array]] [go [first type-args]]
 
           [logq-abort not implemented [identity type-name]]]]]]
