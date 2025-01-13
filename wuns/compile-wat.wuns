@@ -349,11 +349,11 @@
 
       [ctype/inst inst]
       [match inst
+        [ctype-inst/tuple types]
+        [list-map ta types [translate-type bind-ctx ta]]
+
         [ctype-inst/apply type-name type-args]
         [switch type-name
-          [[word tuple]]
-          [list-map ta type-args [translate-type bind-ctx ta]]
-
           [list [translate-type bind-ctx nt]]]
 
         [ctype-inst/anon kind]

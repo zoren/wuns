@@ -28,6 +28,7 @@
   [union
     [literal type-literal]
     [primitive primitive-type]
+    [tuple [list lltype]]
     [apply syntax-word [list lltype]]]
 
   lltype []
@@ -307,7 +308,7 @@
             [logq-abort form-to-lltype anonymous records and unions not implemented]
 
             [[word tuple]]
-            [type-inst/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]
+            [type-inst/tuple [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]
 
             [[word array] [word pointer]]
             [do
@@ -825,6 +826,7 @@
   [union
     [literal ctype-literal]
     [primitive primitive-type]
+    [tuple [list ctype]]
     [apply word [list ctype]]
     [anon ctype-user-inst-kind]]
 
@@ -878,6 +880,9 @@
             [ctype-inst/primitive pt]
             [do]
 
+            [ctype-inst/tuple types]
+            [for-each arg types [go arg]]
+
             [ctype-inst/apply type-name type-args]
             [for-each arg type-args [go arg]]
 
@@ -923,7 +928,7 @@
 [defn type-pointer [mem target] [make-type [word pointer] mem target]]
 [defn type-array [elem-type size] [make-type [word array] elem-type size]]
 
-[def type-empty-tuple [make-type [word tuple]]]
+[def type-empty-tuple [ctype/inst [ctype-inst/tuple [list]]]]
 
 [defn type-tuple-list-no-singleton [types]
   [ifs
@@ -933,7 +938,7 @@
     [eq [size types] 1]
     [first types]
 
-    [make-type-list [word tuple] types]]]
+    [ctype/inst [ctype-inst/tuple types]]]]
 
 [defn type-func [params result]
   [make-type [word func] [type-tuple-list-no-singleton params] result]]
@@ -1087,6 +1092,15 @@
 
                 [push-unify-error [quote [not unifiable - primitive vs non-primitive]]]]
 
+              [ctype-inst/tuple types1]
+              [match inst2
+                [ctype-inst/tuple types2]
+                [if [eq [size types1] [size types2]]
+                  [for i 0 [size types1]
+                    [go [at types1 i] [at types2 i]]]
+                  [push-unify-error [quote [not unifiable - different number of tuple types]]]]
+                [push-unify-error [quote [not unifiable - tuple vs non-tuple]]]]
+
               [ctype-inst/apply type-name1 type-args1]
               [match inst2
                 [ctype-inst/apply type-name2 type-args2]
@@ -1158,9 +1172,10 @@
     [option/none]]]
 
 [defn get-tuple-types [t]
-  [if-let [at [try-get-apply-type t]]
-    [if [eq-word [word tuple] [pair/fst at]]
-      [pair/snd at]
+  [if-let [inst [try-get-inst-type t]]
+    [match inst
+      [ctype-inst/tuple types]
+      types
       [list t]]
     [list t]]]
 
@@ -1289,6 +1304,9 @@
         [ctype-inst/literal l] t
         [ctype-inst/primitive pt] t
 
+        [ctype-inst/tuple types]
+        [ctype/inst [ctype-inst/tuple [list-map arg types [go arg]]]]
+
         [ctype-inst/apply type-name type-args]
         [make-type-list type-name [list-map arg type-args [go arg]]]
 
@@ -1342,6 +1360,9 @@
 
           [type-inst/primitive pt]
           [ctype/inst [ctype-inst/primitive pt]]
+
+          [type-inst/tuple types]
+          [ctype/inst [ctype-inst/tuple [list-map t types [go t]]]]
 
           [type-inst/apply type-name type-args]
           [let [tnw [syntax-word/word type-name]]
