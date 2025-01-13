@@ -642,14 +642,11 @@
       [integer-exp-to-wat-inst [type-to-size-exp1 [get-annotation cctx t]]]
 
       [llexp/is-identical p1 p2]
-      [let
-        [pt [get-pointer-type [get-ctype cctx p1]]
-         mem-kind [get-memory-kind bind-ctx [pair/fst pt]]]
-        [wat-inst-word
-          [match mem-kind
-            [memory-kind/i32] [word i32.eq]
-            [memory-kind/i64] [word i64.eq]]
-            [go p1] [go p2]]]
+      [wat-inst-word
+        [match [get-memory-kind bind-ctx [pair/fst [get-pointer-type [get-ctype cctx p1]]]]
+          [memory-kind/i32] [word i32.eq]
+          [memory-kind/i64] [word i64.eq]]
+        [go p1] [go p2]]
 
       [llexp/tuple values]
       [wat-inst/instructions [list-map value values [go value]]]

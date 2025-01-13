@@ -1580,15 +1580,13 @@
               [logq-abort check-cast not implemented lower literal]
 
               [ctype-inst/primitive lower-primitive]
-              [let [lower-name [primitive-type/name lower-primitive]]
-                [match [get-memory-kind bctx [mem-name-from-mem-type upper-mem]]
-                  [memory-kind/i32]
-                  [when-not [eq-word lower-name [word i32]]
-                    [logq-abort can only cast i32 to pointer [identity bform]]]
-
-                  [memory-kind/i64]
-                  [when-not [eq-word lower-name [word i64]]
-                    [logq-abort can only cast i64 to pointer [identity bform]]]]]
+              [let [lower-name [primitive-type/name lower-primitive]
+                    mem-pt-name
+                    [match [get-memory-kind bctx [mem-name-from-mem-type upper-mem]]
+                      [memory-kind/i32] [word i32]
+                      [memory-kind/i64] [word i64]]]
+                [when-not [eq-word lower-name mem-pt-name]
+                  [logq-abort can only cast [identity mem-pt-name] to pointer]]]
 
               [ctype-inst/pointer lower-mem lower-target]
               [do
@@ -1611,17 +1609,6 @@
             [match lower-inst
               [ctype-inst/literal lower-literal]
               [logq-abort check-cast not implemented lower literal]
-
-              [ctype-inst/primitive lower-primitive]
-              [let [lower-name [primitive-type/name lower-primitive]]
-                [match [get-memory-kind bctx [mem-name-from-mem-type [first upper-args]]]
-                  [memory-kind/i32]
-                  [when-not [eq-word lower-name [word i32]]
-                    [logq-abort can only cast i32 to pointer [identity bform]]]
-
-                  [memory-kind/i64]
-                  [when-not [eq-word lower-name [word i64]]
-                    [logq-abort can only cast i64 to pointer [identity bform]]]]]
 
               [ctype-inst/apply lower-name lower-args]
               [ifs
