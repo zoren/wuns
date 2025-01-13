@@ -30,6 +30,7 @@
     [primitive primitive-type]
     [tuple [list lltype]]
     [func [list lltype] lltype]
+    [pointer lltype lltype]
     [apply syntax-word [list lltype]]]
 
   lltype []
@@ -314,7 +315,14 @@
             [[word tuple]]
             [type-inst/tuple [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]
 
-            [[word array] [word pointer]]
+            [[word pointer]]
+            [do
+              [when-not [eq n-of-args 2] [push-error form [quote [expected 2 arguments]]]]
+              [type-inst/pointer
+                [form-to-lltype lstack type-params [at l 1]]
+                [form-to-lltype lstack type-params [at l 2]]]]
+
+            [[word array]]
             [do
               [when-not [eq n-of-args 2] [push-error form [quote [expected 2 arguments]]]]
               [type-inst/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]
@@ -832,6 +840,7 @@
     [primitive primitive-type]
     [tuple [list ctype]]
     [func [list ctype] ctype]
+    [pointer ctype ctype]
     [apply word [list ctype]]
     [anon ctype-user-inst-kind]]
 
@@ -893,6 +902,9 @@
               [for-each arg param-types [go arg]]
               [go result-type]]
 
+            [ctype-inst/pointer mem target]
+            [do [go mem] [go target]]
+
             [ctype-inst/apply type-name type-args]
             [for-each arg type-args [go arg]]
 
@@ -926,7 +938,7 @@
 [def type-f32 [ctype/inst [ctype-inst/primitive [get primitive-types-by-name [word f32]]]]]
 [def type-i64 [ctype/inst [ctype-inst/primitive [get primitive-types-by-name [word i64]]]]]
 
-[defn type-pointer [mem target] [make-type [word pointer] mem target]]
+[defn type-pointer [mem target] [ctype/inst [ctype-inst/pointer mem target]]]
 [defn type-array [elem-type size] [make-type [word array] elem-type size]]
 
 [def type-empty-tuple [ctype/inst [ctype-inst/tuple [list]]]]
@@ -1113,6 +1125,13 @@
                   [go result-type1 result-type2]]
                 [push-unify-error [quote [not unifiable - func vs non-func]]]]
 
+              [ctype-inst/pointer mem1 target1]
+              [match inst2
+                [ctype-inst/pointer mem2 target2]
+                [do [go mem1 mem2] [go target1 target2]]
+
+                [push-unify-error [quote [not unifiable - pointer vs non-pointer]]]]
+
               [ctype-inst/apply type-name1 type-args1]
               [match inst2
                 [ctype-inst/apply type-name2 type-args2]
@@ -1121,13 +1140,7 @@
                     [for i 0 [size type-args1]
                       [go [at type-args1 i] [at type-args2 i]]]
                     [push-unify-error [quote [not unifiable - different number of type arguments]]]]
-                  [if [eq-word type-name1 [word pointer]]
-                    [let [mem-name [mem-name-from-mem-type [first type-args1]]]
-                      [match [get-memory-kind [llcheck-context/bind-ctx gctx] mem-name]
-                        [memory-kind/i32] [go type-i32 nt2]
-                        [memory-kind/i64] [go type-i64 nt2]
-                        [push-unify-error [quote [not unifiable - different memory types]]]]]
-                    [push-unify-error [quote [not unifiable - different types]]]]]
+                  [push-unify-error [quote [not unifiable - different types]]]]
 
                 [do]]
 
@@ -1196,6 +1209,14 @@
     [match inst
       [ctype-inst/func ps r]
       [pair ps r]
+      [logq-abort get-func-type expected a func type [identity t]]]
+    [logq-abort get-func-type expected a func type [identity t]]]]
+
+[defn get-pointer-type [t]
+  [if-let [inst [try-get-inst-type t]]
+    [match inst
+      [ctype-inst/pointer mem target]
+      [pair [mem-name-from-mem-type mem] [normalize-type target]]
       [logq-abort get-func-type expected a func type [identity t]]]
     [logq-abort get-func-type expected a func type [identity t]]]]
 
@@ -1325,6 +1346,9 @@
         [ctype-inst/func param-types result-type]
         [ctype/inst [ctype-inst/func [list-map pt param-types [go pt]] [go result-type]]]
 
+        [ctype-inst/pointer mem target]
+        [ctype/inst [ctype-inst/pointer [go mem] [go target]]]
+
         [ctype-inst/apply type-name type-args]
         [make-type-list type-name [list-map arg type-args [go arg]]]
 
@@ -1381,6 +1405,12 @@
 
           [type-inst/tuple types]
           [ctype/inst [ctype-inst/tuple [list-map t types [go t]]]]
+
+          [type-inst/func param-types result-type]
+          [ctype/inst [ctype-inst/func [list-map pt param-types [go pt]] [go result-type]]]
+
+          [type-inst/pointer mem target]
+          [ctype/inst [ctype-inst/pointer [go mem] [go target]]]
 
           [type-inst/apply type-name type-args]
           [let [tnw [syntax-word/word type-name]]
@@ -1494,12 +1524,6 @@
 
       [ctype/inst inst]
       [match inst
-        [ctype-inst/literal l]
-        [do]
-
-        [ctype-inst/primitive pt]
-        [do]
-
         [ctype-inst/anon kind]
         [match kind
           [ctype-user-inst-kind/union types]
@@ -1510,10 +1534,11 @@
 
         [ctype-inst/apply type-name type-args]
         [switch type-name
-          [[word pointer]] [do]
           [[word array]] [go [first type-args]]
 
-          [logq-abort not implemented [identity type-name]]]]]]
+          [logq-abort not implemented [identity type-name]]]
+
+        [do]]]]
     type]]
 
 [defn check-cast [gctx inst-type tv bform]
@@ -1540,6 +1565,33 @@
 
           [ctype-inst/anon kind]
           [do]
+
+          [ctype-inst/pointer upper-mem upper-target]
+          [match lower-type
+            [ctype/inst lower-inst]
+            [match lower-inst
+              [ctype-inst/literal lower-literal]
+              [logq-abort check-cast not implemented lower literal]
+
+              [ctype-inst/primitive lower-primitive]
+              [let [lower-name [primitive-type/name lower-primitive]]
+                [match [get-memory-kind bctx [mem-name-from-mem-type upper-mem]]
+                  [memory-kind/i32]
+                  [when-not [eq-word lower-name [word i32]]
+                    [logq-abort can only cast i32 to pointer [identity bform]]]
+
+                  [memory-kind/i64]
+                  [when-not [eq-word lower-name [word i64]]
+                    [logq-abort can only cast i64 to pointer [identity bform]]]]]
+
+              [ctype-inst/pointer lower-mem lower-target]
+              [do
+                [go upper-mem lower-mem]
+                [go upper-target lower-target]]
+
+              [logq-abort check-cast not implemented [identity upper-inst] [identity lower-inst]]]
+
+            [do]]
 
           [ctype-inst/apply upper-name upper-args]
           [match lower-type
@@ -1569,16 +1621,6 @@
                   [assert [eq [size upper-args] [size lower-args]] arity mismatch in cast]
                   [for i 0 [size upper-args]
                     [go [at upper-args i] [at lower-args i]]]]
-
-                [and [eq-word upper-name [word pointer]] [not [eq-word lower-name [word pointer]]]]
-                [match [get-memory-kind bctx [mem-name-from-mem-type [first upper-args]]]
-                  [memory-kind/i32]
-                  [when-not [eq-word lower-name [word i32]]
-                    [logq-abort can only cast i32 to pointer [identity bform]]]
-
-                  [memory-kind/i64]
-                  [when-not [eq-word lower-name [word i64]]
-                    [logq-abort can only cast i64 to pointer [identity bform]]]]
 
                 [todo
                   we need to do something here to check if the types are compatible

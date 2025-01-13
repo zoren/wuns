@@ -76,6 +76,13 @@
               cur-size]]
           [logq-abort size-of not a record type [identity kind]]]
 
+        [ctype-inst/pointer mem-type target-type]
+        [match [get-memory-kind [llcheck-context/bind-ctx check-ctx] [mem-name-from-mem-type mem-type]]
+          [memory-kind/i32]
+          int-const-4
+          [memory-kind/i64]
+          int-const-8]
+
         [ctype-inst/apply type-name type-args]
         [switch type-name
           [[word u8] [word i8]] int-const-1
@@ -324,6 +331,11 @@
 
       [ctype-inst/primitive pt] [primitive-type/name pt]
 
+      [ctype-inst/pointer mem-type target-type]
+      [match [get-memory-kind bind-ctx [mem-name-from-mem-type mem-type]]
+        [memory-kind/i32] [word i32]
+        [memory-kind/i64] [word i64]]
+
       [ctype-inst/apply type-name type-args]
       [switch type-name
         [[word pointer]]
@@ -353,8 +365,7 @@
         [list-map ta types [translate-type bind-ctx ta]]
 
         [ctype-inst/apply type-name type-args]
-        [switch type-name
-          [list [translate-type bind-ctx nt]]]
+        [list [translate-type bind-ctx nt]]
 
         [ctype-inst/anon kind]
         [match kind
@@ -364,6 +375,9 @@
           [logq-abort translate-types not implemented [identity kind]]]
 
         [ctype-inst/primitive pt]
+        [list [translate-type bind-ctx nt]]
+
+        [ctype-inst/pointer m t]
         [list [translate-type bind-ctx nt]]
 
         [do [log it] [logq-abort not implemented translate-types [identity it]]]]]]]
@@ -391,17 +405,17 @@
             [ctype-inst/primitive pt]
             [primitive-type/name pt]
 
-            [ctype-inst/apply type-name type-args]
-            [switch type-name
-              [[word pointer]]
-              [match [get-memory-kind bind-ctx [mem-name-from-mem-type [first type-args]]]
-                [memory-kind/i32] [word i32]
-                [memory-kind/i64] [word i64]]
-              [word-join
-                [word -]
-                [list-map ta type-args [t2n ta]]]]
+            [ctype-inst/pointer mem-type target-type]
+            [match [get-memory-kind bind-ctx [mem-name-from-mem-type mem-type]]
+              [memory-kind/i32] [word i32]
+              [memory-kind/i64] [word i64]]
 
-              [do [logq-abort not implemented ctype-to-name]]]]]]
+            [ctype-inst/apply type-name type-args]
+            [word-join
+              [word -]
+              [list-map ta type-args [t2n ta]]]
+
+            [logq-abort not implemented ctype-to-name [identity inst]]]]]]
     [if [lt-s i s]
       [let
         [tn [t2n [at type-args i]]]
@@ -549,9 +563,8 @@
 
       [llexp/deref target]
       [let
-        [pt [get-apply-type [get-ctype cctx target]]
-         it [copy-type-proper type-env [second [pair/snd pt]]]]
-        [assert [eq-word [pair/fst pt] [word pointer]]]
+        [pt [get-pointer-type [get-ctype cctx target]]
+         it [copy-type-proper type-env [pair/snd pt]]]
         [wat-inst/load
           [wasm-name-to-wat-byte-array
             [switch [translate-type bind-ctx it]
@@ -566,16 +579,15 @@
             [[word i16]] [word i32.load16-s]
             [logq-abort not implemented deref inst-type/apply]]]
           [wat-inst-memargs
-            [mem-name-from-mem-type [first [pair/snd pt]]]
+            [pair/fst pt]
             [word 0]
             [word 1]]
           [go target]]]
 
       [llexp/assign target value]
       [let
-        [pt [get-apply-type [get-ctype cctx target]]
-         it [copy-type-proper type-env [second [pair/snd pt]]]]
-        [assert [eq-word [pair/fst pt] [word pointer]]]
+        [pt [get-pointer-type [get-ctype cctx target]]
+         it [copy-type-proper type-env [pair/snd pt]]]
         [wat-inst/store
           [wasm-name-to-wat-byte-array
             [switch [translate-type bind-ctx it]
@@ -588,7 +600,7 @@
             [[word u16] [word i16]] [word i32.store16]
             [logq-abort not implemented assign inst-type/apply]]]
           [wat-inst-memargs
-            [mem-name-from-mem-type [first [pair/snd pt]]]
+            [pair/fst pt]
             [word 0]
             [word 1]]
           [go target]
@@ -596,11 +608,9 @@
 
       [llexp/field target field-name]
       [let
-        [pt [get-apply-type [get-ctype cctx target]]
+        [pt [get-pointer-type [get-ctype cctx target]]
          field-name-word [syntax-word/word field-name]]
-        [assert [eq-word [pair/fst pt] [word pointer]]]
-        [let [ptargs [pair/snd pt]
-              get-offset
+        [let [get-offset
               [func g-off [ttarget]
                 [let [inst [if-let [i [try-get-inst-type ttarget]] i [logq-abort type not an inst]]]
                   [match inst
@@ -629,27 +639,25 @@
                         fo]
 
                       [logq-abort field not a record or union type [identity ttarget]]]]]]]
-          [wat-inst-i32.add [integer-exp-to-wat-inst [get-offset [second ptargs]]] [go target]]]]
+          [wat-inst-i32.add [integer-exp-to-wat-inst [get-offset [pair/snd pt]]] [go target]]]]
 
       [llexp/index target index]
       [let
-        [pt [get-apply-type [get-ctype cctx target]]]
-        [assert [eq-word [pair/fst pt] [word pointer]]]
-        [let [ptargs [pair/snd pt]
-              array-type [second ptargs]
-              array-type-pair [get-apply-type array-type]
-              - [assert [eq-word [pair/fst array-type-pair] [word array]]]
-              element-type [first [pair/snd array-type-pair]]
-              offset [wat-inst-i32.mul [integer-exp-to-wat-inst [type-to-size-exp1 element-type]] [go index]]]
-        [wat-inst-i32.add offset [go target]]]]
+        [pt [get-pointer-type [get-ctype cctx target]]
+         array-type [pair/snd pt]
+         array-type-pair [get-apply-type array-type]
+         - [assert [eq-word [pair/fst array-type-pair] [word array]]]
+         element-type [first [pair/snd array-type-pair]]
+         offset [wat-inst-i32.mul [integer-exp-to-wat-inst [type-to-size-exp1 element-type]] [go index]]]
+        [wat-inst-i32.add offset [go target]]]
 
       [llexp/size-of t]
       [integer-exp-to-wat-inst [type-to-size-exp1 [get-annotation cctx t]]]
 
       [llexp/is-identical p1 p2]
       [let
-        [pt [get-apply-type [get-ctype cctx p1]]
-         mem-kind [get-memory-kind bind-ctx [mem-name-from-mem-type [first [pair/snd pt]]]]]
+        [pt [get-pointer-type [get-ctype cctx p1]]
+         mem-kind [get-memory-kind bind-ctx [pair/fst pt]]]
         [wat-inst-word
           [match mem-kind
             [memory-kind/i32] [word i32.eq]
