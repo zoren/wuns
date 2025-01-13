@@ -83,61 +83,42 @@
           [memory-kind/i64]
           int-const-8]
 
+        [ctype-inst/array element-type size-type]
+        [let [size-exp
+          [match size-type
+            [ctype/var tv]
+            [logq-abort size-of array not implemented [identity size-type]]
+
+            [ctype/inst inst]
+            [match inst
+              [ctype-inst/literal l]
+              [match l
+                [ctype-literal/exp e]
+                [integer-exp/exp e]
+
+                [ctype-literal/i32 i]
+                [integer-exp/const i]
+
+                [ctype-literal/memory m]
+                [logq-abort size-of not implemented memory literal]]
+
+              [logq-abort size-of not implemented]]
+
+            [logq-abort size-of array not implemented [identity size-type]]]]
+          [int-exp-mul [type-to-size element-type] size-exp]]
+
         [ctype-inst/apply type-name type-args]
-        [switch type-name
-          [[word u8] [word i8]] int-const-1
-          [[word u16] [word i16]] int-const-2
-          [[word i32] [word f32]] int-const-4
-          [[word i64] [word f64]] int-const-8
-          [[word v128]] int-const-16
-          [[word tuple]] [logq-abort size-of tuple not implemented]
-
-          [[word pointer]]
-          [do
-            [assert [eq 2 [size type-args]]]
-            [match [get-memory-kind [llcheck-context/bind-ctx check-ctx] [mem-name-from-mem-type [first type-args]]]
-              [memory-kind/i32]
-              int-const-4
-              [memory-kind/i64]
-              int-const-8]]
-
-          [[word array]]
-          [let [size-exp
-            [match [at type-args 1]
-              [ctype/var tv]
-              [logq-abort size-of array not implemented [at type-args 1]]
-
-              [ctype/inst inst]
-              [match inst
-                [ctype-inst/literal l]
-                [match l
-                  [ctype-literal/exp e]
-                  [integer-exp/exp e]
-
-                  [ctype-literal/i32 i]
-                  [integer-exp/const i]
-
-                  [ctype-literal/memory m]
-                  [logq-abort size-of not implemented memory literal]]
-
-                [logq-abort size-of not implemented]]
-
-              [logq-abort size-of array not implemented [at type-args 1]]]]
-            [int-exp-mul
-              [type-to-size [first type-args]]
-              size-exp]]
-
-          [if-let [inst-cuser-desc [try-get [llcheck-context/user-types check-ctx] type-name]]
-            [match [ctype-desc/desc inst-cuser-desc]
-              [ctype-desc-kind/record field-list]
-              [loop [cur-size int-const-0 i 0 n [size field-list]]
-                [if [lt-s i n]
-                  [continue
-                    cur-size [int-exp-add cur-size [type-to-size [pair/snd [at field-list i]]]]
-                    i [inc i]]
-                  cur-size]]
-              [logq-abort size-of not a record type [identity type-name]]]
-            [logq-abort size-of not a user type]]]]]]]
+        [if-let [inst-cuser-desc [try-get [llcheck-context/user-types check-ctx] type-name]]
+          [match [ctype-desc/desc inst-cuser-desc]
+            [ctype-desc-kind/record field-list]
+            [loop [cur-size int-const-0 i 0 n [size field-list]]
+              [if [lt-s i n]
+                [continue
+                  cur-size [int-exp-add cur-size [type-to-size [pair/snd [at field-list i]]]]
+                  i [inc i]]
+                cur-size]]
+            [logq-abort size-of not a record type [identity type-name]]]
+          [logq-abort size-of not a user type]]]]]]
 
 [defn get-annotation [cctx bst]
   [if-let [anno [try-get [llcheck-context/type-annotations cctx] [to-js-value bst]]]
@@ -452,6 +433,22 @@
     [exps [func [[list llexp]] [list wat-inst]]]
     [exp [func [llexp] wat-inst]]]]
 
+[defn get-pointer-type [t]
+  [if-let [inst [try-get-inst-type t]]
+    [match inst
+      [ctype-inst/pointer mem target]
+      [pair [mem-name-from-mem-type mem] [normalize-type target]]
+      [logq-abort get-func-type expected a func type [identity t]]]
+    [logq-abort get-func-type expected a func type [identity t]]]]
+
+[defn get-array-type [t]
+  [if-let [inst [try-get-inst-type t]]
+    [match inst
+      [ctype-inst/array element-type size-type]
+      [pair element-type size-type]
+      [logq-abort get-func-type expected a func type [identity t]]]
+    [logq-abort get-func-type expected a func type [identity t]]]]
+
 [defn make-translator [tctx type-env]
   [let
     [cctx [translate-context/check-context tctx]
@@ -645,9 +642,8 @@
       [let
         [pt [get-pointer-type [get-ctype cctx target]]
          array-type [pair/snd pt]
-         array-type-pair [get-apply-type array-type]
-         - [assert [eq-word [pair/fst array-type-pair] [word array]]]
-         element-type [first [pair/snd array-type-pair]]
+         array-type-pair [get-array-type array-type]
+         element-type [pair/fst array-type-pair]
          offset [wat-inst-i32.mul [integer-exp-to-wat-inst [type-to-size-exp1 element-type]] [go index]]]
         [wat-inst-i32.add offset [go target]]]
 

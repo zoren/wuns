@@ -31,6 +31,7 @@
     [tuple [list lltype]]
     [func [list lltype] lltype]
     [pointer lltype lltype]
+    [array lltype lltype]
     [apply syntax-word [list lltype]]]
 
   lltype []
@@ -325,7 +326,9 @@
             [[word array]]
             [do
               [when-not [eq n-of-args 2] [push-error form [quote [expected 2 arguments]]]]
-              [type-inst/apply sw [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]]
+              [type-inst/array
+                [form-to-lltype lstack type-params [at l 1]]
+                [form-to-lltype lstack type-params [at l 2]]]]
 
             [do
               [if-let [pt [try-get primitive-types-by-name fw]]
@@ -841,6 +844,7 @@
     [tuple [list ctype]]
     [func [list ctype] ctype]
     [pointer ctype ctype]
+    [array ctype ctype]
     [apply word [list ctype]]
     [anon ctype-user-inst-kind]]
 
@@ -905,6 +909,9 @@
             [ctype-inst/pointer mem target]
             [do [go mem] [go target]]
 
+            [ctype-inst/array element-type size-type]
+            [do [go element-type] [go size-type]]
+
             [ctype-inst/apply type-name type-args]
             [for-each arg type-args [go arg]]
 
@@ -939,7 +946,7 @@
 [def type-i64 [ctype/inst [ctype-inst/primitive [get primitive-types-by-name [word i64]]]]]
 
 [defn type-pointer [mem target] [ctype/inst [ctype-inst/pointer mem target]]]
-[defn type-array [elem-type size] [make-type [word array] elem-type size]]
+[defn type-array [elem-type size] [ctype/inst [ctype-inst/array elem-type size]]]
 
 [def type-empty-tuple [ctype/inst [ctype-inst/tuple [list]]]]
 
@@ -1132,6 +1139,13 @@
 
                 [push-unify-error [quote [not unifiable - pointer vs non-pointer]]]]
 
+              [ctype-inst/array element-type1 size-type1]
+              [match inst2
+                [ctype-inst/array element-type2 size-type2]
+                [do [go element-type1 element-type2] [go size-type1 size-type2]]
+
+                [push-unify-error [quote [not unifiable - array vs non-array]]]]
+
               [ctype-inst/apply type-name1 type-args1]
               [match inst2
                 [ctype-inst/apply type-name2 type-args2]
@@ -1211,19 +1225,6 @@
       [pair ps r]
       [logq-abort get-func-type expected a func type [identity t]]]
     [logq-abort get-func-type expected a func type [identity t]]]]
-
-[defn get-pointer-type [t]
-  [if-let [inst [try-get-inst-type t]]
-    [match inst
-      [ctype-inst/pointer mem target]
-      [pair [mem-name-from-mem-type mem] [normalize-type target]]
-      [logq-abort get-func-type expected a func type [identity t]]]
-    [logq-abort get-func-type expected a func type [identity t]]]]
-
-[defn get-apply-type [t]
-  [if-let [at [try-get-apply-type t]]
-    at
-    [logq-abort get-apply-type expected an apply type [identity t]]]]
 
 [defn int-to-type-var-name [i]
   [if [lt-s i [i32 26]]
@@ -1349,6 +1350,9 @@
         [ctype-inst/pointer mem target]
         [ctype/inst [ctype-inst/pointer [go mem] [go target]]]
 
+        [ctype-inst/array element-type size]
+        [ctype/inst [ctype-inst/array [go element-type] [go size]]]
+
         [ctype-inst/apply type-name type-args]
         [make-type-list type-name [list-map arg type-args [go arg]]]
 
@@ -1411,6 +1415,9 @@
 
           [type-inst/pointer mem target]
           [ctype/inst [ctype-inst/pointer [go mem] [go target]]]
+
+          [type-inst/array element-type size]
+          [ctype/inst [ctype-inst/array [go element-type] [go size]]]
 
           [type-inst/apply type-name type-args]
           [let [tnw [syntax-word/word type-name]]
@@ -1592,6 +1599,9 @@
               [logq-abort check-cast not implemented [identity upper-inst] [identity lower-inst]]]
 
             [do]]
+
+          [ctype-inst/array upper-element upper-size]
+          [do]
 
           [ctype-inst/apply upper-name upper-args]
           [match lower-type
