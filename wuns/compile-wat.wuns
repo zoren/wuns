@@ -430,6 +430,11 @@
       [logq-abort get-func-type expected a func type [identity t]]]
     [logq-abort get-func-type expected a func type [identity t]]]]
 
+[defn get-memory-kind [llctx mem-name]
+  [if-let [kind [try-get-memory-kind llctx mem-name]]
+    kind
+    [logq-abort get-memory-kind not found [identity mem-name]]]]
+
 [defn make-translator [tctx type-env]
   [let
     [cctx [translate-context/check-context tctx]
@@ -644,10 +649,6 @@
       [llexp/data smem-name exp]
       [let
         [mem-name [syntax-word/word smem-name]
-         ctor
-          [match [get-memory-kind bind-ctx mem-name]
-            [memory-kind/i32] wat-inst/i32.const
-            [memory-kind/i64] wat-inst/i64.const]
          data-active [translate-context/data-active tctx]
          current-offset-atom
          [if-let [offset-atom [try-get data-active mem-name]]
@@ -657,7 +658,11 @@
             [set-kv-map data-active mem-name new-offset-atom]
             new-offset-atom]]
          offset [atom-get current-offset-atom]
-         pointer-inst [ctor [int-to-word offset]]
+         pointer-inst
+         [[match [get-memory-kind bind-ctx mem-name]
+            [memory-kind/i32] wat-inst/i32.const
+            [memory-kind/i64] wat-inst/i64.const]
+          [int-to-word offset]]
          data-exp-to-byte-array
           [func data-exp-to-byte-array [data-exp]
             [match data-exp

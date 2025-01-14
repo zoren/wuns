@@ -300,10 +300,9 @@
                 [logq-abort not a memory]
                 [if-let [ddesc [try-get lldef-ctx w]]
                   [match ddesc
-                    [lldef-desc/memory k] [do]
+                    [lldef-desc/memory k] [type-inst/literal [type-literal/memory [sword [second l]]]]
                     [logq-abort not a memory]]
-                  [push-error form [quote [undefined exp word]]]]]
-              [type-inst/literal [type-literal/memory [sword [second l]]]]]
+                  [push-error form [quote [undefined exp word]]]]]]
 
             [[word literal]]
             [type-inst/literal [type-literal/exp [form-to-llexp type-params lstack [second l]]]]
@@ -970,23 +969,20 @@
 
     false]]
 
-[defn get-memory-kind [llctx mem-name]
+[defn try-get-memory-kind [llctx mem-name]
   [if-let [dd [try-get [llctx/lldef-ctx llctx] mem-name]]
     [match dd
       [lldef-desc/memory kind]
-      kind
-      [logq-abort get-memory-kind not a memory desc]]
-    [logq-abort get-memory-kind not found [identity mem-name]]]]
+      [option/some kind]
+      [option/none]]
+    [option/none]]]
 
 [defn get-memory-pointer-type [llctx mem-name]
-  [if-let [dd [try-get [llctx/lldef-ctx llctx] mem-name]]
-    [match dd
-      [lldef-desc/memory kind]
-      [match kind
-        [memory-kind/i32] i32-primitive
-        [memory-kind/i64] i64-primitive
-        [logq-abort get-memory-pointer-type not a pointer memory kind [identity kind]]]
-      [logq-abort get-memory-pointer-type not a memory desc]]
+  [if-let [kind [try-get-memory-kind llctx mem-name]]
+    [match kind
+      [memory-kind/i32] i32-primitive
+      [memory-kind/i64] i64-primitive
+      [logq-abort get-memory-pointer-type not a pointer memory kind [identity kind]]]
     [logq-abort get-memory-pointer-type not found [identity mem-name]]]]
 
 [type check-type-scheme []
@@ -1019,19 +1015,6 @@
     [transient-kv-map]
     [transient-kv-map]
     bind-ctx]]
-
-[defn mem-name-from-mem-type [tmem]
-  [match [normalize-type tmem]
-    [ctype/inst inst]
-    [match inst
-      [ctype-inst/literal l]
-      [match l
-        [ctype-literal/memory mem-name]
-        mem-name
-
-        [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]
-      [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]
-    [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]]
 
 [defn unify [gctx outer-t1 outer-t2]
   [let
@@ -1188,23 +1171,17 @@
 
     [option/none]]]
 
-[defn try-get-apply-type [t]
-  [if-let [inst [try-get-inst-type t]]
+[defn mem-name-from-mem-type [tmem]
+  [if-let [inst [try-get-inst-type tmem]]
     [match inst
-      [ctype-inst/apply type-name type-args]
-      [option/some [pair type-name type-args]]
+      [ctype-inst/literal l]
+      [match l
+        [ctype-literal/memory mem-name]
+        mem-name
 
-      [option/none]]
-
-    [option/none]]]
-
-[defn get-tuple-types [t]
-  [if-let [inst [try-get-inst-type t]]
-    [match inst
-      [ctype-inst/tuple types]
-      types
-      [list t]]
-    [list t]]]
+        [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]
+      [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]
+    [logq-abort mem-name-from-mem-type not a memory type [identity tmem]]]]
 
 [defn get-func-type [t]
   [if-let [inst [try-get-inst-type t]]
