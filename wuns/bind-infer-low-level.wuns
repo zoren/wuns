@@ -32,6 +32,8 @@
     [func [list lltype] lltype]
     [pointer lltype lltype]
     [array lltype lltype]
+    [record [list [pair syntax-word lltype]]]
+    [union [list lltype]]
     [apply syntax-word [list lltype]]]
 
   lltype []
@@ -314,8 +316,14 @@
             [[word literal]]
             [type-inst/literal [type-literal/exp [form-to-llexp type-params lstack [second l]]]]
 
-            [[word record] [word union]]
-            [logq-abort form-to-lltype anonymous records and unions not implemented]
+            [[word record]]
+            [type-inst/record
+              [list-map p [rest l]
+                [let [ll [get-list p]]
+                  [pair [sword [first ll]] [form-to-lltype lstack type-params [second ll]]]]]]
+
+            [[word union]]
+            [type-inst/union [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]
 
             [[word tuple]]
             [type-inst/tuple [list-map arg [rest l] [form-to-lltype lstack type-params arg]]]
@@ -725,7 +733,7 @@
                         [let [field-name [form-to-word [first ll]]
                               fd [form-to-lltype [local-stack/empty] type-env [second ll]]]
                           [push field-list [pair field-name fd]]]]]
-                      [user-type-desc/record [clone-growable-to-frozen-list field-list]]]
+                    [user-type-desc/record [clone-growable-to-frozen-list field-list]]]
 
                   [[word union]]
                   [user-type-desc/union
@@ -1432,6 +1440,12 @@
 
           [type-inst/array element-type size]
           [ctype/inst [ctype-inst/array [go element-type] [go size]]]
+
+          [type-inst/record fields]
+          [type-record [list-map field fields [pair [syntax-word/word [pair/fst field]] [go [pair/snd field]]]]]
+
+          [type-inst/union types]
+          [type-union [list-map t types [go t]]]
 
           [type-inst/apply type-name type-args]
           [let [tnw [syntax-word/word type-name]]
