@@ -1909,19 +1909,18 @@
          params [user-type/params type-desc]
          type [user-type/type type-desc]
          type-env [transient-kv-map]
-         ctype-params [growable-list]
-         instantiate-type
-         [instantiate-syntax-type-env gctx type-env [should-const-eval/yes] i32-min]]
-        [for-each param params
+         ctype-params
+         [list-map param params
           [let [tv [generate-fresh-type-var-atom-var [llcheck-context/type-var-counter gctx] 0]]
-            [push ctype-params tv]
             [set-kv-map
               type-env
               [syntax-word/word param]
-              [ctype/var tv]]]]
+              [ctype/var tv]]
+            tv]]
+         instantiate-type
+         [instantiate-syntax-type-env gctx type-env [should-const-eval/yes] i32-min]]
         [set-kv-map [llcheck-context/user-types gctx] [syntax-word/word name]
-          [ctype-desc [clone-growable-to-frozen-list ctype-params]
-            [instantiate-type type]]]]]
+          [ctype-desc ctype-params [instantiate-type type]]]]]
 
     [lltop/data-active mem-name mem-expr datas]
     [do]
