@@ -237,11 +237,15 @@
 
 [load interpreter-externs.wuns]
 
+[def i32-primitive [get primitive-types-by-name [word i32]]]
+[def i64-primitive [get primitive-types-by-name [word i64]]]
+[def f64-primitive [get primitive-types-by-name [word f64]]]
+
 [def intrinsic-types-map
   [let [name-to-pair [transient-kv-map]
-        i32 [get primitive-types-by-name [word i32]]
+        i32 i32-primitive
         bool i32
-        f64 [get primitive-types-by-name [word f64]]]
+        f64 f64-primitive]
     [let [i32i32-to-i32 [pair [list i32 i32] i32]]
       [for-each name [list [word i32.add] [word i32.sub] [word i32.mul] [word i32.rem-s] [word i32.div-s]
                            [word i32.and] [word i32.or] [word i32.xor]
@@ -994,6 +998,17 @@
       [logq-abort get-memory-kind not a memory desc]]
     [logq-abort get-memory-kind not found [identity mem-name]]]]
 
+[defn get-memory-pointer-type [llctx mem-name]
+  [if-let [dd [try-get [llctx/lldef-ctx llctx] mem-name]]
+    [match dd
+      [lldef-desc/memory kind]
+      [match kind
+        [memory-kind/i32] i32-primitive
+        [memory-kind/i64] i64-primitive
+        [logq-abort get-memory-pointer-type not a pointer memory kind [identity kind]]]
+      [logq-abort get-memory-pointer-type not a memory desc]]
+    [logq-abort get-memory-pointer-type not found [identity mem-name]]]]
+
 [type check-type-scheme []
   [record
     [named-type-params [list [pair word type-var]]]
@@ -1580,13 +1595,9 @@
               [logq-abort check-cast not implemented lower literal]
 
               [ctype-inst/primitive lower-primitive]
-              [let [lower-name [primitive-type/name lower-primitive]
-                    mem-pt-name
-                    [match [get-memory-kind bctx [mem-name-from-mem-type upper-mem]]
-                      [memory-kind/i32] [word i32]
-                      [memory-kind/i64] [word i64]]]
-                [when-not [eq-word lower-name mem-pt-name]
-                  [logq-abort can only cast [identity mem-pt-name] to pointer]]]
+              [let [mem-pt [get-memory-pointer-type bctx [mem-name-from-mem-type upper-mem]]]
+                [when-not [is-identical lower-primitive mem-pt]
+                  [logq-abort can only cast [primitive-type/name mem-pt] to pointer]]]
 
               [ctype-inst/pointer lower-mem lower-target]
               [do

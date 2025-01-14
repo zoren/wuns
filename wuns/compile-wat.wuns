@@ -77,11 +77,11 @@
           [logq-abort size-of not a record type [identity kind]]]
 
         [ctype-inst/pointer mem-type target-type]
-        [match [get-memory-kind [llcheck-context/bind-ctx check-ctx] [mem-name-from-mem-type mem-type]]
-          [memory-kind/i32]
-          int-const-4
-          [memory-kind/i64]
-          int-const-8]
+        [let [pt [primitive-type/bits
+                  [get-memory-pointer-type
+                    [llcheck-context/bind-ctx check-ctx]
+                    [mem-name-from-mem-type mem-type]]]]
+          [integer-exp/const [intrinsic i32.div-s pt 8]]]
 
         [ctype-inst/array element-type size-type]
         [let [size-exp
@@ -313,9 +313,8 @@
       [ctype-inst/primitive pt] [primitive-type/name pt]
 
       [ctype-inst/pointer mem-type target-type]
-      [match [get-memory-kind bind-ctx [mem-name-from-mem-type mem-type]]
-        [memory-kind/i32] [word i32]
-        [memory-kind/i64] [word i64]]
+      [primitive-type/name
+        [get-memory-pointer-type bind-ctx [mem-name-from-mem-type mem-type]]]
 
       [ctype-inst/anon kind]
       [match kind
@@ -378,9 +377,8 @@
             [primitive-type/name pt]
 
             [ctype-inst/pointer mem-type target-type]
-            [match [get-memory-kind bind-ctx [mem-name-from-mem-type mem-type]]
-              [memory-kind/i32] [word i32]
-              [memory-kind/i64] [word i64]]
+            [primitive-type/name
+              [get-memory-pointer-type bind-ctx [mem-name-from-mem-type mem-type]]]
 
             [ctype-inst/apply type-name type-args]
             [word-join
