@@ -62,19 +62,16 @@
         [ctype-inst/primitive pt]
         [integer-exp/const [intrinsic i32.div-s [primitive-type/bits pt] 8]]
 
-        [ctype-inst/anon kind]
-        [match kind
-          [ctype-user-inst-kind/record field-list]
-          [loop [cur-size int-const-0 i 0 n [size field-list]]
-            [if [lt-s i n]
-              [let [fd [at field-list i]]
-                [continue
-                  cur-size
-                    [int-exp-add cur-size
-                      [type-to-size [pair/snd fd]]]
-                  i [inc i]]]
-              cur-size]]
-          [logq-abort size-of not a record type [identity kind]]]
+        [ctype-inst/record field-list]
+        [loop [cur-size int-const-0 i 0 n [size field-list]]
+          [if [lt-s i n]
+            [let [fd [at field-list i]]
+              [continue
+                cur-size
+                  [int-exp-add cur-size
+                    [type-to-size [pair/snd fd]]]
+                i [inc i]]]
+            cur-size]]
 
         [ctype-inst/pointer mem-type target-type]
         [let [pt [primitive-type/bits
@@ -308,12 +305,8 @@
       [primitive-type/name
         [get-memory-pointer-type bind-ctx [mem-name-from-mem-type mem-type]]]
 
-      [ctype-inst/anon kind]
-      [match kind
-        [ctype-user-inst-kind/union utypes]
-        [translate-type bind-ctx [first utypes]]
-
-        [logq-abort not implemented translate-type [identity it]]]
+      [ctype-inst/union utypes]
+      [translate-type bind-ctx [first utypes]]
 
       [logq-abort not implemented translate-type [identity it]]]]]
 
@@ -330,12 +323,8 @@
         [ctype-inst/apply type-name type-args]
         [list [translate-type bind-ctx nt]]
 
-        [ctype-inst/anon kind]
-        [match kind
-          [ctype-user-inst-kind/union utypes]
-          [list [translate-type bind-ctx [first utypes]]]
-
-          [logq-abort translate-types not implemented [identity kind]]]
+        [ctype-inst/union utypes]
+        [list [translate-type bind-ctx [first utypes]]]
 
         [ctype-inst/primitive pt]
         [list [translate-type bind-ctx nt]]
@@ -597,31 +586,29 @@
               [func g-off [ttarget]
                 [let [inst [if-let [i [try-get-inst-type ttarget]] i [logq-abort type not an inst]]]
                   [match inst
-                    [ctype-inst/anon kind]
-                    [match kind
-                      [ctype-user-inst-kind/record field-list]
-                      [loop [i 0 offset int-const-0]
-                        [if [lt-s i [size field-list]]
-                          [let [fp [at field-list i]]
-                            [if [eq-word field-name-word [pair/fst fp]]
-                              offset
-                              [continue
-                                i [inc i]
-                                offset [int-exp-add offset [type-to-size-exp1 [pair/snd fp]]]]]]
-                          [logq-abort field not found]]]
+                    [ctype-inst/record field-list]
+                    [loop [i 0 offset int-const-0]
+                      [if [lt-s i [size field-list]]
+                        [let [fp [at field-list i]]
+                          [if [eq-word field-name-word [pair/fst fp]]
+                            offset
+                            [continue
+                              i [inc i]
+                              offset [int-exp-add offset [type-to-size-exp1 [pair/snd fp]]]]]]
+                        [logq-abort field not found]]]
 
-                      [ctype-user-inst-kind/union utypes]
-                      [let [fo [g-off [first utypes]]]
-                        [if-let [first-offset [try-get-int-const fo]]
-                          [for i 1 [size utypes]
-                            [if-let [offset [try-get-int-const [g-off [at utypes i]]]]
-                              [when-not [eq first-offset offset]
-                                [logq-abort field not at constant offset]]
-                              [logq-abort field not at constant offset]]]
-                          [logq-abort field not at constant offset]]
-                        fo]
+                    [ctype-inst/union utypes]
+                    [let [fo [g-off [first utypes]]]
+                      [if-let [first-offset [try-get-int-const fo]]
+                        [for i 1 [size utypes]
+                          [if-let [offset [try-get-int-const [g-off [at utypes i]]]]
+                            [when-not [eq first-offset offset]
+                              [logq-abort field not at constant offset]]
+                            [logq-abort field not at constant offset]]]
+                        [logq-abort field not at constant offset]]
+                      fo]
 
-                      [logq-abort field not a record or union type [identity ttarget]]]]]]]
+                    [logq-abort field not a record or union type [identity inst]]]]]]
           [wat-inst-i32.add [integer-exp-to-wat-inst [get-offset [pair/snd pt]]] [go target]]]]
 
       [llexp/index target index]

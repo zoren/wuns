@@ -828,10 +828,6 @@
     [pointer ctype ctype]
     [array ctype ctype]
     [apply word [list ctype]]
-    [anon ctype-user-inst-kind]]
-
-  ctype-user-inst-kind []
-  [union
     [record [list [pair word ctype]]]
     [union [list ctype]]]]
 
@@ -897,13 +893,11 @@
             [ctype-inst/apply type-name type-args]
             [for-each arg type-args [go arg]]
 
-            [ctype-inst/anon kind]
-            [match kind
-              [ctype-user-inst-kind/union types]
-              [for-each ut types [go ut]]
+            [ctype-inst/union types]
+            [for-each ut types [go ut]]
 
-              [ctype-user-inst-kind/record fields]
-              [for-each p fields [go [pair/snd p]]]]]]]]]
+            [ctype-inst/record fields]
+            [for-each p fields [go [pair/snd p]]]]]]]]
     [go outer-t]
     ftvs]]
 
@@ -945,11 +939,10 @@
 [defn type-func [params result]
   [ctype/inst [ctype-inst/func params result]]]
 
-[defn type-union [types] [ctype/inst [ctype-inst/anon [ctype-user-inst-kind/union types]]]]
-[defn type-record [fields] [ctype/inst [ctype-inst/anon [ctype-user-inst-kind/record fields]]]]
+[defn type-union [types] [ctype/inst [ctype-inst/union types]]]
+[defn type-record [fields] [ctype/inst [ctype-inst/record fields]]]
 
-[defn make-type-var [kind level]
-  [type-var [atom kind] [atom level] [set]]]
+[defn make-type-var [kind level] [type-var [atom kind] [atom level] [set]]]
 
 [defn type-literal-desc-equals [l1 l2]
   [match l1
@@ -1069,9 +1062,7 @@
                 [when-not [is-identical pt1 pt2]
                   [push-unify-error [quote [not unifiable - different primitives]]]]
 
-                [ctype-inst/anon kind2]
-                [match kind2
-                  [ctype-user-inst-kind/union utypes2]
+                [ctype-inst/union utypes2]
                   [for-each ut2 utypes2
                     [match ut2
                       [ctype/inst ui2]
@@ -1080,8 +1071,6 @@
                       ]]
 
                   [push-unify-error [quote [not unifiable - union vs non-union]]]]
-
-                [push-unify-error [quote [not unifiable - primitive vs non-primitive]]]]
 
               [ctype-inst/tuple types1]
               [match inst2
@@ -1129,38 +1118,33 @@
 
                 [do]]
 
-                [ctype-inst/anon kind1]
-                [match inst2
-                  [ctype-inst/anon kind2]
-                  [match kind1
-                    [ctype-user-inst-kind/union types1]
-                    [match kind2
-                      [ctype-user-inst-kind/union types2]
-                      [if [eq [size types1] [size types2]]
-                        [for i 0 [size types1]
-                          [go [at types1 i] [at types2 i]]]
-                        [push-unify-error [quote [not unifiable - different number of union types]]]]
+              [ctype-inst/union types1]
+              [match inst2
+                [ctype-inst/union types2]
+                [if [eq [size types1] [size types2]]
+                  [for i 0 [size types1]
+                    [go [at types1 i] [at types2 i]]]
+                  [push-unify-error [quote [not unifiable - different number of union types]]]]
+                [push-unify-error [quote [not unifiable - union vs non-union]]]]
 
-                      [push-unify-error [quote [not unifiable - union vs non-union]]]]
+              [ctype-inst/record fields1]
+              [match inst2
+                [ctype-inst/record fields2]
+                [if [eq [size fields1] [size fields2]]
+                  [for i 0 [size fields1]
+                    [let [f1 [at fields1 i]
+                          f2 [at fields2 i]]
+                      [if [eq-word [pair/fst f1] [pair/fst f2]]
+                        [go [pair/snd f1] [pair/snd f2]]
+                        [push-unify-error [quote [not unifiable - different record field names]]]]]]
+                  [push-unify-error [quote [not unifiable - different number of record fields]]]]
 
-                    [ctype-user-inst-kind/record fields1]
-                    [match kind2
-                      [ctype-user-inst-kind/record fields2]
-                      [if [eq [size fields1] [size fields2]]
-                        [for i 0 [size fields1]
-                          [let [f1 [at fields1 i]
-                                f2 [at fields2 i]]
-                            [if [eq-word [pair/fst f1] [pair/fst f2]]
-                              [go [pair/snd f1] [pair/snd f2]]
-                              [push-unify-error [quote [not unifiable - different record field names]]]]]]
-                        [push-unify-error [quote [not unifiable - different number of record fields]]]]
+                [push-unify-error [quote [not unifiable - record vs non-record]]]]
 
-                      [push-unify-error [quote [not unifiable - record vs non-record]]]]
+                  [push-unify-error [quote [not unifiable - union vs non-union]]]]
+                [push-unify-error [quote [not unifiable - anon vs non-anon]]]]
 
-                    [push-unify-error [quote [not unifiable - union vs non-union]]]]
-                  [push-unify-error [quote [not unifiable - anon vs non-anon]]]]
-
-                [push-unify-error [quote [not unifiable - literal vs non-literal1]]]]]]]]]
+                [push-unify-error [quote [not unifiable - literal vs non-literal1]]]]]]]
     [go outer-t1 outer-t2]
     [clone-growable-to-frozen-list errors]]]
 
@@ -1255,15 +1239,13 @@
               [list [form/word type-name]]
               [list-map targ type-args [go targ]]]
 
-            [ctype-inst/anon kind]
-            [match kind
-              [ctype-user-inst-kind/union types]
-              [form-concat [list [quote union]]
-                [list-map ut types [go ut]]]
+            [ctype-inst/union types]
+            [form-concat [list [quote union]]
+              [list-map ut types [go ut]]]
 
-              [ctype-user-inst-kind/record fields]
-              [form-concat [list [quote record]]
-                [list-map p fields [flist [form/word [pair/fst p]] [go [pair/snd p]]]]]]]]]]
+            [ctype-inst/record fields]
+            [form-concat [list [quote record]]
+              [list-map p fields [flist [form/word [pair/fst p]] [go [pair/snd p]]]]]]]]]
             [check-type-scheme/type scheme]]
         tps [clone-growable-to-frozen-list type-param-names]]
     [if [is-empty tps]
@@ -1321,13 +1303,11 @@
         [ctype-inst/apply type-name type-args]
         [make-type-list type-name [list-map arg type-args [go arg]]]
 
-        [ctype-inst/anon kind]
-        [match kind
-          [ctype-user-inst-kind/union types]
-          [type-union [list-map ut types [go ut]]]
+        [ctype-inst/union types]
+        [type-union [list-map ut types [go ut]]]
 
-          [ctype-user-inst-kind/record fields]
-          [type-record [list-map p fields [pair [pair/fst p] [go [pair/snd p]]]]]]]]]
+        [ctype-inst/record fields]
+        [type-record [list-map p fields [pair [pair/fst p] [go [pair/snd p]]]]]]]]
     outer-t]]
 
 [defn const-eval [exp]
@@ -1486,31 +1466,6 @@
       [copy-type-proper type-env [check-type-scheme/type scheme]]]
     [logq-abort llvariable not found [identity sw]]]]
 
-[defn constrain-type-data [gctx type]
-  [[func go [t]
-    [match t
-      [ctype/var tv]
-      [set-add [type-var/constraints tv] type-constraint-data]
-
-      [ctype/inst inst]
-      [match inst
-        [ctype-inst/anon kind]
-        [match kind
-          [ctype-user-inst-kind/union types]
-          [for-each ut types [go ut]]
-
-          [ctype-user-inst-kind/record fields]
-          [for-each p fields [go [pair/snd p]]]]
-
-        [ctype-inst/apply type-name type-args]
-        [switch type-name
-          [[word array]] [go [first type-args]]
-
-          [logq-abort not implemented [identity type-name]]]
-
-        [do]]]]
-    type]]
-
 [defn check-cast [gctx inst-type tv bform]
   [let
     [bctx [llcheck-context/bind-ctx gctx]]
@@ -1533,7 +1488,10 @@
 
             [logq-abort check-cast not implemented upper literal [identity lower-type] [identity upper-literal]]]
 
-          [ctype-inst/anon kind]
+          [ctype-inst/union utypes]
+          [do]
+
+          [ctype-inst/record fields]
           [do]
 
           [ctype-inst/pointer upper-mem upper-target]
@@ -1747,7 +1705,6 @@
     [llexp/size-of t]
     [let
       [it [instantiate-syntax-type t]]
-      [constrain-type-data gctx it]
       [llannotate gctx t it]
       type-i32]
 
@@ -1825,16 +1782,15 @@
             [match nt
               [ctype/inst inst]
               [match inst
-                [ctype-inst/anon kind]
-                [match kind
-                  [ctype-user-inst-kind/record field-list]
-                  [if-let [ft [try-assoc-list-get field-list field-name-word]]
-                    ft
-                    [logq-abort not found]]
+                [ctype-inst/record field-list]
+                [if-let [ft [try-assoc-list-get field-list field-name-word]]
+                  ft
+                  [logq-abort not found]]
 
-                  [ctype-user-inst-kind/union ctors]
-                  [let [field-types [list-map ct ctors [ti ct]]]
-                    [if [eq 1 [size field-types]] [first field-types] [type-union field-types]]]]
+                [ctype-inst/union ctors]
+                [let [field-types [list-map ct ctors [ti ct]]]
+                  [if [eq 1 [size field-types]] [first field-types] [type-union field-types]]]
+
                 [logq-abort infer-llexp field type not found [identity field-name] [normalize-type ctor-type]]]
 
               [logq-abort infer-llexp field type not found [identity field-name] [normalize-type ctor-type]]]]]]
