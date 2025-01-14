@@ -102,14 +102,6 @@
     [loop]
     [func-internal-self i32]]]
 
-[type user-type-desc []
-  [union
-    [record
-      [list [pair word lltype]]]
-    [union
-      [list lltype]]
-    [alias lltype]]]
-
 [defn syntax-word-get-form [sw]
   [if-let [f [syntax-word/opt-form sw]]
     f
@@ -195,7 +187,7 @@
     [lldef-ctx [transient-kv-map word lldef-desc]]
     [form-to-ldesc [transient-kv-map form lllocal-var-kind]]
     [user-type-params [transient-kv-map word [list syntax-word]]]
-    [user-types [transient-kv-map word user-type-desc]]
+    [user-types [transient-kv-map word lltype]]
     [bound-form-to-form [transient-kv-map js-value form]]]]
 
 [defn llctx-empty [] [llctx [transient-kv-map] [transient-kv-map] [transient-kv-map] [transient-kv-map] [transient-kv-map]]]
@@ -204,7 +196,7 @@
   [record
     [name syntax-word]
     [params [list syntax-word]]
-    [desc user-type-desc]]]
+    [type lltype]]]
 
 [type lltop []
   [union
@@ -716,36 +708,16 @@
             [let
               [type-name-form [at l i]
                type-params [get-list [at l [inc i]]]
-               type-decl-list [get-list [at l [add 2 i]]]
+               type-decl [at l [add 2 i]]
                type-env [set]]
-              [assert-not [is-empty type-decl-list] empty type decl list]
               [for-each type-param type-params
                 [let [tp [form-to-word type-param]]
                   [assert-not [set-has type-env tp] duplicate type param]
                   [set-add type-env tp]]]
               [let
-                [desc
-                 [switch [form-to-word [first type-decl-list]]
-                  [[word record]]
-                  [let [field-list [growable-list]]
-                    [for-each p [rest type-decl-list]
-                      [let [ll [get-list p]]
-                        [let [field-name [form-to-word [first ll]]
-                              fd [form-to-lltype [local-stack/empty] type-env [second ll]]]
-                          [push field-list [pair field-name fd]]]]]
-                    [user-type-desc/record [clone-growable-to-frozen-list field-list]]]
-
-                  [[word union]]
-                  [user-type-desc/union
-                    [list-map tform [rest type-decl-list]
-                      [form-to-lltype [local-stack/empty] type-env tform]]]
-
-                  [[word alias]]
-                  [user-type-desc/alias [form-to-lltype [local-stack/empty] type-env [second type-decl-list]]]
-
-                  [logq-abort form-to-lltop type kind not implemented [first type-decl-list]]]]
-                [push descs [user-type [sword type-name-form] [list-map tp type-params [sword tp]] desc]]
-                [set-kv-map user-types [form-to-word type-name-form] desc]]]]
+                [type [form-to-lltype [local-stack/empty] type-env type-decl]]
+                [push descs [user-type [sword type-name-form] [list-map tp type-params [sword tp]] type]]
+                [set-kv-map user-types [form-to-word type-name-form] type]]]]
           [lltop/type [clone-growable-to-frozen-list descs]]]
 
         [[word def]]
@@ -1025,16 +997,10 @@
 
 [defn mk-empty-type-scheme [type] [check-type-scheme [list] [list] type]]
 
-[type ctype-desc-kind []
-  [union
-    [record [list [pair word ctype]]]
-    [union [list ctype]]
-    [alias ctype]]]
-
 [type ctype-desc []
   [record
     [type-params [list type-var]]
-    [desc ctype-desc-kind]]]
+    [type ctype]]]
 
 [type llcheck-context []
   [record
@@ -1455,15 +1421,7 @@
                 [assert [eq [size type-params] [size type-args]] make-type-env expected equal number of type params and type args]
                 [for i 0 [size type-args]
                   [set-kv-map new-type-env [at type-params i] [go [at type-args i]]]]
-                [match [ctype-desc/desc cuser-desc]
-                  [ctype-desc-kind/alias at]
-                  [copy-type-proper new-type-env at]
-
-                  [ctype-desc-kind/union utypes]
-                  [type-union [list-map ut utypes [copy-type-proper new-type-env ut]]]
-
-                  [ctype-desc-kind/record fields]
-                  [type-record [list-map fp fields [pair [pair/fst fp] [copy-type-proper new-type-env [pair/snd fp]]]]]]]
+                [copy-type-proper new-type-env [ctype-desc/type cuser-desc]]]
               [do
                 [todo check or constrain params for array and pointer to be literals / memories / data]
                 [make-type-list tnw [list-map arg type-args [go arg]]]]]]]]]]]
@@ -1949,7 +1907,7 @@
       [let
         [name [user-type/name type-desc]
          params [user-type/params type-desc]
-         desc [user-type/desc type-desc]
+         type [user-type/type type-desc]
          type-env [transient-kv-map]
          ctype-params [growable-list]
          instantiate-type
@@ -1963,23 +1921,7 @@
               [ctype/var tv]]]]
         [set-kv-map [llcheck-context/user-types gctx] [syntax-word/word name]
           [ctype-desc [clone-growable-to-frozen-list ctype-params]
-            [match desc
-              [user-type-desc/alias aliased-type]
-              [ctype-desc-kind/alias [instantiate-type aliased-type]]
-
-              [user-type-desc/record field-list]
-              [ctype-desc-kind/record
-                [list-map fp field-list
-                  [pair
-                    [pair/fst fp]
-                    [instantiate-type [pair/snd fp]]]]]
-
-              [user-type-desc/union ctor-list]
-              [do
-                [todo we need to sort by type to ensure a normal form - also if theres only one we should just return that]
-                [ctype-desc-kind/union
-                  [list-map ctor ctor-list
-                    [instantiate-type ctor]]]]]]]]]
+            [instantiate-type type]]]]]
 
     [lltop/data-active mem-name mem-expr datas]
     [do]

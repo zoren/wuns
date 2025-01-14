@@ -109,15 +109,7 @@
 
         [ctype-inst/apply type-name type-args]
         [if-let [inst-cuser-desc [try-get [llcheck-context/user-types check-ctx] type-name]]
-          [match [ctype-desc/desc inst-cuser-desc]
-            [ctype-desc-kind/record field-list]
-            [loop [cur-size int-const-0 i 0 n [size field-list]]
-              [if [lt-s i n]
-                [continue
-                  cur-size [int-exp-add cur-size [type-to-size [pair/snd [at field-list i]]]]
-                  i [inc i]]
-                cur-size]]
-            [logq-abort size-of not a record type [identity type-name]]]
+          [type-to-size [ctype-desc/type inst-cuser-desc]]
           [logq-abort size-of not a user type]]]]]]
 
 [defn get-annotation [cctx bst]

@@ -12,8 +12,7 @@
 [memory i32 mem 1]
 
 [type pvector [v]
-  [alias
-    [pointer [memory mem] [vector-data v -s]]]]
+  [pointer [memory mem] [vector-data v -s]]]
 
 [defn size [[type pvec [pvector -a]]]
   [deref [field pvec size]]]
@@ -200,7 +199,7 @@
     [is-between-inclusive [i32 45] c [i32 57]]]]
 
 [type word []
-  [alias [pvector [u8]]]]
+  [pvector [u8]]]
 
 [type form-word []
   [record
@@ -278,11 +277,10 @@
 [export form-word-make form-list-make form-get-word form-get-list form-depth form-size-length]
 
 [type parser-stack []
-  [alias
-    [array
-      [pointer [memory mem]
-        [growable-vector [pointer [memory mem] [form]]]]
-      [literal [i32 16]]]]]
+  [array
+    [pointer [memory mem]
+      [growable-vector [pointer [memory mem] [form]]]]
+    [literal [i32 16]]]]
 
 [defn growable-vector-push-form [
     [type pgvec [pointer [memory mem] [growable-vector [pointer [memory mem] [form]]]]]
