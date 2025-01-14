@@ -1637,6 +1637,13 @@
   [let [instantiate-syntax-type [instantiate-syntax-type-env gctx type-env [should-const-eval/no] i32-min]
         type-var-counter [llcheck-context/type-var-counter gctx]]
   [letfn [
+  [func go-forms [level stack bodies]
+    [if [is-empty bodies]
+      type-empty-tuple
+      [do
+        [for i 0 [dec [size bodies]]
+          [go level stack [at bodies i]]]
+        [go level stack [last bodies]]]]]
   [func go [level stack bform]
   [let [fresh-type-var [func ftv [] [generate-fresh-type-var-atom type-var-counter level]]]
   [match bform
@@ -1648,12 +1655,7 @@
     [llliteral-to-type l]
 
     [llexp/do bodies]
-    [if [is-empty bodies]
-      type-empty-tuple
-      [do
-        [for i 0 [dec [size bodies]]
-          [go level stack [at bodies i]]]
-        [go level stack [last bodies]]]]
+    [go-forms level stack bodies]
 
     [llexp/intrinsic inst-name imm-args iargs]
     [let [w [syntax-word/word inst-name]]
@@ -1713,12 +1715,7 @@
               [mk-empty-type-scheme val-type]]]
           [llannotate gctx value val-type]
           [set-kv-map var-types [syntax-word/word var] general-val-type]]]
-      [if [is-empty bodies]
-        type-empty-tuple
-        [do
-          [for i 0 [dec [size bodies]]
-            [go level let-ctx [at bodies i]]]
-          [go level let-ctx [last bodies]]]]]
+      [go-forms level let-ctx bodies]]
 
     [llexp/loop bindings bodies]
     [let
@@ -1733,13 +1730,7 @@
             general-val-type [mk-empty-type-scheme val-type]]
           [llannotate gctx value val-type]
           [set-kv-map var-types [syntax-word/word var] general-val-type]]]
-      [llannotate gctx bform
-        [if [is-empty bodies]
-          type-empty-tuple
-          [do
-            [for i 0 [dec [size bodies]]
-              [go level loop-ctx [at bodies i]]]
-            [go level loop-ctx [last bodies]]]]]]
+      [llannotate gctx bform [go-forms level loop-ctx bodies]]]
 
     [llexp/continue assignments]
     [do
@@ -1883,19 +1874,16 @@
       [llannotate gctx bform [type-pointer t-mem t-elem]]]
 
     [logq-abort infer-llexp not implemented [identity bform]]]]]]
-  go]]]
+  [pair go go-forms]]]]
 
 [defn infer-llexp-entry [gctx level type-env lstack bform]
-  [[infer-llexp gctx type-env] level lstack bform]]
+  [let [infer-form [pair/fst [infer-llexp gctx type-env]]]
+    [infer-form level lstack bform]]]
 
 [defn infer-func [gctx level type-env param-ctx bodies]
-  [if [is-empty bodies]
-    type-empty-tuple
-    [let [f [infer-llexp gctx type-env]
-          lstack [local-stack/frame [local-stack/empty] [local-context param-ctx [local-context-kind/func]]]]
-      [for i 0 [dec [size bodies]]
-        [f level lstack [at bodies i]]]
-      [f level lstack [last bodies]]]]]
+  [let [infer-forms [pair/snd [infer-llexp gctx type-env]]
+        lstack [local-stack/frame [local-stack/empty] [local-context param-ctx [local-context-kind/func]]]]
+    [infer-forms level lstack bodies]]]
 
 [defn infer-lltop [gctx lltop]
   [match lltop
