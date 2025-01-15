@@ -1569,25 +1569,16 @@
     [stack [local-stack check-type-scheme]]
     [type-env [transient-kv-map word ctype]]]]
 
-[defn try-get-call-type-predicate-env [gctx e stack]
+[defn try-get-call-single-var [e]
   [match e
-    [llexp/call fname-sword opt-type-args args]
+    [llexp/call fname opt-type-args args]
     [if [eq [size args] 1]
       [match [first args]
         [llexp/var sw]
-        [match [get [llctx/lldef-ctx [llcheck-context/bind-ctx gctx]] [syntax-word/word fname-sword]]
-          [lldef-desc/func func-sig]
-          [match [func-sig/kind func-sig]
-            [func-kind/type-predicate pred-type]
-            [let [var-types [transient-kv-map]
-                  t [[instantiate-syntax-type-exp gctx [transient-kv-map] [should-const-eval/yes] i32-min] pred-type]]
-              [set-kv-map var-types [syntax-word/word sw] [mk-empty-type-scheme t]]
-              [local-stack/frame stack [local-context var-types [local-context-kind/type-predicate]]]]
-            stack]
-          stack]
-        stack]
-      stack]
-    stack]]
+        [option/some [pair fname sw]]
+        [option/none]]
+      [option/none]]
+    [option/none]]]
 
 [defn infer-llexp [gctx type-env]
   [let [instantiate-syntax-type [instantiate-syntax-type-exp gctx type-env [should-const-eval/no] i32-min]
@@ -1646,7 +1637,21 @@
     [llexp/if cond then else]
     [let
       [cond-type [go level stack cond]
-       stack-rebound [try-get-call-type-predicate-env gctx cond stack]
+       stack-rebound
+       [if-let [pair [try-get-call-single-var cond]]
+        [let [fname-sword [pair/fst pair]
+              sw [pair/snd pair]]
+          [match [get [llctx/lldef-ctx [llcheck-context/bind-ctx gctx]] [syntax-word/word fname-sword]]
+            [lldef-desc/func func-sig]
+            [match [func-sig/kind func-sig]
+              [func-kind/type-predicate pred-type]
+              [let [var-types [transient-kv-map]
+                    t [[instantiate-syntax-type-exp gctx [transient-kv-map] [should-const-eval/yes] i32-min] pred-type]]
+                [set-kv-map var-types [syntax-word/word sw] [mk-empty-type-scheme t]]
+                [local-stack/frame stack [local-context var-types [local-context-kind/type-predicate]]]]
+              stack]
+            stack]]
+        stack]
        then-type [go level stack-rebound then]
        else-type [go level stack else]]
       [llunify-report gctx type-i32 cond-type cond]
@@ -1656,7 +1661,7 @@
     [llexp/let bindings bodies]
     [let
       [var-types [transient-kv-map]
-      let-ctx [local-stack/frame
+       let-ctx [local-stack/frame
                 stack
                 [local-context var-types [local-context-kind/let]]]
       level-1 [inc level]]
