@@ -50,7 +50,8 @@
 
 [defn type-to-size-of-integer-exp [check-ctx]
   [func type-to-size [it]
-    [match [normalize-type it]
+    [let [nt [normalize-type it]]
+    [match nt
       [ctype/var tv]
       [logq-abort size-of type var not bound [identity tv]]
 
@@ -105,9 +106,7 @@
           [int-exp-mul [type-to-size element-type] size-exp]]
 
         [ctype-inst/apply type-name type-args]
-        [if-let [inst-cuser-desc [try-get [llcheck-context/user-types check-ctx] type-name]]
-          [type-to-size [ctype-desc/type inst-cuser-desc]]
-          [logq-abort size-of not a user type]]]]]]
+        [type-to-size [expand-custom-inst-type check-ctx type-name type-args]]]]]]]
 
 [defn get-annotation [cctx bst]
   [if-let [anno [try-get [llcheck-context/type-annotations cctx] [to-js-value bst]]]
@@ -290,7 +289,7 @@
     [transient-kv-map]
     datas]]
 
-[defn translate-type [bind-ctx it]
+[defn translate-type [check-ctx it]
   [match [normalize-type it]
     [ctype/var tv]
     [logq-abort translate-type not implemented type var [identity tv]]
@@ -303,14 +302,17 @@
 
       [ctype-inst/pointer mem-type target-type]
       [primitive-type/name
-        [get-memory-pointer-type bind-ctx [mem-name-from-mem-type mem-type]]]
+        [get-memory-pointer-type [llcheck-context/bind-ctx check-ctx] [mem-name-from-mem-type mem-type]]]
 
       [ctype-inst/union utypes]
-      [translate-type bind-ctx [first utypes]]
+      [translate-type check-ctx [first utypes]]
+
+      [ctype-inst/apply type-name type-args]
+      [translate-type check-ctx [expand-custom-inst-type check-ctx type-name type-args]]
 
       [logq-abort not implemented translate-type [identity it]]]]]
 
-[defn translate-types [bind-ctx it]
+[defn translate-types [check-ctx it]
   [let [nt [normalize-type it]]
     [match nt
       [ctype/var tv] [logq-abort translate-types not implemented [identity nt]]
@@ -318,19 +320,19 @@
       [ctype/inst inst]
       [match inst
         [ctype-inst/tuple types]
-        [list-map ta types [translate-type bind-ctx ta]]
+        [list-map ta types [translate-type check-ctx ta]]
 
         [ctype-inst/apply type-name type-args]
-        [list [translate-type bind-ctx nt]]
+        [list [translate-type check-ctx nt]]
 
         [ctype-inst/union utypes]
-        [list [translate-type bind-ctx [first utypes]]]
+        [list [translate-type check-ctx [first utypes]]]
 
         [ctype-inst/primitive pt]
-        [list [translate-type bind-ctx nt]]
+        [list [translate-type check-ctx nt]]
 
         [ctype-inst/pointer m t]
-        [list [translate-type bind-ctx nt]]
+        [list [translate-type check-ctx nt]]
 
         [do [log it] [logq-abort not implemented translate-types [identity it]]]]]]]
 
@@ -434,14 +436,14 @@
          [if-let [ldesc [try-get form-to-ldesc [syntax-word-get-form lvar-sname]]]
            [syntax-word/word lvar-sname]
            [logq-abort lvar-to-name expected local var [identity lvar-sname]]]]
-     get-form-types [func get-form-types [form] [translate-types bind-ctx [get-ctype cctx form]]]
+     get-form-types [func get-form-types [form] [translate-types cctx [get-ctype cctx form]]]
      glocals [growable-list]
      add-binding
      [func ab [b]
        [push glocals
          [pair
            [syntax-word/word [pair/fst b]]
-           [translate-type bind-ctx [get-ctype cctx [pair/snd b]]]]]]]
+           [translate-type cctx [get-ctype cctx [pair/snd b]]]]]]]
   [letfn [
   [func integer-exp-to-wat-inst [e]
     [match e
@@ -539,7 +541,7 @@
          it [copy-type-proper type-env [pair/snd pt]]]
         [wat-inst/load
           [wasm-name-to-wat-byte-array
-            [switch [translate-type bind-ctx it]
+            [switch [translate-type cctx it]
             [[word i32]] [word i32.load]
             [[word i64]] [word i64.load]
             [[word f32]] [word f32.load]
@@ -562,7 +564,7 @@
          it [copy-type-proper type-env [pair/snd pt]]]
         [wat-inst/store
           [wasm-name-to-wat-byte-array
-            [switch [translate-type bind-ctx it]
+            [switch [translate-type cctx it]
             [[word i32]] [word i32.store]
             [[word i64]] [word i64.store]
             [[word f32]] [word f32.store]
@@ -607,6 +609,9 @@
                             [logq-abort field not at constant offset]]]
                         [logq-abort field not at constant offset]]
                       fo]
+
+                    [ctype-inst/apply type-name type-args]
+                    [g-off [expand-custom-inst-type cctx type-name type-args]]
 
                     [logq-abort field not a record or union type [identity inst]]]]]]
           [wat-inst-i32.add [integer-exp-to-wat-inst [get-offset [pair/snd pt]]] [go target]]]]
@@ -703,7 +708,7 @@
          [if-let [ldesc [try-get form-to-ldesc [syntax-word-get-form lvar-sname]]]
            [syntax-word/word lvar-sname]
            [logq-abort lvar-to-name expected local var [identity lvar-sname]]]]
-     get-form-types [func get-form-types [form] [translate-types bind-ctx [get-ctype cctx form]]]
+     get-form-types [func get-form-types [form] [translate-types cctx [get-ctype cctx form]]]
      signature [lldefn/signature func]
      fname-word [syntax-word/word [func-sig/name signature]]
      ts [get [llcheck-context/def-var-types cctx] fname-word]
@@ -733,14 +738,14 @@
       [push gparams
         [pair
           [syntax-word/word [pair/fst [at params i]]]
-          [translate-type bind-ctx [lift-data-type [at param-types i]]]]]]
+          [translate-type cctx [lift-data-type [at param-types i]]]]]]
     [comment translation has the side effect of adding locals so we need to run it first]
     [let [tbodies [[translator/exps ltranslator] [lldefn/bodies func]]]
       [output-func
         special-func-name
         [clone-growable-to-frozen-list gparams]
         [[translator/get-locals ltranslator]]
-        [translate-types bind-ctx [lift-data-type [pair/snd ft]]]
+        [translate-types cctx [lift-data-type [pair/snd ft]]]
         [wat-inst/instructions tbodies]]]]]]
 
 [type import-kind []
@@ -805,7 +810,7 @@
         [push globals
           [wat-global
             [syntax-word/word name]
-            [translate-type bind-ctx [get-ctype gctx value]]
+            [translate-type gctx [get-ctype gctx value]]
             [exp-const-to-wat-inst value]]]
 
         [lltop/defn func]
