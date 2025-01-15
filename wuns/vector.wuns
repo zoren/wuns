@@ -4,18 +4,7 @@
 [def false [i32 0]]
 [def true [i32 1]]
 
-[type vector-data [a s]
-  [record
-    [size [i32]]
-    [array [array a s]]]]
-
 [memory i32 mem 1]
-
-[type pvector [v]
-  [pointer [memory mem] [vector-data v -s]]]
-
-[defn size [[type pvec [pvector -a]]]
-  [deref [field pvec size]]]
 
 [def top [cast [pointer [memory mem] [i32]] [i32 0]]]
 
@@ -36,15 +25,26 @@
     [set-top [add top-val n-bytes]]
     top-val]]
 
+[defn inc [x] [add x 1]]
+
+[defn dec [x] [sub x 1]]
+
+[type vector-data [a s]
+  [record
+    [size [i32]]
+    [array [array a s]]]]
+
+[type pvector [v]
+  [pointer [memory mem] [vector-data v -s]]]
+
+[defn size [[type pvec [pvector -a]]]
+  [deref [field pvec size]]]
+
 [genfn vector-make-no-init [elem-type] [[type size [i32]]]
   [let
     [p [alloc [vector-data elem-type [literal size]]]]
     [assign [field p size] size]
     [cast [pvector elem-type] p]]]
-
-[defn inc [x] [add x 1]]
-
-[defn dec [x] [sub x 1]]
 
 [genfn vector-make-init [a] [[type size [i32]] [type init a]]
   [let
