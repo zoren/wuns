@@ -659,6 +659,12 @@
       [lltop/defn
         [lldefn sig [list-map b bodies [form-to-llexp type-env lstack b]]]]]]]
 
+[func form-to-memory-kind [form]
+  [switch [form-to-word form]
+    [[word i32]] [memory-kind/i32]
+    [[word i64]] [memory-kind/i64]
+    [logq-abort memory kind not recognized]]]
+
 [func form-to-lltop [form]
   [let
     [report-error [func r [msg] [push-error form msg]]
@@ -672,18 +678,27 @@
       [switch first-word
         [[word import]]
         [lltop/import [sword [get-arg 0]] [sword [get-arg 1]]
-          [let [import-kind-list [get-list [get-arg 2]]]
+          [let [import-kind-list [get-list [get-arg 2]]
+                kind [form-to-memory-kind [second import-kind-list]]]
+            [set-ll-def [get-arg 1] [lldef-desc/memory kind]]
             [switch [form-to-word [first import-kind-list]]
               [[word memory]]
               [import-kind/memory
-                [switch [form-to-word [second import-kind-list]]
-                  [[word i32]] [memory-kind/i32]
-                  [[word i64]] [memory-kind/i64]
-                  [logq-abort form-to-lltop memory kind not recognized]]
+                kind
                 [sword [third import-kind-list]]
                 [if [eq [size import-kind-list] 4] [option/some [sword [fourth import-kind-list]]] [option/none]]]
 
               [logq-abort form-to-lltop import kind not recognized]]]]
+
+        [[word memory]]
+        [let [kind [form-to-memory-kind [get-arg 0]]
+              mem-name [sword [get-arg 1]]]
+          [set-ll-def [get-arg 1] [lldef-desc/memory kind]]
+          [lltop/memory
+            mem-name
+            kind
+            [sword [get-arg 2]]
+            [if [lt-s n-of-args 3] [option/none] [option/some [sword [get-arg 3]]]]]]
 
         [[word data]]
         [lltop/data-active
@@ -700,20 +715,6 @@
                   [[word f64]]
                   [data/f64 [list-map b [rest dl] [sword b]]]
                   [logq-abort form-to-lltop data kind not recognized]]]]]]
-
-        [[word memory]]
-        [let [mem-name [sword [get-arg 1]]
-              kind
-              [switch [form-to-word [get-arg 0]]
-                [[word i32]] [memory-kind/i32]
-                [[word i64]] [memory-kind/i64]
-                [logq-abort form-to-lltop memory kind not recognized]]]
-          [set-ll-def [get-arg 1] [lldef-desc/memory kind]]
-          [lltop/memory
-            mem-name
-            kind
-            [sword [get-arg 2]]
-            [if [lt-s n-of-args 3] [option/none] [option/some [sword [get-arg 3]]]]]]
 
         [[word type]]
         [let
