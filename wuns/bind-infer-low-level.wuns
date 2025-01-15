@@ -1417,18 +1417,6 @@
         [push tvs tv]]]
     [check-type-scheme [list] [clone-growable-to-frozen-list tvs] type]]]
 
-[todo see if we can lift to data types in the compiler instead of during type-cheking]
-[defn lift-data-type [t]
-  [match [normalize-type t]
-    [ctype/inst inst]
-    [match inst
-      [ctype-inst/primitive pt]
-      [if [lt-s [primitive-type/bits pt] [i32 32]]
-        type-i32
-        t]
-      t]
-    t]]
-
 [defn llliteral-to-type [l]
   [match l
     [llliteral/i32 -] type-i32
@@ -1495,6 +1483,22 @@
 
         [ctype/inst upper-inst]
         [match upper-inst
+          [ctype-inst/primitive upper-primitive]
+          [match lower-type
+            [ctype/inst lower-inst]
+            [match lower-inst
+              [ctype-inst/primitive lower-primitive]
+              [if [eq-word [word i32] [primitive-type/name upper-primitive]]
+                [let [lower-prefix [primitive-type/prefix lower-primitive]
+                      lower-is-int [or [eq-word lower-prefix [word i]] [eq-word lower-prefix [word u]]]]
+                  [if lower-is-int
+                    [when-not [lt-s [primitive-type/bits lower-primitive] [i32 32]]
+                      [logq-abort check-cast cannot cast [primitive-type/name lower-primitive]]]
+                    [logq-abort check-cast cannot cast [primitive-type/name lower-primitive]]]]
+                [do]
+                ]]
+            [do]]
+
           [ctype-inst/literal upper-literal]
           [match lower-type
             [ctype/inst lower-inst]
@@ -1646,7 +1650,7 @@
             [match [func-sig/kind func-sig]
               [func-kind/type-predicate pred-type]
               [let [var-types [transient-kv-map]
-                    t [[instantiate-syntax-type-exp gctx [transient-kv-map] [should-const-eval/yes] i32-min] pred-type]]
+                    t [instantiate-syntax-type pred-type]]
                 [set-kv-map var-types [syntax-word/word sw] [mk-empty-type-scheme t]]
                 [local-stack/frame stack [local-context var-types [local-context-kind/type-predicate]]]]
               stack]
@@ -1669,7 +1673,7 @@
         [let
           [var [pair/fst binding]
            value [pair/snd binding]
-           val-type [lift-data-type [go level-1 let-ctx value]]
+           val-type [go level-1 let-ctx value]
            general-val-type
             [if [is-syntactic-llvalue value]
               [generalize level val-type]
@@ -1687,7 +1691,7 @@
         [let
           [var [pair/fst binding]
            value [pair/snd binding]
-           val-type [lift-data-type [go level-1 loop-ctx value]]
+           val-type [go level-1 loop-ctx value]
            general-val-type [mk-empty-type-scheme val-type]]
           [llannotate gctx value val-type]
           [set-kv-map var-types [syntax-word/word var] general-val-type]]]
@@ -1770,8 +1774,7 @@
           t-res [fresh-type-var]
           t-val [go level stack value]]
       [llunify-report gctx [type-pointer t-mem t-res] t-val value]
-      [let [lifted [lift-data-type t-res]]
-        [llannotate gctx bform lifted]]]
+      [llannotate gctx bform t-res]]
 
     [llexp/assign target value]
     [let [t-mem [fresh-type-var]
@@ -1791,8 +1794,8 @@
                   [logq-abort infer-llexp cannot assign literal to non-literal [identity bform]]]
                 [do]]]
             [do]]
-          [llunify-report gctx [lift-data-type t-val] [go level stack value] value]]
-        [llunify-report gctx [lift-data-type t-val] [go level stack value] value]]
+          [llunify-report gctx t-val [go level stack value] value]]
+        [llunify-report gctx t-val [go level stack value] value]]
       type-empty-tuple]
 
     [llexp/field target field-name]
@@ -1923,7 +1926,6 @@
            type-env [at type-sigs i]
            instantiate-type [instantiate-syntax-type-decl gctx type-env]
            inst-type [instantiate-type type]]
-          [logq inst-type [identity inst-type]]
           [set-kv-map [llcheck-context/user-types gctx] wname inst-type]]]]
 
     [lltop/data-active mem-name mem-expr datas]

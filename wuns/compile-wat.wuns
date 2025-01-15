@@ -698,6 +698,18 @@
     [result [list word]]
     [body wat-inst]]]
 
+[todo see if we can lift to data types in the compiler instead of during type-cheking]
+[defn lift-data-type [t]
+  [match [normalize-type t]
+    [ctype/inst inst]
+    [match inst
+      [ctype-inst/primitive pt]
+      [if [lt-s [primitive-type/bits pt] [i32 32]]
+        type-i32
+        t]
+      t]
+    t]]
+
 [defn translate-func [tctx func type-args]
   [let
     [cctx [translate-context/check-context tctx]
