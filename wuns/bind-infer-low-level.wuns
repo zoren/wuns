@@ -198,8 +198,13 @@
     [params [list syntax-word]]
     [type lltype]]]
 
+[type import-kind []
+  [union
+    [memory memory-kind syntax-word [option syntax-word]]]]
+
 [type lltop []
   [union
+    [import syntax-word syntax-word import-kind]
     [memory syntax-word memory-kind syntax-word [option syntax-word]]
     [type [list user-type]]
     [data-active syntax-word llexp [list data]]
@@ -665,6 +670,21 @@
     [match first-form
       [form/word first-word]
       [switch first-word
+        [[word import]]
+        [lltop/import [sword [get-arg 0]] [sword [get-arg 1]]
+          [let [import-kind-list [get-list [get-arg 2]]]
+            [switch [form-to-word [first import-kind-list]]
+              [[word memory]]
+              [import-kind/memory
+                [switch [form-to-word [second import-kind-list]]
+                  [[word i32]] [memory-kind/i32]
+                  [[word i64]] [memory-kind/i64]
+                  [logq-abort form-to-lltop memory kind not recognized]]
+                [sword [third import-kind-list]]
+                [if [eq [size import-kind-list] 4] [option/some [sword [fourth import-kind-list]]] [option/none]]]
+
+              [logq-abort form-to-lltop import kind not recognized]]]]
+
         [[word data]]
         [lltop/data-active
           [sword [get-arg 1]]
@@ -1904,6 +1924,9 @@
 
 [defn infer-lltop [gctx lltop]
   [match lltop
+    [lltop/import env-name name kind]
+    [do]
+
     [lltop/memory mem-name mem-kind mem-size mem-export]
     [do]
 

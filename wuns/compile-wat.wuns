@@ -760,9 +760,9 @@
         [translate-types cctx [lift-data-type [pair/snd ft]]]
         [wat-inst/instructions tbodies]]]]]]
 
-[type import-kind []
+[type wat-import-kind []
   [union
-    [memory word i32]]]
+    [memory memory-kind i32 [option i32]]]]
 
 [type wat-memory []
   [record
@@ -782,7 +782,7 @@
 
 [type wat-output []
   [record
-    [imports [growable-list [pair [list word] import-kind]]]
+    [imports [growable-list [pair [pair word word] wat-import-kind]]]
     [memories [growable-list wat-memory]]
     [globals [growable-list wat-global]]
     [funcs [growable-list output-func]]
@@ -808,6 +808,16 @@
     [for-each btop [pair/fst btops-ctx-pair]
       [infer-lltop gctx btop]
       [match btop
+        [lltop/import env-name name kind]
+        [push imports
+          [pair
+            [pair [syntax-word/word env-name] [syntax-word/word name]]
+            [match kind
+              [import-kind/memory mem-kind init-size opt-max]
+              [wat-import-kind/memory mem-kind [word-to-int [syntax-word/word init-size]] [if-let [max opt-max]
+              [option/some [word-to-int [syntax-word/word max]]]
+              [option/none]]]]]]
+
         [lltop/memory name kind init-size opt-max]
         [push memories
           [wat-memory
@@ -1096,12 +1106,21 @@
     [logq-abort wat-inst-to-out unknown instruction]]]
 
 [defn import-to-wat [import]
-  [match [pair/snd import]
-    [import-kind/memory name init-size]
+  [let [name-pair [pair/fst import]
+        name [pair/snd name-pair]]
     [wat-list
-      [wat/word [word memory]]
-      [wat/dollar name]
-      [wat/word [int-to-word init-size]]]]]
+      [wat/word [word import]]
+      [wat/dqstring [pair/fst name-pair]]
+      [wat/dqstring name]
+      [match [pair/snd import]
+        [wat-import-kind/memory kind init-size opt-max]
+        [wat-list
+          [wat/word [word memory]]
+          [wat/dollar name]
+          [wat/word [match kind
+            [memory-kind/i32] [word i32]
+            [memory-kind/i64] [word i64]]]
+          [wat/word [int-to-word init-size]]]]]]]
 
 [defn memory-to-wat [mem]
   [wat-list
