@@ -483,7 +483,7 @@ test('assign', async () => {
     [defn get [[type p [pointer [memory mem] [u8]]]]
       [deref p]]
     [defn set [[type p [pointer [memory mem] [u8]]] [type v [i32]]]
-      [assign p v]]
+      [assign p [cast [u8] v]]]
     [export get set]
     `)
     const { get, set } = inst
@@ -498,7 +498,7 @@ test('assign', async () => {
     [defn get [[type p [pointer [memory mem] [i8]]]]
       [deref p]]
     [defn set [[type p [pointer [memory mem] [i8]]] [type v [i32]]]
-      [assign p v]]
+      [assign p [cast [i8] v]]]
     [export get set]
     `)
     const { get, set } = inst
@@ -511,7 +511,7 @@ test('assign', async () => {
     [defn get [[type p [pointer [memory mem] [u16]]]]
       [deref p]]
     [defn set [[type p [pointer [memory mem] [u16]]] [type v [i32]]]
-      [assign p v]]
+      [assign p [cast [u16] v]]]
     [export get set]
     `)
     const { get, set } = inst
@@ -524,7 +524,7 @@ test('assign', async () => {
     [defn get [[type p [pointer [memory mem] [i16]]]]
       [deref p]]
     [defn set [[type p [pointer [memory mem] [i16]]] [type v [i32]]]
-      [assign p v]]
+      [assign p [cast [i16] v]]]
     [export get set]
     `)
     const { get, set } = inst

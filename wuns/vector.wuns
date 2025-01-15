@@ -67,23 +67,18 @@
      par [field p array]]
     [loop [i 0]
       [when [lt-s i size]
-        [assign [index par i] 0]
+        [assign [index par i] [cast [u8] 0]]
         [continue i [inc i]]]]
     p]]
 
-[genfn get [a] [[type pvec [pvector a]] [type i [i32]]]
-  [if [lt-s i 0] [intrinsic unreachable] [do]]
-  [if [le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
-  [deref [index [field pvec array] i]]]
-
 [defn vector-get [[type pvec [pvector -a]] i]
   [if [lt-s i 0] [intrinsic unreachable] [do]]
-  [if [le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
+  [if [le-s [size pvec] i] [intrinsic unreachable] [do]]
   [deref [index [field pvec array] i]]]
 
 [defn vector-set [[type pvec [pvector -a]] i v]
   [when [lt-s i 0] [intrinsic unreachable]]
-  [if [le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
+  [if [le-s [size pvec] i] [intrinsic unreachable] [do]]
   [assign [index [field pvec array] i] v]]
 
 [defn vector-eq-u8 [[type pvec1 [pvector [u8]]] [type pvec2 [pvector [u8]]]]
@@ -94,22 +89,21 @@
       [loop [n [size pvec1] i 0 pa1 [field pvec1 array] pa2 [field pvec2 array]]
         [if [le-s n i]
           true
-          [if [eq [deref [index pa1 i]] [deref [index pa2 i]]]
+          [if [eq [cast [i32] [deref [index pa1 i]]] [cast [i32] [deref [index pa2 i]]]]
             [continue i [inc i]]
             false]]]]]]
 
-[genfn set [a] [[type pvec [pvector a]] [type i [i32]] [type v a]]
-  [if [lt-s i 0] [intrinsic unreachable] [do]]
-  [if [le-s [deref [field pvec size]] i] [intrinsic unreachable] [do]]
-  [assign [index [field pvec array] i] v]]
-
-[genfn vector-slice [s] [[type pvec [pvector s]] start end]
+[genfn vector-slice [s] [[type psrc [pvector s]] start end]
   [let
     [sz [sub end start]
-     p [call vector-make-no-init [s] [sz]]]
+     pdst [call vector-make-no-init [s] [sz]]
+     pdst-ar [field pdst array]
+     psrc-ar [field psrc array]]
     [for i 0 sz
-      [call set [s] [p i [call get [s] [pvec [add start i]]]]]]
-    p]]
+      [assign
+        [index pdst-ar i]
+        [deref [index psrc-ar [add start i]]]]]
+    pdst]]
 
 [defn set-float [pvec i [type v [f64]]]
   [vector-set pvec i v]]
@@ -123,11 +117,15 @@
 [defn get-int [[type pvec [pvector [i32]]] i]
   [vector-get pvec i]]
 
-[defn set-byte [[type pvec [pvector [u8]]] i v]
-  [call set [[u8]] [pvec i v]]]
+[defn set-byte [[type pvec [pvector [u8]]] i [type v [i32]]]
+  [when [lt-s i 0] [intrinsic unreachable]]
+  [when [le-s [size pvec] i] [intrinsic unreachable]]
+  [assign [index [field pvec array] i] [cast [u8] v]]]
 
 [defn get-byte [[type pvec [pvector [u8]]] i]
-  [call get [[u8]] [pvec i]]]
+  [when [lt-s i 0] [intrinsic unreachable]]
+  [when [le-s [size pvec] i] [intrinsic unreachable]]
+  [cast [i32] [deref [index [field pvec array] i]]]]
 
 [defn vector-slice-byte [pvec start end]
   [call vector-slice [[u8]] [pvec start end]]]
@@ -167,10 +165,11 @@
 [genfn growable-vector-to-vector [a] [[type pgvec [pointer [memory mem] [growable-vector a]]]]
   [let
     [size [deref [field pgvec size]]
-     arr [deref [field pgvec parray]]
-     pvector [call vector-make-no-init [a] [size]]]
+     pgvec-arr [deref [field pgvec parray]]
+     pvector [call vector-make-no-init [a] [size]]
+     par [field pvector array]]
     [for i 0 size
-      [call set [a] [pvector i [deref [index arr i]]]]]
+      [assign [index par i] [deref [index pgvec-arr i]]]]
     pvector]]
 
 [defn growable-vector-reset [[type pgvec [pointer [memory mem] [growable-vector -a]]]]
@@ -367,7 +366,7 @@
       [continue
         hash
         [mul
-          [intrinsic i32.xor hash [deref [index ar i]]]
+          [intrinsic i32.xor hash [cast [i32] [deref [index ar i]]]]
           fnv-prime]
         i [inc i]]]]]
 
