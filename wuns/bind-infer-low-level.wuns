@@ -1473,6 +1473,13 @@
       [copy-type-proper type-env [check-type-scheme/type scheme]]]
     [logq-abort llvariable not found [identity sw]]]]
 
+[defn primitive-int-less-than [upper-primitive lower-primitive]
+  [and [eq-word [word i32] [primitive-type/name upper-primitive]]
+    [let [lower-prefix [primitive-type/prefix lower-primitive]]
+      [and
+        [or [eq-word lower-prefix [word i]] [eq-word lower-prefix [word u]]]
+        [lt-s [primitive-type/bits lower-primitive] [i32 32]]]]]]
+
 [defn check-cast [gctx inst-type tv bform]
   [let
     [bctx [llcheck-context/bind-ctx gctx]]
@@ -1488,16 +1495,11 @@
             [ctype/inst lower-inst]
             [match lower-inst
               [ctype-inst/primitive lower-primitive]
-              [if [eq-word [word i32] [primitive-type/name upper-primitive]]
-                [let [lower-prefix [primitive-type/prefix lower-primitive]
-                      lower-is-int [or [eq-word lower-prefix [word i]] [eq-word lower-prefix [word u]]]]
-                  [if lower-is-int
-                    [when-not [lt-s [primitive-type/bits lower-primitive] [i32 32]]
-                      [logq-abort check-cast cannot cast [primitive-type/name lower-primitive]]]
-                    [logq-abort check-cast cannot cast [primitive-type/name lower-primitive]]]]
-                [do]
-                ]]
-            [do]]
+              [when-not [or [primitive-int-less-than upper-primitive lower-primitive]
+                            [primitive-int-less-than lower-primitive upper-primitive]]
+                [logq-abort check-cast cannot cast [primitive-type/name lower-primitive] to [primitive-type/name upper-primitive]]]
+            [logq-abort check-cast cannot cast inst [identity lower-inst] to [primitive-type/name upper-primitive]]]
+          [logq-abort check-cast cannot cast inst [identity lower-type] to [primitive-type/name upper-primitive]]]
 
           [ctype-inst/literal upper-literal]
           [match lower-type
@@ -1729,7 +1731,7 @@
     [let
       [inst-type [instantiate-syntax-type cast-type]
        tv [go level stack value]]
-      [check-cast gctx inst-type tv bform]
+      [check-cast gctx [normalize-type inst-type] [normalize-type tv] bform]
       [llannotate gctx bform inst-type]]
 
     [llexp/size-of t]
