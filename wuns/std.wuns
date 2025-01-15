@@ -80,7 +80,6 @@
 
 [defn not [c] [if c 0 1]]
 
-
 [defn is-empty [form]
   [eq 0 [size form]]]
 
@@ -333,12 +332,12 @@
   [let [sa [word-byte-size wa] sb [word-byte-size wb]]
     [and
       [eq sa sb]
-      [[func go [i]
+      [loop [i 0]
         [if [lt-s i sa]
           [if [eq [char-code-at wa i] [char-code-at wb i]]
-            [go [inc i]]
+            [continue i [inc i]]
             0]
-          1]] 0]]]]
+          1]]]]]
 
 [todo remove this]
 [defn eq-form-word [fa fb]
