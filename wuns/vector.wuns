@@ -154,7 +154,7 @@
     [assign [field p parray] parray]
     p]]
 
-[genfn growable-vector-push [a] [[type pgvec [pointer [memory mem] [growable-vector a]]] [type elem a]]
+[defn growable-vector-push [[type pgvec [pointer [memory mem] [growable-vector -a]]] elem]
   [let
     [cur-size [deref [field pgvec size]]
      cur-capacity [deref [field pgvec capacity]]
@@ -180,7 +180,7 @@
   [call growable-vector-make [[i32]] [init-capacity]]]
 
 [defn growable-vector-push-int [[type pgvec [pointer [memory mem] [growable-vector [i32]]]] elem]
-  [call growable-vector-push [[i32]] [pgvec elem]]]
+  [growable-vector-push pgvec elem]]
 
 [defn growable-vector-to-vector-int [[type pgvec [pointer [memory mem] [growable-vector [i32]]]]]
   [call growable-vector-to-vector [[i32]] [pgvec]]]
@@ -285,7 +285,7 @@
 [defn growable-vector-push-form [
     [type pgvec [pointer [memory mem] [growable-vector [pointer [memory mem] [form]]]]]
     [type elem [pointer [memory mem] [form]]]]
-  [call growable-vector-push [[pointer [memory mem] [form]]] [pgvec elem]]]
+  [growable-vector-push pgvec elem]]
 
 [defn make-stack [init-capacity]
   [let [parray [alloc [parser-stack]]]
