@@ -1627,7 +1627,7 @@
           [[word i32.store] [word i32.store8]]
           [let
             [addr [first iargs]
-            value [second iargs]]
+             value [second iargs]]
             [llunify-report gctx type-i32 [go level stack addr] addr]
             [llunify-report gctx type-i32 [go level stack value] value]
             type-empty-tuple]
@@ -1668,9 +1668,9 @@
       [for-each binding bindings
         [let
           [var [pair/fst binding]
-          value [pair/snd binding]
-          val-type [lift-data-type [go level-1 let-ctx value]]
-          general-val-type
+           value [pair/snd binding]
+           val-type [lift-data-type [go level-1 let-ctx value]]
+           general-val-type
             [if [is-syntactic-llvalue value]
               [generalize level val-type]
               [mk-empty-type-scheme val-type]]]
@@ -1686,9 +1686,9 @@
       [for-each binding bindings
         [let
           [var [pair/fst binding]
-            value [pair/snd binding]
-            val-type [lift-data-type [go level-1 loop-ctx value]]
-            general-val-type [mk-empty-type-scheme val-type]]
+           value [pair/snd binding]
+           val-type [lift-data-type [go level-1 loop-ctx value]]
+           general-val-type [mk-empty-type-scheme val-type]]
           [llannotate gctx value val-type]
           [set-kv-map var-types [syntax-word/word var] general-val-type]]]
       [llannotate gctx bform [go-forms level loop-ctx bodies]]]
