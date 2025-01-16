@@ -48,10 +48,11 @@
 
 [genfn vector-make-init [a] [[type size [i32]] [type init a]]
   [let
-    [p [call vector-make-no-init [a] [size]]]
+    [p [call vector-make-no-init [a] [size]]
+     par [field p array]]
     [loop [i 0]
       [when [lt-s i size]
-        [assign [index [field p array] i] init]
+        [assign [index par i] init]
         [continue i [inc i]]]]
     p]]
 

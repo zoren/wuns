@@ -332,11 +332,14 @@ test('data exp vector', async () => {
 
 [memory i32 mem 1]
 
+[type pvector [v]
+  [pointer [memory mem] [vector-data v -s]]]
+
 [defn vec [] [data mem [record [size [i32 2]] [array [array [i32 3] [i32 5]]]]]]
 
-[defn size [[type p [pointer [memory mem] [vector-data -a -s]]]] [deref [field p size]]]
+[defn size [[type p [pvector -a]]] [deref [field p size]]]
 
-[defn get [[type p [pointer [memory mem] [vector-data [i32] -s]]] i] [deref [index [field p array] i]]]
+[defn get [[type p [pvector [i32]]] i] [deref [index [field p array] i]]]
 
 [export vec size get]`)
   const { vec, size, get } = inst

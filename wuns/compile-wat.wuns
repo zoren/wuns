@@ -696,13 +696,9 @@
                       [for i 0 [size elems]
                         [byte-array-set ba i [word-to-int [syntax-word/word [at elems i]]]]]
                       ba]
-                    [logq-abort not implemented data array-prim [identity p]]
-                    ]
+                    [logq-abort not implemented data array-prim [identity p]]]
                   [logq-abort not a primitive type]]
-                [logq-abort not an inst-type]]
-                ]
-
-              ]]
+                [logq-abort not an inst-type]]]]]
          data-bytes [data-exp-to-byte-array exp]]
         [push
           [translate-context/datas tctx]
