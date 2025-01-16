@@ -393,11 +393,18 @@
 
 [defn add-func-specialization-to-work-set [tctx sname type-args]
   [let [fname-word [syntax-word/word sname]
-        gl [atom-get [translate-context/func-specs-to-generate tctx]]
-        spec-name [specialized-name-from [llcheck-context/bind-ctx [translate-context/check-context tctx]] fname-word type-args]]
-    [when-not [set-has [translate-context/specialized-names-generated tctx] spec-name]
-      [push gl [pair fname-word type-args]]]
-    spec-name]]
+        bctx [llcheck-context/bind-ctx [translate-context/check-context tctx]]]
+    [match [get [llctx/lldef-ctx bctx] fname-word]
+      [lldef-desc/func fsd]
+      [match [func-sig-desc/kind fsd]
+        [func-kind/import rt]
+        fname-word
+        [let [gl [atom-get [translate-context/func-specs-to-generate tctx]]
+              spec-name [specialized-name-from bctx fname-word type-args]]
+          [when-not [set-has [translate-context/specialized-names-generated tctx] spec-name]
+            [push gl [pair fname-word type-args]]]
+          spec-name]]
+      [logq-abort add-func-specialization-to-work-set not a func [identity sname]]]]]
 
 [type translator []
   [record
@@ -762,7 +769,8 @@
 
 [type wat-import-kind []
   [union
-    [memory memory-kind i32 [option i32]]]]
+    [memory memory-kind i32 [option i32]]
+    [func word [list word] [list word]]]]
 
 [type wat-memory []
   [record
@@ -804,7 +812,9 @@
      exports [growable-list]
      specs-atom [translate-context/func-specs-to-generate tctx]
      func-to-body [translate-context/function-name-to-body tctx]
-     exp-const-to-wat-inst [translator/exp [make-translator tctx [transient-kv-map]]]]
+     exp-const-to-wat-inst [translator/exp [make-translator tctx [transient-kv-map]]]
+     type-env [transient-kv-map]
+     inst-syntax-type [instantiate-syntax-type-exp gctx type-env [should-const-eval/yes] 0]]
     [for-each btop [pair/fst btops-ctx-pair]
       [infer-lltop gctx btop]
       [match btop
@@ -814,9 +824,17 @@
             [pair [syntax-word/word env-name] [syntax-word/word name]]
             [match kind
               [import-kind/memory mem-kind init-size opt-max]
-              [wat-import-kind/memory mem-kind [word-to-int [syntax-word/word init-size]] [if-let [max opt-max]
-              [option/some [word-to-int [syntax-word/word max]]]
-              [option/none]]]]]]
+              [wat-import-kind/memory mem-kind
+                [word-to-int [syntax-word/word init-size]]
+                [if-let [max opt-max]
+                  [option/some [word-to-int [syntax-word/word max]]]
+                  [option/none]]]
+
+              [import-kind/func param-types result-type]
+              [wat-import-kind/func
+                [syntax-word/word name]
+                [list-map pt param-types [translate-type gctx [inst-syntax-type pt]]]
+                [translate-types gctx [inst-syntax-type result-type]]]]]]
 
         [lltop/memory name kind init-size opt-max]
         [push memories
@@ -856,7 +874,7 @@
                       [cctx [translate-context/check-context tctx]
                        type-args [get [llcheck-context/type-instantiations cctx] sname]
                        spec-name [add-func-specialization-to-work-set tctx sname type-args]]
-                      [if-let [tparams [func-sig/type-params fsig]]
+                      [if-let [tparams [func-sig-desc/type-params fsig]]
                         [logq-abort export genfn not implemented]
                         [do]]
                       [pair [export-kind/func] spec-name]]
@@ -1120,7 +1138,16 @@
           [wat/word [match kind
             [memory-kind/i32] [word i32]
             [memory-kind/i64] [word i64]]]
-          [wat/word [int-to-word init-size]]]]]]]
+          [wat/word [int-to-word init-size]]]
+
+        [wat-import-kind/func fname param-types result-types]
+        [wat-list
+          [wat/word [word func]]
+          [wat/dollar name]
+          [wat-concat [list [wat/word [word param]]]
+            [list-map pt param-types [wat/word pt]]]
+          [wat-concat [list [wat/word [word result]]]
+            [list-map rt result-types [wat/word rt]]]]]]]]
 
 [defn memory-to-wat [mem]
   [wat-list

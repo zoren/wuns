@@ -79,20 +79,21 @@
   [union
     [defn]
     [genfn]
-    [type-predicate lltype]]]
+    [type-predicate lltype]
+    [import lltype]]]
 
-[type func-sig []
+[type func-sig-desc []
   [record
     [name syntax-word]
     [type-params [option [list syntax-word]]]
-    [params [list [pair syntax-word [option lltype]]]]
+    [params [list [option lltype]]]
     [kind func-kind]]]
 
 [type lldef-desc []
   [union
     [memory memory-kind]
     [any]
-    [func func-sig]]]
+    [func func-sig-desc]]]
 
 [type lllocal-var-kind []
   [union
@@ -177,11 +178,6 @@
     [f64 [list syntax-word]]
     ]]
 
-[type lldefn []
-  [record
-    [signature func-sig]
-    [bodies [list llexp]]]]
-
 [type llctx []
   [record
     [lldef-ctx [transient-kv-map word lldef-desc]]
@@ -200,7 +196,20 @@
 
 [type import-kind []
   [union
-    [memory memory-kind syntax-word [option syntax-word]]]]
+    [memory memory-kind syntax-word [option syntax-word]]
+    [func [list lltype] lltype]]]
+
+[type func-sig []
+  [record
+    [name syntax-word]
+    [type-params [option [list syntax-word]]]
+    [params [list [pair syntax-word [option lltype]]]]
+    [kind func-kind]]]
+
+[type lldefn []
+  [record
+    [signature func-sig]
+    [bodies [list llexp]]]]
 
 [type lltop []
   [union
@@ -586,10 +595,10 @@
                   [match llddesc
                     [lldef-desc/func func-sig]
                     [do
-                      [if-let [tparams [func-sig/type-params func-sig]]
+                      [if-let [tparams [func-sig-desc/type-params func-sig]]
                         [when-not [eq [size tparams] [size type-args]] [push-error form [quote [type arity mismatch]]]]
                         [push-error form [quote [expected a genfn]]]]
-                      [when-not [eq [size [func-sig/params func-sig]] [size exp-args]] [push-error form [quote [exp arity mismatch]]]]
+                      [when-not [eq [size [func-sig-desc/params func-sig]] [size exp-args]] [push-error form [quote [exp arity mismatch]]]]
                       [llexp/call fsword
                         [option/some [list-map targ type-args [form-to-lltype lstack type-var-set targ]]]
                         [list-map arg exp-args [form-to-llexp type-var-set lstack arg]]]]
@@ -611,9 +620,9 @@
               [match llddesc
                 [lldef-desc/func func-sig]
                 [do
-                  [when-let [tparams [func-sig/type-params func-sig]]
+                  [when-let [tparams [func-sig-desc/type-params func-sig]]
                     [push-error form [quote [expected type args for genfn]]]]
-                  [assert-n-args [size [func-sig/params func-sig]]]
+                  [assert-n-args [size [func-sig-desc/params func-sig]]]
                   [llexp/call [sword first-form] [option/none] [list-map arg [rest l] [form-to-llexp type-var-set lstack arg]]]]
 
                 [logq-abort form-to-llexp not a func]]
@@ -650,12 +659,17 @@
         [set-add type-env [syntax-word/word type-param]]]]
     [let
       [params [list-map p params-list [form-to-param lvars type-env p]]
-       sig [func-sig
+       sig-desc [func-sig-desc
+              [sword name-form]
+              opt-t-params
+              [list-map p params [pair/snd p]]
+              kind]
+      sig [func-sig
               [sword name-form]
               opt-t-params
               params
               kind]]
-      [set-ll-def name-form [lldef-desc/func sig]]
+      [set-ll-def name-form [lldef-desc/func sig-desc]]
       [lltop/defn
         [lldefn sig [list-map b bodies [form-to-llexp type-env lstack b]]]]]]]
 
@@ -670,7 +684,9 @@
     [report-error [func r [msg] [push-error form msg]]
      l [form-to-list form]
      n-of-args [dec [size l]]
-     assert-n-args [func ana [n] [when-not [eq n-of-args n] [report-error [quote [expected n-of-args arguments]]]]]
+     assert-n-args [func ana [n] [when-not [eq n-of-args n] [do
+      [logq arity mismatch expected [identity n-of-args] but got [identity n]]
+      [report-error [quote [expected n-of-args arguments]]]]]]
      get-arg [func get-arg [i] [if [lt-s i n-of-args] [at l [inc i]] [quote 0]]]
      first-form [first l]]
     [match first-form
@@ -678,15 +694,29 @@
       [switch first-word
         [[word import]]
         [lltop/import [sword [get-arg 0]] [sword [get-arg 1]]
-          [let [import-kind-list [get-list [get-arg 2]]
-                kind [form-to-memory-kind [second import-kind-list]]]
-            [set-ll-def [get-arg 1] [lldef-desc/memory kind]]
+          [let [name-form [get-arg 1]
+                import-kind-list [get-list [get-arg 2]]]
             [switch [form-to-word [first import-kind-list]]
               [[word memory]]
-              [import-kind/memory
-                kind
-                [sword [third import-kind-list]]
-                [if [eq [size import-kind-list] 4] [option/some [sword [fourth import-kind-list]]] [option/none]]]
+              [let [kind [form-to-memory-kind [second import-kind-list]]]
+                [set-ll-def name-form [lldef-desc/memory kind]]
+                [import-kind/memory
+                  kind
+                  [sword [third import-kind-list]]
+                  [if [eq [size import-kind-list] 4] [option/some [sword [fourth import-kind-list]]] [option/none]]]]
+
+              [[word func]]
+              [let [
+                params [list-map tp [get-list [second import-kind-list]]
+                [form-to-lltype [local-stack/empty] [set] tp]]
+                result [form-to-lltype [local-stack/empty] [set] [third import-kind-list]]
+                sig [func-sig-desc
+                      [sword name-form]
+                      [option/none]
+                      [list-map p params [option/some p]]
+                      [func-kind/import result]]]
+                [set-ll-def name-form [lldef-desc/func sig]]
+                [import-kind/func params result]]
 
               [logq-abort form-to-lltop import kind not recognized]]]]
 
@@ -1670,7 +1700,7 @@
               sw [pair/snd pair]]
           [match [get [llctx/lldef-ctx [llcheck-context/bind-ctx gctx]] [syntax-word/word fname-sword]]
             [lldef-desc/func func-sig]
-            [match [func-sig/kind func-sig]
+            [match [func-sig-desc/kind func-sig]
               [func-kind/type-predicate pred-type]
               [let [var-types [transient-kv-map]
                     t [instantiate-syntax-type pred-type]]
@@ -1926,7 +1956,17 @@
 [defn infer-lltop [gctx lltop]
   [match lltop
     [lltop/import env-name name kind]
-    [do]
+    [match kind
+      [import-kind/func param-types result-type]
+      [let
+        [type-env [transient-kv-map]
+         instantiate-type [instantiate-syntax-type-decl gctx type-env]]
+        [set-kv-map [llcheck-context/def-var-types gctx] [syntax-word/word name]
+        [mk-empty-type-scheme
+          [type-func
+            [list-map pt param-types [instantiate-type pt]]
+            [instantiate-type result-type]]]]]
+      [do]]
 
     [lltop/memory mem-name mem-kind mem-size mem-export]
     [do]
@@ -1964,7 +2004,7 @@
         [if [is-syntactic-llvalue value]
           [generalize 0 value-type]
           [mk-empty-type-scheme value-type]]]
-        [set-kv-map [llcheck-context/def-var-types gctx] [syntax-word/word var] general-val-type]]
+      [set-kv-map [llcheck-context/def-var-types gctx] [syntax-word/word var] general-val-type]]
 
     [lltop/defn func]
     [let

@@ -41,7 +41,7 @@ test.each([
   expect((await stringToInst(m)).f()).toBe(expected)
 })
 
-test('import', async() => {
+test('import memory', async() => {
   const mem = new WebAssembly.Memory({ initial: 1 })
   const inst = await stringToInst(`
     [import env mem [memory i32 1]]
@@ -51,6 +51,14 @@ test('import', async() => {
   expect(inst.f(0)).toBe(0)
   new Uint32Array(mem.buffer)[0] = 7
   expect(inst.f(0)).toBe(7)
+})
+
+test('import func', async() => {
+  const inst = await stringToInst(`
+    [import env f [func [[i32]] [i32]]]
+    [defn g [x] [f x]]
+    [export g]`, 'import', { env: { f: (x) => x + 1 } })
+  expect(inst.g(7)).toBe(8)
 })
 
 test('genfn', async () => {
