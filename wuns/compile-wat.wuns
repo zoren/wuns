@@ -728,11 +728,10 @@
            [syntax-word/word lvar-sname]
            [logq-abort lvar-to-name expected local var [identity lvar-sname]]]]
      get-form-types [func get-form-types [form] [translate-types cctx [get-ctype cctx form]]]
-     signature [lldefn/signature func]
-     fname-word [syntax-word/word [func-sig/name signature]]
+     fname-word [syntax-word/word [lldefn/name func]]
      ts [get [llcheck-context/def-var-types cctx] fname-word]
      type-env [transient-kv-map]]
-  [if-let [fn-tps [func-sig/type-params signature]]
+  [if-let [fn-tps [lldefn/type-params func]]
     [let [type-params [check-type-scheme/named-type-params ts]]
       [assert [eq [size type-params] [size type-args]]
         expected matching number of type parameters and type arguments
@@ -748,7 +747,7 @@
      ft [get-func-type t]
      param-types [pair/fst ft]
      gparams [growable-list]
-     params [func-sig/params signature]
+     params [lldefn/params func]
      special-func-name [specialized-name-from bind-ctx fname-word type-args]
      ltranslator [make-translator tctx type-env]]
     [assert [eq [size params] [size param-types]] expected matching number of parameters and types]
@@ -855,7 +854,7 @@
 
         [lltop/defn func]
         [set-kv-map [translate-context/function-name-to-body tctx]
-          [syntax-word/word [func-sig/name [lldefn/signature func]]] func]
+          [syntax-word/word [lldefn/name func]] func]
 
         [lltop/export snames]
         [for-each sname snames

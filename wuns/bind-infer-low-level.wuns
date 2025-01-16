@@ -199,16 +199,12 @@
     [memory memory-kind syntax-word [option syntax-word]]
     [func [list lltype] lltype]]]
 
-[type func-sig []
+[type lldefn []
   [record
     [name syntax-word]
     [type-params [option [list syntax-word]]]
     [params [list [pair syntax-word [option lltype]]]]
-    [kind func-kind]]]
-
-[type lldefn []
-  [record
-    [signature func-sig]
+    [kind func-kind]
     [bodies [list llexp]]]]
 
 [type lltop []
@@ -663,15 +659,15 @@
               [sword name-form]
               opt-t-params
               [list-map p params [pair/snd p]]
-              kind]
-      sig [func-sig
-              [sword name-form]
-              opt-t-params
-              params
               kind]]
       [set-ll-def name-form [lldef-desc/func sig-desc]]
       [lltop/defn
-        [lldefn sig [list-map b bodies [form-to-llexp type-env lstack b]]]]]]]
+        [lldefn
+          [sword name-form]
+          opt-t-params
+          params
+          kind
+          [list-map b bodies [form-to-llexp type-env lstack b]]]]]]]
 
 [func form-to-memory-kind [form]
   [switch [form-to-word form]
@@ -2014,10 +2010,9 @@
        param-ctx [transient-kv-map]
        type-env [transient-kv-map]
        inst-syntax-type [instantiate-syntax-type-exp gctx type-env [should-const-eval/yes] level-1]
-       signature [lldefn/signature func]
-       fname-word [syntax-word/word [func-sig/name signature]]
+       fname-word [syntax-word/word [lldefn/name func]]
        opt-named-type-params
-       [if-let [type-params [func-sig/type-params signature]]
+       [if-let [type-params [lldefn/type-params func]]
          [option/some
           [list-map type-param type-params
             [let [tpw [syntax-word/word type-param]
@@ -2028,7 +2023,7 @@
       [set-kv-map param-ctx fname-word [mk-empty-type-scheme gfunc-type]]
       [let [ct
             [type-func
-              [list-map param [func-sig/params signature]
+              [list-map param [lldefn/params func]
                 [let
                   [t [if-let [param-t [pair/snd param]]
                       [inst-syntax-type param-t]
