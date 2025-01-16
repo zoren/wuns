@@ -293,6 +293,35 @@ test('data exp array', async () => {
   expect(get(a, 1)).toBe(2.7)
 })
 
+test('data exp array prim', async () => {
+  const mem = new WebAssembly.Memory({ initial: 1 })
+  const decoder = new TextDecoder()
+
+  const log = (size, p) => {
+    const ui8Array = new Uint8Array(mem.buffer, p, size)
+    const text = decoder.decode(ui8Array)
+    console.log(text)
+  }
+  const inst = await stringToInst(`
+[import env mem [memory i32 1]]
+
+[import env log [func [[i32] [pointer [memory mem] [array [u8] -s]]] [tuple]]]
+
+[defn hello-world [] [data mem [array-prim [u8] 104 101 108 108 111 32 119 111 114 108 100]]]
+
+[defn get [[type p [pointer [memory mem] [array [u8] -s]]] i] [deref [index p i]]]
+
+[defn log-hello []
+  [log [i32 11] [hello-world]]]
+
+[export hello-world get log-hello]`,'data-exp-array-prim', { env: { log, mem}})
+    const helloWorld = inst['hello-world']
+    const logHello = inst['log-hello']
+    const get = inst['get']
+    const a = helloWorld()
+    expect(get(a, 0)).toBe(104)
+    logHello()
+})
 
 test('data exp vector', async () => {
   const inst = await stringToInst(`

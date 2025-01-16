@@ -683,7 +683,26 @@
               [concat-byte-arrays [list-map f fields [data-exp-to-byte-array [pair/snd f]]]]
 
               [data-exp/array elems]
-              [concat-byte-arrays [list-map e elems [data-exp-to-byte-array e]]]]]
+              [concat-byte-arrays [list-map e elems [data-exp-to-byte-array e]]]
+
+              [data-exp/array-prim t-elem elems]
+              [let [ctype [get-annotation cctx t-elem]]
+                [if-let [tinst [try-get-inst-type ctype]]
+                [match tinst
+                  [ctype-inst/primitive p]
+                  [switch [primitive-type/name p]
+                    [[word u8]]
+                    [let [ba [byte-array [size elems]]]
+                      [for i 0 [size elems]
+                        [byte-array-set ba i [word-to-int [syntax-word/word [at elems i]]]]]
+                      ba]
+                    [logq-abort not implemented data array-prim [identity p]]
+                    ]
+                  [logq-abort not a primitive type]]
+                [logq-abort not an inst-type]]
+                ]
+
+              ]]
          data-bytes [data-exp-to-byte-array exp]]
         [push
           [translate-context/datas tctx]

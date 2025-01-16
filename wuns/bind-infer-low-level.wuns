@@ -68,7 +68,8 @@
     [union
       [exp llexp]
       [record [list [pair syntax-word data-exp]]]
-      [array [list data-exp]]]]
+      [array [list data-exp]]
+      [array-prim lltype [list syntax-word]]]]
 
 [type memory-kind []
   [union
@@ -375,6 +376,11 @@
 
           [[word array]]
           [data-exp/array [list-map e [rest l] [go e]]]
+
+          [[word array-prim]]
+          [data-exp/array-prim
+            [form-to-lltype lstack [transient-kv-map] [second l]]
+            [list-map e [slice l 2 [size l]] [sword e]]]
 
           [data-exp/exp [form-to-llexp type-var-set lstack form]]]]
 
@@ -1807,15 +1813,30 @@
         [func infer-data [data-exp]
           [match data-exp
             [data-exp/exp e] [go level stack e]
+
             [data-exp/record fields]
             [type-record
               [list-map p fields
                 [pair [syntax-word/word [pair/fst p]] [infer-data [pair/snd p]]]]]
+
             [data-exp/array elements]
             [let [t-elem [fresh-type-var]]
               [for-each element elements
                 [llunify-report gctx t-elem [infer-data element] element]]
-              [type-array t-elem [type-literal [ctype-literal/i32 [size elements]]]]]]]]
+              [type-array t-elem [type-literal [ctype-literal/i32 [size elements]]]]]
+
+            [data-exp/array-prim elem-type elements]
+            [let [t-elem [instantiate-syntax-type elem-type]]
+              [llannotate gctx elem-type t-elem]
+              [if-let [tinst [try-get-inst-type t-elem]]
+                [match tinst
+                  [ctype-inst/primitive p] [do]
+                  [logq-abort not a primitive type]]
+                [logq-abort not an inst-type]]
+              [for-each element elements
+                [word-to-int [syntax-word/word element]]]
+              [type-array t-elem [type-literal [ctype-literal/i32 [size elements]]]]]
+            ]]]
       [llannotate gctx bform [type-pointer t-mem [infer-data init-exp]]]]
 
     [llexp/deref value]
