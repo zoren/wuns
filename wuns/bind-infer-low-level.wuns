@@ -1013,6 +1013,18 @@
 
       false]
 
+    [ctype-literal/exp e1]
+    [match l2
+      [ctype-literal/exp e2]
+      [match e1
+        [llexp/var w1]
+        [match e2
+          [llexp/var w2]
+          [eq-word [syntax-word/word w1] [syntax-word/word w2]]
+          false]
+        false]
+      false]
+
     false]]
 
 [defn try-get-memory-kind [llctx mem-name]

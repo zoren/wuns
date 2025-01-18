@@ -289,8 +289,7 @@
 
 [type parser-stack [size]
   [array
-    [pointer [memory mem]
-      [growable-vector [pointer [memory mem] [form]]]]
+    [growable-vector [pointer [memory mem] [form]]]
     size]]
 
 [defn growable-vector-push-form [
@@ -301,8 +300,10 @@
 [defn make-stack [stack-size init-capacity]
   [let [parray [alloc [parser-stack [literal stack-size]]]]
     [for i 0 stack-size
-      [assign [index parray i]
-        [call growable-vector-make [[pointer [memory mem] [form]]] [init-capacity]]]]
+      [let [p [index parray i]]
+        [assign [field p size] 0]
+        [assign [field p capacity] init-capacity]
+        [assign [field p parray] [alloc [array [pointer [memory mem] [form]] [literal init-capacity]]]]]]
     parray]]
 
 [defn scan-word-end [[type bytes [pvector [u8]]] start]
@@ -329,7 +330,7 @@
         [do
           [when-not [eq 0 stack-index] [intrinsic unreachable]]
           [form-list-make
-            [call growable-vector-to-vector [[pointer [memory mem] [form]]] [[deref [index stack stack-index]]]]]]]
+            [call growable-vector-to-vector [[pointer [memory mem] [form]]] [[index stack stack-index]]]]]]
       [let [c [get-byte bytes i]]
         [ifs
           [is-word-char c]
@@ -338,7 +339,7 @@
             [if [is-negative stack-index]
               fw
               [do
-                [growable-vector-push-form [deref [index stack stack-index]] fw]
+                [growable-vector-push-form [index stack stack-index] fw]
                 [when-not [lt-s i word-end] [intrinsic unreachable]]
                 [continue i word-end]]]]
 
@@ -355,14 +356,14 @@
           [eq c [i32 93]]
           [do
             [when [is-negative stack-index] [intrinsic unreachable]]
-            [let [gvec [deref [index stack stack-index]]
+            [let [gvec [index stack stack-index]
                   form-vector [call growable-vector-to-vector [[pointer [memory mem] [form]]] [gvec]]]
               [growable-vector-reset gvec]
               [let [fl [form-list-make form-vector]]
                 [if [eq stack-index 0]
                 fl
                 [do
-                  [growable-vector-push-form [deref [index stack [dec stack-index]]] fl]
+                  [growable-vector-push-form [index stack [dec stack-index]] fl]
                   [continue
                     i [inc i]
                     stack-index [dec stack-index]]]]]]]
