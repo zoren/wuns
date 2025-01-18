@@ -425,18 +425,14 @@
           [for i 0 [dec [size sub-forms]]
             [go level lctx [at sub-forms i]]]
           [go level lctx [last sub-forms]]]]]
-    [func go-func-sig [level func function-kind]
+    [func go-func-sig [param-ctx level func function-kind]
       [let
-        [gen-func-type [generate-fresh-type-var gctx level]
-         func-type-scheme [mk-empty-type-scheme gen-func-type]
-         param-ctx [transient-kv-map]
-         takes-form-params
+        [takes-form-params
            [match function-kind
              [function-kind/func] false
              [function-kind/macro] true
              [function-kind/fexpr] true
              [logq-abort check function-kind not recognized]]
-         - [set-kv-map param-ctx [syntax-word/word [bfunc/name func]] func-type-scheme]
          reg-params
          [list-map param [bfunc/parameters func]
            [let [tv [if takes-form-params type-form [generate-fresh-type-var gctx level]]]
@@ -451,28 +447,28 @@
          return-type
          [match function-kind
            [function-kind/macro] type-form
-           [generate-fresh-type-var gctx level]]
-         ft
-         [func-type
-            reg-params
-            opt-rest
-            return-type
-            function-kind]]
-        [unify-report gctx gen-func-type [ctype/inst [inst-type/func ft]] func]
-        [pair param-ctx ft]]]
+           [generate-fresh-type-var gctx level]]]
+        [func-type
+          reg-params
+          opt-rest
+          return-type
+          function-kind]]]
     [func go-func [level lctx func function-kind]
       [let
         [level-1 [inc level]
-         ctx-func-type-pair [go-func-sig level-1 func function-kind]
-         param-ctx [pair/fst ctx-func-type-pair]
-         ft [pair/snd ctx-func-type-pair]
-         return-type
+         param-ctx [transient-kv-map]
+         ft [go-func-sig param-ctx level-1 func function-kind]
+         cft [ctype/inst [inst-type/func ft]]]
+        [set-kv-map param-ctx [syntax-word/word [bfunc/name func]] [mk-empty-type-scheme cft]]
+        [unify-report
+          gctx
+          [func-type/result ft]
           [go-forms
             level-1
             [make-local-context param-ctx lctx [local-context-kind/func]]
-            [bfunc/body func]]]
-        [unify-report gctx [func-type/result ft] return-type func]
-        [annotate gctx func [ctype/inst [inst-type/func ft]]]]]
+            [bfunc/body func]]
+          func]
+        [annotate gctx func cft]]]
     [func go [level lctx bform]
       [match bform
         [bexp/var w]
@@ -585,28 +581,39 @@
                 [unify-report gctx [check-type-scheme/type loop-var-type-scheme] val-type value]]]]
           [generate-fresh-type-var gctx level]]
 
-        [bexp/letfn funcs bodies]
-        [let
-          [var-types [transient-kv-map]
-           letfn-ctx [make-local-context var-types lctx [local-context-kind/letfn]]
-           level-1 [inc level]
-           gtmp-types [growable-list]]
-          [for-each func funcs
-            [let
-              [tmp-type [generate-fresh-type-var gctx level-1]]
-              [push gtmp-types tmp-type]
-              [set-kv-map var-types [syntax-word/word [bfunc/name func]] [generalize level tmp-type]]]]
-          [let [tmp-types [clone-growable-to-frozen-list gtmp-types]]
-            [for i 0 [size funcs]
-              [let
-                [tmp-type [at tmp-types i]
-                 func [at funcs i]
-                 ft [go-func level letfn-ctx func [function-kind/func]]]
-                [unify-report gctx tmp-type ft func]]]]
-          [go-forms level letfn-ctx bodies]]
-
         [bexp/func f]
         [go-func level lctx f [function-kind/func]]
+
+        [bexp/letfn funcs bodies]
+        [let
+          [level-1 [inc level]
+           letfn-vars [transient-kv-map]
+           func-param-ctx-pairs
+           [list-map func funcs
+            [let
+              [param-ctx [transient-kv-map]
+               fname [syntax-word/word [bfunc/name func]]
+               ft [go-func-sig param-ctx level-1 func [function-kind/func]]
+               cft [ctype/inst [inst-type/func ft]]]
+              [set-kv-map letfn-vars fname [mk-empty-type-scheme cft]]
+              [pair [pair cft ft] param-ctx]]]
+           letfn-ctx [make-local-context letfn-vars lctx [local-context-kind/letfn]]]
+          [for i 0 [size funcs]
+            [let
+              [func [at funcs i]
+               func-param-ctx-pair [at func-param-ctx-pairs i]
+               ft-pair [pair/fst func-param-ctx-pair]
+               cft [pair/fst ft-pair]
+               ft [pair/snd ft-pair]
+               param-ctx [pair/snd func-param-ctx-pair]
+               t-res
+               [go-forms
+                level-1
+                [make-local-context param-ctx letfn-ctx [local-context-kind/func]]
+                [bfunc/body func]]]
+              [unify-report gctx [func-type/result ft] t-res func]
+              [annotate gctx func cft]]]
+          [go-forms level letfn-ctx bodies]]
 
         [bexp/switch switch-value clauses default]
         [let [switch-type [go level lctx switch-value]
@@ -779,7 +786,9 @@
             [set-kv-map [check-context/def-var-types gctx] [syntax-word/word import-name] general-val-type]]
 
           [btop/exp e]
-          [go 0 [local-stack/empty] e]]]]
+          [do
+            [go 0 [local-stack/empty] e]
+            [do]]]]]
       [checker
         [func check-exp [bexp] [go 0 [local-stack/empty] bexp]]
         check-top]]]
