@@ -76,25 +76,21 @@ test('vector', async () => {
   }
   {
     const parse = inst['parse']
-    const formGetWord = inst['form-get-word']
-    const formGetList = inst['form-get-list']
+    const formTryGetWord = inst['form-try-get-word']
+    const formTryGetList = inst['form-try-get-list']
 
+    const pointerToForm = (pointer) => {
+      if (pointer === 0) return null
+      const word = formTryGetWord(pointer)
+      if (word !== 0) return pwordToString(word)
+      const list = formTryGetList(pointer)
+      if (list === 0) throw new Error('neither word nor list')
+      const forms = []
+      for (let i = 0; i < size(list); i++) forms.push(pointerToForm(getInt(list, i)))
+      return Object.freeze(forms)
+    }
     const expectForm = (actualPointer, expectedForm) => {
-      if (expectedForm === null) {
-        expect(actualPointer).toBe(0)
-      } else if (typeof expectedForm === 'string') {
-        const actualWord = formGetWord(actualPointer)
-        expect(pwordToString(actualWord)).toEqual(expectedForm)
-      } else if (Array.isArray(expectedForm)) {
-        const actualList = formGetList(actualPointer)
-        expect(size(actualList)).toEqual(expectedForm.length)
-        for (let i = 0; i < expectedForm.length; i++) {
-          expectForm(getInt(actualList, i), expectedForm[i])
-        }
-      } else {
-        console.log({ expectedForm })
-        throw new Error('unreachable')
-      }
+      expect(pointerToForm(actualPointer)).toEqual(expectedForm)
     }
     const expectFormString = (stringInput, expectedForm) =>
       expectForm(parse(stringToByteVector(stringInput)), expectedForm)
@@ -117,6 +113,10 @@ test('vector', async () => {
     expectFormString(' [abc] ', ['abc'])
     expectFormString(' [a] ', ['a'])
     expectFormString(' [] ', [])
+    expectFormString(' [[a]] ', [['a']])
+    expectFormString(' [abc []] ', ['abc', []])
+    expectFormString(' [abc [def 123]] ', ['abc', ['def', '123']])
+    expectFormString(' [abc [def 123] xyz] ', ['abc', ['def', '123'], 'xyz'])
   }
   {
     const growableVectorInt = inst['growable-vector-make-int']

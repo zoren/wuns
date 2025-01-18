@@ -240,10 +240,20 @@
     [deref [field form word]]
     [intrinsic unreachable]]]
 
+[defn form-try-get-word [[type form [pointer [memory mem] [form]]]]
+  [if [form-is-word form]
+    [deref [field form word]]
+    [cast -a 0]]]
+
 [defn form-get-list [[type form [pointer [memory mem] [form]]]]
   [if [form-is-list form]
     [deref [field form forms]]
     [intrinsic unreachable]]]
+
+[defn form-try-get-list [[type form [pointer [memory mem] [form]]]]
+  [if [form-is-list form]
+    [deref [field form forms]]
+    [cast -a 0]]]
 
 [defn form-size-length [form]
   [ifs
@@ -274,23 +284,25 @@
 
     [intrinsic unreachable]]]
 
-[export form-word-make form-list-make form-get-word form-get-list form-depth form-size-length]
+[export form-word-make form-list-make form-get-word form-get-list form-depth form-size-length
+  form-try-get-word form-try-get-list]
 
-[type parser-stack []
+[type parser-stack [size]
   [array
     [pointer [memory mem]
       [growable-vector [pointer [memory mem] [form]]]]
-    [literal [i32 16]]]]
+    size]]
 
 [defn growable-vector-push-form [
     [type pgvec [pointer [memory mem] [growable-vector [pointer [memory mem] [form]]]]]
     [type elem [pointer [memory mem] [form]]]]
   [growable-vector-push pgvec elem]]
 
-[defn make-stack [init-capacity]
-  [let [parray [alloc [parser-stack]]]
-    [for i 0 [i32 16]
-      [assign [index parray i] [call growable-vector-make [[pointer [memory mem] [form]]] [init-capacity]]]]
+[defn make-stack [stack-size init-capacity]
+  [let [parray [alloc [parser-stack [literal stack-size]]]]
+    [for i 0 stack-size
+      [assign [index parray i]
+        [call growable-vector-make [[pointer [memory mem] [form]]] [init-capacity]]]]
     parray]]
 
 [defn scan-word-end [[type bytes [pvector [u8]]] start]
@@ -303,9 +315,11 @@
         [continue i [inc i]]
         i]]]]
 
+[def stack-size [i32 16]]
+
 [defn parse [[type bytes [pvector [u8]]]]
   [loop
-    [stack [make-stack [i32 16]]
+    [stack [make-stack stack-size [i32 16]]
      n-of-bytes [size bytes]
      i 0
      stack-index [i32 -1]]
@@ -314,7 +328,8 @@
         [cast [pointer [memory mem] [form]] 0]
         [do
           [when-not [eq 0 stack-index] [intrinsic unreachable]]
-          [form-list-make [call growable-vector-to-vector [[pointer [memory mem] [form]]] [[deref [index stack stack-index]]]]]]]
+          [form-list-make
+            [call growable-vector-to-vector [[pointer [memory mem] [form]]] [[deref [index stack stack-index]]]]]]]
       [let [c [get-byte bytes i]]
         [ifs
           [is-word-char c]
@@ -332,7 +347,7 @@
 
           [eq c [i32 91]]
           [do
-            [when [lt-s [i32 16] stack-index] [intrinsic unreachable]]
+            [when [lt-s stack-size stack-index] [intrinsic unreachable]]
             [continue
               i [inc i]
               stack-index [inc stack-index]]]
@@ -343,12 +358,14 @@
             [let [gvec [deref [index stack stack-index]]
                   form-vector [call growable-vector-to-vector [[pointer [memory mem] [form]]] [gvec]]]
               [growable-vector-reset gvec]
-              [if [eq stack-index 0]
-                [form-list-make form-vector]
+              [let [fl [form-list-make form-vector]]
+                [if [eq stack-index 0]
+                fl
                 [do
+                  [growable-vector-push-form [deref [index stack [dec stack-index]]] fl]
                   [continue
                     i [inc i]
-                    stack-index [dec stack-index]]]]]]
+                    stack-index [dec stack-index]]]]]]]
 
           [intrinsic unreachable]]]]]]
 
@@ -372,3 +389,4 @@
         i [inc i]]]]]
 
 [export vector-u8-hash-fnv-1a-i32]
+
