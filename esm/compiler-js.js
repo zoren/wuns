@@ -164,7 +164,6 @@ const builtInPrimitiveTypeSizes = Object.freeze({
 
 const typeVar = (name) => Object.freeze({ typeKind: 'var', name })
 const typeInst = (typeName, ...args) => Object.freeze({ typeKind: 'inst', typeName, args })
-const typeExp = (exp) => Object.freeze({ typeKind: 'exp', exp })
 const typeFunc = (parameters, restParameter, result) =>
   Object.freeze({ typeKind: 'func', parameters, restParameter, result })
 
@@ -195,10 +194,6 @@ const makeTypeValidator = (typeContext, params) => {
       case 'pointer': {
         if (rest.length !== 1) throw new CompileError('expected one argument')
         return typeInst(firstWord, go(rest[0]))
-      }
-      case 'exp': {
-        if (rest.length !== 1) throw new CompileError('exp expected one argument')
-        return typeExp(rest[0])
       }
       case 'array': {
         if (rest.length !== 2) throw new CompileError('array expected two arguments')
