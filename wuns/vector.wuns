@@ -297,6 +297,9 @@
     [type elem [pointer [memory mem] [form]]]]
   [growable-vector-push pgvec elem]]
 
+[defn growable-vector-to-vector-form [gv]
+  [call growable-vector-to-vector [[pointer [memory mem] [form]]] [gv]]]
+
 [defn make-stack [stack-size init-capacity]
   [let [parray [alloc [parser-stack [literal stack-size]]]]
     [for i 0 stack-size
@@ -330,7 +333,7 @@
         [do
           [when-not [eq 0 stack-index] [intrinsic unreachable]]
           [form-list-make
-            [call growable-vector-to-vector [[pointer [memory mem] [form]]] [[index stack stack-index]]]]]]
+            [growable-vector-to-vector-form [index stack stack-index]]]]]
       [let [c [get-byte bytes i]]
         [ifs
           [is-word-char c]
@@ -357,7 +360,7 @@
           [do
             [when [is-negative stack-index] [intrinsic unreachable]]
             [let [gvec [index stack stack-index]
-                  form-vector [call growable-vector-to-vector [[pointer [memory mem] [form]]] [gvec]]]
+                  form-vector [growable-vector-to-vector-form gvec]]
               [growable-vector-reset gvec]
               [let [fl [form-list-make form-vector]]
                 [if [eq stack-index 0]
