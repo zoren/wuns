@@ -64,12 +64,12 @@
     [data syntax-word data-exp]
     ]
 
-    data-exp []
-    [union
-      [exp llexp]
-      [record [list [pair syntax-word data-exp]]]
-      [array [list data-exp]]
-      [array-prim lltype [list syntax-word]]]]
+  data-exp []
+  [union
+    [exp llexp]
+    [record [list [pair syntax-word data-exp]]]
+    [array [list data-exp]]
+    [array-prim lltype [list syntax-word]]]]
 
 [type memory-kind []
   [union
