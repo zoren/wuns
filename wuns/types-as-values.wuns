@@ -9,16 +9,78 @@
     [value i32]]]
 
 [type
+  type []
+  [union
+    [primitive word]
+    [tuple [list type]]
+    [array type i32]
+    [pointer word type]
+    [memory mem-type]
+    [func [list type] type]
+    [error]
+    ]
+  mem-type []
+  [record [type type] [name word]]
+]
+
+[defn type-equals [t1 t2]
+  [match t1
+    [type/primitive w1]
+    [match t2
+      [type/primitive w2]
+      [eq-word w1 w2]
+      false]
+
+    [type/tuple ts1]
+    [match t2
+      [type/tuple ts2]
+      [and
+        [eq [size ts1] [size ts2]]
+        [loop [i 0 n [size ts1]]
+          [if [lt-s i n]
+            [if [type-equals [at ts1 i] [at ts2 i]]
+              [continue i [inc i]]
+              false]
+            true]]]
+      false]
+
+    [type/array et1 s1]
+    [match t2
+      [type/array et2 s2]
+      [and
+        [type-equals et1 et2]
+        [eq s1 s2]]
+      false]
+
+    [type/pointer m1 t1]
+    [match t2
+      [type/pointer m2 t2]
+      [and
+        [eq-word m1 m2]
+        [type-equals t1 t2]]
+      false]
+
+    [type/memory m1]
+    [match t2
+      [type/memory m2]
+      [and
+        [type-equals [mem-type/type m1] [mem-type/type m2]]
+        [eq-word [mem-type/name m1] [mem-type/name m2]]]
+      false]
+
+    [logq-abort type-equals [identity t1] [identity t2]]]]
+
+[type
   exp []
   [union
-    [constructor word]
     [i32 i32]
     [f64 f64]
     [call exp [list exp]]
 
     [var name]
     [if exp exp exp]
-    [cast exp exp]
+    [cast type exp]
+    [tuple [list exp]]
     [import name name import-kind]
     [deref exp]
     [assign exp exp]
@@ -27,8 +89,8 @@
 
   import-kind []
   [union
-    [memory exp integer [option integer]]
-    [function [list exp] exp]]]
+    [memory type integer [option integer]]
+    [function [list type] type]]]
 
 [comment
     [let [list [pair name exp]] [list exp]]
@@ -40,68 +102,11 @@
     [size-of exp]
 ]
 
-[defn is-normal-form [exp]
-  [match exp
-    [exp/constructor w]
-    true
-
-    [exp/i32 i]
-    true
-
-    [exp/f64 f]
-    true
-
-    [exp/call f args]
-    [match f
-      [exp/constructor w]
-      [all args is-normal-form]
-
-      false]
-
-    false]]
-
-[defn exp-eq [t1 t2]
-  [logq exp-eq [identity t1]]
-  [logq exp-eq [identity t2]]
-  [assert [is-normal-form t1] exp-eq expects normal form [identity t1]]
-  [assert [is-normal-form t2] exp-eq expects normal form [identity t2]]
-  [if [is-identical t1 t2]
-    true
-    [match t1
-      [exp/constructor s1]
-      [match t2
-        [exp/constructor s2]
-        [eq-word s1 s2]
-        false]
-
-      [exp/i32 s1]
-      [match t2
-        [exp/i32 s2]
-        [eq s1 s2]
-        false]
-
-      [exp/call constr1 ts1]
-      [match t2
-        [exp/call constr2 ts2]
-        [and
-          [exp-eq constr1 constr2]
-          [eq [size ts1] [size ts2]]
-          [loop [i 0 n [size ts1]]
-            [if [lt-s i n]
-              [if [exp-eq [at ts1 i] [at ts2 i]]
-                [continue i [inc i]]
-                false]
-              true]]]
-
-        false]
-
-      false]]]
-
 [type exp-function []
   [record
     [name name]
-    [params [list [pair name exp]]]
-    [return-type exp]
+    [params [list [pair name type]]]
+    [return-type type]
     [bodies [list exp]]]]
 
 [type top-exp []
@@ -111,18 +116,13 @@
 
 [type defunc-desc []
   [record
-    [params [list [pair name exp]]]
-    [return-type exp]]]
+    [params [list [pair name type]]]
+    [return-type type]]]
 
 [type top-desc []
   [union
-    [constant exp exp]
+    [constant type exp]
     [function defunc-desc]]]
-
-[type local-var-kind []
-  [union
-    [param exp]
-    [let-loop exp]]]
 
 [type local-context-kind []
   [union [func] [let] [loop] [def]]]
@@ -130,12 +130,12 @@
 [type local-context []
   [record
     [outer [option local-context]]
-    [names [transient-kv-map word local-var-kind]]
+    [names [transient-kv-map word type]]
     [kind local-context-kind]]]
 
 [type desc []
   [union
-    [local [pair local-var-kind local-context-kind]]
+    [local [pair type local-context-kind]]
     [top top-desc]]]
 
 [type top-context []
@@ -163,59 +163,24 @@
         [continue cur o]
         [option/none]]]]]
 
-[def ctor-i32 [exp/constructor [word i32]]]
-[def ctor-f64 [exp/constructor [word f64]]]
-[def type-type [exp/constructor [word type]]]
-[def ctor-tuple [exp/constructor [word tuple]]]
-[def ctor-array [exp/constructor [word array]]]
-[def ctor-func [exp/constructor [word func]]]
-[def ctor-memory [exp/constructor [word memory]]]
-[def ctor-pointer [exp/constructor [word pointer]]]
-[def ctor-record [exp/constructor [word record]]]
-
-[defn exp-call [f .. args] [exp/call f args]]
-[def empty-tuple [exp-call ctor-tuple]]
-[defn tuple-make-list [params] [if [is-empty params] empty-tuple [exp/call ctor-tuple params]]]
-
-[defn type-func [params ret] [exp-call ctor-func [tuple-make-list params] ret]]
-[defn type-array [elem-type size] [exp-call ctor-array elem-type size]]
-[defn type-memory [pointer-type] [exp-call ctor-memory pointer-type]]
-[defn type-pointer [memory target] [exp-call ctor-pointer memory target]]
-
-[defn type-field [name type] [exp-call ctor-tuple name type]]
-[defn type-record [fields] [exp/call ctor-record fields]]
-[def type-error [exp/constructor [word error]]]
-
 [defn defunc-desc-to-func-type [dd]
-  [type-func
+  [type/func
     [list-map p [defunc-desc/params dd] [pair/snd p]]
     [defunc-desc/return-type dd]]]
 
-[defn try-get-ctor-call [t]
-  [match t
-    [exp/call call-target args]
-    [match call-target
-      [exp/constructor wp]
-      [option/some [pair wp args]]
-      [option/none]]
-    [option/none]]]
-
 [defn try-get-pointer-args [t]
-  [if-let [ctor-call [try-get-ctor-call t]]
-    [if [eq-word [word pointer] [pair/fst ctor-call]]
-      [let [args [pair/snd ctor-call]]
-        [option/some [pair [first args] [second args]]]]
-      [option/none]]
+  [match t
+    [type/pointer m p]
+    [option/some [pair m p]]
     [option/none]]]
 
 [defn make-top-names []
-  [let [
-    built-words [list [word i32] [word f64] [word type]
-      [word memory] [word tuple]]
-    top-names [transient-kv-map]]
-    [for-each w built-words
-      [set-kv-map top-names w [top-desc/constant type-type [exp/constructor w]]]]
+  [let [top-names [transient-kv-map]]
     top-names]]
+
+[def type-i32 [type/primitive [word i32]]]
+[def type-f64 [type/primitive [word f64]]]
+[def type-empty-tuple [type/tuple [list]]]
 
 [defn bind [errors top-names]
   [let
@@ -254,15 +219,50 @@
     desc
     [logq-abort get-name problem [name/word n]]]]
 
+[func form-to-type [lctx form]
+  [match form
+    [form/word w]
+    [type/primitive w]
+
+    [form/list l]
+  [do
+    [when [is-empty l] [log-location form]]
+
+    [assert-not [is-empty l] form-to-type expected non-empty list]
+    [switch [form-to-word [first l]]
+      [[word i32] [word f64]]
+      [type/primitive [form-to-word [first l]]]
+
+      [[word tuple]]
+      [type/tuple [list-map t [slice l 1 [size l]] [form-to-type lctx t]]]
+
+      [[word pointer]]
+      [let [mem-name [form-to-word [second l]]]
+        [todo check if mem-name is valid]
+        [type/pointer
+          mem-name
+          [form-to-type lctx [third l]]]]
+
+      [[word array]]
+      [do
+        [assert [eq [size l] 2] form-to-type expected 2 elements]
+        [type/array
+          [form-to-type lctx [second l]]
+          [word-to-int [form-to-word [third l]]]]]
+
+      [logq-abort not implemented type [identity form]]]]]]
+
 [func form-to-import-kind [lctx form]
   [let [l [get-list form]]
+    [logq form-to-import-kind [identity l]]
     [assert-not [is-empty l] form-to-import-kind expected non-empty list]
     [switch [form-to-word [first l]]
       [[word memory]]
-      [do
+      [let [mt [form-to-type lctx [second l]]]
         [assert [or [eq [size l] 3] [eq [size l] 4]] import memory expected 3 or 4 elements]
+        [logq mt [identity mt]]
         [import-kind/memory
-          [form-to-exp lctx [second l]]
+          mt
           [form-to-integer [third l]]
           [if [eq [size l] 3]
             [option/none]
@@ -272,16 +272,15 @@
       [do
         [assert [eq [size l] 2] import func expected 2 elements]
         [import-kind/function
-          [list-map param [get-list [second l]] [form-to-exp lctx param]]
-          [form-to-exp lctx [third l]]]]
+          [list-map param [get-list [second l]] [form-to-type lctx param]]
+          [form-to-type lctx [third l]]]]
 
       [logq-abort not implemented import-kind [first l]]]]]
 
 [func form-special-to-exp [lctx fw l]
   [switch fw
-    [[word constructor]]
-    [exp/constructor
-      [form-to-word [second l]]]
+    [[word i32]]
+    [exp/i32 [word-to-int [get-word [second l]]]]
 
     [[word if]]
     [exp/if
@@ -291,7 +290,7 @@
 
     [[word cast]]
     [exp/cast
-      [form-to-exp lctx [second l]]
+      [form-to-type lctx [second l]]
       [form-to-exp lctx [third l]]]
 
     [[word import]]
@@ -313,7 +312,7 @@
       [form-to-name [second l]]
       [list-map arg [slice l 2 [size l]] [form-to-exp lctx arg]]]
 
-    [logq-abort not impl [identity fw]]]]
+    [logq-abort form-special-to-exp not impl [identity fw]]]]
 
 [func form-to-exp [lctx f]
   [match f
@@ -330,22 +329,6 @@
           [match desc
             [desc/top td]
             [match td
-              [top-desc/constant desc-type desc-exp]
-              [ifs
-                [exp-eq desc-exp ctor-i32]
-                [do
-                  [when-not [eq [size args] 1]
-                    [error f expected 1 argument got]]
-                  [exp/i32 [word-to-int [get-word [first args]]]]]
-
-                [exp-eq desc-exp ctor-f64]
-                [do
-                  [when-not [eq [size args] 1]
-                    [error f expected 1 argument got]]
-                  [exp/f64 [word-to-f64 [get-word [first args]]]]]
-
-                [exp/call [exp/var [form-to-name ff]] [list-map arg args [form-to-exp lctx arg]]]]
-
               [top-desc/function fd]
               [exp/call
                 [exp/var [form-to-name ff]]
@@ -354,52 +337,19 @@
           [form-special-to-exp lctx fw l]]
         [exp/call [form-to-exp lctx ff] [list-map arg args [form-to-exp lctx arg]]]]]]]
 
-[func evaluate [lctx exp]
-  [match exp
-    [exp/call f args]
-    [exp/call [evaluate lctx f] [list-map arg args [evaluate lctx arg]]]
-
-    [exp/var n]
-    [match [get-name lctx n]
-      [desc/top td]
-      [match td
-        [top-desc/constant desc-type desc-exp]
-        desc-exp
-        exp]
-      [desc/local ld]
-      exp]
-
-    [exp/if c t e]
-    [match [evaluate lctx c]
-      [exp/i32 ec]
-      [evaluate lctx [if [eq ec 0] e t]]
-      [logq-abort eval exp condition not i32]]
-
-    [exp/cast t e]
-    [exp/cast
-      [evaluate lctx t]
-      [evaluate lctx e]]
-
-    exp]]
-
-      [func form-to-eval [lctx f]
-        [evaluate lctx [form-to-exp lctx f]]]
 [func type-of [lctx exp]
   [match exp
-    [exp/constructor w]
-    type-type
-
     [exp/i32 i]
-    ctor-i32
+    type-i32
 
     [exp/f64 f]
-    ctor-f64
+    type-f64
 
     [exp/if c t e]
     [do
-      [when-not [exp-eq [type-of lctx c] ctor-i32] [logq-abort eval exp condition not i32]]
+      [when-not [type-equals [type-of lctx c] type-i32] [logq-abort eval exp condition not i32]]
       [let [tt [type-of lctx t]]
-        [when-not [exp-eq tt [type-of lctx e]] [logq-abort eval exp branches not same type]]
+        [when-not [type-equals tt [type-of lctx e]] [logq-abort eval exp branches not same type]]
         tt]]
 
     [exp/call f args]
@@ -416,31 +366,30 @@
                     pname [pair/fst param-pair]
                     ptype [pair/snd param-pair]
                     arg [at args i]]
-                [when-not [exp-eq [type-of lctx arg] ptype] [logq-abort eval exp expected type got]]]]
+                [when-not [type-equals [type-of lctx arg] ptype] [logq-abort eval exp expected type got]]]]
             [defunc-desc/return-type fd]]
           [logq-abort not implemented type-of call]]
         [desc/local ld]
-        exp]
-      [exp/constructor cn]
-      type-type
-      ]
+        [logq-abort not implemented type-of call]]
+
+      [logq-abort not implemented type-of call]]
 
     [exp/import n m ik]
     [match ik
       [import-kind/memory et s os]
       [do
         [todo type should include index or name of type...]
-        [type-memory [evaluate lctx et]]]
+        [type/memory [mem-type et [name/word m]]]]
 
       [import-kind/function ps rt]
-      [type-func ps rt]
+      [type/func ps rt]
 
       [logq-abort not implemented type-of import]]
 
     [exp/cast t e]
-    [let [tt [type-of lctx t]]
-      [when-not [exp-eq tt type-type] [logq-abort eval exp expected type got]]
-      [evaluate lctx t]]
+    [do
+      [todo check if cast is valid]
+      t]
 
     [exp/var n]
     [match [get-name lctx n]
@@ -448,18 +397,19 @@
       [match td
         [top-desc/constant desc-type desc-exp]
         desc-type
-        exp]
+        [top-desc/function fd]
+        [defunc-desc-to-func-type fd]]
       [desc/local ld]
-      exp]
+      [pair/fst ld]]
 
     [exp/intrinsic intrinsic-name args]
     [switch [name/word intrinsic-name]
       [[word i32.add] [word i32.sub] [word i32.mul]]
       [do
         [assert [eq [size args] 2] intrinsic expected 2 arguments]
-        [assert [exp-eq [type-of lctx [at args 0]] ctor-i32] intrinsic expected i32 ]
-        [assert [exp-eq [type-of lctx [at args 1]] ctor-i32] intrinsic expected i32]
-        ctor-i32]
+        [assert [type-equals [type-of lctx [at args 0]] type-i32] intrinsic expected i32 ]
+        [assert [type-equals [type-of lctx [at args 1]] type-i32] intrinsic expected i32]
+        type-i32]
 
       [logq-abort not implemented type-of intrinsic]]
 
@@ -468,15 +418,14 @@
       [logq target-type [identity target-type]]
       [if-let [p [try-get-pointer-args target-type]]
         [pair/snd p]
-        [do
-          type-error]]]
+        [type/error]]]
 
     [exp/assign target source]
     [let [target-pointer-type [type-of lctx target]
           source-type [type-of lctx source]]
       [when-let [p [try-get-pointer-args target-pointer-type]]
-        [when-not [exp-eq [pair/snd p] source-type] [logq-abort eval exp expected type got]]]
-      empty-tuple]
+        [when-not [type-equals [pair/snd p] source-type] [logq-abort eval exp expected type got]]]
+      type-empty-tuple]
 
     [logq-abort not implemented type-of [identity exp]]]]
 [func bind-top [name-form desc]
@@ -500,7 +449,7 @@
             [when-not [eq [size l] 3] [error form expected def name exp-form]]
             [let
               [be
-                [form-to-eval
+                [form-to-exp
                   [local-context-make-top [transient-kv-map] [local-context-kind/def]]
                   [third l]]
                type [type-of [local-context-make-top [transient-kv-map] [local-context-kind/def]] be]
@@ -520,26 +469,23 @@
                parameters
                [list-map p [pairwise-pairs params-list]
                  [let [pname [form-to-name [pair/fst p]]
-                       ptype [form-to-eval lctx [pair/snd p]]
-                       ptype-type [type-of lctx ptype]]
-                  [when-not [exp-eq ptype-type type-type]
-                    [logq-abort defn parameter was not a type [identity ptype-type]]]
-                  [set-kv-map param-ctx [name/word pname] [local-var-kind/param ptype]]
+                       ptype [form-to-type lctx [pair/snd p]]]
+                  [set-kv-map param-ctx [name/word pname] ptype]
                   [pair pname ptype]]]
-               return-type [form-to-eval lctx return-type-form]]
+               return-type [form-to-type lctx return-type-form]]
               [bind-top [second l]
                 [top-desc/function
                   [defunc-desc parameters return-type]]]
               [let
-                [cbodies [list-map body [slice l 4 [size l]] [form-to-eval lctx body]]
+                [cbodies [list-map body [slice l 4 [size l]] [form-to-exp lctx body]]
                  inferred-return-type
                  [if [is-empty cbodies]
-                   empty-tuple
+                   type-empty-tuple
                    [type-of lctx [last cbodies]]]]
                 [logq defn [second l]]
                 [logq return-type [identity return-type]]
                 [logq inferred-return-type [identity inferred-return-type]]
-                [when-not [exp-eq return-type inferred-return-type]
+                [when-not [type-equals return-type inferred-return-type]
                   [logq-abort return type mismatch [identity return-type] [identity inferred-return-type]]]
                 [option/some
                   [top-exp/function
@@ -577,16 +523,19 @@
 [def prog1 [qlist
 [def mem [import env mem [memory i32 1]]]
 [defn empty [] [tuple]]
-[defn pointer [mem memory s i32] type
-  [[constructor pointer] mem s]]
 [def bump-top [cast [pointer mem i32] [i32 0]]]
 [defn get-top [] i32
   [deref bump-top]]
 [defn set-top [new-top i32] [tuple]
   [assign bump-top new-top]]
+[defn add [x i32 y i32] i32 [intrinsic i32.add x y]]
 [defn alloc-init [] [tuple]
-  [set-top [intrinsic i32.add [get-top] [i32 16]]]]
-
+  [set-top [add [get-top] [i32 16]]]]
+[defn alloc-n [n-bytes] i32
+  [let [top-val [get-top]]
+    [when [eq top-val 0] [intrinsic unreachable]]
+    [set-top [add top-val n-bytes]]
+    top-val]]
     ]]
 
 [comment
