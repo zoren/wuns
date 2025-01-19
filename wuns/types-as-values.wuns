@@ -85,6 +85,10 @@
     [deref exp]
     [assign exp exp]
     [intrinsic name [list exp]]
+    [let [list [pair name exp]] [list exp]]
+    [do [list exp]]
+
+    [size-of type]
     ]
 
   import-kind []
@@ -93,13 +97,10 @@
     [function [list type] type]]]
 
 [comment
-    [let [list [pair name exp]] [list exp]]
     [loop [list [pair name exp]] [list exp]]
     [continue [list [pair name exp]]]
-    [do [list exp]]
     [field exp name]
     [index exp exp]
-    [size-of exp]
 ]
 
 [type exp-function []
@@ -182,9 +183,12 @@
 [def type-f64 [type/primitive [word f64]]]
 [def type-empty-tuple [type/tuple [list]]]
 
-[defn bind [errors top-names]
+[load interpreter-externs.wuns]
+
+[defn bind [evaluator errors top-names]
   [let
-    [name-to-form [transient-kv-map]]
+    [name-to-form [transient-kv-map]
+     name-to-desc [transient-kv-map]]
     [letfn [
 [func get-word [f]
   [if-let [w [try-get-word f]]
@@ -312,13 +316,28 @@
       [form-to-name [second l]]
       [list-map arg [slice l 2 [size l]] [form-to-exp lctx arg]]]
 
+    [[word let]]
+    [let
+      [vars [transient-kv-map]
+       let-ctx [local-context-make lctx vars [local-context-kind/let]]]
+      [exp/let
+        [list-map p [pairwise-pairs [get-list [second l]]]
+          [let [pname [form-to-name [pair/fst p]]
+                pexp [form-to-exp let-ctx [pair/snd p]]]
+            [set-kv-map vars [name/word pname] [type-of pexp]]
+            [pair pname pexp]]]
+        [list-map b [slice l 2 [size l]] [form-to-exp let-ctx b]]]]
+
+    [[word do]]
+    [exp/do [list-map b [rest l] [form-to-exp lctx b]]]
+
     [logq-abort form-special-to-exp not impl [identity fw]]]]
 
 [func form-to-exp [lctx f]
   [match f
     [form/word w]
     [let [n [form-to-name f]]
-      [get-name lctx n]
+      [set-kv-map name-to-desc n [get-name lctx n]]
       [exp/var n]]
 
     [form/list l]
@@ -326,18 +345,22 @@
           args [rest l]]
       [if-let [fw [try-get-word ff]]
         [if-let [desc [try-get-desc lctx fw]]
-          [match desc
-            [desc/top td]
-            [match td
-              [top-desc/function fd]
-              [exp/call
-                [exp/var [form-to-name ff]]
-                [list-map arg args [form-to-exp lctx arg]]]]
-            [logq-abort not implemented local call]]
-          [form-special-to-exp lctx fw l]]
+          [let [fn [form-to-name ff]]
+            [set-kv-map name-to-desc fn desc]
+            [match desc
+              [desc/top td]
+              [match td
+                [top-desc/function fd]
+                [exp/call
+                  [exp/var fn]
+                  [list-map arg args [form-to-exp lctx arg]]]]
+              [logq-abort not implemented local call]]]
+          [if-let [macro-func [try-get-macro evaluator fw]]
+            [form-to-exp lctx [apply macro-func args]]
+            [form-special-to-exp lctx fw l]]]
         [exp/call [form-to-exp lctx ff] [list-map arg args [form-to-exp lctx arg]]]]]]]
 
-[func type-of [lctx exp]
+[func type-of [exp]
   [match exp
     [exp/i32 i]
     type-i32
@@ -347,15 +370,15 @@
 
     [exp/if c t e]
     [do
-      [when-not [type-equals [type-of lctx c] type-i32] [logq-abort eval exp condition not i32]]
-      [let [tt [type-of lctx t]]
-        [when-not [type-equals tt [type-of lctx e]] [logq-abort eval exp branches not same type]]
+      [when-not [type-equals [type-of c] type-i32] [logq-abort eval exp condition not i32]]
+      [let [tt [type-of t]]
+        [when-not [type-equals tt [type-of e]] [logq-abort eval exp branches not same type]]
         tt]]
 
     [exp/call f args]
     [match f
       [exp/var fn]
-      [match [get-name lctx fn]
+      [match [get name-to-desc fn]
         [desc/top td]
         [match td
           [top-desc/function fd]
@@ -366,7 +389,7 @@
                     pname [pair/fst param-pair]
                     ptype [pair/snd param-pair]
                     arg [at args i]]
-                [when-not [type-equals [type-of lctx arg] ptype] [logq-abort eval exp expected type got]]]]
+                [when-not [type-equals [type-of arg] ptype] [logq-abort eval exp expected type got]]]]
             [defunc-desc/return-type fd]]
           [logq-abort not implemented type-of call]]
         [desc/local ld]
@@ -392,7 +415,7 @@
       t]
 
     [exp/var n]
-    [match [get-name lctx n]
+    [match [get name-to-desc n]
       [desc/top td]
       [match td
         [top-desc/constant desc-type desc-exp]
@@ -407,25 +430,32 @@
       [[word i32.add] [word i32.sub] [word i32.mul]]
       [do
         [assert [eq [size args] 2] intrinsic expected 2 arguments]
-        [assert [type-equals [type-of lctx [at args 0]] type-i32] intrinsic expected i32 ]
-        [assert [type-equals [type-of lctx [at args 1]] type-i32] intrinsic expected i32]
+        [assert [type-equals [type-of [at args 0]] type-i32] intrinsic expected i32 ]
+        [assert [type-equals [type-of [at args 1]] type-i32] intrinsic expected i32]
         type-i32]
 
       [logq-abort not implemented type-of intrinsic]]
 
     [exp/deref target]
-    [let [target-type [type-of lctx target]]
+    [let [target-type [type-of target]]
       [logq target-type [identity target-type]]
       [if-let [p [try-get-pointer-args target-type]]
         [pair/snd p]
         [type/error]]]
 
     [exp/assign target source]
-    [let [target-pointer-type [type-of lctx target]
-          source-type [type-of lctx source]]
+    [let [target-pointer-type [type-of target]
+          source-type [type-of source]]
       [when-let [p [try-get-pointer-args target-pointer-type]]
         [when-not [type-equals [pair/snd p] source-type] [logq-abort eval exp expected type got]]]
       type-empty-tuple]
+
+    [exp/let bindings bodies]
+    [let
+      []
+      [if [is-empty bodies]
+        type-empty-tuple
+        [type-of [last bodies]]]]
 
     [logq-abort not implemented type-of [identity exp]]]]
 [func bind-top [name-form desc]
@@ -452,7 +482,7 @@
                 [form-to-exp
                   [local-context-make-top [transient-kv-map] [local-context-kind/def]]
                   [third l]]
-               type [type-of [local-context-make-top [transient-kv-map] [local-context-kind/def]] be]
+               type [type-of be]
                bt [top-exp/constant [form-to-name [second l]] be]]
               [bind-top [second l] [top-desc/constant type be]]
               [option/some bt]]]
@@ -481,7 +511,7 @@
                  inferred-return-type
                  [if [is-empty cbodies]
                    type-empty-tuple
-                   [type-of lctx [last cbodies]]]]
+                   [type-of [last cbodies]]]]
                 [logq defn [second l]]
                 [logq return-type [identity return-type]]
                 [logq inferred-return-type [identity inferred-return-type]]
@@ -499,23 +529,32 @@
 
 [defexpr qlist [.. fs] fs]
 
+[defn make-init-evaluator-async []
+  [let [evaluator [make-evaluator]]
+    [promise-then
+      [evaluate-top-async evaluator [quote [load llmacro.wuns]]]
+      [func t [-] evaluator]]]]
+
 [defn bind-forms-fn [forms]
-  [let
-    [gerrors [growable-list]
-     top-names [make-top-names]
-     top-form-to-top-exp [bind gerrors top-names]
-     top-forms [growable-list]]
-    [for-each form forms
-      [if-let [top [top-form-to-top-exp form]]
-        [push top-forms top]
-        [logq-abort no top form for [identity form]]]]
-    [let [errors [clone-growable-to-frozen-list gerrors]]
-      [when-not [is-empty errors]
-        [logq there were errors]
-        [for-each e errors
-          [logq error [identity e]]]]
-      [for-each top-form [clone-growable-to-frozen-list top-forms]
-      [log top-form]]]]]
+  [promise-then
+    [make-init-evaluator-async]
+    [func then [evaluator]
+      [let
+        [gerrors [growable-list]
+         top-names [make-top-names]
+         top-form-to-top-exp [bind evaluator gerrors top-names]
+         top-forms [growable-list]]
+        [for-each form forms
+          [if-let [top [top-form-to-top-exp form]]
+            [push top-forms top]
+            [logq-abort no top form for [identity form]]]]
+        [let [errors [clone-growable-to-frozen-list gerrors]]
+          [when-not [is-empty errors]
+            [logq there were errors]
+            [for-each e errors
+              [logq error [identity e]]]]
+          [for-each top-form [clone-growable-to-frozen-list top-forms]
+          [log top-form]]]]]]]
 
 [defexpr bind-forms [.. forms]
   [bind-forms-fn forms]]
@@ -528,14 +567,20 @@
   [deref bump-top]]
 [defn set-top [new-top i32] [tuple]
   [assign bump-top new-top]]
-[defn add [x i32 y i32] i32 [intrinsic i32.add x y]]
+[def 0 [i32 0]]
+[def 1 [i32 1]]
 [defn alloc-init [] [tuple]
   [set-top [add [get-top] [i32 16]]]]
-[defn alloc-n [n-bytes] i32
+
+[defn alloc-n [n-bytes i32] i32
   [let [top-val [get-top]]
     [when [eq top-val 0] [intrinsic unreachable]]
     [set-top [add top-val n-bytes]]
     top-val]]
+
+[defn inc [x i32] i32 [add x 1]]
+[defn dec [x i32] i32 [sub x 1]]
+
     ]]
 
 [comment
