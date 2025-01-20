@@ -120,32 +120,20 @@
 
 [load interpreter-externs.wuns]
 
-[type defunc-desc []
-  [record
-    [params [list [pair name type]]]
-    [return-type type]]]
-
-[type top-desc []
+[type top-desc-kind []
   [union
-    [constant type exp]
-    [function defunc-desc]]]
+    [constant]
+    [function]]]
 
 [type desc []
   [union
     [local [pair type local-context-kind]]
-    [top top-desc]]]
+    [top [pair type top-desc-kind]]]]
 
 [defn desc-to-type [desc]
   [match desc
-    [desc/top td]
-    [match td
-      [top-desc/constant desc-type desc-exp]
-      desc-type
-
-      [top-desc/function fd]
-      [type/func
-        [list-map p [defunc-desc/params fd] [pair/snd p]]
-        [defunc-desc/return-type fd]]]
+    [desc/top tt]
+    [pair/fst tt]
 
     [desc/local ld]
     [pair/fst ld]]]
@@ -186,11 +174,9 @@
       [if-let [td [try-get top-names name-word]]
         [option/some [desc/top td]]
         [option/none]]]]
-    [if-let [desc opt-desc]
-      [do
-        [set-kv-map name-to-desc name desc]
-        [option/some desc]]
-      [option/none]]]]
+    [when-let [desc opt-desc]
+      [set-kv-map name-to-desc name desc]]
+    opt-desc]]
 
 [func form-to-type [lctx form]
   [match form
@@ -514,7 +500,7 @@
               [be [form-to-exp [local-context/empty] [third l]]
                type [type-of be]
                bt [top-exp/constant [form-to-name [second l]] be]]
-              [bind-top [second l] [top-desc/constant type be]]
+              [bind-top [second l] [pair type [top-desc-kind/constant]]]
               [option/some bt]]]
 
           [[word defn]]
@@ -534,8 +520,9 @@
                   [pair pname ptype]]]
                return-type [form-to-type lctx return-type-form]]
               [bind-top [second l]
-                [top-desc/function
-                  [defunc-desc parameters return-type]]]
+                [pair
+                  [type/func
+                    [list-map p parameters [pair/snd p]] return-type] [top-desc-kind/function]]]
               [let
                 [cbodies [list-map body [slice l 4 [size l]] [form-to-exp lctx body]]
                  inferred-return-type [type-ofs cbodies]]
@@ -623,11 +610,11 @@
     [exp/var n]
     [match [get name-to-desc n]
       [desc/top td]
-      [match td
-        [top-desc/constant t e]
+      [match [pair/snd td]
+        [top-desc-kind/constant]
         [wat-inst/global.get [name/word n]]
 
-        [top-desc/function fd]
+        [top-desc-kind/function]
         [logq-abort function as value not implemented]]
 
       [desc/local ld]
