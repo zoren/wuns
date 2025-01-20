@@ -10,6 +10,8 @@
     [primitive name]
     [tuple [list type]]
     [pointer name type]
+    [array type [option exp]]
+
     [memory mem-type]
     [func [list type] type]
     [error]
@@ -37,6 +39,7 @@
 
     [size-of type]
     [import name name import-kind]
+    [index exp exp]
     ]
 
   import-kind []
@@ -48,7 +51,6 @@
     [loop [list [pair name exp]] [list exp]]
     [continue [list [pair name exp]]]
     [field exp name]
-    [index exp exp]
 ]
 
 [type exp-function []
@@ -92,6 +94,13 @@
   [match t
     [type/pointer m p]
     [option/some [pair m p]]
+
+    [option/none]]]
+
+[defn try-get-array-args [t]
+  [match t
+    [type/array et opt-size-exp]
+    [option/some [pair et opt-size-exp]]
 
     [option/none]]]
 
@@ -205,6 +214,16 @@
           mem-name
           [form-to-type lctx [third l]]]]
 
+      [[word array]]
+      [ifs
+        [eq [size l] 2]
+        [type/array [form-to-type lctx [second l]] [option/none]]
+
+        [eq [size l] 3]
+        [type/array [form-to-type lctx [second l]] [option/some [form-to-exp lctx [third l]]]]
+
+        [logq-abort array expected 2 or 3 elements]]
+
       [logq-abort not implemented type [identity form]]]]]]
 
 [func form-to-import-kind [lctx form]
@@ -287,6 +306,14 @@
     [[word do]]
     [exp/do [list-map b [rest l] [form-to-exp lctx b]]]
 
+    [[word size-of]]
+    [exp/size-of [form-to-type lctx [second l]]]
+
+    [[word index]]
+    [exp/index
+      [form-to-exp lctx [second l]]
+      [form-to-exp lctx [third l]]]
+
     [logq-abort form-special-to-exp not impl [identity fw]]]]
 
 [func form-to-exp [lctx f]
@@ -354,6 +381,29 @@
       [and
         [type-equals [mem-type/type m1] [mem-type/type m2]]
         [eq-word [name/word [mem-type/name m1]] [name/word [mem-type/name m2]]]]
+      false]
+
+    [type/array t1 opt-s1]
+    [match t2
+      [type/array t2 opt-s2]
+      [and
+        [type-equals t1 t2]
+        [match opt-s1
+          [option/none]
+          [match opt-s2
+            [option/none]
+            true
+
+            [option/some s2]
+            false]
+
+          [option/some s1]
+          [match opt-s2
+            [option/none]
+            false
+
+            [option/some s2]
+            [logq-abort not implemented type-equals array [identity t1] [identity t2]]]]]
       false]
 
     [logq-abort type-equals [identity t1] [identity t2]]]]
@@ -461,6 +511,18 @@
     [exp/do bodies]
     [type-ofs bodies]
 
+    [exp/size-of t]
+    type-i32
+
+    [exp/index a i]
+    [if-let [p [try-get-pointer-args [type-of a]]]
+      [if-let [par [try-get-array-args [pair/snd p]]]
+        [do
+          [when-not [type-equals type-i32 [type-of i]] [logq-abort eval exp expected type got]]
+          [type/pointer [pair/fst p] [pair/fst par]]]
+        [logq-abort not implemented type-of index]]
+      [logq-abort not a pointer]]
+
     [logq-abort not implemented type-of [identity exp]]]]
 
 [func type-ofs [bodies]
@@ -550,6 +612,21 @@
 
     [list [type-to-wat-type type]]]]
 
+[func type-to-size-of-exp [t]
+  [match t
+    [type/primitive n]
+    [switch [name/word n]
+      [[word i32]] [exp/i32 [i32 4]]
+      [[word f64]] [exp/i32 [i32 8]]
+      [logq-abort not implemented type-to-size-of-exp [identity n]]]
+
+    [type/array et opt-s]
+    [if-let [s opt-s]
+      [exp/intrinsic [name [word i32.mul]] [list [type-to-size-of-exp et] s]]
+      [logq-abort not implemented type-to-size-of-exp [identity t]]]
+
+    [logq-abort not implemented type-to-size-of-exp [identity t]]]]
+
 [func form-to-inst [f]
   [match f
     [exp/import mod-name name ik] [logq-abort inline imports not implemented]
@@ -635,6 +712,16 @@
             [wat-inst/local.set n [form-to-inst e]]]]
         [list [forms-to-inst bodies]]]]
 
+    [exp/size-of t]
+    [form-to-inst [type-to-size-of-exp t]]
+
+    [exp/index a i]
+    [if-let [p [try-get-pointer-args [type-of a]]]
+      [if-let [par [try-get-array-args [pair/snd p]]]
+        [form-to-inst [type-to-size-of-exp [type/array [pair/fst par] [option/some i]]]]
+        [logq-abort not implemented type-of index]]
+      [logq-abort not a pointer]]
+
     [logq-abort form-to-inst not implemented [identity f]]]]
 
 [func forms-to-inst [forms]
@@ -680,6 +767,19 @@
           [do
             [for-each binding bindings [add-locals [pair/snd binding]]]
             [for-each body bodies [add-locals body]]]
+
+          [exp/size-of t]
+          [match t
+            [type/array et opt-s]
+            [when-let [e opt-s]
+              [add-locals e]]
+
+            [do]]
+
+          [exp/index a i]
+          [do
+            [add-locals a]
+            [add-locals i]]
 
           [logq-abort add-locals not implemented [identity f]]]]]
     [for-each body [exp-function/bodies f]
@@ -811,6 +911,14 @@
 
 [defn inc [x i32] i32 [add x 1]]
 [defn dec [x i32] i32 [sub x 1]]
+
+[defn array-f64 [s i32] [pointer mem [array f64]]
+  [cast
+    [pointer mem [array f64]]
+    [alloc-n [size-of [array f64 s]]]]]
+
+[defn array-f64-get [p [pointer mem [array f64]] i i32] f64
+  [deref [index p i]]]
 
     ]]
 
