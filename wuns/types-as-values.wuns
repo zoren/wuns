@@ -175,6 +175,21 @@
 [def type-f64 [type/primitive [word f64]]]
 [def type-empty-tuple [type/tuple [list]]]
 
+[defn try-get-primitive [t]
+  [match t
+    [type/primitive w]
+    [option/some w]
+    [option/none]]]
+
+[defn option-pair [opt1 opt2]
+  [match opt1
+    [option/some v1]
+    [match opt2
+      [option/some v2]
+      [option/some [pair v1 v2]]
+      [option/none]]
+    [option/none]]]
+
 [load interpreter-externs.wuns]
 
 [defn bind [evaluator errors top-names]
@@ -226,7 +241,12 @@
 
     [assert-not [is-empty l] form-to-type expected non-empty list]
     [switch [form-to-word [first l]]
-      [[word i32] [word f64]]
+      [[word i8]  [word u8]
+       [word i16] [word u16]
+       [word i32] [word u32]
+       [word f32]
+       [word f64]
+       [word v128]]
       [type/primitive [form-to-word [first l]]]
 
       [[word tuple]]
@@ -414,18 +434,20 @@
 
     [exp/intrinsic intrinsic-name args]
     [switch [name/word intrinsic-name]
-      [[word i32.add] [word i32.sub] [word i32.mul]]
+      [[word i32.add] [word i32.sub] [word i32.mul] [word i32.eq]]
       [do
         [assert [eq [size args] 2] intrinsic expected 2 arguments]
         [assert [type-equals [type-of [at args 0]] type-i32] intrinsic expected i32 ]
         [assert [type-equals [type-of [at args 1]] type-i32] intrinsic expected i32]
         type-i32]
 
-      [logq-abort not implemented type-of intrinsic]]
+      [[word unreachable]]
+      type-empty-tuple
+
+      [logq-abort not implemented type-of intrinsic [name/word intrinsic-name]]]
 
     [exp/deref target]
     [let [target-type [type-of target]]
-      [logq target-type [identity target-type]]
       [if-let [p [try-get-pointer-args target-type]]
         [pair/snd p]
         [type/error]]]
@@ -438,13 +460,30 @@
       type-empty-tuple]
 
     [exp/let bindings bodies]
-    [let
-      []
-      [if [is-empty bodies]
-        type-empty-tuple
-        [type-of [last bodies]]]]
+    [do
+      [for-each binding bindings
+        [type-of [pair/snd binding]]]
+      [type-ofs bodies]]
+
+    [exp/do bodies]
+    [type-ofs bodies]
+
+    [exp/intrinsic n args]
+    [switch [name/word n]
+      [[word i32.add] [word i32.sub] [word i32.mul]]
+      [do
+        [assert [eq [size args] 2] intrinsic expected 2 arguments]
+        [for-each arg args
+          [assert [type-equals type-i32 [type-of arg]] intrinsic expected i32]]
+        type-i32]
+
+      [logq-abort not implemented type-of intrinsic [identity n]]]
 
     [logq-abort not implemented type-of [identity exp]]]]
+[func type-ofs [bodies]
+  [if [is-empty bodies]
+    type-empty-tuple
+    [type-of [last bodies]]]]
 [func bind-top [name-form desc]
   [let [n [get-word name-form]]
     [when [has top-names n]
@@ -495,13 +534,7 @@
                   [defunc-desc parameters return-type]]]
               [let
                 [cbodies [list-map body [slice l 4 [size l]] [form-to-exp lctx body]]
-                 inferred-return-type
-                 [if [is-empty cbodies]
-                   type-empty-tuple
-                   [type-of [last cbodies]]]]
-                [logq defn [second l]]
-                [logq return-type [identity return-type]]
-                [logq inferred-return-type [identity inferred-return-type]]
+                 inferred-return-type [type-ofs cbodies]]
                 [when-not [type-equals return-type inferred-return-type]
                   [logq-abort return type mismatch [identity return-type] [identity inferred-return-type]]]
                 [option/some
@@ -544,8 +577,48 @@
     [exp/import mod-name name ik] [logq-abort inline imports not implemented]
     [exp/cast t e] [form-to-inst e]
     [exp/i32 i] [wat-inst/i32.const [int-to-word i]]
-    [exp/deref p] [logq-abort deref not implemented]
-    [exp/assign t s] [logq-abort assign not implemented]
+    [exp/deref target]
+    [let
+      [pt [type-of target]
+       ppt [if-let [p [try-get-pointer-args pt]] p [logq-abort not a pointer]]
+       target-type [pair/snd ppt]]
+      [wat-inst/load
+        [wasm-name-to-wat-byte-array
+          [switch [type-to-wat-type target-type]
+            [[word i32]] [word i32.load]
+            [[word i64]] [word i64.load]
+            [[word f32]] [word f32.load]
+            [[word f64]] [word f64.load]
+            [[word v128]] [word v128.load]
+            [logq-abort not implemented deref inst-type/apply]]]
+        [wat-inst-memargs
+          [name/word [pair/fst ppt]]
+          [word 0]
+          [word 1]]
+        [form-to-inst target]]]
+
+    [exp/assign target value]
+    [let
+      [pt [type-of target]
+       ppt [if-let [p [try-get-pointer-args pt]] p [logq-abort not a pointer]]
+       target-type [pair/snd ppt]]
+      [wat-inst/store
+        [wasm-name-to-wat-byte-array
+          [switch [type-to-wat-type target-type]
+          [[word i32]] [word i32.store]
+          [[word i64]] [word i64.store]
+          [[word f32]] [word f32.store]
+          [[word f64]] [word f64.store]
+          [[word v128]] [word v128.store]
+          [[word u8] [word i8]] [word i32.store8]
+          [[word u16] [word i16]] [word i32.store16]
+          [logq-abort not implemented assign inst-type/apply]]]
+        [wat-inst-memargs
+          [name/word [pair/fst ppt]]
+          [word 0]
+          [word 1]]
+        [form-to-inst target]
+        [form-to-inst value]]]
     [exp/intrinsic n args] [wat-inst/inst-word [name/word n] [list-map arg args [form-to-inst arg]]]
 
     [exp/var n]
@@ -587,31 +660,61 @@
     [logq-abort form-to-inst not implemented [identity f]]]]
 
 [func forms-to-inst [forms]
-      [wat-inst/instructions
-        [if [is-empty forms]
-          [list]
-          [concat
-            [list-map form [slice forms 0 [dec [size forms]]]
-              [loop [res [form-to-inst form] i [size [type-to-wat-types [type-of form]]]]
-                  [if i
-                    [continue
-                      res [wat-inst-word [word drop] res]
-                      i [dec i]]
-                    res]]]
-            [list [form-to-inst [last forms]]]]]]]
+  [wat-inst/instructions
+    [if [is-empty forms]
+      [list]
+      [concat
+        [list-map form [slice forms 0 [dec [size forms]]]
+          [loop [res [form-to-inst form] i [size [type-to-wat-types [type-of form]]]]
+              [if i
+                [continue
+                  res [wat-inst-word [word drop] res]
+                  i [dec i]]
+                res]]]
+        [list [form-to-inst [last forms]]]]]]]
 
 [func wuns-to-wat-func [f]
-  [let [wat-body [forms-to-inst [exp-function/bodies f]]
-        locals [list]]
+  [let
+    [glocals [growable-list]
+     add-locals
+      [func add-locals [f]
+        [match f
+          [exp/import mod-name name ik] [do]
+          [exp/cast t e] [add-locals e]
+          [exp/i32 i] [do]
+          [exp/deref p] [add-locals p]
+          [exp/assign t s] [do [add-locals t] [add-locals s]]
+          [exp/intrinsic n args] [for-each arg args [add-locals arg]]
+          [exp/var n] [do]
+          [exp/call fexp args]
+          [do
+            [add-locals fexp]
+            [for-each arg args [add-locals arg]]]
+
+          [exp/if c t e]
+          [do
+            [add-locals c] [add-locals t] [add-locals e]]
+
+          [exp/do es]
+          [for-each e es [add-locals e]]
+
+          [exp/let bindings bodies]
+          [do
+            [for-each binding bindings [add-locals [pair/snd binding]]]
+            [for-each body bodies [add-locals body]]]
+
+          [logq-abort add-locals not implemented [identity f]]]]]
+    [for-each body [exp-function/bodies f]
+      [add-locals body]]
     [wat-func
       [name/word [exp-function/name f]]
       [list-map p [exp-function/params f]
         [pair
           [name/word [pair/fst p]]
           [type-to-wat-type [pair/snd p]]]]
-      locals
+      [clone-growable-to-frozen-list glocals]
       [type-to-wat-types [exp-function/return-type f]]
-      wat-body]]]
+      [forms-to-inst [exp-function/bodies f]]]]]
 
 [func compile [tops]
   [let
@@ -655,7 +758,6 @@
               [name/word n]
               [type-to-wat-type [type-of e]]
               [form-to-inst e]]]]
-
 
         [top-exp/function f]
         [push
