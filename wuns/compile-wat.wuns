@@ -280,7 +280,7 @@
     [match [get [llctx/lldef-ctx bctx] fname-word]
       [lldef-desc/func fsd]
       [match [func-sig-desc/kind fsd]
-        [func-kind/import rt]
+        [func-kind/import]
         fname-word
         [let [gl [atom-get [translate-context/func-specs-to-generate tctx]]
               spec-name [specialized-name-from bctx fname-word type-args]]
@@ -689,7 +689,7 @@
                   [option/some [word-to-int [syntax-word/word max]]]
                   [option/none]]]
 
-              [import-kind/func param-types result-type]
+              [import-kind/func type-params param-types result-type]
               [wat-import-kind/func
                 [syntax-word/word name]
                 [list-map pt param-types [translate-type gctx [inst-syntax-type pt]]]
