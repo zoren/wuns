@@ -564,17 +564,11 @@
     [name/word n]
 
     [type/pointer mem-name -]
-    [if-let [td [try-get top-names [name/word mem-name]]]
-      [match td
-        [top-desc/constant desc-type desc-exp]
-        [match desc-exp
-          [exp/import mod-name name ik]
-          [match ik
-            [import-kind/memory et s os]
-            [type-to-wat-type et]]]
-        [top-desc/function fd]
-        [logq-abort type-to-wat-type memory a func]]
-      [logq-abort type-to-wat-type memory a local]]
+    [match [name-to-type mem-name]
+      [type/memory mk]
+      [type-to-wat-type [mem-type/type mk]]
+
+      [logq-abort not a memory type]]
 
     [logq-abort type-to-wat-type [identity t]]]]
 
