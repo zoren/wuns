@@ -397,6 +397,28 @@ Object.freeze(expSpecialFormsStmt)
 
 const isSpecialForm = (word) => word in expSpecialFormsExp || word in expSpecialFormsStmt
 
+const tryRunStmtHandler = (firstForm, args, lctx, topContext, isTail) => {
+  const handler = expSpecialFormsStmt[tryGetFormWord(firstForm)]
+  if (!handler) return null
+  try {
+    return handler(args, lctx, topContext, isTail)
+  } catch (e) {
+    if (e instanceof CompileError && !e.form) e.form = firstForm
+    throw e
+  }
+}
+
+const tryRunExpHandler = (firstForm, args, lctx, topContext) => {
+  const handler = expSpecialFormsExp[tryGetFormWord(firstForm)]
+  if (!handler) return null
+  try {
+    return handler(args, lctx, topContext)
+  } catch (e) {
+    if (e instanceof CompileError && !e.form) e.form = firstForm
+    throw e
+  }
+}
+
 const tryGetWordFirst = (form) => {
   const forms = tryGetFormList(form)
   if (!forms || forms.length === 0) return null
@@ -410,16 +432,13 @@ const compExpStmt = (lctx, form, topContext, isTail) => {
   if (wordFirstForm) {
     const { firstWord, args } = wordFirstForm
     try {
-      const stmtSpecialHandler = expSpecialFormsStmt[firstWord]
-      if (stmtSpecialHandler) {
-        const stmt = stmtSpecialHandler(args, lctx, topContext, isTail)
-        return isTail ? stmt : jsExpStmt(jsIIFE([stmt]))
-      }
-      const expSpecialHandler = expSpecialFormsExp[firstWord]
-      if (expSpecialHandler) {
-        const exp = expSpecialHandler(args, lctx, topContext)
-        return isTail ? jsReturn(exp) : jsExpStmt(exp)
-      }
+      const firstForm = tryGetFormList(form)[0]
+      const stmt = tryRunStmtHandler(firstForm, args, lctx, topContext, isTail)
+      if (stmt) return isTail ? stmt : jsExpStmt(jsIIFE([stmt]))
+
+      const exp = tryRunExpHandler(firstForm, args, lctx, topContext)
+      if (exp) return isTail ? jsReturn(exp) : jsExpStmt(exp)
+
       const desc = topContext.defEnv.get(firstWord)
       if (desc && desc.defKind === 'defmacro') return compExpStmt(lctx, desc.value(...args), topContext, isTail)
     } catch (e) {
@@ -468,11 +487,13 @@ const compExp = (ctx, form, topContext) => {
       if (firstWord === 'do') return jsIIFE(compBodiesToStmts(topContext, ctx, args, true))
       if (firstWord in topSpecialForms) throw new CompileError('top special not allowed in expression form', form)
 
-      const expSpecialHandler = expSpecialFormsExp[firstWord]
-      if (expSpecialHandler) return expSpecialHandler(args, ctx, topContext)
+      const firstForm = forms[0]
+      const exp = tryRunExpHandler(firstForm, args, ctx, topContext)
+      if (exp) return exp
 
-      const stmtSpecialHandler = expSpecialFormsStmt[firstWord]
-      if (stmtSpecialHandler) return jsIIFE([stmtSpecialHandler(args, ctx, topContext, true)])
+      const stmt = tryRunStmtHandler(firstForm,args, ctx, topContext, true)
+      if (stmt) return jsIIFE([stmt])
+
       const numOfArgs = args.length
       const checkArity = ({ parameters, restParam }) => {
         if (numOfArgs < parameters.length) throw new CompileError('not enough arguments', form)
@@ -641,7 +662,7 @@ const topSpecialForms = {
           const constructors = []
           for (let i = 1; i < body.length; i++) {
             const unionCase = getFormList(body[i])
-            if (unionCase.length === 0) throw new CompileError('union case must have at least one word')
+            if (unionCase.length === 0) throw new CompileError('union case must have at least one word', body[i])
             const unionCaseName = getFormWord(unionCase[0])
             const qualName = typePrefix + unionCaseName
             const paramtypes = unionCase.slice(1)
@@ -662,7 +683,7 @@ const topSpecialForms = {
           const fields = []
           for (let i = 1; i < body.length; i++) {
             const recordField = getFormList(body[i])
-            if (recordField.length != 2) throw new CompileError('record field must have a name and a type')
+            if (recordField.length != 2) throw new CompileError('record field must have a name and a type', body[i])
             const fieldName = getFormWord(recordField[0])
             fieldNames.push(fieldName)
             const projecterName = typePrefix + fieldName
@@ -678,7 +699,7 @@ const topSpecialForms = {
           break
         }
         default:
-          throw new CompileError('unexpected type body: ' + typeKind)
+          throw new CompileError('unexpected type body: ' + typeKind, body[0])
       }
     }
   },
