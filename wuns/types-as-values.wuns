@@ -147,45 +147,6 @@
       [option/none]]
     [option/none]]]
 
-[defn type-equals [t1 t2]
-  [match t1
-    [type/primitive w1]
-    [match t2
-      [type/primitive w2]
-      [eq-word [name/word w1] [name/word w2]]
-      false]
-
-    [type/tuple ts1]
-    [match t2
-      [type/tuple ts2]
-      [and
-        [eq [size ts1] [size ts2]]
-        [loop [i 0 n [size ts1]]
-          [if [lt-s i n]
-            [if [type-equals [at ts1 i] [at ts2 i]]
-              [continue i [inc i]]
-              false]
-            true]]]
-      false]
-
-    [type/pointer m1 t1]
-    [match t2
-      [type/pointer m2 t2]
-      [and
-        [eq-word [name/word m1] [name/word m2]]
-        [type-equals t1 t2]]
-      false]
-
-    [type/memory m1]
-    [match t2
-      [type/memory m2]
-      [and
-        [type-equals [mem-type/type m1] [mem-type/type m2]]
-        [eq-word [name/word [mem-type/name m1]] [name/word [mem-type/name m2]]]]
-      false]
-
-    [logq-abort type-equals [identity t1] [identity t2]]]]
-
 [load interpreter-externs.wuns]
 
 [defn bind [evaluator errors top-names]
@@ -211,16 +172,34 @@
       [set-kv-map name-to-form n f]
       n]
     [logq-abort expected word [identity f]]]]
-[func try-get-desc [lctx w]
-  [if-let [ldesc [try-get-local lctx w]]
-    [option/some [desc/local ldesc]]
-    [if-let [top-desc [try-get top-names w]]
-      [option/some [desc/top top-desc]]
+
+[func try-lookup-bind-name [lctx name]
+  [let
+    [name-word [name/word name]
+     opt-desc
+     [if-let [ldesc [try-get-local lctx name-word]]
+      [option/some [desc/local ldesc]]
+      [if-let [top-desc [try-get top-names name-word]]
+        [option/some [desc/top top-desc]]
+        [option/none]]]]
+    [if-let [desc opt-desc]
+      [do
+        [set-kv-map name-to-desc name desc]
+        [option/some desc]]
       [option/none]]]]
-[func get-name [lctx n]
-  [if-let [desc [try-get-desc lctx [name/word n]]]
-    desc
-    [logq-abort get-name problem [name/word n]]]]
+
+[func desc-to-type [desc]
+  [match desc
+    [desc/top td]
+    [match td
+      [top-desc/constant desc-type desc-exp]
+      desc-type
+
+      [top-desc/function fd]
+      [defunc-desc-to-func-type fd]]
+
+    [desc/local ld]
+    [pair/fst ld]]]
 
 [func form-to-type [lctx form]
   [match form
@@ -245,10 +224,14 @@
       [type/tuple [list-map t [slice l 1 [size l]] [form-to-type lctx t]]]
 
       [[word pointer]]
-      [let [mem-name-form [second l]
-            mem-name [form-to-name [second l]]]
-        [todo check if mem-name is valid]
-        [set-kv-map name-to-desc mem-name [get-name lctx mem-name]]
+      [let [mem-name [form-to-name [second l]]]
+        [if-let [desc [try-lookup-bind-name lctx mem-name]]
+          [match [desc-to-type desc]
+            [type/memory -]
+            [do]
+
+            [logq-abort not a memory type]]
+          [logq-abort memory not bound]]
         [type/pointer
           mem-name
           [form-to-type lctx [third l]]]]
@@ -341,16 +324,15 @@
   [match f
     [form/word w]
     [let [n [form-to-name f]]
-      [set-kv-map name-to-desc n [get-name lctx n]]
+      [try-lookup-bind-name lctx n]
       [exp/var n]]
 
     [form/list l]
     [let [ff [first l]
           args [rest l]]
       [if-let [fw [try-get-word ff]]
-        [if-let [desc [try-get-desc lctx fw]]
-          [let [fn [form-to-name ff]]
-            [set-kv-map name-to-desc fn desc]
+        [let [fn [form-to-name ff]]
+          [if-let [desc [try-lookup-bind-name lctx fn]]
             [match desc
               [desc/top td]
               [match td
@@ -358,11 +340,52 @@
                 [exp/call
                   [exp/var fn]
                   [list-map arg args [form-to-exp lctx arg]]]]
-              [logq-abort not implemented local call]]]
-          [if-let [macro-func [try-get-macro evaluator fw]]
-            [form-to-exp lctx [apply macro-func args]]
-            [form-special-to-exp lctx fw l]]]
+              [logq-abort not implemented local call]]
+            [if-let [macro-func [try-get-macro evaluator fw]]
+              [form-to-exp lctx [apply macro-func args]]
+              [form-special-to-exp lctx fw l]]]]
         [exp/call [form-to-exp lctx ff] [list-map arg args [form-to-exp lctx arg]]]]]]]
+
+[func type-equals [t1 t2]
+  [match t1
+    [type/primitive w1]
+    [match t2
+      [type/primitive w2]
+      [eq-word [name/word w1] [name/word w2]]
+      false]
+
+    [type/tuple ts1]
+    [match t2
+      [type/tuple ts2]
+      [and
+        [eq [size ts1] [size ts2]]
+        [loop [i 0 n [size ts1]]
+          [if [lt-s i n]
+            [if [type-equals [at ts1 i] [at ts2 i]]
+              [continue i [inc i]]
+              false]
+            true]]]
+      false]
+
+    [type/pointer m1 t1]
+    [match t2
+      [type/pointer m2 t2]
+      [and
+        [type-equals
+          [desc-to-type [get name-to-desc m1]]
+          [desc-to-type [get name-to-desc m2]]]
+        [type-equals t1 t2]]
+      false]
+
+    [type/memory m1]
+    [match t2
+      [type/memory m2]
+      [and
+        [type-equals [mem-type/type m1] [mem-type/type m2]]
+        [eq-word [name/word [mem-type/name m1]] [name/word [mem-type/name m2]]]]
+      false]
+
+    [logq-abort type-equals [identity t1] [identity t2]]]]
 
 [func type-of [exp]
   [match exp
@@ -419,15 +442,7 @@
       t]
 
     [exp/var n]
-    [match [get name-to-desc n]
-      [desc/top td]
-      [match td
-        [top-desc/constant desc-type desc-exp]
-        desc-type
-        [top-desc/function fd]
-        [defunc-desc-to-func-type fd]]
-      [desc/local ld]
-      [pair/fst ld]]
+    [desc-to-type [get name-to-desc n]]
 
     [exp/intrinsic intrinsic-name args]
     [switch [name/word intrinsic-name]
@@ -485,15 +500,18 @@
     [type-ofs bodies]
 
     [logq-abort not implemented type-of [identity exp]]]]
+
 [func type-ofs [bodies]
   [if [is-empty bodies]
     type-empty-tuple
     [type-of [last bodies]]]]
+
 [func bind-top [name-form desc]
   [let [n [get-word name-form]]
     [when [has top-names n]
       [error name-form name already defined]]
     [set-kv-map top-names n desc]]]
+
 [func top-form-to-top-exp [form]
   [let [l [get-list form]]
     [if [is-empty l]
