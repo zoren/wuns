@@ -329,14 +329,18 @@
           [if-let [desc [try-lookup-bind-name lctx fn]]
             [match [desc-to-type desc]
               [type/func ps rt]
-              [exp/call
-                [exp/var fn]
-                [list-map arg args [form-to-exp lctx arg]]]
+              [let [cargs [list-map arg args [form-to-exp lctx arg]]]
+                [assert [eq [size ps] [size args]] call expected same number of arguments
+                  [identity fn] [size ps] [size args]]
+                [for i 0 [min [size ps] [size args]]
+                  [assert [type-equals [at ps i] [type-of [at cargs i]]]
+                    call expected same type [identity fn] [at ps i] [type-of [at cargs i]]]]
+                [exp/call [exp/var fn] cargs]]
               [logq-abort not a function type]]
             [if-let [macro-func [try-get-macro evaluator fw]]
               [form-to-exp lctx [apply macro-func args]]
               [form-special-to-exp lctx fw l]]]]
-        [exp/call [form-to-exp lctx ff] [list-map arg args [form-to-exp lctx arg]]]]]]]
+        [logq-abort form-to-exp not a word [identity ff]]]]]]
 
 [func name-to-type [n] [desc-to-type [get name-to-desc n]]]
 
@@ -395,15 +399,11 @@
         tt]]
 
     [exp/call f args]
-    [match f
-      [exp/var fn]
-      [match [name-to-type fn]
-        [type/func - rt]
-        rt
+    [match [type-of f]
+      [type/func - rt]
+      rt
 
-        [logq-abort not a function type]]
-
-      [logq-abort not implemented type-of call]]
+      [logq-abort not a function type]]
 
     [exp/import n m ik]
     [match ik
