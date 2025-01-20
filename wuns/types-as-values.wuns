@@ -13,7 +13,6 @@
   [union
     [primitive word]
     [tuple [list type]]
-    [array type i32]
     [pointer name type]
     [memory mem-type]
     [func [list type] type]
@@ -42,14 +41,6 @@
               [continue i [inc i]]
               false]
             true]]]
-      false]
-
-    [type/array et1 s1]
-    [match t2
-      [type/array et2 s2]
-      [and
-        [type-equals et1 et2]
-        [eq s1 s2]]
       false]
 
     [type/pointer m1 t1]
@@ -249,13 +240,6 @@
         [type/pointer
           mem-name
           [form-to-type lctx [third l]]]]
-
-      [[word array]]
-      [do
-        [assert [eq [size l] 2] form-to-type expected 2 elements]
-        [type/array
-          [form-to-type lctx [second l]]
-          [word-to-int [form-to-word [third l]]]]]
 
       [logq-abort not implemented type [identity form]]]]]]
 
