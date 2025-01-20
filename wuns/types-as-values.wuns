@@ -64,27 +64,29 @@
     [function exp-function]]]
 
 [type local-context-kind []
-  [union [func] [let] [loop] [def]]]
+  [union [func] [let] [loop]]]
 
 [type local-context []
-  [record
-    [outer [option local-context]]
-    [names [transient-kv-map word type]]
-    [kind local-context-kind]]]
+  [union
+    [empty]
+    [frame local-context [transient-kv-map word type] local-context-kind]]]
 
 [defn local-context-make [outer vars kind]
-  [local-context [option/some outer] vars kind]]
+  [local-context/frame outer vars kind]]
 
 [defn local-context-make-top [vars kind]
-  [local-context [option/none] vars kind]]
+  [local-context/frame [local-context/empty] vars kind]]
 
 [defn try-get-local [lctx name]
   [loop [cur lctx]
-    [if-let [v [try-get [local-context/names cur] name]]
-      [option/some [pair v [local-context/kind cur]]]
-      [if-let [o [local-context/outer cur]]
-        [continue cur o]
-        [option/none]]]]]
+    [match cur
+      [local-context/empty]
+      [option/none]
+
+      [local-context/frame outer names kind]
+      [if-let [v [try-get names name]]
+        [option/some [pair v kind]]
+        [continue cur outer]]]]]
 
 [defn try-get-pointer-args [t]
   [match t
@@ -509,10 +511,7 @@
           [do
             [when-not [eq [size l] 3] [error form expected def name exp-form]]
             [let
-              [be
-                [form-to-exp
-                  [local-context-make-top [transient-kv-map] [local-context-kind/def]]
-                  [third l]]
+              [be [form-to-exp [local-context/empty] [third l]]
                type [type-of be]
                bt [top-exp/constant [form-to-name [second l]] be]]
               [bind-top [second l] [top-desc/constant type be]]
