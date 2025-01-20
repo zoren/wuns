@@ -346,6 +346,8 @@
               [form-special-to-exp lctx fw l]]]]
         [exp/call [form-to-exp lctx ff] [list-map arg args [form-to-exp lctx arg]]]]]]]
 
+[func name-to-type [n] [desc-to-type [get name-to-desc n]]]
+
 [func type-equals [t1 t2]
   [match t1
     [type/primitive w1]
@@ -371,9 +373,7 @@
     [match t2
       [type/pointer m2 t2]
       [and
-        [type-equals
-          [desc-to-type [get name-to-desc m1]]
-          [desc-to-type [get name-to-desc m2]]]
+        [type-equals [name-to-type m1] [name-to-type m2]]
         [type-equals t1 t2]]
       false]
 
@@ -405,31 +405,18 @@
     [exp/call f args]
     [match f
       [exp/var fn]
-      [match [get name-to-desc fn]
-        [desc/top td]
-        [match td
-          [top-desc/function fd]
-          [let [params [defunc-desc/params fd]]
-            [when-not [eq [size params] [size args]] [logq-abort eval exp expected n arguments got m]]
-            [for i 0 [min [size params] [size args]]
-              [let [param-pair [at params i]
-                    pname [pair/fst param-pair]
-                    ptype [pair/snd param-pair]
-                    arg [at args i]]
-                [when-not [type-equals [type-of arg] ptype] [logq-abort eval exp expected type got]]]]
-            [defunc-desc/return-type fd]]
-          [logq-abort not implemented type-of call]]
-        [desc/local ld]
-        [logq-abort not implemented type-of call]]
+      [match [name-to-type fn]
+        [type/func - rt]
+        rt
+
+        [logq-abort not a function type]]
 
       [logq-abort not implemented type-of call]]
 
     [exp/import n m ik]
     [match ik
       [import-kind/memory et s os]
-      [do
-        [todo type should include index or name of type...]
-        [type/memory [mem-type et m]]]
+      [type/memory [mem-type et m]]
 
       [import-kind/function ps rt]
       [type/func ps rt]
@@ -438,11 +425,19 @@
 
     [exp/cast t e]
     [do
-      [todo check if cast is valid]
+      [if-let [ptp [try-get-pointer-args t]]
+        [let [mt [name-to-type [pair/fst ptp]]]
+          [match mt
+            [type/memory mk]
+            [assert [type-equals [mem-type/type mk] [type-of e]]
+              cast expected pointer to point to same type [identity mt] [type-of e]]
+
+            [logq-abort not implemented type-of cast]]]
+        [logq-abort not implemented type-of cast]]
       t]
 
     [exp/var n]
-    [desc-to-type [get name-to-desc n]]
+    [name-to-type n]
 
     [exp/intrinsic intrinsic-name args]
     [switch [name/word intrinsic-name]
