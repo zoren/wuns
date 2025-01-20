@@ -1,4 +1,4 @@
-[load std.wuns]
+[load wat.wuns]
 
 [type name []
   [record
@@ -14,7 +14,7 @@
     [primitive word]
     [tuple [list type]]
     [array type i32]
-    [pointer word type]
+    [pointer name type]
     [memory mem-type]
     [func [list type] type]
     [error]
@@ -56,7 +56,7 @@
     [match t2
       [type/pointer m2 t2]
       [and
-        [eq-word m1 m2]
+        [eq-word [name/word m1] [name/word m2]]
         [type-equals t1 t2]]
       false]
 
@@ -81,7 +81,6 @@
     [if exp exp exp]
     [cast type exp]
     [tuple [list exp]]
-    [import name name import-kind]
     [deref exp]
     [assign exp exp]
     [intrinsic name [list exp]]
@@ -89,11 +88,13 @@
     [do [list exp]]
 
     [size-of type]
+    [import name name import-kind]
+    [memory type i32 [option i32]]
     ]
 
   import-kind []
   [union
-    [memory type integer [option integer]]
+    [memory type i32 [option i32]]
     [function [list type] type]]]
 
 [comment
@@ -241,8 +242,10 @@
       [type/tuple [list-map t [slice l 1 [size l]] [form-to-type lctx t]]]
 
       [[word pointer]]
-      [let [mem-name [form-to-word [second l]]]
+      [let [mem-name-form [second l]
+            mem-name [form-to-name [second l]]]
         [todo check if mem-name is valid]
+        [set-kv-map name-to-desc mem-name [get-name lctx mem-name]]
         [type/pointer
           mem-name
           [form-to-type lctx [third l]]]]
@@ -267,10 +270,10 @@
         [logq mt [identity mt]]
         [import-kind/memory
           mt
-          [form-to-integer [third l]]
+          [word-to-int [form-to-word [third l]]]
           [if [eq [size l] 3]
             [option/none]
-            [option/some [form-to-integer [fourth l]]]]]]
+            [option/some [word-to-int [form-to-word [fourth l]]]]]]]
 
       [[word func]]
       [do
@@ -524,8 +527,168 @@
                       parameters
                       return-type
                       cbodies]]]]]]
-          [logq-abort not implemented [identity fw]]]]]]]]
-    top-form-to-top-exp]]]
+          [logq-abort not implemented [identity fw]]]]]]]
+
+[func type-to-wat-type [t]
+  [match t
+    [type/primitive w]
+    w
+    [type/pointer mem-name t]
+    [if-let [td [try-get top-names [name/word mem-name]]]
+      [match td
+        [top-desc/constant desc-type desc-exp]
+        [match desc-exp
+          [exp/import mod-name name ik]
+          [match ik
+            [import-kind/memory et s os]
+            [type-to-wat-type et]]]
+        [top-desc/function fd]
+        [logq-abort type-to-wat-type memory a func]]
+      [logq-abort type-to-wat-type memory a local]]
+
+    [logq-abort type-to-wat-type [identity t]]]]
+
+[func type-to-wat-types [type]
+  [match type
+    [type/tuple types]
+    [list-map t types [type-to-wat-type t]]
+
+    [list [type-to-wat-type type]]]]
+
+[func form-to-inst [f]
+  [match f
+    [exp/import mod-name name ik] [logq-abort inline imports not implemented]
+    [exp/cast t e] [form-to-inst e]
+    [exp/i32 i] [wat-inst/i32.const [int-to-word i]]
+    [exp/deref p] [logq-abort deref not implemented]
+    [exp/assign t s] [logq-abort assign not implemented]
+    [exp/intrinsic n args] [wat-inst/inst-word [name/word n] [list-map arg args [form-to-inst arg]]]
+
+    [exp/var n]
+    [match [get name-to-desc n]
+      [desc/top td]
+      [match td
+        [top-desc/constant t e]
+        [wat-inst/global.get [name/word n]]
+
+        [top-desc/function fd]
+        [logq-abort function as value not implemented]]
+
+      [desc/local ld]
+      [wat-inst/local.get [name/word n]]]
+
+    [exp/call fexp args]
+    [match fexp
+      [exp/var fn]
+      [wat-inst/call [name/word fn] [list-map arg args [form-to-inst arg]]]
+      [logq-abort not implemented call on non-var]]
+
+    [exp/if c t e]
+    [wat-inst/if
+      [type-to-wat-types [type-of t]]
+      [form-to-inst c] [form-to-inst t] [form-to-inst e]]
+
+    [exp/do es]
+    [forms-to-inst es]
+
+    [exp/let bindings bodies]
+    [wat-inst/instructions
+      [concat
+        [list-map b bindings
+          [let [n [name/word [pair/fst b]]
+                e [pair/snd b]]
+            [wat-inst/local.set n [form-to-inst e]]]]
+        [list [forms-to-inst bodies]]]]
+
+    [logq-abort form-to-inst not implemented [identity f]]]]
+
+[func forms-to-inst [forms]
+      [wat-inst/instructions
+        [if [is-empty forms]
+          [list]
+          [concat
+            [list-map form [slice forms 0 [dec [size forms]]]
+              [loop [res [form-to-inst form] i [size [type-to-wat-types [type-of form]]]]
+                  [if i
+                    [continue
+                      res [wat-inst-word [word drop] res]
+                      i [dec i]]
+                    res]]]
+            [list [form-to-inst [last forms]]]]]]]
+
+[func wuns-to-wat-func [f]
+  [let [wat-body [forms-to-inst [exp-function/bodies f]]
+        locals [list]]
+    [wat-func
+      [name/word [exp-function/name f]]
+      [list-map p [exp-function/params f]
+        [pair
+          [name/word [pair/fst p]]
+          [type-to-wat-type [pair/snd p]]]]
+      locals
+      [type-to-wat-types [exp-function/return-type f]]
+      wat-body]]]
+
+[func compile [tops]
+  [let
+    [imports [growable-list]
+     memories [growable-list]
+     globals [growable-list]
+     funcs [growable-list]
+     exports [growable-list]
+     datas [growable-list]]
+    [for-each top tops
+      [match top
+        [top-exp/constant n e]
+        [match e
+          [exp/import mod-name name ik]
+          [push
+            imports
+            [pair
+              [pair [name/word mod-name] [name/word name]]
+              [match ik
+                [import-kind/function ps rt]
+                [wat-import-kind/func
+                  [name/word name]
+                  [list-map p ps [type-to-wat-type p]]
+                  [type-to-wat-types rt]]
+
+                [import-kind/memory mk s os]
+                [wat-import-kind/memory
+                  [match mk
+                    [type/primitive w]
+                    [switch w
+                      [[word i32]] [memory-kind/i32]
+                      [[word i64]] [memory-kind/i64]
+                      [logq-abort not implemented memory-kind [identity w]]]
+                    [logq-abort not implemented memory-kind [identity mk]]]
+                  s
+                  os]]]]
+
+          [push
+            globals
+            [wat-global
+              [name/word n]
+              [type-to-wat-type [type-of e]]
+              [form-to-inst e]]]]
+
+
+        [top-exp/function f]
+        [push
+          funcs
+          [wuns-to-wat-func f]]]]
+
+    [wat-output
+      imports
+      memories
+      globals
+      funcs
+      exports
+      datas]]]
+]
+    [pair
+      top-form-to-top-exp
+      compile]]]]
 
 [defexpr qlist [.. fs] fs]
 
@@ -542,19 +705,23 @@
       [let
         [gerrors [growable-list]
          top-names [make-top-names]
-         top-form-to-top-exp [bind evaluator gerrors top-names]
+         binder-compiler [bind evaluator gerrors top-names]
+         top-form-to-top-exp [pair/fst binder-compiler]
+         compile-tops [pair/snd binder-compiler]
          top-forms [growable-list]]
         [for-each form forms
           [if-let [top [top-form-to-top-exp form]]
             [push top-forms top]
             [logq-abort no top form for [identity form]]]]
-        [let [errors [clone-growable-to-frozen-list gerrors]]
+        [let [errors [clone-growable-to-frozen-list gerrors]
+              tops [clone-growable-to-frozen-list top-forms]]
           [when-not [is-empty errors]
             [logq there were errors]
             [for-each e errors
               [logq error [identity e]]]]
-          [for-each top-form [clone-growable-to-frozen-list top-forms]
-          [log top-form]]]]]]]
+          [for-each top-form tops
+            [log top-form]]
+          [byte-array-log-as-string [wat-to-wat-bytes [output-to-wat [compile-tops tops]]]]]]]]]
 
 [defexpr bind-forms [.. forms]
   [bind-forms-fn forms]]
