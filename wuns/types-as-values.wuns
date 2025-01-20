@@ -73,6 +73,7 @@
     [cast type exp]
     [tuple [list exp]]
     [deref exp]
+    [deref-to type exp]
     [assign exp exp]
     [intrinsic name [list exp]]
     [let [list [pair name exp]] [list exp]]
@@ -313,6 +314,11 @@
     [[word deref]]
     [exp/deref [form-to-exp lctx [second l]]]
 
+    [[word deref-to]]
+    [exp/deref-to
+      [form-to-type lctx [second l]]
+      [form-to-exp lctx [third l]]]
+
     [[word assign]]
     [exp/assign
       [form-to-exp lctx [second l]]
@@ -451,6 +457,25 @@
       [if-let [p [try-get-pointer-args target-type]]
         [pair/snd p]
         [type/error]]]
+
+    [exp/deref-to target-type target-exp]
+    [let [exp-type [type-of target-exp]]
+      [if-let [p [try-get-pointer-args exp-type]]
+        [let [pointer-target-type [pair/snd p]]
+          [when-not [type-equals pointer-target-type target-type]
+            [if-let [p [option-pair [try-get-primitive pointer-target-type] [try-get-primitive target-type]]]
+              [let [et [pair/fst p]]
+                [switch [pair/snd p]
+                  [[word i32]]
+                  [assert
+                    [or [eq-word et [word u8]] [eq-word et [word i8]]]]
+                  [[word i64]]
+                  [assert
+                    [or [eq-word et [word u8]] [eq-word et [word i8]]]]
+                  [logq-abort only i32 and i64 targets supported for deref-to]]]
+              [logq-abort expected primitive types]]]]
+        [logq-abort not a pointer]]
+      target-type]
 
     [exp/assign target source]
     [let [target-pointer-type [type-of target]
