@@ -3,7 +3,7 @@ import fs from 'node:fs/promises'
 import * as readline from 'node:readline'
 import { stdin, stdout, nextTick } from 'node:process'
 
-import { getLocationFromForm, parseString, print } from './core.js'
+import { parseString, print } from './core.js'
 import { specialForms, makeJSCompilingEvaluator } from './compiler-js.js'
 import { 'read-file-async' as read_file_async } from './runtime-lib/files.js'
 
@@ -20,21 +20,11 @@ const commandLineArgs = process.argv.slice(2)
 const endsWithDashFlag = commandLineArgs.at(-1) === '-'
 const files = endsWithDashFlag ? commandLineArgs.slice(0, -1) : commandLineArgs
 
-const logEvalError = (e) => {
-  console.error(e.message, getLocationFromForm(e.form))
-  let curErr = e
-  while (curErr) {
-    console.error(curErr.message, getLocationFromForm(curErr.form))
-    curErr = curErr.innerError
-  }
-}
-
 const evaluateForms = async (forms) => {
   try {
     return await evalTops(forms)
   } catch (e) {
     console.error(e)
-    logEvalError(e)
   }
 }
 
