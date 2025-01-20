@@ -149,10 +149,22 @@
 
 [load interpreter-externs.wuns]
 
+[defn desc-to-type [desc]
+  [match desc
+    [desc/top td]
+    [match td
+      [top-desc/constant desc-type desc-exp]
+      desc-type
+
+      [top-desc/function fd]
+      [defunc-desc-to-func-type fd]]
+
+    [desc/local ld]
+    [pair/fst ld]]]
+
 [defn bind [evaluator errors top-names]
   [let
-    [name-to-form [transient-kv-map]
-     name-to-desc [transient-kv-map]]
+    [name-to-desc [transient-kv-map]]
     [letfn [
 [func get-word [f]
   [if-let [w [try-get-word f]]
@@ -168,9 +180,7 @@
       [list]]]]
 [func form-to-name [f]
   [if-let [w [try-get-word f]]
-    [let [n [name w]]
-      [set-kv-map name-to-form n f]
-      n]
+    [name w]
     [logq-abort expected word [identity f]]]]
 
 [func try-lookup-bind-name [lctx name]
@@ -187,19 +197,6 @@
         [set-kv-map name-to-desc name desc]
         [option/some desc]]
       [option/none]]]]
-
-[func desc-to-type [desc]
-  [match desc
-    [desc/top td]
-    [match td
-      [top-desc/constant desc-type desc-exp]
-      desc-type
-
-      [top-desc/function fd]
-      [defunc-desc-to-func-type fd]]
-
-    [desc/local ld]
-    [pair/fst ld]]]
 
 [func form-to-type [lctx form]
   [match form
