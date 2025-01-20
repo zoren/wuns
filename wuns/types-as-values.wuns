@@ -4,6 +4,9 @@
   [record
     [word word]]]
 
+[type local-context-kind []
+  [union [func] [let] [loop]]]
+
 [type
   type []
   [union
@@ -34,7 +37,8 @@
     [deref-to type exp]
     [assign exp exp]
     [intrinsic name [list exp]]
-    [let [list [pair name exp]] [list exp]]
+    [let-loop local-context-kind [list [pair name exp]] [list exp]]
+    [continue [list [pair name exp]]]
     [do [list exp]]
 
     [size-of type]
@@ -48,8 +52,6 @@
     [function [list type] type]]]
 
 [comment
-    [loop [list [pair name exp]] [list exp]]
-    [continue [list [pair name exp]]]
     [field exp name]
 ]
 
@@ -64,9 +66,6 @@
   [union
     [constant name exp]
     [function exp-function]]]
-
-[type local-context-kind []
-  [union [func] [let] [loop]]]
 
 [type local-context []
   [union
@@ -89,6 +88,23 @@
       [if-let [v [try-get names name]]
         [option/some [pair v kind]]
         [continue cur outer]]]]]
+
+[defn try-get-enclosing-loop-context [lctx]
+  [loop [cur lctx]
+    [match cur
+      [local-context/empty]
+      [option/none]
+
+      [local-context/frame outer names kind]
+      [match kind
+        [local-context-kind/loop]
+        [option/some names]
+
+        [local-context-kind/let]
+        [continue cur outer]
+
+        [local-context-kind/func]
+        [option/none]]]]]
 
 [defn try-get-pointer-args [t]
   [match t
@@ -291,17 +307,30 @@
       [form-to-name [second l]]
       [list-map arg [slice l 2 [size l]] [form-to-exp lctx arg]]]
 
-    [[word let]]
+    [[word let] [word loop]]
     [let
       [vars [transient-kv-map]
-       let-ctx [local-context-make lctx vars [local-context-kind/let]]]
-      [exp/let
+       ll-kind [if [eq-word fw [word let]] [local-context-kind/let] [local-context-kind/loop]]
+       let-loop-ctx [local-context-make lctx vars ll-kind]]
+      [exp/let-loop ll-kind
         [list-map p [pairwise-pairs [get-list [second l]]]
           [let [pname [form-to-name [pair/fst p]]
-                pexp [form-to-exp let-ctx [pair/snd p]]]
+                pexp [form-to-exp let-loop-ctx [pair/snd p]]]
             [set-kv-map vars [name/word pname] [type-of pexp]]
             [pair pname pexp]]]
-        [list-map b [slice l 2 [size l]] [form-to-exp let-ctx b]]]]
+        [list-map b [slice l 2 [size l]] [form-to-exp let-loop-ctx b]]]]
+
+    [[word continue]]
+    [if-let [loop-vars [try-get-enclosing-loop-context lctx]]
+      [exp/continue
+        [list-map p [pairwise-pairs [get-list [second l]]]
+          [let [n [form-to-name [pair/fst p]]
+                e [form-to-exp lctx [pair/snd p]]]
+            [if-let [t [try-get loop-vars [name/word n]]]
+              [assert [type-equals t [type-of e]] continue expected same type [identity n]]
+              [logq-abort continue not a loop var]]
+            [pair n e]]]]
+      [logq-abort continue not in loop]]
 
     [[word do]]
     [exp/do [list-map b [rest l] [form-to-exp lctx b]]]
@@ -502,11 +531,17 @@
         [when-not [type-equals [pair/snd p] source-type] [logq-abort eval exp expected type got]]]
       type-empty-tuple]
 
-    [exp/let bindings bodies]
+    [exp/let-loop ll-kind bindings bodies]
     [do
       [for-each binding bindings
         [type-of [pair/snd binding]]]
       [type-ofs bodies]]
+
+    [exp/continue bindings]
+    [do
+      [for-each binding bindings
+       [type-of [pair/snd binding]]]
+      type-empty-tuple]
 
     [exp/do bodies]
     [type-ofs bodies]
@@ -703,14 +738,31 @@
     [exp/do es]
     [forms-to-inst es]
 
-    [exp/let bindings bodies]
+    [exp/let-loop ll-kind bindings bodies]
+    [let
+      [bind-insts
+       [list-map b bindings
+          [wat-inst/local.set [name/word [pair/fst b]] [form-to-inst [pair/snd b]]]]]
+      [match ll-kind
+        [local-context-kind/let]
+        [wat-inst/instructions
+          [concat bind-insts [list [forms-to-inst bodies]]]]
+
+        [local-context-kind/loop]
+        [wat-inst/instructions
+          [concat bind-insts
+            [list
+              [wat-inst/loop
+                [word loop-label]
+                [type-to-wat-types [type-ofs bodies]]
+                [forms-to-inst bodies]]]]]]]
+
+    [exp/continue assignments]
     [wat-inst/instructions
       [concat
-        [list-map b bindings
-          [let [n [name/word [pair/fst b]]
-                e [pair/snd b]]
-            [wat-inst/local.set n [form-to-inst e]]]]
-        [list [forms-to-inst bodies]]]]
+        [list-map a assignments
+          [wat-inst/local.set [name/word [pair/fst a]] [form-to-inst [pair/snd a]]]]
+        [list [wat-inst/br [word loop-label]]]]]
 
     [exp/size-of t]
     [form-to-inst [type-to-size-of-exp t]]
@@ -763,10 +815,13 @@
           [exp/do es]
           [for-each e es [add-locals e]]
 
-          [exp/let bindings bodies]
+          [exp/let-loop ll-kind bindings bodies]
           [do
             [for-each binding bindings [add-locals [pair/snd binding]]]
             [for-each body bodies [add-locals body]]]
+
+          [exp/continue assignments]
+          [for-each a assignments [add-locals [pair/snd a]]]
 
           [exp/size-of t]
           [match t
