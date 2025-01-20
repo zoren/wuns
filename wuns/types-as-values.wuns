@@ -16,7 +16,7 @@
     ]
 
   mem-type []
-  [record [type type] [name word]]
+  [record [type type] [name name]]
 
   exp []
   [union
@@ -121,6 +121,7 @@
   [match t
     [type/pointer m p]
     [option/some [pair m p]]
+
     [option/none]]]
 
 [defn make-top-names []
@@ -180,7 +181,7 @@
       [type/memory m2]
       [and
         [type-equals [mem-type/type m1] [mem-type/type m2]]
-        [eq-word [mem-type/name m1] [mem-type/name m2]]]
+        [eq-word [name/word [mem-type/name m1]] [name/word [mem-type/name m2]]]]
       false]
 
     [logq-abort type-equals [identity t1] [identity t2]]]]
@@ -405,7 +406,7 @@
       [import-kind/memory et s os]
       [do
         [todo type should include index or name of type...]
-        [type/memory [mem-type et [name/word m]]]]
+        [type/memory [mem-type et m]]]
 
       [import-kind/function ps rt]
       [type/func ps rt]
