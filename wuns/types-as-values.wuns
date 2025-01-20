@@ -4,10 +4,6 @@
   [record
     [word word]]]
 
-[type integer []
-  [record
-    [value i32]]]
-
 [type
   type []
   [union
@@ -216,10 +212,6 @@
       [set-kv-map name-to-form n f]
       n]
     [logq-abort expected word [identity f]]]]
-[func form-to-integer [f]
-  [if-let [w [try-get-word f]]
-    [integer [word-to-int w]]
-    [logq-abort expected word]]]
 [func try-get-desc [lctx w]
   [if-let [ldesc [try-get-local lctx w]]
     [option/some [desc/local ldesc]]
