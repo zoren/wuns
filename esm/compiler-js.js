@@ -169,35 +169,35 @@ const typeFunc = (parameters, restParameter, result) =>
 
 const makeTypeValidator = (typeContext, params) => {
   const subst = new Set(params)
-  const go = (typeForm) => {
+  const go = (form) => {
     {
-      const typeWord = tryGetFormWord(typeForm)
+      const typeWord = tryGetFormWord(form)
       if (typeWord) {
         if (subst.has(typeWord)) return typeVar(typeWord)
-        return go(makeFormList([typeForm]))
+        return go(makeFormList([form]))
       }
     }
-    const typeList = getFormList(typeForm)
-    if (typeList.length === 0) throw new CompileError('empty type list', typeForm)
+    const typeList = getFormList(form)
+    if (typeList.length === 0) throw new CompileError('empty type list', form)
     const [first, ...rest] = typeList
     const firstWord = getFormWord(first)
     if (firstWord in builtInPrimitiveTypeSizes) {
-      if (rest.length !== 0) throw new CompileError('built-in type expected no arguments', typeForm)
+      if (rest.length !== 0) throw new CompileError('built-in type expected no arguments', form)
       return typeInst(firstWord)
     }
     switch (firstWord) {
       case 'word':
-        if (rest.length !== 0) throw new CompileError('expects no arguments', typeForm)
+        if (rest.length !== 0) throw new CompileError('expects no arguments', form)
         return typeInst(firstWord)
       case 'list':
-        if (rest.length !== 1) throw new CompileError('expects one argument', typeForm)
+        if (rest.length !== 1) throw new CompileError('expects one argument', form)
         return typeInst(firstWord, go(rest[0]))
       case 'func': {
-        if (rest.length !== 2) throw new CompileError('func expects two arguments', typeForm)
+        if (rest.length !== 2) throw new CompileError('func expects two arguments', form)
         const [paramsForm, returnTypeForm] = rest
         const params = getFormList(paramsForm)
         if (params.length > 1 && tryGetFormWord(params.at(-2)) === '..')
-          throw new CompileError('rest parameter not implemented')
+          throw new CompileError('rest parameter not implemented', form)
         const returnType = go(returnTypeForm)
         return typeFunc(params.map(go), null, returnType)
       }
@@ -205,9 +205,9 @@ const makeTypeValidator = (typeContext, params) => {
         return typeInst('tuple', rest.map(go))
     }
     const userDef = typeContext.get(firstWord)
-    if (!userDef) throw new CompileError('unknown type: ' + firstWord)
+    if (!userDef) throw new CompileError('unknown type: ' + firstWord, first)
     const { params } = userDef
-    if (params.length !== rest.length) throw new CompileError('wrong number of type parameters')
+    if (params.length !== rest.length) throw new CompileError('wrong number of type parameters', form)
     return typeInst(firstWord, ...rest.map((t) => go(t)))
   }
   return go
