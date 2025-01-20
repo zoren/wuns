@@ -10,7 +10,7 @@ import {
   getLocationFromForm,
   print,
 } from './core.js'
-import { loadInstToType, storeInstToType, primtiveArrays, intrinsicsInfo } from './intrinsics.js'
+import { intrinsicsInfo } from './intrinsics.js'
 import { escapeIdentifier, jsExpToString, jsStmtToString } from './runtime-lib/js.js'
 
 const jsExp =
@@ -178,33 +178,22 @@ const makeTypeValidator = (typeContext, params) => {
       }
     }
     const typeList = getFormList(typeForm)
-    if (typeList.length === 0) throw new CompileError('empty type list')
+    if (typeList.length === 0) throw new CompileError('empty type list', typeForm)
     const [first, ...rest] = typeList
     const firstWord = getFormWord(first)
     if (firstWord in builtInPrimitiveTypeSizes) {
-      if (rest.length !== 0) throw new CompileError('built-in type expected no arguments')
+      if (rest.length !== 0) throw new CompileError('built-in type expected no arguments', typeForm)
       return typeInst(firstWord)
     }
     switch (firstWord) {
       case 'word':
-      case 'any':
-        if (rest.length !== 0) throw new CompileError('expected no arguments')
+        if (rest.length !== 0) throw new CompileError('expects no arguments', typeForm)
         return typeInst(firstWord)
       case 'list':
-      case 'pointer': {
-        if (rest.length !== 1) throw new CompileError('expected one argument')
+        if (rest.length !== 1) throw new CompileError('expects one argument', typeForm)
         return typeInst(firstWord, go(rest[0]))
-      }
-      case 'array': {
-        if (rest.length !== 2) throw new CompileError('array expected two arguments')
-        const [elementTypeForm, sizeForm] = rest
-        const elementType = go(elementTypeForm)
-        const size = go(sizeForm)
-        if (Array.isArray(size) && size[0] !== 'exp') throw new CompileError('array size must be exp type')
-        return typeInst('array', elementType, size)
-      }
       case 'func': {
-        if (rest.length < 2) throw new CompileError('func expected at least two arguments')
+        if (rest.length !== 2) throw new CompileError('func expects two arguments', typeForm)
         const [paramsForm, returnTypeForm] = rest
         const params = getFormList(paramsForm)
         if (params.length > 1 && tryGetFormWord(params.at(-2)) === '..')
@@ -222,18 +211,6 @@ const makeTypeValidator = (typeContext, params) => {
     return typeInst(firstWord, ...rest.map((t) => go(t)))
   }
   return go
-}
-
-const createPrimitiveArrayExpression = (typeName, memName, offset, pointer) => {
-  const primArray = primtiveArrays[typeName]
-  if (!primArray) throw new CompileError('primitive array expected')
-  const { arrayName, byteSize } = primArray
-  if (offset < 0) throw new CompileError('negative offset')
-  if (offset > 0x7fffffff) throw new CompileError('offset too large')
-  if (offset % byteSize !== 0) throw new CompileError('unaligned offset')
-  const arrayExp = jsNew(jsCall(jsVar(arrayName), [jsSubscript(jsVar(memName), jsString('buffer')), jsNumber(offset)]))
-  const addrExp = byteSize === 1 ? pointer : jsBin('div')(pointer, jsNumber(byteSize))
-  return jsSubscript(arrayExp, jsOr0(addrExp))
 }
 
 const expSpecialFormsExp = {
