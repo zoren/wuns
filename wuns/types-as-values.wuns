@@ -493,17 +493,6 @@
     [exp/do bodies]
     [type-ofs bodies]
 
-    [exp/intrinsic n args]
-    [switch [name/word n]
-      [[word i32.add] [word i32.sub] [word i32.mul]]
-      [do
-        [assert [eq [size args] 2] intrinsic expected 2 arguments]
-        [for-each arg args
-          [assert [type-equals type-i32 [type-of arg]] intrinsic expected i32]]
-        type-i32]
-
-      [logq-abort not implemented type-of intrinsic [identity n]]]
-
     [logq-abort not implemented type-of [identity exp]]]]
 [func type-ofs [bodies]
   [if [is-empty bodies]
