@@ -63,16 +63,6 @@
     [constant name exp]
     [function exp-function]]]
 
-[type defunc-desc []
-  [record
-    [params [list [pair name type]]]
-    [return-type type]]]
-
-[type top-desc []
-  [union
-    [constant type exp]
-    [function defunc-desc]]]
-
 [type local-context-kind []
   [union [func] [let] [loop] [def]]]
 
@@ -81,17 +71,6 @@
     [outer [option local-context]]
     [names [transient-kv-map word type]]
     [kind local-context-kind]]]
-
-[type top-context []
-  [record
-    [errors [list [pair form [list form]]]]
-    [top-names [transient-kv-map word top-desc]]]]
-
-[defn error-fn [errors exp message-form]
-  [push errors [pair exp message-form]]]
-
-[defmacro error [form .. message]
-  [flist [quote error-fn] [quote errors] form [quote-list message]]]
 
 [defn local-context-make [outer vars kind]
   [local-context [option/some outer] vars kind]]
@@ -139,6 +118,16 @@
 
 [load interpreter-externs.wuns]
 
+[type defunc-desc []
+  [record
+    [params [list [pair name type]]]
+    [return-type type]]]
+
+[type top-desc []
+  [union
+    [constant type exp]
+    [function defunc-desc]]]
+
 [type desc []
   [union
     [local [pair type local-context-kind]]
@@ -159,10 +148,16 @@
     [desc/local ld]
     [pair/fst ld]]]
 
+[defmacro error [form .. message]
+  [flist [quote error-fn] form [quote-list message]]]
+
 [defn bind [evaluator errors top-names]
   [let
     [name-to-desc [transient-kv-map]]
     [letfn [
+[func error-fn [exp message-form]
+  [push errors [pair exp message-form]]]
+
 [func get-word [f]
   [if-let [w [try-get-word f]]
     w
@@ -186,8 +181,8 @@
      opt-desc
      [if-let [ldesc [try-get-local lctx name-word]]
       [option/some [desc/local ldesc]]
-      [if-let [top-desc [try-get top-names name-word]]
-        [option/some [desc/top top-desc]]
+      [if-let [td [try-get top-names name-word]]
+        [option/some [desc/top td]]
         [option/none]]]]
     [if-let [desc opt-desc]
       [do
