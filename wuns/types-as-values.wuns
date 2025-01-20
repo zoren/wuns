@@ -7,57 +7,17 @@
 [type
   type []
   [union
-    [primitive word]
+    [primitive name]
     [tuple [list type]]
     [pointer name type]
     [memory mem-type]
     [func [list type] type]
     [error]
     ]
+
   mem-type []
   [record [type type] [name word]]
-]
 
-[defn type-equals [t1 t2]
-  [match t1
-    [type/primitive w1]
-    [match t2
-      [type/primitive w2]
-      [eq-word w1 w2]
-      false]
-
-    [type/tuple ts1]
-    [match t2
-      [type/tuple ts2]
-      [and
-        [eq [size ts1] [size ts2]]
-        [loop [i 0 n [size ts1]]
-          [if [lt-s i n]
-            [if [type-equals [at ts1 i] [at ts2 i]]
-              [continue i [inc i]]
-              false]
-            true]]]
-      false]
-
-    [type/pointer m1 t1]
-    [match t2
-      [type/pointer m2 t2]
-      [and
-        [eq-word [name/word m1] [name/word m2]]
-        [type-equals t1 t2]]
-      false]
-
-    [type/memory m1]
-    [match t2
-      [type/memory m2]
-      [and
-        [type-equals [mem-type/type m1] [mem-type/type m2]]
-        [eq-word [mem-type/name m1] [mem-type/name m2]]]
-      false]
-
-    [logq-abort type-equals [identity t1] [identity t2]]]]
-
-[type
   exp []
   [union
     [i32 i32]
@@ -77,7 +37,6 @@
 
     [size-of type]
     [import name name import-kind]
-    [memory type i32 [option i32]]
     ]
 
   import-kind []
@@ -168,14 +127,14 @@
   [let [top-names [transient-kv-map]]
     top-names]]
 
-[def type-i32 [type/primitive [word i32]]]
-[def type-f64 [type/primitive [word f64]]]
+[def type-i32 [type/primitive [name [word i32]]]]
+[def type-f64 [type/primitive [name [word f64]]]]
 [def type-empty-tuple [type/tuple [list]]]
 
 [defn try-get-primitive [t]
   [match t
     [type/primitive w]
-    [option/some w]
+    [option/some [name/word w]]
     [option/none]]]
 
 [defn option-pair [opt1 opt2]
@@ -186,6 +145,45 @@
       [option/some [pair v1 v2]]
       [option/none]]
     [option/none]]]
+
+[defn type-equals [t1 t2]
+  [match t1
+    [type/primitive w1]
+    [match t2
+      [type/primitive w2]
+      [eq-word [name/word w1] [name/word w2]]
+      false]
+
+    [type/tuple ts1]
+    [match t2
+      [type/tuple ts2]
+      [and
+        [eq [size ts1] [size ts2]]
+        [loop [i 0 n [size ts1]]
+          [if [lt-s i n]
+            [if [type-equals [at ts1 i] [at ts2 i]]
+              [continue i [inc i]]
+              false]
+            true]]]
+      false]
+
+    [type/pointer m1 t1]
+    [match t2
+      [type/pointer m2 t2]
+      [and
+        [eq-word [name/word m1] [name/word m2]]
+        [type-equals t1 t2]]
+      false]
+
+    [type/memory m1]
+    [match t2
+      [type/memory m2]
+      [and
+        [type-equals [mem-type/type m1] [mem-type/type m2]]
+        [eq-word [mem-type/name m1] [mem-type/name m2]]]
+      false]
+
+    [logq-abort type-equals [identity t1] [identity t2]]]]
 
 [load interpreter-externs.wuns]
 
@@ -226,7 +224,7 @@
 [func form-to-type [lctx form]
   [match form
     [form/word w]
-    [type/primitive w]
+    [type/primitive [form-to-name form]]
 
     [form/list l]
   [do
@@ -240,7 +238,7 @@
        [word f32]
        [word f64]
        [word v128]]
-      [type/primitive [form-to-word [first l]]]
+      [type/primitive [form-to-name [first l]]]
 
       [[word tuple]]
       [type/tuple [list-map t [slice l 1 [size l]] [form-to-type lctx t]]]
@@ -554,9 +552,10 @@
 
 [func type-to-wat-type [t]
   [match t
-    [type/primitive w]
-    w
-    [type/pointer mem-name t]
+    [type/primitive n]
+    [name/word n]
+
+    [type/pointer mem-name -]
     [if-let [td [try-get top-names [name/word mem-name]]]
       [match td
         [top-desc/constant desc-type desc-exp]
@@ -750,7 +749,7 @@
                 [wat-import-kind/memory
                   [match mk
                     [type/primitive w]
-                    [switch w
+                    [switch [name/word w]
                       [[word i32]] [memory-kind/i32]
                       [[word i64]] [memory-kind/i64]
                       [logq-abort not implemented memory-kind [identity w]]]
