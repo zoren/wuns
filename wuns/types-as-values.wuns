@@ -327,14 +327,12 @@
       [if-let [fw [try-get-word ff]]
         [let [fn [form-to-name ff]]
           [if-let [desc [try-lookup-bind-name lctx fn]]
-            [match desc
-              [desc/top td]
-              [match td
-                [top-desc/function fd]
-                [exp/call
-                  [exp/var fn]
-                  [list-map arg args [form-to-exp lctx arg]]]]
-              [logq-abort not implemented local call]]
+            [match [desc-to-type desc]
+              [type/func ps rt]
+              [exp/call
+                [exp/var fn]
+                [list-map arg args [form-to-exp lctx arg]]]
+              [logq-abort not a function type]]
             [if-let [macro-func [try-get-macro evaluator fw]]
               [form-to-exp lctx [apply macro-func args]]
               [form-special-to-exp lctx fw l]]]]
