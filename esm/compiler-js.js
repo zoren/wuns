@@ -440,7 +440,15 @@ const compExpStmt = (lctx, form, topContext, isTail) => {
       if (exp) return isTail ? jsReturn(exp) : jsExpStmt(exp)
 
       const desc = topContext.defEnv.get(firstWord)
-      if (desc && desc.defKind === 'defmacro') return compExpStmt(lctx, desc.value(...args), topContext, isTail)
+      if (desc && desc.defKind === 'defmacro') {
+        const macroResult = desc.value(...args)
+        try {
+          return compExpStmt(lctx, macroResult, topContext, isTail)
+        } catch (e) {
+          if (e instanceof CompileError) throw e
+          throw new CompileError('failed to compile macro result to expression statement', form)
+        }
+      }
     } catch (e) {
       if (e instanceof CompileError && !e.form) e.form = form
       throw e
@@ -520,8 +528,15 @@ const compExp = (ctx, form, topContext) => {
         const { defKind, value, paramDesc } = defDesc
         if (paramDesc) checkArity(paramDesc)
         switch (defKind) {
-          case 'defmacro':
-            return compExp(ctx, value(...args), topContext)
+          case 'defmacro': {
+            const macroForm = value(...args)
+            try {
+              return compExp(ctx, macroForm, topContext)
+            } catch (e) {
+              if (e instanceof CompileError) throw e
+              throw new CompileError('failed to compile macro result to expression', form)
+            }
+          }
           case 'defexpr':
             return jsCall(jsVar(firstWord), args.map(formToQuotedJS))
           default:
