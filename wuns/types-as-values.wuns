@@ -82,11 +82,6 @@
     [names [transient-kv-map word type]]
     [kind local-context-kind]]]
 
-[type desc []
-  [union
-    [local [pair type local-context-kind]]
-    [top top-desc]]]
-
 [type top-context []
   [record
     [errors [list [pair form [list form]]]]
@@ -111,11 +106,6 @@
       [if-let [o [local-context/outer cur]]
         [continue cur o]
         [option/none]]]]]
-
-[defn defunc-desc-to-func-type [dd]
-  [type/func
-    [list-map p [defunc-desc/params dd] [pair/snd p]]
-    [defunc-desc/return-type dd]]]
 
 [defn try-get-pointer-args [t]
   [match t
@@ -149,6 +139,11 @@
 
 [load interpreter-externs.wuns]
 
+[type desc []
+  [union
+    [local [pair type local-context-kind]]
+    [top top-desc]]]
+
 [defn desc-to-type [desc]
   [match desc
     [desc/top td]
@@ -157,7 +152,9 @@
       desc-type
 
       [top-desc/function fd]
-      [defunc-desc-to-func-type fd]]
+      [type/func
+        [list-map p [defunc-desc/params fd] [pair/snd p]]
+        [defunc-desc/return-type fd]]]
 
     [desc/local ld]
     [pair/fst ld]]]
