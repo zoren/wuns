@@ -125,18 +125,10 @@
     [constant]
     [function]]]
 
-[type desc []
+[type desc-kind []
   [union
-    [local [pair type local-context-kind]]
-    [top [pair type top-desc-kind]]]]
-
-[defn desc-to-type [desc]
-  [match desc
-    [desc/top tt]
-    [pair/fst tt]
-
-    [desc/local ld]
-    [pair/fst ld]]]
+    [local local-context-kind]
+    [top top-desc-kind]]]
 
 [defmacro error [form .. message]
   [flist [quote error-fn] form [quote-list message]]]
@@ -170,9 +162,9 @@
     [name-word [name/word name]
      opt-desc
      [if-let [ldesc [try-get-local lctx name-word]]
-      [option/some [desc/local ldesc]]
+      [option/some [pair [pair/fst ldesc] [desc-kind/local [pair/snd ldesc]]]]
       [if-let [td [try-get top-names name-word]]
-        [option/some [desc/top td]]
+        [option/some [pair [pair/fst td] [desc-kind/top [pair/snd td]]]]
         [option/none]]]]
     [when-let [desc opt-desc]
       [set-kv-map name-to-desc name desc]]
@@ -203,7 +195,7 @@
       [[word pointer]]
       [let [mem-name [form-to-name [second l]]]
         [if-let [desc [try-lookup-bind-name lctx mem-name]]
-          [match [desc-to-type desc]
+          [match [pair/fst desc]
             [type/memory -]
             [do]
 
@@ -310,7 +302,7 @@
       [if-let [fw [try-get-word ff]]
         [let [fn [form-to-name ff]]
           [if-let [desc [try-lookup-bind-name lctx fn]]
-            [match [desc-to-type desc]
+            [match [pair/fst desc]
               [type/func ps rt]
               [let [cargs [list-map arg args [form-to-exp lctx arg]]]
                 [assert [eq [size ps] [size args]] call expected same number of arguments
@@ -325,7 +317,7 @@
               [form-special-to-exp lctx fw l]]]]
         [logq-abort form-to-exp not a word [identity ff]]]]]]
 
-[func name-to-type [n] [desc-to-type [get name-to-desc n]]]
+[func name-to-type [n] [pair/fst [get name-to-desc n]]]
 
 [func type-equals [t1 t2]
   [match t1
@@ -608,16 +600,16 @@
     [exp/intrinsic n args] [wat-inst/inst-word [name/word n] [list-map arg args [form-to-inst arg]]]
 
     [exp/var n]
-    [match [get name-to-desc n]
-      [desc/top td]
-      [match [pair/snd td]
+    [match [pair/snd [get name-to-desc n]]
+      [desc-kind/top td]
+      [match td
         [top-desc-kind/constant]
         [wat-inst/global.get [name/word n]]
 
         [top-desc-kind/function]
         [logq-abort function as value not implemented]]
 
-      [desc/local ld]
+      [desc-kind/local ld]
       [wat-inst/local.get [name/word n]]]
 
     [exp/call fexp args]
