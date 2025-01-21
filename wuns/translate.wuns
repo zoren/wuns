@@ -109,6 +109,13 @@
     [memory type i32 [option i32]]
     [function [list type] type]]]
 
+[defn may-side-effect [e]
+  [match e
+    [exp/literal - --] false
+    [exp/var -] false
+    [exp/cast - e] [may-side-effect e]
+    true]]
+
 [comment
     [field exp name]
 ]
@@ -504,6 +511,18 @@
 
 [func name-to-type [n] [pair/fst [get name-to-desc n]]]
 
+[func exp-equals [e1 e2]
+  [match e1
+    [exp/literal pt1 n1]
+    [match e2
+      [exp/literal pt2 n2]
+      [do
+        [todo normalize here ...]
+        [and [is-identical pt1 pt2] [eq-word [name/word n1] [name/word n2]]]]
+      false]
+
+    false]]
+
 [func type-equals [t1 t2]
   [match t1
     [type/primitive p1]
@@ -561,7 +580,7 @@
             false
 
             [option/some s2]
-            [logq-abort not implemented type-equals array [identity t1] [identity t2]]]]]
+            [exp-equals s1 s2]]]]
       false]
 
     [logq-abort type-equals [identity t1] [identity t2]]]]
@@ -857,23 +876,44 @@
     [let
       [ppt [if-let [p [try-get-pointer-args [type-of target]]] p [logq-abort not a pointer]]
        mem-name-word [name/word [pair/fst ppt]]
-       target-inst [form-to-inst target]
        go
-        [func go [offset ttarget tvalue]
+        [func go [target-inst ttarget value]
           [match ttarget
             [type/primitive pttarget]
-            [match tvalue
+            [match [type-of value]
               [type/primitive ptvalue]
               [wat-inst/store
                 [wasm-name-to-wat-byte-array [prim-types-to-store-inst-name pttarget ptvalue]]
-                [wat-inst-memargs mem-name-word [int-to-word offset] [word 1]]
+                [wat-inst-memargs mem-name-word [word 0] [word 1]]
                 target-inst
                 [form-to-inst value]]
 
               [logq-abort not implemented assign primitive types]]
 
-            [logq-abort not implemented assign primitive types]]]]
-        [go 0 [pair/snd ppt] [type-of value]]]
+            [type/array ttarget-elem ttarget-size-exp-opt]
+            [match value
+              [exp/array tvalue-elem elems]
+              [do
+                [assert-not [may-side-effect target] assign target cannot have side effects when assigning arrays]
+                [let
+                  [size-of-value [type-to-size-of-exp tvalue-elem]
+                   size-of-inst [form-to-inst size-of-value]
+                   ginsts [growable-list]]
+                  [loop [i 0 n [size elems]]
+                    [when [lt-s i n]
+                      [let
+                        [offset-target
+                          [wat-inst/inst-word [word i32.add]
+                            [list target-inst
+                              [wat-inst/inst-word [word i32.mul] [list [wat-inst/i32.const [int-to-word i]] size-of-inst]]]]]
+                        [push ginsts [go offset-target ttarget-elem [at elems i]]]
+                        [continue i [inc i]]]]]
+                  [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
+
+                [logq-abort not implemented assign array types]]
+
+              [logq-abort not implemented assign array types]]]]
+        [go [form-to-inst target] [pair/snd ppt] value]]
 
     [exp/intrinsic n args] [wat-inst/inst [wasm-name-to-wat-byte-array [name/word n]] [list-map arg args [form-to-inst arg]]]
 
@@ -1149,6 +1189,13 @@
         [assign [index par i] [i8 0]]]
         [continue i [inc i]]]
     par]]
+
+[defn assign-array-test [] [tuple]
+  [let
+    [par [cast
+      [pointer mem [array i8 [i32 3]]]
+      [alloc-n [size-of [array i8 [i32 3]]]]]]
+    [assign par [array i8 [i8 11] [i8 12] [i8 13]]]]]
 
 ]
     ]
