@@ -293,7 +293,12 @@
         [if-let [desc [try-lookup-bind-name lctx mem-name]]
           [match [pair/fst desc]
             [type/memory -]
-            [do]
+            [match [pair/snd desc]
+              [desc-kind/local -]
+              [error [second l] locally defined memory not allowed]
+
+              [desc-kind/top -]
+              [do]]
 
             [logq-abort not a memory type]]
           [logq-abort memory not bound]]
