@@ -70,7 +70,6 @@
     [var name]
     [if exp exp exp]
     [cast type exp]
-    [tuple [list exp]]
     [deref exp]
     [deref-to exp type]
     [assign exp exp]
