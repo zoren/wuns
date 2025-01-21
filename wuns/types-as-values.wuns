@@ -7,10 +7,48 @@
 [type local-context-kind []
   [union [func] [let] [loop]]]
 
+[type primitive-type []
+  [record
+    [prefix word]
+    [bits i32]
+    [bytes i32]
+    [name word]]]
+
+[def primitive-types-by-name
+  [let [m [transient-kv-map]]
+    [for-each prefix-bits [list
+        [pair [word i] [i32 8]]
+        [pair [word u] [i32 8]]
+
+        [pair [word i] [i32 16]]
+        [pair [word u] [i32 16]]
+
+        [pair [word i] [i32 32]]
+        [pair [word u] [i32 32]]
+
+        [pair [word i] [i32 64]]
+
+        [pair [word f] [i32 32]]
+        [pair [word f] [i32 64]]
+
+        [pair [word v] [i32 128]]]
+      [let [prefix [pair/fst prefix-bits]
+            bits [pair/snd prefix-bits]
+            bytes [i32.div-s bits [i32 8]]
+            prim-name [concat-words prefix [int-to-word bits]]]
+        [set-kv-map m prim-name [primitive-type prefix bits bytes prim-name]]]]
+    m]]
+
+[defn primitive-type-is-integer [p]
+  [let [prefix [primitive-type/prefix p]]
+    [or [eq-word prefix [word u]] [eq-word prefix [word i]]]]]
+
+[defn get-primitive [n] [get primitive-types-by-name n]]
+
 [type
   type []
   [union
-    [primitive name]
+    [primitive primitive-type]
     [tuple [list type]]
     [pointer name type]
     [array type [option exp]]
@@ -34,7 +72,7 @@
     [cast type exp]
     [tuple [list exp]]
     [deref exp]
-    [deref-to type exp]
+    [deref-to exp type]
     [assign exp exp]
     [intrinsic name [list exp]]
     [let-loop local-context-kind [list [pair name exp]] [list exp]]
@@ -124,15 +162,23 @@
   [let [top-names [transient-kv-map]]
     top-names]]
 
-[def type-i32 [type/primitive [name [word i32]]]]
-[def type-f64 [type/primitive [name [word f64]]]]
+[def type-primitive-i32 [get-primitive [word i32]]]
+[def type-primitive-i64 [get-primitive [word i64]]]
+
+[def type-i32 [type/primitive type-primitive-i32]]
+[def type-f64 [type/primitive [get-primitive [word f64]]]]
 [def type-empty-tuple [type/tuple [list]]]
 
 [defn try-get-primitive [t]
   [match t
-    [type/primitive w]
-    [option/some [name/word w]]
+    [type/primitive p]
+    [option/some p]
     [option/none]]]
+
+[defn option-get [opt]
+  [match opt
+    [option/some v] v
+    [option/none] [logq-abort option-get none]]]
 
 [defn option-pair [opt1 opt2]
   [match opt1
@@ -156,14 +202,20 @@
     [top top-desc-kind]]]
 
 [defmacro error [form .. message]
-  [flist [quote error-fn] form [quote-list message]]]
+  [flist [quote error-form-fn] form [quote-list message]]]
+
+[defmacro error-exp [exp .. message]
+  [flist [quote error-exp-fn] exp [quote-list message]]]
 
 [defn bind [evaluator errors top-names]
   [let
     [name-to-desc [transient-kv-map]]
     [letfn [
-[func error-fn [exp message-form]
-  [push errors [pair exp message-form]]]
+[func error-form-fn [form message-form]
+  [push errors [pair form message-form]]]
+
+[func error-exp-fn [exp message-form]
+  [logq-abort error-exp [identity exp] [identity message-form]]]
 
 [func get-word [f]
   [if-let [w [try-get-word f]]
@@ -198,7 +250,7 @@
 [func form-to-type [lctx form]
   [match form
     [form/word w]
-    [type/primitive [form-to-name form]]
+    [type/primitive [get-primitive w]]
 
     [form/list l]
   [do
@@ -206,14 +258,6 @@
 
     [assert-not [is-empty l] form-to-type expected non-empty list]
     [switch [form-to-word [first l]]
-      [[word i8]  [word u8]
-       [word i16] [word u16]
-       [word i32] [word u32]
-       [word f32]
-       [word f64]
-       [word v128]]
-      [type/primitive [form-to-name [first l]]]
-
       [[word tuple]]
       [type/tuple [list-map t [slice l 1 [size l]] [form-to-type lctx t]]]
 
@@ -294,8 +338,8 @@
 
     [[word deref-to]]
     [exp/deref-to
-      [form-to-type lctx [second l]]
-      [form-to-exp lctx [third l]]]
+      [form-to-exp lctx [third l]]
+      [form-to-type lctx [second l]]]
 
     [[word assign]]
     [exp/assign
@@ -377,10 +421,10 @@
 
 [func type-equals [t1 t2]
   [match t1
-    [type/primitive w1]
+    [type/primitive p1]
     [match t2
-      [type/primitive w2]
-      [eq-word [name/word w1] [name/word w2]]
+      [type/primitive p2]
+      [is-identical p1 p2]
       false]
 
     [type/tuple ts1]
@@ -487,7 +531,7 @@
 
     [exp/intrinsic intrinsic-name args]
     [switch [name/word intrinsic-name]
-      [[word i32.add] [word i32.sub] [word i32.mul] [word i32.eq]]
+      [[word i32.add] [word i32.sub] [word i32.mul] [word i32.eq] [word i32.lt-s]]
       [do
         [assert [eq [size args] 2] intrinsic expected 2 arguments]
         [assert [type-equals [type-of [at args 0]] type-i32] intrinsic expected i32 ]
@@ -505,30 +549,41 @@
         [pair/snd p]
         [type/error]]]
 
-    [exp/deref-to target-type target-exp]
-    [let [exp-type [type-of target-exp]]
-      [if-let [p [try-get-pointer-args exp-type]]
-        [let [pointer-target-type [pair/snd p]]
-          [when-not [type-equals pointer-target-type target-type]
-            [if-let [p [option-pair [try-get-primitive pointer-target-type] [try-get-primitive target-type]]]
-              [let [et [pair/fst p]]
-                [switch [pair/snd p]
-                  [[word i32]]
-                  [assert
-                    [or [eq-word et [word u8]] [eq-word et [word i8]]]]
-                  [[word i64]]
-                  [assert
-                    [or [eq-word et [word u8]] [eq-word et [word i8]]]]
-                  [logq-abort only i32 and i64 targets supported for deref-to]]]
-              [logq-abort expected primitive types]]]]
-        [logq-abort not a pointer]]
+    [exp/deref-to pointer-exp target-type]
+    [do
+      [if-let [target-prim [try-get-primitive target-type]]
+        [if-not [or [is-identical target-prim type-primitive-i32]
+                    [is-identical target-prim type-primitive-i64]]
+          [error-exp exp only i32 and i64 targets supported for deref-to]
+          [if-let [p [try-get-pointer-args [type-of pointer-exp]]]
+            [if-let [pointer-prim [try-get-primitive [pair/snd p]]]
+              [assert
+                [and
+                  [primitive-type-is-integer pointer-prim]
+                  [lt-s [primitive-type/bits pointer-prim] [primitive-type/bits target-prim]]]
+                can only convert to smaller integer type]
+                [logq-abort expected primitive types]]
+            [error-exp exp not a pointer]]]
+        [error-exp exp target-type not a primitive type]]
       target-type]
 
-    [exp/assign target source]
-    [let [target-pointer-type [type-of target]
-          source-type [type-of source]]
-      [when-let [p [try-get-pointer-args target-pointer-type]]
-        [when-not [type-equals [pair/snd p] source-type] [logq-abort eval exp expected type got]]]
+    [exp/assign dst src]
+    [let [tsrc [type-of src]]
+      [if-let [pp [try-get-pointer-args [type-of dst]]]
+        [let [tdst [pair/snd pp]]
+          [when-not [type-equals tdst tsrc]
+            [if-let [src-prim [try-get-primitive tsrc]]
+              [if-not [or [is-identical src-prim type-primitive-i32] [is-identical src-prim type-primitive-i64]]
+                [error-exp exp only i32 and i64 targets supported for assign]
+                [if-let [dst-prim [try-get-primitive tdst]]
+                  [when-not
+                    [and
+                      [primitive-type-is-integer dst-prim]
+                      [lt-s [primitive-type/bits dst-prim] [primitive-type/bits src-prim]]]
+                    [error-exp exp can only assign to smaller integer type]]
+                  [error-exp exp source-type not a primitive type]]]
+              [error-exp exp eval exp expected primitive types]]]]
+        [error-exp exp not a pointer]]
       type-empty-tuple]
 
     [exp/let-loop ll-kind bindings bodies]
@@ -628,8 +683,8 @@
 
 [func type-to-wat-type [t]
   [match t
-    [type/primitive n]
-    [name/word n]
+    [type/primitive p]
+    [primitive-type/name p]
 
     [type/pointer mem-name -]
     [match [name-to-type mem-name]
@@ -649,19 +704,23 @@
 
 [func type-to-size-of-exp [t]
   [match t
-    [type/primitive n]
-    [switch [name/word n]
-      [[word i32]] [exp/i32 [i32 4]]
-      [[word f64]] [exp/i32 [i32 8]]
-      [logq-abort not implemented type-to-size-of-exp [identity n]]]
+    [type/primitive p]
+    [exp/i32 [primitive-type/bytes p]]
+
+    [type/pointer mem-name t]
+    [match [name-to-type mem-name]
+      [type/memory mk]
+      [type-to-size-of-exp [mem-type/type mk]]]
 
     [type/array et opt-s]
     [if-let [s opt-s]
       [exp/intrinsic [name [word i32.mul]] [list [type-to-size-of-exp et] s]]
-      [logq-abort not implemented type-to-size-of-exp [identity t]]]
+      [logq-abort type-to-size-of-exp no size given [identity t]]]
 
     [logq-abort not implemented type-to-size-of-exp [identity t]]]]
 
+[func make-forms-to-inst [glocals]
+[letfn [
 [func form-to-inst [f]
   [match f
     [exp/import mod-name name ik] [logq-abort inline imports not implemented]
@@ -680,12 +739,48 @@
             [[word f32]] [word f32.load]
             [[word f64]] [word f64.load]
             [[word v128]] [word v128.load]
-            [logq-abort not implemented deref inst-type/apply]]]
+            [logq-abort not implemented deref]]]
         [wat-inst-memargs
           [name/word [pair/fst ppt]]
           [word 0]
           [word 1]]
         [form-to-inst target]]]
+
+    [exp/deref-to pexp ttarget]
+    [let
+      [prim-target [option-get [try-get-primitive ttarget]]
+       ppt [option-get [try-get-pointer-args [type-of pexp]]]
+       texp [pair/snd ppt]
+       prim-exp [option-get [try-get-primitive texp]]
+       inst
+        [ifs
+          [is-identical prim-target type-primitive-i32]
+          [switch [primitive-type/name prim-exp]
+            [[word i8]] [word i32.load8-s]
+            [[word u8]] [word i32.load8-u]
+            [[word i16]] [word i32.load16-s]
+            [[word u16]] [word i32.load16-u]
+            [logq-abort not implemented deref-to]]
+
+          [is-identical prim-target type-primitive-i64]
+          [switch [primitive-type/name prim-exp]
+            [[word i8]] [word i64.load8-s]
+            [[word u8]] [word i64.load8-u]
+            [[word i16]] [word i64.load16-s]
+            [[word u16]] [word i64.load16-u]
+            [[word i32]] [word i64.load32-s]
+            [[word u32]] [word i64.load32-u]
+
+            [logq-abort not implemented deref-to]]
+
+          [logq-abort not implemented deref-to [primitive-type/name prim-target]]]]
+      [wat-inst/load
+        [wasm-name-to-wat-byte-array inst]
+        [wat-inst-memargs
+          [name/word [pair/fst ppt]]
+          [word 0]
+          [word 1]]
+        [form-to-inst pexp]]]
 
     [exp/assign target value]
     [let
@@ -709,7 +804,7 @@
           [word 1]]
         [form-to-inst target]
         [form-to-inst value]]]
-    [exp/intrinsic n args] [wat-inst/inst-word [name/word n] [list-map arg args [form-to-inst arg]]]
+    [exp/intrinsic n args] [wat-inst/inst [wasm-name-to-wat-byte-array [name/word n]] [list-map arg args [form-to-inst arg]]]
 
     [exp/var n]
     [match [pair/snd [get name-to-desc n]]
@@ -742,7 +837,10 @@
     [let
       [bind-insts
        [list-map b bindings
-          [wat-inst/local.set [name/word [pair/fst b]] [form-to-inst [pair/snd b]]]]]
+        [let [n [name/word [pair/fst b]]
+              e [pair/snd b]]
+          [push glocals [pair n [type-to-wat-type [type-of e]]]]
+          [wat-inst/local.set n [form-to-inst e]]]]]
       [match ll-kind
         [local-context-kind/let]
         [wat-inst/instructions
@@ -789,56 +887,13 @@
                   i [dec i]]
                 res]]]
         [list [form-to-inst [last forms]]]]]]]
+]
+  forms-to-inst]]
 
 [func wuns-to-wat-func [f]
   [let
     [glocals [growable-list]
-     add-locals
-      [func add-locals [f]
-        [match f
-          [exp/import mod-name name ik] [do]
-          [exp/cast t e] [add-locals e]
-          [exp/i32 i] [do]
-          [exp/deref p] [add-locals p]
-          [exp/assign t s] [do [add-locals t] [add-locals s]]
-          [exp/intrinsic n args] [for-each arg args [add-locals arg]]
-          [exp/var n] [do]
-          [exp/call fexp args]
-          [do
-            [add-locals fexp]
-            [for-each arg args [add-locals arg]]]
-
-          [exp/if c t e]
-          [do
-            [add-locals c] [add-locals t] [add-locals e]]
-
-          [exp/do es]
-          [for-each e es [add-locals e]]
-
-          [exp/let-loop ll-kind bindings bodies]
-          [do
-            [for-each binding bindings [add-locals [pair/snd binding]]]
-            [for-each body bodies [add-locals body]]]
-
-          [exp/continue assignments]
-          [for-each a assignments [add-locals [pair/snd a]]]
-
-          [exp/size-of t]
-          [match t
-            [type/array et opt-s]
-            [when-let [e opt-s]
-              [add-locals e]]
-
-            [do]]
-
-          [exp/index a i]
-          [do
-            [add-locals a]
-            [add-locals i]]
-
-          [logq-abort add-locals not implemented [identity f]]]]]
-    [for-each body [exp-function/bodies f]
-      [add-locals body]]
+     body-inst [[make-forms-to-inst glocals] [exp-function/bodies f]]]
     [wat-func
       [name/word [exp-function/name f]]
       [list-map p [exp-function/params f]
@@ -847,7 +902,15 @@
           [type-to-wat-type [pair/snd p]]]]
       [clone-growable-to-frozen-list glocals]
       [type-to-wat-types [exp-function/return-type f]]
-      [forms-to-inst [exp-function/bodies f]]]]]
+      body-inst]]]
+
+[func const-exp-to-inst [e]
+  [match e
+    [exp/i32 i] [option/some [wat-inst/i32.const [int-to-word i]]]
+    [exp/cast t e] [const-exp-to-inst e]
+
+    [option/none]]]
+
 
 [func compile [tops]
   [let
@@ -876,21 +939,23 @@
                 [import-kind/memory mk s os]
                 [wat-import-kind/memory
                   [match mk
-                    [type/primitive w]
-                    [switch [name/word w]
-                      [[word i32]] [memory-kind/i32]
-                      [[word i64]] [memory-kind/i64]
-                      [logq-abort not implemented memory-kind [identity w]]]
+                    [type/primitive p]
+                    [ifs
+                      [is-identical p type-primitive-i32] [memory-kind/i32]
+                      [is-identical p type-primitive-i64] [memory-kind/i64]
+                      [logq-abort not implemented memory-kind [identity p]]]
                     [logq-abort not implemented memory-kind [identity mk]]]
                   s
                   os]]]]
 
-          [push
-            globals
-            [wat-global
-              [name/word n]
-              [type-to-wat-type [type-of e]]
-              [form-to-inst e]]]]
+          [if-let [inst [const-exp-to-inst e]]
+            [push
+              globals
+              [wat-global
+                [name/word n]
+                [type-to-wat-type [type-of e]]
+                inst]]
+            [logq-abort not a const exp]]]
 
         [top-exp/function f]
         [push
@@ -917,6 +982,12 @@
       [evaluate-top-async evaluator [quote [load llmacro.wuns]]]
       [func t [-] evaluator]]]]
 
+[import ./runtime-lib/wabt.js wat-to-wasm-byte-array [func [byte-array] byte-array]]
+
+[type wasm-module [] [union]]
+
+[import ./runtime-lib/wasm.js byte-array-to-wasm-module [func [byte-array] wasm-module]]
+
 [defn bind-forms-fn [forms]
   [promise-then
     [make-init-evaluator-async]
@@ -940,7 +1011,10 @@
               [logq error [identity e]]]]
           [for-each top-form tops
             [log top-form]]
-          [byte-array-log-as-string [wat-to-wat-bytes [output-to-wat [compile-tops tops]]]]]]]]]
+          [let [wat-string [wat-to-wat-bytes [output-to-wat [compile-tops tops]]]]
+            [byte-array-log-as-string wat-string]
+            [byte-array-to-wasm-module [wat-to-wasm-byte-array wat-string]]
+            ]]]]]]
 
 [defexpr bind-forms [.. forms]
   [bind-forms-fn forms]]
@@ -975,7 +1049,26 @@
 [defn array-f64-get [p [pointer mem [array f64]] i i32] f64
   [deref [index p i]]]
 
-    ]]
+[defn array-u8 [s i32] [pointer mem [array u8]]
+  [let
+    [par
+      [cast
+        [pointer mem [array u8]]
+        [alloc-n [size-of [array u8 s]]]]]
+    [loop [i 0]
+      [when [lt-s i s]
+        [assign [index par i] 0]]
+        [continue i [inc i]]]
+    par]]
+
+[defn array-u8-get [p [pointer mem [array u8]] i i32] i32
+  [deref-to i32 [index p i]]]
+
+
+[defn array-i8-get [p [pointer mem [array i8]] i i32] i64
+  [deref-to i64 [index p i]]]
+]
+    ]
 
 [comment
   [bind-forms [def mem [import env mem [memory i32 1]]]]
