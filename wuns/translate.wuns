@@ -839,6 +839,14 @@
       [exp/intrinsic [name [word i32.mul]] [list [type-to-size-of-exp et] s]]
       [logq-abort type-to-size-of-exp no size given [identity t]]]
 
+    [type/tuple types]
+    [loop [i 0 n [size types] sum [exp/literal type-primitive-i32 [name [int-to-word 0]]]]
+      [if [lt-s i n]
+        [continue
+          sum [exp/intrinsic [name [word i32.add]] [list sum [type-to-size-of-exp [at types i]]]]
+          i [inc i]]
+        sum]]
+
     [logq-abort not implemented type-to-size-of-exp [identity t]]]]
 
 [func make-forms-to-inst [glocals]
@@ -922,7 +930,26 @@
 
                 [logq-abort not implemented assign array types]]
 
-              [logq-abort not implemented assign array types]]]]
+            [type/tuple types]
+            [match value
+              [exp/tuple elems]
+              [do
+                [assert-not [may-side-effect target] assign target cannot have side effects when assigning tuples]
+                [let
+                  [ginsts [growable-list]]
+                  [loop [i 0 n [size elems]]
+                    [when [lt-s i n]
+                      [let
+                        [telem [at types i]
+                         offset-target
+                          [wat-inst/inst-word [word i32.add]
+                            [list target-inst [form-to-inst [type-to-size-of-exp telem]]]]]
+                        [push ginsts [go offset-target telem [at elems i]]]
+                        [continue i [inc i]]]]]
+                  [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
+              [logq-abort not implemented assign tuple types]]
+
+            [logq-abort not implemented assign type [identity ttarget]]]]]
         [go [form-to-inst target] [pair/snd ppt] value]]
 
     [exp/intrinsic n args] [wat-inst/inst [wasm-name-to-wat-byte-array [name/word n]] [list-map arg args [form-to-inst arg]]]
@@ -1222,6 +1249,11 @@
         [array i32 [i32 2]]
         [array i32 0 1]
         [array i32 1 0]]]]]
+
+[defn assign-tuple [] [tuple]
+  [let
+    [ptup [alloc mem [tuple f64 i32]]]
+    [assign ptup [tuple [f64 1.1] [i32 2]]]]]
 
 [defn mk-2-tup [x i32 y i32] [tuple i32 i32]
   [tuple x y]]
