@@ -225,7 +225,9 @@
     [[word i64]] wat-inst/i64.const
     [[word f32]] wat-inst/f32.const
     [[word f64]] wat-inst/f64.const
-    [logq-abort translate-literal not implemented [identity pt]]]]
+    [if [or [eq-word [primitive-type/prefix pt] [word u]] [eq-word [primitive-type/prefix pt] [word i]]]
+      wat-inst/i64.const
+      [logq-abort translate-literal not implemented [identity pt]]]]]
 
 [defn const-exp-to-inst [e]
   [match e
@@ -423,8 +425,8 @@
           [let [i [word-to-int [name/word n]]
                 range [primitive-integer-type-min-max-range pt]]
             [todo there are issues with word-to-int when integer is greater than 2 to the 31 power]
-            [when [le-s i [pair/fst range]] [error [second l] literal below min]]
-            [when [le-s [pair/snd range] i] [error [second l] literal above max]]]
+            [when [lt-s i [pair/fst range]] [error [second l] literal below min]]
+            [when [lt-s [pair/snd range] i] [error [second l] literal above max]]]
 
           [[word f]] [do [word-to-f64 [name/word n]] [do]]
 
@@ -438,7 +440,7 @@
     [let [n [form-to-name f]]
       [if-let [desc [try-lookup-bind-name lctx n]]
         [do]
-        [error f not bound [identity n]]]
+        [error f not bound]]
       [exp/var n]]
 
     [form/list l]
@@ -825,20 +827,28 @@
 
     [exp/assign target value]
     [let
-      [pt [type-of target]
-       ppt [if-let [p [try-get-pointer-args pt]] p [logq-abort not a pointer]]
-       target-type [pair/snd ppt]]
+      [ppt [if-let [p [try-get-pointer-args [type-of target]]] p [logq-abort not a pointer]]
+       target-type [pair/snd ppt]
+       tval [type-of value]
+       target-prim [option-get [try-get-primitive target-type]]
+       value-prim [option-get [try-get-primitive tval]]
+       inst-name
+       [if [and [is-identical target-prim value-prim]
+                [le-s [i32 32] [primitive-type/bits target-prim]]
+                [not [eq-word [primitive-type/prefix target-prim] [word u]]]]
+        [concat-words [primitive-type/name target-prim] [word .store]]
+        [if-not [or [is-identical value-prim type-primitive-i32]
+                    [is-identical value-prim type-primitive-i64]]
+          [concat-words
+            [word i64.store]
+            [int-to-word [primitive-type/bits target-prim]]]
+          [do
+            [assert [primitive-type-is-integer target-prim] store expected integer type]
+            [concat-words
+              [concat-words [primitive-type/name value-prim] [word .store]]
+              [int-to-word [primitive-type/bits target-prim]]]]]]]
       [wat-inst/store
-        [wasm-name-to-wat-byte-array
-          [switch [type-to-wat-type target-type]
-          [[word i32]] [word i32.store]
-          [[word i64]] [word i64.store]
-          [[word f32]] [word f32.store]
-          [[word f64]] [word f64.store]
-          [[word v128]] [word v128.store]
-          [[word u8] [word i8]] [word i32.store8]
-          [[word u16] [word i16]] [word i32.store16]
-          [logq-abort not implemented assign inst-type/apply]]]
+        [wasm-name-to-wat-byte-array inst-name]
         [wat-inst-memargs
           [name/word [pair/fst ppt]]
           [word 0]
@@ -1097,7 +1107,7 @@
         [alloc-n [size-of [array u8 s]]]]]
     [loop [i 0]
       [when [lt-s i s]
-        [assign [index par i] 0]]
+        [assign [index par i] [u8 0]]]
         [continue i [inc i]]]
     par]]
 
