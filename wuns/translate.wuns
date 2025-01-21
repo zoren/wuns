@@ -277,6 +277,49 @@
           [concat-words [primitive-type/name value-prim] [word .store]]
           [int-to-word [primitive-type/bits target-prim]]]]]]]
 
+[type integer-exp []
+  [union
+    [const i32]
+    [add integer-exp integer-exp]
+    [mul integer-exp integer-exp]
+    [exp exp]]]
+
+[defn try-get-int-const [e]
+  [match e
+    [integer-exp/const i] [option/some i]
+    [option/none]]]
+
+[defn int-exp-add [a b]
+  [if-let [i [try-get-int-const a]]
+    [if [eq i 0]
+      b
+      [if-let [j [try-get-int-const b]]
+        [integer-exp/const [add i j]]
+        [integer-exp/add a b]]]
+    [if-let [j [try-get-int-const b]]
+      [if [eq j 0]
+        a
+        [integer-exp/add a b]]
+      [integer-exp/add a b]]]]
+
+[def int-const-0 [integer-exp/const 0]]
+[def int-const-1 [integer-exp/const 1]]
+
+[defn int-exp-mul [a b]
+  [if-let [i [try-get-int-const a]]
+    [ifs
+      [eq i 0] int-const-0
+      [eq i 1] b
+      [if-let [j [try-get-int-const b]]
+        [integer-exp/const [mul i j]]
+        [integer-exp/mul a b]]]
+    [if-let [j [try-get-int-const b]]
+      [ifs
+        [eq j 0] int-const-0
+        [eq j 1] a
+        [integer-exp/mul a b]]
+      [integer-exp/mul a b]]]]
+
 [defn bind [evaluator errors top-names]
   [let
     [name-to-desc [transient-kv-map]]
@@ -824,33 +867,55 @@
 
     [list [type-to-wat-type type]]]]
 
-[func type-to-size-of-exp [t]
+[func make-forms-to-inst [glocals]
+[letfn [
+[func exp-to-integer-exp [e]
+  [match e
+    [exp/literal pt n]
+    [do
+      [assert [is-identical pt type-primitive-i32] exp-to-integer-exp expected i32]
+      [integer-exp/const [word-to-int [name/word n]]]]
+
+    [do
+      [todo check for all constant cases...]
+      [integer-exp/exp e]]]]
+
+[func type-to-size-of-integer-exp [t]
   [match t
     [type/primitive p]
-    [exp/literal type-primitive-i32 [name [int-to-word [primitive-type/bytes p]]]]
+    [integer-exp/const [primitive-type/bytes p]]
 
     [type/pointer mem-name t]
     [match [name-to-type mem-name]
       [type/memory mk]
-      [type-to-size-of-exp [mem-type/type mk]]]
+      [type-to-size-of-integer-exp [mem-type/type mk]]]
 
     [type/array et opt-s]
     [if-let [s opt-s]
-      [exp/intrinsic [name [word i32.mul]] [list [type-to-size-of-exp et] s]]
-      [logq-abort type-to-size-of-exp no size given [identity t]]]
+      [int-exp-mul [type-to-size-of-integer-exp et] [exp-to-integer-exp s]]
+      [logq-abort type-to-size-of-integer-exp no size given [identity t]]]
 
     [type/tuple types]
-    [loop [i 0 n [size types] sum [exp/literal type-primitive-i32 [name [int-to-word 0]]]]
+    [loop [i 0
+           n [size types]
+           sum int-const-0]
       [if [lt-s i n]
         [continue
-          sum [exp/intrinsic [name [word i32.add]] [list sum [type-to-size-of-exp [at types i]]]]
+          sum [int-exp-add sum [type-to-size-of-integer-exp [at types i]]]
           i [inc i]]
         sum]]
 
-    [logq-abort not implemented type-to-size-of-exp [identity t]]]]
+    [logq-abort not implemented type-to-size-of-integer-exp [identity t]]]]
 
-[func make-forms-to-inst [glocals]
-[letfn [
+[func integer-exp-to-int [ie]
+  [match ie
+    [integer-exp/const i] [wat-inst/i32.const [int-to-word i]]
+    [integer-exp/add a b]
+    [wat-inst/inst-word [word i32.add] [list [integer-exp-to-int a] [integer-exp-to-int b]]]
+    [integer-exp/mul a b]
+    [wat-inst/inst-word [word i32.mul] [list [integer-exp-to-int a] [integer-exp-to-int b]]]
+    [integer-exp/exp e] [form-to-inst e]]]
+
 [func form-to-inst [f]
   [match f
     [exp/import mod-name name ik] [logq-abort inline imports not implemented]
@@ -895,7 +960,7 @@
       [ppt [if-let [p [try-get-pointer-args [type-of target]]] p [logq-abort not a pointer]]
        mem-name-word [name/word [pair/fst ppt]]
        go
-        [func go [target-inst ttarget value]
+        [func go [target-int-exp ttarget value]
           [match ttarget
             [type/primitive pttarget]
             [match [type-of value]
@@ -903,7 +968,7 @@
               [wat-inst/store
                 [wasm-name-to-wat-byte-array [prim-types-to-store-inst-name pttarget ptvalue]]
                 [wat-inst-memargs mem-name-word [word 0] [word 1]]
-                target-inst
+                [integer-exp-to-int target-int-exp]
                 [form-to-inst value]]
 
               [logq-abort not implemented assign primitive types]]
@@ -914,15 +979,15 @@
               [do
                 [assert-not [may-side-effect target] assign target cannot have side effects when assigning arrays]
                 [let
-                  [size-of-inst [form-to-inst [type-to-size-of-exp tvalue-elem]]
+                  [size-of-int-exp [type-to-size-of-integer-exp tvalue-elem]
                    ginsts [growable-list]]
                   [loop [i 0 n [size elems]]
                     [when [lt-s i n]
                       [let
                         [offset-target
-                          [wat-inst/inst-word [word i32.add]
-                            [list target-inst
-                              [wat-inst/inst-word [word i32.mul] [list [wat-inst/i32.const [int-to-word i]] size-of-inst]]]]]
+                          [int-exp-add
+                            target-int-exp
+                            [int-exp-mul [integer-exp/const i] size-of-int-exp]]]
                         [push ginsts [go offset-target ttarget-elem [at elems i]]]
                         [continue i [inc i]]]]]
                   [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
@@ -936,20 +1001,18 @@
                 [assert-not [may-side-effect target] assign target cannot have side effects when assigning tuples]
                 [let
                   [ginsts [growable-list]]
-                  [loop [i 0 n [size elems]]
+                  [loop [i 0 n [size elems] acc int-const-0]
                     [when [lt-s i n]
                       [let
                         [telem [at types i]
-                         offset-target
-                          [wat-inst/inst-word [word i32.add]
-                            [list target-inst [form-to-inst [type-to-size-of-exp telem]]]]]
-                        [push ginsts [go offset-target telem [at elems i]]]
-                        [continue i [inc i]]]]]
+                         offset-target [int-exp-add acc [type-to-size-of-integer-exp telem]]]
+                        [push ginsts [go [int-exp-add target-int-exp offset-target] telem [at elems i]]]
+                        [continue i [inc i] acc offset-target]]]]
                   [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
               [logq-abort not implemented assign tuple types]]
 
             [logq-abort not implemented assign type [identity ttarget]]]]]
-        [go [form-to-inst target] [pair/snd ppt] value]]
+        [go [exp-to-integer-exp target] [pair/snd ppt] value]]
 
     [exp/intrinsic n args] [wat-inst/inst [wasm-name-to-wat-byte-array [name/word n]] [list-map arg args [form-to-inst arg]]]
 
@@ -1010,12 +1073,12 @@
         [list [wat-inst/br [word loop-label]]]]]
 
     [exp/size-of t]
-    [form-to-inst [type-to-size-of-exp t]]
+    [integer-exp-to-int [type-to-size-of-integer-exp t]]
 
     [exp/index a i]
     [if-let [p [try-get-pointer-args [type-of a]]]
       [if-let [par [try-get-array-args [pair/snd p]]]
-        [form-to-inst [type-to-size-of-exp [type/array [pair/fst par] [option/some i]]]]
+        [integer-exp-to-int [type-to-size-of-integer-exp [type/array [pair/fst par] [option/some i]]]]
         [logq-abort not implemented type-of index]]
       [logq-abort not a pointer]]
 
@@ -1159,7 +1222,7 @@
 
 [defn output-to-module [output]
   [let [wat-string [wat-to-wat-bytes [output-to-wat output]]]
-    [comment [byte-array-log-as-string wat-string] ]
+    [byte-array-log-as-string wat-string]
     [byte-array-to-wasm-module [wat-to-wasm-byte-array wat-string]]]]
 
 [def prog1 [qlist
