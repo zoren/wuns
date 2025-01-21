@@ -185,6 +185,7 @@
 [def type-primitive-i64 [get-primitive [word i64]]]
 
 [def type-i32 [type/primitive type-primitive-i32]]
+[def type-i64 [type/primitive type-primitive-i64]]
 [def type-f64 [type/primitive [get-primitive [word f64]]]]
 [def type-empty-tuple [type/tuple [list]]]
 
@@ -242,6 +243,16 @@
     [exp/cast t e] [const-exp-to-inst e]
 
     [option/none]]]
+
+[defn prim-types-to-load-inst-name [dst src]
+  [let [prefix [concat-words [primitive-type/name dst] [word .load]]]
+    [if [is-identical dst src]
+      prefix
+      [do
+        [assert [primitive-type-is-integer src] load expected integer type source]
+        [concat-words prefix
+          [concat-words [int-to-word [primitive-type/bits src]]
+            [concat-words [word -] [if [eq-word [primitive-type/prefix src] [word u]] [word u] [word s]]]]]]]]]
 
 [defn bind [evaluator errors top-names]
   [let
@@ -595,10 +606,16 @@
       [logq-abort not implemented type-of intrinsic [name/word intrinsic-name]]]
 
     [exp/deref target]
-    [let [target-type [type-of target]]
-      [if-let [p [try-get-pointer-args target-type]]
-        [pair/snd p]
-        [type/error]]]
+    [if-let [p [try-get-pointer-args [type-of target]]]
+      [let [tt [pair/snd p]]
+        [if-let [prim [try-get-primitive tt]]
+          [if [primitive-is-wasm-value-type prim]
+            tt
+            [do
+              [assert [primitive-type-is-integer prim] deref expected i32 or i64]
+              type-i64]]
+          tt]]
+      [type/error]]
 
     [exp/deref-to pointer-exp target-type]
     [do
@@ -780,16 +797,12 @@
     [let
       [pt [type-of target]
        ppt [if-let [p [try-get-pointer-args pt]] p [logq-abort not a pointer]]
-       target-type [pair/snd ppt]]
+       target-prim [option-get [try-get-primitive [pair/snd ppt]]]]
       [wat-inst/load
         [wasm-name-to-wat-byte-array
-          [switch [type-to-wat-type target-type]
-            [[word i32]] [word i32.load]
-            [[word i64]] [word i64.load]
-            [[word f32]] [word f32.load]
-            [[word f64]] [word f64.load]
-            [[word v128]] [word v128.load]
-            [logq-abort not implemented deref]]]
+          [prim-types-to-load-inst-name
+            [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i64]
+            target-prim]]
         [wat-inst-memargs
           [name/word [pair/fst ppt]]
           [word 0]
@@ -803,26 +816,8 @@
        texp [pair/snd ppt]
        prim-exp [option-get [try-get-primitive texp]]
        inst
-        [ifs
-          [is-identical prim-target type-primitive-i32]
-          [switch [primitive-type/name prim-exp]
-            [[word i8]] [word i32.load8-s]
-            [[word u8]] [word i32.load8-u]
-            [[word i16]] [word i32.load16-s]
-            [[word u16]] [word i32.load16-u]
-            [logq-abort not implemented deref-to]]
-
-          [is-identical prim-target type-primitive-i64]
-          [switch [primitive-type/name prim-exp]
-            [[word i8]] [word i64.load8-s]
-            [[word u8]] [word i64.load8-u]
-            [[word i16]] [word i64.load16-s]
-            [[word u16]] [word i64.load16-u]
-            [[word i32]] [word i64.load32-s]
-            [[word u32]] [word i64.load32-u]
-
-            [logq-abort not implemented deref-to]]
-
+        [if [or [is-identical prim-target type-primitive-i32] [is-identical prim-target type-primitive-i64]]
+          [prim-types-to-load-inst-name prim-target prim-exp]
           [logq-abort not implemented deref-to [primitive-type/name prim-target]]]]
       [wat-inst/load
         [wasm-name-to-wat-byte-array inst]
@@ -1104,6 +1099,12 @@
 
 [defn array-i8-get [p [pointer mem [array i8]] i i32] i64
   [deref-to [index p i] i64]]
+
+[defn array-u8-get2 [p [pointer mem [array u8]] i i32] i64
+  [deref [index p i]]]
+
+[defn array-i8-get2 [p [pointer mem [array i8]] i i32] i64
+  [deref [index p i]]]
 
 [defn array-u8 [s i32] [pointer mem [array u8]]
   [let
