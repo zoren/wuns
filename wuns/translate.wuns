@@ -914,8 +914,7 @@
               [do
                 [assert-not [may-side-effect target] assign target cannot have side effects when assigning arrays]
                 [let
-                  [size-of-value [type-to-size-of-exp tvalue-elem]
-                   size-of-inst [form-to-inst size-of-value]
+                  [size-of-inst [form-to-inst [type-to-size-of-exp tvalue-elem]]
                    ginsts [growable-list]]
                   [loop [i 0 n [size elems]]
                     [when [lt-s i n]
