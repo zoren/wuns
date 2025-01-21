@@ -858,19 +858,22 @@
       [ppt [if-let [p [try-get-pointer-args [type-of target]]] p [logq-abort not a pointer]]
        mem-name-word [name/word [pair/fst ppt]]
        target-inst [form-to-inst target]
+       go
+        [func go [offset ttarget tvalue]
+          [match ttarget
+            [type/primitive pttarget]
+            [match tvalue
+              [type/primitive ptvalue]
+              [wat-inst/store
+                [wasm-name-to-wat-byte-array [prim-types-to-store-inst-name pttarget ptvalue]]
+                [wat-inst-memargs mem-name-word [int-to-word offset] [word 1]]
+                target-inst
+                [form-to-inst value]]
 
-       tval [type-of value]
-       value-prim [option-get [try-get-primitive tval]]
-       target-prim [option-get [try-get-primitive [pair/snd ppt]]]
-       inst-name [wasm-name-to-wat-byte-array [prim-types-to-store-inst-name target-prim value-prim]]]
-      [wat-inst/store
-        inst-name
-        [wat-inst-memargs
-          mem-name-word
-          [word 0]
-          [word 1]]
-        target-inst
-        [form-to-inst value]]]
+              [logq-abort not implemented assign primitive types]]
+
+            [logq-abort not implemented assign primitive types]]]]
+        [go 0 [pair/snd ppt] [type-of value]]]
 
     [exp/intrinsic n args] [wat-inst/inst [wasm-name-to-wat-byte-array [name/word n]] [list-map arg args [form-to-inst arg]]]
 
