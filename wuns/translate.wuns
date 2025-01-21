@@ -219,6 +219,21 @@
 [defmacro error-exp [exp .. message]
   [flist [quote error-exp-fn] exp [quote-list message]]]
 
+[defn translate-literal [pt]
+  [switch [primitive-type/name pt]
+    [[word i32]] wat-inst/i32.const
+    [[word i64]] wat-inst/i64.const
+    [[word f32]] wat-inst/f32.const
+    [[word f64]] wat-inst/f64.const
+    [logq-abort translate-literal not implemented [identity pt]]]]
+
+[defn const-exp-to-inst [e]
+  [match e
+    [exp/literal pt n] [option/some [[translate-literal pt] [name/word n]]]
+    [exp/cast t e] [const-exp-to-inst e]
+
+    [option/none]]]
+
 [defn bind [evaluator errors top-names]
   [let
     [name-to-desc [transient-kv-map]]
@@ -737,22 +752,6 @@
       [logq-abort type-to-size-of-exp no size given [identity t]]]
 
     [logq-abort not implemented type-to-size-of-exp [identity t]]]]
-
-[func translate-literal [pt]
-  [switch [primitive-type/name pt]
-    [[word i32]] wat-inst/i32.const
-    [[word i64]] wat-inst/i64.const
-    [[word f32]] wat-inst/f32.const
-    [[word f64]] wat-inst/f64.const
-    [logq-abort translate-literal not implemented [identity pt]]]]
-
-[func const-exp-to-inst [e]
-  [match e
-    [exp/literal pt n] [option/some [[translate-literal pt] [name/word n]]]
-    [exp/cast t e] [const-exp-to-inst e]
-
-    [option/none]]]
-
 
 [func make-forms-to-inst [glocals]
 [letfn [
