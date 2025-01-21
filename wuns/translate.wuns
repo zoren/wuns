@@ -254,6 +254,20 @@
           [concat-words [int-to-word [primitive-type/bits src]]
             [concat-words [word -] [if [eq-word [primitive-type/prefix src] [word u]] [word u] [word s]]]]]]]]]
 
+[defn prim-types-to-store-inst-name [target-prim value-prim]
+  [if [and [is-identical target-prim value-prim] [primitive-is-wasm-value-type target-prim]]
+    [concat-words [primitive-type/name target-prim] [word .store]]
+    [if-not [or [is-identical value-prim type-primitive-i32]
+                [is-identical value-prim type-primitive-i64]]
+      [concat-words
+        [word i64.store]
+        [int-to-word [primitive-type/bits target-prim]]]
+      [do
+        [assert [primitive-type-is-integer target-prim] store expected integer type]
+        [concat-words
+          [concat-words [primitive-type/name value-prim] [word .store]]
+          [int-to-word [primitive-type/bits target-prim]]]]]]]
+
 [defn bind [evaluator errors top-names]
   [let
     [name-to-desc [transient-kv-map]]
@@ -829,25 +843,11 @@
 
     [exp/assign target value]
     [let
-      [ppt [if-let [p [try-get-pointer-args [type-of target]]] p [logq-abort not a pointer]]
-       target-type [pair/snd ppt]
-       tval [type-of value]
-       target-prim [option-get [try-get-primitive target-type]]
+      [tval [type-of value]
        value-prim [option-get [try-get-primitive tval]]
-       inst-name
-       [if [and [is-identical target-prim value-prim]
-                [primitive-is-wasm-value-type target-prim]]
-        [concat-words [primitive-type/name target-prim] [word .store]]
-        [if-not [or [is-identical value-prim type-primitive-i32]
-                    [is-identical value-prim type-primitive-i64]]
-          [concat-words
-            [word i64.store]
-            [int-to-word [primitive-type/bits target-prim]]]
-          [do
-            [assert [primitive-type-is-integer target-prim] store expected integer type]
-            [concat-words
-              [concat-words [primitive-type/name value-prim] [word .store]]
-              [int-to-word [primitive-type/bits target-prim]]]]]]]
+       ppt [if-let [p [try-get-pointer-args [type-of target]]] p [logq-abort not a pointer]]
+       target-prim [option-get [try-get-primitive [pair/snd ppt]]]
+       inst-name [prim-types-to-store-inst-name target-prim value-prim]]
       [wat-inst/store
         [wasm-name-to-wat-byte-array inst-name]
         [wat-inst-memargs
@@ -856,6 +856,7 @@
           [word 1]]
         [form-to-inst target]
         [form-to-inst value]]]
+
     [exp/intrinsic n args] [wat-inst/inst [wasm-name-to-wat-byte-array [name/word n]] [list-map arg args [form-to-inst arg]]]
 
     [exp/var n]
