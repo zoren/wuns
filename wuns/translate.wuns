@@ -100,6 +100,7 @@
     [size-of type]
     [index exp exp]
     [array type [list exp]]
+    [tuple [list exp]]
 
     [import name name import-kind]
     ]
@@ -463,6 +464,10 @@
       [form-to-type lctx [second l]]
       [list-map e [slice l 2 [size l]] [form-to-exp lctx e]]]
 
+    [[word tuple]]
+    [exp/tuple
+      [list-map e [rest l] [form-to-exp lctx e]]]
+
     [if-let [pt [try-get primitive-types-by-name fw]]
       [let [n [form-to-name [second l]]]
         [switch [primitive-type/prefix pt]
@@ -725,6 +730,11 @@
         [when-not [type-equals elem-type [type-of elem]] [logq-abort eval exp expected type got]]]
       [type/array elem-type [option/some [exp/literal type-primitive-i32 [name [int-to-word [size elems]]]]]]]
 
+    [exp/tuple elems]
+    [if [eq [size elems] 1]
+      [type-of [first elems]]
+      [type/tuple [list-map e elems [type-of e]]]]
+
     [logq-abort not implemented type-of [identity exp]]]]
 
 [func type-ofs [bodies]
@@ -983,6 +993,9 @@
         [logq-abort not implemented type-of index]]
       [logq-abort not a pointer]]
 
+    [exp/tuple elems]
+    [wat-inst/instructions [list-map elem elems [form-to-inst elem]]]
+
     [logq-abort form-to-inst not implemented [identity f]]]]
 
 [func forms-to-inst [forms]
@@ -1192,13 +1205,27 @@
 
 [defn assign-array-test [] [tuple]
   [let
-    [par [cast
-      [pointer mem [array i8 [i32 3]]]
-      [alloc-n [size-of [array i8 [i32 3]]]]]]
+    [par [alloc mem [array i8 [i32 3]]]]
     [assign par [array i8 [i8 11] [i8 12] [i8 13]]]]]
 
-]
-    ]
+[defn assign-array-test2 [] [tuple]
+  [let
+    [par [alloc mem [array i32 [i32 3]]]
+     22 [i32 22]]
+    [assign par [array i32 0 1 22]]]]
+
+[defn assign-array-test3 [] [tuple]
+  [let
+    [parar [alloc mem [array [array i32 [i32 2]] [i32 2]]]]
+    [assign parar
+      [array
+        [array i32 [i32 2]]
+        [array i32 0 1]
+        [array i32 1 0]]]]]
+
+[defn mk-2-tup [x i32 y i32] [tuple i32 i32]
+  [tuple x y]]
+]]
 
 [defn test []
   [promise-then
