@@ -337,8 +337,8 @@
 
     [[word deref-to]]
     [exp/deref-to
-      [form-to-exp lctx [third l]]
-      [form-to-type lctx [second l]]]
+      [form-to-exp lctx [second l]]
+      [form-to-type lctx [third l]]]
 
     [[word assign]]
     [exp/assign
@@ -366,7 +366,7 @@
     [[word continue]]
     [if-let [loop-vars [try-get-enclosing-loop-context lctx]]
       [exp/continue
-        [list-map p [pairwise-pairs [get-list [second l]]]
+        [list-map p [pairwise-pairs [rest l]]
           [let [n [form-to-name [pair/fst p]]
                 e [form-to-exp lctx [pair/snd p]]]
             [if-let [t [try-get loop-vars [name/word n]]]
@@ -593,8 +593,7 @@
 
     [exp/continue bindings]
     [do
-      [for-each binding bindings
-       [type-of [pair/snd binding]]]
+      [for-each binding bindings [type-of [pair/snd binding]]]
       type-empty-tuple]
 
     [exp/do bodies]
@@ -987,7 +986,7 @@
 
 [import ./runtime-lib/wasm.js byte-array-to-wasm-module [func [byte-array] wasm-module]]
 
-[defn bind-forms-fn [forms]
+[defn forms-to-output [forms]
   [promise-then
     [make-init-evaluator-async]
     [func then [evaluator]
@@ -1002,21 +1001,22 @@
           [if-let [top [top-form-to-top-exp form]]
             [push top-forms top]
             [logq-abort no top form for [identity form]]]]
-        [let [errors [clone-growable-to-frozen-list gerrors]
-              tops [clone-growable-to-frozen-list top-forms]]
+        [let [tops [clone-growable-to-frozen-list top-forms]
+              output [compile-tops tops]
+              errors [clone-growable-to-frozen-list gerrors]]
           [when-not [is-empty errors]
             [logq there were errors]
+            [log errors]
             [for-each e errors
-              [logq error [identity e]]]]
-          [for-each top-form tops
-            [log top-form]]
-          [let [wat-string [wat-to-wat-bytes [output-to-wat [compile-tops tops]]]]
-            [byte-array-log-as-string wat-string]
-            [byte-array-to-wasm-module [wat-to-wasm-byte-array wat-string]]
-            ]]]]]]
+              [logq error [identity e]]]
+            [logq-abort errors]]
+          [comment [for-each top-form tops [log top-form]]]
+          output]]]]]
 
-[defexpr bind-forms [.. forms]
-  [bind-forms-fn forms]]
+[defn output-to-module [output]
+  [let [wat-string [wat-to-wat-bytes [output-to-wat output]]]
+    [comment [byte-array-log-as-string wat-string] ]
+    [byte-array-to-wasm-module [wat-to-wasm-byte-array wat-string]]]]
 
 [def prog1 [qlist
 [def mem [import env mem [memory i32 1]]]
@@ -1048,6 +1048,12 @@
 [defn array-f64-get [p [pointer mem [array f64]] i i32] f64
   [deref [index p i]]]
 
+[defn array-u8-get [p [pointer mem [array u8]] i i32] i32
+  [deref-to [index p i] i32]]
+
+[defn array-i8-get [p [pointer mem [array i8]] i i32] i64
+  [deref-to [index p i] i64]]
+
 [defn array-u8 [s i32] [pointer mem [array u8]]
   [let
     [par
@@ -1060,14 +1066,13 @@
         [continue i [inc i]]]
     par]]
 
-[defn array-u8-get [p [pointer mem [array u8]] i i32] i32
-  [deref-to i32 [index p i]]]
-
-
-[defn array-i8-get [p [pointer mem [array i8]] i i32] i64
-  [deref-to i64 [index p i]]]
 ]
     ]
+
+[defn test []
+  [promise-then
+    [forms-to-output prog1]
+    output-to-module]]
 
 [comment
   [bind-forms [def mem [import env mem [memory i32 1]]]]
