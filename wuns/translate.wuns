@@ -642,7 +642,7 @@
           [when-not [type-equals tdst tsrc]
             [if-let [src-prim [try-get-primitive tsrc]]
               [if-not [or [is-identical src-prim type-primitive-i32] [is-identical src-prim type-primitive-i64]]
-                [error-exp exp only i32 and i64 targets supported for assign]
+                [error-exp exp only i32 and i64 sources supported for heterogenous assign]
                 [if-let [dst-prim [try-get-primitive tdst]]
                   [when-not
                     [and
@@ -1115,6 +1115,19 @@
     [loop [i 0]
       [when [lt-s i s]
         [assign [index par i] [u8 0]]]
+        [continue i [inc i]]]
+    par]]
+
+
+[defn array-i8 [s i32] [pointer mem [array i8]]
+  [let
+    [par
+      [cast
+        [pointer mem [array i8]]
+        [alloc-n [size-of [array i8 s]]]]]
+    [loop [i 0]
+      [when [lt-s i s]
+        [assign [index par i] [i8 0]]]
         [continue i [inc i]]]
     par]]
 
