@@ -39,6 +39,13 @@
         [set-kv-map m prim-name [primitive-type prefix bits bytes prim-name]]]]
     m]]
 
+[defn primitive-is-wasm-value-type [pt]
+  [let
+    [prefix [primitive-type/prefix pt] bits [primitive-type/bits pt]]
+    [or
+      [and [or [eq-word prefix [word i]] [eq-word prefix [word f]]] [or [eq bits [i32 32]] [eq bits [i32 64]]]]
+      [eq-word [primitive-type/name pt] [word v128]]]]]
+
 [defn primitive-type-is-integer [p]
   [let [prefix [primitive-type/prefix p]]
     [or [eq-word prefix [word u]] [eq-word prefix [word i]]]]]
@@ -834,8 +841,7 @@
        value-prim [option-get [try-get-primitive tval]]
        inst-name
        [if [and [is-identical target-prim value-prim]
-                [le-s [i32 32] [primitive-type/bits target-prim]]
-                [not [eq-word [primitive-type/prefix target-prim] [word u]]]]
+                [primitive-is-wasm-value-type target-prim]]
         [concat-words [primitive-type/name target-prim] [word .store]]
         [if-not [or [is-identical value-prim type-primitive-i32]
                     [is-identical value-prim type-primitive-i64]]
