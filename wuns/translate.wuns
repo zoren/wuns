@@ -97,10 +97,11 @@
     [let-loop local-context-kind [list [pair name exp]] [list exp]]
     [continue [list [pair name exp]]]
     [do [list exp]]
-
     [size-of type]
-    [import name name import-kind]
     [index exp exp]
+    [array type [list exp]]
+
+    [import name name import-kind]
     ]
 
   import-kind []
@@ -450,6 +451,11 @@
       [form-to-exp lctx [second l]]
       [form-to-exp lctx [third l]]]
 
+    [[word array]]
+    [exp/array
+      [form-to-type lctx [second l]]
+      [list-map e [slice l 2 [size l]] [form-to-exp lctx e]]]
+
     [if-let [pt [try-get primitive-types-by-name fw]]
       [let [n [form-to-name [second l]]]
         [switch [primitive-type/prefix pt]
@@ -694,6 +700,12 @@
         [logq-abort not implemented type-of index]]
       [logq-abort not a pointer]]
 
+    [exp/array elem-type elems]
+    [do
+      [for-each elem elems
+        [when-not [type-equals elem-type [type-of elem]] [logq-abort eval exp expected type got]]]
+      [type/array elem-type [option/some [exp/literal type-primitive-i32 [name [int-to-word [size elems]]]]]]]
+
     [logq-abort not implemented type-of [identity exp]]]]
 
 [func type-ofs [bodies]
@@ -843,18 +855,21 @@
 
     [exp/assign target value]
     [let
-      [tval [type-of value]
+      [ppt [if-let [p [try-get-pointer-args [type-of target]]] p [logq-abort not a pointer]]
+       mem-name-word [name/word [pair/fst ppt]]
+       target-inst [form-to-inst target]
+
+       tval [type-of value]
        value-prim [option-get [try-get-primitive tval]]
-       ppt [if-let [p [try-get-pointer-args [type-of target]]] p [logq-abort not a pointer]]
        target-prim [option-get [try-get-primitive [pair/snd ppt]]]
-       inst-name [prim-types-to-store-inst-name target-prim value-prim]]
+       inst-name [wasm-name-to-wat-byte-array [prim-types-to-store-inst-name target-prim value-prim]]]
       [wat-inst/store
-        [wasm-name-to-wat-byte-array inst-name]
+        inst-name
         [wat-inst-memargs
-          [name/word [pair/fst ppt]]
+          mem-name-word
           [word 0]
           [word 1]]
-        [form-to-inst target]
+        target-inst
         [form-to-inst value]]]
 
     [exp/intrinsic n args] [wat-inst/inst [wasm-name-to-wat-byte-array [name/word n]] [list-map arg args [form-to-inst arg]]]
