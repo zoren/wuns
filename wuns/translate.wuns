@@ -436,7 +436,9 @@
   [match f
     [form/word w]
     [let [n [form-to-name f]]
-      [try-lookup-bind-name lctx n]
+      [if-let [desc [try-lookup-bind-name lctx n]]
+        [do]
+        [error f not bound [identity n]]]
       [exp/var n]]
 
     [form/list l]
