@@ -149,8 +149,10 @@
 [defn local-context-make [outer vars kind]
   [local-context/frame outer vars kind]]
 
+[def local-context-empty [local-context/empty]]
+
 [defn local-context-make-top [vars kind]
-  [local-context/frame [local-context/empty] vars kind]]
+  [local-context/frame local-context-empty vars kind]]
 
 [defn try-get-local [lctx name]
   [loop [cur lctx]
@@ -423,12 +425,12 @@
 
         [logq-abort array expected 2 or 3 elements]]
 
-      [logq-abort not implemented type [identity form]]]]]]
+      [logq-abort not implemented form-to-type [identity form]]]]]]
 
 [func form-list-to-mem-exp [l]
   [assert [or [eq [size l] 3] [eq [size l] 4]] memory expected 3 or 4 elements]
   [let
-    [mt [form-to-type [local-context/empty] [second l]]
+    [mt [form-to-type local-context-empty [second l]]
      init-size-name [form-to-name [third l]]
      init-size [word-to-int [name/word init-size-name]]
      - [assert [lt-s 0 init-size] memory init-size must be greater than or equal to 0]
@@ -442,7 +444,7 @@
     [assert [or [type-equals mt type-i32] [type-equals mt type-i64]] memory expected i32 or i64]
     [memory-exp mt init-size-name opt-max]]]
 
-[func form-to-import-kind [lctx form]
+[func form-to-import-kind [form]
   [let [l [get-list form]]
     [assert-not [is-empty l] form-to-import-kind expected non-empty list]
     [switch [form-to-word [first l]]
@@ -454,8 +456,8 @@
         [assert [eq [size l] 3] import func expected 2 elements]
         [import-kind-exp/function
           [list-map pp [pairwise-pairs [get-list [second l]]]
-            [pair [form-to-name [pair/fst pp]] [form-to-type lctx [pair/snd pp]]]]
-          [form-to-type lctx [third l]]]]
+            [pair [form-to-name [pair/fst pp]] [form-to-type local-context-empty [pair/snd pp]]]]
+          [form-to-type local-context-empty [third l]]]]
 
       [logq-abort not implemented import-kind [first l]]]]]
 
@@ -838,7 +840,7 @@
           [do
             [when-not [eq [size l] 3] [error form expected def name exp-form]]
             [let
-              [be [form-to-exp [local-context/empty] [third l]]
+              [be [form-to-exp local-context-empty [third l]]
                type [type-of be]
                bt [top-exp/constant [form-to-name [second l]] be]]
               [bind-top [second l] [pair type [top-desc-kind/constant]]]
@@ -859,7 +861,7 @@
                 [let [
                   import-list [get-list import]
                   m [form-to-name [first import-list]]
-                  ik [form-to-import-kind [local-context/empty] [second import-list]]
+                  ik [form-to-import-kind [second import-list]]
                   t
                   [match ik
                     [import-kind-exp/function ps rt]
