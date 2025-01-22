@@ -101,14 +101,8 @@
     [index exp exp]
     [array type [list exp]]
     [tuple [list exp]]
-
-    [import name name import-kind]
-    ]
-
-  import-kind []
-  [union
-    [memory type i32 [option i32]]
-    [function [list type] type]]]
+    [data name exp]
+    ]]
 
 [defn may-side-effect [e]
   [match e
@@ -128,10 +122,24 @@
     [return-type type]
     [bodies [list exp]]]]
 
-[type top-exp []
+[type
+  top-exp []
   [union
     [constant name exp]
-    [function exp-function]]]
+    [function exp-function]
+    [import name [list [pair name import-kind-exp]]]
+    [memory name memory-exp]]
+
+  memory-exp []
+  [record
+    [type type]
+    [init-size name]
+    [max-size [option name]]]
+
+  import-kind-exp []
+  [union
+    [memory memory-exp]
+    [function [list [pair name type]] type]]]
 
 [type local-context []
   [union
@@ -220,10 +228,24 @@
 
 [load interpreter-externs.wuns]
 
-[type top-desc-kind []
+[type
+  top-desc-kind []
   [union
     [constant]
-    [function]]]
+    [function]
+    [import import-kind-desc]
+    [memory memory-desc]]
+
+  memory-desc []
+  [record
+    [type type]
+    [init-size i32]
+    [max-size [option i32]]]
+
+  import-kind-desc []
+  [union
+    [memory memory-desc]
+    [function [list [pair name type]] type]]]
 
 [type desc-kind []
   [union
@@ -379,12 +401,7 @@
         [if-let [desc [try-lookup-bind-name lctx mem-name]]
           [match [pair/fst desc]
             [type/memory -]
-            [match [pair/snd desc]
-              [desc-kind/local -]
-              [error [second l] locally defined memory not allowed]
-
-              [desc-kind/top -]
-              [do]]
+            [do]
 
             [logq-abort not a memory type]]
           [logq-abort memory not bound]]
@@ -404,27 +421,36 @@
 
       [logq-abort not implemented type [identity form]]]]]]
 
+[func form-list-to-mem-exp [l]
+  [assert [or [eq [size l] 3] [eq [size l] 4]] memory expected 3 or 4 elements]
+  [let
+    [mt [form-to-type [local-context/empty] [second l]]
+     init-size-name [form-to-name [third l]]
+     init-size [word-to-int [name/word init-size-name]]
+     - [assert [lt-s 0 init-size] memory init-size must be greater than or equal to 0]
+     opt-max
+     [if [eq [size l] 3]
+       [option/none]
+       [let [n [form-to-name [fourth l]] ms [word-to-int [name/word n]]]
+        [assert [lt-s init-size ms] memory max-size must be greater than init-size]
+        [option/some n]]]]
+    [todo check type and size parse and are consistent]
+    [assert [or [type-equals mt type-i32] [type-equals mt type-i64]] memory expected i32 or i64]
+    [memory-exp mt init-size-name opt-max]]]
+
 [func form-to-import-kind [lctx form]
   [let [l [get-list form]]
-    [logq form-to-import-kind [identity l]]
     [assert-not [is-empty l] form-to-import-kind expected non-empty list]
     [switch [form-to-word [first l]]
       [[word memory]]
-      [let [mt [form-to-type lctx [second l]]]
-        [assert [or [eq [size l] 3] [eq [size l] 4]] import memory expected 3 or 4 elements]
-        [logq mt [identity mt]]
-        [import-kind/memory
-          mt
-          [word-to-int [form-to-word [third l]]]
-          [if [eq [size l] 3]
-            [option/none]
-            [option/some [word-to-int [form-to-word [fourth l]]]]]]]
+      [import-kind-exp/memory [form-list-to-mem-exp l]]
 
       [[word func]]
       [do
-        [assert [eq [size l] 2] import func expected 2 elements]
-        [import-kind/function
-          [list-map param [get-list [second l]] [form-to-type lctx param]]
+        [assert [eq [size l] 3] import func expected 2 elements]
+        [import-kind-exp/function
+          [list-map pp [pairwise-pairs [get-list [second l]]]
+            [pair [form-to-name [pair/fst pp]] [form-to-type lctx [pair/snd pp]]]]
           [form-to-type lctx [third l]]]]
 
       [logq-abort not implemented import-kind [first l]]]]]
@@ -441,12 +467,6 @@
     [exp/cast
       [form-to-type lctx [second l]]
       [form-to-exp lctx [third l]]]
-
-    [[word import]]
-    [exp/import
-      [form-to-name [second l]]
-      [form-to-name [third l]]
-      [form-to-import-kind lctx [fourth l]]]
 
     [[word deref]]
     [exp/deref [form-to-exp lctx [second l]]]
@@ -510,6 +530,12 @@
     [[word tuple]]
     [exp/tuple
       [list-map e [rest l] [form-to-exp lctx e]]]
+
+    [[word data]]
+    [let [mem-name [form-to-name [second l]]]
+      [exp/data
+        mem-name
+        [form-to-exp lctx [third l]]]]
 
     [if-let [pt [try-get primitive-types-by-name fw]]
       [let [n [form-to-name [second l]]]
@@ -652,16 +678,6 @@
 
       [logq-abort not a function type]]
 
-    [exp/import n m ik]
-    [match ik
-      [import-kind/memory et s os]
-      [type/memory [mem-type et m]]
-
-      [import-kind/function ps rt]
-      [type/func ps rt]
-
-      [logq-abort not implemented type-of import]]
-
     [exp/cast t e]
     [do
       [if-let [ptp [try-get-pointer-args t]]
@@ -791,6 +807,14 @@
       [error name-form name already defined]]
     [set-kv-map top-names n desc]]]
 
+[func mem-exp-to-mem-kind [mem-exp]
+  [memory-desc
+    [memory-exp/type mem-exp]
+    [word-to-int [name/word [memory-exp/init-size mem-exp]]]
+    [if-let [max [memory-exp/max-size mem-exp]]
+      [option/some [word-to-int [name/word max]]]
+      [option/none]]]]
+
 [func top-form-to-top-exp [form]
   [let [l [get-list form]]
     [if [is-empty l]
@@ -811,6 +835,44 @@
                bt [top-exp/constant [form-to-name [second l]] be]]
               [bind-top [second l] [pair type [top-desc-kind/constant]]]
               [option/some bt]]]
+
+          [[word memory]]
+          [let [mem-name [form-to-name [second l]]
+                mem-exp [form-list-to-mem-exp [rest l]]
+                t [type/memory [mem-type [memory-exp/type mem-exp] mem-name]]]
+            [bind-top [second l] [pair t [top-desc-kind/memory [mem-exp-to-mem-kind mem-exp]]]]
+            [option/some [top-exp/memory [form-to-name [second l]] mem-exp]]]
+
+          [[word import]]
+          [let
+            [mod-name [form-to-name [second l]]
+             import-exps
+              [list-map import [slice l 2 [size l]]
+                [let [
+                  import-list [get-list import]
+                  m [form-to-name [first import-list]]
+                  ik [form-to-import-kind [local-context/empty] [second import-list]]
+                  t
+                  [match ik
+                    [import-kind-exp/function ps rt]
+                    [type/func [list-map p ps [pair/snd p]] rt]
+
+                    [import-kind-exp/memory mem-exp]
+                    [type/memory [mem-type [memory-exp/type mem-exp] m]]
+
+                    [logq-abort not implemented type-of import]]
+                  ikd
+                  [match ik
+                    [import-kind-exp/function ps rt]
+                    [import-kind-desc/function ps rt]
+
+                    [import-kind-exp/memory mem-exp]
+                    [import-kind-desc/memory [mem-exp-to-mem-kind mem-exp]]
+
+                    [logq-abort not implemented type-of import]]]
+                  [bind-top [first import-list] [pair t [top-desc-kind/import ikd]]]
+                  [pair m ik]]]]
+            [option/some [top-exp/import mod-name import-exps]]]
 
           [[word defn]]
           [do
@@ -918,7 +980,6 @@
 
 [func form-to-inst [f]
   [match f
-    [exp/import mod-name name ik] [logq-abort inline imports not implemented]
     [exp/cast t e] [form-to-inst e]
     [exp/literal pt n] [[translate-literal pt] [name/word n]]
     [exp/deref target]
@@ -1124,43 +1185,61 @@
      globals [growable-list]
      funcs [growable-list]
      exports [growable-list]
-     datas [growable-list]]
+     datas [growable-list]
+     type-to-mem-kind
+     [func ttmk [t]
+       [match t
+        [type/primitive p]
+        [ifs
+          [is-identical p type-primitive-i32] [memory-kind/i32]
+          [is-identical p type-primitive-i64] [memory-kind/i64]
+          [logq-abort not implemented memory-kind [identity p]]]
+        [logq-abort not implemented memory-kind [identity t]]]]]
     [for-each top tops
       [match top
+        [top-exp/memory n mem-exp]
+        [push memories
+          [wat-memory
+            [type-to-mem-kind [memory-exp/type mem-exp]]
+            [name/word n]
+            [word-to-int [name/word [memory-exp/init-size mem-exp]]]
+            [if-let [max [memory-exp/max-size mem-exp]]
+              [option/some [word-to-int [name/word max]]]
+              [option/none]]]]
+
+        [top-exp/import mod-name exp-imports]
+        [let [mod-name-word [name/word mod-name]]
+          [for-each import-pair exp-imports
+            [let [n [pair/fst import-pair]
+                  nw [name/word n]
+                  ik [pair/snd import-pair]]
+              [push
+                imports
+                [pair
+                  [pair mod-name-word nw]
+                  [match ik
+                    [import-kind-exp/function ps rt]
+                    [wat-import-kind/func
+                      nw
+                      [list-map p ps [type-to-wat-type [pair/snd p]]]
+                      [type-to-wat-types rt]]
+
+                    [import-kind-exp/memory mem-exp]
+                    [wat-import-kind/memory
+                      nw
+                      [type-to-mem-kind [memory-exp/type mem-exp]]
+                      [word-to-int [name/word [memory-exp/init-size mem-exp]]]
+                      [if-let [max [memory-exp/max-size mem-exp]]
+                        [option/some [word-to-int [name/word max]]]
+                        [option/none]]]]]]]]]
+
         [top-exp/constant n e]
-        [match e
-          [exp/import mod-name name ik]
+        [if-let [inst [const-exp-to-inst e]]
           [push
-            imports
-            [pair
-              [pair [name/word mod-name] [name/word name]]
-              [match ik
-                [import-kind/function ps rt]
-                [wat-import-kind/func
-                  [name/word name]
-                  [list-map p ps [type-to-wat-type p]]
-                  [type-to-wat-types rt]]
-
-                [import-kind/memory mk s os]
-                [wat-import-kind/memory
-                  [match mk
-                    [type/primitive p]
-                    [ifs
-                      [is-identical p type-primitive-i32] [memory-kind/i32]
-                      [is-identical p type-primitive-i64] [memory-kind/i64]
-                      [logq-abort not implemented memory-kind [identity p]]]
-                    [logq-abort not implemented memory-kind [identity mk]]]
-                  s
-                  os]]]]
-
-          [if-let [inst [const-exp-to-inst e]]
-            [push
-              globals
-              [wat-global
-                [name/word n]
-                [type-to-wat-type [type-of e]]
-                inst]]
-            [logq-abort not a const exp]]]
+            globals
+            [wat-global
+              [name/word n] [type-to-wat-type [type-of e]] inst]]
+          [logq-abort not a const exp]]
 
         [top-exp/function f]
         [push
@@ -1226,7 +1305,10 @@
     [byte-array-to-wasm-module [wat-to-wasm-byte-array wat-string]]]]
 
 [def prog1 [qlist
-[def mem [import env mem [memory i32 1]]]
+[import env
+  [mem [memory i32 1]]
+  [log [func [par [pointer mem [array u8]]
+              n-bytes i32] [tuple]]]]
 [defn empty [] [tuple]]
 [def bump-top [cast [pointer mem i32] [i32 0]]]
 [defn get-top [] i32
