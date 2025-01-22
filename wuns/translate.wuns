@@ -382,6 +382,11 @@
       [set-kv-map name-to-desc name desc]]
     opt-desc]]
 
+[func lookup-bind-name [lctx name]
+  [if-let [desc [try-lookup-bind-name lctx name]]
+    desc
+    [logq-abort not bound [identity name]]]]
+
 [func form-to-type [lctx form]
   [match form
     [form/word w]
@@ -397,14 +402,13 @@
       [type/tuple [list-map t [slice l 1 [size l]] [form-to-type lctx t]]]
 
       [[word pointer]]
-      [let [mem-name [form-to-name [second l]]]
-        [if-let [desc [try-lookup-bind-name lctx mem-name]]
-          [match [pair/fst desc]
-            [type/memory -]
-            [do]
+      [let [mem-name [form-to-name [second l]]
+            desc [lookup-bind-name lctx mem-name]]
+        [match [pair/fst desc]
+          [type/memory -]
+          [do]
 
-            [logq-abort not a memory type]]
-          [logq-abort memory not bound]]
+          [logq-abort not a memory type]]
         [type/pointer
           mem-name
           [form-to-type lctx [third l]]]]
@@ -533,6 +537,12 @@
 
     [[word data]]
     [let [mem-name [form-to-name [second l]]]
+      [let [desc [lookup-bind-name lctx mem-name]]
+        [match [pair/fst desc]
+          [type/memory -]
+          [do]
+
+          [logq-abort not a memory type]]]
       [exp/data
         mem-name
         [form-to-exp lctx [third l]]]]
@@ -556,10 +566,8 @@
 [func form-to-exp [lctx f]
   [match f
     [form/word w]
-    [let [n [form-to-name f]]
-      [if-let [desc [try-lookup-bind-name lctx n]]
-        [do]
-        [error f not bound]]
+    [let [n [form-to-name f]
+          desc [lookup-bind-name lctx n]]
       [exp/var n]]
 
     [form/list l]
