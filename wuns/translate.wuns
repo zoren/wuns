@@ -133,7 +133,8 @@
     [constant name exp]
     [function exp-function]
     [import name [list [pair name import-kind-exp]]]
-    [memory name memory-exp]]
+    [memory name memory-exp]
+    [export [list name]]]
 
   memory-exp []
   [record
@@ -193,10 +194,6 @@
     [option/some [pair m p]]
 
     [option/none]]]
-
-[defn make-top-names []
-  [let [top-names [transient-kv-map]]
-    top-names]]
 
 [def type-primitive-i32 [get-primitive [word i32]]]
 [def type-primitive-i64 [get-primitive [word i64]]]
@@ -894,6 +891,14 @@
             [bind-top [second l] [pair t [top-desc-kind/memory [mem-exp-to-mem-kind mem-exp]]]]
             [option/some [top-exp/memory [form-to-name [second l]] mem-exp]]]
 
+          [[word export]]
+          [option/some
+            [top-exp/export
+              [list-map fe [rest l]
+                [let [n [form-to-name fe]]
+                  [lookup-bind-name local-context-empty n]
+                  n]]]]
+
           [[word import]]
           [let
             [mod-name [form-to-name [second l]]
@@ -1365,6 +1370,21 @@
                         [option/some [word-to-int [name/word max]]]
                         [option/none]]]]]]]]]
 
+        [top-exp/export names]
+        [for-each n names
+          [push exports
+            [let [nw [name/word n]
+                  ekind
+                  [match [pair/snd [get name-to-desc n]]
+                    [desc-kind/local -] [logq-abort unreachable export local]
+                    [desc-kind/top td]
+                    [match td
+                      [top-desc-kind/constant] [export-kind/global]
+                      [top-desc-kind/function] [export-kind/func]
+                      [top-desc-kind/import -] [logq-abort not implemented export-kind/import]
+                      [top-desc-kind/memory -] [export-kind/memory]]]]
+              [pair nw [pair ekind nw]]]]]
+
         [top-exp/constant n e]
         [if-let [inst [const-exp-to-inst e]]
           [push
@@ -1418,7 +1438,7 @@
     [func then [evaluator]
       [let
         [gerrors [growable-list]
-         top-names [make-top-names]
+         top-names [transient-kv-map]
          binder-compiler [bind evaluator gerrors top-names]
          top-form-to-top-exp [pair/fst binder-compiler]
          compile-tops [pair/snd binder-compiler]
