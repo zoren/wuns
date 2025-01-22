@@ -1,5 +1,10 @@
 [load wat.wuns]
 
+[defn align [p x]
+  [intrinsic i32.and
+    [add x [dec p]]
+    [intrinsic i32.xor [i32 -1] [dec p]]]]
+
 [type name []
   [record
     [word word]]]
@@ -669,6 +674,30 @@
 
     [logq-abort type-equals [identity t1] [identity t2]]]]
 
+[func exp-is-constant [e]
+  [match e
+    [exp/literal - --] true
+    [exp/var -]
+    [do
+      [todo check if bound to constant]
+      false]
+    [exp/cast - e] [exp-is-constant e]
+    [exp/array t es]
+    [loop [i 0 n [size es]]
+      [if [lt-s i n]
+        [if [exp-is-constant [at es i]]
+          [continue i [inc i]]
+          false]
+        true]]
+    [exp/tuple es]
+    [loop [i 0 n [size es]]
+      [if [lt-s i n]
+        [if [exp-is-constant [at es i]]
+          [continue i [inc i]]
+          false]
+        true]]
+    false]]
+
 [func type-of [exp]
   [match exp
     [exp/literal pt n]
@@ -803,6 +832,12 @@
     [if [eq [size elems] 1]
       [type-of [first elems]]
       [type/tuple [list-map e elems [type-of e]]]]
+
+    [exp/data mem-name data-exp]
+    [let [mem-desc [lookup-bind-name local-context-empty mem-name]
+          texp [type-of data-exp]]
+      [assert [exp-is-constant data-exp] data expected constant]
+      [type/pointer mem-name texp]]
 
     [logq-abort not implemented type-of [identity exp]]]]
 
@@ -939,7 +974,8 @@
 
     [list [type-to-wat-type type]]]]
 
-[func make-forms-to-inst [glocals]
+[func exps-to-inst [datas active-data-map outer-exps]
+[let [glocals [growable-list]]
 [letfn [
 [func exp-to-integer-exp [e]
   [match e
@@ -1156,7 +1192,61 @@
     [exp/tuple elems]
     [wat-inst/instructions [list-map elem elems [form-to-inst elem]]]
 
+    [exp/data mem-name data-exp]
+    [let
+      [mem-desc
+        [match [pair/snd [get name-to-desc mem-name]]
+          [desc-kind/local ld]
+          [logq-abort not implemented data local]
+
+          [desc-kind/top td]
+          [match td
+            [top-desc-kind/memory md] md
+            [top-desc-kind/import id]
+            [match id
+              [import-kind-desc/memory md] md
+              [logq-abort not implemented data import]]
+            [logq-abort not implemented data import]]]
+       pt [option-get [try-get-primitive [memory-desc/type mem-desc]]]
+       mem-name-word [name/word mem-name]
+       offset-atom
+       [if-let [offset-atom [try-get active-data-map mem-name-word]]
+        offset-atom
+        [let [oa [atom [i32 16]]]
+          [set-kv-map active-data-map mem-name-word oa]
+          oa]]
+        current-offset [atom-get offset-atom]
+        pexp [[translate-literal pt] [int-to-word current-offset]]
+        bytes [exp-to-bytes data-exp]
+        n-of-bytes [byte-array-size bytes]]
+      [atom-set offset-atom [add current-offset [align [i32 16] n-of-bytes]]]
+      [push
+        datas
+        [wat-data/active
+          mem-name-word
+          pexp
+          bytes]]
+      pexp]
+
     [logq-abort form-to-inst not implemented [identity f]]]]
+
+[func exp-to-bytes [e]
+  [let
+    [bprinter [empty-printer]
+     go
+     [func go [e]
+      [match e
+        [exp/literal pt n]
+        [let [i [word-to-int [name/word n]]]
+          [assert [eq [primitive-type/bytes pt] 1] only one bytes supported]
+          [print-byte bprinter [if [is-negative i] [add i [i32 256]] i]]]
+
+        [exp/array - es]
+        [for-each elem es [go elem]]
+
+        [logq-abort not implemented exp-to-bytes [identity e]]]]]
+    [go e]
+    [printer-to-byte-array bprinter]]]
 
 [func forms-to-inst [forms]
   [wat-inst/instructions
@@ -1172,21 +1262,9 @@
                 res]]]
         [list [form-to-inst [last forms]]]]]]]
 ]
-  forms-to-inst]]
-
-[func wuns-to-wat-func [f]
-  [let
-    [glocals [growable-list]
-     body-inst [[make-forms-to-inst glocals] [exp-function/bodies f]]]
-    [wat-func
-      [name/word [exp-function/name f]]
-      [list-map p [exp-function/params f]
-        [pair
-          [name/word [pair/fst p]]
-          [type-to-wat-type [pair/snd p]]]]
-      [clone-growable-to-frozen-list glocals]
-      [type-to-wat-types [exp-function/return-type f]]
-      body-inst]]]
+  [pair
+    [forms-to-inst outer-exps]
+    [clone-growable-to-frozen-list glocals]]]]]
 
 [func compile [tops]
   [let
@@ -1196,6 +1274,7 @@
      funcs [growable-list]
      exports [growable-list]
      datas [growable-list]
+     active-data-map [transient-kv-map]
      type-to-mem-kind
      [func ttmk [t]
        [match t
@@ -1252,9 +1331,17 @@
           [logq-abort not a const exp]]
 
         [top-exp/function f]
-        [push
-          funcs
-          [wuns-to-wat-func f]]]]
+        [let
+          [body-inst-locals-pair [exps-to-inst datas active-data-map [exp-function/bodies f]]]
+          [push
+            funcs
+            [wat-func
+              [name/word [exp-function/name f]]
+              [list-map p [exp-function/params f]
+                [pair [name/word [pair/fst p]] [type-to-wat-type [pair/snd p]]]]
+              [pair/snd body-inst-locals-pair]
+              [type-to-wat-types [exp-function/return-type f]]
+              [pair/fst body-inst-locals-pair]]]]]]
 
     [wat-output
       imports
@@ -1411,6 +1498,21 @@
 
 [defn mk-2-tup [x i32 y i32] [tuple i32 i32]
   [tuple x y]]
+
+[defn test-data [] [pointer mem [array u8 [i32 11]]]
+  [data mem
+    [array u8
+      [u8 104] [u8 101] [u8 108] [u8 108] [u8 111]
+      [u8 32]
+      [u8 119] [u8 111] [u8 114] [u8 108] [u8 100]]]]
+
+[defn test-data2 [] [pointer mem [array u8 [i32 11]]]
+  [data mem
+    [array u8
+      [u8 104] [u8 101] [u8 108] [u8 108] [u8 111]
+      [u8 32]
+      [u8 119] [u8 111] [u8 114] [u8 108] [u8 100]]]]
+
 ]]
 
 [defn test []
