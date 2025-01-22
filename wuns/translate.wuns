@@ -194,13 +194,6 @@
 
     [option/none]]]
 
-[defn try-get-array-args [t]
-  [match t
-    [type/array et opt-size-exp]
-    [option/some [pair et opt-size-exp]]
-
-    [option/none]]]
-
 [defn make-top-names []
   [let [top-names [transient-kv-map]]
     top-names]]
@@ -814,13 +807,26 @@
     type-i32
 
     [exp/index a i]
-    [if-let [p [try-get-pointer-args [type-of a]]]
-      [if-let [par [try-get-array-args [pair/snd p]]]
-        [do
-          [when-not [type-equals type-i32 [type-of i]] [logq-abort eval exp expected type got]]
-          [type/pointer [pair/fst p] [pair/fst par]]]
-        [logq-abort not implemented type-of index]]
-      [logq-abort not a pointer]]
+    [do
+      [when-not [type-equals type-i32 [type-of i]] [logq-abort eval exp expected type got]]
+      [if-let [p [try-get-pointer-args [type-of a]]]
+        [type/pointer [pair/fst p]
+          [match [pair/snd p]
+            [type/array et opt-size-exp]
+            et
+
+            [type/tuple ts]
+            [match i
+              [exp/literal pt n]
+              [let [ii [word-to-int [name/word n]]]
+                [assert-not [is-negative ii] index expected non-negative integer]
+                [assert [lt-s ii [size ts]] index expected less than tuple size]
+                [at ts ii]]
+
+              [logq-abort index on tuple only allowed with constants [identity i]]]
+
+            [logq-abort not implemented type-of index]]]
+        [logq-abort not a pointer]]]
 
     [exp/array elem-type elems]
     [do
@@ -1182,10 +1188,24 @@
     [exp/size-of t]
     [integer-exp-to-int [type-to-size-of-integer-exp t]]
 
-    [exp/index a i]
+    [exp/index a index-exp]
     [if-let [p [try-get-pointer-args [type-of a]]]
-      [if-let [par [try-get-array-args [pair/snd p]]]
-        [integer-exp-to-int [type-to-size-of-integer-exp [type/array [pair/fst par] [option/some i]]]]
+      [match [pair/snd p]
+        [type/array et opt-size-exp]
+        [integer-exp-to-int [type-to-size-of-integer-exp [type/array et [option/some index-exp]]]]
+
+        [type/tuple ts]
+        [match index-exp
+          [exp/literal pt n]
+          [loop [ii [word-to-int [name/word n]]
+                 i 0
+                 res int-const-0]
+            [if [lt-s i ii]
+              [continue res [int-exp-add res [type-to-size-of-integer-exp [at ts i]]]
+              i [inc i]]
+              [integer-exp-to-int res]]]
+
+          [logq-abort index on tuple only allowed with constants]]
         [logq-abort not implemented type-of index]]
       [logq-abort not a pointer]]
 

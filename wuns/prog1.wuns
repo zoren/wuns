@@ -136,3 +136,6 @@
 [defn test-data-tuple [] [pointer mem [tuple f64 i32]]
   [data mem
     [tuple [f64 1.1] [i32 2]]]]
+
+[defn test-data-tuple-index [ptup [pointer mem [tuple f64 i32]]] i32
+  [deref [index ptup [i32 1]]]]
