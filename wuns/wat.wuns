@@ -40,7 +40,7 @@
 
 [type wat-import-kind []
   [union
-    [memory memory-kind i32 [option i32]]
+    [memory word memory-kind i32 [option i32]]
     [func word [list word] [list word]]]]
 
 [type wat-memory []
@@ -92,6 +92,8 @@
 [defn empty-printer []
   [printer [byte-array-resizable [i32 256] [i32 0x10000000]] [atom 0]]]
 
+[defn printer-index [p] [atom-get [printer/index p]]]
+
 [defn printer-to-byte-array [p]
   [let
     [ci [atom-get [printer/index p]]
@@ -109,7 +111,7 @@
     [when [le-s cur-size i]
       [byte-array-resize a [mul [i32 2] cur-size]]]
     [byte-array-set a i byte]
-    [atom-set [printer/index printer] [inc i]]]]
+    [atom-set ia [inc i]]]]
 
 [defn print-word [printer word]
   [for i 0 [word-byte-size word]
@@ -279,7 +281,7 @@
     [wat-inst/br w]
     [wat-list [wat/word [word br]] [wat/dollar w]]
 
-    [logq-abort wat-inst-to-out unknown instruction]]]
+    [logq-abort wat-inst-to-out unknown instruction [identity i]]]]
 
 [defn import-to-wat [import]
   [let [name-pair [pair/fst import]
@@ -289,10 +291,10 @@
       [wat/dqstring [pair/fst name-pair]]
       [wat/dqstring name]
       [match [pair/snd import]
-        [wat-import-kind/memory kind init-size opt-max]
+        [wat-import-kind/memory mname kind init-size opt-max]
         [wat-list
           [wat/word [word memory]]
-          [wat/dollar name]
+          [wat/dollar mname]
           [wat/word [match kind
             [memory-kind/i32] [word i32]
             [memory-kind/i64] [word i64]]]
@@ -301,7 +303,7 @@
         [wat-import-kind/func fname param-types result-types]
         [wat-list
           [wat/word [word func]]
-          [wat/dollar name]
+          [wat/dollar fname]
           [wat-concat [list [wat/word [word param]]]
             [list-map pt param-types [wat/word pt]]]
           [wat-concat [list [wat/word [word result]]]
