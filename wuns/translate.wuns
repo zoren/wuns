@@ -1237,30 +1237,34 @@
      [func go [e]
       [match e
         [exp/literal pt value-name]
-        [switch [primitive-type/prefix pt]
-          [[word i] [word u]]
-          [loop
-            [i 0
-             cur [word-to-int [name/word value-name]]
-             n-bytes [primitive-type/bytes pt]]
-            [when [lt-s i n-bytes]
-              [print-byte bprinter [intrinsic i32.and [i32 0xff] cur]]
-              [continue
-                i [inc i]
-                cur [intrinsic i32.shr-s cur [i32 8]]]]]
+        [let [n-bytes [primitive-type/bytes pt]]
+          [assert [eq [intrinsic i32.rem-s [printer-index bprinter] n-bytes] [i32 0]]
+            exp-to-bytes expected natural alignment [identity pt]]
+          [switch [primitive-type/prefix pt]
+            [[word i] [word u]]
+            [loop
+              [i 0
+               cur [word-to-int [name/word value-name]]]
+              [when [lt-s i n-bytes]
+                [print-byte bprinter [intrinsic i32.and [i32 0xff] cur]]
+                [continue
+                  i [inc i]
+                  cur [intrinsic i32.shr-s cur [i32 8]]]]]
 
-          [[word f]]
-          [loop
-            [i 0
-             fba [f64-to-byte-array [word-to-f64 [name/word value-name]]]
-             n-bytes [byte-array-size fba]]
-            [when [lt-s i n-bytes]
-              [print-byte bprinter [byte-array-get fba i]]
-              [continue i [inc i]]]]
+            [[word f]]
+            [loop
+              [i 0
+               fba [f64-to-byte-array [word-to-f64 [name/word value-name]]]]
+              [when [lt-s i n-bytes]
+                [print-byte bprinter [byte-array-get fba i]]
+                [continue i [inc i]]]]
 
-          [logq-abort not implemented exp-to-bytes [identity e]]]
+            [logq-abort not implemented exp-to-bytes [identity e]]]]
 
         [exp/array - es]
+        [for-each elem es [go elem]]
+
+        [exp/tuple es]
         [for-each elem es [go elem]]
 
         [logq-abort not implemented exp-to-bytes [identity e]]]]]

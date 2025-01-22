@@ -132,3 +132,7 @@
 [defn test-data-f64 [] [pointer mem [array f64 [i32 1]]]
   [data mem
     [array f64 [f64 0] ]]]
+
+[defn test-data-tuple [] [pointer mem [tuple f64 i32]]
+  [data mem
+    [tuple [f64 1.1] [i32 2]]]]
