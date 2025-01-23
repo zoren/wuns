@@ -1159,7 +1159,7 @@
       [exp-to-inst c] [exp-to-inst t] [exp-to-inst e]]
 
     [exp/do es]
-    [forms-to-inst es]
+    [exps-to-inst es]
 
     [exp/let-loop ll-kind bindings bodies]
     [let
@@ -1172,7 +1172,7 @@
       [match ll-kind
         [local-context-kind/let]
         [wat-inst/instructions
-          [concat bind-insts [list [forms-to-inst bodies]]]]
+          [concat bind-insts [list [exps-to-inst bodies]]]]
 
         [local-context-kind/loop]
         [wat-inst/instructions
@@ -1181,7 +1181,7 @@
               [wat-inst/loop
                 [word loop-label]
                 [type-to-wat-types [type-ofs bodies]]
-                [forms-to-inst bodies]]]]]]]
+                [exps-to-inst bodies]]]]]]]
 
     [exp/continue assignments]
     [wat-inst/instructions
@@ -1296,7 +1296,7 @@
     [go e]
     [printer-to-byte-array bprinter]]]
 
-[func forms-to-inst [forms]
+[func exps-to-inst [forms]
   [wat-inst/instructions
     [if [is-empty forms]
       [list]
@@ -1311,7 +1311,7 @@
         [list [exp-to-inst [last forms]]]]]]]
 ]
   [pair
-    [forms-to-inst outer-exps]
+    [exps-to-inst outer-exps]
     [clone-growable-to-frozen-list glocals]]]]]
 
 [func compile [tops]
@@ -1391,7 +1391,7 @@
             globals
             [wat-global
               [name/word n] [type-to-wat-type [type-of e]] inst]]
-          [logq-abort not a const exp]]
+          [logq-abort not a const exp [identity e]]]
 
         [top-exp/function f]
         [let
