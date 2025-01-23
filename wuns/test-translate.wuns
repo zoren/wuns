@@ -170,6 +170,36 @@
           [test-assert [i32 2] get-y ptup]
           ]]]]]
 
+[defn test-mutable []
+  [let [forms
+        [qlist
+          [mutable x [i32 1336]]
+
+          [defn get-x [] i32
+            x]
+
+          [defn set-x [v i32] [tuple]
+            [assign x v]]
+
+          [export get-x]]]
+    [promise-then
+      [promise-then
+        [forms-to-output forms]
+        output-to-module]
+      [func then [module]
+        [let [inst [wasm-instantiate module empty-object]
+              get-x [get-export inst [word get-x]]
+              test-assert
+              [func ta [expected fn arg]
+                [let [actual [js-apply fn [list [to-js-value arg]]]
+                      js-expected [to-js-value expected]]
+                  [when-not [is-identical js-expected actual]
+                    [logq test failed]
+                    [log js-expected]
+                    [log actual]]]]]
+          [test-assert [i32 1336] get-x 0]
+          ]]]]]
+
 
 [comment
   [bind-forms [def mem [import env mem [memory i32 1]]]]

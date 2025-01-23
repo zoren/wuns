@@ -15,6 +15,7 @@
     [local.get word]
     [local.set word wat-inst]
     [global.get word]
+    [global.set word wat-inst]
     [inst-word word [list wat-inst]]
     [inst byte-array [list wat-inst]]
     [load byte-array wat-inst-memargs wat-inst]
@@ -50,9 +51,15 @@
     [initial i32]
     [maximum [option i32]]]]
 
+[type mut []
+  [union
+    [const]
+    [var]]]
+
 [type wat-global []
   [record
     [name word]
+    [mutable mut]
     [type word]
     [value wat-inst]]]
 
@@ -240,6 +247,9 @@
     [wat-inst/global.get w]
     [wat-list [wat/word [word global.get]] [wat/dollar w]]
 
+    [wat-inst/global.set w e]
+    [wat-list [wat/word [word global.set]] [wat/dollar w] [wat-inst-to-out e]]
+
     [wat-inst/load name ma addr]
     [wat-concat
       [list [wat/byte-array name]]
@@ -322,7 +332,12 @@
   [wat-list
     [wat/word [word global]]
     [wat/dollar [wat-global/name global]]
-    [wat/word [wat-global/type global]]
+    [match [wat-global/mutable global]
+      [mut/const]
+      [wat/word [wat-global/type global]]
+
+      [mut/var]
+      [wat-list [wat/word [word mut]] [wat/word [wat-global/type global]]]]
     [wat-inst-to-out [wat-global/value global]]]]
 
 [defn data-to-wat [d]
