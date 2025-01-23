@@ -67,6 +67,12 @@
 [defn get-export [wasm-inst export-name]
   [get [object-to-kv-map [wasm-get-export-object wasm-inst]] export-name]]
 
+[defmacro js-app [fn .. args]
+  [flist [quote js-apply] fn
+    [form-concat
+      [list [quote list]]
+      [list-map arg args [flist [quote to-js-value] arg]]]]]
+
 [defn test1 []
   [let [forms
         [qlist
@@ -80,7 +86,7 @@
       [func then [module]
         [let [inst [wasm-instantiate module empty-object]
               f [get-export inst [word f]]
-              actual [js-apply f [list [to-js-value [i32 1]]]]
+              actual [js-app f [i32 1]]
               js-expected [to-js-value [i32 2]]]
           [when-not [is-identical js-expected actual]
             [logq test failed]
@@ -113,7 +119,7 @@
               get-x [get-export inst [word get-x]]
               get-y [get-export inst [word get-y]]
               test-assert [func ta [expected fn arg]
-                [let [actual [js-apply fn [list [to-js-value arg]]]
+                [let [actual [js-app fn arg]
                       js-expected [to-js-value expected]]
                 [when-not [is-identical js-expected actual]
                   [logq test failed]
@@ -129,6 +135,32 @@
           [test-assert [i32 -9] get-y tup2]
           ]]]]]
 
+[defn test-tuple-return []
+  [let [forms
+        [qlist
+          [defn get-empty-tuple [] [tuple] [tuple]]
+          [defn get-2tuple [] [tuple f64 i32] [tuple [f64 1.1] [i32 2]]]
+          [export get-empty-tuple get-2tuple]]]
+    [promise-then
+      [promise-then
+        [forms-to-output forms]
+        output-to-module]
+      [func then [module]
+        [let [inst [wasm-instantiate module empty-object]
+              get-empty-tuple [get-export inst [word get-empty-tuple]]
+              get-2tuple [get-export inst [word get-2tuple]]
+              test-assert-eq [func ta [js-expected actual]
+                [when-not [is-identical js-expected actual]
+                  [logq test failed]
+                  [log js-expected]
+                  [log actual]]]
+              ]
+          [test-assert-eq true [is-undefined [js-app get-empty-tuple]]]
+          [let [tup [js-app get-2tuple]
+                ar [js-value-to-array tup]]
+            [test-assert-eq 2 [size ar]]
+            [test-assert-eq [f64 1.1] [at ar [i32 0]]]
+            [test-assert-eq [i32 2] [at ar [i32 1]]]]]]]]]
 
 [defn test-data-exp []
   [let [forms
@@ -157,10 +189,10 @@
               get-pointed [get-export inst [word get-pointed]]
               get-x [get-export inst [word get-x]]
               get-y [get-export inst [word get-y]]
-              ptup [js-apply get-pointed [list [to-js-value pptup]]]
+              ptup [js-app get-pointed pptup]
               test-assert
               [func ta [expected fn arg]
-                [let [actual [js-apply fn [list [to-js-value arg]]]
+                [let [actual [js-app fn arg]
                       js-expected [to-js-value expected]]
                   [when-not [is-identical js-expected actual]
                     [logq test failed]
@@ -191,7 +223,7 @@
               get-x [get-export inst [word get-x]]
               test-assert
               [func ta [expected fn arg]
-                [let [actual [js-apply fn [list [to-js-value arg]]]
+                [let [actual [js-app fn arg]
                       js-expected [to-js-value expected]]
                   [when-not [is-identical js-expected actual]
                     [logq test failed]
