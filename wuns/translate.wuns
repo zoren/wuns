@@ -127,11 +127,16 @@
     [return-type type]
     [bodies [list exp]]]]
 
+
+[type top-value-kind [] [union [constant] [variable]]]
+
+[def top-value-kind-constant [top-value-kind/constant]]
+[def top-value-kind-variable [top-value-kind/variable]]
+
 [type
   top-exp []
   [union
-    [constant name exp]
-    [mutable name exp]
+    [value top-value-kind name exp]
     [function exp-function]
     [import name [list [pair name import-kind-exp]]]
     [memory name memory-exp]
@@ -229,8 +234,7 @@
 [type
   top-desc-kind []
   [union
-    [constant]
-    [mutable]
+    [value top-value-kind]
     [function]
     [import import-kind-desc]
     [memory memory-desc]]
@@ -768,7 +772,8 @@
 
               [desc-kind/top td]
               [match td
-                [top-desc-kind/mutable] [do]
+                [top-desc-kind/value k] [assert [is-identical k top-value-kind-variable]
+                  can only assign to variables]
                 [logq-abort can only assign to pointers or mutables]]]
             [logq-abort can only assign to pointers or mutables]]]]
       type-empty-tuple]
@@ -860,24 +865,15 @@
         [when [has top-names fw]
           [error f top-level calls not yet implemented]]
         [switch fw
-          [[word def]]
+          [[word def] [word mutable]]
           [do
             [when-not [eq [size l] 3] [error form expected def name exp-form]]
             [let
               [be [form-to-exp local-context-empty [third l]]
                type [type-of be]
-               bt [top-exp/constant [form-to-name [second l]] be]]
-              [bind-top [second l] [pair type [top-desc-kind/constant]]]
-              [option/some bt]]]
-
-          [[word mutable]]
-          [do
-            [when-not [eq [size l] 3] [error form expected mutable name exp-form]]
-            [let
-              [be [form-to-exp local-context-empty [third l]]
-               type [type-of be]
-               bt [top-exp/mutable [form-to-name [second l]] be]]
-              [bind-top [second l] [pair type [top-desc-kind/mutable]]]
+               kind [if [eq-word fw [word mutable]] top-value-kind-variable top-value-kind-constant]
+               bt [top-exp/value kind [form-to-name [second l]] be]]
+              [bind-top [second l] [pair type [top-desc-kind/value kind]]]
               [option/some bt]]]
 
           [[word memory]]
@@ -1149,15 +1145,16 @@
         [exp-to-inst pexp]]]
 
     [exp/assign target value]
-    [let [
-    target-is-mutable [match target
-      [exp/var n]
-      [match [get-desc-from-name n]
-        [desc-kind/top td]
-        [match td
-          [top-desc-kind/mutable]
-          [option/some n]
-          [option/none]]]
+    [let [target-is-mutable
+      [match target
+        [exp/var n]
+        [match [get-desc-from-name n]
+          [desc-kind/top td]
+          [match td
+            [top-desc-kind/value k]
+            [if [is-identical k top-value-kind-variable] [option/some n] [option/none]]
+            [option/none]]
+          [option/none]]
         [option/none]]]
       [if-let [n target-is-mutable]
         [wat-inst/global.set [name/word n] [exp-to-inst value]]
@@ -1226,10 +1223,7 @@
     [match [get-desc-from-name n]
       [desc-kind/top td]
       [match td
-        [top-desc-kind/constant]
-        [wat-inst/global.get [name/word n]]
-
-        [top-desc-kind/mutable]
+        [top-desc-kind/value -]
         [wat-inst/global.get [name/word n]]
 
         [top-desc-kind/function]
@@ -1424,32 +1418,20 @@
                     [desc-kind/local -] [logq-abort unreachable export local]
                     [desc-kind/top td]
                     [match td
-                      [top-desc-kind/constant] [export-kind/global]
+                      [top-desc-kind/value -] [export-kind/global]
                       [top-desc-kind/function] [export-kind/func]
                       [top-desc-kind/import -] [logq-abort not implemented export-kind/import]
                       [top-desc-kind/memory -] [export-kind/memory]]]]
               [pair nw [pair ekind nw]]]]]
 
-        [top-exp/constant def-name e]
+        [top-exp/value k def-name e]
         [match [const-eval e]
           [exp/literal pt lit-name]
           [push
             globals
             [wat-global
               [name/word def-name]
-              [mut/const]
-              [type-to-wat-type [type-of e]]
-              [[translate-literal pt] [name/word lit-name]]]]
-          [logq-abort not a const exp [identity e]]]
-
-        [top-exp/mutable def-name e]
-        [match [const-eval e]
-          [exp/literal pt lit-name]
-          [push
-            globals
-            [wat-global
-              [name/word def-name]
-              [mut/var]
+              [if [is-identical k top-value-kind-constant] [mut/const] [mut/var]]
               [type-to-wat-type [type-of e]]
               [[translate-literal pt] [name/word lit-name]]]]
           [logq-abort not a const exp [identity e]]]
