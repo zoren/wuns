@@ -98,6 +98,7 @@
     [deref exp]
     [deref-to exp type]
     [assign exp exp]
+    [assign-mutable name exp]
     [intrinsic name [list exp]]
     [let-loop local-context-kind [list [pair name exp]] [list exp]]
     [continue [list [pair name exp]]]
@@ -126,7 +127,6 @@
     [params [list [pair name type]]]
     [return-type type]
     [bodies [list exp]]]]
-
 
 [type top-value-kind [] [union [constant] [variable]]]
 
@@ -483,6 +483,22 @@
       [form-to-exp lctx [second l]]
       [form-to-exp lctx [third l]]]
 
+    [[word assign-mutable]]
+    [let [dst-name [form-to-name [second l]]
+          desc [lookup-bind-name lctx dst-name]
+          src [form-to-exp lctx [third l]]]
+      [when-not [type-equals [type-of src] [name-to-type dst-name]]
+        [logq-abort eval exp expected type got]]
+      [match [pair/snd desc]
+        [desc-kind/top td]
+        [match td
+          [top-desc-kind/value v]
+          [assert [is-identical v top-value-kind-variable] assign-mutable expected variable]
+
+          [logq-abort not implemented assign-mutable top-desc-kind]]
+        [logq-abort not implemented assign-mutable top-desc-kind]]
+      [exp/assign-mutable dst-name src]]
+
     [[word intrinsic]]
     [exp/intrinsic
       [form-to-name [second l]]
@@ -746,37 +762,27 @@
       target-type]
 
     [exp/assign dst src]
-    [let [tsrc [type-of src]]
+    [do
       [match [type-of dst]
         [type/pointer - tdst]
-        [when-not [type-equals tdst tsrc]
-          [if-let [src-prim [try-get-primitive tsrc]]
-            [if-not [or [is-identical src-prim type-primitive-i32] [is-identical src-prim type-primitive-i64]]
-              [error-exp exp only i32 and i64 sources supported for heterogenous assign]
-              [if-let [dst-prim [try-get-primitive tdst]]
-                [when-not
-                  [and
-                    [primitive-type-is-integer dst-prim]
-                    [lt-s [primitive-type/bits dst-prim] [primitive-type/bits src-prim]]]
-                  [error-exp exp can only assign to smaller integer type]]
-                [error-exp exp source-type not a primitive type]]]
-            [error-exp exp eval exp expected primitive types]]]
-
-        [do
-          [when-not [type-equals tsrc [type-of dst]] [logq-abort eval exp expected type got]]
-          [match dst
-            [exp/var n]
-            [match [get-desc-from-name n]
-              [desc-kind/local ld]
-              [logq-abort cannot assign local variable]
-
-              [desc-kind/top td]
-              [match td
-                [top-desc-kind/value k] [assert [is-identical k top-value-kind-variable]
-                  can only assign to variables]
-                [logq-abort can only assign to pointers or mutables]]]
-            [logq-abort can only assign to pointers or mutables]]]]
+        [let [tsrc [type-of src]]
+          [when-not [type-equals tdst tsrc]
+            [if-let [src-prim [try-get-primitive tsrc]]
+              [if-not [or [is-identical src-prim type-primitive-i32] [is-identical src-prim type-primitive-i64]]
+                [error-exp exp only i32 and i64 sources supported for heterogenous assign]
+                [if-let [dst-prim [try-get-primitive tdst]]
+                  [when-not
+                    [and
+                      [primitive-type-is-integer dst-prim]
+                      [lt-s [primitive-type/bits dst-prim] [primitive-type/bits src-prim]]]
+                    [error-exp exp can only assign to smaller integer type]]
+                  [error-exp exp source-type not a primitive type]]]
+              [error-exp exp eval exp expected primitive types]]]]
+        [logq-abort not a pointer]]
       type-empty-tuple]
+
+    [exp/assign-mutable dst-name src]
+    type-empty-tuple
 
     [exp/let-loop ll-kind bindings bodies]
     [do
@@ -829,7 +835,7 @@
       [type/tuple [list-map e elems [type-of e]]]]
 
     [exp/data mem-name data-exp]
-    [let [mem-desc [lookup-bind-name local-context-empty mem-name]
+    [let [-mem-desc [lookup-bind-name local-context-empty mem-name]
           texp [type-of data-exp]]
       [type/pointer mem-name texp]]
 
@@ -1145,76 +1151,62 @@
         [exp-to-inst pexp]]]
 
     [exp/assign target value]
-    [let [target-is-mutable
-      [match target
-        [exp/var n]
-        [match [get-desc-from-name n]
-          [desc-kind/top td]
-          [match td
-            [top-desc-kind/value k]
-            [if [is-identical k top-value-kind-variable] [option/some n] [option/none]]
-            [option/none]]
-          [option/none]]
-        [option/none]]]
-      [if-let [n target-is-mutable]
-        [wat-inst/global.set [name/word n] [exp-to-inst value]]
-        [let
-          [ppt [if-let [p [try-get-pointer-args [type-of target]]] p [logq-abort not a pointer]]
-           mem-name-word [name/word [pair/fst ppt]]
-           assign-pointer
-           [func assign-pointer [target-int-exp ttarget value]
-  [match ttarget
-    [type/primitive pttarget]
-    [match [type-of value]
-      [type/primitive ptvalue]
-      [wat-inst/store
-        [wasm-name-to-wat-byte-array [prim-types-to-store-inst-name pttarget ptvalue]]
-        [wat-inst-memargs mem-name-word [word 0] [word 1]]
-        [integer-exp-to-inst target-int-exp]
-        [exp-to-inst value]]
+    [let
+      [ppt [if-let [p [try-get-pointer-args [type-of target]]] p [logq-abort not a pointer]]
+       assign-pointer
+       [func assign-pointer [target-int-exp ttarget value]
+        [match ttarget
+          [type/primitive pttarget]
+          [match [type-of value]
+            [type/primitive ptvalue]
+            [wat-inst/store
+              [wasm-name-to-wat-byte-array [prim-types-to-store-inst-name pttarget ptvalue]]
+              [wat-inst-memargs [name/word [pair/fst ppt]] [word 0] [word 1]]
+              [integer-exp-to-inst target-int-exp]
+              [exp-to-inst value]]
+            [logq-abort not implemented assign primitive types]]
 
-      [logq-abort not implemented assign primitive types]]
-
-    [type/array ttarget-elem ttarget-size-exp-opt]
-    [match value
-      [exp/array tvalue-elem elems]
-      [do
-        [assert-not [may-side-effect target] assign target cannot have side effects when assigning arrays]
-        [let
-          [size-of-int-exp [type-to-size-of-integer-exp tvalue-elem]
-            ginsts [growable-list]]
-          [loop [i 0 n [size elems]]
-            [when [lt-s i n]
+          [type/array ttarget-elem ttarget-size-exp-opt]
+          [match value
+            [exp/array tvalue-elem elems]
+            [do
+              [assert-not [may-side-effect target] assign target cannot have side effects when assigning arrays]
               [let
-                [offset-target
-                  [int-exp-add
-                    target-int-exp
-                    [int-exp-mul [integer-exp/const i] size-of-int-exp]]]
-                [push ginsts [assign-pointer offset-target ttarget-elem [at elems i]]]
-                [continue i [inc i]]]]]
-          [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
+                [size-of-int-exp [type-to-size-of-integer-exp tvalue-elem]
+                  ginsts [growable-list]]
+                [loop [i 0 n [size elems]]
+                  [when [lt-s i n]
+                    [let
+                      [offset-target
+                        [int-exp-add
+                          target-int-exp
+                          [int-exp-mul [integer-exp/const i] size-of-int-exp]]]
+                      [push ginsts [assign-pointer offset-target ttarget-elem [at elems i]]]
+                      [continue i [inc i]]]]]
+                [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
+              [logq-abort not implemented assign array types]]
 
-        [logq-abort not implemented assign array types]]
-
-    [type/tuple types]
-    [match value
-      [exp/tuple elems]
-      [do
-        [assert-not [may-side-effect target] assign target cannot have side effects when assigning tuples]
-        [let
-          [ginsts [growable-list]]
-          [loop [i 0 n [size elems] acc int-const-0]
-            [when [lt-s i n]
+          [type/tuple types]
+          [match value
+            [exp/tuple elems]
+            [do
+              [assert-not [may-side-effect target] assign target cannot have side effects when assigning tuples]
               [let
-                [telem [at types i]
-                  offset-target [int-exp-add acc [type-to-size-of-integer-exp telem]]]
-                [push ginsts [assign-pointer [int-exp-add target-int-exp offset-target] telem [at elems i]]]
-                [continue i [inc i] acc offset-target]]]]
-          [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
-      [logq-abort not implemented assign tuple types]]
+                [ginsts [growable-list]]
+                [loop [i 0 n [size elems] acc int-const-0]
+                  [when [lt-s i n]
+                    [let
+                      [telem [at types i]
+                        offset-target [int-exp-add acc [type-to-size-of-integer-exp telem]]]
+                      [push ginsts [assign-pointer [int-exp-add target-int-exp offset-target] telem [at elems i]]]
+                      [continue i [inc i] acc offset-target]]]]
+                [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
+            [logq-abort not implemented assign tuple types]]
+          [logq-abort not implemented assign type [identity ttarget]]]]]
+       [assign-pointer [exp-to-integer-exp target] [pair/snd ppt] value]]
 
-    [logq-abort not implemented assign type [identity ttarget]]]]]
-          [assign-pointer [exp-to-integer-exp target] [pair/snd ppt] value]]]]
+    [exp/assign-mutable dst-name value]
+    [wat-inst/global.set [name/word dst-name] [exp-to-inst value]]
 
     [exp/intrinsic n args]
     [wat-inst/inst [wasm-name-to-wat-byte-array [name/word n]] [list-map arg args [exp-to-inst arg]]]

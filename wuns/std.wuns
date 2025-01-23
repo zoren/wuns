@@ -654,6 +654,8 @@
 [def-js-extern to-js-value [type-scheme [a] [func [a] js-value]]]
 
 [def-js-extern is-undefined [func [js-value] i32]]
+[def-js-extern js-value-is-array [func [js-value] i32]]
+[def-js-extern js-value-to-array [func [js-value] [list js-value]]]
 
 [type object [v] [union]]
 

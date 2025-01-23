@@ -211,7 +211,7 @@
             x]
 
           [defn set-x [v i32] [tuple]
-            [assign x v]]
+            [assign-mutable x v]]
 
           [export get-x]]]
     [promise-then
