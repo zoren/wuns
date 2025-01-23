@@ -232,6 +232,49 @@
           [test-assert [i32 1336] get-x 0]
           ]]]]]
 
+[defn test-record []
+  [let [forms
+        [qlist
+          [memory mem i32 1]
+
+          [def tup1 [data mem [record f [f64 1.1] i [i32 2]]]]
+          [def tup2 [data mem [record f [f64 9.3] i [i32 -9]]]]
+
+          [defn get-f [t [pointer mem [record [f f64] [i i32]]]] f64
+            [deref [field t f]]]
+
+          [defn get-i [t [pointer mem [record [f f64] [i i32]]]] i32
+            [deref [field t i]]]
+
+          [export tup1 tup2 get-f get-i]]]
+    [promise-then
+      [promise-then
+        [forms-to-output forms]
+        output-to-module]
+      [func then [module]
+        [let [inst [wasm-instantiate module empty-object]
+              tup1 [get-export inst [word tup1]]
+              tup2 [get-export inst [word tup2]]
+              get-f [get-export inst [word get-f]]
+              get-i [get-export inst [word get-i]]
+              test-assert [func ta [expected fn arg]
+                [let [actual [js-app fn arg]
+                      js-expected [to-js-value expected]]
+                [when-not [is-identical js-expected actual]
+                  [logq test failed]
+                  [log js-expected]
+                  [log actual]]
+                ]
+              ]
+              ]
+          [test-assert [f64 1.1] get-f tup1]
+          [test-assert [i32 2] get-i tup1]
+
+          [test-assert [f64 9.3] get-f tup2]
+          [test-assert [i32 -9] get-i tup2]
+          ]]]]]
+
+
 [defn test-all []
   [promise-all
     [list
@@ -240,7 +283,9 @@
       [test-tuple]
       [test-tuple-return]
       [test-data-exp]
-      [test-mutable]]]]
+      [test-mutable]
+      [test-record]
+      ]]]
 
 [comment
   [bind-forms [def mem [import env mem [memory i32 1]]]]

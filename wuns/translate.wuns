@@ -78,6 +78,7 @@
     [tuple [list type]]
     [pointer name type]
     [array type [option exp]]
+    [record [list [pair name type]]]
 
     [memory mem-type]
     [func [list type] type]
@@ -105,8 +106,10 @@
     [do [list exp]]
     [size-of type]
     [index exp exp]
+    [field exp name]
     [array type [list exp]]
     [tuple [list exp]]
+    [record [list [pair name exp]]]
     [data name exp]
     ]]
 
@@ -395,6 +398,12 @@
         [[word tuple]]
         [type/tuple [list-map t [slice l 1 [size l]] [form-to-type lctx t]]]
 
+        [[word record]]
+        [type/record
+          [list-map pf [rest l]
+            [let [p [get-list pf]]
+              [pair [form-to-name [first p]] [form-to-type lctx [second p]]]]]]
+
         [[word pointer]]
         [let [mem-name [form-to-name [second l]]
               desc [lookup-bind-name lctx mem-name]]
@@ -592,6 +601,22 @@
       [form-to-exp lctx [second l]]
       [form-to-exp lctx [third l]]]
 
+    [[word field]]
+    [let [pexp [form-to-exp lctx [second l]]
+          field-name [form-to-name [third l]]
+          field-name-word [name/word field-name]
+          ppt [if-let [p [try-get-pointer-args [type-of pexp]]] p [logq-abort not a pointer]]]
+      [match [pair/snd ppt]
+        [type/record field-types]
+        [loop [i 0 n [size field-types]]
+          [if [lt-s i n]
+            [when-not [eq-word [name/word [pair/fst [at field-types i]]] field-name-word]
+              [continue i [inc i]]]
+            [logq-abort field not found [identity field-name]]]]
+
+        [logq-abort not a record type]]
+      [exp/field pexp field-name]]
+
     [[word array]]
     [let [telem [form-to-type lctx [second l]]]
       [exp/array
@@ -604,6 +629,11 @@
     [[word tuple]]
     [exp/tuple
       [list-map e [rest l] [form-to-exp lctx e]]]
+
+    [[word record]]
+    [exp/record
+      [list-map p [pairwise-pairs [rest l]]
+        [pair [form-to-name [pair/fst p]] [form-to-exp lctx [pair/snd p]]]]]
 
     [[word data]]
     [let [mem-name [form-to-name [second l]]]
@@ -695,6 +725,22 @@
               [continue i [inc i]]
               false]
             true]]]
+      false]
+
+    [type/record ps1]
+    [match t2
+      [type/record ps2]
+      [and
+        [eq [size ps1] [size ps2]]
+        [loop [i 0 n [size ps1]]
+          [if [lt-s i n]
+            [if [let [p1 [at ps1 i] p2 [at ps2 i]]
+                  [and [eq-word [name/word [pair/fst p1]] [name/word [pair/fst p2]]]
+                       [type-equals [pair/snd p1] [pair/snd p2]]]]
+              [continue i [inc i]]
+              false]
+            true]]]
+
       false]
 
     [type/pointer m1 t1]
@@ -824,6 +870,20 @@
             [logq-abort not implemented type-of index]]]
         [logq-abort not a pointer]]]
 
+    [exp/field pexp field-name]
+    [let [field-name-word [name/word field-name]
+          ppt [if-let [p [try-get-pointer-args [type-of pexp]]] p [logq-abort not a pointer]]]
+      [match [pair/snd ppt]
+        [type/record field-types]
+        [loop [i 0 n [size field-types]]
+          [if [lt-s i n]
+            [let [fp [at field-types i]]
+              [if [eq-word [name/word [pair/fst fp]] field-name-word]
+                [type/pointer [pair/fst ppt] [pair/snd fp]]
+                [continue i [inc i]]]]
+            [logq-abort field not found [identity field-name]]]]
+        [logq-abort not a record type]]]
+
     [exp/array elem-type elems]
     [type/array
       elem-type
@@ -833,6 +893,9 @@
     [if [eq [size elems] 1]
       [type-of [first elems]]
       [type/tuple [list-map e elems [type-of e]]]]
+
+    [exp/record pairs]
+    [type/record [list-map p pairs [pair [pair/fst p] [type-of [pair/snd p]]]]]
 
     [exp/data mem-name data-exp]
     [type/pointer mem-name [type-of data-exp]]
@@ -1195,11 +1258,30 @@
                   [when [lt-s i n]
                     [let
                       [telem [at types i]
-                        offset-target [int-exp-add acc [type-to-size-of-integer-exp telem]]]
+                       offset-target [int-exp-add acc [type-to-size-of-integer-exp telem]]]
                       [push ginsts [assign-pointer [int-exp-add target-int-exp offset-target] telem [at elems i]]]
                       [continue i [inc i] acc offset-target]]]]
                 [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
             [logq-abort not implemented assign tuple types]]
+
+          [type/record field-types]
+          [match value
+            [exp/record fields]
+            [do
+              [assert-not [may-side-effect target] assign target cannot have side effects when assigning tuples]
+              [let
+                [ginsts [growable-list]]
+                [loop [i 0 n [size fields] acc int-const-0]
+                  [when [lt-s i n]
+                    [let
+                      [telem [pair/snd [at field-types i]]
+                       offset-target [int-exp-add acc [type-to-size-of-integer-exp telem]]]
+                      [push ginsts [assign-pointer [int-exp-add target-int-exp offset-target] telem
+                        [pair/snd [at fields i]]]]
+                      [continue i [inc i] acc offset-target]]]]
+                [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
+            [logq-abort not implemented assign tuple types]]
+
           [logq-abort not implemented assign type [identity ttarget]]]]]
        [assign-pointer [exp-to-integer-exp target] [pair/snd ppt] value]]
 
@@ -1276,20 +1358,44 @@
           [match index-exp
             [exp/literal pt n]
             [loop [ii [word-to-int [name/word n]]
-                  i 0
-                  res int-const-0]
+                   i 0
+                   res int-const-0]
               [if [lt-s i ii]
                 [continue res [int-exp-add res [type-to-size-of-integer-exp [at ts i]]]
                           i [inc i]]
                 res]]
 
             [logq-abort index on tuple only allowed with constants]]
-          [logq-abort not implemented type-of index]]
+          [logq-abort not implemented exp-to-inst index]]
+        [logq-abort not a pointer]]]
+      [integer-exp-to-inst [int-exp-add [exp-to-integer-exp a] offset]]]
+
+    [exp/field a field-name]
+    [let [field-name-word [name/word field-name]
+          offset
+      [if-let [p [try-get-pointer-args [type-of a]]]
+        [match [pair/snd p]
+          [type/record field-types]
+          [loop [i 0
+                 res int-const-0
+                 n [size field-types]]
+              [if [lt-s i n]
+                [let [ft [at field-types i]]
+                  [if [eq-word [name/word [pair/fst ft]] field-name-word]
+                    res
+                    [continue res [int-exp-add res [type-to-size-of-integer-exp [pair/snd ft]]]
+                              i [inc i]]]]
+                [logq-abort field not found [identity field-name]]]]
+
+          [logq-abort ]]
         [logq-abort not a pointer]]]
       [integer-exp-to-inst [int-exp-add [exp-to-integer-exp a] offset]]]
 
     [exp/tuple elems]
     [wat-inst/instructions [list-map elem elems [exp-to-inst elem]]]
+
+    [exp/record fields]
+    [logq-abort top-level record not allowed]
 
     [exp/literal pt n]
     [[translate-literal pt] [name/word n]]
@@ -1341,6 +1447,9 @@
 
         [exp/tuple es]
         [for-each elem es [go elem]]
+
+        [exp/record fields]
+        [for-each field fields [go [pair/snd field]]]
 
         [logq-abort not implemented exp-to-bytes [identity e]]]]]
     [go e]
