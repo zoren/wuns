@@ -85,7 +85,7 @@
     ]
 
   mem-type []
-  [record [type type] [name name]]
+  [record [type primitive-type] [name name]]
 
   exp []
   [union
@@ -138,7 +138,7 @@
 
   memory-exp []
   [record
-    [type type]
+    [type primitive-type]
     [init-size name]
     [max-size [option name]]]
 
@@ -235,7 +235,7 @@
 
   memory-desc []
   [record
-    [type type]
+    [type primitive-type]
     [init-size i32]
     [max-size [option i32]]]
 
@@ -429,8 +429,12 @@
         [assert [lt-s init-size ms] memory max-size must be greater than init-size]
         [option/some n]]]]
     [todo check type and size parse and are consistent]
-    [assert [or [type-equals mt type-i32] [type-equals mt type-i64]] memory expected i32 or i64]
-    [memory-exp mt init-size-name opt-max]]]
+    [match mt
+      [type/primitive mpt]
+      [do
+        [assert [or [type-equals mt type-i32] [type-equals mt type-i64]] memory expected i32 or i64]
+        [memory-exp mpt init-size-name opt-max]]
+      [logq-abort not implemented memory type]]]]
 
 [func form-to-import-kind [form]
   [let [l [get-list form]]
@@ -628,7 +632,7 @@
     [match t2
       [type/memory m2]
       [and
-        [type-equals [mem-type/type m1] [mem-type/type m2]]
+        [is-identical [mem-type/type m1] [mem-type/type m2]]
         [eq-word [name/word [mem-type/name m1]] [name/word [mem-type/name m2]]]]
       false]
 
@@ -657,30 +661,6 @@
 
     [logq-abort type-equals [identity t1] [identity t2]]]]
 
-[func exp-is-constant [e]
-  [match e
-    [exp/literal - --] true
-    [exp/var -]
-    [do
-      [todo check if bound to constant]
-      false]
-    [exp/cast - e] [exp-is-constant e]
-    [exp/array t es]
-    [loop [i 0 n [size es]]
-      [if [lt-s i n]
-        [if [exp-is-constant [at es i]]
-          [continue i [inc i]]
-          false]
-        true]]
-    [exp/tuple es]
-    [loop [i 0 n [size es]]
-      [if [lt-s i n]
-        [if [exp-is-constant [at es i]]
-          [continue i [inc i]]
-          false]
-        true]]
-    false]]
-
 [func type-of [exp]
   [match exp
     [exp/literal pt n]
@@ -706,7 +686,7 @@
         [let [mt [name-to-type [pair/fst ptp]]]
           [match mt
             [type/memory mk]
-            [assert [type-equals [mem-type/type mk] [type-of e]]
+            [assert [type-equals [type/primitive [mem-type/type mk]] [type-of e]]
               cast expected pointer to point to same type [identity mt] [type-of e]]
 
             [logq-abort not implemented type-of cast]]]
@@ -832,7 +812,6 @@
     [exp/data mem-name data-exp]
     [let [mem-desc [lookup-bind-name local-context-empty mem-name]
           texp [type-of data-exp]]
-      [assert [exp-is-constant data-exp] data expected constant]
       [type/pointer mem-name texp]]
 
     [logq-abort not implemented type-of [identity exp]]]]
@@ -965,7 +944,7 @@
     [type/pointer mem-name -]
     [match [name-to-type mem-name]
       [type/memory mk]
-      [type-to-wat-type [mem-type/type mk]]
+      [primitive-type/name [mem-type/type mk]]
 
       [logq-abort not a memory type]]
 
@@ -989,14 +968,11 @@
      active-data-map [transient-kv-map]
      glocals-atom [atom [growable-list]]
      type-to-mem-kind
-     [func ttmk [t]
-       [match t
-        [type/primitive p]
-        [ifs
-          [is-identical p type-primitive-i32] [memory-kind/i32]
-          [is-identical p type-primitive-i64] [memory-kind/i64]
-          [logq-abort not implemented memory-kind [identity p]]]
-        [logq-abort not implemented memory-kind [identity t]]]]]
+     [func ttmk [p]
+      [ifs
+        [is-identical p type-primitive-i32] [memory-kind/i32]
+        [is-identical p type-primitive-i64] [memory-kind/i64]
+        [logq-abort not implemented memory-kind [identity p]]]]]
     [letfn [
 [func exp-to-integer-exp [e]
   [match e
@@ -1017,7 +993,9 @@
     [type/pointer mem-name t]
     [match [name-to-type mem-name]
       [type/memory mk]
-      [type-to-size-of-integer-exp [mem-type/type mk]]]
+      [integer-exp/const [primitive-type/bytes [mem-type/type mk]]]
+
+      [logq-abort not a memory type]]
 
     [type/array et opt-s]
     [if-let [s opt-s]
@@ -1071,7 +1049,7 @@
               [import-kind-desc/memory md] md
               [logq-abort not implemented data import]]
             [logq-abort not implemented data import]]]
-       pt [option-get [try-get-primitive [memory-desc/type mem-desc]]]
+       pt [memory-desc/type mem-desc]
        mem-name-word [name/word mem-name]
        offset-atom
        [if-let [offset-atom [try-get active-data-map mem-name-word]]
@@ -1079,9 +1057,9 @@
         [let [oa [atom [i32 16]]]
           [set-kv-map active-data-map mem-name-word oa]
           oa]]
+        bytes [exp-to-bytes data-exp]
         current-offset [atom-get offset-atom]
         offset-word [int-to-word current-offset]
-        bytes [exp-to-bytes data-exp]
         n-of-bytes [byte-array-size bytes]]
       [atom-set offset-atom [add current-offset [align [i32 16] n-of-bytes]]]
       [push
@@ -1096,13 +1074,27 @@
 
 [func integer-exp-to-inst [ie] [exp-to-inst [integer-exp-to-exp ie]]]
 
+[func type-to-primitive [t]
+  [match t
+    [type/primitive p]
+    p
+
+    [type/pointer mem -]
+    [match [name-to-type mem]
+      [type/memory mk]
+      [mem-type/type mk]
+
+      [logq-abort not a memory type]]
+
+    [logq-abort not a primitive type [identity t]]]]
+
 [func exp-to-inst [f]
   [match f
     [exp/deref target]
     [let
       [pt [type-of target]
        ppt [if-let [p [try-get-pointer-args pt]] p [logq-abort not a pointer]]
-       target-prim [option-get [try-get-primitive [pair/snd ppt]]]]
+       target-prim [type-to-primitive [pair/snd ppt]]]
       [wat-inst/load
         [wasm-name-to-wat-byte-array
           [prim-types-to-load-inst-name
@@ -1295,7 +1287,7 @@
     [bprinter [empty-printer]
      go
      [func go [e]
-      [match e
+      [match [const-eval e]
         [exp/literal pt value-name]
         [let [n-bytes [primitive-type/bytes pt]]
           [assert [eq [intrinsic i32.rem-s [printer-index bprinter] n-bytes] [i32 0]]

@@ -129,6 +129,48 @@
           [test-assert [i32 -9] get-y tup2]
           ]]]]]
 
+
+[defn test-data-exp []
+  [let [forms
+        [qlist
+          [memory mem i32 1]
+
+          [def pptup [data mem [data mem [tuple [f64 1.1] [i32 2]]]]]
+
+          [defn get-pointed [t [pointer mem [pointer mem [tuple f64 i32]]]] [pointer mem [tuple f64 i32]]
+            [deref t]]
+
+          [defn get-x [t [pointer mem [tuple f64 i32]]] f64
+            [deref [index t [i32 0]]]]
+
+          [defn get-y [t [pointer mem [tuple f64 i32]]] i32
+            [deref [index t [i32 1]]]]
+
+          [export pptup get-pointed get-x get-y]]]
+    [promise-then
+      [promise-then
+        [forms-to-output forms]
+        output-to-module]
+      [func then [module]
+        [let [inst [wasm-instantiate module empty-object]
+              pptup [get-export inst [word pptup]]
+              get-pointed [get-export inst [word get-pointed]]
+              get-x [get-export inst [word get-x]]
+              get-y [get-export inst [word get-y]]
+              ptup [js-apply get-pointed [list [to-js-value pptup]]]
+              test-assert
+              [func ta [expected fn arg]
+                [let [actual [js-apply fn [list [to-js-value arg]]]
+                      js-expected [to-js-value expected]]
+                  [when-not [is-identical js-expected actual]
+                    [logq test failed]
+                    [log js-expected]
+                    [log actual]]]]]
+          [test-assert [f64 1.1] get-x ptup]
+          [test-assert [i32 2] get-y ptup]
+          ]]]]]
+
+
 [comment
   [bind-forms [def mem [import env mem [memory i32 1]]]]
   ]
