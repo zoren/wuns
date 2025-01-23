@@ -281,8 +281,17 @@ export { format_js_src_async as 'format-js-src-async' }
 export const identity = (v) => v
 const to_js_value = (v) => v
 export { to_js_value as 'to-js-value' }
-const is_undefined = (v) => v === undefined
+const is_undefined = (v) => +(v === undefined)
 export { is_undefined as 'is-undefined' }
+// [def-js-extern js-value-is-array [func [js-value] i32]]
+const js_value_is_array = (v) => Array.isArray(v)
+export { js_value_is_array as 'js-value-is-array' }
+// [def-js-extern js-value-to-array [func [js-value] [list js-value]]]
+const js_value_to_array = (v) => {
+  if (!Array.isArray(v)) throw new Error('expects array')
+  return v
+}
+export { js_value_to_array as 'js-value-to-array' }
 const object_to_kv_map = (obj) => {
   if (typeof obj !== 'object') throw new Error('expects object')
   return new Map(Object.entries(obj))
@@ -324,6 +333,9 @@ const promises_seq = (l, f) => {
   return p.then(() => results)
 }
 export { promises_seq as 'promises-seq' }
+
+const promise_all = (l) => Promise.all(l)
+export { promise_all as 'promise-all' }
 
 const js_apply = (f, args) => f(...args)
 export { js_apply as 'js-apply' }

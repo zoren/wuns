@@ -460,28 +460,69 @@
 [func form-special-to-exp [lctx fw l]
   [switch fw
     [[word if]]
-    [exp/if
-      [form-to-exp lctx [second l]]
-      [form-to-exp lctx [third l]]
-      [form-to-exp lctx [fourth l]]]
+    [let [c [form-to-exp lctx [second l]]
+          t [form-to-exp lctx [third l]]
+          e [form-to-exp lctx [fourth l]]]
+      [when-not [type-equals [type-of c] type-i32] [logq-abort if condition not i32]]
+      [when-not [type-equals [type-of t] [type-of e]] [logq-abort if branches not same type]]
+      [exp/if c t e]]
 
     [[word cast]]
-    [exp/cast
-      [form-to-type lctx [second l]]
-      [form-to-exp lctx [third l]]]
+    [let [t [form-to-type lctx [second l]]
+          e [form-to-exp lctx [third l]]]
+      [if-let [ptp [try-get-pointer-args t]]
+        [let [mt [name-to-type [pair/fst ptp]]]
+          [match mt
+            [type/memory mk]
+            [assert [type-equals [type/primitive [mem-type/type mk]] [type-of e]]
+              cast expected pointer to point to same type [identity mt] [type-of e]]
+
+            [logq-abort not implemented cast]]]
+        [logq-abort not implemented cast]]
+      [exp/cast t e]]
 
     [[word deref]]
     [exp/deref [form-to-exp lctx [second l]]]
 
     [[word deref-to]]
-    [exp/deref-to
-      [form-to-exp lctx [second l]]
-      [form-to-type lctx [third l]]]
+    [let [pointer-exp [form-to-exp lctx [second l]]
+          target-type [form-to-type lctx [third l]]]
+      [if-let [target-prim [try-get-primitive target-type]]
+        [if-not [or [is-identical target-prim type-primitive-i32]
+                    [is-identical target-prim type-primitive-i64]]
+          [error-exp pointer-exp only i32 and i64 targets supported for deref-to]
+          [if-let [p [try-get-pointer-args [type-of pointer-exp]]]
+            [if-let [pointer-prim [try-get-primitive [pair/snd p]]]
+              [assert
+                [and
+                  [primitive-type-is-integer pointer-prim]
+                  [lt-s [primitive-type/bits pointer-prim] [primitive-type/bits target-prim]]]
+                can only convert to smaller integer type]
+                [logq-abort expected primitive types]]
+            [error-exp pointer-exp not a pointer]]]
+        [error-exp pointer-exp target-type not a primitive type]]
+      [exp/deref-to pointer-exp target-type]]
 
     [[word assign]]
-    [exp/assign
-      [form-to-exp lctx [second l]]
-      [form-to-exp lctx [third l]]]
+    [let [dst [form-to-exp lctx [second l]]
+          src [form-to-exp lctx [third l]]]
+      [match [type-of dst]
+        [type/pointer - tdst]
+        [let [tsrc [type-of src]]
+          [when-not [type-equals tdst tsrc]
+            [if-let [src-prim [try-get-primitive tsrc]]
+              [if-not [or [is-identical src-prim type-primitive-i32] [is-identical src-prim type-primitive-i64]]
+                [error [second l] only i32 and i64 sources supported for heterogenous assign]
+                [if-let [dst-prim [try-get-primitive tdst]]
+                  [when-not
+                    [and
+                      [primitive-type-is-integer dst-prim]
+                      [lt-s [primitive-type/bits dst-prim] [primitive-type/bits src-prim]]]
+                    [error [second l] can only assign to smaller integer type]]
+                  [error [second l] source-type not a primitive type]]]
+              [error [second l] eval exp expected primitive types]]]]
+        [logq-abort not a pointer]]
+      [exp/assign dst src]]
 
     [[word assign-mutable]]
     [let [dst-name [form-to-name [second l]]
@@ -500,9 +541,20 @@
       [exp/assign-mutable dst-name src]]
 
     [[word intrinsic]]
-    [exp/intrinsic
-      [form-to-name [second l]]
-      [list-map arg [slice l 2 [size l]] [form-to-exp lctx arg]]]
+    [let [intrinsic-name [form-to-name [second l]]
+          args [list-map arg [slice l 2 [size l]] [form-to-exp lctx arg]]]
+      [switch [name/word intrinsic-name]
+        [[word i32.add] [word i32.sub] [word i32.mul] [word i32.eq] [word i32.lt-s]]
+        [do
+          [assert [eq [size args] 2] intrinsic expected 2 arguments]
+          [assert [type-equals [type-of [at args 0]] type-i32] intrinsic expected i32]
+          [assert [type-equals [type-of [at args 1]] type-i32] intrinsic expected i32]]
+
+        [[word unreachable]]
+        [do]
+
+        [logq-abort not implemented type-of intrinsic [name/word intrinsic-name]]]
+      [exp/intrinsic intrinsic-name args]]
 
     [[word let] [word loop]]
     [let
@@ -541,9 +593,13 @@
       [form-to-exp lctx [third l]]]
 
     [[word array]]
-    [exp/array
-      [form-to-type lctx [second l]]
-      [list-map e [slice l 2 [size l]] [form-to-exp lctx e]]]
+    [let [telem [form-to-type lctx [second l]]]
+      [exp/array
+        telem
+        [list-map ef [slice l 2 [size l]]
+          [let [ee [form-to-exp lctx ef]]
+            [when-not [type-equals telem [type-of ee]] [logq-abort array expected same type]]
+            ee]]]]
 
     [[word tuple]]
     [exp/tuple
@@ -688,11 +744,7 @@
     [type/primitive pt]
 
     [exp/if c t e]
-    [do
-      [when-not [type-equals [type-of c] type-i32] [logq-abort eval exp condition not i32]]
-      [let [tt [type-of t]]
-        [when-not [type-equals tt [type-of e]] [logq-abort eval exp branches not same type]]
-        tt]]
+    [type-of t]
 
     [exp/call f args]
     [match [type-of f]
@@ -702,17 +754,7 @@
       [logq-abort not a function type]]
 
     [exp/cast t e]
-    [do
-      [if-let [ptp [try-get-pointer-args t]]
-        [let [mt [name-to-type [pair/fst ptp]]]
-          [match mt
-            [type/memory mk]
-            [assert [type-equals [type/primitive [mem-type/type mk]] [type-of e]]
-              cast expected pointer to point to same type [identity mt] [type-of e]]
-
-            [logq-abort not implemented type-of cast]]]
-        [logq-abort not implemented type-of cast]]
-      t]
+    t
 
     [exp/var n]
     [name-to-type n]
@@ -720,11 +762,7 @@
     [exp/intrinsic intrinsic-name args]
     [switch [name/word intrinsic-name]
       [[word i32.add] [word i32.sub] [word i32.mul] [word i32.eq] [word i32.lt-s]]
-      [do
-        [assert [eq [size args] 2] intrinsic expected 2 arguments]
-        [assert [type-equals [type-of [at args 0]] type-i32] intrinsic expected i32 ]
-        [assert [type-equals [type-of [at args 1]] type-i32] intrinsic expected i32]
-        type-i32]
+      type-i32
 
       [[word unreachable]]
       type-empty-tuple
@@ -744,56 +782,19 @@
       [type/error]]
 
     [exp/deref-to pointer-exp target-type]
-    [do
-      [if-let [target-prim [try-get-primitive target-type]]
-        [if-not [or [is-identical target-prim type-primitive-i32]
-                    [is-identical target-prim type-primitive-i64]]
-          [error-exp exp only i32 and i64 targets supported for deref-to]
-          [if-let [p [try-get-pointer-args [type-of pointer-exp]]]
-            [if-let [pointer-prim [try-get-primitive [pair/snd p]]]
-              [assert
-                [and
-                  [primitive-type-is-integer pointer-prim]
-                  [lt-s [primitive-type/bits pointer-prim] [primitive-type/bits target-prim]]]
-                can only convert to smaller integer type]
-                [logq-abort expected primitive types]]
-            [error-exp exp not a pointer]]]
-        [error-exp exp target-type not a primitive type]]
-      target-type]
+    target-type
 
     [exp/assign dst src]
-    [do
-      [match [type-of dst]
-        [type/pointer - tdst]
-        [let [tsrc [type-of src]]
-          [when-not [type-equals tdst tsrc]
-            [if-let [src-prim [try-get-primitive tsrc]]
-              [if-not [or [is-identical src-prim type-primitive-i32] [is-identical src-prim type-primitive-i64]]
-                [error-exp exp only i32 and i64 sources supported for heterogenous assign]
-                [if-let [dst-prim [try-get-primitive tdst]]
-                  [when-not
-                    [and
-                      [primitive-type-is-integer dst-prim]
-                      [lt-s [primitive-type/bits dst-prim] [primitive-type/bits src-prim]]]
-                    [error-exp exp can only assign to smaller integer type]]
-                  [error-exp exp source-type not a primitive type]]]
-              [error-exp exp eval exp expected primitive types]]]]
-        [logq-abort not a pointer]]
-      type-empty-tuple]
+    type-empty-tuple
 
     [exp/assign-mutable dst-name src]
     type-empty-tuple
 
     [exp/let-loop ll-kind bindings bodies]
-    [do
-      [for-each binding bindings
-        [type-of [pair/snd binding]]]
-      [type-ofs bodies]]
+    [type-ofs bodies]
 
     [exp/continue bindings]
-    [do
-      [for-each binding bindings [type-of [pair/snd binding]]]
-      type-empty-tuple]
+    type-empty-tuple
 
     [exp/do bodies]
     [type-ofs bodies]
@@ -824,10 +825,9 @@
         [logq-abort not a pointer]]]
 
     [exp/array elem-type elems]
-    [do
-      [for-each elem elems
-        [when-not [type-equals elem-type [type-of elem]] [logq-abort eval exp expected type got]]]
-      [type/array elem-type [option/some [exp/literal type-primitive-i32 [name [int-to-word [size elems]]]]]]]
+    [type/array
+      elem-type
+      [option/some [exp/literal type-primitive-i32 [name [int-to-word [size elems]]]]]]
 
     [exp/tuple elems]
     [if [eq [size elems] 1]
@@ -835,9 +835,7 @@
       [type/tuple [list-map e elems [type-of e]]]]
 
     [exp/data mem-name data-exp]
-    [let [-mem-desc [lookup-bind-name local-context-empty mem-name]
-          texp [type-of data-exp]]
-      [type/pointer mem-name texp]]
+    [type/pointer mem-name [type-of data-exp]]
 
     [logq-abort not implemented type-of [identity exp]]]]
 

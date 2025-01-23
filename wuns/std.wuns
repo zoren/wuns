@@ -508,6 +508,7 @@
 [def-js-extern promise-bind [type-scheme [a b] [func [[promise a] [func [a] [promise b]]] [promise b]]]]
 [def-js-extern promise-then [type-scheme [a b] [func [[promise a] [func [a] b]] [promise b]]]]
 [def-js-extern promises-seq [type-scheme [a b] [func [[list a] [func [a] [promise b]]] [promise [list b]]]]]
+[def-js-extern promise-all [type-scheme [a] [func [[list [promise a]]] [list a]]]]
 
 [defn read-parse-file-async [file-name]
   [promise-then

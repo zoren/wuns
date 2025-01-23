@@ -232,6 +232,15 @@
           [test-assert [i32 1336] get-x 0]
           ]]]]]
 
+[defn test-all []
+  [promise-all
+    [list
+      [test]
+      [test1]
+      [test-tuple]
+      [test-tuple-return]
+      [test-data-exp]
+      [test-mutable]]]]
 
 [comment
   [bind-forms [def mem [import env mem [memory i32 1]]]]
