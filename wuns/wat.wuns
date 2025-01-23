@@ -150,7 +150,7 @@
 [defn print-string-chars [printer word]
   [for i 0 [byte-array-size word]
     [let [cc [byte-array-get word i]]
-      [if [or [lt-s cc [i32 32]] [lt-s [i32 126] cc]]
+      [if [or [lt-s cc [i32 32]] [lt-s [i32 126] cc] [eq cc ascii-double-quote] [eq cc ascii-backslash]]
         [do
           [print-byte printer ascii-backslash]
           [print-word printer [i32-to-hex-8 cc]]]

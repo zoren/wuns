@@ -123,7 +123,10 @@
               ]
               ]
           [test-assert [f64 1.1] get-x tup1]
-          [test-assert [i32 2] get-x tup1]
+          [test-assert [i32 2] get-y tup1]
+
+          [test-assert [f64 9.3] get-x tup2]
+          [test-assert [i32 -9] get-y tup2]
           ]]]]]
 
 [comment
