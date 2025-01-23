@@ -1033,11 +1033,11 @@
     [wat-inst/inst-word [word i32.add] [list [integer-exp-to-int a] [integer-exp-to-int b]]]
     [integer-exp/mul a b]
     [wat-inst/inst-word [word i32.mul] [list [integer-exp-to-int a] [integer-exp-to-int b]]]
-    [integer-exp/exp e] [form-to-inst e]]]
+    [integer-exp/exp e] [exp-to-inst e]]]
 
-[func form-to-inst [f]
+[func exp-to-inst [f]
   [match f
-    [exp/cast t e] [form-to-inst e]
+    [exp/cast t e] [exp-to-inst e]
     [exp/literal pt n] [[translate-literal pt] [name/word n]]
     [exp/deref target]
     [let
@@ -1053,7 +1053,7 @@
           [name/word [pair/fst ppt]]
           [word 0]
           [word 1]]
-        [form-to-inst target]]]
+        [exp-to-inst target]]]
 
     [exp/deref-to pexp ttarget]
     [let
@@ -1071,7 +1071,7 @@
           [name/word [pair/fst ppt]]
           [word 0]
           [word 1]]
-        [form-to-inst pexp]]]
+        [exp-to-inst pexp]]]
 
     [exp/assign target value]
     [let
@@ -1087,7 +1087,7 @@
                 [wasm-name-to-wat-byte-array [prim-types-to-store-inst-name pttarget ptvalue]]
                 [wat-inst-memargs mem-name-word [word 0] [word 1]]
                 [integer-exp-to-int target-int-exp]
-                [form-to-inst value]]
+                [exp-to-inst value]]
 
               [logq-abort not implemented assign primitive types]]
 
@@ -1132,7 +1132,7 @@
             [logq-abort not implemented assign type [identity ttarget]]]]]
         [go [exp-to-integer-exp target] [pair/snd ppt] value]]
 
-    [exp/intrinsic n args] [wat-inst/inst [wasm-name-to-wat-byte-array [name/word n]] [list-map arg args [form-to-inst arg]]]
+    [exp/intrinsic n args] [wat-inst/inst [wasm-name-to-wat-byte-array [name/word n]] [list-map arg args [exp-to-inst arg]]]
 
     [exp/var n]
     [match [pair/snd [get name-to-desc n]]
@@ -1150,13 +1150,13 @@
     [exp/call fexp args]
     [match fexp
       [exp/var fn]
-      [wat-inst/call [name/word fn] [list-map arg args [form-to-inst arg]]]
+      [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]
       [logq-abort not implemented call on non-var]]
 
     [exp/if c t e]
     [wat-inst/if
       [type-to-wat-types [type-of t]]
-      [form-to-inst c] [form-to-inst t] [form-to-inst e]]
+      [exp-to-inst c] [exp-to-inst t] [exp-to-inst e]]
 
     [exp/do es]
     [forms-to-inst es]
@@ -1168,7 +1168,7 @@
         [let [n [name/word [pair/fst b]]
               e [pair/snd b]]
           [push glocals [pair n [type-to-wat-type [type-of e]]]]
-          [wat-inst/local.set n [form-to-inst e]]]]]
+          [wat-inst/local.set n [exp-to-inst e]]]]]
       [match ll-kind
         [local-context-kind/let]
         [wat-inst/instructions
@@ -1187,7 +1187,7 @@
     [wat-inst/instructions
       [concat
         [list-map a assignments
-          [wat-inst/local.set [name/word [pair/fst a]] [form-to-inst [pair/snd a]]]]
+          [wat-inst/local.set [name/word [pair/fst a]] [exp-to-inst [pair/snd a]]]]
         [list [wat-inst/br [word loop-label]]]]]
 
     [exp/size-of t]
@@ -1215,7 +1215,7 @@
       [logq-abort not a pointer]]
 
     [exp/tuple elems]
-    [wat-inst/instructions [list-map elem elems [form-to-inst elem]]]
+    [wat-inst/instructions [list-map elem elems [exp-to-inst elem]]]
 
     [exp/data mem-name data-exp]
     [let
@@ -1253,7 +1253,7 @@
           bytes]]
       pexp]
 
-    [logq-abort form-to-inst not implemented [identity f]]]]
+    [logq-abort exp-to-inst not implemented [identity f]]]]
 
 [func exp-to-bytes [e]
   [let
@@ -1302,13 +1302,13 @@
       [list]
       [concat
         [list-map form [slice forms 0 [dec [size forms]]]
-          [loop [res [form-to-inst form] i [size [type-to-wat-types [type-of form]]]]
+          [loop [res [exp-to-inst form] i [size [type-to-wat-types [type-of form]]]]
               [if i
                 [continue
                   res [wat-inst-word [word drop] res]
                   i [dec i]]
                 res]]]
-        [list [form-to-inst [last forms]]]]]]]
+        [list [exp-to-inst [last forms]]]]]]]
 ]
   [pair
     [forms-to-inst outer-exps]
