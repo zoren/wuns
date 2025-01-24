@@ -339,3 +339,13 @@ export { promise_all as 'promise-all' }
 
 const js_apply = (f, args) => f(...args)
 export { js_apply as 'js-apply' }
+
+const js_apply_error = (f, args) => {
+  try {
+    f(...args)
+  } catch (e) {
+    return e
+  }
+  throw new Error('js-apply-error: no error')
+}
+export { js_apply_error as 'js-apply-error' }

@@ -135,6 +135,12 @@
           [test-assert [i32 -9] get-y tup2]
           ]]]]]
 
+[defn test-assert-eq [js-expected actual]
+  [when-not [is-identical js-expected actual]
+    [logq test failed]
+    [log js-expected]
+    [log actual]]]
+
 [defn test-tuple-return []
   [let [forms
         [qlist
@@ -148,13 +154,7 @@
       [func then [module]
         [let [inst [wasm-instantiate module empty-object]
               get-empty-tuple [get-export inst [word get-empty-tuple]]
-              get-2tuple [get-export inst [word get-2tuple]]
-              test-assert-eq [func ta [js-expected actual]
-                [when-not [is-identical js-expected actual]
-                  [logq test failed]
-                  [log js-expected]
-                  [log actual]]]
-              ]
+              get-2tuple [get-export inst [word get-2tuple]]]
           [test-assert-eq true [is-undefined [js-app get-empty-tuple]]]
           [let [tup [js-app get-2tuple]
                 ar [js-value-to-array tup]]
@@ -263,10 +263,7 @@
                 [when-not [is-identical js-expected actual]
                   [logq test failed]
                   [log js-expected]
-                  [log actual]]
-                ]
-              ]
-              ]
+                  [log actual]]]]]
           [test-assert [f64 1.1] get-f tup1]
           [test-assert [i32 2] get-i tup1]
 
@@ -274,6 +271,50 @@
           [test-assert [i32 -9] get-i tup2]
           ]]]]]
 
+[defn test-record-vector []
+  [let [forms
+        [qlist
+          [memory mem i32 1]
+
+          [def parray [data mem [record size [i32 3] array [array i32 [i32 2] [i32 3] [i32 5]]]]]
+
+          [defn size [pvec [pointer mem [record [size i32] [array [array i32]]]]] i32
+            [deref [field pvec size]]]
+
+          [defn get-array-i32 [pvec [pointer mem [record [size i32] [array [array i32]]]] i i32] i32
+            [when [lt-s i [i32 0]] [intrinsic unreachable]]
+            [when-not [lt-s i [size pvec]] [intrinsic unreachable]]
+            [deref [index [field pvec array] i]]]
+
+          [defn set-array-i32 [pvec [pointer mem [record [size i32] [array [array i32]]]] i i32 v i32] [tuple]
+            [assign [index [field pvec array] i] v]]
+
+          [export parray size get-array-i32 set-array-i32]]]
+    [promise-then
+      [promise-then
+        [forms-to-output forms]
+        output-to-module]
+      [func then [module]
+        [let [inst [wasm-instantiate module empty-object]
+              parray [get-export inst [word parray]]
+              size [get-export inst [word size]]
+              get-array-i32 [get-export inst [word get-array-i32]]
+              set-array-i32 [get-export inst [word set-array-i32]]
+              ]
+
+          [logq get-array-i32]
+          [test-assert-eq [i32 2] [js-app get-array-i32 parray 0]]
+          [test-assert-eq [i32 3] [js-app get-array-i32 parray 1]]
+          [test-assert-eq [i32 5] [js-app get-array-i32 parray 2]]
+
+          [logq size]
+          [test-assert-eq [i32 3] [js-app size parray]]
+
+          [test-assert-eq [word unreachable]
+            [object-get [js-apply-error get-array-i32 [list [to-js-value parray] [to-js-value [i32 -1]]]] [word message]]]
+          [test-assert-eq [word unreachable]
+            [object-get [js-apply-error get-array-i32 [list [to-js-value parray] [to-js-value 3]]] [word message]]]
+          ]]]]]
 
 [defn test-all []
   [promise-all
@@ -285,6 +326,7 @@
       [test-data-exp]
       [test-mutable]
       [test-record]
+      [test-record-vector]
       ]]]
 
 [comment

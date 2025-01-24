@@ -665,5 +665,6 @@
 [def-js-extern object-get [func [js-value word] js-value]]
 [def-js-extern byte-array-from [func [js-value] byte-array]]
 [def-js-extern js-apply [func [js-value [list js-value]] js-value]]
+[def-js-extern js-apply-error [func [js-value [list js-value]] js-value]]
 
 [import ./runtime-lib/host.js mem-dump [func [memory i32 i32] [tuple]]]
