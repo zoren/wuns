@@ -905,13 +905,14 @@
                         [pair sname be]]]]]
 
                 [[word let]]
-                [let
+                [do
+                  [when [lt-s n-of-args 1] [report-error [quote [expected at least 2 arguments]]]]
+                  [let
                   [bindings [get-list [get-arg 0]]
                    lvars [transient-kv-map]
                    lctx [local-context lvars [local-context-kind/let]]
                    new-lstack [local-stack/frame lstack lctx]
                    ldesc [local-var-kind/let]]
-                  [when [lt-s n-of-args 2] [report-error [quote [expected at least 2 arguments]]]]
                   [bexp/let
                     [list-map p [pairwise-pairs bindings]
                       [let [name [pair/fst p]
@@ -924,7 +925,7 @@
                             [push-error name [quote [let var shadows def]]]]]
                         [set-local lvars name ldesc]
                         [pair sname be]]]
-                    [list-map f [slice l 2 [size l]] [form-to-ast new-lstack f]]]]
+                    [list-map f [slice l 2 [size l]] [form-to-ast new-lstack f]]]]]
 
                 [[word letfn]]
                 [let
