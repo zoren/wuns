@@ -28,7 +28,7 @@
         [for-each form forms
           [if-let [top [top-form-to-top-exp form]]
             [push top-forms top]
-            [logq-abort no top form for [identity form]]]]
+            [do]]]
         [let [tops [clone-growable-to-frozen-list top-forms]
               output [compile-tops tops]
               errors [clone-growable-to-frozen-list gerrors]]
@@ -46,13 +46,17 @@
     [byte-array-log-as-string wat-string]
     [byte-array-to-wasm-module [wat-to-wasm-byte-array wat-string]]]]
 
-[defn test []
+[defn forms-to-module-async [forms]
   [promise-then
-    [read-parse-file-async [word prog1.wuns]]
-    [func t [forms]
-      [promise-then
-        [forms-to-output forms]
-        output-to-module]]]]
+    [forms-to-output forms]
+    output-to-module]]
+
+[defn test-prog1 []
+  [promise-then
+    [promise-then
+      [read-parse-file-async [word prog1.wuns]]
+      forms-to-module-async]
+    [func t [module] [do]]]]
 
 [type wasm-instance [] [union]]
 
@@ -80,9 +84,7 @@
 
           [export f]]]
     [promise-then
-      [promise-then
-        [forms-to-output forms]
-        output-to-module]
+      [forms-to-module-async forms]
       [func then [module]
         [let [inst [wasm-instantiate module empty-object]
               f [get-export inst [word f]]
@@ -101,17 +103,15 @@
           [def tup1 [data mem [tuple [f64 1.1] [i32 2]]]]
           [def tup2 [data mem [tuple [f64 9.3] [i32 -9]]]]
 
-          [defn get-x [t [pointer mem [tuple f64 i32]]] f64
+          [defn get-x [t [pointer [exp mem] [tuple f64 i32]]] f64
             [deref [index t [i32 0]]]]
 
-          [defn get-y [t [pointer mem [tuple f64 i32]]] i32
+          [defn get-y [t [pointer [exp mem] [tuple f64 i32]]] i32
             [deref [index t [i32 1]]]]
 
           [export tup1 tup2 get-x get-y]]]
     [promise-then
-      [promise-then
-        [forms-to-output forms]
-        output-to-module]
+      [forms-to-module-async forms]
       [func then [module]
         [let [inst [wasm-instantiate module empty-object]
               tup1 [get-export inst [word tup1]]
@@ -136,10 +136,10 @@
           ]]]]]
 
 [defn test-assert-eq [js-expected actual]
-  [when-not [is-identical js-expected actual]
+  [when-not [is-identical [to-js-value js-expected] [to-js-value actual]]
     [logq test failed]
-    [log js-expected]
-    [log actual]]]
+    [logq expected [identity js-expected]]
+    [logq but got- [identity actual]]]]
 
 [defn test-tuple-return []
   [let [forms
@@ -148,9 +148,7 @@
           [defn get-2tuple [] [tuple f64 i32] [tuple [f64 1.1] [i32 2]]]
           [export get-empty-tuple get-2tuple]]]
     [promise-then
-      [promise-then
-        [forms-to-output forms]
-        output-to-module]
+      [forms-to-module-async forms]
       [func then [module]
         [let [inst [wasm-instantiate module empty-object]
               get-empty-tuple [get-export inst [word get-empty-tuple]]
@@ -169,20 +167,18 @@
 
           [def pptup [data mem [data mem [tuple [f64 1.1] [i32 2]]]]]
 
-          [defn get-pointed [t [pointer mem [pointer mem [tuple f64 i32]]]] [pointer mem [tuple f64 i32]]
+          [defn get-pointed [t [pointer [exp mem] [pointer [exp mem] [tuple f64 i32]]]] [pointer [exp mem] [tuple f64 i32]]
             [deref t]]
 
-          [defn get-x [t [pointer mem [tuple f64 i32]]] f64
+          [defn get-x [t [pointer [exp mem] [tuple f64 i32]]] f64
             [deref [index t [i32 0]]]]
 
-          [defn get-y [t [pointer mem [tuple f64 i32]]] i32
+          [defn get-y [t [pointer [exp mem] [tuple f64 i32]]] i32
             [deref [index t [i32 1]]]]
 
           [export pptup get-pointed get-x get-y]]]
     [promise-then
-      [promise-then
-        [forms-to-output forms]
-        output-to-module]
+      [forms-to-module-async forms]
       [func then [module]
         [let [inst [wasm-instantiate module empty-object]
               pptup [get-export inst [word pptup]]
@@ -215,9 +211,7 @@
 
           [export get-x]]]
     [promise-then
-      [promise-then
-        [forms-to-output forms]
-        output-to-module]
+      [forms-to-module-async forms]
       [func then [module]
         [let [inst [wasm-instantiate module empty-object]
               get-x [get-export inst [word get-x]]
@@ -240,17 +234,15 @@
           [def tup1 [data mem [record f [f64 1.1] i [i32 2]]]]
           [def tup2 [data mem [record f [f64 9.3] i [i32 -9]]]]
 
-          [defn get-f [t [pointer mem [record [f f64] [i i32]]]] f64
+          [defn get-f [t [pointer [exp mem] [record [f f64] [i i32]]]] f64
             [deref [field t f]]]
 
-          [defn get-i [t [pointer mem [record [f f64] [i i32]]]] i32
+          [defn get-i [t [pointer [exp mem] [record [f f64] [i i32]]]] i32
             [deref [field t i]]]
 
           [export tup1 tup2 get-f get-i]]]
     [promise-then
-      [promise-then
-        [forms-to-output forms]
-        output-to-module]
+      [forms-to-module-async forms]
       [func then [module]
         [let [inst [wasm-instantiate module empty-object]
               tup1 [get-export inst [word tup1]]
@@ -278,37 +270,33 @@
 
           [def parray [data mem [record size [i32 3] array [array i32 [i32 2] [i32 3] [i32 5]]]]]
 
-          [defn size [pvec [pointer mem [record [size i32] [array [array i32]]]]] i32
+          [defn size [pvec [pointer [exp mem] [record [size i32] [array [array i32]]]]] i32
             [deref [field pvec size]]]
 
-          [defn get-array-i32 [pvec [pointer mem [record [size i32] [array [array i32]]]] i i32] i32
+          [defn get-array-i32 [pvec [pointer [exp mem] [record [size i32] [array [array i32]]]] i i32] i32
             [when [lt-s i [i32 0]] [intrinsic unreachable]]
             [when-not [lt-s i [size pvec]] [intrinsic unreachable]]
             [deref [index [field pvec array] i]]]
 
-          [defn set-array-i32 [pvec [pointer mem [record [size i32] [array [array i32]]]] i i32 v i32] [tuple]
+          [defn set-array-i32 [pvec [pointer [exp mem] [record [size i32] [array [array i32]]]] i i32 v i32] [tuple]
             [assign [index [field pvec array] i] v]]
 
           [export parray size get-array-i32 set-array-i32]]]
     [promise-then
-      [promise-then
-        [forms-to-output forms]
-        output-to-module]
+      [forms-to-module-async forms]
       [func then [module]
         [let [inst [wasm-instantiate module empty-object]
               parray [get-export inst [word parray]]
-              size [get-export inst [word size]]
+              wsize [get-export inst [word size]]
               get-array-i32 [get-export inst [word get-array-i32]]
               set-array-i32 [get-export inst [word set-array-i32]]
               ]
 
-          [logq get-array-i32]
           [test-assert-eq [i32 2] [js-app get-array-i32 parray 0]]
           [test-assert-eq [i32 3] [js-app get-array-i32 parray 1]]
           [test-assert-eq [i32 5] [js-app get-array-i32 parray 2]]
 
-          [logq size]
-          [test-assert-eq [i32 3] [js-app size parray]]
+          [test-assert-eq [i32 3] [js-app wsize parray]]
 
           [test-assert-eq [word unreachable]
             [object-get [js-apply-error get-array-i32 [list [to-js-value parray] [to-js-value [i32 -1]]]] [word message]]]
@@ -316,18 +304,54 @@
             [object-get [js-apply-error get-array-i32 [list [to-js-value parray] [to-js-value 3]]] [word message]]]
           ]]]]]
 
+[defn test-custom-type []
+  [let [forms
+        [qlist
+[memory mem i32 1]
+
+[type vector-data [a datatype size [exp i32]]
+  [record
+    [size i32]
+    [array [array a size]]]]
+
+[type pvector [v datatype]
+  [pointer [exp mem] [vector-data v -size]]]
+
+[type growable-vector [a datatype]
+  [record
+    [size i32]
+    [capacity i32]
+    [parray [pointer [exp mem] [array a]]]]]
+
+
+          ]]
+    [promise-then
+      [forms-to-module-async forms]
+      [func then [module]
+        [let [inst [wasm-instantiate module empty-object]
+              ]
+
+          ]]]]]
+
 [defn test-all []
-  [promise-all
+  [let [tests
     [list
-      [test]
-      [test1]
-      [test-tuple]
-      [test-tuple-return]
-      [test-data-exp]
-      [test-mutable]
-      [test-record]
-      [test-record-vector]
-      ]]]
+      test1
+      test-tuple
+      test-tuple-return
+      test-data-exp
+      test-mutable
+      test-record
+      test-record-vector
+      test-prog1
+]]
+    [[func go [i]
+      [if [lt-s i [size tests]]
+        [promise-bind
+          [[at tests i]]
+          [func t [x]
+            [go [inc i]]]]
+          [promise-resolve [i32 99]]]] [i32 0]]]]
 
 [comment
   [bind-forms [def mem [import env mem [memory i32 1]]]]
