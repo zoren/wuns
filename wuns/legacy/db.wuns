@@ -1,0 +1,60 @@
+[type db []
+  [record
+    [entity-to-attributes
+      [transient-kv-map js-value
+        [transient-kv-map word [growable-list js-value]]]]
+    [attribute-value-to-entities
+      [transient-kv-map word [transient-kv-map js-value [growable-list js-value]]]]]]
+
+[defn database-make []
+  [db
+    [transient-kv-map]
+    [transient-kv-map]]]
+
+[defn database-insert [db entity attribute value]
+  [let-do
+    [entity-to-attributes [db/entity-to-attributes db]
+     attribute-value-to-entities [db/attribute-value-to-entities db]]
+
+    [comment update entity-to-attributes]
+    [when-not [has entity-to-attributes entity]
+      [set-kv-map entity-to-attributes entity [transient-kv-map]]]
+    [let-do [attr-to-values [get entity-to-attributes entity]]
+      [when-not [has attr-to-values attribute]
+        [set-kv-map attr-to-values attribute [growable-list]]]
+      [push [get attr-to-values attribute] value]]
+
+    [comment update attribute-value-to-entities]
+    [when-not [has attribute-value-to-entities attribute]
+      [set-kv-map attribute-value-to-entities attribute [transient-kv-map]]]
+    [let
+      [vm [get attribute-value-to-entities attribute]
+       gl
+        [if-let [gl [try-get vm value]]
+          gl
+          [let-do [new-gl [growable-list]]
+            [set-kv-map vm value new-gl]
+            new-gl]]]
+      [push gl entity]]]]
+
+[defn database-get-entity-attribute [db entity attribute]
+  [if-let [v [try-get [db/entity-to-attributes db] entity]]
+    [if-let [l [try-get v attribute]]
+      [clone-growable-to-frozen-list l]
+      [list]]
+    [list]]]
+
+[defn database-get-ea-single [db entity attribute]
+  [let [l [database-get-entity-attribute db entity attribute]]
+    [if [is-empty l]
+      [option/none]
+      [do
+        [assert [eq 1 [size l]] database-get-ea-single size is not 1]
+        [option/some [first l]]]]]]
+
+[defn database-get-attribute-value [db attribute value]
+  [if-let [vm [try-get [db/attribute-value-to-entities db] attribute]]
+    [if-let [l [try-get vm [to-js-value value]]]
+      [clone-growable-to-frozen-list l]
+      [list]]
+    [list]]]

@@ -1,0 +1,27 @@
+[load std.wuns]
+
+[defn is-even-slow-letrec [outer-n]
+  [letrec
+    [is-even
+      [func ieven [n] [if [eq n 0] 1 [is-odd [sub n 1]]]]
+     is-odd
+      [func iodd [n] [if [eq n 0] 0 [is-even [sub n 1]]]]]
+    [is-even outer-n]]]
+
+[defn is-even-slow-letfn [outer-n]
+  [letfn
+    [[func is-even [n] [if [eq n 0] 1 [is-odd [sub n 1]]]]
+     [func is-odd [n] [if [eq n 0] 0 [is-even [sub n 1]]]]]
+    [is-even outer-n]]]
+
+[func is-even-slow-letfn [outer-n]
+  [letfn
+    [[func is-even [n]
+      [if n
+        [is-odd [intrinsic i32.sub n [i32 1]]]
+        [i32 1]]]
+     [func is-odd [n]
+      [if n
+        [is-even [intrinsic i32.sub n [i32 1]]]
+        [i32 0]]]]
+    [is-even outer-n]]]

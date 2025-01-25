@@ -1,0 +1,55 @@
+[memory i32 mem 1]
+
+[data active mem [i32 0] [i32 16]]
+
+[defn get-top []
+  [intrinsic i32.load mem 0 4 [i32 0]]]
+
+[defn set-top [new-top]
+  [intrinsic i32.store mem 0 4 [i32 0] new-top]]
+
+[defn alloc-n [n-bytes]
+  [let [top [get-top]]
+    [set-top [intrinsic i32.add top n-bytes]]
+    top]]
+
+[defn alloc-f64 []
+  [cast [pointer mem target-type] [alloc-n [size-of target-type]]]]
+
+[genfn alloc [target-type] [pointer target-type] []
+  [cast [pointer mem target-type] [alloc-n [size-of target-type]]]]
+  [genfn gen-cons [a] [pointer mem [linked-list a]] [h a
+                                                     t [pointer mem [linked-list a]]]
+    [let [p [alloc [linked-list a]]]
+      [assign [field p head] h]
+      [assign [field p tail] t]
+      p]]
+[type linked-list [e]
+  [record
+    [head e]
+    [tail [pointer mem [linked-list e]]]]]
+
+[defn cons [h t]
+  [let [p [alloc-n [size-of [linked-list i32]]]]
+    [assign [field p head] h]
+    [assign [field p tail] t]
+    p]]
+
+[defn head [p]
+  [deref [field [cast [pointer mem [linked-list i32]] p] head]]]
+
+[export get-top set-top alloc-n cons]
+
+[defn make-list [n]
+  [if n
+    [cons n [make-list [intrinsic i32.sub n [i32 1]]]]
+    [i32 0]]]
+
+[defn list-size [l]
+  [if l
+    [intrinsic i32.add [i32 1] [list-size [deref [field l tail]]]]
+    [i32 0]]]
+[genfn list-size [] i32 [pl [pointer mem [linked-list i32]]]
+  [if pl
+    [intrinsic i32.add [i32 1] [list-size [deref [field pl tail]]]]
+    [i32 0]]]

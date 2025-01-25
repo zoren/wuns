@@ -1,0 +1,83 @@
+[i32 5]
+
+[word a]
+
+[quote [a 1 [quote a]]]
+
+[if [i32 5]
+  [word true] [word false]]
+
+[match [word a]
+  [word a] [i32 1]
+  [word b] [i32 2]
+  [i32 1337]]
+
+[do
+  [word a]
+  [word b]
+  [i32 5]]
+
+[let [x [i32 5] y [i32 6]]
+  [[intrinsic i32.add] x y]]
+
+[func f [x y]
+  [i32 1337]]
+
+[fexpr f [x y]
+  [i32 1337]]
+
+[macro f [x y]
+  [i32 1337]]
+
+[def leet [i32 1337]]
+[def f [func f [x y]
+  [i32 1337]]]
+
+[f [i32 5] [i32 6]]
+
+[extern host log]
+
+[intrinsic i32.add]
+
+[atom [i32 5]]
+[quote
+[load std.wuns]
+]
+[type-anno
+  [extern host log]
+  [func [i32] [tuple]]]
+
+[type
+  rec []
+  [record
+    [field i32]]
+  uni []
+  [union
+    [ctor i32]
+    [ctor2 word]]]
+
+[def list [func list [.. entries] entries]]
+[type form []
+  [union
+    [word word]
+    [list [list form]]]]
+
+[def form-word form/word]
+[def form-list form/list]
+
+[def flist [func flist [.. elements] [form-list elements]]]
+
+[def defmacro
+  [macro defmacro [name params .. bodies]
+    [flist [quote def] name
+      [flist [quote macro] name params [form-list [[extern host concat] [list [quote do]] bodies]]]]]]
+
+[defmacro def-extern [name type]
+  [flist [quote def] name
+    [flist [quote type-anno]
+      [flist [quote extern] [quote host] name]
+      type]]]
+
+[def-extern log [type-scheme [a] [func [.. a] [tuple]]]]
+
+[def-extern concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]

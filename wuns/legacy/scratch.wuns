@@ -1,0 +1,112 @@
+
+[comment
+        [bform/type decls]
+        [let
+          [types [check-context/types gctx]
+           def-var-types [check-context/def-var-types gctx]]
+          [for-each decl decls
+            [let [name-word [type-decl/name decl]]
+              [if [has types name-word]
+                [logq-abort report name-form already defined]
+                [let [type-params-list [type-decl/type-params decl]
+                      param-map [transient-kv-map]
+                      type-args [growable-list]]
+                  [for-each param-word type-params-list
+                    [report-when [has param-map param-word] param-word already defined]
+                    [let [tv [generate-fresh-type-var gctx 1]]
+                      [set-kv-map param-map param-word tv]
+                      [push type-args tv]]]
+                  [set-kv-map types name-word
+                    [type-def
+                      [size type-params-list]
+                      param-map
+                      [make-type-list name-word [clone-growable-to-frozen-list type-args]]]]]]]]
+          [comment  [for-3 i 1 s-form
+            [when-let [name-word [try-get-form-word-option [at sub-forms i]]]
+              [assert [not [is-builtin-type name-word]] cannot be redefined [at sub-forms i]]
+              [let
+                [type-prefix [concat-words name-word [word /]]
+                 this-type-def [get types name-word]
+                 result-type [type-def/result-type this-type-def]
+                 param-map [type-def/param-map this-type-def]
+                 type-def-list [try-get-list-report gctx [at sub-forms [add 2 i]]]]
+                [if-let [type-def-first-word [try-get-word-report gctx [first type-def-list]]]
+                  [switch type-def-first-word
+                    [[word union]]
+                    [for i 1 [size type-def-list]
+                      [let [ctor [try-get-list-report gctx [at type-def-list i]]
+                              param-list [list-map param [rest ctor] [instantiate-annotated-type gctx param-map param]]]
+                        [when-let [ctor-name [try-get-word-report gctx [first ctor]]]
+                          [set-kv-map def-var-types [concat-words type-prefix ctor-name]
+                            [generalize-top [type-ctor param-list result-type]]]]]]
+
+                    [[word record]]
+                    [let
+                      [fields [growable-list]]
+                      [for i 1 [size type-def-list]
+                        [let
+                          [field-def [try-get-list-report gctx [at type-def-list i]]
+                          inst-field-type [instantiate-annotated-type gctx param-map [second field-def]]]
+                          [push fields inst-field-type]
+                          [when-let [field-name [try-get-word-report gctx [first field-def]]]
+                            [set-kv-map def-var-types [concat-words type-prefix field-name]
+                              [generalize-top [type-func [list result-type] [none] inst-field-type]]]]]]
+                      [set-kv-map def-var-types name-word
+                        [generalize-top [type-func [clone-growable-to-frozen-list fields] [none] [type-def/result-type this-type-def]]]]]
+
+                    [logq-abort check type definition not recognized]]
+                  [logq-abort check type definition not recognized]]]]] ]
+          type-empty-tuple]
+
+
+[func check-func [level lctx func]
+      [let
+        [
+          level-1 [inc level]
+          gen-func-type [generate-fresh-type-var gctx level-1]
+          func-type-scheme [mk-empty-type-scheme gen-func-type]
+          param-ctx [transient-kv-map]
+          func-ctx [make-local-context param-ctx lctx]
+          reg-params [growable-list]
+        ]
+        [for-each param [bfunc/parameters func]
+          [let [tv [generate-fresh-type-var gctx level-1]]
+            [set-kv-map param-ctx param [mk-empty-type-scheme tv]]
+            [push reg-params tv]]]
+
+        [let [return-type [check gctx level-1 func-ctx [bfunc/body func]]]
+          [unify-report gctx
+            gen-func-type
+            [ctype/inst
+              [inst-type/func
+                [func-type
+                  [clone-growable-to-frozen-list reg-params]
+                  [if-let [rest-param [bfunc/rest-param func]]
+                    [let [tv [generate-fresh-type-var gctx level-1]]
+                      [set-kv-map param-ctx rest-param [mk-empty-type-scheme [type-list tv]]]
+                      [some tv]]
+                    [none]]
+                  return-type [function-kind/func]]]]
+            func]]
+        gen-func-type]]
+ ]
+
+[comment
+        [bform/letfn functions body]
+        [let
+          [var-values [transient-kv-map]
+           let-ctx [make-local-context var-values lctx]
+           level-1 [inc level]
+           tmp-types [growable-list]]
+          [for-each function functions
+            [let [tmp-type [generate-fresh-type-var gctx level-1]]
+              [push tmp-types tmp-type]
+              [set-kv-map var-values [bfunc/name function] [mk-empty-type-scheme tmp-type]]]]
+          [let [types [clone-growable-to-frozen-list tmp-types]]
+            [for i 0 [size types]
+              [let
+                [val-type [check gctx level-1 let-ctx [at functions i]]]
+                [unify-report gctx val-type [at types i] bform]]]]
+          [check gctx level let-ctx body]]
+
+ ]
