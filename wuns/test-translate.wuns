@@ -51,6 +51,11 @@
     [forms-to-output forms]
     output-to-module]]
 
+[defn file-to-module-async [file-name]
+  [promise-then
+    [read-parse-file-async file-name]
+    forms-to-module-async]]
+
 [defn test-prog1 []
   [promise-then
     [promise-then
@@ -322,7 +327,6 @@
     [size i32]
     [capacity i32]
     [parray [pointer [exp mem] [array a]]]]]
-
 
           ]]
     [promise-then

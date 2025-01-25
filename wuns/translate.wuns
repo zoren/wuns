@@ -84,12 +84,13 @@
     [array type [option type]]
     [record [list [pair name type]]]
 
-    [memory mem-type]
+    [memory memory-type]
     [func [list type] type]
     [error]
+    [empty]
     ]
 
-  mem-type []
+  memory-type []
   [record [type primitive-type] [name name]]
 
   exp []
@@ -115,7 +116,44 @@
     [tuple [list exp]]
     [record [list [pair name exp]]]
     [data name exp]
+    [memory-static-top name]
     ]]
+
+[defn option-map [f opt]
+  [if-let [v opt]
+    [option/some [f v]]
+    [option/none]]]
+
+[defn type-substitute [type-env outer-t]
+  [[func go [t]
+    [match t
+      [type/var tv]
+      [if-let [subst-t [try-get type-env [name/word tv]]]
+        subst-t
+        [logq-abort type-substitute var not found [identity tv]]]
+
+      [type/wildcard -] t
+      [type/primitive -] t
+      [type/exp -] t
+
+      [type/apply-custom tn args]
+      [type/apply-custom tn [list-map a args [go a]]]
+
+      [type/tuple ts]
+      [type/tuple [list-map a ts [go a]]]
+
+      [type/pointer mt pt]
+      [type/pointer [go mt] [go pt]]
+
+      [type/array at opt-et]
+      [type/array [go at] [option-map go opt-et]]
+
+      [type/record fs]
+      [type/record [list-map f fs [pair [pair/fst f] [go [pair/snd f]]]]]
+
+      [logq-abort type-substitute not implemented [identity t]]
+
+      ]] outer-t]]
 
 [type exp-function []
   [record
@@ -206,13 +244,6 @@
         [local-context-kind/func]
         [option/none]]]]]
 
-[defn try-get-pointer-args [t]
-  [match t
-    [type/pointer m p]
-    [option/some [pair m p]]
-
-    [option/none]]]
-
 [def type-primitive-i32 [get-primitive [word i32]]]
 [def type-primitive-i64 [get-primitive [word i64]]]
 
@@ -220,6 +251,7 @@
 [def type-i64 [type/primitive type-primitive-i64]]
 [def type-f64 [type/primitive [get-primitive [word f64]]]]
 [def type-empty-tuple [type/tuple [list]]]
+[def type-empty [type/empty]]
 
 [defn try-get-primitive [t]
   [match t
@@ -416,17 +448,17 @@
   [if-let [mem-exp [try-get-type-exp mt]]
     [if-let [mem-type [try-get-type-memory [type-of mem-exp]]]
       mem-type
-      [logq-abort pointer expected memory type]]
-    [logq-abort pointer expected memory type]]]
+      [logq-abort expected memory type exp [identity mem-exp]]]
+    [logq-abort expected memory type [identity mt]]]]
 
-[func form-to-type-type-params [type-params lctx outer-form]
+[func form-to-type-type-params [type-params-kinds lctx outer-form]
   [letfn [
   [func go [form]
     [match form
     [form/word w]
     [if [starts-with-dash w]
       [type/wildcard [form-to-name form]]
-      [if-let [tp [try-get type-params w]]
+      [if-let [tp [try-get type-params-kinds w]]
         [type/var [form-to-name form]]
         [type/primitive [get-primitive w]]]]
 
@@ -474,15 +506,14 @@
                       arg-kind-opt
                       [match arg
                         [type/wildcard wcn] [option/none]
-                        [type/var tvn] [option/some [get type-params [name/word tvn]]]
+                        [type/var tvn] [option/some [get type-params-kinds [name/word tvn]]]
                         [type/exp e] [option/some [type-kind/exp [type-of e]]]
-                        [type/apply-custom tn args] [logq-abort type-to-type-kind [identity tn]]
                         [type/primitive -] [option/some type-kind-datatype]
                         [type/pointer - --] [option/some type-kind-datatype]
                         [type/tuple -] [option/some type-kind-datatype]
                         [type/record -] [option/some type-kind-datatype]
                         [type/array - --] [option/some type-kind-datatype]
-                        [logq-abort type-to-type-kind [identity arg]]]]
+                        ]]
                   [when-let [arg-kind arg-kind-opt]
                     [assert [type-kind-equals param-kind arg-kind] form-to-type expected same type kind
                       [identity type-name-word] [identity param-kind] [identity arg-kind]]]]]
@@ -491,6 +522,44 @@
             [log-location form]
             [logq-abort not implemented form-to-type [identity form]]]]]]]]]
     [go outer-form]]]
+
+[func type-to-type-kind-opt [arg]
+  [match arg
+    [type/wildcard wcn] [option/none]
+    [type/var tvn] [logq-abort type-to-type-kind-opt var not allowed [identity tvn]]
+    [type/exp e] [option/some [type-kind/exp [type-of e]]]
+    [type/apply-custom -tn -args] [type-to-type-kind-opt [expand-custom arg]]
+    [type/primitive -] [option/some type-kind-datatype]
+    [type/pointer - --] [option/some type-kind-datatype]
+    [type/tuple -] [option/some type-kind-datatype]
+    [type/record -] [option/some type-kind-datatype]
+    [type/array - --] [option/some type-kind-datatype]
+    [logq-abort type-to-type-kind ]]]
+
+[func instantiate-custom-type [type-name-word args]
+  [if-let [custom-type-params [try-get custom-type-signatures type-name-word]]
+    [do
+      [assert [eq [size args] [size custom-type-params]] form-to-type expected same number of arguments
+        [identity type-name-word] [size custom-type-params] [identity [size args]]]
+      [let [custom-type [get custom-types type-name-word]
+            tenv [transient-kv-map]]
+        [for i 0 [size args]
+          [let [param-pair [at custom-type-params i]
+                param-kind [pair/snd param-pair]
+                arg [at args i]]
+            [when-let [arg-kind [type-to-type-kind-opt arg]]
+              [assert [type-kind-equals param-kind arg-kind] form-to-type expected same type kind
+                [identity type-name-word] [identity param-kind] [identity arg-kind]]]
+            [set-kv-map tenv [name/word [pair/fst param-pair]] arg]]]
+        [type-substitute tenv custom-type]]]
+    [logq-abort instantiate-custom-type type not found [identity type-name-word]]]]
+
+[func expand-custom [t]
+  [match t
+    [type/apply-custom tn args]
+    [expand-custom [instantiate-custom-type [name/word tn] args]]
+
+    t]]
 
 [func form-to-type [lctx f]
   [form-to-type-type-params [transient-kv-map] lctx f]]
@@ -533,14 +602,28 @@
 
       [logq-abort not implemented import-kind [first l]]]]]
 
+[func try-get-pointer-args [t]
+  [match [expand-custom t]
+    [type/pointer m p]
+    [option/some [pair m p]]
+
+    [option/none]]]
+
 [func form-special-to-exp [lctx fw l]
   [switch fw
     [[word if]]
     [let [c [form-to-exp lctx [second l]]
           t [form-to-exp lctx [third l]]
-          e [form-to-exp lctx [fourth l]]]
+          e [form-to-exp lctx [fourth l]]
+          tt [type-of t]
+          te [type-of e]]
       [when-not [type-equals [type-of c] type-i32] [logq-abort if condition not i32]]
-      [when-not [type-equals [type-of t] [type-of e]] [logq-abort if branches not same type]]
+      [if [type-equals tt type-empty]
+        [do]
+        [if [type-equals te type-empty]
+          [do]
+          [when-not [type-equals [type-of t] [type-of e]] [logq-abort if branches not same type]]]]
+
       [exp/if c t e]]
 
     [[word cast]]
@@ -614,7 +697,10 @@
     [let [intrinsic-name [form-to-name [second l]]
           args [list-map arg [slice l 2 [size l]] [form-to-exp lctx arg]]]
       [switch [name/word intrinsic-name]
-        [[word i32.add] [word i32.sub] [word i32.mul] [word i32.eq] [word i32.lt-s]]
+        [[word i32.add] [word i32.sub] [word i32.mul] [word i32.eq]
+         [word i32.lt-s] [word i32.le-s]
+         [word i32.gt-s] [word i32.ge-s]
+         ]
         [do
           [assert [eq [size args] 2] intrinsic expected 2 arguments]
           [assert [type-equals [type-of [at args 0]] type-i32] intrinsic expected i32]
@@ -667,7 +753,7 @@
           field-name [form-to-name [third l]]
           field-name-word [name/word field-name]
           ppt [if-let [p [try-get-pointer-args [type-of pexp]]] p [logq-abort not a pointer]]]
-      [match [pair/snd ppt]
+      [match [expand-custom [pair/snd ppt]]
         [type/record field-types]
         [loop [i 0 n [size field-types]]
           [if [lt-s i n]
@@ -708,6 +794,16 @@
         mem-name
         [form-to-exp lctx [third l]]]]
 
+    [[word memory-static-top]]
+    [let [mem-name [form-to-name [second l]]]
+      [let [desc [lookup-bind-name lctx mem-name]]
+        [match [pair/fst desc]
+          [type/memory -]
+          [do]
+
+          [logq-abort not a memory type]]]
+      [exp/memory-static-top mem-name]]
+
     [if-let [pt [try-get primitive-types-by-name fw]]
       [let [n [form-to-name [second l]]]
         [switch [primitive-type/prefix pt]
@@ -743,7 +839,7 @@
                 [assert [eq [size ps] [size args]] call expected same number of arguments
                   [identity fn] [size ps] [size args]]
                 [for i 0 [min [size ps] [size args]]
-                  [assert [type-equals [at ps i] [type-of [at cargs i]]]
+                  [assert [type-assignable [at ps i] [type-of [at cargs i]]]
                     call expected same type [identity fn] [at ps i] [type-of [at cargs i]]]]
                 [exp/call [exp/var fn] cargs]]
               [logq-abort not a function type]]
@@ -781,8 +877,34 @@
         false]
       false]]
 
+[func type-assignable [tdst tsrc]
+  [or
+    [match tdst
+      [type/wildcard -]
+      true
+
+      [type/apply-custom dtn dargs]
+      [match tsrc
+        [type/apply-custom stn sargs]
+        [if
+          [eq-word [name/word dtn] [name/word stn]]
+          [and
+            [eq [size dargs] [size sargs]]
+            [loop [i 0 n [size dargs]]
+              [if [lt-s i n]
+                [if [type-assignable [at dargs i] [at sargs i]]
+                  [continue i [inc i]]
+                  false]
+                true]]]
+          [type-assignable [expand-custom tdst] [expand-custom tsrc]]]
+
+          false]
+
+      [type-equals tdst tsrc]]]]
+
 [func type-equals [t1 t2]
-  [match t1
+  [or [is-identical t1 t2]
+    [match t1
     [type/primitive p1]
     [match t2
       [type/primitive p2]
@@ -836,8 +958,8 @@
     [match t2
       [type/memory m2]
       [and
-        [is-identical [mem-type/type m1] [mem-type/type m2]]
-        [eq-word [name/word [mem-type/name m1]] [name/word [mem-type/name m2]]]]
+        [is-identical [memory-type/type m1] [memory-type/type m2]]
+        [eq-word [name/word [memory-type/name m1]] [name/word [memory-type/name m2]]]]
       false]
 
     [type/array t1 opt-s1]
@@ -863,7 +985,7 @@
             [type-equals s1 s2]]]]
       false]
 
-    [logq-abort type-equals [identity t1] [identity t2]]]]
+    [logq-abort type-equals [identity t1] [identity t2]]]]]
 
 [func type-kind-equals [tk1 tk2]
   [or [is-identical tk1 tk2]
@@ -889,7 +1011,10 @@
     [type/primitive pt]
 
     [exp/if c t e]
-    [type-of t]
+    [let [tt [type-of t]]
+      [if [type-equals tt type-empty]
+        [type-of e]
+        tt]]
 
     [exp/call f args]
     [match [type-of f]
@@ -906,7 +1031,9 @@
 
     [exp/intrinsic intrinsic-name args]
     [switch [name/word intrinsic-name]
-      [[word i32.add] [word i32.sub] [word i32.mul] [word i32.eq] [word i32.lt-s]]
+      [[word i32.add] [word i32.sub] [word i32.mul] [word i32.eq]
+       [word i32.lt-s] [word i32.le-s]
+       [word i32.gt-s] [word i32.ge-s]]
       type-i32
 
       [[word unreachable]]
@@ -939,7 +1066,7 @@
     [type-ofs bodies]
 
     [exp/continue bindings]
-    type-empty-tuple
+    type-empty
 
     [exp/do bodies]
     [type-ofs bodies]
@@ -972,7 +1099,7 @@
     [exp/field pexp field-name]
     [let [field-name-word [name/word field-name]
           ppt [if-let [p [try-get-pointer-args [type-of pexp]]] p [logq-abort not a pointer]]]
-      [match [pair/snd ppt]
+      [match [expand-custom [pair/snd ppt]]
         [type/record field-types]
         [loop [i 0 n [size field-types]]
           [if [lt-s i n]
@@ -1000,6 +1127,14 @@
 
     [exp/data mem-name data-exp]
     [type/pointer [type/exp [exp/var mem-name]] [type-of data-exp]]
+
+    [exp/memory-static-top mem-name]
+    [let [mt [name-to-type mem-name]
+    mem-type
+          [if-let [mem-type [try-get-type-memory [name-to-type mem-name]]]
+            mem-type
+            [logq-abort expected memory type exp]]]
+      [type/primitive [memory-type/type mem-type]]]
 
     [logq-abort not implemented type-of [identity exp]]]]
 
@@ -1047,7 +1182,7 @@
           [[word memory]]
           [let [mem-name [form-to-name [second l]]
                 mem-exp [form-list-to-mem-exp [rest l]]
-                t [type/memory [mem-type [memory-exp/type mem-exp] mem-name]]]
+                t [type/memory [memory-type [memory-exp/type mem-exp] mem-name]]]
             [bind-top [second l] [pair t [top-desc-kind/memory [mem-exp-to-mem-kind mem-exp]]]]
             [option/some [top-decl/memory [form-to-name [second l]] mem-exp]]]
 
@@ -1099,7 +1234,7 @@
                     [type/func [list-map p ps [pair/snd p]] rt]
 
                     [import-kind-exp/memory mem-exp]
-                    [type/memory [mem-type [memory-exp/type mem-exp] m]]
+                    [type/memory [memory-type [memory-exp/type mem-exp] m]]
 
                     [logq-abort not implemented type-of import]]
                   ikd
@@ -1150,12 +1285,12 @@
           [logq-abort not implemented [identity fw]]]]]]]
 
 [func type-to-wat-type [t]
-  [match t
+  [match [expand-custom t]
     [type/primitive p]
     [primitive-type/name p]
 
     [type/pointer mt -]
-    [primitive-type/name [mem-type/type [get-memory-type-from-type mt]]]
+    [primitive-type/name [memory-type/type [get-memory-type-from-type mt]]]
 
     [logq-abort type-to-wat-type [identity t]]]]
 
@@ -1200,7 +1335,7 @@
     [integer-exp/const [primitive-type/bytes p]]
 
     [type/pointer mt t]
-    [integer-exp/const [primitive-type/bytes [mem-type/type [get-memory-type-from-type mt]]]]
+    [integer-exp/const [primitive-type/bytes [memory-type/type [get-memory-type-from-type mt]]]]
 
     [type/array et opt-st]
     [if-let [size-type opt-st]
@@ -1258,16 +1393,11 @@
             [logq-abort not implemented data import]]]
        pt [memory-desc/type mem-desc]
        mem-name-word [name/word mem-name]
-       offset-atom
-       [if-let [offset-atom [try-get active-data-map mem-name-word]]
-        offset-atom
-        [let [oa [atom [i32 16]]]
-          [set-kv-map active-data-map mem-name-word oa]
-          oa]]
-        bytes [exp-to-bytes data-exp]
-        current-offset [atom-get offset-atom]
-        offset-word [int-to-word current-offset]
-        n-of-bytes [byte-array-size bytes]]
+       offset-atom [get-offset-atom mem-name-word]
+       bytes [exp-to-bytes data-exp]
+       current-offset [atom-get offset-atom]
+       offset-word [int-to-word current-offset]
+       n-of-bytes [byte-array-size bytes]]
       [atom-set offset-atom [add current-offset [align [i32 16] n-of-bytes]]]
       [push
         datas
@@ -1277,7 +1407,23 @@
           bytes]]
       [exp/literal pt [name offset-word]]]
 
+    [exp/memory-static-top mem-name]
+    [exp/literal
+      type-primitive-i32
+      [name
+        [int-to-word
+          [if-let [offset-atom [try-get active-data-map [name/word mem-name]]]
+            [atom-get offset-atom]
+            [i32 0]]]]]
+
     exp]]
+
+[func get-offset-atom [mem-name-word]
+  [if-let [offset-atom [try-get active-data-map mem-name-word]]
+  offset-atom
+  [let [oa [atom [i32 16]]]
+    [set-kv-map active-data-map mem-name-word oa]
+    oa]]]
 
 [func integer-exp-to-inst [ie] [exp-to-inst [integer-exp-to-exp ie]]]
 
@@ -1287,7 +1433,7 @@
     p
 
     [type/pointer mt -]
-    [mem-type/type [get-memory-type-from-type mt]]
+    [memory-type/type [get-memory-type-from-type mt]]
 
     [logq-abort not a primitive type [identity t]]]]
 
@@ -1305,7 +1451,7 @@
             [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i64]
             target-prim]]
         [wat-inst-memargs
-          [name/word [mem-type/name mt]]
+          [name/word [memory-type/name mt]]
           [word 0]
           [word 1]]
         [exp-to-inst target]]]
@@ -1324,7 +1470,7 @@
       [wat-inst/load
         [wasm-name-to-wat-byte-array inst]
         [wat-inst-memargs
-          [name/word [mem-type/name mt]]
+          [name/word [memory-type/name mt]]
           [word 0]
           [word 1]]
         [exp-to-inst pexp]]]
@@ -1341,7 +1487,7 @@
             [type/primitive ptvalue]
             [wat-inst/store
               [wasm-name-to-wat-byte-array [prim-types-to-store-inst-name pttarget ptvalue]]
-              [wat-inst-memargs [name/word [mem-type/name mt]] [word 0] [word 1]]
+              [wat-inst-memargs [name/word [memory-type/name mt]] [word 0] [word 1]]
               [integer-exp-to-inst target-int-exp]
               [exp-to-inst value]]
             [logq-abort not implemented assign primitive types]]
@@ -1431,7 +1577,7 @@
 
     [exp/if c t e]
     [wat-inst/if
-      [type-to-wat-types [type-of t]]
+      [type-to-wat-types [type-of f]]
       [exp-to-inst c] [exp-to-inst t] [exp-to-inst e]]
 
     [exp/do es]
@@ -1493,7 +1639,7 @@
     [let [field-name-word [name/word field-name]
           offset
       [if-let [p [try-get-pointer-args [type-of a]]]
-        [match [pair/snd p]
+        [match [expand-custom [pair/snd p]]
           [type/record field-types]
           [loop [i 0
                  res int-const-0
@@ -1506,7 +1652,7 @@
                               i [inc i]]]]
                 [logq-abort field not found [identity field-name]]]]
 
-          [logq-abort ]]
+          [logq-abort field type not a pointer]]
         [logq-abort not a pointer]]]
       [integer-exp-to-inst [int-exp-add [exp-to-integer-exp a] offset]]]
 
