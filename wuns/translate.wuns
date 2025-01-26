@@ -15,33 +15,35 @@
 [type primitive-type []
   [record
     [prefix word]
-    [bits i32]
     [bytes i32]
     [name word]]]
+
+[defn primitive-type/bits [pt]
+  [mul 8 [primitive-type/bytes pt]]]
 
 [def primitive-types-by-name
   [let [m [transient-kv-map]]
     [for-each prefix-bits [list
-        [pair [word i] [i32 8]]
-        [pair [word u] [i32 8]]
+        [pair [word i] 1]
+        [pair [word u] 1]
 
-        [pair [word i] [i32 16]]
-        [pair [word u] [i32 16]]
+        [pair [word i] 2]
+        [pair [word u] 2]
 
-        [pair [word i] [i32 32]]
-        [pair [word u] [i32 32]]
+        [pair [word i] 4]
+        [pair [word u] 4]
 
-        [pair [word i] [i32 64]]
+        [pair [word i] 8]
 
-        [pair [word f] [i32 32]]
-        [pair [word f] [i32 64]]
+        [pair [word f] 4]
+        [pair [word f] 8]
 
-        [pair [word v] [i32 128]]]
+        [pair [word v] [i32 16]]]
       [let [prefix [pair/fst prefix-bits]
-            bits [pair/snd prefix-bits]
-            bytes [i32.div-s bits [i32 8]]
+            bytes [pair/snd prefix-bits]
+            bits [mul 8 bytes]
             prim-name [concat-words prefix [int-to-word bits]]]
-        [set-kv-map m prim-name [primitive-type prefix bits bytes prim-name]]]]
+        [set-kv-map m prim-name [primitive-type prefix bytes prim-name]]]]
     m]]
 
 [defn primitive-is-wasm-value-type [pt]
