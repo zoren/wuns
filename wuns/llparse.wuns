@@ -51,10 +51,51 @@
         [continue i [inc i]]
         i]]]]
 
-[type word []
+[type pword []
   [pvector [u8]]]
 
 [type form-word []
   [record
     [tag [exp [i32 10]]]
-    [word [word]]]]
+    [pword [pword]]]]
+
+[type
+  form-list []
+  [record
+    [tag [exp [i32 11]]]
+    [forms [pvector [pmem [form]]]]]
+
+  form []
+  [union
+    [form-word]
+    [form-list]]]
+
+[mutable mem-top [memory-static-top mem]]
+
+[defn get-top [] [i32]
+  mem-top]
+
+[defn set-top [new-top [i32]] [tuple]
+  [assign-mutable mem-top new-top]]
+
+[defn alloc-n [n-bytes [i32]] [i32]
+  [let [top-val [get-top]]
+    [when [eq top-val 0] [intrinsic unreachable]]
+    [set-top [add top-val n-bytes]]
+    top-val]]
+
+[defn form-word-alloc [pw [pword]] [pmem [form-word]]
+  [let [pfw [cast [pmem [form-word]] [alloc-n [size-of [form-word]]]]]
+    [assign pfw
+      [record
+        tag [i32 10]
+        pword pw]]
+    pfw]]
+
+[defn form-list-alloc [pfs [pvector [pmem [form]]]] [pmem [form-list]]
+  [let [pfl [cast [pmem [form-list]] [alloc-n [size-of [form-list]]]]]
+    [assign pfl
+      [record
+        tag [i32 11]
+        forms pfs]]
+    pfl]]
