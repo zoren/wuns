@@ -85,7 +85,7 @@
 [defn test1 []
   [let [forms
         [qlist
-          [defn f [x i32] i32 [intrinsic i32.add x [i32 1]]]
+          [defn f [x [i32]] [i32] [intrinsic i32.add x [i32 1]]]
 
           [export f]]]
     [promise-then
@@ -103,15 +103,15 @@
 [defn test-tuple []
   [let [forms
         [qlist
-          [memory mem i32 1]
+          [memory mem [i32] 1]
 
           [def tup1 [data mem [tuple [f64 1.1] [i32 2]]]]
           [def tup2 [data mem [tuple [f64 9.3] [i32 -9]]]]
 
-          [defn get-x [t [pointer [exp mem] [tuple f64 i32]]] f64
+          [defn get-x [t [pointer [exp mem] [tuple [f64] [i32]]]] [f64]
             [deref [index t [i32 0]]]]
 
-          [defn get-y [t [pointer [exp mem] [tuple f64 i32]]] i32
+          [defn get-y [t [pointer [exp mem] [tuple [f64] [i32]]]] [i32]
             [deref [index t [i32 1]]]]
 
           [export tup1 tup2 get-x get-y]]]
@@ -150,7 +150,7 @@
   [let [forms
         [qlist
           [defn get-empty-tuple [] [tuple] [tuple]]
-          [defn get-2tuple [] [tuple f64 i32] [tuple [f64 1.1] [i32 2]]]
+          [defn get-2tuple [] [tuple [f64] [i32]] [tuple [f64 1.1] [i32 2]]]
           [export get-empty-tuple get-2tuple]]]
     [promise-then
       [forms-to-module-async forms]
@@ -168,17 +168,17 @@
 [defn test-data-exp []
   [let [forms
         [qlist
-          [memory mem i32 1]
+          [memory mem [i32] 1]
 
           [def pptup [data mem [data mem [tuple [f64 1.1] [i32 2]]]]]
 
-          [defn get-pointed [t [pointer [exp mem] [pointer [exp mem] [tuple f64 i32]]]] [pointer [exp mem] [tuple f64 i32]]
+          [defn get-pointed [t [pointer [exp mem] [pointer [exp mem] [tuple [f64] [i32]]]]] [pointer [exp mem] [tuple [f64] [i32]]]
             [deref t]]
 
-          [defn get-x [t [pointer [exp mem] [tuple f64 i32]]] f64
+          [defn get-x [t [pointer [exp mem] [tuple [f64] [i32]]]] [f64]
             [deref [index t [i32 0]]]]
 
-          [defn get-y [t [pointer [exp mem] [tuple f64 i32]]] i32
+          [defn get-y [t [pointer [exp mem] [tuple [f64] [i32]]]] [i32]
             [deref [index t [i32 1]]]]
 
           [export pptup get-pointed get-x get-y]]]
@@ -208,10 +208,10 @@
         [qlist
           [mutable x [i32 1336]]
 
-          [defn get-x [] i32
+          [defn get-x [] [i32]
             x]
 
-          [defn set-x [v i32] [tuple]
+          [defn set-x [v [i32]] [tuple]
             [assign-mutable x v]]
 
           [export get-x]]]
@@ -234,15 +234,15 @@
 [defn test-record []
   [let [forms
         [qlist
-          [memory mem i32 1]
+          [memory mem [i32] 1]
 
           [def tup1 [data mem [record f [f64 1.1] i [i32 2]]]]
           [def tup2 [data mem [record f [f64 9.3] i [i32 -9]]]]
 
-          [defn get-f [t [pointer [exp mem] [record [f f64] [i i32]]]] f64
+          [defn get-f [t [pointer [exp mem] [record [f [f64]] [i [i32]]]]] [f64]
             [deref [field t f]]]
 
-          [defn get-i [t [pointer [exp mem] [record [f f64] [i i32]]]] i32
+          [defn get-i [t [pointer [exp mem] [record [f [f64]] [i [i32]]]]] [i32]
             [deref [field t i]]]
 
           [export tup1 tup2 get-f get-i]]]
@@ -271,19 +271,19 @@
 [defn test-record-vector []
   [let [forms
         [qlist
-          [memory mem i32 1]
+          [memory mem [i32] 1]
 
-          [def parray [data mem [record size [i32 3] array [array i32 [i32 2] [i32 3] [i32 5]]]]]
+          [def parray [data mem [record size [i32 3] array [array [i32] [i32 2] [i32 3] [i32 5]]]]]
 
-          [defn size [pvec [pointer [exp mem] [record [size i32] [array [array i32]]]]] i32
+          [defn size [pvec [pointer [exp mem] [record [size [i32]] [array [array [i32]]]]]] [i32]
             [deref [field pvec size]]]
 
-          [defn get-array-i32 [pvec [pointer [exp mem] [record [size i32] [array [array i32]]]] i i32] i32
+          [defn get-array-i32 [pvec [pointer [exp mem] [record [size [i32]] [array [array [i32]]]]] i [i32]] [i32]
             [when [lt-s i [i32 0]] [intrinsic unreachable]]
             [when-not [lt-s i [size pvec]] [intrinsic unreachable]]
             [deref [index [field pvec array] i]]]
 
-          [defn set-array-i32 [pvec [pointer [exp mem] [record [size i32] [array [array i32]]]] i i32 v i32] [tuple]
+          [defn set-array-i32 [pvec [pointer [exp mem] [record [size [i32]] [array [array [i32]]]]] i [i32] v [i32]] [tuple]
             [assign [index [field pvec array] i] v]]
 
           [export parray size get-array-i32 set-array-i32]]]
@@ -312,11 +312,11 @@
 [defn test-custom-type []
   [let [forms
         [qlist
-[memory mem i32 1]
+[memory mem [i32] 1]
 
-[type vector-data [a datatype size [exp i32]]
+[type vector-data [a datatype size [exp [i32]]]
   [record
-    [size i32]
+    [size [i32]]
     [array [array a size]]]]
 
 [type pvector [v datatype]
@@ -324,8 +324,8 @@
 
 [type growable-vector [a datatype]
   [record
-    [size i32]
-    [capacity i32]
+    [size [i32]]
+    [capacity [i32]]
     [parray [pointer [exp mem] [array a]]]]]
 
           ]]
@@ -356,7 +356,3 @@
           [func t [x]
             [go [inc i]]]]
           [promise-resolve [i32 99]]]] [i32 0]]]]
-
-[comment
-  [bind-forms [def mem [import env mem [memory i32 1]]]]
-  ]

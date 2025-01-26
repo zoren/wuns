@@ -151,9 +151,8 @@
       [type/record fs]
       [type/record [list-map f fs [pair [pair/fst f] [go [pair/snd f]]]]]
 
-      [logq-abort type-substitute not implemented [identity t]]
-
-      ]] outer-t]]
+      [logq-abort type-substitute not implemented [identity t]]]]
+    outer-t]]
 
 [type exp-function []
   [record
@@ -397,6 +396,11 @@
 [defn starts-with-dash [w]
   [eq [char-code-at w 0] [word-to-char-code -]]]
 
+[type type-signature []
+  [record
+    [kind type-kind]
+    [params [list [pair name type-kind]]]]]
+
 [defn bind [evaluator errors top-names]
   [let
     [name-to-desc [transient-kv-map]
@@ -451,19 +455,18 @@
       [logq-abort expected memory type exp [identity mem-exp]]]
     [logq-abort expected memory type [identity mt]]]]
 
-[func form-to-type-type-params [type-params-kinds lctx outer-form]
+[func form-to-type [lctx outer-form]
   [letfn [
   [func go [form]
     [match form
     [form/word w]
     [if [starts-with-dash w]
       [type/wildcard [form-to-name form]]
-      [if-let [tp [try-get type-params-kinds w]]
-        [type/var [form-to-name form]]
-        [type/primitive [get-primitive w]]]]
+      [type/var [form-to-name form]]]
 
     [form/list l]
-    [let [type-name-word [form-to-word [first l]]]
+    [let [type-name-word [form-to-word [first l]]
+          n-of-args [dec [size l]]]
       [assert-not [is-empty l] form-to-type expected non-empty list]
       [switch type-name-word
         [[word tuple]]
@@ -494,64 +497,49 @@
 
           [logq-abort array expected 2 or 3 elements]]
 
-        [if-let [custom-type-params [try-get custom-type-signatures type-name-word]]
-          [let [n-of-args [dec [size l]]]
-            [assert [eq n-of-args [size custom-type-params]] form-to-type expected same number of arguments
-              [identity type-name-word] [size custom-type-params] [identity n-of-args]]
-            [let [args [list-map a [rest l] [go a]]]
-              [for i 0 [size args]
-                [let [param-pair [at custom-type-params i]
-                      param-kind [pair/snd param-pair]
-                      arg [at args i]
-                      arg-kind-opt
-                      [match arg
-                        [type/wildcard wcn] [option/none]
-                        [type/var tvn] [option/some [get type-params-kinds [name/word tvn]]]
-                        [type/exp e] [option/some [type-kind/exp [type-of e]]]
-                        [type/primitive -] [option/some type-kind-datatype]
-                        [type/pointer - --] [option/some type-kind-datatype]
-                        [type/tuple -] [option/some type-kind-datatype]
-                        [type/record -] [option/some type-kind-datatype]
-                        [type/array - --] [option/some type-kind-datatype]
-                        ]]
-                  [when-let [arg-kind arg-kind-opt]
-                    [assert [type-kind-equals param-kind arg-kind] form-to-type expected same type kind
-                      [identity type-name-word] [identity param-kind] [identity arg-kind]]]]]
-              [type/apply-custom [form-to-name [first l]] args]]]
-          [do
-            [log-location form]
+        [if-let [custom-type-signature [try-get custom-type-signatures type-name-word]]
+          [let [type-params [type-signature/params custom-type-signature]]
+            [assert [eq n-of-args [size type-params]] form-to-type expected same number of arguments
+              [identity type-name-word] [size type-params] [identity n-of-args]]
+            [type/apply-custom [form-to-name [first l]] [list-map a [rest l] [go a]]]]
+          [if-let [p [try-get primitive-types-by-name type-name-word]]
+            [do
+              [assert [eq n-of-args 0] form-to-type primitive takes no arguments [identity type-name-word]]
+              [type/primitive p]]
             [logq-abort not implemented form-to-type [identity form]]]]]]]]]
     [go outer-form]]]
 
 [func type-to-type-kind-opt [arg]
   [match arg
     [type/wildcard wcn] [option/none]
-    [type/var tvn] [logq-abort type-to-type-kind-opt var not allowed [identity tvn]]
     [type/exp e] [option/some [type-kind/exp [type-of e]]]
-    [type/apply-custom -tn -args] [type-to-type-kind-opt [expand-custom arg]]
+    [type/apply-custom tn -args] [option/some [type-signature/kind [get custom-type-signatures [name/word tn]]]]
     [type/primitive -] [option/some type-kind-datatype]
     [type/pointer - --] [option/some type-kind-datatype]
     [type/tuple -] [option/some type-kind-datatype]
     [type/record -] [option/some type-kind-datatype]
     [type/array - --] [option/some type-kind-datatype]
-    [logq-abort type-to-type-kind ]]]
+    [logq-abort type-to-type-kind [identity arg]]]]
 
 [func instantiate-custom-type [type-name-word args]
-  [if-let [custom-type-params [try-get custom-type-signatures type-name-word]]
-    [do
-      [assert [eq [size args] [size custom-type-params]] form-to-type expected same number of arguments
-        [identity type-name-word] [size custom-type-params] [identity [size args]]]
-      [let [custom-type [get custom-types type-name-word]
-            tenv [transient-kv-map]]
+  [if-let [custom-type-signature [try-get custom-type-signatures type-name-word]]
+    [let [type-params [type-signature/params custom-type-signature]]
+      [assert [eq [size args] [size type-params]] form-to-type expected same number of arguments
+        [identity type-name-word] [size type-params] [identity [size args]]]
+      [let [tenv [transient-kv-map]]
         [for i 0 [size args]
-          [let [param-pair [at custom-type-params i]
+          [let [param-pair [at type-params i]
                 param-kind [pair/snd param-pair]
-                arg [at args i]]
-            [when-let [arg-kind [type-to-type-kind-opt arg]]
+                arg [at args i]
+                arg-kind-opt
+                [match arg
+                  [type/var tvn] [logq-abort not implemented instantiate-custom-type type-var [identity tvn]]
+                  [type-to-type-kind-opt arg]]]
+            [when-let [arg-kind arg-kind-opt]
               [assert [type-kind-equals param-kind arg-kind] form-to-type expected same type kind
                 [identity type-name-word] [identity param-kind] [identity arg-kind]]]
             [set-kv-map tenv [name/word [pair/fst param-pair]] arg]]]
-        [type-substitute tenv custom-type]]]
+        [type-substitute tenv [get custom-types type-name-word]]]]
     [logq-abort instantiate-custom-type type not found [identity type-name-word]]]]
 
 [func expand-custom [t]
@@ -560,9 +548,6 @@
     [expand-custom [instantiate-custom-type [name/word tn] args]]
 
     t]]
-
-[func form-to-type [lctx f]
-  [form-to-type-type-params [transient-kv-map] lctx f]]
 
 [func form-list-to-mem-exp [l]
   [assert [or [eq [size l] 3] [eq [size l] 4]] memory expected 3 or 4 elements]
@@ -583,7 +568,7 @@
       [do
         [assert [or [type-equals mt type-i32] [type-equals mt type-i64]] memory expected i32 or i64]
         [memory-exp mpt init-size-name opt-max]]
-      [logq-abort not implemented memory type]]]]
+      [logq-abort not implemented memory type [identity mt]]]]]
 
 [func form-to-import-kind [form]
   [let [l [get-list form]]
@@ -651,7 +636,7 @@
                   [primitive-type-is-integer pointer-prim]
                   [lt-s [primitive-type/bits pointer-prim] [primitive-type/bits target-prim]]]
                 can only convert to smaller integer type]
-                [logq-abort expected primitive types]]
+                [logq-abort expected primitive types [identity p]]]
             [error-exp pointer-exp not a pointer]]]
         [error-exp pointer-exp target-type not a primitive type]]
       [exp/deref-to pointer-exp target-type]]
@@ -1011,9 +996,15 @@
     [type/primitive pt]
 
     [exp/if c t e]
-    [let [tt [type-of t]]
-      [if [type-equals tt type-empty]
-        [type-of e]
+    [let [tt [type-of t]
+          te [type-of e]]
+      [ifs
+        [type-equals tt type-empty]
+        te
+
+        [type-equals te type-empty]
+        tt
+
         tt]]
 
     [exp/call f args]
@@ -1195,29 +1186,33 @@
                   n]]]]
 
           [[word type]]
-          [let
-            [type-name [form-to-word [second l]]
-             type-param-ctx [transient-kv-map]
-             params
-             [list-map param-pair [pairwise-pairs [get-list [third l]]]
-                [let
-                  [pname [form-to-name [pair/fst param-pair]]
-                   kind
-                    [match [pair/snd param-pair]
-                      [form/word w]
-                      [switch w
-                        [[word datatype]] type-kind-datatype
-                        [logq-abort type unknown kind]]
-                      [form/list l]
-                      [switch [form-to-word [first l]]
-                        [[word exp]] [type-kind/exp [form-to-type local-context-empty [second l]]]
-                        [logq-abort type unknown kind]]]]
-                  [set-kv-map type-param-ctx [name/word pname] kind]
-                  [pair pname kind]]]]
-            [set-kv-map custom-type-signatures type-name params]
-            [set-kv-map custom-types type-name
-              [form-to-type-type-params type-param-ctx local-context-empty [fourth l]]]
-            [option/none]]
+          [do
+            [for-3 i 1 [size l]
+              [let
+                [type-name [form-to-word [at l i]]
+                 type-params
+                 [list-map param-pair [pairwise-pairs [get-list [at l [inc i]]]]
+                  [let
+                    [pname [form-to-name [pair/fst param-pair]]
+                     kind
+                      [match [pair/snd param-pair]
+                        [form/word w]
+                        [switch w
+                          [[word datatype]] type-kind-datatype
+                          [logq-abort type unknown kind]]
+
+                        [form/list ll]
+                        [switch [form-to-word [first ll]]
+                          [[word exp]] [type-kind/exp [form-to-type local-context-empty [second ll]]]
+                          [logq-abort type unknown kind]]]]
+                    [pair pname kind]]]]
+              [set-kv-map custom-type-signatures type-name [type-signature type-kind-datatype type-params]]]]
+            [for-3 i 1 [size l]
+              [let
+                [type-name [form-to-word [at l i]]
+                 type [form-to-type local-context-empty [at l [add 2 i]]]]
+                [set-kv-map custom-types type-name type]]]
+          [option/none]]
 
           [[word import]]
           [let
@@ -1298,6 +1293,9 @@
   [match type
     [type/tuple types]
     [list-map t types [type-to-wat-type t]]
+
+    [type/empty]
+    [list]
 
     [list [type-to-wat-type type]]]]
 

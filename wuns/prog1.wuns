@@ -1,65 +1,65 @@
 [import env
-  [mem [memory i32 1]]
-  [log [func [par [pointer [exp mem] [array u8]]
-              n-bytes i32] [tuple]]]]
+  [mem [memory [i32] 1]]
+  [log [func [par [pointer [exp mem] [array [u8]]]
+              n-bytes [i32]] [tuple]]]]
 [defn empty [] [tuple]]
-[def bump-top [cast [pointer [exp mem] i32] [i32 0]]]
-[defn get-top [] i32
+[def bump-top [cast [pointer [exp mem] [i32]] [i32 0]]]
+[defn get-top [] [i32]
   [deref bump-top]]
-[defn set-top [new-top i32] [tuple]
+[defn set-top [new-top [i32]] [tuple]
   [assign bump-top new-top]]
 [def 0 [i32 0]]
 [def 1 [i32 1]]
 [defn alloc-init [] [tuple]
   [set-top [add [get-top] [i32 16]]]]
 
-[defn alloc-n [n-bytes i32] i32
+[defn alloc-n [n-bytes [i32]] [i32]
   [let [top-val [get-top]]
     [when [eq top-val 0] [intrinsic unreachable]]
     [set-top [add top-val n-bytes]]
     top-val]]
 
-[defn inc [x i32] i32 [add x 1]]
-[defn dec [x i32] i32 [sub x 1]]
+[defn inc [x [i32]] [i32] [add x 1]]
+[defn dec [x [i32]] [i32] [sub x 1]]
 
-[defn array-f64 [s i32] [pointer [exp mem] [array f64]]
+[defn array-f64 [s [i32]] [pointer [exp mem] [array [f64]]]
   [cast
-    [pointer [exp mem] [array f64]]
-    [alloc-n [size-of [array f64 [exp s]]]]]]
+    [pointer [exp mem] [array [f64]]]
+    [alloc-n [size-of [array [f64] [exp s]]]]]]
 
-[defn array-f64-get [p [pointer [exp mem] [array f64]] i i32] f64
+[defn array-f64-get [p [pointer [exp mem] [array [f64]]] i [i32]] [f64]
   [deref [index p i]]]
 
-[defn array-u8-get [p [pointer [exp mem] [array u8]] i i32] i32
-  [deref-to [index p i] i32]]
+[defn array-u8-get [p [pointer [exp mem] [array [u8]]] i [i32]] [i32]
+  [deref-to [index p i] [i32]]]
 
-[defn array-i8-get [p [pointer [exp mem] [array i8]] i i32] i64
-  [deref-to [index p i] i64]]
+[defn array-i8-get [p [pointer [exp mem] [array [i8]]] i [i32]] [i64]
+  [deref-to [index p i] [i64]]]
 
-[defn array-u8-get2 [p [pointer [exp mem] [array u8]] i i32] i64
+[defn array-u8-get2 [p [pointer [exp mem] [array [u8]]] i [i32]] [i64]
   [deref [index p i]]]
 
-[defn array-i8-get2 [p [pointer [exp mem] [array i8]] i i32] i64
+[defn array-i8-get2 [p [pointer [exp mem] [array [i8]]] i [i32]] [i64]
   [deref [index p i]]]
 
-[defn array-u8 [s i32] [pointer [exp mem] [array u8]]
+[defn array-u8 [s [i32]] [pointer [exp mem] [array [u8]]]
   [let
     [par
       [cast
-        [pointer [exp mem] [array u8]]
-        [alloc-n [size-of [array u8 [exp s]]]]]]
+        [pointer [exp mem] [array [u8]]]
+        [alloc-n [size-of [array [u8] [exp s]]]]]]
     [loop [i 0]
       [when [lt-s i s]
         [assign [index par i] [u8 0]]]
         [continue i [inc i]]]
     par]]
 
-[defn array-i8 [s i32] [pointer [exp mem] [array i8]]
+[defn array-i8 [s [i32]] [pointer [exp mem] [array [i8]]]
   [let
     [par
       [cast
-        [pointer [exp mem] [array i8]]
-        [alloc-n [size-of [array i8 [exp s]]]]]]
+        [pointer [exp mem] [array [i8]]]
+        [alloc-n [size-of [array [i8] [exp s]]]]]]
     [loop [i 0]
       [when [lt-s i s]
         [assign [index par i] [i8 0]]]
@@ -68,75 +68,75 @@
 
 [defn assign-array-test [] [tuple]
   [let
-    [par [alloc mem [array i8 [exp [i32 3]]]]]
-    [assign par [array i8 [i8 11] [i8 12] [i8 13]]]]]
+    [par [alloc mem [array [i8] [exp [i32 3]]]]]
+    [assign par [array [i8] [i8 11] [i8 12] [i8 13]]]]]
 
 [defn assign-array-test2 [] [tuple]
   [let
-    [par [alloc mem [array i32 [exp [i32 3]]]]
+    [par [alloc mem [array [i32] [exp [i32 3]]]]
      22 [i32 22]]
-    [assign par [array i32 0 1 22]]]]
+    [assign par [array [i32] 0 1 22]]]]
 
 [defn assign-array-test3 [] [tuple]
   [let
-    [parar [alloc mem [array [array i32 [exp [i32 2]]] [exp [i32 2]]]]]
+    [parar [alloc mem [array [array [i32] [exp [i32 2]]] [exp [i32 2]]]]]
     [assign parar
       [array
-        [array i32 [exp [i32 2]]]
-        [array i32 0 1]
-        [array i32 1 0]]]]]
+        [array [i32] [exp [i32 2]]]
+        [array [i32] 0 1]
+        [array [i32] 1 0]]]]]
 
 [defn assign-tuple [] [tuple]
   [let
-    [ptup [alloc mem [tuple f64 i32]]]
+    [ptup [alloc mem [tuple [f64] [i32]]]]
     [assign ptup [tuple [f64 1.1] [i32 2]]]]]
 
-[defn mk-2-tup [x i32 y i32] [tuple i32 i32]
+[defn mk-2-tup [x [i32] y [i32]] [tuple [i32] [i32]]
   [tuple x y]]
 
-[defn test-data [] [pointer [exp mem] [array u8 [exp [i32 11]]]]
+[defn test-data [] [pointer [exp mem] [array [u8] [exp [i32 11]]]]
   [data mem
-    [array u8
+    [array [u8]
       [u8 104] [u8 101] [u8 108] [u8 108] [u8 111]
       [u8 32]
       [u8 119] [u8 111] [u8 114] [u8 108] [u8 100]]]]
 
-[defn test-data2 [] [pointer [exp mem] [array u8 [exp [i32 11]]]]
+[defn test-data2 [] [pointer [exp mem] [array [u8] [exp [i32 11]]]]
   [data mem
-    [array u8
+    [array [u8]
       [u8 104] [u8 101] [u8 108] [u8 108] [u8 111]
       [u8 32]
       [u8 119] [u8 111] [u8 114] [u8 108] [u8 100]]]]
 
-[defn test-data-i8 [] [pointer [exp mem] [array i8 [exp [i32 4]]]]
+[defn test-data-i8 [] [pointer [exp mem] [array [i8] [exp [i32 4]]]]
   [data mem
-    [array i8 [i8 -128] [i8 -1] [i8 0] [i8 127]]]]
+    [array [i8] [i8 -128] [i8 -1] [i8 0] [i8 127]]]]
 
-[defn test-data-i16 [] [pointer [exp mem] [array i16 [exp [i32 4]]]]
+[defn test-data-i16 [] [pointer [exp mem] [array [i16] [exp [i32 4]]]]
   [data mem
-    [array i16 [i16 -128] [i16 -1] [i16 0] [i16 127]]]]
+    [array [i16] [i16 -128] [i16 -1] [i16 0] [i16 127]]]]
 
-[defn test-data-u16 [] [pointer [exp mem] [array u16 [exp [i32 4]]]]
+[defn test-data-u16 [] [pointer [exp mem] [array [u16] [exp [i32 4]]]]
   [data mem
-    [array u16 [u16 1] [u16 0] [u16 127] [u16 65535]]]]
+    [array [u16] [u16 1] [u16 0] [u16 127] [u16 65535]]]]
 
-[defn test-data-i32 [] [pointer [exp mem] [array i32 [exp [i32 4]]]]
+[defn test-data-i32 [] [pointer [exp mem] [array [i32] [exp [i32 4]]]]
   [data mem
-    [array i32 [i32 -128] [i32 -1] [i32 0] [i32 127]]]]
+    [array [i32] [i32 -128] [i32 -1] [i32 0] [i32 127]]]]
 
-[defn test-data-i64 [] [pointer [exp mem] [array i64 [exp [i32 4]]]]
+[defn test-data-i64 [] [pointer [exp mem] [array [i64] [exp [i32 4]]]]
   [data mem
-    [array i64 [i64 -1] [i64 -128] [i64 0] [i64 127]]]]
+    [array [i64] [i64 -1] [i64 -128] [i64 0] [i64 127]]]]
 
-[defn test-data-f64 [] [pointer [exp mem] [array f64 [exp [i32 1]]]]
+[defn test-data-f64 [] [pointer [exp mem] [array [f64] [exp [i32 1]]]]
   [data mem
-    [array f64 [f64 0] ]]]
+    [array [f64] [f64 0] ]]]
 
-[defn test-data-tuple [] [pointer [exp mem] [tuple f64 i32]]
+[defn test-data-tuple [] [pointer [exp mem] [tuple [f64] [i32]]]
   [data mem
     [tuple [f64 1.1] [i32 2]]]]
 
-[defn test-data-tuple-index [ptup [pointer [exp mem] [tuple f64 i32]]] i32
+[defn test-data-tuple-index [ptup [pointer [exp mem] [tuple [f64] [i32]]]] [i32]
   [deref [index ptup [i32 1]]]]
 
 [export test-data-tuple-index]

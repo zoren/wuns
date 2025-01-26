@@ -1,44 +1,47 @@
-[memory mem i32 1]
+[memory mem [i32] 1]
 
-[type vector-data [a datatype size [exp i32]]
+[type vector-data [a datatype size [exp [i32]]]
   [record
-    [size i32]
+    [size [i32]]
     [array [array a size]]]]
 
-[type pvector [v datatype]
-  [pointer [exp mem] [vector-data v -size]]]
+[type pmem [a datatype]
+  [pointer [exp mem] a]]
 
-[defn size [pvec [pvector -a]] i32
+[type pvector [vp datatype]
+  [pmem [vector-data vp -size]]]
+
+[defn size [pvec [pvector -a]] [i32]
   [deref [field pvec size]]]
 
 [type growable-vector [a datatype]
   [record
-    [size i32]
-    [capacity i32]
-    [parray [pointer [exp mem] [array a]]]]]
+    [size [i32]]
+    [capacity [i32]]
+    [parray [pmem [array a]]]]]
 
 [def 0 [i32 0]]
 [def 1 [i32 1]]
 
-[defn get-byte [pvec [pvector u8] i i32] i32
+[defn get-byte [pvec [pvector [u8]] i [i32]] [i32]
   [when [lt-s i 0] [intrinsic unreachable]]
   [when-not [lt-s i [size pvec]] [intrinsic unreachable]]
-  [deref-to [index [field pvec array] i] i32]]
+  [deref-to [index [field pvec array] i] [i32]]]
 
-[defn is-between-inclusive [lower i32 c i32 upper i32] i32
+[defn is-between-inclusive [lower [i32] c [i32] upper [i32]] [i32]
   [and [le-s lower c] [le-s c upper]]]
 
-[defn is-whitespace [c i32] i32
+[defn is-whitespace [c [i32]] [i32]
   [or [eq c [i32 32]] [eq c [i32 10]]]]
 
-[defn is-word-char [c i32] i32
+[defn is-word-char [c [i32]] [i32]
   [or
     [is-between-inclusive [i32 97] c [i32 122]]
     [is-between-inclusive [i32 45] c [i32 57]]]]
 
-[defn inc [x i32] i32 [add x 1]]
+[defn inc [x [i32]] [i32] [add x 1]]
 
-[defn scan-word-end [bytes [pvector u8] start i32] i32
+[defn scan-word-end [bytes [pvector [u8]] start [i32]] [i32]
   [loop
     [n-of-bytes [size bytes]
      i start]
@@ -47,3 +50,11 @@
       [if [is-word-char [get-byte bytes i]]
         [continue i [inc i]]
         i]]]]
+
+[type word []
+  [pvector [u8]]]
+
+[type form-word []
+  [record
+    [tag [exp [i32 10]]]
+    [word [word]]]]
