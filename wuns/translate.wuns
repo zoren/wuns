@@ -284,7 +284,7 @@
 [type
   top-desc-kind []
   [union
-    [value top-value-kind]
+    [value top-value-kind exp]
     [function]
     [import import-kind-desc]
     [memory memory-desc]]
@@ -712,7 +712,7 @@
       [match [pair/snd desc]
         [desc-kind/top td]
         [match td
-          [top-desc-kind/value v]
+          [top-desc-kind/value v -exp]
           [assert [is-identical v top-value-kind-variable] assign-mutable expected variable]
 
           [logq-abort not implemented assign-mutable top-desc-kind]]
@@ -1268,7 +1268,7 @@
                is-mutable [eq-word fw [word mutable]]
                kind [if is-mutable top-value-kind-variable top-value-kind-constant]
                bt [top-decl/value kind [form-to-name [second l]] be]]
-              [bind-top [second l] [pair [if is-mutable [lift-literal-type type] type] [top-desc-kind/value kind]]]
+              [bind-top [second l] [pair [if is-mutable [lift-literal-type type] type] [top-desc-kind/value kind be]]]
               [option/some bt]]]
 
           [[word memory]]
@@ -1488,6 +1488,17 @@
     [exp/literal - n]
     exp
 
+    [exp/var var-name]
+    [match [get-desc-from-name var-name]
+      [desc-kind/local ld] exp
+      [desc-kind/top td]
+      [match td
+        [top-desc-kind/value value-kind desc-exp]
+        [if [is-identical value-kind top-value-kind-constant]
+          desc-exp
+          exp]
+        exp]]
+
     [exp/size-of t]
     [integer-exp-to-exp [type-to-size-of-integer-exp t]]
 
@@ -1684,7 +1695,7 @@
     [match [get-desc-from-name n]
       [desc-kind/top td]
       [match td
-        [top-desc-kind/value -]
+        [top-desc-kind/value - --]
         [wat-inst/global.get [name/word n]]
 
         [top-desc-kind/function]
@@ -1909,7 +1920,7 @@
                     [desc-kind/local -] [logq-abort unreachable export local]
                     [desc-kind/top td]
                     [match td
-                      [top-desc-kind/value -] [export-kind/global]
+                      [top-desc-kind/value - --] [export-kind/global]
                       [top-desc-kind/function] [export-kind/func]
                       [top-desc-kind/import -] [logq-abort not implemented export-kind/import]
                       [top-desc-kind/memory -] [export-kind/memory]]]]
@@ -1925,6 +1936,7 @@
               [if [is-identical k top-value-kind-constant] [mut/const] [mut/var]]
               [type-to-wat-type [type-of e]]
               [[translate-literal pt] [name/word lit-name]]]]
+
           [logq-abort not a const exp [identity e]]]
 
         [top-decl/function f]
