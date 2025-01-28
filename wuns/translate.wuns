@@ -423,7 +423,9 @@
      top-names [transient-kv-map]
      name-to-desc [transient-kv-map]
      custom-type-signatures [transient-kv-map]
-     custom-types [transient-kv-map]]
+     custom-types [transient-kv-map]
+     active-data-map [transient-kv-map]
+     datas [growable-list]]
     [letfn [
 [func error-form-fn [form message-form]
   [push gerrors [pair form message-form]]]
@@ -1411,23 +1413,6 @@
 
     [list [type-to-wat-type type]]]]
 
-[func compile [tops]
-  [let
-    [imports [growable-list]
-     memories [growable-list]
-     globals [growable-list]
-     funcs [growable-list]
-     exports [growable-list]
-     datas [growable-list]
-     active-data-map [transient-kv-map]
-     glocals-atom [atom [growable-list]]
-     type-to-mem-kind
-     [func ttmk [p]
-      [ifs
-        [is-identical p type-primitive-i32] [memory-kind/i32]
-        [is-identical p type-primitive-i64] [memory-kind/i64]
-        [logq-abort not implemented memory-kind [identity p]]]]]
-    [letfn [
 [func exp-to-integer-exp [e]
   [match e
     [exp/literal pt n]
@@ -1556,8 +1541,6 @@
     [set-kv-map active-data-map mem-name-word oa]
     oa]]]
 
-[func integer-exp-to-inst [ie] [exp-to-inst [integer-exp-to-exp ie]]]
-
 [func type-to-primitive [t]
   [match t
     [type/primitive p]
@@ -1567,6 +1550,67 @@
     [get-memory-pointer-type mt]
 
     [logq-abort not a primitive type [identity t]]]]
+
+[func exp-to-bytes [e]
+  [let
+    [bprinter [empty-printer]
+     go
+     [func go [e]
+      [match [const-eval e]
+        [exp/literal pt value-name]
+        [let [n-bytes [primitive-type/bytes pt]]
+          [assert [eq [intrinsic i32.rem-s [printer-index bprinter] n-bytes] [i32 0]]
+            exp-to-bytes expected natural alignment [identity pt]]
+          [switch [primitive-type/prefix pt]
+            [[word i] [word u]]
+            [loop
+              [i 0
+               cur [word-to-int [name/word value-name]]]
+              [when [lt-s i n-bytes]
+                [print-byte bprinter [intrinsic i32.and [i32 0xff] cur]]
+                [continue
+                  i [inc i]
+                  cur [intrinsic i32.shr-s cur [i32 8]]]]]
+
+            [[word f]]
+            [loop
+              [i 0
+               fba [f64-to-byte-array [word-to-f64 [name/word value-name]]]]
+              [when [lt-s i n-bytes]
+                [print-byte bprinter [byte-array-get fba i]]
+                [continue i [inc i]]]]
+
+            [logq-abort not implemented exp-to-bytes [identity e]]]]
+
+        [exp/array - es]
+        [for-each elem es [go elem]]
+
+        [exp/tuple es]
+        [for-each elem es [go elem]]
+
+        [exp/record fields]
+        [for-each field fields [go [pair/snd field]]]
+
+        [logq-abort not implemented exp-to-bytes [identity e]]]]]
+    [go e]
+    [printer-to-byte-array bprinter]]]
+
+[func compile [tops]
+  [let
+    [imports [growable-list]
+     memories [growable-list]
+     globals [growable-list]
+     funcs [growable-list]
+     exports [growable-list]
+     glocals-atom [atom [growable-list]]
+     type-to-mem-kind
+     [func ttmk [p]
+      [ifs
+        [is-identical p type-primitive-i32] [memory-kind/i32]
+        [is-identical p type-primitive-i64] [memory-kind/i64]
+        [logq-abort not implemented memory-kind [identity p]]]]]
+    [letfn [
+[func integer-exp-to-inst [ie] [exp-to-inst [integer-exp-to-exp ie]]]
 
 [func exp-to-inst [f]
   [match f
@@ -1815,50 +1859,6 @@
     [exp-to-inst [const-eval f]]
 
     [logq-abort exp-to-inst not implemented [identity f]]]]
-
-[func exp-to-bytes [e]
-  [let
-    [bprinter [empty-printer]
-     go
-     [func go [e]
-      [match [const-eval e]
-        [exp/literal pt value-name]
-        [let [n-bytes [primitive-type/bytes pt]]
-          [assert [eq [intrinsic i32.rem-s [printer-index bprinter] n-bytes] [i32 0]]
-            exp-to-bytes expected natural alignment [identity pt]]
-          [switch [primitive-type/prefix pt]
-            [[word i] [word u]]
-            [loop
-              [i 0
-               cur [word-to-int [name/word value-name]]]
-              [when [lt-s i n-bytes]
-                [print-byte bprinter [intrinsic i32.and [i32 0xff] cur]]
-                [continue
-                  i [inc i]
-                  cur [intrinsic i32.shr-s cur [i32 8]]]]]
-
-            [[word f]]
-            [loop
-              [i 0
-               fba [f64-to-byte-array [word-to-f64 [name/word value-name]]]]
-              [when [lt-s i n-bytes]
-                [print-byte bprinter [byte-array-get fba i]]
-                [continue i [inc i]]]]
-
-            [logq-abort not implemented exp-to-bytes [identity e]]]]
-
-        [exp/array - es]
-        [for-each elem es [go elem]]
-
-        [exp/tuple es]
-        [for-each elem es [go elem]]
-
-        [exp/record fields]
-        [for-each field fields [go [pair/snd field]]]
-
-        [logq-abort not implemented exp-to-bytes [identity e]]]]]
-    [go e]
-    [printer-to-byte-array bprinter]]]
 
 [func exps-to-inst [forms]
   [wat-inst/instructions
