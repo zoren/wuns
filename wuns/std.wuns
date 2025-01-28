@@ -193,14 +193,14 @@
 [defmacro ifs [.. clauses]
   [let [s [size clauses]]
     [assert [is-odd s] ifs requires an odd number of arguments]
-    [[func go [i res]
+    [loop
+      [i [dec s]
+       res [at clauses -1]]
       [if [eq i 0]
         res
-        [go
-          [sub i 2]
-          [flist [quote if] [at clauses [sub i 2]] [at clauses [dec i]] res]]]]
-      [dec s]
-      [at clauses -1]]]]
+        [continue
+          res [flist [quote if] [at clauses [sub i 2]] [at clauses [dec i]] res]
+          i [sub i 2]]]]]]
 
 [comment and relies on there only being one falsy value [i32 0]
         it will not return any other falsy value as or returns the first truthy argument]
@@ -208,14 +208,14 @@
   [let [s [size clauses]]
     [if [is-zero s]
       [quote [i32 1]]
-      [[func go [i res]
+      [loop
+        [i [dec s]
+         res [at clauses -1]]
         [if [eq i 0]
           res
-          [go
-            [dec i]
-            [flist [quote if] [at clauses [dec i]] res [quote [i32 0]]]]]]
-         [dec s]
-         [at clauses -1]]]]]
+          [continue
+            res [flist [quote if] [at clauses [dec i]] res [quote [i32 0]]]
+            i [dec i]]]]]]]
 
 [type atom [v] [union]]
 
@@ -264,16 +264,15 @@
   [let [s [size clauses]]
     [if [is-zero s]
       [quote [i32 0]]
-      [[func go [i res]
+      [loop [i [dec s] res [at clauses -1]]
         [if [eq i 0]
           res
-          [go
-            [dec i]
+          [continue
+            res
             [let [w [genword]]
               [flist [quote let] [flist w [at clauses [dec i]]]
-                [flist [quote if] w w res]]]]]]
-       [dec s]
-       [at clauses -1]]]]]
+                [flist [quote if] w w res]]]
+            i [dec i]]]]]]]
 
 [defn form-to-list [form]
   [match form
@@ -356,12 +355,12 @@
             lb [form-to-list b]
             sa [size la]]
         [and [eq sa [size lb]]
-          [[func go [i]
+          [loop [i 0]
             [if [lt-s i sa]
               [if [eq-form [at la i] [at lb i]]
-                [go [inc i]]
+                [continue i [inc i]]
                 0]
-              1]] 0]]]]]]
+              1]]]]]]]
 
 [defn for-func [iteration-var start increment end forms]
   [assert [lt-s 0 increment] for-func increment must be positive]
@@ -586,22 +585,20 @@
 [def true [i32 1]]
 
 [defn all [l pred]
-  [[func go [i]
+  [loop [i 0]
     [if [lt-s i [size l]]
       [if [pred [at l i]]
-        [go [inc i]]
+        [continue i [inc i]]
         false]
-      true]]
-    0]]
+      true]]]
 
 [defn exists [l pred]
-  [[func go [i]
+  [loop [i 0]
     [if [lt-s i [size l]]
       [if [pred [at l i]]
         true
-        [go [inc i]]]
-      false]]
-    0]]
+        [continue i [inc i]]]
+      false]]]
 
 [type pair [a b] [record [fst a] [snd b]]]
 
@@ -640,17 +637,18 @@
     [error error-type]]]
 
 [defn map-result [l f]
-  [let [gl [growable-list]]
-    [[func go [i]
-      [if [lt-s i [size l]]
-        [match [f [at l i]]
-          [result/error e] [result/error e]
-          [result/ok v]
-          [do
-            [push gl v]
-            [go [inc i]]]]
-        [result/ok [clone-growable-to-frozen-list gl]]]]
-      0]]]
+  [loop
+    [gl [growable-list]
+     n [size l]
+     i 0]
+    [if [lt-s i n]
+      [match [f [at l i]]
+        [result/error e] [result/error e]
+        [result/ok v]
+        [do
+          [push gl v]
+          [continue i [inc i]]]]
+      [result/ok [clone-growable-to-frozen-list gl]]]]]
 
 [def-js-extern performance-now [func [] f64]]
 
