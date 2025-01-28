@@ -14,32 +14,11 @@
 
 [import ./runtime-lib/wasm.js byte-array-to-wasm-module [func [byte-array] wasm-module]]
 
-[defn forms-to-output [forms]
+[defn forms-to-output-async [forms]
   [promise-then
     [make-init-evaluator-async]
     [func then [evaluator]
-      [let
-        [gerrors [growable-list]
-         top-names [transient-kv-map]
-         binder-compiler [bind evaluator gerrors top-names]
-         top-form-to-top-exp [pair/fst binder-compiler]
-         compile-tops [pair/snd binder-compiler]
-         top-forms [growable-list]]
-        [for-each form forms
-          [if-let [top [top-form-to-top-exp form]]
-            [push top-forms top]
-            [do]]]
-        [let [tops [clone-growable-to-frozen-list top-forms]
-              output [compile-tops tops]
-              errors [clone-growable-to-frozen-list gerrors]]
-          [when-not [is-empty errors]
-            [logq there were errors]
-            [log errors]
-            [for-each e errors
-              [logq error [identity e]]]
-            [logq-abort errors]]
-          [comment [for-each top-form tops [log top-form]]]
-          output]]]]]
+      [[make-forms-to-output evaluator] forms]]]]
 
 [defn output-to-module [output]
   [let [wat-string [wat-to-wat-bytes [output-to-wat output]]]
@@ -48,7 +27,7 @@
 
 [defn forms-to-module-async [forms]
   [promise-then
-    [forms-to-output forms]
+    [forms-to-output-async forms]
     output-to-module]]
 
 [defn file-to-module-async [file-name]

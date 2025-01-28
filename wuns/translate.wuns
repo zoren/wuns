@@ -417,14 +417,16 @@
     [kind type-kind]
     [params [list [pair name type-kind]]]]]
 
-[defn bind [evaluator errors top-names]
+[defn make-forms-to-output [evaluator]
   [let
-    [name-to-desc [transient-kv-map]
+    [gerrors [growable-list]
+     top-names [transient-kv-map]
+     name-to-desc [transient-kv-map]
      custom-type-signatures [transient-kv-map]
      custom-types [transient-kv-map]]
     [letfn [
 [func error-form-fn [form message-form]
-  [push errors [pair form message-form]]]
+  [push gerrors [pair form message-form]]]
 
 [func error-exp-fn [exp message-form]
   [logq-abort error-exp [identity exp] [identity message-form]]]
@@ -1962,6 +1964,20 @@
       exports
       datas]]]]
 ]
-    [pair
-      top-form-to-top-decl
-      compile]]]]
+    [func f2o [forms]
+      [let
+        [top-exps [growable-list]]
+        [for-each form forms
+          [when-let [top [top-form-to-top-decl form]]
+            [push top-exps top]]]
+        [let [tops [clone-growable-to-frozen-list top-exps]
+              output [compile tops]
+              errors [clone-growable-to-frozen-list gerrors]]
+          [when-not [is-empty errors]
+            [logq listing errors]
+            [log errors]
+            [for-each e errors
+              [logq error [identity e]]]
+            [logq-abort aborting because of errors]]
+          [comment [for-each top-form tops [log top-form]]]
+          output]]]]]]
