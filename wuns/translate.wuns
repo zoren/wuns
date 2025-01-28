@@ -508,7 +508,7 @@
           [type/pointer mt target-type]]
 
         [[word exp]]
-        [type/exp [form-to-exp lctx [second l]]]
+        [type/exp [const-eval [form-to-exp lctx [second l]]]]
 
         [[word array]]
         [ifs
