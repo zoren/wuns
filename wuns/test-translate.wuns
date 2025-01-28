@@ -14,6 +14,8 @@
 
 [import ./runtime-lib/wasm.js byte-array-to-wasm-module [func [byte-array] wasm-module]]
 
+[import ./runtime-lib/wasm.js memory-buffer [func [memory] array-buffer]]
+
 [defn forms-to-output-async [forms]
   [promise-then
     [make-init-evaluator-async]
@@ -37,9 +39,7 @@
 
 [defn test-prog1 []
   [promise-then
-    [promise-then
-      [read-parse-file-async [word prog1.wuns]]
-      forms-to-module-async]
+    [file-to-module-async [word prog1.wuns]]
     [func t [module] [do]]]]
 
 [type wasm-instance [] [union]]
@@ -121,8 +121,14 @@
 
 [defn test-assert-eq [js-expected actual]
   [when-not [is-identical [to-js-value js-expected] [to-js-value actual]]
-    [logq test failed]
+    [logq test-assert-eq failed]
     [logq expected [identity js-expected]]
+    [logq but got- [identity actual]]]]
+
+[defn test-assert-not-eq [js-expected actual]
+  [when [is-identical [to-js-value js-expected] [to-js-value actual]]
+    [logq test-assert-not-eq failed]
+    [logq expected different from [identity js-expected]]
     [logq but got- [identity actual]]]]
 
 [defn test-tuple-return []
@@ -335,3 +341,40 @@
           [func t [x]
             [go [inc i]]]]
           [promise-resolve [i32 99]]]] [i32 0]]]]
+
+[defn test-parse []
+  [promise-then
+    [file-to-module-async [word llparse.wuns]]
+    [func t [module]
+      [let [inst [wasm-instantiate module empty-object]
+            mem [get-export inst [word mem]]
+            mem-buf [memory-buffer mem]
+            parse [get-export inst [word parse]]
+            vector-size [get-export inst [word vector-size]]
+            vector-data [get-export inst [word vector-data]]
+            byte-array-alloc [get-export inst [word byte-array-alloc]]
+            form-tag [get-export inst [word form-tag]]
+            form-word-is [get-export inst [word form-word-is]]
+            form-word-get [get-export inst [word form-word-get]]
+            form-list-is [get-export inst [word form-list-is]]
+            form-list-get [get-export inst [word form-list-get]]
+            get-byte [get-export inst [word get-byte]]]
+        [let [empty-vec [js-app byte-array-alloc [i32 0]]]
+          [test-assert-eq [i32 16] empty-vec]
+          [test-assert-eq [i32 0] [js-app vector-size empty-vec]]
+          [test-assert-eq [i32 0] [js-app parse empty-vec]]]
+        [let [a-vec [js-app byte-array-alloc [i32 1]]
+              asize [js-app vector-size a-vec]
+              adata [js-app vector-data a-vec]
+              ar-buf [byte-array-from-array-buffer mem-buf adata asize]]
+          [byte-array-set ar-buf [i32 0] [i32 97]]
+          [test-assert-eq [i32 97] [js-app get-byte a-vec [i32 0]]]
+          [let [form [js-app parse a-vec]
+                tag [js-app form-tag form]]
+            [test-assert-not-eq [i32 0] form]
+            [test-assert-eq [i32 10] tag]
+            [test-assert-eq [i32 1] [js-app form-word-is form]]
+            [test-assert-eq [i32 0] [js-app form-list-is form]]
+            [let [fw [js-app form-word-get form]]
+              [test-assert-eq [i32 1] [js-app vector-size fw]]
+              [test-assert-eq [i32 97] [js-app get-byte fw [i32 0]]]]]]]]]]

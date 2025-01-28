@@ -214,6 +214,8 @@
     [exp/literal - --] false
     [exp/var -] false
     [exp/cast - e] [may-side-effect e]
+    [exp/field t -] [may-side-effect t]
+    [exp/index t i] [or [may-side-effect t] [may-side-effect i]]
     true]]
 
 [defn local-context-make [outer vars kind]
@@ -620,11 +622,43 @@
 
 [func try-get-primitive [t]
   [match t
-    [type/exp e] [try-get-primitive [type-of e]]
+    [type/exp e]
+    [match e
+      [exp/i32 n] [option/some type-primitive-i32]
+      [exp/literal pt -] [option/some pt]
+      [option/none]]
     [type/primitive p] [option/some p]
     [type/apply-custom - --] [try-get-primitive [expand-custom t]]
     [type/pointer mt -] [option/some [get-memory-pointer-type mt]]
     [option/none]]]
+
+[func calc-field-offset [rec-union-type field-name-word]
+  [match [expand-custom rec-union-type]
+    [type/record field-types]
+    [loop [i 0
+           res int-const-0
+           n [size field-types]]
+      [if [lt-s i n]
+        [let [fp [at field-types i]
+              ft [pair/snd fp]
+              fn [name/word [pair/fst fp]]]
+          [if [eq-word fn field-name-word]
+            [pair res ft]
+            [continue res [int-exp-add res [type-to-size-of-integer-exp ft]]
+                      i [inc i]]]]
+        [logq-abort field not found [identity field-name-word]]]]
+
+    [type/union utypes]
+    [if [is-empty utypes]
+      [logq-abort union type empty does not allow field access]
+      [let [first-pair [calc-field-offset [first utypes] field-name-word]
+            first-offset [pair/fst first-pair]]
+        [for i 1 [size utypes]
+          [when-not [exp-equals first-offset [pair/fst [calc-field-offset [at utypes i] field-name-word]]]
+            [logq-abort union type field offsets do not match]]]
+        first-pair]]
+
+    [logq-abort field type not a pointer]]]
 
 [func form-special-to-exp [lctx fw l]
   [switch fw
@@ -699,7 +733,7 @@
       [match [expand-custom [type-of dst]]
         [type/pointer - tdst-orig]
         [let [tdst [expand-custom tdst-orig]
-              tsrc [type-of src]]
+              tsrc [expand-custom [type-of src]]]
           [when-not [type-assignable tdst tsrc]
             [if-let [src-prim [try-get-primitive tsrc]]
               [if-not [or [is-identical src-prim type-primitive-i32] [is-identical src-prim type-primitive-i64]]
@@ -709,8 +743,7 @@
                     [and
                       [primitive-type-is-integer dst-prim]
                       [le-s [primitive-type/bits src-prim] [primitive-type/bits dst-prim]]]
-                    [error [second l] can only assign to smaller integer type [primitive-type/name dst-prim]
-                    [primitive-type/name src-prim]]]
+                    [error [second l] can only assign to smaller integer type]]
                   [error [second l] source-type not a primitive type]]]
               [error [second l] eval exp expected primitive types]]]]
         [logq-abort not a pointer]]
@@ -737,6 +770,7 @@
           args [list-map arg [slice l 2 [size l]] [form-to-exp lctx arg]]]
       [switch [name/word intrinsic-name]
         [[word i32.add] [word i32.sub] [word i32.mul] [word i32.eq]
+         [word i32.and] [word i32.or] [word i32.xor]
          [word i32.lt-s] [word i32.le-s]
          [word i32.gt-s] [word i32.ge-s]
          ]
@@ -794,18 +828,7 @@
           field-name [form-to-name [third l]]
           field-name-word [name/word field-name]
           ppt [if-let [p [try-get-pointer-args [type-of pexp]]] p [logq-abort not a pointer]]]
-      [match [expand-custom [pair/snd ppt]]
-        [type/record field-types]
-        [loop [i 0 n [size field-types]]
-          [if [lt-s i n]
-            [when-not [eq-word [name/word [pair/fst [at field-types i]]] field-name-word]
-              [continue i [inc i]]]
-            [logq-abort field not found [identity field-name]]]]
-
-        [type/union ts]
-        [logq-abort not implemented field access union pointer]
-
-        [logq-abort not a record type]]
+      [calc-field-offset [pair/snd ppt] field-name-word]
       [exp/field pexp field-name]]
 
     [[word array]]
@@ -1008,6 +1031,25 @@
 
         [type-equals tdst tsrc]]
 
+      [type/array det dopts]
+      [match tsrc
+        [type/array set sopts]
+        [and
+          [type-assignable det set]
+          [match dopts
+            [option/none]
+            true
+
+            [option/some dopt]
+            [match sopts
+              [option/none]
+              false
+
+              [option/some sopt]
+              [type-assignable dopt sopt]]]]
+
+        [type-equals tdst tsrc]]
+
       [type-equals tdst tsrc]]]]
 
 [func types-equal [ts1 ts2]
@@ -1173,26 +1215,20 @@
     [exp/intrinsic intrinsic-name args]
     [switch [name/word intrinsic-name]
       [[word i32.add] [word i32.sub] [word i32.mul] [word i32.eq]
+       [word i32.and] [word i32.or] [word i32.xor]
        [word i32.lt-s] [word i32.le-s]
        [word i32.gt-s] [word i32.ge-s]]
       type-i32
 
       [[word unreachable]]
-      type-empty-tuple
+      type-empty
 
-      [logq-abort not implemented type-of intrinsic [name/word intrinsic-name]]]
+      [logq-abort not implemented intrinsic [name/word intrinsic-name]]]
 
     [exp/deref target]
     [if-let [p [try-get-pointer-args [type-of target]]]
-      [let [tt [pair/snd p]]
-        [if-let [prim [try-get-primitive tt]]
-          [if [primitive-is-wasm-value-type prim]
-            tt
-            [do
-              [assert [primitive-type-is-integer prim] deref expected i32 or i64]
-              type-i64]]
-          tt]]
-      [type/error]]
+      [pair/snd p]
+      [logq-abort not a pointer]]
 
     [exp/deref-to pointer-exp target-type]
     target-type
@@ -1220,7 +1256,7 @@
       [when-not [type-assignable type-i32 [type-of i]] [logq-abort type-of index expected index i32]]
       [if-let [p [try-get-pointer-args [type-of a]]]
         [type/pointer [pair/fst p]
-          [match [pair/snd p]
+          [match [expand-custom [pair/snd p]]
             [type/array et opt-size-exp]
             et
 
@@ -1234,22 +1270,14 @@
 
               [logq-abort index on tuple only allowed with constants [identity i]]]
 
-            [logq-abort not implemented type-of index]]]
+            [logq-abort not implemented type-of index [pair/snd p]]]]
         [logq-abort not a pointer]]]
 
     [exp/field pexp field-name]
-    [let [field-name-word [name/word field-name]
-          ppt [if-let [p [try-get-pointer-args [type-of pexp]]] p [logq-abort not a pointer]]]
-      [match [expand-custom [pair/snd ppt]]
-        [type/record field-types]
-        [loop [i 0 n [size field-types]]
-          [if [lt-s i n]
-            [let [fp [at field-types i]]
-              [if [eq-word [name/word [pair/fst fp]] field-name-word]
-                [type/pointer [pair/fst ppt] [pair/snd fp]]
-                [continue i [inc i]]]]
-            [logq-abort field not found [identity field-name]]]]
-        [logq-abort not a record type]]]
+    [let
+      [field-name-word [name/word field-name]
+       ppt [if-let [p [try-get-pointer-args [type-of pexp]]] p [logq-abort not a pointer]]]
+      [type/pointer [pair/fst ppt] [pair/snd [calc-field-offset [pair/snd ppt] field-name-word]]]]
 
     [exp/array elem-type elems]
     [type/array
@@ -1433,7 +1461,9 @@
 [func type-to-wat-type [t]
   [match [expand-custom t]
     [type/primitive p]
-    [primitive-type/name p]
+    [if [and [primitive-type-is-integer p] [lt-s [primitive-type/bits p] [i32 32]]]
+      [word i64]
+      [primitive-type/name p]]
 
     [type/exp e]
     [match e
@@ -1720,7 +1750,8 @@
                     [let
                       [telem [at types i]
                        offset-target [int-exp-add acc [type-to-size-of-integer-exp telem]]]
-                      [push ginsts [assign-pointer [int-exp-add target-int-exp offset-target] telem [at elems i]]]
+                      [push ginsts
+                        [assign-pointer [int-exp-add target-int-exp acc] telem [at elems i]]]
                       [continue i [inc i] acc offset-target]]]]
                 [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
             [logq-abort not implemented assign tuple types]]
@@ -1729,7 +1760,7 @@
           [match value
             [exp/record fields]
             [do
-              [assert-not [may-side-effect target] assign target cannot have side effects when assigning tuples]
+              [assert-not [may-side-effect target] assign target cannot have side effects when assigning record]
               [let
                 [ginsts [growable-list]]
                 [loop [i 0 n [size fields] acc int-const-0]
@@ -1737,8 +1768,8 @@
                     [let
                       [telem [pair/snd [at field-types i]]
                        offset-target [int-exp-add acc [type-to-size-of-integer-exp telem]]]
-                      [push ginsts [assign-pointer [int-exp-add target-int-exp offset-target] telem
-                        [pair/snd [at fields i]]]]
+                      [push ginsts
+                        [assign-pointer [int-exp-add target-int-exp acc] telem [pair/snd [at fields i]]]]
                       [continue i [inc i] acc offset-target]]]]
                 [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
             [logq-abort not implemented assign tuple types]]
@@ -1834,26 +1865,11 @@
       [exp-to-inst [int-exp-add [const-eval a] offset]]]
 
     [exp/field a field-name]
-    [let [field-name-word [name/word field-name]
-          offset
-      [if-let [p [try-get-pointer-args [type-of a]]]
-        [match [expand-custom [pair/snd p]]
-          [type/record field-types]
-          [loop [i 0
-                 res int-const-0
-                 n [size field-types]]
-              [if [lt-s i n]
-                [let [ft [at field-types i]]
-                  [if [eq-word [name/word [pair/fst ft]] field-name-word]
-                    res
-                    [continue res [int-exp-add res [type-to-size-of-integer-exp [pair/snd ft]]]
-                              i [inc i]]]]
-                [logq-abort field not found [identity field-name]]]]
-
-          [type/union utypes]
-          [logq-abort not implemented exp-to-inst field]
-
-          [logq-abort field type not a pointer]]
+    [let
+      [field-name-word [name/word field-name]
+       offset
+       [if-let [p [try-get-pointer-args [type-of a]]]
+        [pair/fst [calc-field-offset [pair/snd p] field-name-word]]
         [logq-abort not a pointer]]]
       [exp-to-inst [int-exp-add [const-eval a] offset]]]
 
@@ -1882,7 +1898,7 @@
     [wat-inst/i32.const
       [if-let [offset-atom [try-get active-data-map [name/word mem-name]]]
         [int-to-word [atom-get offset-atom]]
-        [word 0]]]
+        [word 16]]]
 
     [logq-abort exp-to-inst not implemented [identity f]]]]
 

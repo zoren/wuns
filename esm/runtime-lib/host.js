@@ -283,6 +283,17 @@ const byte_array = (size) => {
   return new Uint8Array(size)
 }
 export { byte_array as 'byte-array' }
+const byte_array_from_array_buffer = (buffer, byteOffset, length) => {
+  if (!(buffer instanceof ArrayBuffer)) throw new Error('byte-array-from-array-buffer expects array buffer')
+  if (!isSigned32BitInteger(byteOffset)) throw new Error('byte-array-from-array-buffer expects number: ' + byteOffset)
+  if (!isSigned32BitInteger(length)) throw new Error('byte-array-from-array-buffer expects number: ' + length)
+  if (byteOffset < 0 || byteOffset >= buffer.byteLength)
+    throw new Error('byte-array-from-array-buffer start out of bounds')
+  if (length < 0 || byteOffset + length > buffer.byteLength)
+    throw new Error('byte-array-from-array-buffer length out of bounds')
+  return new Uint8Array(buffer, byteOffset, length)
+}
+export { byte_array_from_array_buffer as 'byte-array-from-array-buffer' }
 const byte_array_resizable = (size, max_byte_size) => {
   if (!isSigned32BitInteger(size)) throw new Error('byte-array-resizable expects number: ' + size)
   if (!isSigned32BitInteger(max_byte_size)) throw new Error('byte-array-resizable expects number: ' + max_byte_size)

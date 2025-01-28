@@ -36,10 +36,10 @@
 [defn array-i8-get [p [pointer [exp mem] [array [i8]]] i [i32]] [i64]
   [deref-to [index p i] [i64]]]
 
-[defn array-u8-get2 [p [pointer [exp mem] [array [u8]]] i [i32]] [i64]
+[defn array-u8-get2 [p [pointer [exp mem] [array [u8]]] i [i32]] [u8]
   [deref [index p i]]]
 
-[defn array-i8-get2 [p [pointer [exp mem] [array [i8]]] i [i32]] [i64]
+[defn array-i8-get2 [p [pointer [exp mem] [array [i8]]] i [i32]] [i8]
   [deref [index p i]]]
 
 [defn array-u8 [s [i32]] [pointer [exp mem] [array [u8]]]

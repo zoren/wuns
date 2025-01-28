@@ -1,6 +1,15 @@
 export const memory = (initial_size, maximum_size, shared) =>
   new WebAssembly.Memory({ initial: initial_size, maximum: maximum_size, shared })
-const byte_array_to_wasm_module = (buf) => new WebAssembly.Module(buf)
+const memory_buffer = (memory) => {
+  if (!(memory instanceof WebAssembly.Memory)) throw new Error('expects memory')
+  return memory.buffer
+}
+export { memory_buffer as 'memory-buffer' }
+const byte_array_to_wasm_module = (buf) => {
+  const mod = new WebAssembly.Module(buf)
+  // console.log('byte-array-to-wasm-module', WebAssembly.Module.exports(mod))
+  return mod
+}
 export { byte_array_to_wasm_module as 'byte-array-to-wasm-module' }
 const wasm_instantiate = (module, import_object) => new WebAssembly.Instance(module, import_object)
 export { wasm_instantiate as 'wasm-instantiate' }

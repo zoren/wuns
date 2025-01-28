@@ -11,7 +11,7 @@
 [type pvector [vp datatype]
   [pmem [vector-data vp -size]]]
 
-[defn size [pvec [pvector -a]] [i32]
+[defn vector-size [pvec [pvector -a]] [i32]
   [deref [field pvec size]]]
 
 [def 0 [i32 0]]
@@ -19,36 +19,17 @@
 
 [defn get-byte [pvec [pvector [u8]] i [i32]] [i32]
   [when [lt-s i 0] [intrinsic unreachable]]
-  [when-not [lt-s i [size pvec]] [intrinsic unreachable]]
+  [when-not [lt-s i [vector-size pvec]] [intrinsic unreachable]]
   [deref-to [index [field pvec array] i] [i32]]]
 
-[defn is-between-inclusive [lower [i32] c [i32] upper [i32]] [i32]
-  [and [le-s lower c] [le-s c upper]]]
-
-[defn is-whitespace [c [i32]] [i32]
-  [or [eq c [i32 32]] [eq c [i32 10]]]]
-
-[defn is-word-char [c [i32]] [i32]
-  [or
-    [is-between-inclusive [i32 97] c [i32 122]]
-    [is-between-inclusive [i32 45] c [i32 57]]]]
-
 [defn inc [x [i32]] [i32] [add x 1]]
-
-[defn scan-word-end [bytes [pvector [u8]] start [i32]] [i32]
-  [loop
-    [n-of-bytes [size bytes]
-     i start]
-    [if-not [lt-s i n-of-bytes]
-      i
-      [if [is-word-char [get-byte bytes i]]
-        [continue i [inc i]]
-        i]]]]
+[defn dec [x [i32]] [i32] [sub x 1]]
 
 [type pword []
   [pvector [u8]]]
 
 [def form-word-tag [i32 10]]
+[def form-list-tag [i32 11]]
 
 [type form-word []
   [record
@@ -58,13 +39,30 @@
 [type
   form-list []
   [record
-    [tag [exp [i32 11]]]
+    [tag [exp form-list-tag]]
     [forms [pvector [pmem [form]]]]]
 
   form []
   [union
     [form-word]
     [form-list]]]
+
+[defn form-tag [pf [pmem [form]]] [i32]
+  [deref [field pf tag]]]
+
+[defn form-word-is [pf [pmem [form]]] [i32]
+  [eq [deref [field pf tag]] form-word-tag]]
+
+[defn form-word-get [pf [pmem [form]]] [pword]
+  [when-not [form-word-is pf] [intrinsic unreachable]]
+  [deref [field [cast [pmem [form-word]] pf] pword]]]
+
+[defn form-list-is [pf [pmem [form]]] [i32]
+  [eq [deref [field pf tag]] form-list-tag]]
+
+[defn form-list-get [pf [pmem [form]]] [pvector [pmem [form]]]
+  [when-not [form-list-is pf] [intrinsic unreachable]]
+  [deref [field [cast [pmem [form-list]] pf] forms]]]
 
 [mutable mem-top [memory-static-top mem]]
 
@@ -74,14 +72,20 @@
 [defn set-top [new-top [i32]] [tuple]
   [assign-mutable mem-top new-top]]
 
+[defn align [p [i32] x [i32]] [i32]
+  [intrinsic i32.and
+    [add x [dec p]]
+    [intrinsic i32.xor [i32 -1] [dec p]]]]
+
 [defn alloc-n [n-bytes [i32]] [i32]
-  [let [top-val [get-top]]
+  [let [align-bytes [align [i32 16] n-bytes]
+        top-val [get-top]]
     [when [eq top-val 0] [intrinsic unreachable]]
-    [set-top [add top-val n-bytes]]
+    [set-top [add top-val align-bytes]]
     top-val]]
 
 [defn form-word-alloc [pw [pword]] [pmem [form]]
-  [let [pfw [cast [pmem [form-word]] [alloc-n [size-of [form-word]]]]]
+  [let [pfw [alloc mem [form-word]]]
     [assign pfw
       [record
         tag form-word-tag
@@ -89,10 +93,10 @@
     [cast [pmem [form]] pfw]]]
 
 [defn form-list-alloc [pfs [pvector [pmem [form]]]] [pmem [form]]
-  [let [pfl [cast [pmem [form-list]] [alloc-n [size-of [form-list]]]]]
+  [let [pfl [alloc mem [form-list]]]
     [assign pfl
       [record
-        tag [i32 11]
+        tag form-list-tag
         forms pfs]]
     [cast [pmem [form]] pfl]]]
 
@@ -104,8 +108,7 @@
 
 [defn growable-vector-alloc-form [init-capacity [i32]] [pmem [growable-vector [pmem [form]]]]
   [let
-    [
-     p [alloc mem [growable-vector [pmem [form]]]]
+    [p [alloc mem [growable-vector [pmem [form]]]]
      parray
      [cast [pmem [array [pmem [form]]]]
       [alloc-n [size-of [array [pmem [form]] [exp init-capacity]]]]]]
@@ -125,3 +128,129 @@
       [intrinsic unreachable]]
     [assign [index parray cur-size] elem]
     [assign [field pgvec size] [inc cur-size]]]]
+
+[defn growable-vector-to-vector-form [pgvec [pmem [growable-vector [pmem [form]]]]] [pvector [pmem [form]]]
+  [let
+    [gsize [deref [field pgvec size]]
+     pgvec-arr [deref [field pgvec parray]]
+     pvector [alloc mem [vector-data [pmem [form]] [exp gsize]]]
+     par [field pvector array]]
+    [for i 0 gsize
+      [assign [index par i] [deref [index pgvec-arr i]]]]
+    pvector]]
+
+[defn growable-vector-reset [pgvec [pmem [growable-vector -a]]] [tuple]
+  [assign [field pgvec size] 0]]
+
+[defn is-between-inclusive [lower [i32] c [i32] upper [i32]] [i32]
+  [and [le-s lower c] [le-s c upper]]]
+
+[defn is-whitespace [c [i32]] [i32]
+  [or [eq c [i32 32]] [eq c [i32 10]]]]
+
+[defn is-word-char [c [i32]] [i32]
+  [or
+    [is-between-inclusive [i32 97] c [i32 122]]
+    [is-between-inclusive [i32 45] c [i32 57]]]]
+
+[defn scan-word-end [bytes [pvector [u8]] start [i32]] [i32]
+  [loop
+    [n-of-bytes [vector-size bytes]
+     i start]
+    [if-not [lt-s i n-of-bytes]
+      i
+      [if [is-word-char [get-byte bytes i]]
+        [continue i [inc i]]
+        i]]]]
+
+[defn make-stack [stack-size [i32] init-capacity [i32]] [pmem [array [growable-vector [pmem [form]]]]]
+  [let [parray [alloc mem [array [growable-vector [pmem [form]]] [exp stack-size]]]]
+    [for i 0 stack-size
+      [assign
+        [index parray i]
+        [record
+          size 0
+          capacity init-capacity
+          parray [alloc mem [array [pmem [form]] [exp init-capacity]]]]]]
+    parray]]
+
+[def stack-size [i32 16]]
+[def init-capacity [i32 32]]
+
+[defn vector-slice-byte [psrc [pvector [u8]] start [i32] end [i32]] [pvector [u8]]
+  [let
+    [sz [sub end start]
+     pdst [alloc mem [vector-data [u8] [exp sz]]]
+     pdst-ar [field pdst array]
+     psrc-ar [field psrc array]]
+    [assign [field pdst size] sz]
+    [for i 0 sz
+      [assign
+        [index pdst-ar i]
+        [deref [index psrc-ar [add start i]]]]]
+    pdst]]
+
+[defn parse [bytes [pvector [u8]]] [pmem [form]]
+  [loop
+    [stack [make-stack stack-size init-capacity]
+     n-of-bytes [vector-size bytes]
+     i 0
+     stack-index [i32 -1]]
+    [if-not [lt-s i n-of-bytes]
+      [if [is-negative stack-index]
+        [cast [pmem [form]] 0]
+        [do
+          [when-not [eq 0 stack-index] [intrinsic unreachable]]
+          [form-list-alloc
+            [growable-vector-to-vector-form [index stack stack-index]]]]]
+      [let [c [get-byte bytes i]]
+        [ifs
+          [is-word-char c]
+          [let [word-end [scan-word-end bytes [inc i]]
+                fw [form-word-alloc [vector-slice-byte bytes i word-end]]]
+            [if [is-negative stack-index]
+              fw
+              [do
+                [growable-vector-push-form [index stack stack-index] fw]
+                [when-not [lt-s i word-end] [intrinsic unreachable]]
+                [continue i word-end]]]]
+
+          [is-whitespace c]
+          [continue i [inc i]]
+
+          [eq c [i32 91]]
+          [do
+            [when [lt-s stack-size stack-index] [intrinsic unreachable]]
+            [continue
+              i [inc i]
+              stack-index [inc stack-index]]]
+
+          [eq c [i32 93]]
+          [do
+            [when [is-negative stack-index] [intrinsic unreachable]]
+            [let [gvec [index stack stack-index]
+                  form-vector [growable-vector-to-vector-form gvec]]
+              [growable-vector-reset gvec]
+              [let [fl [form-list-alloc form-vector]]
+                [if [eq stack-index 0]
+                fl
+                [do
+                  [growable-vector-push-form [index stack [dec stack-index]] fl]
+                  [continue
+                    i [inc i]
+                    stack-index [dec stack-index]]]]]]]
+
+          [intrinsic unreachable]]]]]]
+
+[defn byte-array-alloc [sz [i32]] [pvector [u8]]
+  [let [p [alloc mem [vector-data [u8] [exp sz]]]]
+    [assign [field p size] sz]
+    p]]
+
+[defn vector-data [pvec [pvector [u8]]] [pmem [array [u8]]]
+  [field pvec array]]
+
+[export mem parse byte-array-alloc vector-size vector-data
+  form-tag form-word-is form-word-get form-list-is form-list-get
+  get-byte
+]

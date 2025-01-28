@@ -562,6 +562,8 @@
 
 [type byte-array [] [union]]
 [import ./runtime-lib/host.js byte-array [func [i32] byte-array]]
+[type array-buffer [] [union]]
+[import ./runtime-lib/host.js byte-array-from-array-buffer [func [array-buffer i32 i32] byte-array]]
 [import ./runtime-lib/host.js byte-array-resizable [func [i32 i32] byte-array]]
 [import ./runtime-lib/host.js byte-array-resize [func [byte-array i32] [tuple]]]
 [import ./runtime-lib/host.js byte-array-size [func [byte-array] i32]]
