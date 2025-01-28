@@ -14,12 +14,6 @@
 [defn size [pvec [pvector -a]] [i32]
   [deref [field pvec size]]]
 
-[type growable-vector [a datatype]
-  [record
-    [size [i32]]
-    [capacity [i32]]
-    [parray [pmem [array a]]]]]
-
 [def 0 [i32 0]]
 [def 1 [i32 1]]
 
@@ -54,9 +48,11 @@
 [type pword []
   [pvector [u8]]]
 
+[def form-word-tag [i32 10]]
+
 [type form-word []
   [record
-    [tag [exp [i32 10]]]
+    [tag [exp form-word-tag]]
     [pword [pword]]]]
 
 [type
@@ -84,18 +80,48 @@
     [set-top [add top-val n-bytes]]
     top-val]]
 
-[defn form-word-alloc [pw [pword]] [pmem [form-word]]
+[defn form-word-alloc [pw [pword]] [pmem [form]]
   [let [pfw [cast [pmem [form-word]] [alloc-n [size-of [form-word]]]]]
     [assign pfw
       [record
-        tag [i32 10]
+        tag form-word-tag
         pword pw]]
-    pfw]]
+    [cast [pmem [form]] pfw]]]
 
-[defn form-list-alloc [pfs [pvector [pmem [form]]]] [pmem [form-list]]
+[defn form-list-alloc [pfs [pvector [pmem [form]]]] [pmem [form]]
   [let [pfl [cast [pmem [form-list]] [alloc-n [size-of [form-list]]]]]
     [assign pfl
       [record
         tag [i32 11]
         forms pfs]]
-    pfl]]
+    [cast [pmem [form]] pfl]]]
+
+[type growable-vector [a datatype]
+  [record
+    [size [i32]]
+    [capacity [i32]]
+    [parray [pmem [array a]]]]]
+
+[defn growable-vector-alloc-form [init-capacity [i32]] [pmem [growable-vector [pmem [form]]]]
+  [let
+    [
+     p [alloc mem [growable-vector [pmem [form]]]]
+     parray
+     [cast [pmem [array [pmem [form]]]]
+      [alloc-n [size-of [array [pmem [form]] [exp init-capacity]]]]]]
+    [assign p
+      [record
+        size 0
+        capacity init-capacity
+        parray parray]]
+    p]]
+
+[defn growable-vector-push-form [pgvec [pmem [growable-vector [pmem [form]]]] elem [pmem [form]]] [tuple]
+  [let
+    [cur-size [deref [field pgvec size]]
+     cur-capacity [deref [field pgvec capacity]]
+     parray [deref [field pgvec parray]]]
+    [when [eq cur-size cur-capacity]
+      [intrinsic unreachable]]
+    [assign [index parray cur-size] elem]
+    [assign [field pgvec size] [inc cur-size]]]]

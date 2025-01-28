@@ -353,9 +353,6 @@
 [defn mk-exp-i32-add [a b]
   [exp/intrinsic [name [word i32.add]] [list a b]]]
 
-[defn mk-exp-i32-mul [a b]
-  [exp/intrinsic [name [word i32.mul]] [list a b]]]
-
 [defn int-exp-add [a b]
   [if-let [i [try-get-int-const a]]
     [if [eq i 0]
@@ -371,6 +368,9 @@
 
 [def int-const-0 [exp/i32 0]]
 [def int-const-1 [exp/i32 1]]
+
+[defn mk-exp-i32-mul [a b]
+  [exp/intrinsic [name [word i32.mul]] [list a b]]]
 
 [defn int-exp-mul [a b]
   [if-let [i [try-get-int-const a]]
@@ -622,6 +622,8 @@
   [match t
     [type/exp e] [try-get-primitive [type-of e]]
     [type/primitive p] [option/some p]
+    [type/apply-custom - --] [try-get-primitive [expand-custom t]]
+    [type/pointer mt -] [option/some [get-memory-pointer-type mt]]
     [option/none]]]
 
 [func form-special-to-exp [lctx fw l]
@@ -706,8 +708,9 @@
                   [when-not
                     [and
                       [primitive-type-is-integer dst-prim]
-                      [lt-s [primitive-type/bits dst-prim] [primitive-type/bits src-prim]]]
-                    [error [second l] can only assign to smaller integer type]]
+                      [le-s [primitive-type/bits src-prim] [primitive-type/bits dst-prim]]]
+                    [error [second l] can only assign to smaller integer type [primitive-type/name dst-prim]
+                    [primitive-type/name src-prim]]]
                   [error [second l] source-type not a primitive type]]]
               [error [second l] eval exp expected primitive types]]]]
         [logq-abort not a pointer]]
@@ -957,7 +960,7 @@
           [types-assignable dargs sargs]
           [type-assignable [expand-custom tdst] [expand-custom tsrc]]]
 
-          false]
+        [type-assignable [expand-custom tdst] tsrc]]
 
       [type/primitive dpt]
       [match tsrc
@@ -977,6 +980,22 @@
       [match tsrc
         [type/tuple sts]
         [types-assignable dts sts]
+
+        [type-equals tdst tsrc]]
+
+      [type/record dfs]
+      [match tsrc
+        [type/record sfs]
+        [and
+          [le-s [size dfs] [size sfs]]
+          [loop [i 0 n [size dfs]]
+            [if [lt-s i n]
+              [if [let [df [at dfs i] sf [at sfs i]]
+                    [and [eq-word [name/word [pair/fst df]] [name/word [pair/fst sf]]]
+                         [type-assignable [pair/snd df] [pair/snd sf]]]]
+                [continue i [inc i]]
+                false]
+              true]]]
 
         [type-equals tdst tsrc]]
 
@@ -1543,13 +1562,8 @@
     oa]]]
 
 [func type-to-primitive [t]
-  [match t
-    [type/primitive p]
-    p
-
-    [type/pointer mt -]
-    [get-memory-pointer-type mt]
-
+  [if-let [pt [try-get-primitive t]]
+    pt
     [logq-abort not a primitive type [identity t]]]]
 
 [func exp-to-bytes [e]
