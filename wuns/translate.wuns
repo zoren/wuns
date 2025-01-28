@@ -622,7 +622,7 @@
           e [form-to-exp lctx [fourth l]]
           tt [type-of t]
           te [type-of e]]
-      [when-not [type-equals [type-of c] type-i32] [logq-abort if condition not i32]]
+      [when-not [type-assignable type-i32 [type-of c]] [logq-abort if condition not i32]]
       [if [type-equals tt type-empty]
         [do]
         [if [type-equals te type-empty]
