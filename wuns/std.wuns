@@ -569,6 +569,7 @@
 [import ./runtime-lib/host.js byte-array-get [func [byte-array i32] i32]]
 [import ./runtime-lib/host.js byte-array-set [func [byte-array i32 i32] [tuple]]]
 [import ./runtime-lib/host.js byte-array-log-as-string [func [byte-array] [tuple]]]
+[import ./runtime-lib/host.js byte-array-to-string [func [byte-array] string]]
 [import ./runtime-lib/host.js word-to-byte-array [func [word] byte-array]]
 [import ./runtime-lib/host.js i32-to-byte-array [func [i32] byte-array]]
 [import ./runtime-lib/host.js f64-to-byte-array [func [f64] byte-array]]

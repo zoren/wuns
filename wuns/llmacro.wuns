@@ -1,6 +1,6 @@
 [load std.wuns]
 
-[defmacro alloc [type]
+[defmacro alloc [mem-name type]
   [flist [quote cast]
-    [flist [quote pointer] [quote [memory mem]] type]
+    [flist [quote pointer] [flist [quote exp] mem-name] type]
     [flist [quote alloc-n] [flist [quote size-of] type]]]]

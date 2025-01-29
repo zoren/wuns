@@ -67,6 +67,11 @@
   [when-not [form-list-is pf] [intrinsic unreachable]]
   [deref [field [cast [pmem [form-list]] pf] forms]]]
 
+[defn list-get-form [pvec [plist [pmem [form]]] i [i32]] [pmem [form]]
+  [when [lt-s i 0] [intrinsic unreachable]]
+  [when-not [lt-s i [list-size pvec]] [intrinsic unreachable]]
+  [deref [index [field pvec array] i]]]
+
 [mutable mem-top [memory-static-top mem]]
 
 [defn get-top [] [i32]
@@ -138,6 +143,7 @@
      pglist-arr [deref [field pglist parray]]
      plist [alloc mem [list-data [pmem [form]] [exp gsize]]]
      par [field plist array]]
+    [assign [field plist size] gsize]
     [for i 0 gsize
       [assign [index par i] [deref [index pglist-arr i]]]]
     plist]]
@@ -256,4 +262,5 @@
 [export mem parse byte-array-alloc list-size list-data
   form-tag form-word-is form-word-get form-list-is form-list-get
   get-byte
+  list-get-form
 ]

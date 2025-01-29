@@ -131,6 +131,12 @@
     [logq expected different from [identity js-expected]]
     [logq but got- [identity actual]]]]
 
+[defn test-assert-form-eq [expected actual]
+  [when-not [eq-form expected actual]
+    [logq test-assert-form-eq failed]
+    [logq expected [identity expected]]
+    [logq but got- [identity actual]]]]
+
 [defn test-tuple-return []
   [let [forms
         [qlist
@@ -358,23 +364,57 @@
             form-word-get [get-export inst [word form-word-get]]
             form-list-is [get-export inst [word form-list-is]]
             form-list-get [get-export inst [word form-list-get]]
-            get-byte [get-export inst [word get-byte]]]
+            get-byte [get-export inst [word get-byte]]
+            list-get-form [get-export inst [word list-get-form]]
+            alloc-word
+            [func aw [w]
+              [let
+                [src [word-to-byte-array w]
+                 sz [byte-array-size src]
+                 vec [js-app byte-array-alloc sz]
+                 data [js-app list-data vec]
+                 dst [byte-array-from-array-buffer mem-buf data sz]]
+                [for i 0 sz
+                  [byte-array-set dst i [byte-array-get src i]]]
+                vec]]
+            pform-to-form
+            [func pf2f [pform]
+              [ifs
+                [js-app form-word-is pform]
+                [let
+                  [fw [js-app form-word-get pform]
+                   sz [js-app list-size fw]
+                   data [js-app list-data fw]
+                   ar [byte-array-from-array-buffer mem-buf data sz]
+                   str [byte-array-to-string ar]]
+                  [form/word str]]
+                [js-app form-list-is pform]
+                [let
+                  [fl [js-app form-list-get pform]
+                   sz [js-app list-size fl]
+                   gl [growable-list]]
+                  [for i 0 sz
+                    [push gl
+                      [pf2f [js-app list-get-form fl i]]]]
+                  [form/list [clone-growable-to-frozen-list gl]]
+                  ]
+                [logq-abort unknown form type]]]]
         [let [empty-vec [js-app byte-array-alloc [i32 0]]]
           [test-assert-eq [i32 16] empty-vec]
           [test-assert-eq [i32 0] [js-app list-size empty-vec]]
           [test-assert-eq [i32 0] [js-app parse empty-vec]]]
-        [let [a-vec [js-app byte-array-alloc [i32 1]]
-              asize [js-app list-size a-vec]
-              adata [js-app list-data a-vec]
-              ar-buf [byte-array-from-array-buffer mem-buf adata asize]]
-          [byte-array-set ar-buf [i32 0] [i32 97]]
-          [test-assert-eq [i32 97] [js-app get-byte a-vec [i32 0]]]
-          [let [form [js-app parse a-vec]
-                tag [js-app form-tag form]]
-            [test-assert-not-eq [i32 0] form]
-            [test-assert-eq [i32 10] tag]
-            [test-assert-eq [i32 1] [js-app form-word-is form]]
-            [test-assert-eq [i32 0] [js-app form-list-is form]]
-            [let [fw [js-app form-word-get form]]
-              [test-assert-eq [i32 1] [js-app list-size fw]]
-              [test-assert-eq [i32 97] [js-app get-byte fw [i32 0]]]]]]]]]]
+        [let
+          [tests
+            [list
+              [pair [quote a] [word 'a']]
+              [pair [quote abc] [word 'abc']]
+              [pair [quote kebab-123] [word 'kebab-123']]
+              [pair [quote []] [word '[]']]
+              [pair [quote [list]] [word '[list]']]
+              [pair [quote [i32 5]] [word '[i32 5]']]
+              [pair [quote [if b [i32 1] [i32 0]]] [word '[if b [i32 1] [i32 0]]']]
+              [pair [quote parsed] [word 'parsed not-parsed']]]]
+          [for-each test tests
+            [test-assert-form-eq
+              [pair/fst test]
+              [pform-to-form [js-app parse [alloc-word [pair/snd test]]]]]]]]]]]

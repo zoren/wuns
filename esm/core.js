@@ -5,15 +5,7 @@ export const langUndefined = undefined
 export const isSigned32BitInteger = (n) => (n | 0) === n
 
 const wordRegex = /^[-./0-9a-z]+$/
-export const isWord = (s) => typeof s === 'string' && s.length > 0 && wordRegex.test(s)
-export const stringToWord = (s) => {
-  if (!isWord(s)) throw new Error('invalid word: "' + s + '" ' + typeof s)
-  return s
-}
-export const wordValue = (w) => {
-  if (!isWord(w)) throw new Error(`expected word, got: '${w}' ${typeof w} ${w.constructor.name}`)
-  return w
-}
+const isWord = (s) => typeof s === 'string' && s.length > 0 && wordRegex.test(s)
 
 export const emptyList = Object.freeze([])
 export const arrayToList = (array) => (array.length === 0 ? emptyList : Object.freeze([...array]))
@@ -23,7 +15,7 @@ export const isList = (f) => Array.isArray(f)
 export const isTaggedValue = (v) => v && typeof v === 'object' && 'tag' in v && 'args' in v
 export const tryGetTag = (v) => (isTaggedValue(v) ? v.tag : null)
 export const makeTaggedValue = (tag, ...args) => {
-  if (!isWord(tag)) throw new Error('tag must be a word')
+  if (typeof tag !== 'string') throw new Error('tag must be a string')
   return Object.freeze({ tag, args: Object.freeze(args) })
 }
 export const makeValueTagger = (tag, arity) => {
@@ -37,6 +29,7 @@ const formWordName = 'form/word'
 const formListName = 'form/list'
 export const makeFormWord = (w) => makeTaggedValue(formWordName, w)
 export const makeFormList = (l) => makeTaggedValue(formListName, l)
+
 export const optionNone = makeTaggedValue('option/none')
 export const makeOptionSome = makeValueTagger('option/some', 1)
 
@@ -45,7 +38,10 @@ export const resultOk = makeValueTagger('result/ok', 1)
 
 export const tryGetFormWord = (f) => (tryGetTag(f) === formWordName ? f.args[0] : null)
 
-export const isForm = (f) => isTaggedValue(f) && (tryGetTag(f) === formWordName || tryGetTag(f) === formListName)
+export const isForm = (f) => {
+  let tag = tryGetTag(f)
+  return tag === formWordName || tag === formListName
+}
 
 export const tryGetFormList = (f) => (tryGetTag(f) === formListName ? f.args[0] : null)
 export const getFormChildren = (f) => {
@@ -93,7 +89,7 @@ export const print = (ox) => {
     const t = typeof x
     // todo allow t === 'boolean' too
     if (t === 'number' || t === 'bigint') return String(x)
-    if (t === 'string') return isWord(x) ? x : `'${x}'`
+    if (t === 'string') return isWord(x) ? x : x.indexOf("'") < 0 ? `'${x}'` : `"${x}"`
     if (t === 'function') return `[fn ${x.name}]`
     if (x instanceof Map) return `[transient-kv-map${[...x].map(([k, v]) => ` ${go(k)} ${go(v)}`).join('')}]`
     if (x instanceof Set) return `[set${[...x].map((e) => ` ${go(e)}`).join('')}]`
@@ -205,11 +201,26 @@ export const parseString = (content, contentName) => {
       }
       case ']':
         return null
-      default: {
+      case "'":
+      case '"': {
+        const startQuote = c
+        while (i < len) {
+          let c = content[i++]
+          let cc = c.charCodeAt(0)
+          if (cc >= 127) throw new Error('non-printable ascii character in string: ' + offsetAsString(i - 1))
+          if (c === startQuote) return registerForm(makeFormWord(content.slice(startIndex + 1, i - 1)), startIndex)
+          if (c === '\n') {
+            console.warn('missing closing quote: ' + offsetAsString(startIndex))
+            return registerForm(makeFormWord(content.slice(startIndex + 1, i - 1)), startIndex)
+          }
+          if (cc < 32) throw new Error('control character in string: ' + offsetAsString(i - 1))
+        }
+        return registerForm(makeFormWord(content.slice(startIndex + 1, i)), startIndex)
+      }
+      default:
         if (!isWord(c)) console.error(`illegal character: ${c} at ${offsetAsString(i - 1)}`)
         while (i < len && isWord(content[i])) i++
         return registerForm(makeFormWord(content.slice(startIndex, i)), startIndex)
-      }
     }
   }
   const forms = []

@@ -98,6 +98,8 @@ const isJSReservedWord = (word) => {
 
 export const escapeIdentifier = (id) => {
   if (typeof id !== 'string') throw new Error('not a string')
+  // if id has whitespace
+  if (/\s/.test(id)) throw new Error(`invalid identifier: ${id}`)
   if (!isNaN(+id)) return ('n' + id).replace(/-/g, '_')
   return (isJSReservedWord(id) ? '_' : '') + id.replace(/-/g, '_').replace(/\//g, '_slash_').replace(/\./g, '_dot_')
 }
@@ -118,8 +120,10 @@ export const jsExpToString = (js) => {
   switch (tag) {
     case 'js-exp/number':
       return `${+arg(0)}`
-    case 'js-exp/string':
-      return `'${arg(0)}'`
+    case 'js-exp/string': {
+      const s = arg(0)
+      return s.indexOf("'") < 0 ? `'${s}'` : `"${s}"`
+    }
     case 'js-exp/var':
       return escapeIdentifier(arg(0))
     case 'js-exp/array':

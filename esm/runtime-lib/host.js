@@ -1,13 +1,10 @@
 import {
-  isWord,
   isList,
-  wordValue,
   arrayToList,
   atom,
   isAtom,
   isSigned32BitInteger,
   print,
-  stringToWord,
   parseString,
   tryGetFormInfoRec,
   optionNone,
@@ -70,20 +67,24 @@ export const apply = (fn, args) => {
 }
 
 const word_byte_size = (word) => {
-  if (isWord(word)) return wordValue(word).length
-  throw new Error(`word-byte-size expects word, found: ${word} ${typeof word} ${word.constructor.name}`)
+  if (typeof word !== 'string') throw new Error('word-byte-size expects string')
+  return word.length
 }
 export { word_byte_size as 'word-byte-size' }
 
-const char_code_at = (word, index) => {
-  const s = wordValue(word)
+const char_code_at = (s, index) => {
+  if (typeof s !== 'string') throw new Error('char-code-at expects string')
   if (!isSigned32BitInteger(index)) throw new Error('char-code-at expects number: ' + index)
   const len = s.length
   if (index < -len || index >= len) throw new Error('index out of bounds: ' + index + ' ' + len)
   return s.at(index).charCodeAt(0)
 }
 export { char_code_at as 'char-code-at' }
-const concat_words = (word_1, word_2) => stringToWord(wordValue(word_1) + wordValue(word_2))
+const concat_words = (word_1, word_2) => {
+  if (typeof word_1 !== 'string') throw new Error('concat-words expects string')
+  if (typeof word_2 !== 'string') throw new Error('concat-words expects string')
+  return word_1 + word_2
+}
 export { concat_words as 'concat-words' }
 const string_join = (separator, strings) => {
   if (typeof separator !== 'string') {
@@ -110,11 +111,14 @@ export { word_join as 'word-join' }
 const char_code_to_string = (code_point) => String.fromCodePoint(code_point)
 export { char_code_to_string as 'char-code-to-string' }
 // todo rename code_point_to_word
-const char_code_to_word = (code_point) => stringToWord(String.fromCodePoint(code_point))
+const char_code_to_word = (code_point) => String.fromCodePoint(code_point)
 export { char_code_to_word as 'char-code-to-word' }
-const code_points_to_word = (code_points) => stringToWord(String.fromCodePoint(...code_points))
+const code_points_to_word = (code_points) => String.fromCodePoint(...code_points)
 export { code_points_to_word as 'code-points-to-word' }
-const word_to_byte_array = (word) => new TextEncoder().encode(wordValue(word))
+const word_to_byte_array = (word) => {
+  if (typeof word !== 'string') throw new Error('word-to-byte-array expects string')
+  return new TextEncoder().encode(word)
+}
 export { word_to_byte_array as 'word-to-byte-array' }
 const i32_to_byte_array = (i) => new Uint8Array(new Int32Array([i]).buffer)
 export { i32_to_byte_array as 'i32-to-byte-array' }
@@ -255,18 +259,21 @@ export const concat = (l1, l2) => {
   if (!isList(l2)) throw new Error('concat expects frozen list')
   return arrayToList([...l1, ...l2])
 }
-const int_to_word = (i) => stringToWord(String(i))
+const int_to_word = (i) => {
+  if (!isSigned32BitInteger(i)) throw new Error('int-to-word expects number: ' + i)
+  return String(i)
+}
 export { int_to_word as 'int-to-word' }
 const word_to_int = (word) => {
-  if (!isWord(word)) throw new Error('word-to-int expects word')
-  const i = +wordValue(word)
+  if (typeof word !== 'string') throw new Error('word-to-int expects string')
+  const i = +word
   if (Number.isNaN(i)) throw new Error('word-to-int expects integer')
   return i | 0
 }
 export { word_to_int as 'word-to-int' }
 const word_to_f64 = (word) => {
-  if (!isWord(word)) throw new Error('word-to-f64 expects word')
-  const f = +wordValue(word)
+  if (typeof word !== 'string') throw new Error('word-to-f64 expects string')
+  const f = +word
   if (Number.isNaN(f)) throw new Error('word-to-f64 expects number')
   return f
 }
@@ -343,6 +350,13 @@ const byte_array_log_as_string = (byte_array) => {
   return console.log(String.fromCharCode(...byte_array))
 }
 export { byte_array_log_as_string as 'byte-array-log-as-string' }
+const textDecoder = new TextDecoder()
+const byte_array_to_string = (byte_array) => {
+  if (!(byte_array instanceof Uint8Array)) throw new Error('byte-array-to-string expects byte array')
+  return textDecoder.decode(byte_array)
+}
+export { byte_array_to_string as 'byte-array-to-string' }
+
 const memory_log_as_string = (wasmMem, start, size) => {
   // we won't be able to pass a  memory to imports when compiling to wasm...
   if (!(wasmMem instanceof WebAssembly.Memory)) throw new Error('memory-log-as-string expects memory')
@@ -354,7 +368,7 @@ const memory_log_as_string = (wasmMem, start, size) => {
   if (size < 0 || size > buffer.byteLength)
     throw new Error('memory-log-as-string length out of bounds: ' + size + ' ' + buffer.byteLength)
   const view = new Uint8Array(buffer, start, size)
-  const string = new TextDecoder().decode(view)
+  const string = textDecoder.decode(view)
   console.log(string)
 }
 export { memory_log_as_string as 'memory-log-as-string' }
@@ -387,19 +401,19 @@ const set_to_list = (set) => {
 }
 export { set_to_list as 'set-to-list' }
 
-const mem_dump = (wasmMem, start, end) => {
-  if (!(wasmMem instanceof WebAssembly.Memory)) throw new Error('mem-dump expects memory')
+const mem_dump = (wasm_mem, start, end) => {
+  if (!(wasm_mem instanceof WebAssembly.Memory)) throw new Error('mem-dump expects memory')
   if (!isSigned32BitInteger(start)) throw new Error('mem-dump expects number: ' + start)
   if (!isSigned32BitInteger(end)) throw new Error('mem-dump expects number: ' + end)
-  const { buffer } = wasmMem
+  const { buffer } = wasm_mem
   if (start < 0 || start >= buffer.byteLength)
     throw new Error('mem-dump start out of bounds: ' + start + ' ' + buffer.byteLength)
   if (end < 0 || end > buffer.byteLength)
     throw new Error('mem-dump end out of bounds: ' + end + ' ' + buffer.byteLength)
   if (start > end) throw new Error('mem-dump start is greater than end: ' + start + ' ' + end)
   const view = new Uint8Array(buffer)
-  for (let i = start; i < end; i += 16) {
-    console.log([...view.slice(i, i + 16)].map((n) => n.toString(16).padStart(2, '0')).join(' '))
+  for (let i = start & ~0xf; i < ((end + 16) & ~0xf); i += 16) {
+    console.log(i.toString(16), ...[...view.slice(i, i + 16)].map((n) => n.toString(16).padStart(2, '0')))
   }
 }
 export { mem_dump as 'mem-dump' }
