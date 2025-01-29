@@ -9,8 +9,6 @@ const makeStopWatch = () => {
   }
 }
 
-const wunsLanguageId = 'wuns'
-
 // https://code.visualstudio.com/api/language-extensions/semantic-highlight-guide
 const tokenTypes = [
   'variable',
@@ -80,9 +78,9 @@ const makeProvideDocumentSemanticTokensForms = async () => {
       if (!word) return console.error('expected word')
       const info = tryGetFormInfo(form)
       if (!info) return
-      const { start } = getFormInfoAsRange(info)
+      const { start, end } = getFormInfoAsRange(info)
       const { row, column } = start
-      tokensBuilder.push(row, column, word.length, tokenType, tokenModifiers)
+      tokensBuilder.push(row, column, end.column - start.column, tokenType, tokenModifiers)
     }
     const pushToken = (form, tokenType) => pushTokenWithModifier(form, tokenType, 0)
     const emptyList = Object.freeze([])
@@ -521,7 +519,7 @@ const addBindCheckActiveDocumentCommand = async (context) => {
  */
 async function activate(context) {
   console.log('starting wuns lang extension: ' + context.extensionPath)
-
+  const wunsLanguageId = 'wuns'
   const selector = { language: wunsLanguageId, scheme: 'file' }
   const documentSemanticTokensProvider = await makeProvideDocumentSemanticTokensForms()
   context.subscriptions.push(
