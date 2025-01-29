@@ -620,13 +620,15 @@
 
     [option/none]]]
 
+[func try-get-primitive-exp [e]
+  [match e
+    [exp/i32 n] [option/some type-primitive-i32]
+    [exp/literal pt -] [option/some pt]
+    [option/none]]]
+
 [func try-get-primitive [t]
   [match t
-    [type/exp e]
-    [match e
-      [exp/i32 n] [option/some type-primitive-i32]
-      [exp/literal pt -] [option/some pt]
-      [option/none]]
+    [type/exp e] [try-get-primitive-exp e]
     [type/primitive p] [option/some p]
     [type/apply-custom - --] [try-get-primitive [expand-custom t]]
     [type/pointer mt -] [option/some [get-memory-pointer-type mt]]
@@ -653,12 +655,33 @@
       [logq-abort union type empty does not allow field access]
       [let [first-pair [calc-field-offset [first utypes] field-name-word]
             first-offset [pair/fst first-pair]]
-        [for i 1 [size utypes]
-          [when-not [exp-equals first-offset [pair/fst [calc-field-offset [at utypes i] field-name-word]]]
-            [logq-abort union type field offsets do not match]]]
-        first-pair]]
+        [loop [i 1 n [size utypes] field-type [pair/snd first-pair]]
+          [if [lt-s i n]
+            [let [fp [calc-field-offset [at utypes i] field-name-word]]
+              [when-not [exp-equals first-offset [pair/fst fp]]
+                [logq-abort union type field offsets do not match]]
+              [continue i [inc i] field-type [common-super-type field-type [pair/snd fp]]]]
+            [pair first-offset field-type]]]]]
 
     [logq-abort field type not a pointer]]]
+
+[func common-super-type [t1 t2]
+  [ifs
+    [type-assignable t1 t2] t1
+    [type-assignable t2 t1] t2
+    [match t1
+      [type/exp e1]
+      [if-let [p1 [try-get-primitive-exp e1]]
+        [match t2
+          [type/exp e2]
+          [if-let [p2 [try-get-primitive-exp e2]]
+            [if [is-identical p1 p2]
+              [type/primitive p1]
+              [logq-abort common-super-type exp types do not match [identity e1] [identity e2]]]
+            [logq-abort common-super-type not implemented [identity t2]]]]
+          [logq-abort common-super-type not implemented [identity t2]]]
+
+      [logq-abort common-super-type not implemented [identity t1]]]]]
 
 [func form-special-to-exp [lctx fw l]
   [switch fw
@@ -673,13 +696,7 @@
         [do]
         [if [type-equals te type-empty]
           [do]
-          [when-not [type-equals tt te]
-            [ifs
-              [type-assignable tt te] [do]
-              [type-assignable te tt] [do]
-              [logq-abort todo find common super]
-
-              ]]]]
+          [common-super-type tt te]]]
 
       [exp/if c t e]]
 
