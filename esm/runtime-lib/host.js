@@ -10,6 +10,7 @@ import {
   optionNone,
   makeOptionSome,
   getFormPositionAsString,
+  isWord,
 } from '../core.js'
 import { parseFunctionParameters } from '../utils.js'
 
@@ -107,6 +108,12 @@ const string_join = (separator, strings) => {
   return strings.join(separator)
 }
 export { string_join as 'string-join' }
+const string_to_word = (s) => {
+  if (typeof s !== 'string') throw new Error('string-to-word expects string')
+  if (!isWord(s)) throw new Error('string-to-word expects word')
+  return s
+}
+export { string_to_word as 'string-to-word' }
 const word_join = (separator, strings) => {
   if (typeof separator !== 'string') {
     throw new Error('word-join expects string')

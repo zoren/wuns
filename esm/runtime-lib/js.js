@@ -281,7 +281,7 @@ export { format_js_src_async as 'format-js-src-async' }
 // }
 
 // export { write_js_stmt as 'write-js-stmt' }
-
+import { isSigned32BitInteger} from '../core.js'
 export const identity = (v) => v
 const to_js_value = (v) => v
 export { to_js_value as 'to-js-value' }
@@ -296,6 +296,13 @@ const js_value_to_array = (v) => {
   return v
 }
 export { js_value_to_array as 'js-value-to-array' }
+const js_value_to_i32 = (v) => {
+  if (!Number.isInteger(v)) throw new Error('expects integer')
+  if (!Number.isSafeInteger(v)) throw new Error('expects safe integer')
+  if (!isSigned32BitInteger(v)) throw new Error('expects i32 integer, got: ' + v)
+  return v
+}
+export { js_value_to_i32 as 'js-value-to-i32' }
 const object_to_kv_map = (obj) => {
   if (typeof obj !== 'object') throw new Error('expects object')
   return new Map(Object.entries(obj))
