@@ -11,6 +11,7 @@ const STRIP_COMMENTS_DEFAULT_ARGS =
 const ARGUMENT_NAMES = /([^\s,]+)/g
 
 export const parseFunctionParameters = (func) => {
+  if (typeof func !== 'function') throw new Error('func must be a function')
   const fnStr = func.toString().replace(STRIP_COMMENTS_DEFAULT_ARGS, '')
   return fnStr.slice(fnStr.indexOf('(') + 1, fnStr.indexOf(')')).match(ARGUMENT_NAMES) || []
 }

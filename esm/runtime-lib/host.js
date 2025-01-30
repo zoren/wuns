@@ -11,6 +11,7 @@ import {
   makeOptionSome,
   getFormPositionAsString,
 } from '../core.js'
+import { parseFunctionParameters } from '../utils.js'
 
 export const abort = (message) => {
   throw new Error('abort: ' + message.map((f) => print(f)).join(' '))
@@ -62,6 +63,15 @@ const get_syntax_node_location_as_string = (info) => {
 export { get_syntax_node_location_as_string as 'get-syntax-node-location-as-string' }
 export const apply = (fn, args) => {
   if (typeof fn !== 'function') throw new Error('apply expects function')
+  const jsParameterNames = parseFunctionParameters(fn)
+  if (jsParameterNames.length && jsParameterNames.at(-1).startsWith('...')) {
+    if (args.length < jsParameterNames.length - 1) throw new Error('apply expects more arguments')
+  } else {
+    if (jsParameterNames.length !== args.length)
+      throw new Error(
+        `apply expects same number of arguments to: ${fn.name} expected ${jsParameterNames.length} but got ${args.length}`,
+      )
+  }
   if (!Array.isArray(args)) throw new Error('apply expects array')
   return fn(...args)
 }
