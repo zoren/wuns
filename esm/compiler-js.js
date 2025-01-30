@@ -505,7 +505,7 @@ const compExp = (ctx, form, topContext) => {
       const numOfArgs = args.length
       const checkArity = ({ parameters, restParam }) => {
         if (numOfArgs < parameters.length) throw new CompileError('not enough arguments', form)
-        if (!restParam && numOfArgs > parameters.length) throw new CompileError('too many arguments', form)
+        if (!restParam && numOfArgs > parameters.length) throw new CompileError('too many arguments: ' + firstWord + ' ' + parameters.length + ' ' + numOfArgs, form)
       }
 
       let curCtx = ctx
