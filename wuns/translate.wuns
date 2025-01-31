@@ -1025,9 +1025,20 @@
       [exp/var n2]
       [and
         [eq-word [name/word n1] [name/word n2]]
-        [do
-          [todo we could allow locally bound variables also...]
-          [is-identical [get top-names [name/word n1]] [get top-names [name/word n2]]]]]
+        [let
+          [d1 [get-desc-from-name n1] d2 [get-desc-from-name n2]]
+          [match d1
+            [desc-kind/local ld1]
+            [match d2
+              [desc-kind/local ld2]
+              [is-identical ld1 ld2]
+              false]
+
+            [desc-kind/top td1]
+            [match d2
+              [desc-kind/top td2]
+              [is-identical td1 td2]
+              false]]]]
         false]
       false]]
 

@@ -119,6 +119,9 @@
         forms pfs]]
     pfl]]
 
+[defn array-byte-alloc [sz [i32]] [pointer [exp mem] [array [u8] [exp sz]]]
+  [alloc mem [array [u8] [exp sz]]]]
+
 [type growable-list [a datatype]
   [record
     [size [i32]]
@@ -585,7 +588,6 @@
 
 [export parse list-byte-alloc list-size list-data
   form-tag form-word-is form-word-get form-list-is form-list-get
-  get-byte
   list-get-form
   form-to-exp
   form-to-top

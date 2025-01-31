@@ -300,34 +300,6 @@
             [object-get [js-apply-error get-array-i32 [list [to-js-value parray] [to-js-value 3]]] [word message]]]
           ]]]]]
 
-[defn test-custom-type []
-  [let [forms
-        [qlist
-[memory mem [i32] 1]
-
-[type vector-data [a datatype size [exp [i32]]]
-  [record
-    [size [i32]]
-    [array [array a size]]]]
-
-[type pvector [v datatype]
-  [pointer [exp mem] [vector-data v -size]]]
-
-[type growable-vector [a datatype]
-  [record
-    [size [i32]]
-    [capacity [i32]]
-    [parray [pointer [exp mem] [array a]]]]]
-
-          ]]
-    [promise-then
-      [forms-to-module-async forms]
-      [func then [module]
-        [let [inst [wasm-instantiate module empty-object]
-              ]
-
-          ]]]]]
-
 [defn test-all []
   [let [tests
     [list
@@ -374,7 +346,6 @@
             form-word-get [get-export inst [word form-word-get]]
             form-list-is [get-export inst [word form-list-is]]
             form-list-get [get-export inst [word form-list-get]]
-            get-byte [get-export inst [word get-byte]]
             list-get-form [get-export inst [word list-get-form]]
             alloc-word
             [func aw [w]
