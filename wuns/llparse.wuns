@@ -109,7 +109,7 @@
       [record
         tag form-word-tag
         pword pw]]
-    [cast [pmem [form]] pfw]]]
+    pfw]]
 
 [defn form-list-alloc [pfs [plist [pmem [form]]]] [pmem [form]]
   [let [pfl [alloc mem [form-list]]]
@@ -117,7 +117,7 @@
       [record
         tag form-list-tag
         forms pfs]]
-    [cast [pmem [form]] pfl]]]
+    pfl]]
 
 [type growable-list [a datatype]
   [record

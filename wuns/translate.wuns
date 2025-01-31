@@ -1045,6 +1045,10 @@
   [let [tsrc [expand-custom tsrcp]]
     [or
     [match tdst
+      [type/union dus]
+      [or [type-equals tdst tsrc]
+        [exists dus [func type-ass-union [du] [type-assignable du tsrc]]]]
+
       [type/wildcard -]
       true
 
