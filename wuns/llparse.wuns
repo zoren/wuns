@@ -1,4 +1,10 @@
-[memory mem [i32] 1]
+[import env
+  [mem [memory [i32] 1]]
+  [log
+    [func
+      [par [pointer [exp mem] [array [u8]]]
+       n-bytes [i32]]
+      [tuple]]]]
 
 [type list-data [a datatype size [exp [i32]]]
   [record
@@ -16,6 +22,8 @@
 
 [def 0 [i32 0]]
 [def 1 [i32 1]]
+[def 2 [i32 2]]
+[def 3 [i32 3]]
 
 [defn not [x [i32]] [i32]
   [if x 0 1]]
@@ -28,7 +36,7 @@
 [defn inc [x [i32]] [i32] [add x 1]]
 [defn dec [x [i32]] [i32] [sub x 1]]
 
-[type pword []
+[type text []
   [plist [u8]]]
 
 [def form-word-tag [i32 10]]
@@ -37,7 +45,7 @@
 [type form-word []
   [record
     [tag [exp form-word-tag]]
-    [pword [pword]]]]
+    [pword [text]]]]
 
 [type
   form-list []
@@ -56,7 +64,7 @@
 [defn form-word-is [pf [pmem [form]]] [i32]
   [eq [deref [field pf tag]] form-word-tag]]
 
-[defn form-word-get [pf [pmem [form]]] [pword]
+[defn form-word-get [pf [pmem [form]]] [text]
   [when-not [form-word-is pf] [intrinsic unreachable]]
   [deref [field [cast [pmem [form-word]] pf] pword]]]
 
@@ -72,6 +80,8 @@
   [when-not [lt-s i [list-size pvec]] [intrinsic unreachable]]
   [deref [index [field pvec array] i]]]
 
+[def static-mem-top [memory-static-top mem]]
+
 [mutable mem-top [memory-static-top mem]]
 
 [defn get-top [] [i32]
@@ -86,13 +96,14 @@
     [intrinsic i32.xor [i32 -1] [dec p]]]]
 
 [defn alloc-n [n-bytes [i32]] [i32]
+  [when [eq n-bytes 0] [intrinsic unreachable]]
   [let [align-bytes [align [i32 16] n-bytes]
         top-val [get-top]]
     [when [eq top-val 0] [intrinsic unreachable]]
     [set-top [add top-val align-bytes]]
     top-val]]
 
-[defn form-word-alloc [pw [pword]] [pmem [form]]
+[defn form-word-alloc [pw [text]] [pmem [form]]
   [let [pfw [alloc mem [form-word]]]
     [assign pfw
       [record
@@ -118,8 +129,7 @@
   [let
     [p [alloc mem [growable-list [pmem [form]]]]
      parray
-     [cast [pmem [array [pmem [form]]]]
-      [alloc-n [size-of [array [pmem [form]] [exp init-capacity]]]]]]
+      [alloc-n [size-of [array [pmem [form]] [exp init-capacity]]]]]
     [assign p
       [record
         size 0
@@ -172,6 +182,19 @@
         [continue i [inc i]]
         i]]]]
 
+[defn list-slice-byte [psrc [plist [u8]] start [i32] end [i32]] [plist [u8]]
+  [let
+    [sz [sub end start]
+     pdst [alloc mem [list-data [u8] [exp sz]]]
+     pdst-ar [field pdst array]
+     psrc-ar [field psrc array]]
+    [assign [field pdst size] sz]
+    [for i 0 sz
+      [assign
+        [index pdst-ar i]
+        [deref [index psrc-ar [add start i]]]]]
+    pdst]]
+
 [defn make-stack [stack-size [i32] init-capacity [i32]] [pmem [array [growable-list [pmem [form]]]]]
   [let [parray [alloc mem [array [growable-list [pmem [form]]] [exp stack-size]]]]
     [for i 0 stack-size
@@ -185,19 +208,6 @@
 
 [def stack-size [i32 16]]
 [def init-capacity [i32 32]]
-
-[defn list-slice-byte [psrc [plist [u8]] start [i32] end [i32]] [plist [u8]]
-  [let
-    [sz [sub end start]
-     pdst [alloc mem [list-data [u8] [exp sz]]]
-     pdst-ar [field pdst array]
-     psrc-ar [field psrc array]]
-    [assign [field pdst size] sz]
-    [for i 0 sz
-      [assign
-        [index pdst-ar i]
-        [deref [index psrc-ar [add start i]]]]]
-    pdst]]
 
 [defn parse [bytes [plist [u8]]] [pmem [form]]
   [loop
@@ -251,7 +261,7 @@
 
           [intrinsic unreachable]]]]]]
 
-[defn byte-array-alloc [sz [i32]] [plist [u8]]
+[defn list-byte-alloc [sz [i32]] [plist [u8]]
   [let [p [alloc mem [list-data [u8] [exp sz]]]]
     [assign [field p size] sz]
     p]]
@@ -259,8 +269,324 @@
 [defn list-data [pvec [plist [u8]]] [pmem [array [u8]]]
   [field pvec array]]
 
-[export mem parse byte-array-alloc list-size list-data
+[defn dec-word-to-i32 [w [text]] [i32]
+  [loop [i 0 n [list-size w] res 0]
+    [if [lt-s i n]
+      [let [cc [get-byte w i]]
+        [when-not [and [intrinsic i32.le-s [i32 48] cc] [intrinsic i32.le-s cc [i32 57]]] [intrinsic unreachable]]
+        [continue
+          res [add [mul res [i32 10]] [sub cc [i32 48]]]
+          i [inc i]]]
+      res]]]
+
+[defn dec-word-to-i64 [w [text]] [i64]
+  [loop [i 0 n [list-size w] res [i64 0] ar [field w array]]
+    [if [lt-s i n]
+      [let [cc [deref-to [index ar i] [i64]]]
+        [when-not [and [intrinsic i64.le-s [i64 48] cc] [intrinsic i64.le-s cc [i64 57]]] [intrinsic unreachable]]
+        [continue
+          res [intrinsic i64.add [intrinsic i64.mul res [i64 10]] [intrinsic i64.sub cc [i64 48]]]
+          i [inc i]]]
+      res]]]
+
+[defn word-eq [w1 [text] w2 [text]] [i32]
+  [or
+    [eq w1 w2]
+    [let [n1 [list-size w1]
+          n2 [list-size w2]]
+      [and
+        [eq n1 n2]
+        [loop [i 0]
+          [if [lt-s i n1]
+            [if [eq [get-byte w1 i] [get-byte w2 i]]
+              [continue i [inc i]]
+              0]
+            1]]]]]]
+
+[def exp-i32-tag [i32 1]]
+[def exp-i64-tag [i32 2]]
+[def exp-if-tag  [i32 3]]
+
+[type
+  wexp []
+  [union
+    [record
+      [tag [exp exp-i32-tag]]
+      [value [i32]]]
+    [record
+      [tag [exp exp-i64-tag]]
+      [value [i64]]]
+    [wexp-if]]
+
+  wexp-if []
+  [record
+    [tag [exp exp-if-tag]]
+    [cond [pmem [wexp]]]
+    [then [pmem [wexp]]]
+    [else [pmem [wexp]]]]]
+
+[def prim-type-int-tag [i32 1]]
+[def prim-type-float-tag [i32 2]]
+
+[type prim-type []
+  [union
+    [record
+      [tag [exp prim-type-int-tag]]
+      [bytes [i32]]
+      [unsigned [i32]]]
+    [record
+      [tag [exp prim-type-float-tag]]
+      [bytes [i32]]]
+]]
+
+[def type-primitive-tag [i32 1]]
+[def type-exp-tag [i32 2]]
+
+[type wtype []
+  [union
+    [record
+      [tag [exp type-primitive-tag]]
+      [value [pmem [prim-type]]]]
+    [record
+      [tag [exp type-exp-tag]]
+      [value [pmem [wexp]]]]]]
+
+[def type-i32
+  [cast [pmem [wtype]]
+    [data mem
+      [record
+        tag type-primitive-tag
+        value
+        [data mem
+          [record
+            tag prim-type-int-tag
+            bytes [i32 4]
+            unsigned 0]]]]]]
+
+[def type-i64
+  [cast [pmem [wtype]]
+    [data mem
+      [record
+        tag type-primitive-tag
+        value
+        [data mem
+          [record
+            tag prim-type-int-tag
+            bytes [i32 8]
+            unsigned 0]]]]]]
+
+[type compile-context []
+  [record
+    [i [i32]]]]
+
+[defn type-assignable [tdst [pmem [wtype]] tsrc [pmem [wtype]]] [i32]
+  [eq tdst tsrc]
+  ]
+
+[defn common-super-type [t1 [pmem [wtype]] t2 [pmem [wtype]]] [pmem [wtype]]
+  [ifs
+    [type-assignable t1 t2]
+    t1
+
+    [type-assignable t2 t1]
+    t2
+
+    [intrinsic unreachable]]]
+
+[defn type-of [exp [pmem [wexp]]] [pmem [wtype]]
+  [let [tag [deref [field exp tag]]]
+    [ifs
+      [eq tag exp-i32-tag]
+      type-i32
+
+      [eq tag exp-i64-tag]
+      type-i64
+
+      [eq tag exp-if-tag]
+      [let [eif [cast [pmem [wexp-if]] exp]]
+        [common-super-type
+          [type-of [deref [field eif then]]]
+          [type-of [deref [field eif else]]]]]
+
+      [intrinsic unreachable]]]]
+
+[defn form-to-exp [f [pmem [form]]] [pmem [wexp]]
+  [ifs
+    [form-word-is f]
+    [do
+      [intrinsic unreachable]]
+
+    [form-list-is f]
+    [let [fl [form-list-get f]
+          n [list-size fl]]
+      [when [eq n 0] [intrinsic unreachable]]
+      [let [fw [form-word-get [list-get-form fl 0]]]
+        [ifs
+          [word-eq fw [data mem [static-word-to-u8-vector i32]]]
+          [do
+            [when-not [eq n [i32 2]] [intrinsic unreachable]]
+            [let
+              [pexp32
+                [alloc mem
+                  [record
+                    [tag [exp exp-i32-tag]]
+                    [value [i32]]]]]
+              [assign pexp32
+                [record
+                  tag exp-i32-tag
+                  value [dec-word-to-i32 [form-word-get [list-get-form fl 1]]]]]
+              [cast [pmem [wexp]] pexp32]]]
+
+          [word-eq fw [data mem [static-word-to-u8-vector i64]]]
+          [do
+            [when-not [eq n [i32 2]] [intrinsic unreachable]]
+            [let
+              [pexp64
+                [alloc mem
+                  [record
+                    [tag [exp exp-i64-tag]]
+                    [value [i64]]]]]
+              [assign pexp64
+                [record
+                  tag exp-i64-tag
+                  value [dec-word-to-i64 [form-word-get [list-get-form fl 1]]]]]
+              [cast [pmem [wexp]] pexp64]]]
+
+          [word-eq fw [data mem [static-word-to-u8-vector if]]]
+          [do
+            [when-not [eq n [i32 4]] [intrinsic unreachable]]
+            [let
+              [cexp [form-to-exp [list-get-form fl 1]]
+               texp [form-to-exp [list-get-form fl 2]]
+               fexp [form-to-exp [list-get-form fl 3]]]
+              [when-not [type-assignable type-i32 [type-of cexp]]
+                [intrinsic unreachable]]
+              [common-super-type [type-of texp] [type-of fexp]]
+              [let
+                [pexp-if [alloc mem [wexp-if]]]
+                [assign pexp-if
+                  [record
+                    tag exp-if-tag
+                    cond cexp
+                    then texp
+                    else fexp]]
+                [cast [pmem [wexp]] pexp-if]]]]
+
+          [intrinsic unreachable]]]]
+
+    [intrinsic unreachable]]]
+
+[def top-defn-tag [i32 1]]
+[type param-pair []
+  [record
+    [name [text]]
+    [type [pmem [wtype]]]]]
+
+[type wtop-defn []
+  [record
+    [tag [exp top-defn-tag]]
+    [fname [text]]
+    [params [plist [param-pair]]]
+    [bodies [plist [wexp]]]]]
+
+[def top-export-tag [i32 2]]
+[type wtop-export []
+  [record
+    [tag [exp top-export-tag]]
+    [names [plist [text]]]]]
+
+[type
+  wtop []
+  [union
+    [wtop-defn]
+    [wtop-export]]]
+
+[defn is-odd [x [i32]] [i32] [intrinsic i32.and x 1]]
+
+[defn log-text [t [text]] [tuple]
+  [log [list-data t] [list-size t]]]
+
+[defn form-to-type [f [pmem [form]]] [pmem [wtype]]
+  type-i32]
+
+[type context []
+  [pmem
+    [record
+      [funcs [growable-list [i32]]]]]]
+
+[defn form-to-top [f [pmem [form]] gctx [context]] [pmem [wtop]]
+  [ifs
+    [form-word-is f]
+    [do
+      [log-text [data mem [static-word-to-u8-vector 'variable not supported yet']]]
+      [intrinsic unreachable]]
+
+    [form-list-is f]
+    [let [fl [form-list-get f]
+          n [list-size fl]]
+      [when [eq n 0] [intrinsic unreachable]]
+      [let [fw [form-word-get [list-get-form fl 0]]]
+        [ifs
+          [word-eq fw [data mem [static-word-to-u8-vector defn]]]
+          [do
+            [when [lt-s n [i32 3]]
+              [log-text [data mem [static-word-to-u8-vector 'n less than 3']]]
+              [intrinsic unreachable]]
+            [let
+              [fname [form-word-get [list-get-form fl 1]]
+               param-list [form-list-get [list-get-form fl 2]]
+               n-of-param-forms [list-size param-list]
+               n-of-params [intrinsic i32.shr-s n-of-param-forms 1]
+               pdefn [alloc mem [wtop-defn]]
+               params [alloc mem [list-data [param-pair] [exp n-of-params]]]
+               params-array [field params array]
+               bodies [alloc mem [list-data [pmem [wexp]] [exp [sub n 3]]]]]
+              [when [is-odd n-of-param-forms]
+                [log-text [data mem [static-word-to-u8-vector 'there should be an even number of forms in the param list']]]
+                [intrinsic unreachable]]
+              [loop [i 0]
+                [when [lt-s i [dec n-of-param-forms]]
+                  [assign
+                    [index params-array [intrinsic i32.shr-s i 1]]
+                    [record
+                      name [form-word-get [list-get-form param-list i]]
+                      type [form-to-type [list-get-form param-list [inc i]]]]]
+                  [continue i [add 2 i]]]]
+              [assign pdefn
+                [record
+                  tag top-defn-tag
+                  fname fname
+                  params params
+                  bodies bodies]]
+              [cast [pmem [wtop]] pdefn]]]
+
+          [word-eq fw [data mem [static-word-to-u8-vector export]]]
+          [let [pexport [alloc mem [wtop-export]]
+                names [alloc mem [list-data [text] [exp [sub n 1]]]]
+                names-array [field names array]]
+            [loop [j 0]
+              [when [lt-s j [dec n]]
+                [assign
+                  [index names-array j]
+                  [form-word-get [list-get-form fl [inc j]]]]
+                [continue j [inc j]]]]
+            [assign pexport
+              [record
+                tag top-export-tag
+                names names]]
+            [cast [pmem [wtop]] pexport]]
+
+          [do
+            [log-text [data mem [static-word-to-u8-vector 'unknown form word']]]
+            [log-text fw]
+            [intrinsic unreachable]]]]]
+
+    [intrinsic unreachable]]]
+
+[export parse list-byte-alloc list-size list-data
   form-tag form-word-is form-word-get form-list-is form-list-get
   get-byte
   list-get-form
+  form-to-exp
+  form-to-top
 ]
