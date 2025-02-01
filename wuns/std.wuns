@@ -447,6 +447,9 @@
 [import ./runtime-lib/host.js kv-map-size [type-scheme [k v] [func [[transient-kv-map k v]] i32]]]
 [todo remove kv-map-values as it relies on the order of the map]
 [import ./runtime-lib/host.js kv-map-values [type-scheme [k v] [func [[transient-kv-map k v]] [list v]]]]
+[type pair [a b] [record [fst a] [snd b]]]
+[import ./runtime-lib/host.js kv-map-entries [type-scheme [k v]
+  [func [[transient-kv-map k v]] [list [pair k v]]]]]
 
 [defn mk-word [w] [flist [quote word] w]]
 
@@ -601,7 +604,6 @@
         [continue i [inc i]]]
       false]]]
 
-[type pair [a b] [record [fst a] [snd b]]]
 
 [defn pairwise-pairs [l]
   [let [gl [growable-list]]

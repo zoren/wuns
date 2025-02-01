@@ -258,6 +258,13 @@ const kv_map_values = (kv_map) => {
 }
 export { kv_map_values as 'kv-map-values' }
 
+const kv_map_entries = (kv_map) => {
+  if (!(kv_map instanceof Map)) throw new Error('kv-map-values expects map')
+  return arrayToList([...kv_map.entries()].map(([k, v]) => Object.freeze({ fst: k, snd: v })))
+}
+export { kv_map_entries as 'kv-map-entries' }
+
+
 export { print }
 const code_point_to_string = (code_point) => String.fromCodePoint(code_point)
 export { code_point_to_string as 'code-point-to-string' }
