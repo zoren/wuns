@@ -498,6 +498,7 @@
 [import ./runtime-lib/host.js syntax-node-content-name [func [syntax-node] string]]
 
 [import ./runtime-lib/host.js code-point-to-string [func [i32] string]]
+[import ./runtime-lib/host.js string-to-word [func [string] word]]
 
 [defmacro def-js-extern [name type]
   [flist [quote import] [quote ./runtime-lib/js.js] name type]]
@@ -660,6 +661,7 @@
 [def-js-extern is-undefined [func [js-value] i32]]
 [def-js-extern js-value-is-array [func [js-value] i32]]
 [def-js-extern js-value-to-array [func [js-value] [list js-value]]]
+[def-js-extern js-value-to-i32 [func [js-value] i32]]
 
 [type object [v] [union]]
 
