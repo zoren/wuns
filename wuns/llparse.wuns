@@ -4,6 +4,10 @@
     [func
       [par [pointer [exp mem] [array [u8]]]
        n-bytes [i32]]
+      [tuple]]]
+  [log-i32
+    [func
+      [n [i32]]
       [tuple]]]]
 
 [type list-data [a datatype size [exp [i32]]]
@@ -128,17 +132,20 @@
     [capacity [i32]]
     [parray [pmem [array a]]]]]
 
-[defn growable-list-alloc-form [init-capacity [i32]] [pmem [growable-list [pmem [form]]]]
+[defn growable-list-alloc [elem-type [type datatype] init-capacity [i32]] [pmem [growable-list elem-type]]
   [let
-    [p [alloc mem [growable-list [pmem [form]]]]
+    [p [alloc mem [growable-list elem-type]]
      parray
-      [alloc-n [size-of [array [pmem [form]] [exp init-capacity]]]]]
+      [alloc-n [size-of [array elem-type [exp init-capacity]]]]]
     [assign p
       [record
         size 0
         capacity init-capacity
         parray parray]]
     p]]
+
+[defn growable-list-alloc-form [init-capacity [i32]] [pmem [growable-list [pmem [form]]]]
+  [growable-list-alloc [type [pmem [form]]] init-capacity]]
 
 [defn growable-list-push-form [pglist [pmem [growable-list [pmem [form]]]] elem [pmem [form]]] [tuple]
   [let
@@ -291,6 +298,9 @@
           res [intrinsic i64.add [intrinsic i64.mul res [i64 10]] [intrinsic i64.sub cc [i64 48]]]
           i [inc i]]]
       res]]]
+
+[defn log-text [t [text]] [tuple]
+  [log [list-data t] [list-size t]]]
 
 [defn word-eq [w1 [text] w2 [text]] [i32]
   [or
@@ -506,18 +516,21 @@
 
 [defn is-odd [x [i32]] [i32] [intrinsic i32.and x 1]]
 
-[defn log-text [t [text]] [tuple]
-  [log [list-data t] [list-size t]]]
-
 [defn form-to-type [f [pmem [form]]] [pmem [wtype]]
   type-i32]
 
 [type context []
-  [pmem
-    [record
-      [funcs [growable-list [i32]]]]]]
+  [record
+    [funcs
+      [growable-list
+        [record
+          [fname [text]]
+          [params [plist [param-pair]]]
+          [bodies [plist [wexp]]]]]]
+    [exports
+      [growable-list [plist [text]]]]]]
 
-[defn form-to-top [f [pmem [form]] gctx [context]] [pmem [wtop]]
+[defn form-to-top [f [pmem [form]] gctx [pmem [context]]] [tuple]
   [ifs
     [form-word-is f]
     [do
@@ -540,7 +553,10 @@
                param-list [form-list-get [list-get-form fl 2]]
                n-of-param-forms [list-size param-list]
                n-of-params [intrinsic i32.shr-s n-of-param-forms 1]
-               pdefn [alloc mem [wtop-defn]]
+               pdefn [alloc mem [record
+                        [fname [text]]
+                        [params [plist [param-pair]]]
+                        [bodies [plist [wexp]]]]]
                params [alloc mem [list-data [param-pair] [exp n-of-params]]]
                params-array [field params array]
                bodies [alloc mem [list-data [pmem [wexp]] [exp [sub n 3]]]]]
@@ -555,13 +571,8 @@
                       name [form-word-get [list-get-form param-list i]]
                       type [form-to-type [list-get-form param-list [inc i]]]]]
                   [continue i [add 2 i]]]]
-              [assign pdefn
-                [record
-                  tag top-defn-tag
-                  fname fname
-                  params params
-                  bodies bodies]]
-              [cast [pmem [wtop]] pdefn]]]
+
+              ]]
 
           [word-eq fw [data mem [static-word-to-u8-vector export]]]
           [let [pexport [alloc mem [wtop-export]]
@@ -573,15 +584,15 @@
                   [index names-array j]
                   [form-word-get [list-get-form fl [inc j]]]]
                 [continue j [inc j]]]]
-            [assign pexport
-              [record
-                tag top-export-tag
-                names names]]
-            [cast [pmem [wtop]] pexport]]
+
+                ]
 
           [do
             [log-text [data mem [static-word-to-u8-vector 'unknown form word']]]
             [log-text fw]
+            [log-i32 [list-size fw]]
+            [log-i32 [list-size [data mem [static-word-to-u8-vector defn]]]]
+
             [intrinsic unreachable]]]]]
 
     [intrinsic unreachable]]]
