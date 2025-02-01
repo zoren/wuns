@@ -63,7 +63,7 @@ const modificationModifier = encodeTokenModifiers('modification')
  * @param {vscode.TextDocument} document
  */
 const makeProvideDocumentSemanticTokensForms = async () => {
-  const { parseString, tryGetFormInfo, tryGetFormWord, tryGetFormList, getFormInfoAsRange } = await import(
+  const { parseString, tryGetFormInfo, tryGetFormWord, tryGetFormList, getFormInfoAsRange, print } = await import(
     './esm/core.js'
   )
   const { makeJSCompilingEvaluator } = await import('./esm/compiler-js.js')
@@ -71,11 +71,13 @@ const makeProvideDocumentSemanticTokensForms = async () => {
   const provideDocumentSemanticTokens = async (document) => {
     const { evalTop, getDef, getDefKind } = makeJSCompilingEvaluator()
 
+    const fileBaseName = path.basename(document.fileName)
+    const isLowLevel = fileBaseName.startsWith('ll')
     const tokensBuilder = new SemanticTokensBuilder(legend)
     const pushTokenWithModifier = (form, tokenType, tokenModifiers) => {
       if (!form) return
       const word = tryGetFormWord(form)
-      if (!word) return console.error('expected word')
+      if (!word) return console.error('expected word', print(form))
       const info = tryGetFormInfo(form)
       if (!info) return
       const { start, end } = getFormInfoAsRange(info)
@@ -264,7 +266,7 @@ const makeProvideDocumentSemanticTokensForms = async () => {
       }
       if (list.length === 0) return
       try {
-        await evalTop(form)
+        if (!isLowLevel) await evalTop(form)
       } catch (e) {
         console.error('provideDocumentSemanticTokensForms evalForm error', e.message)
         console.error(e)
