@@ -158,25 +158,21 @@
     [assign [field pglist size] [inc cur-size]]]]
 
 [defn growable-list-push-form [pglist [pmem [growable-list [pmem [form]]]] elem [pmem [form]]] [tuple]
-  [let
-    [cur-size [deref [field pglist size]]
-     cur-capacity [deref [field pglist capacity]]
-     parray [deref [field pglist parray]]]
-    [when [eq cur-size cur-capacity]
-      [intrinsic unreachable]]
-    [assign [index parray cur-size] elem]
-    [assign [field pglist size] [inc cur-size]]]]
+  [growable-list-push [type [pmem [form]]] pglist elem]]
 
-[defn growable-list-to-list-form [pglist [pmem [growable-list [pmem [form]]]]] [plist [pmem [form]]]
+[defn growable-list-to-list [elem-type [type datatype] pglist [pmem [growable-list elem-type]]] [plist elem-type]
   [let
     [gsize [deref [field pglist size]]
      pglist-arr [deref [field pglist parray]]
-     plist [alloc mem [list-data [pmem [form]] [exp gsize]]]
+     plist [alloc mem [list-data elem-type [exp gsize]]]
      par [field plist array]]
     [assign [field plist size] gsize]
     [for i 0 gsize
       [assign [index par i] [deref [index pglist-arr i]]]]
     plist]]
+
+[defn growable-list-to-list-form [pglist [pmem [growable-list [pmem [form]]]]] [plist [pmem [form]]]
+  [growable-list-to-list [type [pmem [form]]] pglist]]
 
 [defn growable-list-reset [pglist [pmem [growable-list -a]]] [tuple]
   [assign [field pglist size] 0]]

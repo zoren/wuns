@@ -519,8 +519,7 @@
      datas [growable-list]
      generic-calls [transient-kv-map]
      generic-call-types [transient-kv-map]
-     generic-call-info [transient-kv-map]
-     ]
+     generic-call-info [transient-kv-map]]
     [letfn [
 [func error-form-fn [form message-form]
   [push gerrors [pair form message-form]]]
@@ -1086,7 +1085,7 @@
                       [set-kv-map generic-calls [name/word fn] type-string-to-comp-env]
                       type-string-to-comp-env]]
                  res-form [exp/call [exp/var fn] cargs]]
-                [logq a generic call [identity fw]]
+                [logq a generic call [identity fw] [identity spec-res]]
                 [set-kv-map generic-call-types res-form spec-res]
                 [set-kv-map generic-call-info res-form [pair spec-name [clone-growable-to-frozen-list gnon-type-args]]]
                 [set-kv-map f-calls types-as-str
@@ -1402,7 +1401,8 @@
     [common-super-type [type-of t] [type-of e]]
 
     [exp/call f args]
-    [do
+    [if-let [gen-call-type [try-get generic-call-types exp]]
+      gen-call-type
       [match [type-of f]
         [type/func params rt]
         [if [exists params type-is-type]
@@ -1577,21 +1577,16 @@
                 [type-name [form-to-word [at l i]]
                  type-params
                  [list-map param-pair [pairwise-pairs [get-list [at l [inc i]]]]
-                  [let
-                    [pname [form-to-name [pair/fst param-pair]]
-                     kind [form-to-type-kind [pair/snd param-pair]]]
-                    [pair pname kind]]]]
+                  [pair [form-to-name [pair/fst param-pair]] [form-to-type-kind [pair/snd param-pair]]]]]
                 [set-kv-map custom-type-signatures type-name [type-signature type-kind-datatype type-params]]]]
             [for-3 i 1 [size l]
               [let
                 [type-name [form-to-word [at l i]]
+                 type-sig [get custom-type-signatures type-name]
                  param-map [transient-kv-map]
                  lctx [local-context-make-top param-map [local-context-kind/type-decl]]]
-                [for-each param-pair [pairwise-pairs [get-list [at l [inc i]]]]
-                  [let
-                    [p [form-to-word [pair/fst param-pair]]
-                     kind [form-to-type-kind [pair/snd param-pair]]]
-                    [set-kv-map param-map p [type/type kind]]]]
+                [for-each param-pair [type-signature/params type-sig]
+                  [set-kv-map param-map [name/word [pair/fst param-pair]] [type/type [pair/snd param-pair]]]]
                 [set-kv-map custom-types type-name [form-to-type lctx [at l [add 2 i]]]]]]
           [option/none]]
 
@@ -1775,13 +1770,11 @@
            res int-const-0
            n [size field-types]]
       [if [lt-s i n]
-        [let [fp [at field-types i]
-              ft [pair/snd fp]
-              fn [name/word [pair/fst fp]]]
-          [if [eq-word fn field-name-word]
+        [let [fp [at field-types i]]
+          [if [eq-word [name/word [pair/fst fp]] field-name-word]
             res
             [continue
-              res [int-exp-add res [type-to-size-of-exp ft]]
+              res [int-exp-add res [type-to-size-of-exp [pair/snd fp]]]
               i [inc i]]]]
         [logq-abort field not found [identity field-name-word]]]]
 
@@ -1954,9 +1947,10 @@
     calc-field-offset
     const-eval]]]
 
-[func mk-exp-to-inst-compiler [e2e-comp]
+[func mk-exp-to-inst-compiler [type-env]
   [let
     [glocals [growable-list]
+     e2e-comp [mk-exp-to-exp-compiler type-env]
      type-to-size-of-exp [exp2exp-compiler/type-to-size-of-exp e2e-comp]
      calc-field-offset [exp2exp-compiler/calc-field-offset e2e-comp]]
     [letfn [
@@ -1967,7 +1961,7 @@
       [pt [type-of target]
        ppt [if-let [p [try-get-pointer-args pt]] p [logq-abort not a pointer]]
        mt [get-memory-type-from-type [pair/fst ppt]]
-       target-prim [type-to-primitive [pair/snd ppt]]]
+       target-prim [type-to-primitive [type-substitute type-env [pair/snd ppt]]]]
       [wat-inst/load
         [wasm-name-to-wat-byte-array
           [prim-types-to-load-inst-name
@@ -2004,12 +1998,17 @@
        mt [get-memory-type-from-type [pair/fst ppt]]
        assign-pointer
        [func assign-pointer [target-int-exp ttarget value]
-        [let [expanded-t [expand-custom ttarget]
+        [let [expanded-t [expand-custom [type-substitute type-env ttarget]]
               lifted-t [lift-literal-type expanded-t]]
+          [logq assign-pointer [identity expanded-t]]
           [match lifted-t
           [type/primitive pttarget]
           [let
-            [normed-t [lift-literal-type [expand-custom [type-of value]]]
+            [subst-t [type-substitute type-env [type-of value]]
+             - [logq subst t [identity subst-t]]
+             normed-t [lift-literal-type [expand-custom subst-t]]
+             -- [logq normed t [identity normed-t]]
+
              ptvalue [type-to-primitive normed-t]]
             [wat-inst/store
               [wasm-name-to-wat-byte-array [prim-types-to-store-inst-name pttarget ptvalue]]
@@ -2074,7 +2073,7 @@
                         [assign-pointer [int-exp-add target-int-exp acc] telem [pair/snd [at fields i]]]]
                       [continue i [inc i] acc offset-target]]]]
                 [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
-            [logq-abort not implemented assign tuple types]]
+            [logq-abort not implemented assign record types [identity value]]]
 
           [type/union types]
           [logq-abort not implemented assign union types]
@@ -2322,7 +2321,7 @@
                 [push
                   exp-funcs
                   [pair
-                    e2ec
+                    type-env
                     [exp-func
                       spec-name
                       [list-map p non-type-params
@@ -2337,7 +2336,7 @@
               [push
                 exp-funcs
                 [pair
-                  e2ec
+                  empty-type-env
                   [exp-func
                     fnw
                     [list-map p [exp-function/params f]
@@ -2345,7 +2344,8 @@
                     [type-to-wat-types [exp-function/return-type f]]
                     [list-map body [exp-function/bodies f] [ce body]]]]]]]]]]
     [let
-      [e2ic [mk-exp-to-inst-compiler [mk-exp-to-exp-compiler empty-type-env]]
+      [e2ec [mk-exp-to-exp-compiler empty-type-env]
+       e2ic [mk-exp-to-inst-compiler empty-type-env]
        e2i [exp2inst-compiler/exp-to-inst e2ic]]
       [for-each g [clone-growable-to-frozen-list exp-globals]
         [push
@@ -2357,9 +2357,9 @@
             [e2i [global-exp/exp g]]]]]]
     [for-each comp-f-pair [clone-growable-to-frozen-list exp-funcs]
       [let
-        [e2e [pair/fst comp-f-pair]
+        [type-env [pair/fst comp-f-pair]
          f [pair/snd comp-f-pair]
-         e2i [mk-exp-to-inst-compiler e2e]
+         e2i [mk-exp-to-inst-compiler type-env]
          es2i [exp2inst-compiler/exps-to-inst e2i]
          inst [es2i [exp-func/body f]]
          locals [clone-growable-to-frozen-list [exp2inst-compiler/glocals e2i]]]
