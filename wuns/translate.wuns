@@ -323,6 +323,11 @@
     [option/none] [logq-abort option-get none]
     [option/some v] v]]
 
+[defn option-default [opt default]
+  [match opt
+    [option/none] default
+    [option/some v] v]]
+
 [defn option-pair [opt1 opt2]
   [match opt1
     [option/some v1]
@@ -2308,7 +2313,8 @@
         [let
           [fnw [name/word [exp-function/name f]]]
           [if [exists [exp-function/params f] [func is-type [pp] [type-is-type [pair/snd pp]]]]
-            [for-each func-spec [kv-map-entries [get generic-calls fnw]]
+            [for-each func-spec
+              [kv-map-entries [option-default [try-get generic-calls fnw] [transient-kv-map]]]
               [let
                 [type-env [pair/snd [pair/snd func-spec]]
                  e2ec [mk-exp-to-exp-compiler type-env]

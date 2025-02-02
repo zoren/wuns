@@ -147,6 +147,16 @@
 [defn growable-list-alloc-form [init-capacity [i32]] [pmem [growable-list [pmem [form]]]]
   [growable-list-alloc [type [pmem [form]]] init-capacity]]
 
+[defn growable-list-push [elem-type [type datatype] pglist [pmem [growable-list elem-type]] elem elem-type] [tuple]
+  [let
+    [cur-size [deref [field pglist size]]
+     cur-capacity [deref [field pglist capacity]]
+     parray [deref [field pglist parray]]]
+    [when [eq cur-size cur-capacity]
+      [intrinsic unreachable]]
+    [assign [index parray cur-size] elem]
+    [assign [field pglist size] [inc cur-size]]]]
+
 [defn growable-list-push-form [pglist [pmem [growable-list [pmem [form]]]] elem [pmem [form]]] [tuple]
   [let
     [cur-size [deref [field pglist size]]
