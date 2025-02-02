@@ -342,7 +342,7 @@
 [type
   top-desc-kind []
   [union
-    [value top-value-kind exp]
+    [value top-value-kind]
     [function [list [pair name type]] type]
     [import import-kind-desc]
     [memory memory-desc]]
@@ -511,6 +511,7 @@
   [let
     [gerrors [growable-list]
      top-names [transient-kv-map]
+     gconstants [transient-kv-map]
      name-to-desc [transient-kv-map]
      custom-type-signatures [transient-kv-map]
      custom-types [transient-kv-map]
@@ -879,7 +880,7 @@
       [match [pair/snd desc]
         [desc-kind/top td]
         [match td
-          [top-desc-kind/value v -exp]
+          [top-desc-kind/value v]
           [assert [is-identical v top-value-kind-variable] assign-mutable expected variable]
 
           [logq-abort not implemented assign-mutable top-desc-kind]]
@@ -1056,18 +1057,19 @@
                tp [pair/snd pp]
                a [at cargs i]
                ta [type-of a]]
-              [assert [type-assignable tp ta]
-                call expected assignable type [identity fn] [identity tp] [identity ta]]
               [if [type-is-type tp]
                 [match a
                   [exp/type at]
                   [do
                     [push gtype-args at]
+                    [logq binding [name/word [pair/fst pp]] [identity at]]
                     [set-kv-map type-env [name/word [pair/fst pp]] at]]
 
                   [logq-abort expected a type arg for a type param]]
-                [do
-                  [push gnon-type-params pp]
+                [let [tpsub [type-substitute type-env tp]]
+                  [assert [type-assignable tpsub ta]
+                    call expected assignable type [identity fn] [identity tp] [identity ta]]
+                  [push gnon-type-params [pair [pair/fst pp] tpsub]]
                   [push gnon-type-args a]]]]]
           [let
             [type-args [clone-growable-to-frozen-list gtype-args]]
@@ -1550,7 +1552,7 @@
                is-mutable [eq-word fw [word mutable]]
                kind [if is-mutable top-value-kind-variable top-value-kind-constant]
                bt [top-decl/value kind [form-to-name [second l]] be]]
-              [bind-top [second l] [pair [if is-mutable [lift-literal-type type] type] [top-desc-kind/value kind be]]]
+              [bind-top [second l] [pair [if is-mutable [lift-literal-type type] type] [top-desc-kind/value kind]]]
               [option/some bt]]]
 
           [[word memory]]
@@ -1880,8 +1882,8 @@
       [desc-kind/local ld] exp
       [desc-kind/top td]
       [match td
-        [top-desc-kind/value value-kind desc-exp]
-        [if [is-identical value-kind top-value-kind-constant]
+        [top-desc-kind/value value-kind]
+        [if-let [desc-exp [try-get gconstants [name/word var-name]]]
           desc-exp
           exp]
         exp]]
@@ -1965,8 +1967,7 @@
   [let
     [glocals [growable-list]
      type-to-size-of-exp [exp2exp-compiler/type-to-size-of-exp e2e-comp]
-     calc-field-offset [exp2exp-compiler/calc-field-offset e2e-comp]
-     const-eval [exp2exp-compiler/const-eval e2e-comp]]
+     calc-field-offset [exp2exp-compiler/calc-field-offset e2e-comp]]
     [letfn [
 [func exp-to-inst [f]
   [match f
@@ -2100,7 +2101,7 @@
     [match [get-desc-from-name n]
       [desc-kind/top td]
       [match td
-        [top-desc-kind/value - --]
+        [top-desc-kind/value -]
         [wat-inst/global.get [name/word n]]
 
         [top-desc-kind/function - --]
@@ -2201,13 +2202,13 @@
     [wat-inst/i32.const [int-to-word n]]
 
     [exp/cast -t e]
-    [exp-to-inst [const-eval e]]
+    [exp-to-inst e]
 
     [exp/size-of -t]
-    [exp-to-inst [const-eval f]]
+    [logq-abort exp-to-inst unexpected size-of]
 
     [exp/data -mem-name -data-exp]
-    [exp-to-inst [const-eval f]]
+    [logq-abort exp-to-inst unexpected data]
 
     [exp/memory-static-top mem-name]
     [wat-inst/i32.const
@@ -2292,7 +2293,7 @@
                     [desc-kind/local -] [logq-abort unreachable export local]
                     [desc-kind/top td]
                     [match td
-                      [top-desc-kind/value - --] [export-kind/global]
+                      [top-desc-kind/value -] [export-kind/global]
                       [top-desc-kind/function - --] [export-kind/func]
                       [top-desc-kind/import -] [logq-abort not implemented export-kind/import]
                       [top-desc-kind/memory -] [export-kind/memory]]]]
@@ -2300,14 +2301,18 @@
 
         [top-decl/value k def-name e]
         [let
-          [e2ec [mk-exp-to-exp-compiler [transient-kv-map]]]
+          [e2ec [mk-exp-to-exp-compiler [transient-kv-map]]
+           is-constant [is-identical k top-value-kind-constant]
+           ce-e [[exp2exp-compiler/const-eval e2ec] e]]
+          [when is-constant
+            [set-kv-map gconstants [name/word def-name] ce-e]]
           [push
             exp-globals
             [global-exp
               [name/word def-name]
-              [if [is-identical k top-value-kind-constant] [mut/const] [mut/var]]
+              [if is-constant [mut/const] [mut/var]]
               [type-to-wat-type [type-of e]]
-              [[exp2exp-compiler/const-eval e2ec] e]]]]
+              ce-e]]]
 
         [top-decl/function f]
         [let
@@ -2349,7 +2354,7 @@
                     [type-to-wat-types [exp-function/return-type f]]
                     [list-map body [exp-function/bodies f] [ce body]]]]]]]]]]
     [let
-      [e2ic [mk-exp-to-inst-compiler [mk-exp-to-exp-compiler [transient-kv-map]]]
+      [e2ic [mk-exp-to-inst-compiler [mk-exp-to-exp-compiler empty-type-env]]
        e2i [exp2inst-compiler/exp-to-inst e2ic]]
       [for-each g [clone-growable-to-frozen-list exp-globals]
         [push
