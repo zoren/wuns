@@ -343,9 +343,14 @@
   top-desc-kind []
   [union
     [value top-value-kind]
-    [function [list [pair name type]] type]
+    [function function-desc]
     [import import-kind-desc]
     [memory memory-desc]]
+
+  function-desc []
+  [record
+    [parameters [list [pair name type]]]
+    [result-type type]]
 
   memory-desc []
   [record
@@ -356,21 +361,31 @@
   import-kind-desc []
   [union
     [memory memory-desc]
-    [function [list [pair name type]] type]]]
+    [function function-desc]]]
 
 [defn top-desc-kind-function-desc [tdk]
   [match tdk
-    [top-desc-kind/function param-pairs result-type]
-    [pair param-pairs result-type]
+    [top-desc-kind/function func-desc] func-desc
 
     [top-desc-kind/import id]
     [match id
-      [import-kind-desc/function param-pairs result-type]
-      [pair param-pairs result-type]
+      [import-kind-desc/function func-desc]
+      func-desc
 
       [logq-abort not a function [identity id]]]
 
     [logq-abort not a function [identity tdk]]]]
+
+[defn top-desc-kind-memory-desc [tdk]
+  [match tdk
+    [top-desc-kind/memory mem-desc] mem-desc
+    [top-desc-kind/import id]
+    [match id
+      [import-kind-desc/memory mem-desc] mem-desc
+
+      [logq-abort not a memory [identity id]]]
+
+    [logq-abort not a memory [identity tdk]]]]
 
 [type desc-kind []
   [union
@@ -569,71 +584,6 @@
       [logq-abort expected memory type exp [identity mem-exp]]]
     [logq-abort expected memory type [identity mt]]]]
 
-[func form-to-type [lctx outer-form]
-  [letfn [
-  [func go [form]
-    [match form
-    [form/word w]
-    [if [starts-with-dash w]
-      [type/wildcard [form-to-name form]]
-      [let [n [form-to-name form]]
-        [lookup-bind-name lctx n]
-        [type/var n]]]
-
-    [form/list l]
-    [let [type-name-word [form-to-word [first l]]
-          n-of-args [dec [size l]]]
-      [assert-not [is-empty l] form-to-type expected non-empty list]
-      [switch type-name-word
-        [[word tuple]]
-        [type/tuple [list-map t [rest l] [go t]]]
-
-        [[word record]]
-        [type/record
-          [list-map pf [rest l]
-            [let [p [get-list pf]]
-              [pair [form-to-name [first p]] [go [second p]]]]]]
-
-        [[word union]]
-        [type/union [list-map a [rest l] [go a]]]
-
-        [[word pointer]]
-        [do
-          [assert [eq n-of-args 2] form-to-type expected 2 elements
-            [identity type-name-word] [identity n-of-args]]
-          [let [mt [go [second l]]
-                target-type [go [third l]]]
-            [get-memory-type-from-type mt]
-            [type/pointer mt target-type]]]
-
-        [[word exp]]
-        [type/exp [form-to-exp lctx [second l]]]
-
-        [[word array]]
-        [ifs
-          [eq [size l] 2]
-          [type/array [go [second l]] [option/none]]
-
-          [eq [size l] 3]
-          [type/array [go [second l]] [option/some [go [third l]]]]
-
-          [logq-abort array expected 2 or 3 elements]]
-
-        [[word type]]
-        [type/type [form-to-type-kind [second l]]]
-
-        [if-let [custom-type-signature [try-get custom-type-signatures type-name-word]]
-          [let [type-params [type-signature/params custom-type-signature]]
-            [assert [eq n-of-args [size type-params]] form-to-type expected same number of arguments
-              [identity type-name-word] [size type-params] [identity n-of-args]]
-            [type/apply-custom [form-to-name [first l]] [list-map a [rest l] [go a]]]]
-          [if-let [p [try-get primitive-types-by-name type-name-word]]
-            [do
-              [assert [eq n-of-args 0] form-to-type primitive takes no arguments [identity type-name-word]]
-              [type/primitive p]]
-            [logq-abort not implemented form-to-type [identity form]]]]]]]]]
-    [go outer-form]]]
-
 [func type-to-type-kind-opt [arg]
   [match arg
     [type/wildcard wcn] [option/none]
@@ -650,7 +600,7 @@
 [func instantiate-custom-type [type-name-word args]
   [if-let [custom-type-signature [try-get custom-type-signatures type-name-word]]
     [let [type-params [type-signature/params custom-type-signature]]
-      [assert [eq [size args] [size type-params]] form-to-type expected same number of arguments
+      [assert [eq [size args] [size type-params]] instantiate-custom-type expected same number of arguments
         [identity type-name-word] [size type-params] [identity [size args]]]
       [let [tenv [transient-kv-map]]
         [for i 0 [size args]
@@ -666,7 +616,7 @@
                       [option/none]]]
                   [type-to-type-kind-opt arg]]]
             [when-let [arg-kind arg-kind-opt]
-              [assert [type-kind-equals param-kind arg-kind] form-to-type expected same type kind
+              [assert [type-kind-equals param-kind arg-kind] instantiate-custom-type expected same type kind
                 [identity type-name-word] [identity param-kind] [identity arg-kind]]]
             [set-kv-map tenv [name/word [pair/fst param-pair]] arg]]]
         [type-substitute tenv [get custom-types type-name-word]]]]
@@ -788,6 +738,71 @@
       t]
 
     t]]
+
+[func form-to-type [lctx outer-form]
+  [letfn [
+  [func go [form]
+    [match form
+    [form/word w]
+    [if [starts-with-dash w]
+      [type/wildcard [form-to-name form]]
+      [let [n [form-to-name form]]
+        [lookup-bind-name lctx n]
+        [type/var n]]]
+
+    [form/list l]
+    [let [type-name-word [form-to-word [first l]]
+          n-of-args [dec [size l]]]
+      [assert-not [is-empty l] form-to-type expected non-empty list]
+      [switch type-name-word
+        [[word tuple]]
+        [type/tuple [list-map t [rest l] [go t]]]
+
+        [[word record]]
+        [type/record
+          [list-map pf [rest l]
+            [let [p [get-list pf]]
+              [pair [form-to-name [first p]] [go [second p]]]]]]
+
+        [[word union]]
+        [type/union [list-map a [rest l] [go a]]]
+
+        [[word pointer]]
+        [do
+          [assert [eq n-of-args 2] form-to-type expected 2 elements
+            [identity type-name-word] [identity n-of-args]]
+          [let [mt [go [second l]]
+                target-type [go [third l]]]
+            [get-memory-type-from-type mt]
+            [type/pointer mt target-type]]]
+
+        [[word exp]]
+        [type/exp [form-to-exp lctx [second l]]]
+
+        [[word array]]
+        [ifs
+          [eq [size l] 2]
+          [type/array [go [second l]] [option/none]]
+
+          [eq [size l] 3]
+          [type/array [go [second l]] [option/some [go [third l]]]]
+
+          [logq-abort array expected 2 or 3 elements]]
+
+        [[word type]]
+        [type/type [form-to-type-kind [second l]]]
+
+        [if-let [custom-type-signature [try-get custom-type-signatures type-name-word]]
+          [let [type-params [type-signature/params custom-type-signature]]
+            [assert [eq n-of-args [size type-params]] form-to-type expected same number of arguments
+              [identity type-name-word] [size type-params] [identity n-of-args]]
+            [type/apply-custom [form-to-name [first l]] [list-map a [rest l] [go a]]]]
+          [if-let [p [try-get primitive-types-by-name type-name-word]]
+            [do
+              [assert [eq n-of-args 0] form-to-type primitive takes no arguments [identity type-name-word]]
+              [type/primitive p]]
+            [logq-abort not implemented form-to-type [identity form]]]]]]]]]
+    [go outer-form]]]
 
 [func form-special-to-exp [lctx fw l]
   [switch fw
@@ -978,13 +993,7 @@
           [desc-kind/local ld] [logq-abort not implemented]
 
           [desc-kind/top td]
-          [match td
-            [top-desc-kind/memory md] md
-            [top-desc-kind/import id]
-            [match id
-              [import-kind-desc/memory md] md
-              [logq-abort not implemented data import]]
-            [logq-abort not implemented data import]]]
+          [top-desc-kind-memory-desc td]]
        pt [memory-desc/type mem-desc]
        mem-name-word [name/word mem-name]]
       [exp/data mem-name data-exp]]
@@ -1040,9 +1049,9 @@
 
                 [desc-kind/local ld]
                 [logq-abort not implemented type-of call [identity fn]]]
-              param-pairs [pair/fst func-desc]
+              param-pairs [function-desc/parameters func-desc]
               n-of-params [size param-pairs]
-              result-type [pair/snd func-desc]
+              result-type [function-desc/result-type func-desc]
               cargs [list-map arg args [form-to-exp lctx arg]]
               gtype-args [growable-list]
               gnon-type-args [growable-list]
@@ -1492,6 +1501,7 @@
 
     [exp/memory-static-top mem-name]
     [do
+      [todo use mem type]
       [type/primitive type-primitive-i32]]
 
     [exp/type t]
@@ -1547,12 +1557,13 @@
           [do
             [when-not [eq [size l] 3] [error form expected def name exp-form]]
             [let
-              [be [form-to-exp local-context-empty [third l]]
+              [name-form [second l]
+               be [form-to-exp local-context-empty [third l]]
                type [type-of be]
                is-mutable [eq-word fw [word mutable]]
                kind [if is-mutable top-value-kind-variable top-value-kind-constant]
-               bt [top-decl/value kind [form-to-name [second l]] be]]
-              [bind-top [second l] [pair [if is-mutable [lift-literal-type type] type] [top-desc-kind/value kind]]]
+               bt [top-decl/value kind [form-to-name name-form] be]]
+              [bind-top name-form [pair [if is-mutable [lift-literal-type type] type] [top-desc-kind/value kind]]]
               [option/some bt]]]
 
           [[word memory]]
@@ -1611,7 +1622,7 @@
                   ikd
                   [match ik
                     [import-kind-exp/function ps rt]
-                    [import-kind-desc/function ps rt]
+                    [import-kind-desc/function [function-desc ps rt]]
 
                     [import-kind-exp/memory mem-exp]
                     [import-kind-desc/memory [mem-exp-to-mem-kind mem-exp]]
@@ -1626,7 +1637,8 @@
             [when [lt-s [size l] 3]
               [error form function expected name params return-type bodies]]
             [let
-              [params-list [get-list [third l]]
+              [name-form [second l]
+               params-list [get-list [third l]]
                return-type-form [fourth l]
                param-ctx [transient-kv-map]
                lctx [local-context-make-top param-ctx [local-context-kind/func]]
@@ -1637,13 +1649,12 @@
                   [set-kv-map param-ctx [name/word pname] ptype]
                   [pair pname ptype]]]
                return-type [form-to-type lctx return-type-form]]
-              [bind-top [second l]
+              [bind-top name-form
                 [pair
                   [type/func
                     [list-map p parameters [pair/snd p]] return-type]
                   [top-desc-kind/function
-                    parameters
-                    return-type]]]
+                    [function-desc parameters return-type]]]]
               [let
                 [cbodies [list-map body [slice l 4 [size l]] [form-to-exp lctx body]]
                  inferred-return-type [type-ofs cbodies]]
@@ -1652,11 +1663,11 @@
                   [log [expand-custom return-type]]
                   [log inferred-return-type]
                   [log [expand-custom inferred-return-type]]
-                  [logq-abort return type mismatch [form-to-word [second l]]]]
+                  [logq-abort return type mismatch [form-to-word name-form]]]
                 [option/some
                   [top-decl/function
                     [exp-function
-                      [form-to-name [second l]]
+                      [form-to-name name-form]
                       parameters
                       return-type
                       cbodies]]]]]]
@@ -2094,7 +2105,7 @@
         [top-desc-kind/value -]
         [wat-inst/global.get [name/word n]]
 
-        [top-desc-kind/function - --]
+        [top-desc-kind/function -]
         [logq-abort function as value not implemented]]
 
       [desc-kind/local ld]
@@ -2284,7 +2295,7 @@
                     [desc-kind/top td]
                     [match td
                       [top-desc-kind/value -] [export-kind/global]
-                      [top-desc-kind/function - --] [export-kind/func]
+                      [top-desc-kind/function -] [export-kind/func]
                       [top-desc-kind/import -] [logq-abort not implemented export-kind/import]
                       [top-desc-kind/memory -] [export-kind/memory]]]]
               [pair nw [pair ekind nw]]]]]
