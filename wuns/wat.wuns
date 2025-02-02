@@ -124,6 +124,16 @@
   [for i 0 [word-byte-size word]
     [print-byte printer [char-code-at word i]]]]
 
+[defn print-int32 [printer n-bytes n]
+  [assert [le-s n-bytes 8] print-i32 expected 8 or fewer bytes got [identity n-bytes]]
+  [loop
+    [i 0
+      cur n]
+    [when [lt-s i n-bytes]
+      [print-byte printer [intrinsic i32.and [i32 0xff] cur]]
+      [continue
+        i [inc i]
+        cur [intrinsic i32.shr-s cur [i32 8]]]]]]
 
 [defn int-to-hex-ascii [i]
   [if [lt-s i [i32 10]]

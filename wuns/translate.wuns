@@ -1738,7 +1738,9 @@
     [if-let [size-type opt-st]
       [match size-type
         [type/exp size-exp]
-        [int-exp-mul [type-to-size-of-exp et] [const-eval size-exp]]]
+        [int-exp-mul [type-to-size-of-exp et] [const-eval size-exp]]
+
+        [logq-abort type-to-size-of-exp array size not an exp type [identity size-type]]]
       [logq-abort type-to-size-of-exp no size given [identity t]]]
 
     [type/tuple types]
@@ -1762,9 +1764,7 @@
         sum]]
 
     [type/var n]
-    [do
-      [logq type var desc [identity n] [try-get type-env [name/word n]] [try-get name-to-desc n]]
-      [type-to-size-of-exp [get type-env [name/word n]]]]
+    [type-to-size-of-exp [get type-env [name/word n]]]
 
     [logq-abort not implemented type-to-size-of-exp [expand-custom t] [identity t]]]]
 
@@ -1802,20 +1802,11 @@
 [func exp-to-bytes [e]
   [let
     [bprinter [empty-printer]
-     print-int32 [func pi [n-bytes n]
-      [loop
-        [i 0
-         cur n]
-        [when [lt-s i n-bytes]
-          [print-byte bprinter [intrinsic i32.and [i32 0xff] cur]]
-          [continue
-            i [inc i]
-            cur [intrinsic i32.shr-s cur [i32 8]]]]]]
      go
      [func go [e]
       [match [const-eval e]
         [exp/i32 n]
-        [print-int32 4 n]
+        [print-int32 bprinter 4 n]
 
         [exp/literal pt value-name]
         [let [n-bytes [primitive-type/bytes pt]]
@@ -1823,7 +1814,7 @@
             exp-to-bytes expected natural alignment [identity pt]]
           [switch [primitive-type/prefix pt]
             [[word i] [word u]]
-            [print-int32 n-bytes [word-to-int [name/word value-name]]]
+            [print-int32 bprinter n-bytes [word-to-int [name/word value-name]]]
 
             [[word f]]
             [loop
