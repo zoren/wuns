@@ -110,7 +110,6 @@
 
     [var name]
     [if exp exp exp]
-    [switch exp [list [pair [list exp] exp]] exp]
     [cast type exp]
     [deref exp]
     [deref-to exp type]
@@ -811,20 +810,6 @@
       [when-not [type-assignable type-i32 [type-of c]] [logq-abort if condition not i32]]
       [common-super-type tt te]
       [exp/if c t e]]
-
-    [[word switch]]
-    [let [disc [form-to-exp lctx [second l]]
-          cases
-          [list-map c [pairwise-pairs [slice l 3 [dec [size l]]]]
-            [pair
-              [list-map e [get-list [pair/fst c]]
-                [let [v [form-to-exp lctx e]]
-                  [assert [type-assignable type-i32 [type-of v]] values should be i32]
-                  v]]
-              [form-to-exp lctx [pair/snd c]]]]
-          default-case [form-to-exp lctx [last l]]]
-      [when-not [type-assignable type-i32 [type-of disc]] [logq-abort switch discriminator not i32]]
-      [exp/switch disc cases default-case]]
 
     [[word cast]]
     [let [t [form-to-type lctx [second l]]
@@ -1859,9 +1844,6 @@
         [const-eval [if n t e]]
 
         [exp/if cec [const-eval t] [const-eval e]]]]
-
-    [exp/switch e cases default]
-    [logq-abort not implemented const-eval switch]
 
     [exp/cast t e]
     [exp/cast t [const-eval e]]
