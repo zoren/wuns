@@ -435,10 +435,6 @@
 [defn try-get-int-const [e]
   [match e
     [exp/i32 i] [option/some i]
-    [exp/literal pt n]
-    [if [is-identical pt type-primitive-i32]
-      [option/some [word-to-int [name/word n]]]
-      [option/none]]
     [option/none]]]
 
 [defn mk-exp-i32-add [a b]
@@ -1042,7 +1038,8 @@
       [if-let [fw [try-get-word ff]]
         [let [fn [form-to-name ff]]
           [if-let [desc [try-lookup-bind-name lctx fn]]
-            [let [func-desc
+            [let
+             [func-desc
               [match [pair/snd desc]
                 [desc-kind/top td]
                 [top-desc-kind-function-desc td]
