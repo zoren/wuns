@@ -151,6 +151,13 @@
     [result [list word]]
     [body [list exp]]]]
 
+[type exp-function []
+  [record
+    [name name]
+    [params [list [pair name type]]]
+    [return-type type]
+    [bodies [list exp]]]]
+
 [type exp2inst-compiler []
   [record
     [exp-to-inst [func [exp] wat-inst]]
@@ -207,13 +214,6 @@
 
 [defn types-to-string [ts]
   [word-join [word -] [list-map t ts [type-to-string t]]]]
-
-[type exp-function []
-  [record
-    [name name]
-    [params [list [pair name type]]]
-    [return-type type]
-    [bodies [list exp]]]]
 
 [defn type-is-type [t]
   [match t
