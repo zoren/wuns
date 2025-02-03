@@ -1062,28 +1062,24 @@
                   [push gnon-type-params [pair [pair/fst pp] tpsub]]
                   [push gnon-type-args a]]]]]
           [let
-            [type-args [clone-growable-to-frozen-list gtype-args]]
-            [if [is-empty type-args]
-              [exp/call [exp/var fn] cargs]
-              [let
-                [spec-res [type-substitute type-env result-type]
-                 types-as-str [types-to-string type-args]
-                 spec-name [concat-words fw [concat-words [word ---gen---] types-as-str]]
-                 f-calls
-                  [if-let [calls [try-get generic-calls [name/word fn]]]
-                    calls
-                    [let [type-string-to-comp-env [transient-kv-map]]
-                      [set-kv-map generic-calls [name/word fn] type-string-to-comp-env]
-                      type-string-to-comp-env]]
-                 res-form [exp/call [exp/var fn] cargs]]
-                [logq a generic call [identity fw] [identity spec-res]]
-                [set-kv-map generic-call-types res-form spec-res]
-                [set-kv-map generic-call-info res-form [pair spec-name [clone-growable-to-frozen-list gnon-type-args]]]
-                [set-kv-map f-calls types-as-str
-                  [pair
-                    [clone-growable-to-frozen-list gnon-type-params]
-                    type-env]]
-                res-form]]]]
+            [type-args [clone-growable-to-frozen-list gtype-args]
+             res-form [exp/call [exp/var fn] cargs]
+             spec-res [type-substitute type-env result-type]
+             types-as-str [types-to-string type-args]
+             spec-name [concat-words fw [concat-words [word ---gen---] types-as-str]]
+             f-calls
+             [if-let [calls [try-get generic-calls [name/word fn]]]
+               calls
+               [let [type-string-to-comp-env [transient-kv-map]]
+                 [set-kv-map generic-calls [name/word fn] type-string-to-comp-env]
+                 type-string-to-comp-env]]]
+            [set-kv-map generic-call-types res-form spec-res]
+            [set-kv-map generic-call-info res-form [pair spec-name [clone-growable-to-frozen-list gnon-type-args]]]
+            [set-kv-map f-calls types-as-str
+              [pair
+                [clone-growable-to-frozen-list gnon-type-params]
+                type-env]]
+            res-form]]
             [if-let [macro-func [try-get-macro evaluator fw]]
               [form-to-exp lctx [apply macro-func args]]
               [form-special-to-exp lctx fw l]]]]
@@ -1581,7 +1577,7 @@
                 [for-each param-pair [type-signature/params type-sig]
                   [set-kv-map param-map [name/word [pair/fst param-pair]] [type/type [pair/snd param-pair]]]]
                 [set-kv-map custom-types type-name [form-to-type lctx [at l [add 2 i]]]]]]
-          [option/none]]
+            [option/none]]
 
           [[word import]]
           [let
