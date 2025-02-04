@@ -106,7 +106,7 @@
   [union
     [i32 i32]
     [literal primitive-type name]
-    [call exp [list exp]]
+    [call name [list exp]]
 
     [var name]
     [if exp exp exp]
@@ -130,17 +130,99 @@
     [type type]
     ]]
 
+[defn exp-iterate [f]
+  [func go [exp]
+      [f exp]
+      [match exp
+        [exp/literal pt n]
+        [do]
+
+        [exp/i32 -]
+        [do]
+
+        [exp/memory-static-top -]
+        [do]
+
+        [exp/call fn args]
+        [for-each arg args [go arg]]
+
+        [exp/if c t e]
+        [do [go c] [go t] [go e]]
+
+        [exp/cast t e]
+        [go e]
+
+        [exp/deref target]
+        [go target]
+
+        [exp/var var-name]
+        [do]
+
+        [exp/size-of t]
+        [do]
+
+        [exp/data mem-name data-exp]
+        [go data-exp]
+
+        [exp/field t n]
+        [go t]
+
+        [exp/index t i]
+        [do [go t] [go i]]
+
+        [exp/intrinsic in args]
+        [for-each a args [go a]]
+
+        [exp/do es]
+        [for-each e es [go e]]
+
+        [exp/deref target]
+        [go target]
+
+        [exp/deref-to pexp ttarget]
+        [go pexp]
+
+        [exp/assign target value]
+        [do [go target] [go value]]
+
+        [exp/assign-mutable target-name value]
+        [go value]
+
+        [exp/let-loop ll-kind bindings bodies]
+        [do
+          [for-each binding bindings [go [pair/snd binding]]]
+          [for-each b bodies [go b]]]
+
+        [exp/record pairs]
+        [for-each p pairs [go [pair/snd p]]]
+
+        [exp/array et elems]
+        [for-each e elems [go e]]
+
+        [exp/tuple elems]
+        [for-each e elems [go e]]
+
+        [exp/continue assignments]
+        [for-each a assignments [go [pair/snd a]]]
+
+        [exp/type t]
+        [do]
+
+        [logq-abort exp-iterate not implemented [identity exp]]]]]
+
 [type exp2exp-compiler []
   [record
     [type-to-size-of-exp [func [type] exp]]
     [calc-field-offset [func [type word] exp]]
-    [const-eval [func [exp] exp]]]]
+    [const-eval [func [exp] [tuple]]]
+    [get-replacements [func [] [transient-kv-map exp exp]]]]]
 
 [type global-exp []
   [record
     [name word]
     [mutable mut]
     [type word]
+    [replacements [transient-kv-map exp exp]]
     [exp exp]]]
 
 [type exp-func []
@@ -148,6 +230,7 @@
     [name word]
     [parameters [list [pair word word]]]
     [result [list word]]
+    [replacements [transient-kv-map exp exp]]
     [body [list exp]]]]
 
 [type exp-function []
@@ -375,6 +458,11 @@
 
     [logq-abort not a function [identity tdk]]]]
 
+[defn top-desc-kind-is-import [tdk]
+  [match tdk
+    [top-desc-kind/import -] true
+    false]]
+
 [defn top-desc-kind-memory-desc [tdk]
   [match tdk
     [top-desc-kind/memory mem-desc] mem-desc
@@ -527,7 +615,7 @@
      custom-types [transient-kv-map]
      active-data-map [transient-kv-map]
      datas [growable-list]
-     generic-calls [transient-kv-map]
+     calls [transient-kv-map]
      generic-call-types [transient-kv-map]
      generic-call-info [transient-kv-map]]
     [letfn [
@@ -1032,54 +1120,25 @@
                 [desc-kind/local ld]
                 [logq-abort not implemented type-of call [identity fn]]]
               param-pairs [function-desc/parameters func-desc]
-              n-of-params [size param-pairs]
-              result-type [function-desc/result-type func-desc]
               cargs [list-map arg args [form-to-exp lctx arg]]
-              gtype-args [growable-list]
-              gnon-type-args [growable-list]
-              gnon-type-params [growable-list]
               type-env [transient-kv-map]]
-          [assert [eq n-of-params [size args]] call expected same number of arguments
-            [identity fn] n-of-params [size args]]
-          [for i 0 [min n-of-params [size args]]
-            [let
-              [pp [at param-pairs i]
-               tp [pair/snd pp]
-               a [at cargs i]
-               ta [type-of a]]
-              [if [type-is-type tp]
-                [match a
-                  [exp/type at]
-                  [do
-                    [push gtype-args at]
-                    [logq binding [name/word [pair/fst pp]] [identity at]]
-                    [set-kv-map type-env [name/word [pair/fst pp]] at]]
-
-                  [logq-abort expected a type arg for a type param]]
-                [let [tpsub [type-substitute type-env tp]]
-                  [assert [type-assignable tpsub ta]
-                    call expected assignable type [identity fn] [identity tp] [identity ta]]
-                  [push gnon-type-params [pair [pair/fst pp] tpsub]]
-                  [push gnon-type-args a]]]]]
-          [let
-            [type-args [clone-growable-to-frozen-list gtype-args]
-             res-form [exp/call [exp/var fn] cargs]
-             spec-res [type-substitute type-env result-type]
-             types-as-str [types-to-string type-args]
-             spec-name [concat-words fw [concat-words [word ---gen---] types-as-str]]
-             f-calls
-             [if-let [calls [try-get generic-calls [name/word fn]]]
-               calls
-               [let [type-string-to-comp-env [transient-kv-map]]
-                 [set-kv-map generic-calls [name/word fn] type-string-to-comp-env]
-                 type-string-to-comp-env]]]
-            [set-kv-map generic-call-types res-form spec-res]
-            [set-kv-map generic-call-info res-form [pair spec-name [clone-growable-to-frozen-list gnon-type-args]]]
-            [set-kv-map f-calls types-as-str
-              [pair
-                [clone-growable-to-frozen-list gnon-type-params]
-                type-env]]
-            res-form]]
+              [assert [eq [size param-pairs] [size args]] call expected same number of arguments
+                [identity fn] n-of-params n-of-args]
+              [for i 0 [size param-pairs]
+                [let [pp [at param-pairs i]
+                      pt [pair/snd pp]
+                      arg [at cargs i]
+                      targ [type-of arg]]
+                  [if [type-is-type pt]
+                    [set-kv-map type-env [name/word [pair/fst pp]] [match arg [exp/type at] at [logq-abort arg bla]]]
+                    [let [pt-subst [type-substitute type-env pt]]
+                      [when-not [type-assignable pt-subst targ]
+                        [logq param [identity pt-subst]]
+                        [logq arg-- [identity targ]]
+                        [logq type-env [identity type-env]]
+                        [logq-abort call expected assignable type [identity fn]]]
+                      ]]]]
+              [exp/call fn cargs]]
             [if-let [macro-func [try-get-macro evaluator fw]]
               [form-to-exp lctx [apply macro-func args]]
               [form-special-to-exp lctx fw l]]]]
@@ -1387,16 +1446,25 @@
     [exp/if c t e]
     [common-super-type [type-of t] [type-of e]]
 
-    [exp/call f args]
-    [if-let [gen-call-type [try-get generic-call-types exp]]
-      gen-call-type
-      [match [type-of f]
-        [type/func params rt]
-        [if [exists params type-is-type]
-          [get generic-call-types exp]
-          rt]
+    [exp/call fname args]
+    [let
+      [func-desc
+        [match [get-desc-from-name fname]
+          [desc-kind/top td]
+          [top-desc-kind-function-desc td]
 
-        [logq-abort not a function type]]]
+          [desc-kind/local ld]
+          [logq-abort not implemented type-of call [identity fname]]]
+       param-pairs [function-desc/parameters func-desc]
+       type-env [transient-kv-map]]
+      [for i 0 [size param-pairs]
+        [let [pp [at param-pairs i]]
+          [when [type-is-type [pair/snd pp]]
+            [set-kv-map type-env [name/word [pair/fst pp]]
+            [match [at args i]
+              [exp/type arg-t] arg-t
+              [logq-abort not a type [at args i]]]]]]]
+      [type-substitute type-env [function-desc/result-type func-desc]]]
 
     [exp/cast t e]
     t
@@ -1706,6 +1774,7 @@
     [logq-abort not a primitive type [identity t]]]]
 
 [func mk-exp-to-exp-compiler [type-env]
+  [let [replacements [transient-kv-map]]
   [letfn [
 [func type-to-size-of-exp [t]
   [match [lift-literal-type [expand-custom t]]
@@ -1722,7 +1791,7 @@
     [if-let [size-type opt-st]
       [match size-type
         [type/exp size-exp]
-        [int-exp-mul [type-to-size-of-exp et] [const-eval size-exp]]
+        [int-exp-mul [type-to-size-of-exp et] size-exp]
 
         [logq-abort type-to-size-of-exp array size not an exp type [identity size-type]]]
       [logq-abort type-to-size-of-exp no size given [identity t]]]
@@ -1786,7 +1855,7 @@
     [bprinter [empty-printer]
      go
      [func go [e]
-      [match [const-eval e]
+      [match e
         [exp/i32 n]
         [print-int32 bprinter 4 n]
 
@@ -1817,49 +1886,31 @@
         [exp/record fields]
         [for-each field fields [go [pair/snd field]]]
 
-        [logq-abort not implemented exp-to-bytes [identity e]]]]]
+        [if-let [replacement-exp [const-eval e]]
+          [go replacement-exp]
+          [logq-abort not implemented exp-to-bytes [identity e]]]]]]
     [go e]
     [printer-to-byte-array bprinter]]]
 
 [func const-eval [exp]
   [match exp
-    [exp/literal pt n]
-    [if [is-identical pt type-primitive-i32]
-      [exp/i32 [word-to-int [name/word n]]]
-      exp]
-
-    [exp/call fn args]
-    [if-let [gen [try-get generic-call-info exp]]
-      [exp/call [exp/var [name [pair/fst gen]]] [pair/snd gen]]
-      [exp/call [const-eval fn] [list-map a args [const-eval a]]]]
-
-    [exp/if c t e]
-    [let [cec [const-eval c]]
-      [match cec
-        [exp/i32 n]
-        [const-eval [if n t e]]
-
-        [exp/if cec [const-eval t] [const-eval e]]]]
-
-    [exp/cast t e]
-    [exp/cast t [const-eval e]]
-
-    [exp/deref target]
-    [exp/deref [const-eval target]]
-
     [exp/var var-name]
     [match [get-desc-from-name var-name]
-      [desc-kind/local ld] exp
+      [desc-kind/local ld] [option/none]
       [desc-kind/top td]
       [match td
         [top-desc-kind/value value-kind]
-        [if-let [desc-exp [try-get gconstants [name/word var-name]]]
-          desc-exp
-          exp]
-        exp]]
+        [if-let [pair [try-get gconstants [name/word var-name]]]
+          [do
+            [for-each repl [kv-map-entries [pair/fst pair]]
+              [set-kv-map replacements [pair/fst repl] [pair/snd repl]]]
+            [option/some [pair/snd pair]]]
+          [option/none]]
+
+        [option/none]]]
 
     [exp/size-of t]
-    [type-to-size-of-exp t]
+    [option/some [type-to-size-of-exp t]]
 
     [exp/data mem-name data-exp]
     [let
@@ -1876,72 +1927,36 @@
           mem-name-word
           [[translate-literal type-primitive-i32] offset-word]
           bytes]]
-      [exp/i32 current-offset]]
+      [option/some [exp/i32 current-offset]]]
 
-    [exp/field t n]
-    [exp/field [const-eval t] n]
+    [option/none]]]
 
-    [exp/index t i]
-    [exp/index [const-eval t] [const-eval i]]
+[func const-add-replace [e]
+  [if-let [replacement-exp [const-eval e]]
+    [do
+      [set-kv-map replacements e replacement-exp]
+      replacement-exp]
+    e]]
 
-    [exp/i32 -]
-    exp
-
-    [exp/memory-static-top -]
-    exp
-
-    [exp/intrinsic in args]
-    [exp/intrinsic in [list-map a args [const-eval a]]]
-
-    [exp/do es]
-    [exp/do [list-map e es [const-eval e]]]
-
-    [exp/deref target]
-    [exp/deref [const-eval target]]
-
-    [exp/deref-to pexp ttarget]
-    [exp/deref-to [const-eval pexp] ttarget]
-
-    [exp/assign target value]
-    [exp/assign [const-eval target] [const-eval value]]
-
-    [exp/assign-mutable target-name value]
-    [exp/assign-mutable target-name [const-eval value]]
-
-    [exp/let-loop ll-kind bindings bodies]
-    [exp/let-loop ll-kind
-      [list-map binding bindings [pair [pair/fst binding] [const-eval [pair/snd binding]]]]
-      [list-map b bodies [const-eval b]]]
-
-    [exp/record pairs]
-    [exp/record [list-map p pairs [pair [pair/fst p] [const-eval [pair/snd p]]]]]
-
-    [exp/array et elems]
-    [exp/array et [list-map e elems [const-eval e]]]
-
-    [exp/tuple elems]
-    [exp/tuple [list-map e elems [const-eval e]]]
-
-    [exp/continue assignments]
-    [exp/continue [list-map a assignments [pair [pair/fst a] [const-eval [pair/snd a]]]]]
-
-    [logq-abort not implemented const-eval [identity exp]]
-
-    ]]]
+  ]
   [exp2exp-compiler
     type-to-size-of-exp
     calc-field-offset
-    const-eval]]]
+    [exp-iterate
+      [func f [e]
+        [const-add-replace e]]]
+    [func get-replacements [] replacements]]]]]
 
-[func mk-exp-to-inst-compiler [type-env]
+[func mk-exp-to-inst-compiler [type-env replacements]
   [let
     [glocals [growable-list]
      e2e-comp [mk-exp-to-exp-compiler type-env]
      type-to-size-of-exp [exp2exp-compiler/type-to-size-of-exp e2e-comp]
      calc-field-offset [exp2exp-compiler/calc-field-offset e2e-comp]]
     [letfn [
-[func exp-to-inst [f]
-  [match f
+[func exp-to-inst [input-exp]
+  [let [repl-exp [if-let [r [try-get replacements input-exp]] r input-exp]]
+    [match repl-exp
     [exp/deref target]
     [let
       [pt [type-of target]
@@ -1986,15 +2001,11 @@
        [func assign-pointer [target-int-exp ttarget value]
         [let [expanded-t [expand-custom [type-substitute type-env ttarget]]
               lifted-t [lift-literal-type expanded-t]]
-          [logq assign-pointer [identity expanded-t]]
           [match lifted-t
           [type/primitive pttarget]
           [let
             [subst-t [type-substitute type-env [type-of value]]
-             - [logq subst t [identity subst-t]]
              normed-t [lift-literal-type [expand-custom subst-t]]
-             -- [logq normed t [identity normed-t]]
-
              ptvalue [type-to-primitive normed-t]]
             [wat-inst/store
               [wasm-name-to-wat-byte-array [prim-types-to-store-inst-name pttarget ptvalue]]
@@ -2086,20 +2097,16 @@
       [desc-kind/local ld]
       [wat-inst/local.get [name/word n]]]
 
-    [exp/call fexp args]
-    [match fexp
-      [exp/var fn]
-      [if-let [gen [try-get generic-call-info f]]
-        [do
-          [logq call gen-info [identity gen]]
-          [wat-inst/call [pair/fst gen] [list-map arg [pair/snd gen] [exp-to-inst arg]]]]
-        [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]]
-
-      [logq-abort not implemented call on non-var]]
+    [exp/call fn args]
+    [if-let [gen [try-get generic-call-info repl-exp]]
+      [do
+        [logq call gen-info [identity gen]]
+        [wat-inst/call [pair/fst gen] [list-map arg [pair/snd gen] [exp-to-inst arg]]]]
+      [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]]
 
     [exp/if c t e]
     [wat-inst/if
-      [type-to-wat-types [type-of f]]
+      [type-to-wat-types [type-of repl-exp]]
       [exp-to-inst c] [exp-to-inst t] [exp-to-inst e]]
 
     [exp/do es]
@@ -2192,7 +2199,7 @@
         [int-to-word [atom-get offset-atom]]
         [word 16]]]
 
-    [logq-abort exp-to-inst not implemented [identity f]]]]
+    [logq-abort exp-to-inst not implemented [identity repl-exp]]]]]
 
 [func exps-to-inst [forms]
   [wat-inst/instructions
@@ -2212,6 +2219,11 @@
     [exp2inst-compiler exp-to-inst exps-to-inst glocals]
     ]]]
 
+[func spec-name-from-fname-type-args [fname type-args]
+  [if [is-empty type-args]
+    fname
+    [concat-words fname [concat-words [word ---gen---] [types-to-string type-args]]]]]
+
 [func compile [tops]
   [let
     [imports [growable-list]
@@ -2221,7 +2233,106 @@
      funcs [growable-list]
      exp-funcs [growable-list]
      exports [growable-list]
-     empty-type-env [transient-kv-map]]
+     empty-type-env [transient-kv-map]
+     generated-specializations [set]
+     name-to-top-decl [transient-kv-map]
+     gen-spec-func
+     [func gen-spec-func [fname type-args]
+      [let
+        [top-desc [pair/snd [get top-names fname]]
+         spec-name [spec-name-from-fname-type-args fname type-args]]
+        [when [and [not [top-desc-kind-is-import top-desc]] [not [set-has generated-specializations spec-name]]]
+          [set-add generated-specializations spec-name]
+          [let
+            [func-desc [top-desc-kind-function-desc top-desc]
+             param-pairs [function-desc/parameters func-desc]
+             type-env [transient-kv-map]
+             gnon-type-params [growable-list]]
+            [loop [i-arg 0 j-param 0]
+              [if [lt-s j-param [size param-pairs]]
+                [let [pp [at param-pairs j-param] pt [pair/snd pp]]
+                  [if [type-is-type pt]
+                    [let [subst-arg-t [type-substitute type-env [at type-args i-arg]]]
+                      [set-kv-map type-env [name/word [pair/fst pp]] subst-arg-t]
+                      [continue i-arg [inc i-arg] j-param [inc j-param]]]
+                    [do
+                      [push gnon-type-params pp]
+                      [continue j-param [inc j-param]]]]]
+                [assert [eq i-arg [size type-args]] specialization type args arity mismatch]]]
+            [let
+              [e2ec [mk-exp-to-exp-compiler type-env]
+               const-eval [exp2exp-compiler/const-eval e2ec]
+               fn
+                [match [get name-to-top-decl fname]
+                  [top-decl/function f] f
+                  [logq-abort not a function [identity fname]]]
+               rt [type-substitute type-env [exp-function/return-type fn]]
+               replacements [[exp2exp-compiler/get-replacements e2ec]]
+               replace
+               [exp-iterate
+                 [func f [e]
+                    [match e
+                      [exp/call called-fname called-args]
+                      [let
+                        [cfname [name/word called-fname]
+                         called-func-desc [top-desc-kind-function-desc [pair/snd [get top-names cfname]]]
+                         called-param-pairs [function-desc/parameters called-func-desc]
+                         gtype-args [growable-list]
+                         gnon-type-args [growable-list]]
+                        [assert [eq [size called-args] [size called-param-pairs]]
+                          specialization call arity mismatch
+                          [identity cfname] [identity called-param-pairs] [identity called-args] ]
+                        [for i 0 [size called-param-pairs]
+                          [let [cp [at called-param-pairs i] ct [pair/snd cp]]
+                            [if [type-is-type ct]
+                              [match [at called-args i]
+                                [exp/type arg-t]
+                                [push gtype-args [type-substitute type-env arg-t]]
+
+                                [logq-abort g]]
+                              [push gnon-type-args [at called-args i]]]]]
+                        [let
+                          [ctype-args [clone-growable-to-frozen-list gtype-args]]
+                          [gen-spec-func cfname ctype-args]
+                          [set-kv-map replacements e
+                            [exp/call
+                              [name [spec-name-from-fname-type-args cfname ctype-args]]
+                              [clone-growable-to-frozen-list gnon-type-args]]]]]
+
+                      [do]]
+                    true]]]
+              [for-each body [exp-function/bodies fn]
+                [const-eval body]
+                [replace body]]
+              [push
+                exp-funcs
+                [pair
+                  type-env
+                  [exp-func
+                    spec-name
+                    [list-map p [clone-growable-to-frozen-list gnon-type-params]
+                      [pair [name/word [pair/fst p]] [type-to-wat-type [type-substitute type-env [pair/snd p]]]]]
+                    [type-to-wat-types rt]
+                    replacements
+                    [exp-function/bodies fn]]]]]
+]]]]
+    ]
+    [for-each top tops
+      [match top
+        [top-decl/memory n mem-exp]
+        [set-kv-map name-to-top-decl [name/word n] top]
+
+        [top-decl/import mod-name exp-imports]
+        [set-kv-map name-to-top-decl [name/word mod-name] top]
+
+        [top-decl/value k def-name exp]
+        [set-kv-map name-to-top-decl [name/word def-name] top]
+
+        [top-decl/function f]
+        [set-kv-map name-to-top-decl [name/word [exp-function/name f]] top]
+
+        [do]]]
+
     [for-each top tops
       [match top
         [top-decl/memory n mem-exp]
@@ -2270,70 +2381,46 @@
                     [desc-kind/top td]
                     [match td
                       [top-desc-kind/value -] [export-kind/global]
-                      [top-desc-kind/function -] [export-kind/func]
+                      [top-desc-kind/function fd]
+                      [do
+                        [assert-not
+                          [exists [function-desc/parameters fd]
+                            [func pp [param-pair] [type-is-type [pair/snd param-pair]]]]
+                          export function with type parameters not allowed]
+                        [gen-spec-func nw [list]]
+                        [export-kind/func]]
                       [top-desc-kind/import -] [logq-abort not implemented export-kind/import]
                       [top-desc-kind/memory -] [export-kind/memory]]]]
               [pair nw [pair ekind nw]]]]]
 
-        [top-decl/value k def-name e]
+        [top-decl/value k def-name exp]
         [let
-          [e2ec [mk-exp-to-exp-compiler [transient-kv-map]]
+          [e2ec [mk-exp-to-exp-compiler empty-type-env]
            is-constant [is-identical k top-value-kind-constant]
-           ce-e [[exp2exp-compiler/const-eval e2ec] e]]
+           const-eval [exp2exp-compiler/const-eval e2ec]
+           replacements [[exp2exp-compiler/get-replacements e2ec]]]
+          [const-eval exp]
           [when is-constant
-            [set-kv-map gconstants [name/word def-name] ce-e]]
+            [set-kv-map gconstants [name/word def-name] [pair replacements exp]]]
           [push
             exp-globals
             [global-exp
               [name/word def-name]
               [if is-constant [mut/const] [mut/var]]
-              [type-to-wat-type [type-of e]]
-              ce-e]]]
+              [type-to-wat-type [type-of exp]]
+              replacements
+              exp]]
+
+              ]
 
         [top-decl/function f]
-        [let
-          [fnw [name/word [exp-function/name f]]]
-          [if [exists [exp-function/params f] [func is-type [pp] [type-is-type [pair/snd pp]]]]
-            [for-each func-spec
-              [kv-map-entries [option-default [try-get generic-calls fnw] [transient-kv-map]]]
-              [let
-                [type-env [pair/snd [pair/snd func-spec]]
-                 e2ec [mk-exp-to-exp-compiler type-env]
-                 ce [exp2exp-compiler/const-eval e2ec]
-                 type-args-str [pair/fst func-spec]
-                 spec-name [concat-words fnw [concat-words [word ---gen---] type-args-str]]
-                 non-type-params [pair/fst [pair/snd func-spec]]
-                 rt [type-substitute type-env [exp-function/return-type f]]]
-                [push
-                  exp-funcs
-                  [pair
-                    type-env
-                    [exp-func
-                      spec-name
-                      [list-map p non-type-params
-                        [pair [name/word [pair/fst p]] [type-to-wat-type [pair/snd p]]]]
-                      [type-to-wat-types rt]
-                      [list-map body [exp-function/bodies f] [ce body]]]]]
-                [logq compiled generic func
-                  [identity spec-name] [identity type-args-str] [identity non-type-params]]]]
-            [let
-              [e2ec [mk-exp-to-exp-compiler empty-type-env]
-               ce [exp2exp-compiler/const-eval e2ec]]
-              [push
-                exp-funcs
-                [pair
-                  empty-type-env
-                  [exp-func
-                    fnw
-                    [list-map p [exp-function/params f]
-                      [pair [name/word [pair/fst p]] [type-to-wat-type [pair/snd p]]]]
-                    [type-to-wat-types [exp-function/return-type f]]
-                    [list-map body [exp-function/bodies f] [ce body]]]]]]]]]]
-    [let
-      [e2ec [mk-exp-to-exp-compiler empty-type-env]
-       e2ic [mk-exp-to-inst-compiler empty-type-env]
-       e2i [exp2inst-compiler/exp-to-inst e2ic]]
-      [for-each g [clone-growable-to-frozen-list exp-globals]
+        [do]
+
+        ]]
+    [for-each g [clone-growable-to-frozen-list exp-globals]
+      [let
+        [e2ic [mk-exp-to-inst-compiler empty-type-env [global-exp/replacements g]]
+         e2i [exp2inst-compiler/exp-to-inst e2ic]]
         [push
           globals
           [wat-global
@@ -2345,7 +2432,7 @@
       [let
         [type-env [pair/fst comp-f-pair]
          f [pair/snd comp-f-pair]
-         e2i [mk-exp-to-inst-compiler type-env]
+         e2i [mk-exp-to-inst-compiler type-env [exp-func/replacements f]]
          es2i [exp2inst-compiler/exps-to-inst e2i]
          inst [es2i [exp-func/body f]]
          locals [clone-growable-to-frozen-list [exp2inst-compiler/glocals e2i]]]

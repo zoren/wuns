@@ -161,7 +161,7 @@
         [qlist
           [memory mem [i32] 1]
 
-          [def pptup [data mem [data mem [tuple [f64 1.1] [i32 2]]]]]
+          [def pptup [data mem [data mem [tuple [f64 11.1] [i32 22]]]]]
 
           [defn get-pointed [t [pointer [exp mem] [pointer [exp mem] [tuple [f64] [i32]]]]] [pointer [exp mem] [tuple [f64] [i32]]]
             [deref t]]
@@ -409,4 +409,5 @@
             [list
               [pair [i32 5] [word '[defn f [] [i32] [i32 5]] [export f]']]]]
           [for-each test tests
-            [js-app form-to-top [js-app parse [alloc-word [pair/snd test]]]]]]]]]]
+            [js-app form-to-top [js-app parse [alloc-word [pair/snd test]]]]]
+          [logq done]]]]]]
