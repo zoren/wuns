@@ -6,6 +6,11 @@
     [offset word]
     [alignment word]]]
 
+[type wat-immediate []
+  [union
+    [memory word]
+    ]]
+
 [type wat-inst []
   [union
     [i32.const word]
@@ -16,6 +21,7 @@
     [local.set word wat-inst]
     [global.get word]
     [global.set word wat-inst]
+    [instruction byte-array [list wat-immediate] [list wat-inst]]
     [inst-word word [list wat-inst]]
     [inst byte-array [list wat-inst]]
     [load byte-array wat-inst-memargs wat-inst]
@@ -243,6 +249,15 @@
     [wat-inst/inst-word w args]
     [wat-concat
       [list [wat/word w]] [list-map a args [wat-inst-to-out a]]]
+
+    [wat-inst/instruction ba imm-args args]
+    [wat-concat
+      [list [wat/byte-array ba]]
+      [list-map ia imm-args
+        [match ia
+          [wat-immediate/memory m]
+          [wat-list [wat/word [word memory]] [wat/dollar m]]]]
+      [list-map a args [wat-inst-to-out a]]]
 
     [wat-inst/inst ba args]
     [wat-concat
