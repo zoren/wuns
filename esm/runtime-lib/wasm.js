@@ -23,6 +23,12 @@ const wasm_get_export = (instance, export_name) => {
 }
 export { wasm_get_export as 'wasm-get-export' }
 
+const wasm_get_exports = (module) => {
+  if (!(module instanceof WebAssembly.Module)) throw new Error('expects module')
+  return WebAssembly.Module.exports(module)
+}
+export { wasm_get_exports as 'wasm-get-exports' }
+
 const wasm_get_export_object = (instance) => {
   if (!(instance instanceof WebAssembly.Instance)) throw new Error('expects instance')
   return instance.exports

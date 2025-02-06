@@ -236,6 +236,7 @@
 [def-instruction i32.div-s i32.div-s]
 
 [import ./runtime-lib/host.js int-to-word [func [i32] word]]
+[import ./runtime-lib/host.js f64-to-word [func [f64] word]]
 [import ./runtime-lib/host.js word-to-int [func [word] i32]]
 [import ./runtime-lib/host.js word-to-f64 [func [word] f64]]
 
@@ -326,6 +327,11 @@
           [flist [quote option/some] v] [form-concat [list [quote do]] forms]
           [quote [do]]]]]
     [logq-abort when-let requires a list as the first argument]]]
+
+[defn option-map [f opt]
+  [if-let [v opt]
+    [option/some [f v]]
+    [option/none]]]
 
 [defn eq-word [wa wb]
   [let [sa [word-byte-size wa] sb [word-byte-size wb]]
@@ -519,6 +525,7 @@
     [func then [content] [parse-string content file-name]]]]
 
 [import ./runtime-lib/host.js apply [type-scheme [a b] [func [[func [.. a] b] [list a]] b]]]
+[import ./runtime-lib/host.js parse-function-parameters [type-scheme [a b] [func [[func [.. a] b] [list a]] [list string]]]]
 
 [defn log-fn [forms]
   [apply console-log [list-map f forms [print f]]]]

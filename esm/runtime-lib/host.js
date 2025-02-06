@@ -67,6 +67,12 @@ export const apply = (fn, args) => {
   return fn(...args)
 }
 
+const parse_function_parameters = (fn) => {
+  if (typeof fn !== 'function') throw new Error('parse-function-parameters expects function')
+  return parseFunctionParameters(fn)
+}
+export { parse_function_parameters as 'parse-function-parameters' }
+
 const word_byte_size = (word) => {
   if (typeof word !== 'string') throw new Error('word-byte-size expects string')
   return word.length
@@ -277,6 +283,11 @@ const int_to_word = (i) => {
   return String(i)
 }
 export { int_to_word as 'int-to-word' }
+const f64_to_word = (f) => {
+  if (typeof f !== 'number') throw new Error('f64-to-word expects number: ' + f)
+  return String(f)
+}
+export { f64_to_word as 'f64-to-word' }
 const word_to_int = (word) => {
   if (typeof word !== 'string') throw new Error('word-to-int expects string')
   const i = +word
