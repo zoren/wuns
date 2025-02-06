@@ -133,16 +133,44 @@
 [defn not [x [i32]] [i32]
   [if x 0 1]]
 
+[defn eq [x [i32] y [i32]] [i32] [intrinsic i32.eq x y]]
+[defn lt-s [x [i32] y [i32]] [i32] [intrinsic i32.lt-s x y]]
+
 [defn add [x [i32] y [i32]] [i32] [intrinsic i32.add x y]]
 [defn sub [x [i32] y [i32]] [i32] [intrinsic i32.sub x y]]
+[defn mul [x [i32] y [i32]] [i32] [intrinsic i32.mul x y]]
 
 [defn inc [x [i32]] [i32] [add x 1]]
 [defn dec [x [i32]] [i32] [sub x 1]]
+
+[mutable mem-top [memory-static-top mem]]
+
+[defn get-top [] [i32]
+  mem-top]
+
+[defn set-top [new-top [i32]] [tuple]
+  [assign mem-top new-top]]
 
 [defn align [p [i32] x [i32]] [i32]
   [intrinsic i32.and
     [add x [dec p]]
     [intrinsic i32.xor [i32 -1] [dec p]]]]
+
+[defn mem-align [p [i32]] [i32]
+  [align [i32 16] p]]
+
+[defn alloc-n [n-bytes [i32]] [i32]
+  [if [eq n-bytes 0] [intrinsic unreachable]]
+  [let
+    [align-bytes [mem-align n-bytes]
+     top-val [get-top]
+     mem-size-bytes [mul [intrinsic memory.size mem] [i32 65536]]]
+    [if [eq top-val 0] [intrinsic unreachable]]
+    [let [new-top [add top-val align-bytes]]
+      [if [lt-s mem-size-bytes new-top]
+        [intrinsic unreachable]]
+      [set-top new-top]]
+    top-val]]
 
       ]]
     [forms-to-module forms]]]
