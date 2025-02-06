@@ -164,7 +164,14 @@ export const getFormPositionAsString = (formInfo) => {
   return `${formInfo.contentObj.contentName}:${row + 1}:${column + 1}`
 }
 
-export const parseString = (content, contentName) => {
+class LineComment {
+  constructor(content) {
+    this.content = content
+  }
+}
+const makeLineComment = (content) => Object.freeze(new LineComment(content))
+
+export const parseString = (content, contentName, includeLineComments = false) => {
   const len = content.length
   let i = 0
   const offsetAsString = (offset) => {
@@ -187,6 +194,12 @@ export const parseString = (content, contentName) => {
       startIndex++
     }
     switch (c) {
+      case ';': {
+        const startComment = i
+        while (i < len && content[i] !== '\n') i++
+        if (!includeLineComments) return go()
+        return registerForm(makeLineComment(content.slice(startComment, i)), startIndex)
+      }
       case '[': {
         const list = []
         while (true) {
