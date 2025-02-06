@@ -104,7 +104,7 @@
 
   exp []
   [union
-    [i32 i32]
+    [integer primitive-type i32]
     [float primitive-type f64]
     [var name]
 
@@ -146,7 +146,6 @@
 [def type-i64 [type/primitive type-primitive-i64]]
 [def type-empty [type/empty]]
 [def type-tuple-empty [type/tuple [list]]]
-
 
 [type immediate-type []
   [union
@@ -466,7 +465,21 @@
           [type/primitive p1]
           [logq-abort common-super-type exp types do not match [identity p1] [identity p2]]]
         [logq-abort common-super-type not implemented p2 [identity t1] [identity t2]]]
-      [logq-abort common-super-type not implemented p1 [identity t1] [identity t2]]]]]
+      [match t1
+        [type/exp e1]
+        [match t2
+          [type/exp e2]
+          [if
+            [exp-equals e1 e2]
+            t1
+
+            [match e1
+              [exp/integer pt1 i1]
+              [match e2
+                [exp/integer pt2 i2]
+                [if [is-identical pt1 pt2]
+                  [type/primitive pt1]
+                  [logq-abort common-super-type exp types do not match [identity e1] [identity e1]]]]]]]]]]]
 
 [func form-to-type [lctx outer-form]
   [letfn [
@@ -665,7 +678,7 @@
             [todo there are issues with word-to-int when integer is greater than 2 to the 31 power]
             [when [lt-s i [pair/fst range]] [error [second l] literal below min]]
             [when [lt-s [pair/snd range] i] [error [second l] literal above max]]
-            [exp/i32 i]]
+            [exp/integer pt i]]
 
           [[word f]]
           [let [f [word-to-f64 [name/word n]]]
@@ -698,10 +711,10 @@
 [func exp-equals [e1 e2]
   [todo consider const evaling the two expressions]
   [match e1
-    [exp/i32 i1]
+    [exp/integer pt1 i1]
     [match e2
-      [exp/i32 i2]
-      [eq i1 i2]
+      [exp/integer pt2 i2]
+      [and [is-identical pt1 pt2] [eq i1 i2]]
 
       false]
 
@@ -753,10 +766,10 @@
         [type/pointer mt t]
         [is-identical dpt [get-memory-pointer-type mt]]
 
-        [type/exp e]
-        [match e
-          [exp/i32 -]
-          [is-identical dpt type-primitive-i32]
+        [type/exp se]
+        [match se
+          [exp/integer spt -]
+          [is-identical dpt spt]
 
           [type-equals tdst tsrc]]
 
@@ -911,9 +924,13 @@
       [names-same-binding n1 n2]
       false]
 
+    [type/empty]
+    [match t2
+      [type/empty]
+      true
       false]
 
-    [logq-abort type-equals [identity t1] [identity t2]]]]
+    [logq-abort type-equals [identity t1] [identity t2]]]]]
 
 [func type-ofs [bodies]
   [if [is-empty bodies]
@@ -927,7 +944,7 @@
 
 [func type-of [exp]
   [match exp
-    [exp/i32 n]
+    [exp/integer pt n]
     [type/exp exp]
 
     [exp/float pt f]
@@ -989,7 +1006,7 @@
     [exp/array elem-type elems]
     [type/array
       elem-type
-      [option/some [type/exp [exp/i32 [size elems]]]]]
+      [option/some [type/exp [exp/integer type-primitive-i32 [size elems]]]]]
 
     [exp/tuple elems]
     [if [eq [size elems] 1]
@@ -1057,8 +1074,8 @@
   [match t
     [type/exp e]
     [match e
-      [exp/i32 -] type-i32
-      [exp/literal pt -] [type/primitive pt]
+      [exp/integer pt -] [type/primitive pt]
+      [exp/float pt -] [type/primitive pt]
       [exp/var n] [lift-literal-type [name-to-type n]]
       t]
 
@@ -1192,8 +1209,10 @@
 
     [type/exp e]
     [match e
-      [exp/i32 -]
-      [word i32]
+      [exp/integer pt -]
+      [do
+        [assert [primitive-is-wasm-value-type pt]]
+        [primitive-type/name pt]]
 
       [logq-abort not implemented type-to-wat-type [identity e]]]
 
@@ -1218,11 +1237,18 @@
   [letfn [
 [func exp-to-inst [exp]
   [match exp
-    [exp/i32 n]
-    [wat-inst/i32.const [int-to-word n]]
+    [exp/integer pt n]
+    [[switch [primitive-type/name pt]
+      [[word i32]] wat-inst/i32.const
+      [[word i64]] wat-inst/i64.const
+      [logq-abort not implemented exp-to-inst integer [identity pt]]]
+      [int-to-word n]]
 
     [exp/float pt f]
-    [wat-inst/f64.const [f64-to-word f]]
+    [[switch [primitive-type/name pt]
+      [[word f32]] wat-inst/f32.const
+      [[word f64]] wat-inst/f64.const
+      [logq-abort not implemented exp-to-inst float [identity pt]]] [f64-to-word f]]
 
     [exp/var n]
     [match [get-desc-from-name n]
@@ -1255,6 +1281,9 @@
         [clone-growable-to-frozen-list gimm-args]
         [list-map arg [slice args n-of-imm [size args]]
           [exp-to-inst arg]]]]
+
+    [exp/call fn args]
+    [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]
 
     [exp/if c t e]
     [wat-inst/if
@@ -1541,3 +1570,42 @@
     [test-assert-eq [i32 1336] [js-app get-x]]
     [js-app set-x [i32 1337]]
     [test-assert-eq [i32 1337] [js-app get-x]]]]
+
+[defn test-import []
+  [let
+    [forms
+      [qlist
+[import env
+  [mem [memory [i32] 1]]
+  [log
+    [func
+      [par [pointer [exp mem] [array [u8]]]
+       n-bytes [i32]]
+      [tuple]]]
+  [log-i32
+    [func
+      [n [i32]]
+      [tuple]]]]
+[def 0 [i32 0]]
+[def 1 [i32 1]]
+[def 2 [i32 2]]
+[def 3 [i32 3]]
+
+[defn not [x [i32]] [i32]
+  [if x 0 1]]
+
+[defn add [x [i32] y [i32]] [i32] [intrinsic i32.add x y]]
+[defn sub [x [i32] y [i32]] [i32] [intrinsic i32.sub x y]]
+
+[defn inc [x [i32]] [i32] [add x 1]]
+[defn dec [x [i32]] [i32] [sub x 1]]
+
+      ]]
+    [forms-to-module forms]]]
+
+[defn test-all []
+  [test-arithmetic]
+  [test-tuple-return]
+  [test-mutable]
+  [test-import]
+  ]
