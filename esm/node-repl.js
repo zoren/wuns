@@ -1,11 +1,12 @@
 import fs from 'node:fs/promises'
-
 import * as readline from 'node:readline'
 import { stdin, stdout, nextTick } from 'node:process'
 
 import { parseString, print } from './core.js'
 import { specialForms, makeJSCompilingEvaluator } from './compiler-js.js'
 import { 'read-file-async' as read_file_async } from './runtime-lib/files.js'
+
+Error.stackTraceLimit = Infinity;
 
 const { evalTops, getDefNames } = makeJSCompilingEvaluator()
 
