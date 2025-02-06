@@ -1,4 +1,4 @@
-import { isPlainObject } from './utils.js'
+import { isPlainObject, parseFunctionParameters } from './utils.js'
 
 export const langUndefined = undefined
 
@@ -260,6 +260,19 @@ class Closure extends Function {
 
 export const makeClosure = (f, kind, paramEnvMaker, body) => Object.freeze(new Closure(f, kind, paramEnvMaker, body))
 export const tryGetClosureKind = (v) => (v instanceof Closure ? v.kind : null)
+
+export const checkArity = (fn, args) => {
+  if (typeof fn !== 'function') throw new Error('apply expects function')
+  if (!Array.isArray(args)) throw new Error('apply expects array')
+  const arity = fn.length
+  const jsParameterNames = parseFunctionParameters(fn)
+  if (jsParameterNames.length && jsParameterNames.at(-1).startsWith('...')) {
+    if (args.length < jsParameterNames.length - 1) throw new Error('apply expects more arguments')
+  } else {
+    if (arity !== args.length)
+      throw new Error(`apply expects same number of arguments to: ${fn.name} expected ${arity} but got ${args.length}`)
+  }
+}
 
 export const wordToI32 = (w) => {
   const v = +w

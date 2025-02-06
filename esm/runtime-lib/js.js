@@ -281,7 +281,7 @@ export { format_js_src_async as 'format-js-src-async' }
 // }
 
 // export { write_js_stmt as 'write-js-stmt' }
-import { isSigned32BitInteger} from '../core.js'
+import { checkArity, isSigned32BitInteger } from '../core.js'
 export const identity = (v) => v
 const to_js_value = (v) => v
 export { to_js_value as 'to-js-value' }
@@ -348,7 +348,10 @@ export { promises_seq as 'promises-seq' }
 const promise_all = (l) => Promise.all(l)
 export { promise_all as 'promise-all' }
 
-const js_apply = (f, args) => f(...args)
+const js_apply = (f, args) => {
+  checkArity(f, args)
+  return f(...args)
+}
 export { js_apply as 'js-apply' }
 
 const js_apply_error = (f, args) => {
