@@ -1331,24 +1331,7 @@
      exports [growable-list]
      data [growable-list]
      empty-type-env [transient-kv-map]
-     generated-specializations [set]
-     name-to-top-decl [transient-kv-map]]
-    [for-each top tops
-      [match top
-        [top-decl/memory n mem-exp]
-        [set-kv-map name-to-top-decl [name/word n] top]
-
-        [top-decl/import mod-name exp-imports]
-        [set-kv-map name-to-top-decl [name/word mod-name] top]
-
-        [top-decl/value k def-name exp]
-        [set-kv-map name-to-top-decl [name/word def-name] top]
-
-        [top-decl/function f]
-        [set-kv-map name-to-top-decl [name/word [exp-function/name f]] top]
-
-        [do]]]
-
+     generated-specializations [set]]
     [for-each top tops
       [match top
         [top-decl/memory n mem-exp]
