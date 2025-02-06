@@ -680,3 +680,5 @@
 [def-js-extern js-apply-error [func [js-value [list js-value]] js-value]]
 
 [import ./runtime-lib/host.js mem-dump [func [memory i32 i32] [tuple]]]
+
+[defexpr qlist [.. fs] fs]
