@@ -1434,6 +1434,18 @@
   [let
     [glocals [growable-list]]
   [letfn [
+[func mk-load-inst [target-prim mt target]
+  [wat-inst/load-opt
+    [wasm-name-to-wat-byte-array
+      [prim-types-to-load-inst-name
+        [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i64]
+        target-prim]]
+    [wat-inst-memargs-opt
+      [option/some [get-memory-name-from-type mt]]
+      [option/none]
+      [option/none]]
+    [exp-to-inst target]]]
+
 [func exp-to-inst [exp]
   [match exp
     [exp/integer pt n]
@@ -1521,16 +1533,7 @@
        ppt [get-pointer-args ttarget]
        mn [get-memory-name-from-type [pair/fst ppt]]
        target-prim [type-to-primitive [pair/snd ppt]]]
-      [wat-inst/load-opt
-        [wasm-name-to-wat-byte-array
-          [prim-types-to-load-inst-name
-            [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i64]
-            target-prim]]
-        [wat-inst-memargs-opt
-          [option/some mn]
-          [option/none]
-          [option/none]]
-        [exp-to-inst target]]]
+      [mk-load-inst target-prim [pair/fst ppt] target]]
 
     [exp/index index-target-exp index-exp]
     [let
@@ -1564,16 +1567,7 @@
          derefed-target
          [pair/snd elem-type-offset]]
        target-prim [type-to-primitive [pair/fst elem-type-offset]]]
-      [wat-inst/load-opt
-        [wasm-name-to-wat-byte-array
-          [prim-types-to-load-inst-name
-            [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i64]
-            target-prim]]
-        [wat-inst-memargs-opt
-          [option/some [get-memory-name-from-type [pair/fst ppt]]]
-          [option/none]
-          [option/none]]
-        [exp-to-inst addr-exp]]]
+      [mk-load-inst target-prim [pair/fst ppt] addr-exp]]
 
     [exp/field field-target-exp field-name]
     [let
@@ -1601,16 +1595,7 @@
             [logq-abort field not found [identity field-name-word]]]]
         [logq-abort not implemented exp-to-inst field]]
        target-prim [type-to-primitive [pair/snd offset-p]]]
-      [wat-inst/load-opt
-        [wasm-name-to-wat-byte-array
-          [prim-types-to-load-inst-name
-            [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i64]
-            target-prim]]
-        [wat-inst-memargs-opt
-          [option/some [get-memory-name-from-type [pair/fst ppt]]]
-          [option/none]
-          [option/none]]
-        [exp-to-inst [int-exp-add derefed-target [pair/fst offset-p]]]]]
+      [mk-load-inst target-prim [pair/fst ppt] [int-exp-add derefed-target [pair/fst offset-p]]]]
 
     [exp/assign dst src]
     [match dst
