@@ -1,6 +1,11 @@
 [load wat.wuns]
 [load interpreter-externs.wuns]
 
+[defn align [p x]
+  [intrinsic i32.and
+    [add x [dec p]]
+    [intrinsic i32.xor [i32 -1] [dec p]]]]
+
 [type primitive-type []
   [record
     [prefix word]
@@ -468,7 +473,9 @@
   [gerrors [growable-list]
    name-to-desc [transient-kv-map]
    top-names [transient-kv-map]
-   exp-to-form [transient-kv-map]]
+   exp-to-form [transient-kv-map]
+   active-data-map [transient-kv-map]
+   active-data-map-offsets [transient-kv-map]]
 [letfn [
 [func error-form-fn [form message-form]
   [push gerrors [pair form message-form]]]
@@ -646,6 +653,66 @@
             [logq-abort not implemented form-to-type [identity form]]]]]]]]
     [go outer-form]]]
 
+[func exp-to-bytes [e]
+  [let
+    [bprinter [empty-printer]
+     go
+     [func go [e]
+      [match e
+        [exp/integer pt n]
+        [let [n-bytes [primitive-type/bytes pt]]
+          [assert [eq [intrinsic i32.rem-s [printer-index bprinter] n-bytes] [i32 0]]
+            exp-to-bytes expected natural alignment [identity pt]]
+          [assert [primitive-type-is-integer pt] exp-to-bytes expected integer type [identity pt]]
+          [print-int32 bprinter n-bytes n]]
+
+        [exp/float pt f]
+        [let [n-bytes [primitive-type/bytes pt]]
+          [assert [eq [intrinsic i32.rem-s [printer-index bprinter] n-bytes] [i32 0]]
+            exp-to-bytes expected natural alignment [identity pt]]
+          [assert [eq-word [primitive-type/prefix pt] [word f]] exp-to-bytes expected float type [identity pt]]
+          [loop
+            [i 0
+             fba [f64-to-byte-array f]]
+            [when [lt-s i n-bytes]
+              [print-byte bprinter [byte-array-get fba i]]
+              [continue i [inc i]]]]]
+
+        [exp/array - es]
+        [for-each elem es [go elem]]
+
+        [exp/tuple es]
+        [for-each elem es [go elem]]
+
+        [exp/record fields]
+        [for-each field fields [go [pair/snd field]]]
+
+        [logq-abort not implemented exp-to-bytes [identity e]]]]]
+    [go e]
+    [printer-to-byte-array bprinter]]]
+
+[func get-current-active-address-pair [mem-name-exp]
+  [let
+    [mem-name-name
+      [match [type-of mem-name-exp]
+        [type/exp mem-name-exp2]
+        [match mem-name-exp2
+          [exp/var mem-name] mem-name
+          [logq-abort get-memory-name-from-type not a memory [identity mem-name-exp]]]
+        [logq-abort get-memory-name-from-type not a memory type]]
+     mem-name-word [name/word mem-name-name]
+     mem-name-type
+      [match [top-desc/kind [pair/snd [get top-names mem-name-word]]]
+        [top-desc-kind/memory mt] [memory-desc/type mt]
+        [logq-abort get-memory-name-from-type not a memory]]
+     offset-atom
+     [if-let [offset-atom [try-get active-data-map-offsets mem-name-word]]
+      offset-atom
+      [let [oa [atom [i32 16]]]
+        [set-kv-map active-data-map-offsets mem-name-word oa]
+        oa]]]
+    [pair mem-name-type offset-atom]]]
+
 [func form-special-to-exp [lctx fw l]
   [switch fw
     [[word if]]
@@ -777,10 +844,17 @@
 
     [[word data]]
     [let
-      [mem-name [form-to-exp lctx [second l]]
-       data-exp [form-to-exp lctx [third l]]]
-      [todo check is mem]
-      [exp/data mem-name data-exp]]
+      [mem-name-exp [form-to-exp lctx [second l]]
+       data-exp [form-to-exp lctx [third l]]
+       dexp [exp/data mem-name-exp data-exp]
+       addr-pair [get-current-active-address-pair mem-name-exp]
+       offset-atom [pair/snd addr-pair]
+       bytes [exp-to-bytes data-exp]
+       n-of-bytes [byte-array-size bytes]
+       current-offset [atom-get offset-atom]]
+      [atom-set offset-atom [add current-offset [align [i32 16] n-of-bytes]]]
+      [set-kv-map active-data-map dexp [exp/integer [pair/fst addr-pair] current-offset]]
+      dexp]
 
     [[word memory-static-top]]
     [let
@@ -1733,10 +1807,12 @@
 
       [logq-abort not implemented exp-to-inst assign [identity dst]]]
 
+    [exp/data mem-name data-exp]
+    [exp-to-inst [get active-data-map exp]]
+
     [exp/memory-static-top mem-name]
-    [do
-      [todo set the actual memory top]
-      [wat-inst/i32.const [word 16]]]
+    [let [addr-pair [get-current-active-address-pair mem-name]]
+      [exp-to-inst [exp/integer [pair/fst addr-pair] [atom-get [pair/snd addr-pair]]]]]
 
     [exp/cast t e]
     [exp-to-inst e]

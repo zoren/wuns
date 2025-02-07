@@ -284,6 +284,8 @@
 
 [defn is-odd [x [i32]] [i32] [bitwise-and x 1]]
 
+[def static-mem-top [memory-static-top mem]]
+
 [mutable mem-top [memory-static-top mem]]
 
 [defn get-top [] [i32]
@@ -332,6 +334,8 @@
         [continue i [inc i]]
         i]
       i]]]
+
+[def data-test [data mem [i32 4]]]
 
       ]]
     [forms-to-module forms]]]
