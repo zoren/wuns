@@ -150,12 +150,12 @@
 [def type-empty [type/empty]]
 [def type-tuple-empty [type/tuple [list]]]
 
-[defn try-get-pointer-args [t]
+[defn get-pointer-args [t]
   [match t
     [type/pointer m p]
-    [option/some [pair m p]]
+    [pair m p]
 
-    [option/none]]]
+    [logq-abort get-pointer-args not a pointer [identity t]]]]
 
 [type immediate-type []
   [union
@@ -1493,7 +1493,7 @@
     [exp/deref target]
     [let
       [ttarget [type-of target]
-       ppt [if-let [p [try-get-pointer-args ttarget]] p [logq-abort not a pointer]]
+       ppt [get-pointer-args ttarget]
        mn [get-memory-name-from-type [pair/fst ppt]]
        target-prim [type-to-primitive [pair/snd ppt]]]
       [wat-inst/load-opt
@@ -1515,7 +1515,7 @@
       target
       [logq-abort can only assign to derefed pointers to arrays [identity index-target-exp]]]
       pointer-type [type-of derefed-target]
-      ppt [if-let [p [try-get-pointer-args pointer-type]] p [logq-abort not a pointer]]
+      ppt [get-pointer-args pointer-type]
       elem-type
       [match [type-of index-target-exp]
       [type/array elem-type -]
