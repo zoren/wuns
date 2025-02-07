@@ -6,6 +6,12 @@
     [offset word]
     [alignment word]]]
 
+[type wat-inst-memargs-opt []
+  [record
+    [memory [option word]]
+    [offset [option word]]
+    [alignment [option word]]]]
+
 [type wat-immediate []
   [union
     [memory word]
@@ -25,7 +31,9 @@
     [inst-word word [list wat-inst]]
     [inst byte-array [list wat-inst]]
     [load byte-array wat-inst-memargs wat-inst]
+    [load-opt byte-array wat-inst-memargs-opt wat-inst]
     [store byte-array wat-inst-memargs wat-inst wat-inst]
+    [store-opt byte-array wat-inst-memargs-opt wat-inst wat-inst]
     [if [list word] wat-inst wat-inst wat-inst]
     [call word [list wat-inst]]
     [instructions [list wat-inst]]
@@ -232,6 +240,19 @@
     [wat/eq-pair [word offset] [wat-inst-memargs/offset ma]]
     [wat/eq-pair [word align] [wat-inst-memargs/alignment ma]]]]
 
+[defn wat-inst-memargs-opt-to-out [ma]
+  [concat-lists
+    [list
+      [if-let [m [wat-inst-memargs-opt/memory ma]]
+        [list [wat-list [wat/word [word memory]] [wat/dollar m]]]
+        [list]]
+      [if-let [offset [wat-inst-memargs-opt/offset ma]]
+        [list [wat/eq-pair [word offset] offset]]
+        [list]]
+      [if-let [align [wat-inst-memargs-opt/alignment ma]]
+        [list [wat/eq-pair [word align] align]]
+        [list]]]]]
+
 [defn wat-inst-to-out [i]
   [match i
     [wat-inst/i32.const w]
@@ -281,10 +302,22 @@
       [wat-inst-memargs-to-out ma]
       [list [wat-inst-to-out addr]]]
 
+    [wat-inst/load-opt name ma addr]
+    [wat-concat
+      [list [wat/byte-array name]]
+      [wat-inst-memargs-opt-to-out ma]
+      [list [wat-inst-to-out addr]]]
+
     [wat-inst/store name ma addr value]
     [wat-concat
       [list [wat/byte-array name]]
       [wat-inst-memargs-to-out ma]
+      [list [wat-inst-to-out addr] [wat-inst-to-out value]]]
+
+    [wat-inst/store-opt name ma addr value]
+    [wat-concat
+      [list [wat/byte-array name]]
+      [wat-inst-memargs-opt-to-out ma]
       [list [wat-inst-to-out addr] [wat-inst-to-out value]]]
 
     [wat-inst/instructions insts]
