@@ -69,12 +69,6 @@
 [def type-primitive-f32 [get-primitive [word f32]]]
 [def type-primitive-f64 [get-primitive [word f64]]]
 
-[defn type-to-mem-kind [p]
-  [ifs
-    [is-identical p type-primitive-i32] [memory-kind/i32]
-    [is-identical p type-primitive-i64] [memory-kind/i64]
-    [logq-abort not implemented memory-kind [identity p]]]]
-
 [type name []
   [record
     [word word]]]
@@ -339,9 +333,9 @@
   [memory-desc
     [memory-exp/type mem-exp]
     [word-to-int [name/word [memory-exp/init-size mem-exp]]]
-    [if-let [max [memory-exp/max-size mem-exp]]
-      [option/some [word-to-int [name/word max]]]
-      [option/none]]]]
+    [option-map
+      [func f [max] [word-to-int [name/word max]]]
+      [memory-exp/max-size mem-exp]]]]
 
 [type top-desc-kind []
   [union
@@ -769,9 +763,7 @@
             [when-not [type-assignable telem t-cur-elem]
               [logq-abort array expected assignable type
                 [identity telem]
-                [identity t-cur-elem]
-                [type-equals telem t-cur-elem]
-                ]]
+                [identity t-cur-elem]]]
             ee]]]]
 
     [[word tuple]]
@@ -1268,7 +1260,7 @@
                 mem-exp [form-list-to-mem-exp [rest l]]
                 t [type/exp [exp/var mem-name]]]
             [bind-top [second l] t [top-desc [top-desc-kind/memory [mem-exp-to-mem-kind mem-exp]] [imported-or-here/here]]]
-            [option/some [top-decl/memory [form-to-name [second l]] mem-exp]]]
+            [option/some [top-decl/memory mem-name mem-exp]]]
 
           [[word export]]
           [option/some
@@ -1767,6 +1759,17 @@
   ]
   [exp2inst-compiler exp-to-inst exps-to-inst glocals]]]]
 
+[func mem-exp-to-wat-memory [mem-exp]
+  [wat-memory
+    [ifs
+      [is-identical [memory-exp/type mem-exp] type-primitive-i32] [memory-kind/i32]
+      [is-identical [memory-exp/type mem-exp] type-primitive-i64] [memory-kind/i64]
+      [logq-abort not implemented memory-kind [memory-exp/type mem-exp]]]
+    [word-to-int [name/word [memory-exp/init-size mem-exp]]]
+    [if-let [max [memory-exp/max-size mem-exp]]
+      [option/some [word-to-int [name/word max]]]
+      [option/none]]]]
+
 [func compile [tops]
   [let
     [imports [growable-list]
@@ -1779,13 +1782,9 @@
       [match top
         [top-decl/memory n mem-exp]
         [push memories
-          [wat-memory
-            [type-to-mem-kind [memory-exp/type mem-exp]]
+          [pair
             [name/word n]
-            [word-to-int [name/word [memory-exp/init-size mem-exp]]]
-            [if-let [max [memory-exp/max-size mem-exp]]
-              [option/some [word-to-int [name/word max]]]
-              [option/none]]]]
+            [mem-exp-to-wat-memory mem-exp]]]
 
         [top-decl/import mod-name exp-imports]
         [let [mod-name-word [name/word mod-name]]
@@ -1807,11 +1806,7 @@
                     [import-kind-decl/memory mem-exp]
                     [wat-import-kind/memory
                       nw
-                      [type-to-mem-kind [memory-exp/type mem-exp]]
-                      [word-to-int [name/word [memory-exp/init-size mem-exp]]]
-                      [if-let [max [memory-exp/max-size mem-exp]]
-                        [option/some [word-to-int [name/word max]]]
-                        [option/none]]]]]]]]]
+                      [mem-exp-to-wat-memory mem-exp]]]]]]]]
 
         [top-decl/export names]
         [for-each n names

@@ -53,17 +53,16 @@
     [i32]
     [i64]]]
 
-[type wat-import-kind []
-  [union
-    [memory word memory-kind i32 [option i32]]
-    [func word [list word] [list word]]]]
-
 [type wat-memory []
   [record
     [kind memory-kind]
-    [name word]
     [initial i32]
     [maximum [option i32]]]]
+
+[type wat-import-kind []
+  [union
+    [memory word wat-memory]
+    [func word [list word] [list word]]]]
 
 [type mut []
   [union
@@ -88,7 +87,7 @@
 [type wat-output []
   [record
     [imports [growable-list [pair [pair word word] wat-import-kind]]]
-    [memories [growable-list wat-memory]]
+    [memories [growable-list [pair word wat-memory]]]
     [globals [growable-list wat-global]]
     [funcs [growable-list wat-func]]
     [exports [growable-list [pair word [pair export-kind word]]]]
@@ -360,14 +359,14 @@
       [wat/dqstring [pair/fst name-pair]]
       [wat/dqstring name]
       [match [pair/snd import]
-        [wat-import-kind/memory mname kind init-size opt-max]
+        [wat-import-kind/memory mname wat-mem]
         [wat-list
           [wat/word [word memory]]
           [wat/dollar mname]
-          [wat/word [match kind
+          [wat/word [match [wat-memory/kind wat-mem]
             [memory-kind/i32] [word i32]
             [memory-kind/i64] [word i64]]]
-          [wat/word [int-to-word init-size]]]
+          [wat/word [int-to-word [wat-memory/initial wat-mem]]]]
 
         [wat-import-kind/func fname param-types result-types]
         [wat-list
@@ -378,14 +377,15 @@
           [wat-concat [list [wat/word [word result]]]
             [list-map rt result-types [wat/word rt]]]]]]]]
 
-[defn memory-to-wat [mem]
-  [wat-list
-    [wat/word [word memory]]
-    [wat/dollar [wat-memory/name mem]]
-    [wat/word [match [wat-memory/kind mem]
-      [memory-kind/i32] [word i32]
-      [memory-kind/i64] [word i64]]]
-    [wat/word [int-to-word [wat-memory/initial mem]]]]]
+[defn memory-to-wat [pmem]
+  [let [mem [pair/snd pmem]]
+    [wat-list
+      [wat/word [word memory]]
+      [wat/dollar [pair/fst pmem]]
+      [wat/word [match [wat-memory/kind mem]
+        [memory-kind/i32] [word i32]
+        [memory-kind/i64] [word i64]]]
+      [wat/word [int-to-word [wat-memory/initial mem]]]]]]
 
 [defn global-to-wat [global]
   [wat-list
