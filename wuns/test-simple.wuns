@@ -269,6 +269,7 @@
 
 [defn eq [x [i32] y [i32]] [i32] [intrinsic i32.eq x y]]
 [defn lt-s [x [i32] y [i32]] [i32] [intrinsic i32.lt-s x y]]
+[defn le-s [x [i32] y [i32]] [i32] [intrinsic i32.le-s x y]]
 
 [defn add [x [i32] y [i32]] [i32] [intrinsic i32.add x y]]
 [defn sub [x [i32] y [i32]] [i32] [intrinsic i32.sub x y]]
@@ -276,6 +277,12 @@
 
 [defn inc [x [i32]] [i32] [add x 1]]
 [defn dec [x [i32]] [i32] [sub x 1]]
+
+[defn bitwise-and [x [i32] y [i32]] [i32] [intrinsic i32.and x y]]
+[defn bitwise-ior [x [i32] y [i32]] [i32] [intrinsic i32.or x y]]
+[defn bitwise-xor [x [i32] y [i32]] [i32] [intrinsic i32.xor x y]]
+
+[defn is-odd [x [i32]] [i32] [bitwise-and x 1]]
 
 [mutable mem-top [memory-static-top mem]]
 
@@ -286,9 +293,9 @@
   [assign mem-top new-top]]
 
 [defn align [p [i32] x [i32]] [i32]
-  [intrinsic i32.and
+  [bitwise-and
     [add x [dec p]]
-    [intrinsic i32.xor [i32 -1] [dec p]]]]
+    [bitwise-xor [i32 -1] [dec p]]]]
 
 [defn mem-align [p [i32]] [i32]
   [align [i32 16] p]]
@@ -305,6 +312,26 @@
         [intrinsic unreachable]]
       [set-top new-top]]
     top-val]]
+
+[defn is-between-inclusive [lower [i32] c [i32] upper [i32]] [i32]
+  [bitwise-and [le-s lower c] [le-s c upper]]]
+
+[defn is-whitespace [c [i32]] [i32]
+  [bitwise-ior [eq c [i32 32]] [eq c [i32 10]]]]
+
+[defn is-word-char [c [i32]] [i32]
+  [bitwise-ior
+    [is-between-inclusive [i32 97] c [i32 122]]
+    [is-between-inclusive [i32 45] c [i32 57]]]]
+
+[defn scan-word-end [bytes [pointer [exp mem] [array [u8]]] start [i32] n-of-bytes [i32]] [i32]
+  [loop
+    [i start]
+    [if [lt-s n-of-bytes i]
+      [if [is-word-char [index [deref bytes] i]]
+        [continue i [inc i]]
+        i]
+      i]]]
 
       ]]
     [forms-to-module forms]]]

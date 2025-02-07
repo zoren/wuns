@@ -879,7 +879,7 @@
     [logq-abort get-memory-name-from-type not a memory]]]
 
 [func type-assignable [tdst tsrc]
-  [or
+  [or [is-identical tdst tsrc]
     [match tdst
       [type/union dus]
       [or [type-equals tdst tsrc]
@@ -899,6 +899,11 @@
           [is-identical dpt spt]
 
           [type-equals tdst tsrc]]
+
+        [type/primitive spt]
+        [if [and [primitive-type-is-integer dpt] [primitive-type-is-integer spt]]
+          [le-s [primitive-type/bytes spt] [primitive-type/bytes dpt]]
+          [is-identical dpt spt]]
 
         [type-equals tdst tsrc]]
 
@@ -1457,7 +1462,7 @@
     [wat-inst/load-opt
       [wasm-name-to-wat-byte-array
         [prim-types-to-load-inst-name
-          [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i64]
+          [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i32]
           target-prim]]
       [wat-inst-memargs-opt
         [option/some [get-memory-name-from-type mt]]
@@ -1559,6 +1564,13 @@
                 [word loop-label]
                 [type-to-wat-types [type-ofs bodies]]
                 [exps-to-inst bodies]]]]]]]
+
+    [exp/continue assignments]
+    [wat-inst/instructions
+      [concat
+        [list-map a assignments
+          [wat-inst/local.set [name/word [pair/fst a]] [exp-to-inst [pair/snd a]]]]
+        [list [wat-inst/br [word loop-label]]]]]
 
     [exp/tuple elems]
     [wat-inst/instructions [list-map elem elems [exp-to-inst elem]]]
