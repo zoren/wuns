@@ -145,6 +145,20 @@
     [memory-static-top exp]
     ]]
 
+[defn may-side-effect [e]
+  [match e
+    [exp/integer - --] false
+    [exp/float - --] false
+    [exp/var -] false
+    [exp/cast - e] [may-side-effect e]
+    [exp/field t -] [may-side-effect t]
+    [exp/index t i] [or [may-side-effect t] [may-side-effect i]]
+    [exp/intrinsic n - args]
+    [or
+      [eq-word [name/word n] [word unreachable]]
+      [exists args may-side-effect]]
+    true]]
+
 [def type-i32 [type/primitive type-primitive-i32]]
 [def type-i64 [type/primitive type-primitive-i64]]
 [def type-empty [type/empty]]
@@ -1548,18 +1562,55 @@
 
       [exp/deref target]
       [let
-        [ttarget [type-of target]]
-        [wat-inst/store-opt
-          [wasm-name-to-wat-byte-array
-            [prim-types-to-store-inst-name
-              [type-to-primitive ttarget]
-              [type-to-primitive [type-of src]]]]
-          [wat-inst-memargs-opt
-            [option/some [get-memory-name-from-type [pair/fst [get-pointer-args ttarget]]]]
-            [option/none]
-            [option/none]]
-          [exp-to-inst target]
-          [exp-to-inst src]]]
+        [ttarget [type-of target]
+         mem-name [get-memory-name-from-type [pair/fst [get-pointer-args ttarget]]]
+         ttarget-elem [pair/snd [get-pointer-args ttarget]]
+         assign-pointer
+         [func assign-pointer [target ttarget-elem src]
+          [match src
+            [exp/array tvalue-elem elems]
+            [do
+              [assert-not [may-side-effect target] assign target cannot have side effects when assigning arrays]
+              [let
+                [size-of-int-exp [type-to-size-of-exp tvalue-elem]
+                 ginsts [growable-list]
+                 target-array-elem-type
+                 [match ttarget-elem
+                  [type/array elem-type -] elem-type
+                  [logq-abort not an array]]]
+                [loop [i 0 n [size elems]]
+                  [when [lt-s i n]
+                    [let
+                      [offset-target
+                        [int-exp-add
+                          target
+                          [int-exp-mul [mk-exp-i32 i] size-of-int-exp]]]
+                      [push ginsts [assign-pointer offset-target target-array-elem-type [at elems i]]]
+                      [continue i [inc i]]]]]
+                [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
+
+            [exp/tuple elems]
+            [logq-abort not impl [identity src]]
+
+            [exp/record fields]
+            [logq-abort not impl [identity src]]
+
+            [let
+              [tsrc [type-of src]
+               iname
+                [prim-types-to-store-inst-name
+                  [type-to-primitive ttarget-elem]
+                  [type-to-primitive tsrc]]]
+              [wat-inst/store-opt
+                [wasm-name-to-wat-byte-array iname]
+                [wat-inst-memargs-opt
+                  [option/some mem-name]
+                  [option/none]
+                  [option/none]]
+                [exp-to-inst target]
+                [exp-to-inst src]]]]]]
+        [assign-pointer target ttarget-elem src]
+        ]
 
       [exp/index index-target-exp index-exp]
       [let

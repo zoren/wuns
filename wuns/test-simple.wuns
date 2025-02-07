@@ -61,7 +61,8 @@
   [when-not [is-identical [to-js-value js-expected] [to-js-value actual]]
     [logq test-assert-eq failed]
     [logq expected [identity js-expected]]
-    [logq but got- [identity actual]]]]
+    [logq but got- [identity actual]]
+    [logq-abort test assert failed]]]
 
 [defn test-arithmetic []
   [let [forms
@@ -123,9 +124,21 @@
 
 [defn get [] [i64] [deref p-int]]
 
-[export set get]]]
-    [forms-to-module forms]]]
+[defn inc [] [tuple] [set [intrinsic i64.add [get] [i64 1]]]]
 
+[export set get inc]]
+      inst [forms-to-inst forms]
+      wget [get-export inst [word get]]
+      wset [get-export inst [word set]]
+      winc [get-export inst [word inc]]]
+    [test-assert-eq [bigint 0] [js-app wget]]
+    [js-app wset [bigint 1]]
+    [test-assert-eq [bigint 1] [js-app wget]]
+    [js-app winc]
+    [test-assert-eq [bigint 2] [js-app wget]]
+    [js-app wset [bigint 2147483648]]
+    [js-app winc]
+    [test-assert-eq [bigint 2147483649] [js-app wget]]]]
 
 [defn test-array []
   [let
@@ -142,8 +155,41 @@
 [defn get [i [i32]] [i32]
   [index [deref p-ar] i]]
 
-[export set get]]]
-    [forms-to-module forms]]]
+[export set get]]
+     inst [forms-to-inst forms]
+     wset [get-export inst [word set]]
+     wget [get-export inst [word get]]]
+    [test-assert-eq [i32 0] [js-app wget [i32 0]]]
+    [test-assert-eq [i32 0] [js-app wget [i32 16]]]
+    [js-app wset [i32 0] [i32 1]]
+    [test-assert-eq [i32 1] [js-app wget [i32 0]]]
+    [test-assert-eq [i32 0] [js-app wget [i32 16]]]
+    [js-app wset [i32 16] [i32 2]]
+    [test-assert-eq [i32 1] [js-app wget [i32 0]]]
+    [test-assert-eq [i32 2] [js-app wget [i32 16]]]]]
+
+[defn test-array-exp []
+  [let
+    [forms
+      [qlist
+[memory mem [i32] 1]
+
+[defn make-array [n [i32]] [pointer [exp mem] [array [i32]]]
+  [let [p [cast [pointer [exp mem] [array [i32]]] [i32 16]]]
+    [assign [deref p] [array [i32] [intrinsic i32.add [i32 1] n] [intrinsic i32.add [i32 2] n] [intrinsic i32.add [i32 3] n]]]
+    p]]
+
+[defn get [p [pointer [exp mem] [array [i32]]] i [i32]] [i32]
+  [index [deref p] i]]
+
+[export make-array get]]
+     inst [forms-to-inst forms]
+     make-array [get-export inst [word make-array]]
+     wget [get-export inst [word get]]]
+    [let [p [js-app make-array [i32 3]]]
+      [test-assert-eq [i32 4] [js-app wget p [i32 0]]]
+      [test-assert-eq [i32 5] [js-app wget p [i32 1]]]
+      [test-assert-eq [i32 6] [js-app wget p [i32 2]]]]]]
 
 [defn test-import []
   [let
@@ -215,5 +261,8 @@
   [test-arithmetic]
   [test-tuple-return]
   [test-mutable]
+  [test-pointers]
+  [test-array]
+  [test-array-exp]
   [test-import]
   ]
