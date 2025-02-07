@@ -435,6 +435,21 @@
 [def int-const-0 [mk-exp-i32 0]]
 [def int-const-1 [mk-exp-i32 1]]
 
+[defn try-get-i32-add-const [e]
+  [match e
+    [exp/intrinsic n - args]
+    [let [a [first args] b [second args]]
+      [if [eq-word [name/word n] [word i32.add]]
+        [if-let [i [try-get-int-const a]]
+          [if-let [j [try-get-int-const b]]
+            [option/some [pair int-const-0 [add i j]]]
+            [option/some [pair b i]]]
+          [if-let [j [try-get-int-const b]]
+            [option/some [pair a j]]
+            [option/none]]]
+        [option/none]]]
+    [option/none]]]
+
 [defn mk-exp-i32-mul [a b]
   [exp/intrinsic [name [word i32.mul]] [list] [list a b]]]
 
@@ -1435,16 +1450,37 @@
     [glocals [growable-list]]
   [letfn [
 [func mk-load-inst [target-prim mt target]
-  [wat-inst/load-opt
-    [wasm-name-to-wat-byte-array
-      [prim-types-to-load-inst-name
-        [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i64]
-        target-prim]]
-    [wat-inst-memargs-opt
-      [option/some [get-memory-name-from-type mt]]
-      [option/none]
-      [option/none]]
-    [exp-to-inst target]]]
+  [let
+    [exp-const-pair-opt [try-get-i32-add-const target]
+     texp [option-default [option-map pair/fst exp-const-pair-opt] target]
+     offset-opt [option-map pair/snd exp-const-pair-opt]]
+    [wat-inst/load-opt
+      [wasm-name-to-wat-byte-array
+        [prim-types-to-load-inst-name
+          [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i64]
+          target-prim]]
+      [wat-inst-memargs-opt
+        [option/some [get-memory-name-from-type mt]]
+        offset-opt
+        [option/none]]
+      [exp-to-inst texp]]]]
+
+[func mk-store-inst [target-prim mt target src]
+  [let
+    [exp-const-pair-opt [try-get-i32-add-const target]
+     texp [option-default [option-map pair/fst exp-const-pair-opt] target]
+     offset-opt [option-map pair/snd exp-const-pair-opt]]
+    [wat-inst/store-opt
+      [wasm-name-to-wat-byte-array
+        [prim-types-to-store-inst-name
+          [type-to-primitive target-prim]
+          [type-to-primitive [type-of src]]]]
+      [wat-inst-memargs-opt
+        [option/some [get-memory-name-from-type mt]]
+        offset-opt
+        [option/none]]
+      [exp-to-inst texp]
+      [exp-to-inst src]]]]
 
 [func exp-to-inst [exp]
   [match exp
@@ -1664,22 +1700,8 @@
                       [continue i [inc i] acc offset-target]]]]
                 [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
 
-            [let
-              [tsrc [type-of src]
-               iname
-                [prim-types-to-store-inst-name
-                  [type-to-primitive ttarget-elem]
-                  [type-to-primitive tsrc]]]
-              [wat-inst/store-opt
-                [wasm-name-to-wat-byte-array iname]
-                [wat-inst-memargs-opt
-                  [option/some mem-name]
-                  [option/none]
-                  [option/none]]
-                [exp-to-inst target]
-                [exp-to-inst src]]]]]]
-        [assign-pointer target ttarget-elem src]
-        ]
+            [mk-store-inst ttarget-elem [pair/fst [get-pointer-args ttarget]] target src]]]]
+        [assign-pointer target ttarget-elem src]]
 
       [exp/index index-target-exp index-exp]
       [let
@@ -1703,17 +1725,7 @@
          [int-exp-add
           derefed-target
           [int-exp-mul index-exp [type-to-size-of-exp elem-type]]]]
-        [wat-inst/store-opt
-          [wasm-name-to-wat-byte-array
-            [prim-types-to-store-inst-name
-              [type-to-primitive elem-type]
-              [type-to-primitive [type-of src]]]]
-          [wat-inst-memargs-opt
-            [option/some [get-memory-name-from-type [pair/fst ppt]]]
-            [option/none]
-            [option/none]]
-          [exp-to-inst addr-exp]
-          [exp-to-inst src]]]
+        [mk-store-inst elem-type [pair/fst ppt] addr-exp src]]
 
       [logq-abort not implemented exp-to-inst assign [identity dst]]]
 

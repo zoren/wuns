@@ -396,11 +396,6 @@
     [option/none] [logq-abort option-get none]
     [option/some v] v]]
 
-[defn option-default [opt default]
-  [match opt
-    [option/none] default
-    [option/some v] v]]
-
 [defn option-pair [opt1 opt2]
   [match opt1
     [option/some v1]

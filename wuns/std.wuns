@@ -333,6 +333,11 @@
     [option/some [f v]]
     [option/none]]]
 
+[defn option-default [opt default]
+  [match opt
+    [option/none] default
+    [option/some v] v]]
+
 [defn eq-word [wa wb]
   [let [sa [word-byte-size wa] sb [word-byte-size wb]]
     [and

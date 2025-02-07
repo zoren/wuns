@@ -9,8 +9,8 @@
 [type wat-inst-memargs-opt []
   [record
     [memory [option word]]
-    [offset [option word]]
-    [alignment [option word]]]]
+    [offset [option i32]]
+    [alignment [option i32]]]]
 
 [type wat-immediate []
   [union
@@ -82,7 +82,8 @@
 
 [type wat-data []
   [union
-    [active word wat-inst byte-array]]]
+    [active word wat-inst byte-array]
+    [passive word byte-array]]]
 
 [type wat-output []
   [record
@@ -247,10 +248,10 @@
         [list [wat-list [wat/word [word memory]] [wat/dollar m]]]
         [list]]
       [if-let [offset [wat-inst-memargs-opt/offset ma]]
-        [list [wat/eq-pair [word offset] offset]]
+        [list [wat/eq-pair [word offset] [int-to-word offset]]]
         [list]]
       [if-let [align [wat-inst-memargs-opt/alignment ma]]
-        [list [wat/eq-pair [word align] align]]
+        [list [wat/eq-pair [word align] [int-to-word align]]]
         [list]]]]]
 
 [defn wat-inst-to-out [i]
