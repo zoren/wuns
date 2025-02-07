@@ -150,6 +150,13 @@
 [def type-empty [type/empty]]
 [def type-tuple-empty [type/tuple [list]]]
 
+[defn try-get-pointer-args [t]
+  [match t
+    [type/pointer m p]
+    [option/some [pair m p]]
+
+    [option/none]]]
+
 [type immediate-type []
   [union
     [memory]]]
@@ -361,6 +368,78 @@
 [defmacro error-exp [exp .. message]
   [flist [quote error-exp-fn] exp [quote-list message]]]
 
+[defn prim-types-to-load-inst-name [dst src]
+  [let [prefix [concat-words [primitive-type/name dst] [word .load]]]
+    [if [is-identical dst src]
+      prefix
+      [do
+        [assert [primitive-type-is-integer src] load expected integer type source]
+        [concat-words prefix
+          [concat-words [int-to-word [primitive-type/bits src]]
+            [concat-words [word -] [if [eq-word [primitive-type/prefix src] [word u]] [word u] [word s]]]]]]]]]
+
+[defn prim-types-to-store-inst-name [target-prim value-prim]
+  [if [and [is-identical target-prim value-prim] [primitive-is-wasm-value-type target-prim]]
+    [concat-words [primitive-type/name target-prim] [word .store]]
+    [if-not [or [is-identical value-prim type-primitive-i32]
+                [is-identical value-prim type-primitive-i64]]
+      [concat-words
+        [word i64.store]
+        [int-to-word [primitive-type/bits target-prim]]]
+      [do
+        [assert [primitive-type-is-integer target-prim] store expected integer type]
+        [concat-words
+          [concat-words [primitive-type/name value-prim] [word .store]]
+          [int-to-word [primitive-type/bits target-prim]]]]]]]
+
+[defn try-get-int-const [e]
+  [match e
+    [exp/integer pt i]
+    [do
+      [assert [is-identical pt type-primitive-i32] try-get-int-const expected i32]
+      [option/some i]]
+    [option/none]]]
+
+[defn mk-exp-i32-add [a b]
+  [exp/intrinsic [name [word i32.add]] [list] [list a b]]]
+
+[defn mk-exp-i32 [n] [exp/integer type-primitive-i32 n]]
+
+[defn int-exp-add [a b]
+  [if-let [i [try-get-int-const a]]
+    [if [eq i 0]
+      b
+      [if-let [j [try-get-int-const b]]
+        [mk-exp-i32 [add i j]]
+        [mk-exp-i32-add a b]]]
+    [if-let [j [try-get-int-const b]]
+      [if [eq j 0]
+        a
+        [mk-exp-i32-add a b]]
+      [mk-exp-i32-add a b]]]]
+
+[def int-const-0 [mk-exp-i32 0]]
+[def int-const-1 [mk-exp-i32 1]]
+
+[defn mk-exp-i32-mul [a b]
+  [exp/intrinsic [name [word i32.mul]] [list] [list a b]]]
+
+[defn int-exp-mul [a b]
+  [if-let [i [try-get-int-const a]]
+    [ifs
+      [eq i 0] int-const-0
+      [eq i 1] b
+      [if-let [j [try-get-int-const b]]
+        [mk-exp-i32 [mul i j]]
+        [mk-exp-i32-mul a b]]]
+    [if-let [j [try-get-int-const b]]
+      [ifs
+        [eq j 0] int-const-0
+        [eq j 1] a
+        [mk-exp-i32-mul a b]]
+      [mk-exp-i32-mul a b]]]]
+
+
 [defn make-compiler []
 [let
   [gerrors [growable-list]
@@ -557,7 +636,7 @@
       [exp/if c t e]]
 
     [[word cast]]
-    [logq-abort not implemented cast]
+    [exp/cast [form-to-type lctx [second l]] [form-to-exp lctx [third l]]]
 
     [[word ref]]
     [exp/ref [form-to-exp lctx [second l]]]
@@ -996,7 +1075,10 @@
     [intrinsic-type/result [intrinsic-type-from-name [name/word intrinsic-name]]]
 
     [exp/deref target]
-    [logq-abort type-of not implemented [identity exp]]
+    [match [type-of target]
+      [type/pointer - t]
+      t
+      [logq-abort type-of not a pointer [identity target] [type-of target]]]
 
     [exp/assign dst src]
     type-tuple-empty
@@ -1016,8 +1098,20 @@
     [exp/size-of-exp -e]
     type-i32
 
-    [exp/index a i]
-    [logq-abort type-of not implemented [identity exp]]
+    [exp/index target-exp index-exp]
+    [match [type-of target-exp]
+      [type/array elem-type -]
+      elem-type
+
+      [type/tuple elem-types]
+      [match index-exp
+        [exp/integer pt i]
+        [do
+          [assert [is-identical pt type-primitive-i32] index expected i32]
+          [at elem-types i]]
+
+        [logq-abort indexing of tuples only allowed with constants [identity index-exp]]]
+      [logq-abort indexing only allowed for array and tuple types]]
 
     [exp/field pexp field-name]
     [logq-abort type-of not implemented [identity exp]]
@@ -1250,6 +1344,67 @@
 
     [list [type-to-wat-type type]]]]
 
+[func try-get-primitive-exp [e]
+  [match e
+    [exp/integer pt -] [option/some pt]
+    [exp/float pt -] [option/some pt]
+    [exp/var n] [try-get-primitive [name-to-type n]]
+    [option/none]]]
+
+[func try-get-primitive [t]
+  [match t
+    [type/exp e] [try-get-primitive-exp e]
+    [type/primitive p] [option/some p]
+    [type/pointer mt -] [option/some [get-memory-pointer-type mt]]
+    [option/none]]]
+
+[func type-to-primitive [t]
+  [if-let [pt [try-get-primitive t]]
+    pt
+    [logq-abort not a primitive type [identity t]]]]
+
+[func type-to-size-of-exp [t]
+  [match [lift-literal-type t]
+    [type/primitive p]
+    [exp/integer type-primitive-i32 [primitive-type/bytes p]]
+
+    [type/exp e]
+    [type-to-size-of-exp [type-of e]]
+
+    [type/pointer mt t]
+    [exp/integer type-primitive-i32 [primitive-type/bytes [get-memory-pointer-type mt]]]
+
+    [type/array et opt-st]
+    [if-let [size-type opt-st]
+      [match size-type
+        [type/exp size-exp]
+        [int-exp-mul [type-to-size-of-exp et] size-exp]
+
+        [logq-abort type-to-size-of-exp array size not an exp type [identity size-type]]]
+      [logq-abort type-to-size-of-exp no size given [identity t]]]
+
+    [type/tuple types]
+    [loop [i 0
+           n [size types]
+           sum int-const-0]
+      [if [lt-s i n]
+        [continue
+          sum [int-exp-add sum [type-to-size-of-exp [at types i]]]
+          i [inc i]]
+        sum]]
+
+    [type/record fields]
+    [loop [i 0
+           n [size fields]
+           sum int-const-0]
+      [if [lt-s i n]
+        [continue
+          sum [int-exp-add sum [type-to-size-of-exp [pair/snd [at fields i]]]]
+          i [inc i]]
+        sum]]
+
+    [logq-abort not implemented type-to-size-of-exp [identity t]]]]
+
 [func mk-exp-to-inst-compiler []
   [let
     [glocals [growable-list]]
@@ -1335,10 +1490,110 @@
     [exp/tuple elems]
     [wat-inst/instructions [list-map elem elems [exp-to-inst elem]]]
 
+    [exp/deref target]
+    [let
+      [ttarget [type-of target]
+       ppt [if-let [p [try-get-pointer-args ttarget]] p [logq-abort not a pointer]]
+       mn [get-memory-name-from-type [pair/fst ppt]]
+       target-prim [type-to-primitive [pair/snd ppt]]]
+      [wat-inst/load-opt
+        [wasm-name-to-wat-byte-array
+          [prim-types-to-load-inst-name
+            [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i64]
+            target-prim]]
+        [wat-inst-memargs-opt
+          [option/some mn]
+          [option/none]
+          [option/none]]
+        [exp-to-inst target]]]
+
+    [exp/index index-target-exp index-exp]
+    [let
+      [derefed-target
+      [match index-target-exp
+      [exp/deref target]
+      target
+      [logq-abort can only assign to derefed pointers to arrays [identity index-target-exp]]]
+      pointer-type [type-of derefed-target]
+      ppt [if-let [p [try-get-pointer-args pointer-type]] p [logq-abort not a pointer]]
+      elem-type
+      [match [type-of index-target-exp]
+      [type/array elem-type -]
+      elem-type
+
+      [type/tuple elem-types]
+      [logq-abort not implemented exp-to-inst assign index tuple [identity index-target-exp]]
+
+      [logq-abort not implemented exp-to-inst assign index [identity index-target-exp]]]
+      addr-exp
+      [int-exp-add
+      derefed-target
+      [int-exp-mul index-exp [type-to-size-of-exp elem-type]]]
+      target-prim [type-to-primitive elem-type]]
+      [wat-inst/load-opt
+        [wasm-name-to-wat-byte-array
+          [prim-types-to-load-inst-name
+            [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i64]
+            target-prim]]
+        [wat-inst-memargs-opt
+          [option/some [get-memory-name-from-type [pair/fst ppt]]]
+          [option/none]
+          [option/none]]
+        [exp-to-inst addr-exp]]]
+
     [exp/assign dst src]
     [match dst
       [exp/var n]
       [wat-inst/global.set [name/word n] [exp-to-inst src]]
+
+      [exp/deref target]
+      [let
+        [ttarget [type-of target]]
+        [wat-inst/store-opt
+          [wasm-name-to-wat-byte-array
+            [prim-types-to-store-inst-name
+              [type-to-primitive ttarget]
+              [type-to-primitive [type-of src]]]]
+          [wat-inst-memargs-opt
+            [option/some [get-memory-name-from-type [pair/fst [get-pointer-args ttarget]]]]
+            [option/none]
+            [option/none]]
+          [exp-to-inst target]
+          [exp-to-inst src]]]
+
+      [exp/index index-target-exp index-exp]
+      [let
+        [derefed-target
+         [match index-target-exp
+          [exp/deref target]
+          target
+          [logq-abort can only assign to derefed pointers to arrays [identity index-target-exp]]]
+         pointer-type [type-of derefed-target]
+         ppt [get-pointer-args pointer-type]
+         elem-type
+         [match [type-of index-target-exp]
+          [type/array elem-type -]
+          elem-type
+
+          [type/tuple elem-types]
+          [logq-abort not implemented exp-to-inst assign index tuple [identity index-target-exp]]
+
+          [logq-abort not implemented exp-to-inst assign index [identity index-target-exp]]]
+         addr-exp
+         [int-exp-add
+          derefed-target
+          [int-exp-mul index-exp [type-to-size-of-exp elem-type]]]]
+        [wat-inst/store-opt
+          [wasm-name-to-wat-byte-array
+            [prim-types-to-store-inst-name
+              [type-to-primitive elem-type]
+              [type-to-primitive [type-of src]]]]
+          [wat-inst-memargs-opt
+            [option/some [get-memory-name-from-type [pair/fst ppt]]]
+            [option/none]
+            [option/none]]
+          [exp-to-inst addr-exp]
+          [exp-to-inst src]]]
 
       [logq-abort not implemented exp-to-inst assign [identity dst]]]
 
@@ -1346,6 +1601,9 @@
     [do
       [todo set the actual memory top]
       [wat-inst/i32.const [word 16]]]
+
+    [exp/cast t e]
+    [exp-to-inst e]
 
     [logq-abort exp-to-inst not implemented [identity exp]]]]
 

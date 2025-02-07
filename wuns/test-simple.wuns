@@ -109,6 +109,42 @@
     [js-app set-x [i32 1337]]
     [test-assert-eq [i32 1337] [js-app get-x]]]]
 
+[defn test-pointers []
+  [let
+    [forms
+      [qlist
+[memory mem [i32] 1]
+
+[def p-int
+  [cast [pointer [exp mem] [i64]] [i32 16]]]
+
+[defn set [v [i64]] [tuple]
+  [assign [deref p-int] v]]
+
+[defn get [] [i64] [deref p-int]]
+
+[export set get]]]
+    [forms-to-module forms]]]
+
+
+[defn test-array []
+  [let
+    [forms
+      [qlist
+[memory mem [i32] 1]
+
+[def p-ar
+  [cast [pointer [exp mem] [array [i32]]] [i32 16]]]
+
+[defn set [i [i32] v [i32]] [tuple]
+  [assign [index [deref p-ar] i] v]]
+
+[defn get [i [i32]] [i32]
+  [index [deref p-ar] i]]
+
+[export set get]]]
+    [forms-to-module forms]]]
+
 [defn test-import []
   [let
     [forms
