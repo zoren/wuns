@@ -110,6 +110,9 @@ const makeProvideDocumentSemanticTokensForms = async () => {
       i32: (_headWord, tail) => {
         pushToken(tail[0], tokenTypeNumber)
       },
+      bigint: (_headWord, tail) => {
+        pushToken(tail[0], tokenTypeNumber)
+      },
       f64: (_headWord, tail) => {
         pushToken(tail[0], tokenTypeNumber)
       },

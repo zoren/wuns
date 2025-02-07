@@ -24,6 +24,7 @@ const jsStmt =
     makeTaggedValue('js-stmt/' + ctor, ...args)
 
 const jsNumber = jsExp('number')
+const jsBigInt = jsExp('bigint')
 const jsString = jsExp('string')
 const jsBinop = jsExp('binop')
 const jsBin = (s) => (a, b) => jsBinop(makeTaggedValue('binop/' + s), a, b)
@@ -218,6 +219,15 @@ const expSpecialFormsExp = {
     if (tail.length !== 1) throw new CompileError('i32 expected one argument')
     try {
       return jsNumber(wordToI32(getFormWord(tail[0])))
+    } catch (e) {
+      if (e instanceof CompileError) throw e
+      throw new CompileError(e.message, tail[0])
+    }
+  },
+  bigint: (tail) => {
+    if (tail.length !== 1) throw new CompileError('bigint expected one argument')
+    try {
+      return jsBigInt(BigInt(getFormWord(tail[0])))
     } catch (e) {
       if (e instanceof CompileError) throw e
       throw new CompileError(e.message, tail[0])

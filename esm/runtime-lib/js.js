@@ -120,6 +120,8 @@ export const jsExpToString = (js) => {
   switch (tag) {
     case 'js-exp/number':
       return `${+arg(0)}`
+    case 'js-exp/bigint':
+      return `${arg(0)}n`
     case 'js-exp/string': {
       const s = arg(0)
       return s.indexOf("'") < 0 ? `'${s}'` : `"${s}"`
