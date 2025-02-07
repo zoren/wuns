@@ -1541,20 +1541,29 @@
          [logq-abort can only assign to derefed pointers to arrays [identity index-target-exp]]]
        pointer-type [type-of derefed-target]
        ppt [get-pointer-args pointer-type]
-       elem-type
+       elem-type-offset
        [match [type-of index-target-exp]
          [type/array elem-type -]
-         elem-type
+         [pair elem-type [int-exp-mul index-exp [type-to-size-of-exp elem-type]]]
 
          [type/tuple elem-types]
-         [logq-abort not implemented exp-to-inst assign index tuple [identity index-target-exp]]
+         [if-let [ie [try-get-int-const index-exp]]
+            [let [n [size elem-types]]
+              [assert [lt-s ie n] index out of bounds]
+              [loop [i 0 acc int-const-0]
+                [if [eq ie i]
+                  [pair [at elem-types i] acc]
+                  [continue
+                    acc [int-exp-add acc [type-to-size-of-exp [at elem-types i]]]
+                    i [inc i]]]]]
+            [logq-abort indexing of tuples only allowed with constants [identity index-exp]]]
 
-         [logq-abort not implemented exp-to-inst assign index [identity index-target-exp]]]
+         [logq-abort not implemented exp-to-inst index [identity index-target-exp]]]
        addr-exp
        [int-exp-add
          derefed-target
-         [int-exp-mul index-exp [type-to-size-of-exp elem-type]]]
-       target-prim [type-to-primitive elem-type]]
+         [pair/snd elem-type-offset]]
+       target-prim [type-to-primitive [pair/fst elem-type-offset]]]
       [wat-inst/load-opt
         [wasm-name-to-wat-byte-array
           [prim-types-to-load-inst-name
@@ -1638,7 +1647,20 @@
                 [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
 
             [exp/tuple elems]
-            [logq-abort not impl [identity src]]
+            [do
+              [assert-not [may-side-effect target] assign target cannot have side effects when assigning tuples]
+              [let
+                [ginsts [growable-list]]
+                [loop [i 0 n [size elems] acc int-const-0]
+                  [when [lt-s i n]
+                    [let
+                      [elem [at elems i]
+                       telem [type-of elem]
+                       offset-target [int-exp-add acc [type-to-size-of-exp telem]]]
+                      [push ginsts
+                        [assign-pointer [int-exp-add target acc] telem elem]]
+                      [continue i [inc i] acc offset-target]]]]
+                [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
 
             [exp/record fields]
             [do

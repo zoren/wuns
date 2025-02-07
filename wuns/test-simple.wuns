@@ -214,8 +214,34 @@
      get-i [get-export inst [word get-i]]
      get-f [get-export inst [word get-f]]]
     [let [p [js-app make-record [i32 3]]]
-      [test-assert-eq [i32 3] [js-app get-i p]]
-      [test-assert-eq [f64 1.1] [js-app get-f p]]]]]
+      [test-assert-eq [f64 1.1] [js-app get-f p]]
+      [test-assert-eq [i32 3] [js-app get-i p]]]]]
+
+[defn test-tuple-exp []
+  [let
+    [forms
+      [qlist
+[memory mem [i32] 1]
+
+[defn make-tuple [n [i32]] [pointer [exp mem] [tuple [f64] [i32]]]
+  [let [p [cast [pointer [exp mem] [tuple [f64] [i32]]] [i32 16]]]
+    [assign [deref p] [tuple [f64 1.1] n]]
+    p]]
+
+[defn get-1 [p [pointer [exp mem] [tuple [f64] [i32]]]] [f64]
+  [index [deref p] [i32 0]]]
+
+[defn get-2 [p [pointer [exp mem] [tuple [f64] [i32]]]] [i32]
+  [index [deref p] [i32 1]]]
+
+[export make-tuple get-1 get-2]]
+     inst [forms-to-inst forms]
+     make-tuple [get-export inst [word make-tuple]]
+     get-1 [get-export inst [word get-1]]
+     get-2 [get-export inst [word get-2]]]
+    [let [p [js-app make-tuple [i32 3]]]
+      [test-assert-eq [f64 1.1] [js-app get-1 p]]
+      [test-assert-eq [i32 3] [js-app get-2 p]]]]]
 
 [defn test-import []
   [let
@@ -291,5 +317,6 @@
   [test-array]
   [test-array-exp]
   [test-record-exp]
+  [test-tuple-exp]
   [test-import]
   ]
