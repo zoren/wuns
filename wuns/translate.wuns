@@ -9,9 +9,6 @@
   [record
     [word word]]]
 
-[type local-context-kind []
-  [union [func] [let] [loop] [type-decl]]]
-
 [type primitive-type []
   [record
     [prefix word]
@@ -73,6 +70,9 @@
 
 [defn get-primitive [n] [get primitive-types-by-name n]]
 
+[type local-context-kind []
+  [union [func] [let] [loop] [type-decl]]]
+
 [type
   type []
   [union
@@ -88,7 +88,6 @@
     [union [list type]]
 
     [type type-kind]
-    [memory memory-type]
     [func [list type] type]
     [error]
     [empty]
@@ -98,9 +97,6 @@
   [union
     [datatype]
     [exp type]]
-
-  memory-type []
-  [record [type primitive-type] [name name]]
 
   exp []
   [union
@@ -245,11 +241,6 @@
     [exp-to-inst [func [exp] wat-inst]]
     [exps-to-inst [func [[list exp]] wat-inst]]
     [glocals [growable-list [pair word word]]]]]
-
-[defn option-map [f opt]
-  [if-let [v opt]
-    [option/some [f v]]
-    [option/none]]]
 
 [defn type-substitute [type-env outer-t]
   [[func go [t]
@@ -567,12 +558,6 @@
     [option/some e]
     [option/none]]]
 
-[defn try-get-type-memory [t]
-  [match t
-    [type/memory mt]
-    [option/some mt]
-    [option/none]]]
-
 [defn starts-with-dash [w]
   [eq [char-code-at w 0] [word-to-char-code -]]]
 
@@ -580,6 +565,16 @@
   [record
     [kind type-kind]
     [params [list [pair name type-kind]]]]]
+
+[type immediate-type []
+  [union
+    [memory]]]
+
+[type intrinsic-type []
+  [record
+    [immediate-parameters [list immediate-type]]
+    [parameters [list type]]
+    [result type]]]
 
 [defn intrinsic-type-from-name [n]
   [switch n
@@ -589,19 +584,25 @@
      [word i32.eq]
      [word i32.lt-s] [word i32.le-s]
      [word i32.gt-s] [word i32.ge-s]]
-    [pair [list type-i32 type-i32] type-i32]
+    [intrinsic-type [list] [list type-i32 type-i32] type-i32]
 
     [[word i64.add] [word i64.sub] [word i64.mul]
      [word i64.and] [word i64.or] [word i64.xor]]
-    [pair [list type-i64 type-i64] type-i64]
+    [intrinsic-type [list] [list type-i64 type-i64] type-i64]
 
     [[word i64.eq]
      [word i64.lt-s] [word i64.le-s]
      [word i64.gt-s] [word i64.ge-s]]
-    [pair [list type-i64 type-i64] type-i32]
+    [intrinsic-type [list] [list type-i64 type-i64] type-i32]
 
     [[word unreachable]]
-    [pair [list] type-empty]
+    [intrinsic-type [list] [list] type-empty]
+
+    [[word memory.size]]
+    [intrinsic-type [list [immediate-type/memory]] [list] type-i32]
+
+    [[word memory.grow]]
+    [intrinsic-type [list [immediate-type/memory]] [list type-i32] type-i32]
 
     [logq-abort not implemented intrinsic [identity n]]]]
 
@@ -660,12 +661,19 @@
     desc
     [logq-abort not bound [identity name]]]]
 
-[func get-memory-type-from-type [mt]
+[func get-memory-name-from-type [mt]
   [if-let [mem-exp [try-get-type-exp mt]]
-    [if-let [mem-type [try-get-type-memory [type-of mem-exp]]]
-      mem-type
-      [logq-abort expected memory type exp [identity mem-exp]]]
-    [logq-abort expected memory type [identity mt]]]]
+    [match [type-of mem-exp]
+      [type/exp mem-name-exp]
+      [match mem-name-exp
+        [exp/var mem-name]
+        [name/word mem-name]
+        [logq-abort get-memory-name-from-type not a memory [identity mem-name-exp]]]
+      [logq-abort get-memory-name-from-type not a memory type [identity mt]]]
+    [logq-abort get-memory-name-from-type expected memory type [identity mt]]]]
+
+[func get-memory-type-from-type [mt]
+  [top-desc-kind-memory-desc [pair/snd [get top-names [get-memory-name-from-type mt]]]]]
 
 [func type-to-type-kind-opt [arg]
   [match arg
@@ -972,13 +980,21 @@
 
     [[word intrinsic]]
     [let [intrinsic-name [form-to-name [second l]]
+          arg-forms [slice l 2 [size l]]
           args [list-map arg [slice l 2 [size l]] [form-to-exp lctx arg]]
           it [intrinsic-type-from-name [name/word intrinsic-name]]
-          params [pair/fst it]]
-      [assert [eq [size params] [size args]] intrinsic
-        [identity intrinsic-name] expected [size params] arguments but got [size args]]
-      [for i 0 [size params]
-        [let [p [at params i]
+          imm-params [intrinsic-type/immediate-parameters it]
+          params [intrinsic-type/parameters it]
+          arity [add [size imm-params] [size params]]]
+      [assert [eq arity [size args]] intrinsic
+        [identity intrinsic-name] expected [identity arity] arguments but got [size args]]
+      [for i 0 [size imm-params]
+        [let [p [at imm-params i]
+              ta [type-of [at args i]]]
+          [todo assert arg is constant]
+          ]]
+      [for i [size imm-params] [size params]
+        [let [p [at params [add [size imm-params] i]]
               ta [type-of [at args i]]]
           [assert [type-assignable p ta] intrinsic [identity intrinsic-name] expected [identity p] but got [identity ta]]]]
       [exp/intrinsic intrinsic-name args]]
@@ -1071,7 +1087,7 @@
     [let [mem-name [form-to-name [second l]]]
       [let [desc [lookup-bind-name lctx mem-name]]
         [match [pair/fst desc]
-          [type/memory -]
+          [type/exp -]
           [do]
 
           [logq-abort not a memory type]]]
@@ -1130,7 +1146,10 @@
                       arg [at cargs i]
                       targ [type-of arg]]
                   [if [type-is-type pt]
-                    [set-kv-map type-env [name/word [pair/fst pp]] [match arg [exp/type at] at [logq-abort arg bla]]]
+                    [set-kv-map type-env [name/word [pair/fst pp]]
+                      [match arg
+                        [exp/type at] at
+                        [logq-abort arg bla]]]
                     [let [pt-subst [type-substitute type-env pt]]
                       [when-not [type-assignable pt-subst targ]
                         [logq param [identity pt-subst]]
@@ -1363,14 +1382,6 @@
       [exp-equals e1 e2]
       false]
 
-    [type/memory m1]
-    [match t2
-      [type/memory m2]
-      [and
-        [is-identical [memory-type/type m1] [memory-type/type m2]]
-        [eq-word [name/word [memory-type/name m1]] [name/word [memory-type/name m2]]]]
-      false]
-
     [type/array t1 opt-s1]
     [match t2
       [type/array t2 opt-s2]
@@ -1473,7 +1484,7 @@
     [name-to-type n]
 
     [exp/intrinsic intrinsic-name args]
-    [pair/snd [intrinsic-type-from-name [name/word intrinsic-name]]]
+    [intrinsic-type/result [intrinsic-type-from-name [name/word intrinsic-name]]]
 
     [exp/deref target]
     [if-let [p [try-get-pointer-args [type-of target]]]
@@ -1615,7 +1626,7 @@
           [[word memory]]
           [let [mem-name [form-to-name [second l]]
                 mem-exp [form-list-to-mem-exp [rest l]]
-                t [type/memory [memory-type [memory-exp/type mem-exp] mem-name]]]
+                t [type/exp [exp/var mem-name]]]
             [bind-top [second l] [pair t [top-desc-kind/memory [mem-exp-to-mem-kind mem-exp]]]]
             [option/some [top-decl/memory [form-to-name [second l]] mem-exp]]]
 
@@ -1662,7 +1673,7 @@
                     [type/func [list-map p ps [pair/snd p]] rt]
 
                     [import-kind-exp/memory mem-exp]
-                    [type/memory [memory-type [memory-exp/type mem-exp] m]]
+                    [type/exp [exp/var m]]
 
                     [logq-abort not implemented type-of import]]
                   ikd
@@ -1727,7 +1738,7 @@
         [push top-decls top]]]
     [clone-growable-to-frozen-list top-decls]]]
 
-[func get-memory-pointer-type [mt] [memory-type/type [get-memory-type-from-type mt]]]
+[func get-memory-pointer-type [mt] [memory-desc/type [get-memory-type-from-type mt]]]
 
 [func type-to-wat-type [t]
   [match [expand-custom t]
@@ -1961,7 +1972,7 @@
     [let
       [pt [type-of target]
        ppt [if-let [p [try-get-pointer-args pt]] p [logq-abort not a pointer]]
-       mt [get-memory-type-from-type [pair/fst ppt]]
+       mn [get-memory-name-from-type [pair/fst ppt]]
        target-prim [type-to-primitive [type-substitute type-env [pair/snd ppt]]]]
       [wat-inst/load
         [wasm-name-to-wat-byte-array
@@ -1969,7 +1980,7 @@
             [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i64]
             target-prim]]
         [wat-inst-memargs
-          [name/word [memory-type/name mt]]
+          mn
           [word 0]
           [word 1]]
         [exp-to-inst target]]]
@@ -1978,7 +1989,7 @@
     [let
       [prim-target [option-get [try-get-primitive ttarget]]
        ppt [option-get [try-get-pointer-args [type-of pexp]]]
-       mt [get-memory-type-from-type [pair/fst ppt]]
+       mn [get-memory-name-from-type [pair/fst ppt]]
        texp [pair/snd ppt]
        prim-exp [option-get [try-get-primitive texp]]
        inst
@@ -1988,7 +1999,7 @@
       [wat-inst/load
         [wasm-name-to-wat-byte-array inst]
         [wat-inst-memargs
-          [name/word [memory-type/name mt]]
+          mn
           [word 0]
           [word 1]]
         [exp-to-inst pexp]]]
@@ -1996,7 +2007,7 @@
     [exp/assign target value]
     [let
       [ppt [if-let [p [try-get-pointer-args [type-of target]]] p [logq-abort not a pointer]]
-       mt [get-memory-type-from-type [pair/fst ppt]]
+       mn [get-memory-name-from-type [pair/fst ppt]]
        assign-pointer
        [func assign-pointer [target-int-exp ttarget value]
         [let [expanded-t [expand-custom [type-substitute type-env ttarget]]
@@ -2009,7 +2020,7 @@
              ptvalue [type-to-primitive normed-t]]
             [wat-inst/store
               [wasm-name-to-wat-byte-array [prim-types-to-store-inst-name pttarget ptvalue]]
-              [wat-inst-memargs [name/word [memory-type/name mt]] [word 0] [word 1]]
+              [wat-inst-memargs mn [word 0] [word 1]]
               [exp-to-inst target-int-exp]
               [exp-to-inst value]]]
 
@@ -2082,7 +2093,21 @@
     [wat-inst/global.set [name/word dst-name] [exp-to-inst value]]
 
     [exp/intrinsic n args]
-    [wat-inst/inst [wasm-name-to-wat-byte-array [name/word n]] [list-map arg args [exp-to-inst arg]]]
+    [let [intrin-t [intrinsic-type-from-name [name/word n]]
+          imm [intrinsic-type/immediate-parameters intrin-t]
+          n-of-imm [size [intrinsic-type/immediate-parameters intrin-t]]
+          gimm-args [growable-list]]
+      [for i 0 n-of-imm
+        [match [at imm i]
+          [immediate-type/memory]
+          [push gimm-args [wat-immediate/memory [get-memory-name-from-type [type-of [at args i]]]]]
+
+          ]]
+      [wat-inst/instruction
+        [wasm-name-to-wat-byte-array [name/word n]]
+        [clone-growable-to-frozen-list gimm-args]
+        [list-map arg [slice args n-of-imm [size args]]
+          [exp-to-inst arg]]]]
 
     [exp/var n]
     [match [get-desc-from-name n]
@@ -2092,7 +2117,9 @@
         [wat-inst/global.get [name/word n]]
 
         [top-desc-kind/function -]
-        [logq-abort function as value not implemented]]
+        [logq-abort function as value not implemented]
+
+        [logq-abort not implemented exp-to-inst var [identity n] [identity td]]]
 
       [desc-kind/local ld]
       [wat-inst/local.get [name/word n]]]
