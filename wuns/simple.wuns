@@ -1128,7 +1128,18 @@
       [logq-abort indexing only allowed for array and tuple types]]
 
     [exp/field pexp field-name]
-    [logq-abort type-of not implemented [identity exp]]
+    [match [type-of pexp]
+      [type/record field-types]
+      [loop [n [size field-types]
+             field-name-word [name/word field-name]
+             i 0]
+        [if [lt-s i n]
+          [let [fp [at field-types i]]
+            [if [eq-word [name/word [pair/fst fp]] field-name-word]
+              [pair/snd fp]
+              [continue i [inc i]]]]
+          [logq-abort field not found [identity field-name-word] [identity field-types]]]]
+      [logq-abort type-of not implemented [identity exp]]]
 
     [exp/array elem-type elems]
     [type/array
@@ -1524,26 +1535,26 @@
     [exp/index index-target-exp index-exp]
     [let
       [derefed-target
-      [match index-target-exp
-      [exp/deref target]
-      target
-      [logq-abort can only assign to derefed pointers to arrays [identity index-target-exp]]]
-      pointer-type [type-of derefed-target]
-      ppt [get-pointer-args pointer-type]
-      elem-type
-      [match [type-of index-target-exp]
-      [type/array elem-type -]
-      elem-type
+       [match index-target-exp
+         [exp/deref target]
+         target
+         [logq-abort can only assign to derefed pointers to arrays [identity index-target-exp]]]
+       pointer-type [type-of derefed-target]
+       ppt [get-pointer-args pointer-type]
+       elem-type
+       [match [type-of index-target-exp]
+         [type/array elem-type -]
+         elem-type
 
-      [type/tuple elem-types]
-      [logq-abort not implemented exp-to-inst assign index tuple [identity index-target-exp]]
+         [type/tuple elem-types]
+         [logq-abort not implemented exp-to-inst assign index tuple [identity index-target-exp]]
 
-      [logq-abort not implemented exp-to-inst assign index [identity index-target-exp]]]
-      addr-exp
-      [int-exp-add
-      derefed-target
-      [int-exp-mul index-exp [type-to-size-of-exp elem-type]]]
-      target-prim [type-to-primitive elem-type]]
+         [logq-abort not implemented exp-to-inst assign index [identity index-target-exp]]]
+       addr-exp
+       [int-exp-add
+         derefed-target
+         [int-exp-mul index-exp [type-to-size-of-exp elem-type]]]
+       target-prim [type-to-primitive elem-type]]
       [wat-inst/load-opt
         [wasm-name-to-wat-byte-array
           [prim-types-to-load-inst-name
@@ -1554,6 +1565,43 @@
           [option/none]
           [option/none]]
         [exp-to-inst addr-exp]]]
+
+    [exp/field field-target-exp field-name]
+    [let
+      [derefed-target
+       [match field-target-exp
+        [exp/deref target]
+        target
+        [logq-abort can only assign to derefed pointers to arrays [identity field-target-exp]]]
+       pointer-type [type-of derefed-target]
+       ppt [get-pointer-args pointer-type]
+       field-name-word [name/word field-name]
+       offset-p
+       [match [pair/snd ppt]
+        [type/record field-types]
+        [loop [i 0
+               res int-const-0
+               n [size field-types]]
+          [if [lt-s i n]
+            [let [fp [at field-types i]]
+              [if [eq-word [name/word [pair/fst fp]] field-name-word]
+                [pair res [pair/snd fp]]
+                [continue
+                  res [int-exp-add res [type-to-size-of-exp [pair/snd fp]]]
+                  i [inc i]]]]
+            [logq-abort field not found [identity field-name-word]]]]
+        [logq-abort not implemented exp-to-inst field]]
+       target-prim [type-to-primitive [pair/snd offset-p]]]
+      [wat-inst/load-opt
+        [wasm-name-to-wat-byte-array
+          [prim-types-to-load-inst-name
+            [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i64]
+            target-prim]]
+        [wat-inst-memargs-opt
+          [option/some [get-memory-name-from-type [pair/fst ppt]]]
+          [option/none]
+          [option/none]]
+        [exp-to-inst [int-exp-add derefed-target [pair/fst offset-p]]]]]
 
     [exp/assign dst src]
     [match dst
@@ -1593,7 +1641,21 @@
             [logq-abort not impl [identity src]]
 
             [exp/record fields]
-            [logq-abort not impl [identity src]]
+            [do
+              [assert-not [may-side-effect target] assign target cannot have side effects when assigning record]
+              [let
+                [ginsts [growable-list]]
+                [loop [i 0 n [size fields] acc int-const-0]
+                  [when [lt-s i n]
+                    [let
+                      [field [at fields i]
+                       field-exp [pair/snd field]
+                       telem [type-of field-exp]
+                       offset-target [int-exp-add acc [type-to-size-of-exp telem]]]
+                      [push ginsts
+                        [assign-pointer [int-exp-add target acc] telem field-exp]]
+                      [continue i [inc i] acc offset-target]]]]
+                [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
 
             [let
               [tsrc [type-of src]

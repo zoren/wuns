@@ -191,6 +191,32 @@
       [test-assert-eq [i32 5] [js-app wget p [i32 1]]]
       [test-assert-eq [i32 6] [js-app wget p [i32 2]]]]]]
 
+[defn test-record-exp []
+  [let
+    [forms
+      [qlist
+[memory mem [i32] 1]
+
+[defn make-record [n [i32]] [pointer [exp mem] [record [f [f64]] [i [i32]]]]
+  [let [p [cast [pointer [exp mem] [record [f [f64]] [i [i32]]]] [i32 16]]]
+    [assign [deref p] [record f [f64 1.1] i n]]
+    p]]
+
+[defn get-f [p [pointer [exp mem] [record [f [f64]] [i [i32]]]]] [f64]
+  [field [deref p] f]]
+
+[defn get-i [p [pointer [exp mem] [record [f [f64]] [i [i32]]]]] [i32]
+  [field [deref p] i]]
+
+[export make-record get-f get-i]]
+     inst [forms-to-inst forms]
+     make-record [get-export inst [word make-record]]
+     get-i [get-export inst [word get-i]]
+     get-f [get-export inst [word get-f]]]
+    [let [p [js-app make-record [i32 3]]]
+      [test-assert-eq [i32 3] [js-app get-i p]]
+      [test-assert-eq [f64 1.1] [js-app get-f p]]]]]
+
 [defn test-import []
   [let
     [forms
@@ -264,5 +290,6 @@
   [test-pointers]
   [test-array]
   [test-array-exp]
+  [test-record-exp]
   [test-import]
   ]
