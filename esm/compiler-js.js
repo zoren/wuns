@@ -151,18 +151,6 @@ const compFunc = (tail, ctx, topContext) => {
   return jsIIFE([jsConstDecl(name, arrow), jsReturn(jsVar(name))])
 }
 
-const builtInPrimitiveTypeSizes = Object.freeze({
-  i8: 1,
-  u8: 1,
-  i16: 2,
-  u16: 2,
-  i32: 4,
-  i64: 8,
-  f32: 4,
-  f64: 8,
-  v128: 16,
-})
-
 const typeVar = (name) => Object.freeze({ typeKind: 'var', name })
 const typeInst = (typeName, ...args) => Object.freeze({ typeKind: 'inst', typeName, args })
 const typeFunc = (parameters, restParameter, result) =>
@@ -182,11 +170,11 @@ const makeTypeValidator = (typeContext, params) => {
     if (typeList.length === 0) throw new CompileError('empty type list', form)
     const [first, ...rest] = typeList
     const firstWord = getFormWord(first)
-    if (firstWord in builtInPrimitiveTypeSizes) {
-      if (rest.length !== 0) throw new CompileError('built-in type expected no arguments', form)
-      return typeInst(firstWord)
-    }
     switch (firstWord) {
+      case 'i32':
+      case 'f64':
+        if (rest.length !== 0) throw new CompileError('built-in type expected no arguments', form)
+        return typeInst(firstWord)
       case 'word':
         if (rest.length !== 0) throw new CompileError('expects no arguments', form)
         return typeInst(firstWord)
