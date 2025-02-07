@@ -509,13 +509,14 @@ const compExp = (ctx, form, topContext) => {
       const exp = tryRunExpHandler(firstForm, args, ctx, topContext)
       if (exp) return exp
 
-      const stmt = tryRunStmtHandler(firstForm,args, ctx, topContext, true)
+      const stmt = tryRunStmtHandler(firstForm, args, ctx, topContext, true)
       if (stmt) return jsIIFE([stmt])
 
       const numOfArgs = args.length
       const checkArity = ({ parameters, restParam }) => {
         if (numOfArgs < parameters.length) throw new CompileError('not enough arguments', form)
-        if (!restParam && numOfArgs > parameters.length) throw new CompileError('too many arguments: ' + firstWord + ' ' + parameters.length + ' ' + numOfArgs, form)
+        if (!restParam && numOfArgs > parameters.length)
+          throw new CompileError('too many arguments: ' + firstWord + ' ' + parameters.length + ' ' + numOfArgs, form)
       }
 
       let curCtx = ctx
