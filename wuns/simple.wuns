@@ -102,7 +102,8 @@
     [exp exp]
 
     [func [list type] type]
-    [empty]]
+    [empty]
+    [apply-custom name [list type]]]
 
   exp []
   [union
@@ -144,6 +145,20 @@
     [memory-static-top exp]
     ]]
 
+[defn exp-to-deref [exp]
+  [loop [cur exp]
+    [match cur
+      [exp/deref target]
+      target
+
+      [exp/index target -]
+      [continue cur target]
+
+      [exp/field target -]
+      [continue cur target]
+
+      [logq-abort exp-to-deref [identity cur]]]]]
+
 [defn may-side-effect [e]
   [match e
     [exp/integer - --] false
@@ -162,13 +177,6 @@
 [def type-i64 [type/primitive type-primitive-i64]]
 [def type-empty [type/empty]]
 [def type-tuple-empty [type/tuple [list]]]
-
-[defn get-pointer-args [t]
-  [match t
-    [type/pointer m p]
-    [pair m p]
-
-    [logq-abort get-pointer-args not a pointer [identity t]]]]
 
 [type immediate-type []
   [union
@@ -242,6 +250,9 @@
       [type/union ts]
       [type/union [list-map a ts [go a]]]
 
+      [type/apply-custom tn args]
+      [type/apply-custom tn [list-map a args [go a]]]
+
       [logq-abort type-substitute not implemented [identity t]]]]
     outer-t]]
 
@@ -276,8 +287,7 @@
     [value value-kind name exp]
     [memory name memory-exp]
     [function exp-function]
-    [export [list name]]]
-    ]
+    [export [list name]]]]
 
 [type local-context [var-info context-kind]
   [union
@@ -378,6 +388,9 @@
 [defmacro error [form .. message]
   [flist [quote error-form-fn] form [quote-list message]]]
 
+[defmacro error-name [form .. message]
+  [flist [quote error-name-fn] form [quote-list message]]]
+
 [defmacro error-exp [exp .. message]
   [flist [quote error-exp-fn] exp [quote-list message]]]
 
@@ -467,6 +480,20 @@
         [mk-exp-i32-mul a b]]
       [mk-exp-i32-mul a b]]]]
 
+[type type-kind []
+  [union
+    [datatype]
+    [non-datatype]
+    [exp type]]]
+
+[def type-kind-datatype [type-kind/datatype]]
+[def type-kind-non-datatype [type-kind/non-datatype]]
+[def empty-type-env [transient-kv-map]]
+
+[type type-signature []
+  [record
+    [kind type-kind]
+    [params [list [pair name type-kind]]]]]
 
 [defn make-compiler []
 [let
@@ -475,13 +502,19 @@
    top-names [transient-kv-map]
    exp-to-form [transient-kv-map]
    active-data-map [transient-kv-map]
-   active-data-map-offsets [transient-kv-map]]
+   active-data-map-offsets [transient-kv-map]
+   name-to-form [transient-kv-map]
+   custom-type-signatures [transient-kv-map]
+   custom-types [transient-kv-map]]
 [letfn [
 [func error-form-fn [form message-form]
   [push gerrors [pair form message-form]]]
 
 [func error-exp-fn [exp message-form]
   [logq-abort error-exp [identity exp] [identity message-form]]]
+
+[func error-name-fn [name message-form]
+  [error-form-fn [get name-to-form name] message-form]]
 
 [func get-word [f]
   [if-let [w [try-get-word f]]
@@ -497,7 +530,9 @@
       [list]]]]
 [func form-to-name [f]
   [if-let [w [try-get-word f]]
-    [name w]
+    [let [n [name w]]
+      [set-kv-map name-to-form n f]
+      n]
     [do
       [log-location f]
       [logq-abort expected word [identity f]]]]]
@@ -518,7 +553,9 @@
 [func lookup-bind-name [lctx name]
   [if-let [desc [try-lookup-bind-name lctx name]]
     desc
-    [logq-abort not bound [identity name]]]]
+    [do
+      [error-name name not found]
+      [logq-abort lookup-bind-name [identity name]]]]]
 
 [func form-to-exp [lctx form]
   [match form
@@ -595,62 +632,108 @@
           [logq-abort common-super-type not implemented e2 [identity t1] [identity t2]]]]]]]
 
 [func form-to-type [lctx outer-form]
+  [form-to-type-type-env empty-type-env lctx outer-form]]
+
+[func type-kind-equals [tk1 tk2]
+  [or [is-identical tk1 tk2]
+    [match tk1
+      [type-kind/datatype]
+      [match tk2
+        [type-kind/datatype]
+        true
+        false]
+
+      [type-kind/exp e1]
+      [match tk2
+        [type-kind/exp e2]
+        [type-equals e1 e2]
+
+        false]
+
+      [logq-abort type-kind-equals [identity tk1] [identity tk2]]]]]
+
+[func form-to-type-type-env [type-env lctx outer-form]
   [letfn [
+[func type-to-type-kind-opt [arg]
+  [match arg
+    [type/var n] [option/some [get type-env [name/word n]]]
+    [type/wildcard wcn] [option/none]
+    [type/exp e] [option/some [type-kind/exp [type-of e]]]
+    [type/apply-custom tn -args] [option/some [type-signature/kind [get custom-type-signatures [name/word tn]]]]
+    [type/primitive -] [option/some type-kind-datatype]
+    [type/pointer - --] [option/some type-kind-datatype]
+    [type/tuple -] [option/some type-kind-datatype]
+    [type/record -] [option/some type-kind-datatype]
+    [type/union -] [option/some type-kind-datatype]
+    [type/array - --] [option/some type-kind-datatype]
+    [type/func - --] [option/some type-kind-non-datatype]
+    [logq-abort type-to-type-kind [identity arg]]]]
+
   [func go [form]
     [match form
     [form/word w]
     [if [starts-with-dash w]
       [type/wildcard [form-to-name form]]
       [let [n [form-to-name form]]
-        [lookup-bind-name lctx n]
+        [when-not [has type-env [name/word n]]
+          [error-name n type var not found]]
         [type/var n]]]
 
     [form/list l]
     [let [type-name-word [form-to-word [first l]]
           n-of-args [dec [size l]]]
       [assert-not [is-empty l] form-to-type expected non-empty list]
-      [switch type-name-word
-        [[word tuple]]
-        [type/tuple [list-map t [rest l] [go t]]]
+      [if-let [custom-type-signature [try-get custom-type-signatures type-name-word]]
+        [let [type-params [type-signature/params custom-type-signature]
+              targs [list-map a [rest l] [go a]]]
+          [assert [eq n-of-args [size type-params]] form-to-type expected same number of arguments
+            [identity type-name-word] [size type-params] [identity n-of-args]]
+          [for i 0 [size type-params]
+            [let
+              [tp [at type-params i]
+               targ [at targs i]]
+              [when-let [arg-kind [type-to-type-kind-opt targ]]
+                [when-not [type-kind-equals [pair/snd tp] arg-kind]
+                  [logq-abort form-to-type type mismatch [identity targ] [identity tp]]]]]]
+          [type/apply-custom [form-to-name [first l]] targs]]
+        [switch type-name-word
+          [[word tuple]]
+          [type/tuple [list-map t [rest l] [go t]]]
 
-        [[word record]]
-        [type/record
-          [list-map pf [rest l]
-            [let [p [get-list pf]]
-              [pair [form-to-name [first p]] [go [second p]]]]]]
+          [[word record]]
+          [type/record
+            [list-map pf [rest l]
+              [let [p [get-list pf]]
+                [pair [form-to-name [first p]] [go [second p]]]]]]
 
-        [[word union]]
-        [type/union [list-map a [rest l] [go a]]]
+          [[word union]]
+          [type/union [list-map a [rest l] [go a]]]
 
-        [[word pointer]]
-        [do
-          [assert [eq n-of-args 2] form-to-type expected 2 elements
-            [identity type-name-word] [identity n-of-args]]
-          [let [mt [go [second l]]
-                target-type [go [third l]]]
-            [type/pointer mt target-type]]]
+          [[word pointer]]
+          [do
+            [assert [eq n-of-args 2] form-to-type expected 2 elements [identity type-name-word] [identity n-of-args]]
+            [let [mt [go [second l]]
+                  target-type [go [third l]]]
+              [type/pointer mt target-type]]]
 
-        [[word exp]]
-        [type/exp [form-to-exp lctx [second l]]]
+          [[word exp]]
+          [type/exp [form-to-exp lctx [second l]]]
 
-        [[word array]]
-        [ifs
-          [eq [size l] 2]
-          [type/array [go [second l]] [option/none]]
+          [[word array]]
+          [ifs
+            [eq [size l] 2]
+            [type/array [go [second l]] [option/none]]
 
-          [eq [size l] 3]
-          [type/array [go [second l]] [option/some [go [third l]]]]
+            [eq [size l] 3]
+            [type/array [go [second l]] [option/some [go [third l]]]]
 
-          [logq-abort array expected 2 or 3 elements]]
+            [logq-abort array expected 2 or 3 elements]]
 
-        [[word type]]
-        [logq-abort not implemented form-to-type [identity form]]
-
-        [if-let [p [try-get primitive-types-by-name type-name-word]]
+          [if-let [p [try-get primitive-types-by-name type-name-word]]
             [do
               [assert [eq n-of-args 0] form-to-type primitive takes no arguments [identity type-name-word]]
               [type/primitive p]]
-            [logq-abort not implemented form-to-type [identity form]]]]]]]]
+            [logq-abort not implemented form-to-type [identity form]]]]]]]]]
     [go outer-form]]]
 
 [func exp-to-bytes [e]
@@ -1024,6 +1107,15 @@
 
         [type-equals tdst tsrc]]
 
+      [type/apply-custom dtn dargs]
+      [match tsrc
+        [type/apply-custom stn sargs]
+        [if [eq-word [name/word dtn] [name/word stn]]
+          [types-assignable dargs sargs]
+          [type-assignable [expand-custom tdst] [expand-custom tsrc]]]
+
+        [type-assignable [expand-custom tdst] tsrc]]
+
       [type-equals tdst tsrc]]]]
 
 [func types-equal [ts1 ts2]
@@ -1128,6 +1220,14 @@
       true
       false]
 
+    [type/apply-custom tn1 args1]
+    [match t2
+      [type/apply-custom tn2 args2]
+      [if [eq-word [name/word tn1] [name/word tn2]]
+        [types-equal args1 args2]
+        [type-equals [expand-custom t1] [expand-custom t2]]]
+      false]
+
     [logq-abort type-equals [identity t1] [identity t2]]]]]
 
 [func type-ofs [bodies]
@@ -1140,6 +1240,24 @@
     [pair/fst desc]
     [logq-abort name-to-type not found [identity n]]]]
 
+[func expand-custom [t]
+  [match t
+    [type/apply-custom type-name args]
+    [let
+      [type-name-word [name/word type-name]
+       custom-type-signature [get custom-type-signatures type-name-word]
+       type-params [type-signature/params custom-type-signature]
+       - [assert [eq [size args] [size type-params]] expand-custom expected same number of arguments]
+       expanded-t
+        [if [is-empty args]
+          [get custom-types type-name-word]
+          [let [tenv [transient-kv-map]]
+            [for i 0 [size args]
+              [set-kv-map tenv [name/word [pair/fst [at type-params i]]] [at args i]]]
+            [type-substitute tenv [get custom-types type-name-word]]]]]
+      [expand-custom expanded-t]]
+    t]]
+
 [func type-of [exp]
   [match exp
     [exp/integer pt n]
@@ -1149,7 +1267,7 @@
     [type/primitive pt]
 
     [exp/if c t e]
-    [common-super-type [type-of t] [type-of e]]
+    [expand-custom [common-super-type [type-of t] [type-of e]]]
 
     [exp/call fname args]
     [let
@@ -1163,13 +1281,13 @@
 
           [desc-kind/local ld]
           [logq-abort not implemented type-of call [identity fname]]]]
-      [function-desc/result func-desc]]
+      [expand-custom [function-desc/result func-desc]]]
 
     [exp/cast t e]
-    t
+    [expand-custom t]
 
     [exp/var n]
-    [name-to-type n]
+    [expand-custom [name-to-type n]]
 
     [exp/intrinsic intrinsic-name imm-args args]
     [intrinsic-type/result [intrinsic-type-from-name [name/word intrinsic-name]]]
@@ -1177,8 +1295,11 @@
     [exp/deref target]
     [match [type-of target]
       [type/pointer - t]
-      t
+      [expand-custom t]
       [logq-abort type-of not a pointer [identity target] [type-of target]]]
+
+    [exp/ref target]
+    [type/pointer type-empty [type-of target]]
 
     [exp/assign dst src]
     type-tuple-empty
@@ -1201,17 +1322,17 @@
     [exp/index target-exp index-exp]
     [match [type-of target-exp]
       [type/array elem-type -]
-      elem-type
+      [expand-custom elem-type]
 
       [type/tuple elem-types]
       [match index-exp
         [exp/integer pt i]
         [do
           [assert [is-identical pt type-primitive-i32] index expected i32]
-          [at elem-types i]]
+          [expand-custom [at elem-types i]]]
 
         [logq-abort indexing of tuples only allowed with constants [identity index-exp]]]
-      [logq-abort indexing only allowed for array and tuple types]]
+      [logq-abort indexing only allowed for array and tuple types [type-of target-exp]]]
 
     [exp/field pexp field-name]
     [match [type-of pexp]
@@ -1225,7 +1346,7 @@
               [pair/snd fp]
               [continue i [inc i]]]]
           [logq-abort field not found [identity field-name-word] [identity field-types]]]]
-      [logq-abort type-of not implemented [identity exp]]]
+      [logq-abort type-of not implemented field [identity exp] [type-of pexp] [expand-custom [type-of pexp]]]]
 
     [exp/array elem-type elems]
     [type/array
@@ -1305,6 +1426,18 @@
 
     t]]
 
+[func form-to-type-kind [form]
+  [match form
+    [form/word w]
+    [switch w
+      [[word datatype]] type-kind-datatype
+      [logq-abort type unknown kind]]
+
+    [form/list ll]
+    [switch [form-to-word [first ll]]
+      [[word exp]] [type-kind/exp [form-to-type local-context-empty [second ll]]]
+      [logq-abort type unknown kind]]]]
+
 [func top-form-to-top-decl [form]
   [let [l [get-list form]]
     [if [is-empty l]
@@ -1344,8 +1477,27 @@
                   [lookup-bind-name local-context-empty n]
                   n]]]]
 
-          [[word type]]
-          [logq-abort not implemented [identity l]]
+          [[word datatype]]
+          [do
+            [for-inc i 1 3 [size l]
+              [let
+                [type-name-word [form-to-word [at l i]]
+                 param-form [at l [inc i]]
+                 type-params
+                 [list-map param-pair [pairwise-pairs [get-list param-form]]
+                  [pair [form-to-name [pair/fst param-pair]] [form-to-type-kind [pair/snd param-pair]]]]]
+                [set-kv-map custom-type-signatures type-name-word [type-signature type-kind-datatype type-params]]]]
+            [for-inc i 1 3 [size l]
+              [let
+                [type-name-word [form-to-word [at l i]]
+                 type-sig [get custom-type-signatures type-name-word]
+                 param-map [transient-kv-map]]
+                [for-each param-pair [type-signature/params type-sig]
+                  [set-kv-map param-map [name/word [pair/fst param-pair]] [pair/snd param-pair]]]
+                [let [datatype [form-to-type-type-env param-map local-context-empty [at l [add 2 i]]]]
+                  [todo check datatype has datatype kind]
+                  [set-kv-map custom-types type-name-word datatype]]]]
+            [option/none]]
 
           [[word import]]
           [let
@@ -1425,7 +1577,7 @@
     [clone-growable-to-frozen-list top-decls]]]
 
 [func type-to-wat-type [t]
-  [match t
+  [match [expand-custom t]
     [type/primitive p]
     [do
       [assert [primitive-is-wasm-value-type p]]
@@ -1446,7 +1598,7 @@
     [logq-abort type-to-wat-type [identity t]]]]
 
 [func type-to-wat-types [type]
-  [match type
+  [match [expand-custom type]
     [type/tuple types]
     [list-map t types [type-to-wat-type t]]
 
@@ -1553,6 +1705,13 @@
       [exp-to-inst texp]
       [exp-to-inst src]]]]
 
+[func get-pointer-args [t]
+  [match t
+    [type/pointer m p]
+    [pair [expand-custom m] [expand-custom p]]
+
+    [logq-abort get-pointer-args not a pointer [identity t]]]]
+
 [func exp-to-inst [exp]
   [match exp
     [exp/integer pt n]
@@ -1609,6 +1768,12 @@
     [exp/do es]
     [exps-to-inst es]
 
+    [exp/size-of-type t]
+    [exp-to-inst [type-to-size-of-exp t]]
+
+    [exp/size-of-exp e]
+    [exp-to-inst [type-to-size-of-exp [type-of e]]]
+
     [exp/let-loop ll-kind bindings bodies]
     [let
       [bind-insts
@@ -1651,14 +1816,7 @@
 
     [exp/index index-target-exp index-exp]
     [let
-      [derefed-target
-       [match index-target-exp
-         [exp/deref target]
-         target
-         [logq-abort can only assign to derefed pointers to arrays [identity index-target-exp]]]
-       pointer-type [type-of derefed-target]
-       ppt [get-pointer-args pointer-type]
-       elem-type-offset
+      [elem-type-offset
        [match [type-of index-target-exp]
          [type/array elem-type -]
          [pair elem-type [int-exp-mul index-exp [type-to-size-of-exp elem-type]]]
@@ -1676,6 +1834,9 @@
             [logq-abort indexing of tuples only allowed with constants [identity index-exp]]]
 
          [logq-abort not implemented exp-to-inst index [identity index-target-exp]]]
+       derefed-target [exp-to-deref index-target-exp]
+       pointer-type [type-of derefed-target]
+       ppt [get-pointer-args pointer-type]
        addr-exp
        [int-exp-add
          derefed-target
@@ -1689,7 +1850,7 @@
        [match field-target-exp
         [exp/deref target]
         target
-        [logq-abort can only assign to derefed pointers to arrays [identity field-target-exp]]]
+        [logq-abort can only assign to derefed pointers to records [identity field-target-exp]]]
        pointer-type [type-of derefed-target]
        ppt [get-pointer-args pointer-type]
        field-name-word [name/word field-name]
