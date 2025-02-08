@@ -23,6 +23,8 @@
 
 [type wasm-instance [] [union]]
 
+[import ./runtime-lib/wasm.js memory [func [i32 i32 i32] memory]]
+
 [import ./runtime-lib/wasm.js wasm-instantiate [func [wasm-module [object [object js-value]]] wasm-instance]]
 
 [import ./runtime-lib/wasm.js wasm-get-export-object [func [wasm-instance] [object js-value]]]
@@ -243,102 +245,36 @@
       [test-assert-eq [f64 1.1] [js-app get-1 p]]
       [test-assert-eq [i32 3] [js-app get-2 p]]]]]
 
-[defn test-import []
-  [let
-    [forms
-      [qlist
-[import env
-  [mem [memory [i32] 1]]
-  [log
-    [func
-      [par [pointer [exp mem] [array [u8]]]
-       n-bytes [i32]]
-      [tuple]]]
-  [log-i32
-    [func
-      [n [i32]]
-      [tuple]]]]
+[defn test-assert-form-eq [expected actual]
+  [when-not [eq-form expected actual]
+    [logq test-assert-form-eq failed]
+    [logq expected [identity expected]]
+    [logq but got- [identity actual]]
+    [logq-abort test assert failed]]]
 
-[def 0 [i32 0]]
-[def 1 [i32 1]]
-[def 2 [i32 2]]
-[def 3 [i32 3]]
-
-[defn not [x [i32]] [i32]
-  [if x 0 1]]
-
-[defn eq [x [i32] y [i32]] [i32] [intrinsic i32.eq x y]]
-[defn lt-s [x [i32] y [i32]] [i32] [intrinsic i32.lt-s x y]]
-[defn le-s [x [i32] y [i32]] [i32] [intrinsic i32.le-s x y]]
-
-[defn add [x [i32] y [i32]] [i32] [intrinsic i32.add x y]]
-[defn sub [x [i32] y [i32]] [i32] [intrinsic i32.sub x y]]
-[defn mul [x [i32] y [i32]] [i32] [intrinsic i32.mul x y]]
-
-[defn inc [x [i32]] [i32] [add x 1]]
-[defn dec [x [i32]] [i32] [sub x 1]]
-
-[defn bitwise-and [x [i32] y [i32]] [i32] [intrinsic i32.and x y]]
-[defn bitwise-ior [x [i32] y [i32]] [i32] [intrinsic i32.or x y]]
-[defn bitwise-xor [x [i32] y [i32]] [i32] [intrinsic i32.xor x y]]
-
-[defn is-odd [x [i32]] [i32] [bitwise-and x 1]]
-
-[def static-mem-top [memory-static-top mem]]
-
-[mutable mem-top [memory-static-top mem]]
-
-[defn get-top [] [i32]
-  mem-top]
-
-[defn set-top [new-top [i32]] [tuple]
-  [assign mem-top new-top]]
-
-[defn align [p [i32] x [i32]] [i32]
-  [bitwise-and
-    [add x [dec p]]
-    [bitwise-xor [i32 -1] [dec p]]]]
-
-[defn mem-align [p [i32]] [i32]
-  [align [i32 16] p]]
-
-[defn alloc-n [n-bytes [i32]] [i32]
-  [if [eq n-bytes 0] [intrinsic unreachable]]
-  [let
-    [align-bytes [mem-align n-bytes]
-     top-val [get-top]
-     mem-size-bytes [mul [intrinsic memory.size mem] [i32 65536]]]
-    [if [eq top-val 0] [intrinsic unreachable]]
-    [let [new-top [add top-val align-bytes]]
-      [if [lt-s mem-size-bytes new-top]
-        [intrinsic unreachable]]
-      [set-top new-top]]
-    top-val]]
-
-[defn is-between-inclusive [lower [i32] c [i32] upper [i32]] [i32]
-  [bitwise-and [le-s lower c] [le-s c upper]]]
-
-[defn is-whitespace [c [i32]] [i32]
-  [bitwise-ior [eq c [i32 32]] [eq c [i32 10]]]]
-
-[defn is-word-char [c [i32]] [i32]
-  [bitwise-ior
-    [is-between-inclusive [i32 97] c [i32 122]]
-    [is-between-inclusive [i32 45] c [i32 57]]]]
-
-[defn scan-word-end [bytes [pointer [exp mem] [array [u8]]] start [i32] n-of-bytes [i32]] [i32]
-  [loop
-    [i start]
-    [if [lt-s n-of-bytes i]
-      [if [is-word-char [index [deref bytes] i]]
-        [continue i [inc i]]
-        i]
-      i]]]
-
-[def data-test [data mem [i32 4]]]
-
-      ]]
-    [forms-to-module forms]]]
+[defn test-parse []
+  [promise-then
+    [read-parse-file-async [word llsimpleparse.wuns]]
+    [func t [forms]
+      [let [module [forms-to-module forms]
+            mem [memory 1 2 0]
+            mem-buf [memory-buffer mem]
+            wasm-log
+            [func wasm-log [data sz]
+              [logq wasm-log
+                [byte-array-to-string
+                  [byte-array-from-array-buffer mem-buf data sz]]]]
+            wasm-log-i32
+            [func wasm-log-i32 [n]
+              [logq wasm-log-i32 [identity n]]]
+            env [transient-kv-map]
+            - [set-kv-map env [word mem] [to-js-value mem]]
+            -- [set-kv-map env [word log] [to-js-value wasm-log]]
+            --- [set-kv-map env [word log-i32] [to-js-value wasm-log-i32]]
+            import-map [transient-kv-map]
+            ---- [set-kv-map import-map [word env] [kv-map-to-object env]]
+            inst [wasm-instantiate module [kv-map-to-object import-map]]]
+        ]]]]
 
 [defn test-all []
   [test-arithmetic]
@@ -349,5 +285,5 @@
   [test-array-exp]
   [test-record-exp]
   [test-tuple-exp]
-  [test-import]
+  [test-parse]
   ]
