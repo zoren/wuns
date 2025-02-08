@@ -869,20 +869,22 @@
           [let [pname [form-to-name [pair/fst p]]
                 pexp [form-to-exp let-loop-ctx [pair/snd p]]
                 pt [type-of pexp]]
-            [set-kv-map vars [name/word pname] pt]
+            [set-kv-map vars [name/word pname] [if is-let pt [lift-literal-type pt]]]
             [pair pname pexp]]]
         [list-map b [slice l 2 [size l]] [form-to-exp let-loop-ctx b]]]]
 
     [[word continue]]
     [if-let [loop-vars [try-get-enclosing-loop-context lctx]]
-      [exp/continue
+      [do
+        [assert [is-odd [size l]] expected a pairs of assignments]
+        [exp/continue
         [list-map p [pairwise-pairs [rest l]]
           [let [n [form-to-name [pair/fst p]]
                 e [form-to-exp lctx [pair/snd p]]]
             [if-let [t [try-get loop-vars [name/word n]]]
-              [assert [type-assignable t [type-of e]] continue expected same type [identity n]]
+              [assert [type-assignable t [type-of e]] continue expected assignable type [identity n] [identity t] [type-of e]]
               [logq-abort continue not a loop var]]
-            [pair n e]]]]
+            [pair n e]]]]]
       [logq-abort continue not in loop]]
 
     [[word do]]
@@ -1628,7 +1630,7 @@
     [logq-abort not a primitive type [identity t]]]]
 
 [func type-to-size-of-exp [t]
-  [match [lift-literal-type t]
+  [match [lift-literal-type [expand-custom t]]
     [type/primitive p]
     [exp/integer type-primitive-i32 [primitive-type/bytes p]]
 

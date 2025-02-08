@@ -87,14 +87,50 @@
         i]
       i]]]
 
-[def data-test [data mem [i32 4]]]
+[datatype list-data [a datatype size [exp [i32]]]
+  [record
+    [size [i32]]
+    [array [array a size]]]]
 
-[defn alloc-i32 [n [i32]] [pointer [exp mem] [i32]]
-  [let [p [cast [pointer [exp mem] [i32]] [alloc-n [size-of-exp n]]]]
-    [assign [deref p] n]
-    p]]
+[datatype pmem [a datatype]
+  [pointer [exp mem] a]]
 
-[defn alloc-f64 [n [f64]] [pointer [exp mem] [f64]]
-  [let [p [cast [pointer [exp mem] [f64]] [alloc-n [size-of-exp n]]]]
-    [assign [deref p] n]
-    p]]
+[datatype plist [vp datatype]
+  [pmem [list-data vp -size]]]
+
+[defn list-size [pvec [plist -a]] [i32]
+  [field [deref pvec] size]]
+
+[defn get-byte [pvec [plist [u8]] i [i32]] [i32]
+  [if [lt-s i 0] [intrinsic unreachable]]
+  [if [lt-s i [list-size pvec]] [do] [intrinsic unreachable]]
+  [index [field [deref pvec] array] i]]
+
+[datatype growable-list [a datatype]
+  [record
+    [size [i32]]
+    [capacity [i32]]
+    [parray [pmem [array a]]]]]
+
+[defn growable-list-push [pglist [pmem [growable-list [i32]]] elem [i32]] [tuple]
+  [let
+    [cur-size [field [deref pglist] size]
+     cur-capacity [field [deref pglist] capacity]]
+    [if [eq cur-size cur-capacity]
+      [intrinsic unreachable]]
+    [assign [index [deref [field [deref pglist] parray]] cur-size] elem]
+    [assign [field [deref pglist] size] [inc cur-size]]]]
+
+[defn growable-list-to-list [pglist [pmem [growable-list [i32]]]] [plist [i32]]
+  [let
+    [cur-size [field [deref pglist] size]
+     plist [cast [plist [i32]] [alloc-n [size-of-type [list-data [i32] [exp cur-size]]]]]]
+    [assign [field [deref plist] size] cur-size]
+    [loop [i 0]
+      [if [lt-s i cur-size]
+        [do
+          [assign
+            [index [field [deref plist] array] i]
+            [index [deref [field [deref pglist] parray]] i]]
+          [continue i [inc i]]]]]
+    plist]]
