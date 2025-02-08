@@ -47,6 +47,14 @@ const testExp = ({ pe }) => {
     expect(pe('[f64 -1e309]')).toBe(-Infinity)
   })
 
+  test('bigint', () => {
+    expect(pe('[bigint 2]')).toBe(2n)
+    expect(pe('[bigint -2]')).toBe(-2n)
+    expect(pe('[bigint 0x7fffffffffffffff]')).toBe(0x7fffffffffffffffn)
+    expect(pe('[bigint -0x8000000000000000]')).toBe(-0x8000000000000000n)
+    expect(pe('[bigint 18446744073709552001]')).toBe(18446744073709552001n)
+  })
+
   test('word', () => {
     assert.throws(() => pe('[word]'))
     assert.throws(() => pe('[word two words]'))
