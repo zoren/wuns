@@ -1672,9 +1672,14 @@
   [let
     [glocals [growable-list]]
   [letfn [
-[func mk-load-inst [target-prim mt target]
+[func deref-index-field-to-wat [exp]
   [let
-    [exp-const-pair-opt [try-get-i32-add-const target]
+    [offset [deref-index-field-to-mem-offset exp]
+     pexp [exp-to-deref exp]
+     mt [pair/fst [get-pointer-args [type-of pexp]]]
+     target-prim [type-to-primitive [type-of exp]]
+     target [int-exp-add pexp offset]
+     exp-const-pair-opt [try-get-i32-add-const target]
      texp [option-default [option-map pair/fst exp-const-pair-opt] target]
      offset-opt [option-map pair/snd exp-const-pair-opt]]
     [wat-inst/load-opt
@@ -1711,6 +1716,59 @@
     [pair [expand-custom m] [expand-custom p]]
 
     [logq-abort get-pointer-args not a pointer [identity t]]]]
+
+[func deref-index-field-to-mem-offset [exp]
+  [match exp
+    [exp/deref target]
+    int-const-0
+
+    [exp/index index-target-exp index-exp]
+    [let
+      [elem-offset
+       [match [type-of index-target-exp]
+         [type/array elem-type -]
+         [int-exp-mul index-exp [type-to-size-of-exp elem-type]]
+
+         [type/tuple elem-types]
+         [if-let [ie [try-get-int-const index-exp]]
+            [let [n [size elem-types]]
+              [assert [lt-s ie n] index out of bounds]
+              [loop [i 0 acc int-const-0]
+                [if [eq ie i]
+                  acc
+                  [continue
+                    acc [int-exp-add acc [type-to-size-of-exp [at elem-types i]]]
+                    i [inc i]]]]]
+            [logq-abort indexing of tuples only allowed with constants [identity index-exp]]]
+
+         [logq-abort not implemented exp-to-inst index [identity index-target-exp]]]
+       target-offset [deref-index-field-to-mem-offset index-target-exp]
+       addr-exp [int-exp-add target-offset elem-offset]]
+      addr-exp]
+
+    [exp/field field-target-exp field-name]
+    [let
+      [field-name-word [name/word field-name]
+       field-offset
+       [match [type-of field-target-exp]
+        [type/record field-types]
+        [loop [i 0
+               res int-const-0
+               n [size field-types]]
+          [if [lt-s i n]
+            [let [fp [at field-types i]]
+              [if [eq-word [name/word [pair/fst fp]] field-name-word]
+                res
+                [continue
+                  res [int-exp-add res [type-to-size-of-exp [pair/snd fp]]]
+                  i [inc i]]]]
+            [logq-abort field not found [identity field-name-word]]]]
+        [logq-abort not implemented exp-to-inst field]]
+       target-offset [deref-index-field-to-mem-offset field-target-exp]
+       addr-exp [int-exp-add target-offset field-offset]]
+      addr-exp]
+
+    [logq-abort not implemented deref-index-field-to-mem-offset [identity exp]]]]
 
 [func exp-to-inst [exp]
   [match exp
@@ -1806,71 +1864,14 @@
     [exp/tuple elems]
     [wat-inst/instructions [list-map elem elems [exp-to-inst elem]]]
 
-    [exp/deref target]
-    [let
-      [ttarget [type-of target]
-       ppt [get-pointer-args ttarget]
-       mn [get-memory-name-from-type [pair/fst ppt]]
-       target-prim [type-to-primitive [pair/snd ppt]]]
-      [mk-load-inst target-prim [pair/fst ppt] target]]
+    [exp/deref -target]
+    [deref-index-field-to-wat exp]
 
-    [exp/index index-target-exp index-exp]
-    [let
-      [elem-type-offset
-       [match [type-of index-target-exp]
-         [type/array elem-type -]
-         [pair elem-type [int-exp-mul index-exp [type-to-size-of-exp elem-type]]]
+    [exp/index -index-target-exp -index-exp]
+    [deref-index-field-to-wat exp]
 
-         [type/tuple elem-types]
-         [if-let [ie [try-get-int-const index-exp]]
-            [let [n [size elem-types]]
-              [assert [lt-s ie n] index out of bounds]
-              [loop [i 0 acc int-const-0]
-                [if [eq ie i]
-                  [pair [at elem-types i] acc]
-                  [continue
-                    acc [int-exp-add acc [type-to-size-of-exp [at elem-types i]]]
-                    i [inc i]]]]]
-            [logq-abort indexing of tuples only allowed with constants [identity index-exp]]]
-
-         [logq-abort not implemented exp-to-inst index [identity index-target-exp]]]
-       derefed-target [exp-to-deref index-target-exp]
-       pointer-type [type-of derefed-target]
-       ppt [get-pointer-args pointer-type]
-       addr-exp
-       [int-exp-add
-         derefed-target
-         [pair/snd elem-type-offset]]
-       target-prim [type-to-primitive [pair/fst elem-type-offset]]]
-      [mk-load-inst target-prim [pair/fst ppt] addr-exp]]
-
-    [exp/field field-target-exp field-name]
-    [let
-      [derefed-target
-       [match field-target-exp
-        [exp/deref target]
-        target
-        [logq-abort can only assign to derefed pointers to records [identity field-target-exp]]]
-       pointer-type [type-of derefed-target]
-       ppt [get-pointer-args pointer-type]
-       field-name-word [name/word field-name]
-       offset-p
-       [match [pair/snd ppt]
-        [type/record field-types]
-        [loop [i 0
-               res int-const-0
-               n [size field-types]]
-          [if [lt-s i n]
-            [let [fp [at field-types i]]
-              [if [eq-word [name/word [pair/fst fp]] field-name-word]
-                [pair res [pair/snd fp]]
-                [continue
-                  res [int-exp-add res [type-to-size-of-exp [pair/snd fp]]]
-                  i [inc i]]]]
-            [logq-abort field not found [identity field-name-word]]]]
-        [logq-abort not implemented exp-to-inst field]]
-       target-prim [type-to-primitive [pair/snd offset-p]]]
-      [mk-load-inst target-prim [pair/fst ppt] [int-exp-add derefed-target [pair/fst offset-p]]]]
+    [exp/field -field-target-exp -field-name]
+    [deref-index-field-to-wat exp]
 
     [exp/assign dst src]
     [match dst
