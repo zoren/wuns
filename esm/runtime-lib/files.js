@@ -2,7 +2,6 @@ let isBrowser
 let read_file
 let read_file_async
 let write_file_async
-let read_file_memory
 let open
 let close
 const wunsDir = '../../wuns/'
@@ -25,10 +24,6 @@ if (typeof window === 'undefined') {
   const fs = await import('node:fs')
   open = (file_path) => fs.openSync(getFullPath(file_path), 'r')
   close = (fd) => fs.closeSync(fd)
-  read_file_memory = (fd, memory, start, length) => {
-    const bytes = new Uint8Array(memory.buffer)
-    return fs.readSync(fd, bytes, start, length)
-  }
 } else {
   isBrowser = () => true
   const moduleStrings = import.meta.glob('../../wuns/*.wuns', {
@@ -64,23 +59,12 @@ if (typeof window === 'undefined') {
   close = (fd) => {
     fileDescriptors.delete(fd)
   }
-  const encoder = new TextEncoder()
-  read_file_memory = (fd, memory, start, length) => {
-    const file = fileDescriptors.get(fd)
-    if (!file) throw new Error(`file descriptor not found: ${fd}`)
-    const { index, data } = file
-    const bytes = new Uint8Array(memory.buffer, start, length)
-    const { read, written } = encoder.encodeInto(data.slice(index), bytes)
-    file.index += read
-    return written
-  }
 }
 
 export {
   isBrowser,
   read_file_async as 'read-file-async',
   write_file_async as 'write-file-async',
-  read_file_memory as 'read-file-memory',
   open,
   close,
 }

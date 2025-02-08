@@ -500,7 +500,6 @@
 [type file-descriptor [] [union]]
 [import ./runtime-lib/files.js open [func [word] file-descriptor]]
 [import ./runtime-lib/files.js close [func [file-descriptor] [tuple]]]
-[import ./runtime-lib/files.js read-file-memory [func [file-descriptor memory i32 i32] i32]]
 
 [import ./runtime-lib/host.js parse-string [func [string word] [list form]]]
 
