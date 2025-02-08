@@ -1673,39 +1673,32 @@
   [let
     [glocals [growable-list]]
   [letfn [
-[func deref-index-field-to-pair [exp]
+[func deref-index-field-to-load [exp]
   [let
-    [offset [deref-index-field-to-mem-offset exp]
+    [target-prim [type-to-primitive [type-of exp]]
+     offset [deref-index-field-to-mem-offset exp]
      pexp [exp-to-deref exp]
      mt [pair/fst [get-pointer-args [type-of pexp]]]
      target [int-exp-add pexp offset]
      exp-const-pair-opt [try-get-i32-add-const target]
-     texp [option-default [option-map pair/fst exp-const-pair-opt] target]
-     offset-opt [option-map pair/snd exp-const-pair-opt]]
-    [pair
-      [wat-inst-memargs-opt
-        [option/some [get-memory-name-from-type mt]]
-        offset-opt
-        [option/none]]
-      texp]]]
-
-[func deref-index-field-to-load [exp]
-  [let
-    [target-prim [type-to-primitive [type-of exp]]
-     p [deref-index-field-to-pair exp]]
+     offset-opt [option-map pair/snd exp-const-pair-opt]
+     texp [option-default [option-map pair/fst exp-const-pair-opt] target]]
     [wat-inst/load-opt
       [wasm-name-to-wat-byte-array
         [prim-types-to-load-inst-name
           [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i32]
           target-prim]]
-      [pair/fst p]
-      [exp-to-inst [pair/snd p]]]]]
+      [wat-inst-memargs-opt
+        [option/some [get-memory-name-from-type mt]]
+        offset-opt
+        [option/none]]
+      [exp-to-inst texp]]]]
 
 [func deref-index-field-to-store [target src]
   [let
-    [p [deref-index-field-to-pair target]
-     mem-args [pair/fst p]
-     trimmed-target [pair/snd p]
+    [offset [deref-index-field-to-mem-offset target]
+     pexp [exp-to-deref target]
+     mt [pair/fst [get-pointer-args [type-of pexp]]]
      ginsts [growable-list]
      assign-pointer
      [func assign-pointer [target-offset src]
@@ -1743,14 +1736,21 @@
 
           [let
             [src-prim [type-to-primitive [type-of src]]
-             intr-name [prim-types-to-store-inst-name src-prim src-prim]]
+             intr-name [prim-types-to-store-inst-name src-prim src-prim]
+             p-p-offset [int-exp-add pexp target-offset]
+             exp-const-pair-opt [try-get-i32-add-const p-p-offset]
+             offset-opt [option-map pair/snd exp-const-pair-opt]
+             trimmed-target [option-default [option-map pair/fst exp-const-pair-opt] p-p-offset]]
             [push ginsts
               [wat-inst/store-opt
                 [wasm-name-to-wat-byte-array intr-name]
-                mem-args
-                [exp-to-inst [int-exp-add trimmed-target target-offset]]
+                [wat-inst-memargs-opt
+                  [option/some [get-memory-name-from-type mt]]
+                  offset-opt
+                  [option/none]]
+                [exp-to-inst trimmed-target]
                 [exp-to-inst src]]]]]]]
-    [assign-pointer int-const-0 src]
+    [assign-pointer offset src]
     [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
 
 [func get-pointer-args [t]
