@@ -118,13 +118,13 @@
       [qlist
 [memory mem [i32] 1]
 
-[def p-int
+[def p-i64
   [cast [pointer [exp mem] [i64]] [i32 16]]]
 
 [defn set [v [i64]] [tuple]
-  [assign [deref p-int] v]]
+  [assign [deref p-i64] v]]
 
-[defn get [] [i64] [deref p-int]]
+[defn get [] [i64] [deref p-i64]]
 
 [defn inc [] [tuple] [set [intrinsic i64.add [get] [i64 1]]]]
 

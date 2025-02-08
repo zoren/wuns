@@ -171,6 +171,7 @@
     [or
       [eq-word [name/word n] [word unreachable]]
       [exists args may-side-effect]]
+    [exp/deref e] [may-side-effect e]
     true]]
 
 [def type-i32 [type/primitive type-primitive-i32]]
@@ -1343,7 +1344,7 @@
         [if [lt-s i n]
           [let [fp [at field-types i]]
             [if [eq-word [name/word [pair/fst fp]] field-name-word]
-              [pair/snd fp]
+              [expand-custom [pair/snd fp]]
               [continue i [inc i]]]]
           [logq-abort field not found [identity field-name-word] [identity field-types]]]]
       [logq-abort type-of not implemented field [identity exp] [type-of pexp] [expand-custom [type-of pexp]]]]
@@ -1672,43 +1673,85 @@
   [let
     [glocals [growable-list]]
   [letfn [
-[func deref-index-field-to-wat [exp]
+[func deref-index-field-to-pair [exp]
   [let
     [offset [deref-index-field-to-mem-offset exp]
      pexp [exp-to-deref exp]
      mt [pair/fst [get-pointer-args [type-of pexp]]]
-     target-prim [type-to-primitive [type-of exp]]
      target [int-exp-add pexp offset]
      exp-const-pair-opt [try-get-i32-add-const target]
      texp [option-default [option-map pair/fst exp-const-pair-opt] target]
      offset-opt [option-map pair/snd exp-const-pair-opt]]
+    [pair
+      [wat-inst-memargs-opt
+        [option/some [get-memory-name-from-type mt]]
+        offset-opt
+        [option/none]]
+      texp]]]
+
+[func deref-index-field-to-load [exp]
+  [let
+    [target-prim [type-to-primitive [type-of exp]]
+     p [deref-index-field-to-pair exp]]
     [wat-inst/load-opt
       [wasm-name-to-wat-byte-array
         [prim-types-to-load-inst-name
           [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i32]
           target-prim]]
-      [wat-inst-memargs-opt
-        [option/some [get-memory-name-from-type mt]]
-        offset-opt
-        [option/none]]
-      [exp-to-inst texp]]]]
+      [pair/fst p]
+      [exp-to-inst [pair/snd p]]]]]
 
-[func mk-store-inst [target-prim mt target src]
+[func deref-index-field-to-store [target src]
   [let
-    [exp-const-pair-opt [try-get-i32-add-const target]
-     texp [option-default [option-map pair/fst exp-const-pair-opt] target]
-     offset-opt [option-map pair/snd exp-const-pair-opt]]
-    [wat-inst/store-opt
-      [wasm-name-to-wat-byte-array
-        [prim-types-to-store-inst-name
-          [type-to-primitive target-prim]
-          [type-to-primitive [type-of src]]]]
-      [wat-inst-memargs-opt
-        [option/some [get-memory-name-from-type mt]]
-        offset-opt
-        [option/none]]
-      [exp-to-inst texp]
-      [exp-to-inst src]]]]
+    [p [deref-index-field-to-pair target]
+     mem-args [pair/fst p]
+     trimmed-target [pair/snd p]
+     ginsts [growable-list]
+     assign-pointer
+     [func assign-pointer [target-offset src]
+        [match src
+          [exp/array tvalue-elem elems]
+          [do
+            [assert-not [may-side-effect target] assign target cannot have side effects when assigning arrays]
+            [let
+              [size-of-int-exp [type-to-size-of-exp tvalue-elem]]
+              [loop [i 0 n [size elems]]
+                [when [lt-s i n]
+                  [assign-pointer
+                    [int-exp-add target-offset [int-exp-mul [mk-exp-i32 i] size-of-int-exp]] [at elems i]]
+                  [continue i [inc i]]]]]]
+
+          [exp/tuple elems]
+          [do
+            [assert-not [may-side-effect target] assign target cannot have side effects when assigning tuples]
+            [loop [i 0 n [size elems] acc int-const-0]
+              [when [lt-s i n]
+                [let
+                  [elem [at elems i]]
+                  [assign-pointer [int-exp-add target-offset acc] elem]
+                  [continue i [inc i] acc [int-exp-add acc [type-to-size-of-exp [type-of elem]]]]]]]]
+
+          [exp/record fields]
+          [do
+            [assert-not [may-side-effect target] assign target cannot have side effects when assigning record]
+            [loop [i 0 n [size fields] acc int-const-0]
+              [when [lt-s i n]
+                [let
+                  [field-exp [pair/snd [at fields i]]]
+                  [assign-pointer [int-exp-add target-offset acc] field-exp]
+                  [continue i [inc i] acc [int-exp-add acc [type-to-size-of-exp [type-of field-exp]]]]]]]]
+
+          [let
+            [src-prim [type-to-primitive [type-of src]]
+             intr-name [prim-types-to-store-inst-name src-prim src-prim]]
+            [push ginsts
+              [wat-inst/store-opt
+                [wasm-name-to-wat-byte-array intr-name]
+                mem-args
+                [exp-to-inst [int-exp-add trimmed-target target-offset]]
+                [exp-to-inst src]]]]]]]
+    [assign-pointer int-const-0 src]
+    [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
 
 [func get-pointer-args [t]
   [match t
@@ -1865,101 +1908,27 @@
     [wat-inst/instructions [list-map elem elems [exp-to-inst elem]]]
 
     [exp/deref -target]
-    [deref-index-field-to-wat exp]
+    [deref-index-field-to-load exp]
 
     [exp/index -index-target-exp -index-exp]
-    [deref-index-field-to-wat exp]
+    [deref-index-field-to-load exp]
 
     [exp/field -field-target-exp -field-name]
-    [deref-index-field-to-wat exp]
+    [deref-index-field-to-load exp]
 
     [exp/assign dst src]
     [match dst
       [exp/var n]
       [wat-inst/global.set [name/word n] [exp-to-inst src]]
 
-      [exp/deref target]
-      [let
-        [ttarget [type-of target]
-         mem-name [get-memory-name-from-type [pair/fst [get-pointer-args ttarget]]]
-         ttarget-elem [pair/snd [get-pointer-args ttarget]]
-         assign-pointer
-         [func assign-pointer [target src]
-          [match src
-            [exp/array tvalue-elem elems]
-            [do
-              [assert-not [may-side-effect target] assign target cannot have side effects when assigning arrays]
-              [let
-                [size-of-int-exp [type-to-size-of-exp tvalue-elem]
-                 ginsts [growable-list]]
-                [loop [i 0 n [size elems]]
-                  [when [lt-s i n]
-                    [let
-                      [offset-target
-                        [int-exp-add
-                          target
-                          [int-exp-mul [mk-exp-i32 i] size-of-int-exp]]]
-                      [push ginsts [assign-pointer offset-target [at elems i]]]
-                      [continue i [inc i]]]]]
-                [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
+      [exp/deref -target]
+      [deref-index-field-to-store dst src]
 
-            [exp/tuple elems]
-            [do
-              [assert-not [may-side-effect target] assign target cannot have side effects when assigning tuples]
-              [let
-                [ginsts [growable-list]]
-                [loop [i 0 n [size elems] acc int-const-0]
-                  [when [lt-s i n]
-                    [let
-                      [elem [at elems i]
-                       offset-target [int-exp-add acc [type-to-size-of-exp [type-of elem]]]]
-                      [push ginsts
-                        [assign-pointer [int-exp-add target acc] elem]]
-                      [continue i [inc i] acc offset-target]]]]
-                [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
+      [exp/index -index-target-exp -index-exp]
+      [deref-index-field-to-store dst src]
 
-            [exp/record fields]
-            [do
-              [assert-not [may-side-effect target] assign target cannot have side effects when assigning record]
-              [let
-                [ginsts [growable-list]]
-                [loop [i 0 n [size fields] acc int-const-0]
-                  [when [lt-s i n]
-                    [let
-                      [field [at fields i]
-                       field-exp [pair/snd field]
-                       offset-target [int-exp-add acc [type-to-size-of-exp [type-of field-exp]]]]
-                      [push ginsts
-                        [assign-pointer [int-exp-add target acc] field-exp]]
-                      [continue i [inc i] acc offset-target]]]]
-                [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
-
-            [mk-store-inst [type-of src] [pair/fst [get-pointer-args ttarget]] target src]]]]
-        [assign-pointer target src]]
-
-      [exp/index index-target-exp index-exp]
-      [let
-        [derefed-target
-         [match index-target-exp
-          [exp/deref target]
-          target
-          [logq-abort can only assign to derefed pointers to arrays [identity index-target-exp]]]
-         pointer-type [type-of derefed-target]
-         ppt [get-pointer-args pointer-type]
-         elem-type
-         [match [type-of index-target-exp]
-          [type/array elem-type -]
-          elem-type
-
-          [type/tuple elem-types]
-          [logq-abort not implemented exp-to-inst assign index tuple [identity index-target-exp]]
-
-          [logq-abort not implemented exp-to-inst assign index [identity index-target-exp]]]
-         addr-exp
-         [int-exp-add
-          derefed-target
-          [int-exp-mul index-exp [type-to-size-of-exp elem-type]]]]
-        [mk-store-inst elem-type [pair/fst ppt] addr-exp src]]
+      [exp/field -field-target-exp -field-name]
+      [deref-index-field-to-store dst src]
 
       [logq-abort not implemented exp-to-inst assign [identity dst]]]
 
