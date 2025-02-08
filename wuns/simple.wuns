@@ -1884,18 +1884,14 @@
          mem-name [get-memory-name-from-type [pair/fst [get-pointer-args ttarget]]]
          ttarget-elem [pair/snd [get-pointer-args ttarget]]
          assign-pointer
-         [func assign-pointer [target ttarget-elem src]
+         [func assign-pointer [target src]
           [match src
             [exp/array tvalue-elem elems]
             [do
               [assert-not [may-side-effect target] assign target cannot have side effects when assigning arrays]
               [let
                 [size-of-int-exp [type-to-size-of-exp tvalue-elem]
-                 ginsts [growable-list]
-                 target-array-elem-type
-                 [match ttarget-elem
-                  [type/array elem-type -] elem-type
-                  [logq-abort not an array]]]
+                 ginsts [growable-list]]
                 [loop [i 0 n [size elems]]
                   [when [lt-s i n]
                     [let
@@ -1903,7 +1899,7 @@
                         [int-exp-add
                           target
                           [int-exp-mul [mk-exp-i32 i] size-of-int-exp]]]
-                      [push ginsts [assign-pointer offset-target target-array-elem-type [at elems i]]]
+                      [push ginsts [assign-pointer offset-target [at elems i]]]
                       [continue i [inc i]]]]]
                 [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
 
@@ -1916,10 +1912,9 @@
                   [when [lt-s i n]
                     [let
                       [elem [at elems i]
-                       telem [type-of elem]
-                       offset-target [int-exp-add acc [type-to-size-of-exp telem]]]
+                       offset-target [int-exp-add acc [type-to-size-of-exp [type-of elem]]]]
                       [push ginsts
-                        [assign-pointer [int-exp-add target acc] telem elem]]
+                        [assign-pointer [int-exp-add target acc] elem]]
                       [continue i [inc i] acc offset-target]]]]
                 [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
 
@@ -1933,15 +1928,14 @@
                     [let
                       [field [at fields i]
                        field-exp [pair/snd field]
-                       telem [type-of field-exp]
-                       offset-target [int-exp-add acc [type-to-size-of-exp telem]]]
+                       offset-target [int-exp-add acc [type-to-size-of-exp [type-of field-exp]]]]
                       [push ginsts
-                        [assign-pointer [int-exp-add target acc] telem field-exp]]
+                        [assign-pointer [int-exp-add target acc] field-exp]]
                       [continue i [inc i] acc offset-target]]]]
                 [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
 
-            [mk-store-inst ttarget-elem [pair/fst [get-pointer-args ttarget]] target src]]]]
-        [assign-pointer target ttarget-elem src]]
+            [mk-store-inst [type-of src] [pair/fst [get-pointer-args ttarget]] target src]]]]
+        [assign-pointer target src]]
 
       [exp/index index-target-exp index-exp]
       [let
