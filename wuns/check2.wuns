@@ -51,6 +51,7 @@
 [defn make-type [type-name .. type-args] [make-type-list type-name type-args]]
 
 [def type-i32 [make-type [word i32]]]
+[def type-bigint [make-type [word bigint]]]
 [def type-f64 [make-type [word f64]]]
 
 [def type-word [make-type [word word]]]
@@ -232,6 +233,7 @@
 [defn literal-to-type [l]
   [match l
     [literal/i32 -] type-i32
+    [literal/bigint -] type-bigint
     [literal/f64 -] type-f64
     [literal/word -] type-word]]
 

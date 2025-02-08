@@ -35,6 +35,7 @@
   [union
     [i32 syntax-word]
     [f64 syntax-word]
+    [bigint syntax-word]
     [word syntax-word]]]
 
 [type
@@ -744,6 +745,9 @@
 
                 [[word f64]]
                 [bexp/literal [literal/f64 [get-sword [get-arg 0]]]]
+
+                [[word bigint]]
+                [bexp/literal [literal/bigint [get-sword [get-arg 0]]]]
 
                 [[word i64] [word f32] [word v128]]
                 [logq-abort form-to-ast not implemented [identity first-form]]
