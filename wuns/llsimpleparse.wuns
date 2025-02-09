@@ -121,10 +121,13 @@
     [assign [index [deref [field [deref pglist] parray]] cur-size] elem]
     [assign [field [deref pglist] size] [inc cur-size]]]]
 
+[functor alloc [t datatype]
+  [cast [pmem t] [alloc-n [size-of-type t]]]]
+
 [defn growable-list-to-list [pglist [pmem [growable-list [i32]]]] [plist [i32]]
   [let
     [cur-size [field [deref pglist] size]
-     plist [cast [plist [i32]] [alloc-n [size-of-type [list-data [i32] [exp cur-size]]]]]]
+     plist [cast [plist [i32]] [alloc [list-data [i32] [exp cur-size]]]]]
     [assign [field [deref plist] size] cur-size]
     [loop [i 0]
       [if [lt-s i cur-size]
