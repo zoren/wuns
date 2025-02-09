@@ -1510,7 +1510,7 @@
 
           [[word datatype]]
           [do
-            [for-inc i 1 3 [size l]
+            [for-3 i 1 [size l]
               [let
                 [type-name-word [form-to-word [at l i]]
                  param-form [at l [inc i]]
@@ -1518,7 +1518,7 @@
                  [list-map param-pair [pairwise-pairs [get-list param-form]]
                   [pair [form-to-name [pair/fst param-pair]] [form-to-type-kind [pair/snd param-pair]]]]]
                 [set-kv-map custom-type-signatures type-name-word [type-signature type-kind-datatype type-params]]]]
-            [for-inc i 1 3 [size l]
+            [for-3 i 1 [size l]
               [let
                 [type-name-word [form-to-word [at l i]]
                  type-sig [get custom-type-signatures type-name-word]
