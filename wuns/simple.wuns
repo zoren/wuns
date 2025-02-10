@@ -191,8 +191,13 @@
 
 [def type-i32 [type/primitive type-primitive-i32]]
 [def type-i64 [type/primitive type-primitive-i64]]
-[def type-empty [type/empty]]
+[def type-empty [type/union [list]]]
 [def type-tuple-empty [type/tuple [list]]]
+
+[defn type-empty-is [t]
+  [match t
+    [type/union utypes] [is-empty utypes]
+    false]]
 
 [type immediate-type []
   [union
@@ -620,8 +625,8 @@
 
 [func common-super-type [t1 t2]
   [ifs
-    [type-equals t1 type-empty] t2
-    [type-equals t2 type-empty] t1
+    [type-empty-is t1] t2
+    [type-empty-is t2] t1
     [type-assignable t1 t2] t1
     [type-assignable t2 t1] t2
     [if-let [p1 [try-get-primitive t1]]
@@ -1257,12 +1262,6 @@
       [eq-word [name/word n1] [name/word n2]]
       false]
 
-    [type/empty]
-    [match t2
-      [type/empty]
-      true
-      false]
-
     [type/apply-custom tn1 args1]
     [match t2
       [type/apply-custom tn2 args2]
@@ -1357,7 +1356,9 @@
       [logq-abort type-of not a pointer [identity target] [type-of target]]]
 
     [exp/ref target]
-    [type/pointer type-empty [type-of target]]
+    [do
+      [logq-abort todo get actual pointer mem type of target]
+      [type/pointer type-empty [type-of target]]]
 
     [exp/assign dst src]
     type-tuple-empty
@@ -1393,18 +1394,33 @@
       [logq-abort indexing only allowed for array and tuple types [type-of target-exp]]]
 
     [exp/field pexp field-name]
-    [match [type-of pexp]
-      [type/record field-types]
-      [loop [n [size field-types]
-             field-name-word [name/word field-name]
-             i 0]
-        [if [lt-s i n]
-          [let [fp [at field-types i]]
-            [if [eq-word [name/word [pair/fst fp]] field-name-word]
-              [expand-custom [pair/snd fp]]
-              [continue i [inc i]]]]
-          [logq-abort field not found [identity field-name-word] [identity field-types]]]]
-      [logq-abort type-of not implemented field [identity exp] [type-of pexp] [expand-custom [type-of pexp]]]]
+    [let
+      [field-name-word [name/word field-name]
+       get-field-type
+       [func get-field-type [t]
+        [match [expand-custom t]
+          [type/record field-types]
+          [loop [n [size field-types]
+                 i 0]
+            [if [lt-s i n]
+              [let [fp [at field-types i]]
+                [if [eq-word [name/word [pair/fst fp]] field-name-word]
+                  [expand-custom [pair/snd fp]]
+                  [continue i [inc i]]]]
+              [logq-abort field not found [identity field-name-word] [identity field-types]]]]
+
+          [type/union utypes]
+          [if [is-empty utypes]
+            type-empty
+            [loop [i 1 n [size utypes] field-type [get-field-type [first utypes]]]
+              [if [lt-s i n]
+                [continue
+                  field-type [common-super-type field-type [get-field-type [at utypes i]]]
+                  i [inc i]]
+                field-type]]]
+
+          [logq-abort type-of not implemented field [identity t] ]]]]
+      [get-field-type [type-of pexp]]]
 
     [exp/array elem-type elems]
     [type/array
@@ -1874,21 +1890,36 @@
     [exp/field field-target-exp field-name]
     [let
       [field-name-word [name/word field-name]
-       field-offset
-       [match [type-of field-target-exp]
-        [type/record field-types]
-        [loop [i 0
-               res int-const-0
-               n [size field-types]]
-          [if [lt-s i n]
-            [let [fp [at field-types i]]
-              [if [eq-word [name/word [pair/fst fp]] field-name-word]
-                res
-                [continue
-                  res [int-exp-add res [type-to-size-of-exp [pair/snd fp]]]
-                  i [inc i]]]]
-            [logq-abort field not found [identity field-name-word]]]]
-        [logq-abort not implemented exp-to-inst field]]
+       calc-field-offset
+       [func calc-field-offset [t]
+        [match [expand-custom t]
+          [type/record field-types]
+          [loop [i 0
+                res int-const-0
+                n [size field-types]]
+            [if [lt-s i n]
+              [let [fp [at field-types i]]
+                [if [eq-word [name/word [pair/fst fp]] field-name-word]
+                  res
+                  [continue
+                    res [int-exp-add res [type-to-size-of-exp [pair/snd fp]]]
+                    i [inc i]]]]
+              [logq-abort field not found [identity field-name-word]]]]
+
+          [type/union utypes]
+          [if [is-empty utypes]
+            [logq-abort union type empty does not allow field access]
+            [let [first-offset [calc-field-offset [first utypes]]]
+              [loop [i 1 n [size utypes]]
+                [if [lt-s i n]
+                  [let [fp [calc-field-offset [at utypes i]]]
+                    [when-not [exp-equals first-offset fp]
+                      [logq-abort union type field offsets do not match]]
+                    [continue i [inc i]]]
+                  first-offset]]]]
+
+          [logq-abort not implemented exp-to-inst field]]]
+       field-offset [calc-field-offset [type-of field-target-exp]]
        target-offset [deref-index-field-to-mem-offset field-target-exp]
        addr-exp [int-exp-add target-offset field-offset]]
       addr-exp]

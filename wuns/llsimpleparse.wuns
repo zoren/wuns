@@ -162,3 +162,28 @@
 
 [defn growable-list-reset [pglist [pmem [growable-list -a]]] [tuple]
   [assign [field [deref pglist] size] 0]]
+
+[datatype text []
+  [plist [u8]]]
+
+[def form-word-tag [i32 10]]
+[def form-list-tag [i32 11]]
+
+[datatype form-word []
+  [record
+    [tag [exp form-word-tag]]
+    [pword [text]]]]
+
+[datatype
+  form-list []
+  [record
+    [tag [exp form-list-tag]]
+    [forms [plist [pmem [form]]]]]
+
+  form []
+  [union
+    [form-word]
+    [form-list]]]
+
+[defn form-tag [pf [pmem [form]]] [i32]
+  [field [deref pf] tag]]
