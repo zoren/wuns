@@ -144,13 +144,21 @@
       ; a constant exp
       exp]
     [data-passive exp]
-    [memory-static-top exp]]
+    [memory-static-top exp]
+    [func exp-function]]
 
   type-kind []
   [union
     [datatype]
     [non-datatype]
-    [exp type]]]
+    [exp type]]
+
+  exp-function []
+  [record
+    [name [option name]]
+    [parameters [list [pair name type]]]
+    [result type]
+    [bodies [list exp]]]]
 
 [defn exp-to-deref [exp]
   [loop [cur exp]
@@ -268,13 +276,6 @@
 
 [def value-kind-constant [value-kind/constant]]
 [def value-kind-mutable [value-kind/mutable]]
-
-[type exp-function []
-  [record
-    [name name]
-    [parameters [list [pair name type]]]
-    [result type]
-    [bodies [list exp]]]]
 
 [type memory-exp []
   [record
@@ -580,7 +581,7 @@
           [if-let [desc [try-lookup-bind-name lctx fn]]
             [match [pair/snd desc]
               [desc-kind/local kind]
-              [logq-abort form-to-exp-type-kind-env not a word [identity ff]]
+              [logq-abort form-to-exp-type-kind-env not a top def [identity ff]]
 
               [desc-kind/top td]
               [match [top-desc/kind td]
@@ -903,6 +904,21 @@
             [pair n e]]]]]
       [logq-abort continue not in loop]]
 
+    [[word func]]
+    [let
+      [vars [transient-kv-map]
+       param-ctx [local-context-make lctx vars [local-context-kind/func]]
+       params
+       [list-map p [pairwise-pairs [get-list [second l]]]
+          [let [pname [form-to-name [pair/fst p]]
+                pt [form-to-type-type-env type-kind-env lctx [pair/snd p]]]
+            [set-kv-map vars [name/word pname] pt]
+            [pair pname pt]]]
+       result [form-to-type-type-env type-kind-env param-ctx [third l]]
+       bodies
+       [list-map b [slice l 3 [size l]] [form-to-exp-type-kind-env type-kind-env param-ctx b]]]
+      [exp/func [exp-function [option/none] params result bodies]]]
+
     [[word do]]
     [exp/do [list-map b [rest l] [form-to-exp-type-kind-env type-kind-env lctx b]]]
 
@@ -983,7 +999,10 @@
           [logq-abort unsupported literal type]]]
       [logq-abort form-special-to-exp not impl [identity fw]]]]]
 
-[func get-desc-from-name [n] [pair/snd [get name-to-desc n]]]
+[func get-desc-from-name [n]
+  [if-let [desc [try-get name-to-desc n]]
+    [pair/snd desc]
+    [logq-abort get-desc-from-name not found [name/word n]]]]
 
 [func get-top-desc-from-name [n]
   [match [get-desc-from-name n]
@@ -1235,7 +1254,7 @@
     [type/var n1]
     [match t2
       [type/var n2]
-      [names-same-binding n1 n2]
+      [eq-word [name/word n1] [name/word n2]]
       false]
 
     [type/empty]
@@ -1282,6 +1301,17 @@
       [expand-custom expanded-t]]
     t]]
 
+[func functor-call-to-type-env [fn targs]
+  [let [fd
+      [match [top-desc/kind [get-top-desc-from-name fn]]
+        [top-desc-kind/functor fd] fd
+        [logq-abort not a functor]]]
+    [assert [eq [size targs] [size [functor-desc/parameters fd]]] call-functor expected same number of arguments]
+    [let [functor-type-env [transient-kv-map]]
+      [for i 0 [size targs]
+        [set-kv-map functor-type-env [name/word [pair/fst [at [functor-desc/parameters fd] i]]] [at targs i]]]
+      functor-type-env]]]
+
 [func type-of [exp]
   [match exp
     [exp/integer pt n]
@@ -1303,11 +1333,13 @@
 
     [exp/call-functor fname targs]
     [let
-      [fd
-        [match [top-desc/kind [get-top-desc-from-name fname]]
-          [top-desc-kind/functor fd] fd
-          [logq-abort not a functor]]]
-      [logq-abort not implemented call-functor [identity exp]]]
+      [tenv [functor-call-to-type-env fname targs]
+       fd
+      [match [top-desc/kind [get-top-desc-from-name fname]]
+        [top-desc-kind/functor fd] fd
+        [logq-abort not a functor]]
+       tt [type-substitute tenv [type-of [functor-desc/body fd]]]]
+      tt]
 
     [exp/cast t e]
     [expand-custom t]
@@ -1394,6 +1426,9 @@
     [do
       [todo use mem type]
       [type/primitive type-primitive-i32]]
+
+    [exp/func ef]
+    [type/func [list-map p [exp-function/parameters ef] [pair/snd p]] [exp-function/result ef]]
 
     [logq-abort type-of not implemented [identity exp]]]]
 
@@ -1610,7 +1645,7 @@
                 [option/some
                   [top-decl/function
                     [exp-function
-                      [form-to-name name-form]
+                      [option/some [form-to-name name-form]]
                       parameters
                       return-type
                       cbodies]]]]]]
@@ -2106,7 +2141,7 @@
            [push
             funcs
             [wat-func
-              [name/word [exp-function/name f]]
+              [name/word [option-get [exp-function/name f]]]
               [list-map p [exp-function/parameters f]
                 [pair [name/word [pair/fst p]] [type-to-wat-type [pair/snd p]]]]
               locals

@@ -391,11 +391,6 @@
 [def type-empty-tuple [type/tuple [list]]]
 [def type-empty [type/empty]]
 
-[defn option-get [opt]
-  [match opt
-    [option/none] [logq-abort option-get none]
-    [option/some v] v]]
-
 [defn option-pair [opt1 opt2]
   [match opt1
     [option/some v1]
