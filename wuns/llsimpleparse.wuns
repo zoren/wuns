@@ -109,6 +109,12 @@
       [assign [field [deref p] size] sz]
       p]]]
 
+[functor list-get [elem-type datatype]
+  [func [pvec [pmem [list-data elem-type -sz]]  i [i32]] [pmem [array elem-type]]
+    [if [lt-s i 0] [intrinsic unreachable]]
+    [if [lt-s i [list-size pvec]] [do] [intrinsic unreachable]]
+    [index [field [deref pvec] array] i]]]
+
 [functor list-data-array [elem-type datatype]
   [func [pvec [pointer [exp mem] [list-data elem-type -sz]]] [pointer [exp mem] [array elem-type]]
     [ref [field [deref pvec] array]]]]
@@ -187,3 +193,17 @@
 
 [defn form-tag [pf [pmem [form]]] [i32]
   [field [deref pf] tag]]
+
+[defn form-word-is [pf [pmem [form]]] [i32]
+  [eq [field [deref pf] tag] form-word-tag]]
+
+[defn form-word-get [pf [pmem [form]]] [pmem [form-word]]
+  [if [not [form-word-is pf]] [intrinsic unreachable]]
+  [cast [pmem [form-word]] pf]]
+
+[defn form-list-is [pf [pmem [form]]] [i32]
+  [eq [field [deref pf] tag] form-list-tag]]
+
+[defn form-list-get [pf [pmem [form]]] [pmem [form-list]]
+  [if [not [form-list-is pf]] [intrinsic unreachable]]
+  [cast [pmem [form-list]] pf]]
