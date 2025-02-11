@@ -2129,8 +2129,10 @@
       [exp-to-inst addr-exp]]
 
     [exp/memory-static-top mem-name]
-    [let [addr-pair [get-current-active-address-pair mem-name]]
-      [exp-to-inst [exp/integer [pair/fst addr-pair] [atom-get [pair/snd addr-pair]]]]]
+    [let [addr-pair [get-current-active-address-pair mem-name]
+          mem-type [pair/fst addr-pair]
+          offset-atom [pair/snd addr-pair]]
+      [wat-inst/lazy-integer-const [primitive-type/name mem-type] offset-atom]]
 
     [exp/cast t e]
     [exp-to-inst e]

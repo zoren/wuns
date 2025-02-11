@@ -23,6 +23,7 @@
     [i64.const word]
     [f32.const word]
     [f64.const word]
+    [lazy-integer-const word [atom i32]]
     [local.get word]
     [local.set word wat-inst]
     [global.get word]
@@ -266,6 +267,9 @@
 
     [wat-inst/f64.const w]
     [wat-list [wat/word [word f64.const]] [wat/word w]]
+
+    [wat-inst/lazy-integer-const w n]
+    [wat-list [wat/word [concat-words w [word .const]]] [wat/word [int-to-word [atom-get n]]]]
 
     [wat-inst/inst-word w args]
     [wat-concat

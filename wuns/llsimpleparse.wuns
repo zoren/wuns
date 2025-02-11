@@ -11,16 +11,6 @@
       [n [i32]]
       [tuple]]]]
 
-[def-comp-fn log-ar [ar [array [u8]]] [tuple]
-  [log [data mem ar] [size-of-exp ar]]]
-
-[defn main [] [tuple]
-  [log-ar [array [u8] [u8 97]]]
-  [log-ar [array [u8] [u8 49 50 51]]]
-  ]
-
-[export main]
-
 [def 0 [i32 0]]
 [def 1 [i32 1]]
 [def 2 [i32 2]]
@@ -217,3 +207,13 @@
 [defn form-list-get [pf [pmem [form]]] [pmem [form-list]]
   [if [not [form-list-is pf]] [intrinsic unreachable]]
   [cast [pmem [form-list]] pf]]
+
+[def-comp-fn log-ar [ar [array [u8]]] [tuple]
+  [log [data mem ar] [size-of-exp ar]]]
+
+[defn main [] [tuple]
+  [log-ar [array [u8] [u8 97]]]
+  [log-ar [array [u8] [u8 49 50 51]]]
+  ]
+
+[export main]
