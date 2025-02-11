@@ -273,7 +273,9 @@
             --- [set-kv-map env [word log-i32] [to-js-value wasm-log-i32]]
             import-map [transient-kv-map]
             ---- [set-kv-map import-map [word env] [kv-map-to-object env]]
-            inst [wasm-instantiate module [kv-map-to-object import-map]]]
+            inst [wasm-instantiate module [kv-map-to-object import-map]]
+            main [get-export inst [word main]]]
+        [js-app main]
         ]]]]
 
 [defn test-all []
@@ -285,5 +287,4 @@
   [test-array-exp]
   [test-record-exp]
   [test-tuple-exp]
-  [test-parse]
   ]

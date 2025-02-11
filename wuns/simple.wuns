@@ -155,6 +155,7 @@
 
   exp-function []
   [record
+    [kind word]
     [name [option name]]
     [parameters [list [pair name type]]]
     [result type]
@@ -208,6 +209,12 @@
     [immediate-parameters [list immediate-type]]
     [parameters [list type]]
     [result type]]]
+
+[type data-active []
+  [record
+    [mem-name word]
+    [address exp]
+    [bytes byte-array]]]
 
 [defn intrinsic-type-from-name [n]
   [switch n
@@ -349,6 +356,7 @@
 
 [type function-desc []
   [record
+    [kind word]
     [parameters [list [pair name type]]]
     [result type]]]
 
@@ -514,9 +522,11 @@
   [gerrors [growable-list]
    name-to-desc [transient-kv-map]
    top-names [transient-kv-map]
+   top-funcs [transient-kv-map]
    exp-to-form [transient-kv-map]
    active-data-map [transient-kv-map]
    active-data-map-offsets [transient-kv-map]
+   datas [growable-list]
    name-to-form [transient-kv-map]
    custom-type-signatures [transient-kv-map]
    custom-types [transient-kv-map]]
@@ -759,44 +769,6 @@
             [logq-abort not implemented form-to-type [identity form]]]]]]]]]
     [go outer-form]]]
 
-[func exp-to-bytes [e]
-  [let
-    [bprinter [empty-printer]
-     go
-     [func go [e]
-      [match e
-        [exp/integer pt n]
-        [let [n-bytes [primitive-type/bytes pt]]
-          [assert [eq [intrinsic i32.rem-s [printer-index bprinter] n-bytes] [i32 0]]
-            exp-to-bytes expected natural alignment [identity pt]]
-          [assert [primitive-type-is-integer pt] exp-to-bytes expected integer type [identity pt]]
-          [print-int32 bprinter n-bytes n]]
-
-        [exp/float pt f]
-        [let [n-bytes [primitive-type/bytes pt]]
-          [assert [eq [intrinsic i32.rem-s [printer-index bprinter] n-bytes] [i32 0]]
-            exp-to-bytes expected natural alignment [identity pt]]
-          [assert [eq-word [primitive-type/prefix pt] [word f]] exp-to-bytes expected float type [identity pt]]
-          [loop
-            [i 0
-             fba [f64-to-byte-array f]]
-            [when [lt-s i n-bytes]
-              [print-byte bprinter [byte-array-get fba i]]
-              [continue i [inc i]]]]]
-
-        [exp/array - es]
-        [for-each elem es [go elem]]
-
-        [exp/tuple es]
-        [for-each elem es [go elem]]
-
-        [exp/record fields]
-        [for-each field fields [go [pair/snd field]]]
-
-        [logq-abort not implemented exp-to-bytes [identity e]]]]]
-    [go e]
-    [printer-to-byte-array bprinter]]]
-
 [func get-current-active-address-pair [mem-name-exp]
   [let
     [mem-name-name
@@ -922,7 +894,7 @@
        result [form-to-type-type-env type-kind-env param-ctx [third l]]
        bodies
        [list-map b [slice l 3 [size l]] [form-to-exp-type-kind-env type-kind-env param-ctx b]]]
-      [exp/func [exp-function [option/none] params result bodies]]]
+      [exp/func [exp-function fw [option/none] params result bodies]]]
 
     [[word do]]
     [exp/do [list-map b [rest l] [form-to-exp-type-kind-env type-kind-env lctx b]]]
@@ -968,16 +940,8 @@
     [[word data]]
     [let
       [mem-name-exp [form-to-exp-type-kind-env type-kind-env lctx [second l]]
-       data-exp [form-to-exp-type-kind-env type-kind-env lctx [third l]]
-       dexp [exp/data mem-name-exp data-exp]
-       addr-pair [get-current-active-address-pair mem-name-exp]
-       offset-atom [pair/snd addr-pair]
-       bytes [exp-to-bytes data-exp]
-       n-of-bytes [byte-array-size bytes]
-       current-offset [atom-get offset-atom]]
-      [atom-set offset-atom [add current-offset [align [i32 16] n-of-bytes]]]
-      [set-kv-map active-data-map dexp [exp/integer [pair/fst addr-pair] current-offset]]
-      dexp]
+       data-exp [form-to-exp-type-kind-env type-kind-env lctx [third l]]]
+      [exp/data mem-name-exp data-exp]]
 
     [[word memory-static-top]]
     [let
@@ -1597,7 +1561,7 @@
                   ikd
                   [match ik
                     [import-kind-decl/function ps rt]
-                    [top-desc-kind/function [function-desc ps rt]]
+                    [top-desc-kind/function [function-desc fw ps rt]]
 
                     [import-kind-decl/memory mem-exp]
                     [top-desc-kind/memory [mem-exp-to-mem-kind mem-exp]]
@@ -1629,12 +1593,13 @@
                   [imported-or-here/here]]]
             [option/none]]]
 
-          [[word defn]]
+          [[word defn] [word def-comp-fn]]
           [do
             [when [lt-s [size l] 3]
               [error form function expected name params return-type bodies]]
             [let
               [name-form [second l]
+               is-defn [eq-word fw [word defn]]
                params-list [get-list [third l]]
                return-type-form [fourth l]
                param-ctx [transient-kv-map]
@@ -1649,22 +1614,27 @@
               [bind-top name-form
                 [type/func [list-map p parameters [pair/snd p]] return-type]
                 [top-desc
-                  [top-desc-kind/function [function-desc parameters return-type]]
+                  [top-desc-kind/function [function-desc fw parameters return-type]]
                   [imported-or-here/here]]]
               [let
                 [cbodies [list-map body [slice l 4 [size l]] [form-to-exp-type-kind-env empty-type-env lctx body]]
-                 inferred-return-type [type-ofs cbodies]]
+                 inferred-return-type [type-ofs cbodies]
+                 fname [form-to-name name-form]
+                 exp-func
+                 [exp-function
+                  fw
+                  [option/some fname]
+                  parameters
+                  return-type
+                  cbodies]]
+                [set-kv-map top-funcs [name/word fname] exp-func]
                 [when-not [type-assignable return-type inferred-return-type]
                   [log return-type]
                   [log inferred-return-type]
                   [logq-abort return type mismatch [form-to-word name-form]]]
-                [option/some
-                  [top-decl/function
-                    [exp-function
-                      [option/some [form-to-name name-form]]
-                      parameters
-                      return-type
-                      cbodies]]]]]]
+                [if is-defn
+                  [option/some [top-decl/function exp-func]]
+                  [option/none]]]]]
           [logq-abort not implemented [identity fw]]]]]]]
 
 [func top-forms-to-top-decls [forms]
@@ -1767,7 +1737,7 @@
 
     [logq-abort not implemented type-to-size-of-exp [identity t]]]]
 
-[func mk-exp-to-inst-compiler [type-env]
+[func mk-exp-to-inst-compiler [type-env const-env]
   [let
     [glocals [growable-list]]
   [letfn [
@@ -1926,6 +1896,66 @@
 
     [logq-abort not implemented deref-index-field-to-mem-offset [identity exp]]]]
 
+[func exp-to-bytes [e]
+  [let
+    [bprinter [empty-printer]
+     go
+     [func go [e]
+      [match e
+        [exp/integer pt n]
+        [let [n-bytes [primitive-type/bytes pt]]
+          [assert [eq [intrinsic i32.rem-s [printer-index bprinter] n-bytes] [i32 0]]
+            exp-to-bytes expected natural alignment [identity pt]]
+          [assert [primitive-type-is-integer pt] exp-to-bytes expected integer type [identity pt]]
+          [print-int32 bprinter n-bytes n]]
+
+        [exp/float pt f]
+        [let [n-bytes [primitive-type/bytes pt]]
+          [assert [eq [intrinsic i32.rem-s [printer-index bprinter] n-bytes] [i32 0]]
+            exp-to-bytes expected natural alignment [identity pt]]
+          [assert [eq-word [primitive-type/prefix pt] [word f]] exp-to-bytes expected float type [identity pt]]
+          [loop
+            [i 0
+             fba [f64-to-byte-array f]]
+            [when [lt-s i n-bytes]
+              [print-byte bprinter [byte-array-get fba i]]
+              [continue i [inc i]]]]]
+
+        [exp/array - es]
+        [for-each elem es [go elem]]
+
+        [exp/tuple es]
+        [for-each elem es [go elem]]
+
+        [exp/record fields]
+        [for-each field fields [go [pair/snd field]]]
+
+        [exp/var n]
+        [go [const-eval e]]
+
+        [logq-abort not implemented exp-to-bytes [identity e]]]]]
+    [go e]
+    [printer-to-byte-array bprinter]]]
+
+[func const-eval [e]
+  [match e
+    [exp/var v]
+    [let
+      [desc [get-desc-from-name v]
+       is-param
+        [match desc
+        [desc-kind/top td] false
+        [desc-kind/local ld]
+        [match ld
+          [local-context-kind/func] true
+          false]]]
+      [if is-param
+        [if-let [c [try-get const-env [name/word v]]]
+          c
+          e]
+        e]]
+    e]]
+
 [func exp-to-inst [exp]
   [match exp
     [exp/integer pt n]
@@ -1972,7 +2002,23 @@
           [exp-to-inst arg]]]]
 
     [exp/call fn args]
-    [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]
+    [let [fnw [name/word fn]
+          fd
+          [match [top-desc/kind [get-top-desc-from-name fn]]
+            [top-desc-kind/function fd] fd
+            [logq-abort not a function]]
+          fkind [function-desc/kind fd]]
+      [if [eq-word [word def-comp-fn] fkind]
+        [let [param-env [transient-kv-map]
+              params [function-desc/parameters fd]
+              comp [mk-exp-to-inst-compiler [transient-kv-map] param-env]
+              es2i [exp2inst-compiler/exps-to-inst comp]
+              bodies [exp-function/bodies [get top-funcs fnw]]]
+          [assert [eq [size params] [size args]] call expected same number of arguments]
+          [for i 0 [size args]
+            [set-kv-map param-env [name/word [pair/fst [at params i]]] [at args i]]]
+          [es2i bodies]]
+        [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]]]
 
     [exp/call-functor fn targs]
     [let
@@ -1982,7 +2028,8 @@
           [logq-abort not a functor]]]
       [assert [eq [size targs] [size [functor-desc/parameters fd]]] call-functor expected same number of arguments]
       [let [functor-type-env [transient-kv-map]
-            comp [mk-exp-to-inst-compiler functor-type-env]
+            empty-const-env [transient-kv-map]
+            comp [mk-exp-to-inst-compiler functor-type-env empty-const-env]
             e2i [exp2inst-compiler/exp-to-inst comp]]
         [for i 0 [size targs]
           [set-kv-map functor-type-env [name/word [pair/fst [at [functor-desc/parameters fd] i]]] [at targs i]]]
@@ -2000,7 +2047,7 @@
     [exp-to-inst [type-to-size-of-exp [type-substitute type-env t]]]
 
     [exp/size-of-exp e]
-    [exp-to-inst [type-to-size-of-exp [type-of e]]]
+    [exp-to-inst [type-to-size-of-exp [type-of [const-eval e]]]]
 
     [exp/let-loop ll-kind bindings bodies]
     [let
@@ -2059,8 +2106,27 @@
 
       [logq-abort not implemented exp-to-inst assign [identity dst]]]
 
-    [exp/data mem-name data-exp]
-    [exp-to-inst [get active-data-map exp]]
+    [exp/data mem-name-exp data-exp]
+    [let
+      [addr-pair [get-current-active-address-pair mem-name-exp]
+       offset-atom [pair/snd addr-pair]
+       bytes [exp-to-bytes data-exp]
+       n-of-bytes [byte-array-size bytes]
+       current-offset [atom-get offset-atom]
+       addr-exp [exp/integer [pair/fst addr-pair] current-offset]
+      mem-name
+      [match mem-name-exp
+        [exp/var mem-name] mem-name
+        [logq-abort add-data not a memory [identity mem-name-exp]]]]
+      [assert-not [eq n-of-bytes 0] add-data expected non-empty data]
+      [atom-set offset-atom [add current-offset [align [i32 16] n-of-bytes]]]
+      [todo this breaks if mem is a type var]
+      [push datas
+        [data-active
+          [name/word mem-name]
+          addr-exp
+          bytes]]
+      [exp-to-inst addr-exp]]
 
     [exp/memory-static-top mem-name]
     [let [addr-pair [get-current-active-address-pair mem-name]]
@@ -2104,7 +2170,7 @@
      globals [growable-list]
      funcs [growable-list]
      exports [growable-list]
-     data [growable-list]
+     wdata [growable-list]
      type-inst-env [transient-kv-map]]
     [for-each top tops
       [match top
@@ -2149,7 +2215,8 @@
 
         [top-decl/value k def-name exp]
         [let
-          [e2ic [mk-exp-to-inst-compiler type-inst-env]
+          [const-env [transient-kv-map]
+           e2ic [mk-exp-to-inst-compiler type-inst-env const-env]
            e2i [exp2inst-compiler/exp-to-inst e2ic]
            inst [e2i exp]]
           [assert [is-empty [clone-growable-to-frozen-list [exp2inst-compiler/glocals e2ic]]] compile expected no locals]
@@ -2165,7 +2232,8 @@
 
         [top-decl/function f]
         [let
-          [e2i [mk-exp-to-inst-compiler type-inst-env]
+          [const-env [transient-kv-map]
+           e2i [mk-exp-to-inst-compiler type-inst-env const-env]
            es2i [exp2inst-compiler/exps-to-inst e2i]
            inst [es2i [exp-function/bodies f]]
            locals [clone-growable-to-frozen-list [exp2inst-compiler/glocals e2i]]]
@@ -2180,13 +2248,22 @@
               inst]]]
 
         ]]
+    [let [const-env [transient-kv-map]
+          e2ic [mk-exp-to-inst-compiler type-inst-env const-env]
+          e2i [exp2inst-compiler/exp-to-inst e2ic]]
+      [for-each data [clone-growable-to-frozen-list datas]
+        [push wdata
+          [wat-data/active
+            [data-active/mem-name data]
+            [e2i [data-active/address data]]
+            [data-active/bytes data]]]]]
     [wat-output
       imports
       memories
       globals
       funcs
       exports
-      data]]]
+      wdata]]]
 
 ]
 [func f2o [forms]
