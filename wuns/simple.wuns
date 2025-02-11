@@ -1931,13 +1931,13 @@
         [for-each field fields [go [pair/snd field]]]
 
         [exp/var n]
-        [go [const-eval e]]
+        [go [get-const e]]
 
         [logq-abort not implemented exp-to-bytes [identity e]]]]]
     [go e]
     [printer-to-byte-array bprinter]]]
 
-[func const-eval [e]
+[func get-const [e]
   [match e
     [exp/var v]
     [let
@@ -2047,7 +2047,7 @@
     [exp-to-inst [type-to-size-of-exp [type-substitute type-env t]]]
 
     [exp/size-of-exp e]
-    [exp-to-inst [type-to-size-of-exp [type-of [const-eval e]]]]
+    [exp-to-inst [type-to-size-of-exp [type-of [get-const e]]]]
 
     [exp/let-loop ll-kind bindings bodies]
     [let
