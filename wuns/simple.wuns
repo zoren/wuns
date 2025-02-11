@@ -69,6 +69,7 @@
 
     [logq-abort unsupported literal type]]]
 
+[def type-primitive-u8 [get-primitive [word u8]]]
 [def type-primitive-i32 [get-primitive [word i32]]]
 [def type-primitive-i64 [get-primitive [word i64]]]
 [def type-primitive-f32 [get-primitive [word f32]]]
@@ -190,6 +191,7 @@
     [exp/deref e] [may-side-effect e]
     true]]
 
+[def type-u8 [type/primitive type-primitive-u8]]
 [def type-i32 [type/primitive type-primitive-i32]]
 [def type-i64 [type/primitive type-primitive-i64]]
 [def type-empty [type/union [list]]]
@@ -926,6 +928,13 @@
                 [identity telem]
                 [identity t-cur-elem]]]
             ee]]]]
+
+    [[word text]]
+    [let [gl [growable-list]
+          w [form-to-word [second l]]]
+      [for i 0 [word-byte-size w]
+        [push gl [exp/integer type-primitive-u8 [char-code-at w i]]]]
+      [exp/array type-u8 [clone-growable-to-frozen-list gl]]]
 
     [[word tuple]]
     [exp/tuple

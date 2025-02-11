@@ -214,6 +214,7 @@
 [defn main [] [tuple]
   [log-ar [array [u8] [u8 97]]]
   [log-ar [array [u8] [u8 49 50 51]]]
+  [log-ar [text 'hello world']]
   ]
 
 [export main]
