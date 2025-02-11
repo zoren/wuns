@@ -771,14 +771,13 @@
 
 [func get-current-active-address-pair [mem-name-exp]
   [let
-    [mem-name-name
+    [mem-name-word
       [match [type-of mem-name-exp]
         [type/exp mem-name-exp2]
         [match mem-name-exp2
-          [exp/var mem-name] mem-name
+          [exp/var mem-name] [name/word mem-name]
           [logq-abort get-memory-name-from-type not a memory [identity mem-name-exp]]]
         [logq-abort get-memory-name-from-type not a memory type]]
-     mem-name-word [name/word mem-name-name]
      mem-name-type
       [match [top-desc/kind [pair/snd [get top-names mem-name-word]]]
         [top-desc-kind/memory mt] [memory-desc/type mt]
