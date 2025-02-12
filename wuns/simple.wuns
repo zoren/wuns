@@ -215,7 +215,7 @@
 [type data-active []
   [record
     [mem-name word]
-    [address exp]
+    [address wat-inst]
     [bytes byte-array]]]
 
 [defn intrinsic-type-from-name [n]
@@ -2122,19 +2122,20 @@
        n-of-bytes [byte-array-size bytes]
        current-offset [atom-get offset-atom]
        addr-exp [exp/integer [pair/fst addr-pair] current-offset]
-      mem-name
-      [match mem-name-exp
-        [exp/var mem-name] mem-name
-        [logq-abort add-data not a memory [identity mem-name-exp]]]]
+       addr-inst [exp-to-inst addr-exp]
+       mem-name
+        [match mem-name-exp
+          [exp/var mem-name] mem-name
+          [logq-abort add-data not a memory [identity mem-name-exp]]]]
       [assert-not [eq n-of-bytes 0] add-data expected non-empty data]
       [atom-set offset-atom [add current-offset [align [i32 16] n-of-bytes]]]
       [todo this breaks if mem is a type var]
       [push datas
         [data-active
           [name/word mem-name]
-          addr-exp
+          addr-inst
           bytes]]
-      [exp-to-inst addr-exp]]
+      addr-inst]
 
     [exp/memory-static-top mem-name]
     [let [addr-pair [get-current-active-address-pair mem-name]
@@ -2258,15 +2259,12 @@
               inst]]]
 
         ]]
-    [let [const-env [transient-kv-map]
-          e2ic [mk-exp-to-inst-compiler type-inst-env const-env]
-          e2i [exp2inst-compiler/exp-to-inst e2ic]]
-      [for-each data [clone-growable-to-frozen-list datas]
-        [push wdata
-          [wat-data/active
-            [data-active/mem-name data]
-            [e2i [data-active/address data]]
-            [data-active/bytes data]]]]]
+    [for-each data [clone-growable-to-frozen-list datas]
+      [push wdata
+        [wat-data/active
+          [data-active/mem-name data]
+          [data-active/address data]
+          [data-active/bytes data]]]]
     [wat-output
       imports
       memories
