@@ -252,31 +252,79 @@
     [logq but got- [identity actual]]
     [logq-abort test assert failed]]]
 
-[defn test-parse []
-  [promise-then
-    [read-parse-file-async [word llsimpleparse.wuns]]
-    [func t [forms]
-      [let [module [forms-to-module forms]
-            mem [memory 1 2 0]
-            mem-buf [memory-buffer mem]
-            wasm-log
-            [func wasm-log [data sz]
-              [logq wasm-log
-                [byte-array-to-string
-                  [byte-array-from-array-buffer mem-buf data sz]]]]
-            wasm-log-i32
-            [func wasm-log-i32 [n]
-              [logq wasm-log-i32 [identity n]]]
-            env [transient-kv-map]
-            - [set-kv-map env [word mem] [to-js-value mem]]
-            -- [set-kv-map env [word log] [to-js-value wasm-log]]
-            --- [set-kv-map env [word log-i32] [to-js-value wasm-log-i32]]
-            import-map [transient-kv-map]
-            ---- [set-kv-map import-map [word env] [kv-map-to-object env]]
-            inst [wasm-instantiate module [kv-map-to-object import-map]]
-            main [get-export inst [word main]]]
-        [js-app main]
-        ]]]]
+[defn test-func-exp []
+  [let
+    [forms
+      [qlist
+    [def not
+      [func [x [i32]] [i32] [if x [i32 0] [i32 1]]]]
+
+    [functor id [t datatype]
+      [func [x t] t
+        x]]
+    [def id-i32 [id [i32]]]
+    [def id-f64 [id [f64]]]
+
+    [functor sot [t2 datatype]
+      [size-of-type t2]]
+    [defn get-so-i64 [] [i32] [sot [i64]]]
+
+    [functor sot-fn [t datatype]
+      [func [] [i32] [size-of-type t]]]
+    [def get-so-i32
+      [sot-fn [i32]]]
+
+[defn alloc-n [n-bytes [i32]] [i32]
+  [i32 16]]
+
+[memory mem [i32] 1]
+
+[datatype pmem [a datatype]
+  [pointer [exp mem] a]]
+
+[functor alloc [t datatype]
+  [cast [pmem t] [alloc-n [size-of-type t]]]]
+
+[datatype growable-list [a datatype]
+  [record
+    [size [i32]]
+    [capacity [i32]]
+    [parray [pmem [array a]]]]]
+
+[functor growable-list-alloc-init [elem-type datatype]
+  [func [init-capacity [i32]] [pmem [growable-list elem-type]]
+    [let
+      [p [alloc [growable-list elem-type]]]
+      [assign [deref p]
+        [record
+          size [i32 0]
+          capacity init-capacity
+          parray [alloc [array elem-type [exp init-capacity]]]]]
+      p]]]
+
+[def growable-list-alloc-init-i64
+  [growable-list-alloc-init [i64]]]
+
+    [export not id-i32 id-f64 get-so-i32 get-so-i64]]
+     inst [forms-to-inst forms]
+     wnot [get-export inst [word not]]
+     id-i32 [get-export inst [word id-i32]]
+     id-f64 [get-export inst [word id-f64]]
+     get-so-i32 [get-export inst [word get-so-i32]]
+     get-so-i64 [get-export inst [word get-so-i64]]]
+
+    [test-assert-eq [i32 0] [js-app wnot [i32 1]]]
+    [test-assert-eq [i32 0] [js-app wnot [i32 1337]]]
+    [test-assert-eq [i32 1] [js-app wnot [i32 0]]]
+
+    [test-assert-eq [i32 1337] [js-app id-i32 [i32 1337]]]
+
+    [test-assert-eq [f64 1.1] [js-app id-f64 [f64 1.1]]]
+
+    [test-assert-eq [i32 4] [js-app get-so-i32]]
+
+    [test-assert-eq [i32 8] [js-app get-so-i64]]
+    ]]
 
 [defn test-all []
   [test-arithmetic]
@@ -287,4 +335,91 @@
   [test-array-exp]
   [test-record-exp]
   [test-tuple-exp]
+  [test-func-exp]
   ]
+
+[defn test-parse []
+  [promise-then
+    [read-parse-file-async [word llsimpleparse.wuns]]
+    [func t [forms]
+      [let
+       [module [forms-to-module forms]
+        mem [memory 1 2 0]
+        mem-buf [memory-buffer mem]
+        wasm-log
+        [func wasm-log [data sz]
+          [logq wasm-log
+            [byte-array-to-string
+              [byte-array-from-array-buffer mem-buf data sz]]]]
+        wasm-log-i32
+        [func wasm-log-i32 [n]
+          [logq wasm-log-i32 [identity n]]]
+        env [transient-kv-map]
+        - [set-kv-map env [word mem] [to-js-value mem]]
+        -- [set-kv-map env [word log] [to-js-value wasm-log]]
+        --- [set-kv-map env [word log-i32] [to-js-value wasm-log-i32]]
+        import-map [transient-kv-map]
+        ---- [set-kv-map import-map [word env] [kv-map-to-object env]]
+        inst [wasm-instantiate module [kv-map-to-object import-map]]
+        parse [get-export inst [word parse]]
+        list-size [get-export inst [word list-size]]
+        list-alloc-byte [get-export inst [word list-alloc-byte]]
+        form-tag [get-export inst [word form-tag]]
+        form-word-is [get-export inst [word form-word-is]]
+        form-list-is [get-export inst [word form-list-is]]
+        form-list-get [get-export inst [word form-list-get]]
+        form-word-get [get-export inst [word form-word-get]]
+        list-get-form [get-export inst [word list-get-form]]
+        list-data-array [get-export inst [word list-data-array]]
+        alloc-word
+        [func aw [w]
+          [let
+            [src [word-to-byte-array w]
+              sz [byte-array-size src]
+              vec [js-app list-alloc-byte sz]
+              data [js-value-to-i32 [js-app list-data-array vec]]
+              dst [byte-array-from-array-buffer mem-buf data sz]]
+            [for i 0 sz
+              [byte-array-set dst i [byte-array-get src i]]]
+            vec]]
+        pform-to-form
+        [func pf2f [pform]
+          [ifs
+            [js-value-to-i32 [js-app form-word-is pform]]
+            [let
+              [fw [js-app form-word-get pform]
+                data [js-value-to-i32 [js-app list-data-array fw]]
+                sz [js-value-to-i32 [js-app list-size fw]]
+                ar [byte-array-from-array-buffer mem-buf data sz]
+                str [byte-array-to-string ar]]
+              [form/word [string-to-word str]]]
+
+            [js-value-to-i32 [js-app form-list-is pform]]
+            [let
+              [fl [js-app form-list-get pform]
+                sz [js-value-to-i32 [js-app list-size fl]]
+                gl [growable-list]]
+              [for i 0 sz
+                [push gl
+                  [pf2f [js-app list-get-form fl i]]]]
+              [form/list [clone-growable-to-frozen-list gl]]]
+
+            [logq-abort unknown form type]]]]
+        [let [empty-vec [js-app list-alloc-byte [i32 0]]]
+          [test-assert-eq [i32 0] [js-app list-size empty-vec]]
+          [test-assert-eq [i32 0] [js-app parse empty-vec]]]
+        [let
+          [tests
+            [list
+              [pair [quote a] [word 'a']]
+              [pair [quote abc] [word 'abc']]
+              [pair [quote kebab-123] [word 'kebab-123']]
+              [pair [quote []] [word '[]']]
+              [pair [quote [list]] [word '[list]']]
+              [pair [quote [i32 5]] [word '[i32 5]']]
+              [pair [quote [if b [i32 1] [i32 0]]] [word '[if b [i32 1] [i32 0]]']]
+              [pair [quote parsed] [word 'parsed not-parsed']]]]
+          [for-each test tests
+            [test-assert-form-eq
+              [pair/fst test]
+              [pform-to-form [js-app parse [alloc-word [pair/snd test]]]]]]]]]]]

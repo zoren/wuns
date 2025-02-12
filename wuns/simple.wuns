@@ -102,10 +102,17 @@
 
     [exp exp]
 
-    [func [list type] type]
+    [func type-func]
     [functor [list [pair name type-kind]] type]
     [empty]
     [apply-custom name [list type]]]
+
+  type-func []
+  [record
+    [kind word]
+    [parameter-names [list name]]
+    [parameters [list type]]
+    [result type]]
 
   exp []
   [union
@@ -125,12 +132,16 @@
     [do [list exp]]
 
     [cast type exp]
+    [annotation type exp]
 
     [ref exp]
     [deref exp]
 
     [index exp exp]
     [field exp name]
+
+    [pindex exp exp]
+    [pfield exp name]
 
     [array type [list exp]]
     [tuple [list exp]]
@@ -146,7 +157,9 @@
       exp]
     [data-passive exp]
     [memory-static-top exp]
-    [func exp-function]]
+    [func exp-function]
+
+    ]
 
   type-kind []
   [union
@@ -182,7 +195,10 @@
     [exp/float - --] false
     [exp/var -] false
     [exp/cast - e] [may-side-effect e]
+    [exp/annotation - e] [may-side-effect e]
     [exp/field t -] [may-side-effect t]
+    [exp/pindex t i] [or [may-side-effect t] [may-side-effect i]]
+    [exp/pfield t -] [may-side-effect t]
     [exp/index t i] [or [may-side-effect t] [may-side-effect i]]
     [exp/intrinsic n - args]
     [or
@@ -283,6 +299,14 @@
       [type/apply-custom tn args]
       [type/apply-custom tn [list-map a args [go a]]]
 
+      [type/func tf]
+      [type/func
+        [type-func
+          [type-func/kind tf]
+          [type-func/parameter-names tf]
+          [list-map a [type-func/parameters tf] [go a]]
+          [go [type-func/result tf]]]]
+
       [logq-abort type-substitute not implemented [identity t]]]]
     outer-t]]
 
@@ -356,12 +380,6 @@
         [local-context-kind/func]
         [option/none]]]]]
 
-[type function-desc []
-  [record
-    [kind word]
-    [parameters [list [pair name type]]]
-    [result type]]]
-
 [type functor-desc []
   [record
     [parameters [list [pair name type-kind]]]
@@ -381,12 +399,16 @@
       [func f [max] [word-to-int [name/word max]]]
       [memory-exp/max-size mem-exp]]]]
 
+[type value-desc []
+  [record
+    [kind value-kind]
+    [type type]]]
+
 [type top-desc-kind []
   [union
-    [function function-desc]
     [functor functor-desc]
     [memory memory-desc]
-    [value value-kind type]]]
+    [value value-desc]]]
 
 [type imported-or-here [] [union [imported] [here]]]
 
@@ -440,7 +462,7 @@
     [if-not [or [is-identical value-prim type-primitive-i32]
                 [is-identical value-prim type-primitive-i64]]
       [concat-words
-        [word i64.store]
+        [word i32.store]
         [int-to-word [primitive-type/bits target-prim]]]
       [do
         [assert [primitive-type-is-integer target-prim] store expected integer type]
@@ -524,6 +546,7 @@
   [gerrors [growable-list]
    name-to-desc [transient-kv-map]
    top-names [transient-kv-map]
+   value-constants [transient-kv-map]
    top-funcs [transient-kv-map]
    exp-to-form [transient-kv-map]
    active-data-map [transient-kv-map]
@@ -602,20 +625,23 @@
 
               [desc-kind/top td]
               [match [top-desc/kind td]
-                [top-desc-kind/function func-desc]
-                [let
-                  [param-pairs [function-desc/parameters func-desc]
-                   cargs [list-map arg args [form-to-exp-type-kind-env type-kind-env lctx arg]]]
-                  [assert [eq [size param-pairs] [size args]] call expected same number of arguments
-                    [identity fn] n-of-params n-of-args]
-                  [for i 0 [size param-pairs]
-                    [let [pt [pair/snd [at param-pairs i]]
-                          targ [type-of [at cargs i]]]
-                        [when-not [type-assignable pt targ]
-                          [logq param [identity pt]]
-                          [logq arg-- [identity targ]]
-                          [logq-abort call expected assignable type [identity fn]]]]]
-                  [exp/call fn cargs]]
+                [top-desc-kind/value val-desc]
+                [match [value-desc/type val-desc]
+                  [type/func tf]
+                  [let
+                    [params [type-func/parameters tf]
+                     cargs [list-map arg args [form-to-exp-type-kind-env type-kind-env lctx arg]]]
+                    [assert [eq [size params] [size args]] call expected same number of arguments
+                      [identity fn] n-of-params n-of-args]
+                    [for i 0 [size params]
+                      [let [pt [at params i]
+                            targ [type-of [at cargs i]]]
+                          [when-not [type-assignable pt targ]
+                            [logq param [identity pt]]
+                            [logq arg-t [identity targ]]
+                            [logq arg-e [at cargs i]]
+                            [logq-abort call expected assignable type [identity fn]]]]]
+                    [exp/call fn cargs]]]
 
                 [top-desc-kind/functor functor-desc]
                 [let
@@ -629,8 +655,11 @@
                             targ [at targs i]]
                         [when-let [tk [type-to-type-kind-opt type-kind-env targ]]
                           [when-not [type-kind-equals pk tk]
-                            [logq-abort call expected same type [identity tk] [identity pk]]]]]]
-                    [exp/call-functor fn targs]]]]]
+                            [logq-abort call-functor expected same type [identity tk] [identity pk]]]]]]
+                    [exp/call-functor fn targs]]]
+
+                [logq-abort form-to-exp-type-kind-env not a function [identity ff] [pair/snd desc]]
+                    ]]
 
           [form-special-to-exp type-kind-env lctx fw l]]]
         [logq-abort form-to-exp-type-kind-env not a word [identity ff]]]]]]
@@ -697,7 +726,7 @@
     [type/record -] [option/some type-kind-datatype]
     [type/union -] [option/some type-kind-datatype]
     [type/array - --] [option/some type-kind-datatype]
-    [type/func - --] [option/some type-kind-non-datatype]
+    [type/func -] [option/some type-kind-non-datatype]
     [logq-abort type-to-type-kind [identity arg]]]]
 
 [func form-to-type-type-env [type-env lctx outer-form]
@@ -752,7 +781,8 @@
               [type/pointer mt target-type]]]
 
           [[word exp]]
-          [type/exp [form-to-exp-type-kind-env type-env lctx [second l]]]
+          [let [be [form-to-exp-type-kind-env type-env lctx [second l]]]
+            [type/exp [if-let [c [try-resolve-const be]] c be]]]
 
           [[word array]]
           [ifs
@@ -804,8 +834,27 @@
       [common-super-type tt te]
       [exp/if c t e]]
 
+    [[word ifs]]
+    [let [s [size l]]
+      [assert-not [is-odd s] ifs requires an odd number of arguments]
+      [loop
+        [i [dec s]
+         res [form-to-exp-type-kind-env type-kind-env lctx [at l -1]]]
+        [if [eq i 1]
+          res
+          [continue
+            res
+            [exp/if
+              [form-to-exp-type-kind-env type-kind-env lctx [at l [sub i 2]]]
+              [form-to-exp-type-kind-env type-kind-env lctx [at l [dec i]]]
+              res]
+            i [sub i 2]]]]]
+
     [[word cast]]
     [exp/cast [form-to-type-type-env type-kind-env lctx [second l]] [form-to-exp-type-kind-env type-kind-env lctx [third l]]]
+
+    [[word annotation]]
+    [exp/annotation [form-to-type-type-env type-kind-env lctx [second l]] [form-to-exp-type-kind-env type-kind-env lctx [third l]]]
 
     [[word ref]]
     [exp/ref [form-to-exp-type-kind-env type-kind-env lctx [second l]]]
@@ -817,7 +866,9 @@
     [let [dst [form-to-exp-type-kind-env type-kind-env lctx [second l]]
           src [form-to-exp-type-kind-env type-kind-env lctx [third l]]]
       [when-not [type-assignable [type-of dst] [type-of src]]
-        [logq-abort typing assign failed [type-of dst] [type-of src]]]
+        [logq dst [type-of dst]]
+        [logq src [type-of src]]
+        [logq-abort typing assign failed [identity fw] [identity l]]]
       [exp/assign dst src]]
 
     [[word intrinsic]]
@@ -915,6 +966,16 @@
     [let [pexp [form-to-exp-type-kind-env type-kind-env lctx [second l]]
           field-name [form-to-name [third l]]]
       [exp/field pexp field-name]]
+
+    [[word pindex]]
+    [exp/pindex
+      [form-to-exp-type-kind-env type-kind-env lctx [second l]]
+      [form-to-exp-type-kind-env type-kind-env lctx [third l]]]
+
+    [[word pfield]]
+    [let [pexp [form-to-exp-type-kind-env type-kind-env lctx [second l]]
+          field-name [form-to-name [third l]]]
+      [exp/pfield pexp field-name]]
 
     [[word array]]
     [let [telem [form-to-type-type-env type-kind-env lctx [second l]]]
@@ -1272,21 +1333,68 @@
       [expand-custom expanded-t]]
     t]]
 
-[func functor-call-to-type-env [fn targs]
-  [let [fd
-      [match [top-desc/kind [get-top-desc-from-name fn]]
-        [top-desc-kind/functor fd] fd
-        [logq-abort not a functor]]]
-    [assert [eq [size targs] [size [functor-desc/parameters fd]]] call-functor expected same number of arguments]
-    [let [functor-type-env [transient-kv-map]]
-      [for i 0 [size targs]
-        [set-kv-map functor-type-env [name/word [pair/fst [at [functor-desc/parameters fd] i]]] [at targs i]]]
-      functor-type-env]]]
+[func get-functor-desc [fn]
+  [match [top-desc/kind [get-top-desc-from-name fn]]
+    [top-desc-kind/functor fd] fd
+    [logq-abort not a functor]]]
+
+[func functor-desc-to-type-env [fd targs]
+  [assert [eq [size targs] [size [functor-desc/parameters fd]]] call-functor expected same number of arguments]
+  [let [functor-type-env [transient-kv-map]]
+    [for i 0 [size targs]
+      [set-kv-map functor-type-env [name/word [pair/fst [at [functor-desc/parameters fd] i]]] [at targs i]]]
+    functor-type-env]]
+
+[func get-field-type [t field-name-word]
+  [match [expand-custom t]
+    [type/record field-types]
+    [loop [n [size field-types]
+            i 0]
+      [if [lt-s i n]
+        [let [fp [at field-types i]]
+          [if [eq-word [name/word [pair/fst fp]] field-name-word]
+            [expand-custom [pair/snd fp]]
+            [continue i [inc i]]]]
+        [logq-abort field not found [identity field-name-word] [identity field-types]]]]
+
+    [type/union utypes]
+    [if [is-empty utypes]
+      type-empty
+      [loop [i 1 n [size utypes] field-type [get-field-type [first utypes] field-name-word]]
+        [if [lt-s i n]
+          [continue
+            field-type [common-super-type field-type [get-field-type [at utypes i] field-name-word]]
+            i [inc i]]
+          field-type]]]
+
+    [logq-abort type-of not implemented field [identity t]]]]
+
+[func get-index-type [t index-exp]
+  [match t
+    [type/array elem-type -]
+    [expand-custom elem-type]
+
+    [type/tuple elem-types]
+    [match index-exp
+      [exp/integer pt i]
+      [do
+        [assert [is-identical pt type-primitive-i32] index expected i32]
+        [expand-custom [at elem-types i]]]
+
+      [logq-abort indexing of tuples only allowed with constants [identity index-exp]]]
+    [logq-abort indexing only allowed for array and tuple types [identity t]]]]
+
+[func get-pointer-args [t]
+  [match t
+    [type/pointer m p]
+    [pair [expand-custom m] [expand-custom p]]
+
+    [logq-abort get-pointer-args not a pointer [identity t]]]]
 
 [func type-of [exp]
   [match exp
     [exp/integer pt n]
-    [type/exp exp]
+    [type/primitive pt]
 
     [exp/float pt f]
     [type/primitive pt]
@@ -1295,24 +1403,26 @@
     [expand-custom [common-super-type [type-of t] [type-of e]]]
 
     [exp/call fname args]
-    [let
-      [func-desc
-        [match [top-desc/kind [get-top-desc-from-name fname]]
-          [top-desc-kind/function fd] fd
-          [logq-abort not a func]]]
-      [expand-custom [function-desc/result func-desc]]]
+    [let [ft [name-to-type fname]]
+      [match ft
+        [type/func tf]
+        [expand-custom [type-func/result tf]]
+
+        [logq-abort not a func]]]
 
     [exp/call-functor fname targs]
     [let
-      [tenv [functor-call-to-type-env fname targs]
-       fd
-      [match [top-desc/kind [get-top-desc-from-name fname]]
-        [top-desc-kind/functor fd] fd
-        [logq-abort not a functor]]
-       tt [type-substitute tenv [type-of [functor-desc/body fd]]]]
-      tt]
+      [fd [get-functor-desc fname]
+       res-t [type-substitute [functor-desc-to-type-env fd targs] [type-of [functor-desc/body fd]]]]
+;      [logq type-of call-functor [name/word fname] [identity fd] [identity targs]]
+;      [logq type-of result type [identity res-t]]
+      res-t
+      ]
 
     [exp/cast t e]
+    [expand-custom t]
+
+    [exp/annotation t e]
     [expand-custom t]
 
     [exp/var n]
@@ -1329,7 +1439,6 @@
 
     [exp/ref target]
     [do
-      [logq-abort todo get actual pointer mem type of target]
       [type/pointer type-empty [type-of target]]]
 
     [exp/assign dst src]
@@ -1351,48 +1460,20 @@
     type-i32
 
     [exp/index target-exp index-exp]
-    [match [type-of target-exp]
-      [type/array elem-type -]
-      [expand-custom elem-type]
+    [get-index-type [type-of target-exp] index-exp]
 
-      [type/tuple elem-types]
-      [match index-exp
-        [exp/integer pt i]
-        [do
-          [assert [is-identical pt type-primitive-i32] index expected i32]
-          [expand-custom [at elem-types i]]]
-
-        [logq-abort indexing of tuples only allowed with constants [identity index-exp]]]
-      [logq-abort indexing only allowed for array and tuple types [type-of target-exp]]]
-
-    [exp/field pexp field-name]
+    [exp/pindex p-target-exp index-exp]
     [let
-      [field-name-word [name/word field-name]
-       get-field-type
-       [func get-field-type [t]
-        [match [expand-custom t]
-          [type/record field-types]
-          [loop [n [size field-types]
-                 i 0]
-            [if [lt-s i n]
-              [let [fp [at field-types i]]
-                [if [eq-word [name/word [pair/fst fp]] field-name-word]
-                  [expand-custom [pair/snd fp]]
-                  [continue i [inc i]]]]
-              [logq-abort field not found [identity field-name-word] [identity field-types]]]]
+      [pp [get-pointer-args [type-of p-target-exp]]]
+      [type/pointer [pair/fst pp] [get-index-type [pair/snd pp] index-exp]]]
 
-          [type/union utypes]
-          [if [is-empty utypes]
-            type-empty
-            [loop [i 1 n [size utypes] field-type [get-field-type [first utypes]]]
-              [if [lt-s i n]
-                [continue
-                  field-type [common-super-type field-type [get-field-type [at utypes i]]]
-                  i [inc i]]
-                field-type]]]
+    [exp/field rec-exp field-name]
+    [get-field-type [type-of rec-exp] [name/word field-name]]
 
-          [logq-abort type-of not implemented field [identity t] ]]]]
-      [get-field-type [type-of pexp]]]
+    [exp/pfield p-rec-exp field-name]
+    [let
+      [pp [get-pointer-args [type-of p-rec-exp]]]
+      [type/pointer [pair/fst pp] [get-field-type [pair/snd pp] [name/word field-name]]]]
 
     [exp/array elem-type elems]
     [type/array
@@ -1416,7 +1497,12 @@
       [type/primitive type-primitive-i32]]
 
     [exp/func ef]
-    [type/func [list-map p [exp-function/parameters ef] [pair/snd p]] [exp-function/result ef]]
+    [type/func
+      [type-func
+        [word func]
+        [list-map p [exp-function/parameters ef] [pair/fst p]]
+        [list-map p [exp-function/parameters ef] [pair/snd p]]
+        [exp-function/result ef]]]
 
     [logq-abort type-of not implemented [identity exp]]]]
 
@@ -1487,6 +1573,25 @@
       [[word exp]] [type-kind/exp [form-to-type local-context-empty [second ll]]]
       [logq-abort type unknown kind]]]]
 
+[func try-resolve-const [exp]
+  [match exp
+    [exp/var n]
+    [if-let [desc [try-get name-to-desc n]]
+      [let [t [pair/fst desc]]
+        [match [pair/snd desc]
+          [desc-kind/local ld]
+          [option/none]
+
+          [desc-kind/top td]
+          [match [top-desc/kind td]
+            [top-desc-kind/value vd]
+            [if [is-identical [value-desc/kind vd] value-kind-constant]
+              [option/some [get value-constants [name/word n]]]
+              [option/none]]
+            [option/none]]]]
+      [logq-abort try-resolve-const name not found [identity n]]]
+    [option/none]]]
+
 [func top-form-to-top-decl [form]
   [let [l [get-list form]]
     [if [is-empty l]
@@ -1503,12 +1608,18 @@
             [when-not [eq [size l] 3] [error form expected def name exp-form]]
             [let
               [name-form [second l]
+               fname [form-to-name name-form]
                be [form-to-exp-type-kind-env empty-type-env local-context-empty [third l]]
                type [type-of be]
                is-mutable [eq-word fw [word mutable]]
                kind [if is-mutable value-kind-mutable value-kind-constant]
-               bt [top-decl/value kind [form-to-name name-form] be]]
-              [bind-top name-form [if is-mutable [lift-literal-type type] type] [top-desc [top-desc-kind/value kind type] [imported-or-here/here]]]
+               bt [top-decl/value kind fname be]
+               resolved-be [if-let [c [try-resolve-const be]] c be]]
+              [when-not is-mutable
+                [set-kv-map value-constants [name/word fname] resolved-be]]
+              [bind-top name-form
+                [if is-mutable [lift-literal-type type] type]
+                [top-desc [top-desc-kind/value [value-desc kind type]] [imported-or-here/here]]]
               [option/some bt]]]
 
           [[word memory]]
@@ -1560,7 +1671,12 @@
                   t
                   [match ik
                     [import-kind-decl/function ps rt]
-                    [type/func [list-map p ps [pair/snd p]] rt]
+                    [type/func
+                      [type-func
+                        fw
+                        [list-map p ps [pair/fst p]]
+                        [list-map p ps [pair/snd p]]
+                        rt]]
 
                     [import-kind-decl/memory mem-exp]
                     [type/exp [exp/var m]]
@@ -1569,7 +1685,7 @@
                   ikd
                   [match ik
                     [import-kind-decl/function ps rt]
-                    [top-desc-kind/function [function-desc fw ps rt]]
+                    [top-desc-kind/value [value-desc value-kind-constant t]]
 
                     [import-kind-decl/memory mem-exp]
                     [top-desc-kind/memory [mem-exp-to-mem-kind mem-exp]]
@@ -1618,11 +1734,18 @@
                        ptype [form-to-type lctx [pair/snd p]]]
                   [set-kv-map param-ctx [name/word pname] ptype]
                   [pair pname ptype]]]
-               return-type [form-to-type lctx return-type-form]]
+               return-type [form-to-type lctx return-type-form]
+               t
+               [type/func
+                  [type-func
+                    fw
+                    [list-map p parameters [pair/fst p]]
+                    [list-map p parameters [pair/snd p]]
+                    return-type]]]
               [bind-top name-form
-                [type/func [list-map p parameters [pair/snd p]] return-type]
+                t
                 [top-desc
-                  [top-desc-kind/function [function-desc fw parameters return-type]]
+                  [top-desc-kind/value [value-desc value-kind-constant t]]
                   [imported-or-here/here]]]
               [let
                 [cbodies [list-map body [slice l 4 [size l]] [form-to-exp-type-kind-env empty-type-env lctx body]]
@@ -1692,7 +1815,7 @@
     [option/none]]]
 
 [func try-get-primitive [t]
-  [match t
+  [match [expand-custom t]
     [type/exp e] [try-get-primitive-exp e]
     [type/primitive p] [option/some p]
     [type/pointer mt -] [option/some [get-memory-pointer-type mt]]
@@ -1749,9 +1872,13 @@
   [let
     [glocals [growable-list]]
   [letfn [
+[func type-to-size-of-exp-current-tenv [t]
+  [logq type-to-size-of-exp-current-tenv [identity t] [identity type-env]]
+  [type-to-size-of-exp [type-substitute type-env t]]]
+
 [func deref-index-field-to-load [exp]
   [let
-    [target-prim [type-to-primitive [type-of exp]]
+    [target-prim [type-to-primitive [type-substitute type-env [type-of exp]]]
      offset [deref-index-field-to-mem-offset exp]
      pexp [exp-to-deref exp]
      mt [pair/fst [get-pointer-args [type-of pexp]]]
@@ -1783,7 +1910,7 @@
           [do
             [assert-not [may-side-effect target] assign target cannot have side effects when assigning arrays]
             [let
-              [size-of-int-exp [type-to-size-of-exp tvalue-elem]]
+              [size-of-int-exp [type-to-size-of-exp-current-tenv tvalue-elem]]
               [loop [i 0 n [size elems]]
                 [when [lt-s i n]
                   [assign-pointer
@@ -1798,7 +1925,7 @@
                 [let
                   [elem [at elems i]]
                   [assign-pointer [int-exp-add target-offset acc] elem]
-                  [continue i [inc i] acc [int-exp-add acc [type-to-size-of-exp [type-of elem]]]]]]]]
+                  [continue i [inc i] acc [int-exp-add acc [type-to-size-of-exp-current-tenv [type-of elem]]]]]]]]
 
           [exp/record fields]
           [do
@@ -1808,10 +1935,10 @@
                 [let
                   [field-exp [pair/snd [at fields i]]]
                   [assign-pointer [int-exp-add target-offset acc] field-exp]
-                  [continue i [inc i] acc [int-exp-add acc [type-to-size-of-exp [type-of field-exp]]]]]]]]
+                  [continue i [inc i] acc [int-exp-add acc [type-to-size-of-exp-current-tenv [type-of field-exp]]]]]]]]
 
           [let
-            [src-prim [type-to-primitive [type-of src]]
+            [src-prim [type-to-primitive [type-substitute type-env [type-of src]]]
              intr-name [prim-types-to-store-inst-name src-prim src-prim]
              p-p-offset [int-exp-add pexp target-offset]
              exp-const-pair-opt [try-get-i32-add-const p-p-offset]
@@ -1829,12 +1956,53 @@
     [assign-pointer offset src]
     [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]]
 
-[func get-pointer-args [t]
-  [match t
-    [type/pointer m p]
-    [pair [expand-custom m] [expand-custom p]]
+[func calc-field-offset [t field-name-word]
+  [match [expand-custom t]
+    [type/record field-types]
+    [loop [i 0
+          res int-const-0
+          n [size field-types]]
+      [if [lt-s i n]
+        [let [fp [at field-types i]]
+          [if [eq-word [name/word [pair/fst fp]] field-name-word]
+            res
+            [continue
+              res [int-exp-add res [type-to-size-of-exp-current-tenv [pair/snd fp]]]
+              i [inc i]]]]
+        [logq-abort field not found [identity field-name-word]]]]
 
-    [logq-abort get-pointer-args not a pointer [identity t]]]]
+    [type/union utypes]
+    [if [is-empty utypes]
+      [logq-abort union type empty does not allow field access]
+      [let [first-offset [calc-field-offset [first utypes] field-name-word]]
+        [loop [i 1 n [size utypes]]
+          [if [lt-s i n]
+            [let [fp [calc-field-offset [at utypes i] field-name-word]]
+              [when-not [exp-equals first-offset fp]
+                [logq-abort union type field offsets do not match]]
+              [continue i [inc i]]]
+            first-offset]]]]
+
+    [logq-abort not implemented exp-to-inst field [identity t]]]]
+
+[func calc-index-offset [t index-exp]
+  [match t
+    [type/array elem-type -]
+    [int-exp-mul index-exp [type-to-size-of-exp-current-tenv elem-type]]
+
+    [type/tuple elem-types]
+    [if-let [ie [try-get-int-const index-exp]]
+      [let [n [size elem-types]]
+        [assert [lt-s ie n] index out of bounds]
+        [loop [i 0 acc int-const-0]
+          [if [eq ie i]
+            acc
+            [continue
+              acc [int-exp-add acc [type-to-size-of-exp-current-tenv [at elem-types i]]]
+              i [inc i]]]]]
+      [logq-abort indexing of tuples only allowed with constants [identity index-exp]]]
+
+    [logq-abort not implemented exp-to-inst index [identity t]]]]
 
 [func deref-index-field-to-mem-offset [exp]
   [match exp
@@ -1843,61 +2011,14 @@
 
     [exp/index index-target-exp index-exp]
     [let
-      [elem-offset
-       [match [type-of index-target-exp]
-         [type/array elem-type -]
-         [int-exp-mul index-exp [type-to-size-of-exp elem-type]]
-
-         [type/tuple elem-types]
-         [if-let [ie [try-get-int-const index-exp]]
-            [let [n [size elem-types]]
-              [assert [lt-s ie n] index out of bounds]
-              [loop [i 0 acc int-const-0]
-                [if [eq ie i]
-                  acc
-                  [continue
-                    acc [int-exp-add acc [type-to-size-of-exp [at elem-types i]]]
-                    i [inc i]]]]]
-            [logq-abort indexing of tuples only allowed with constants [identity index-exp]]]
-
-         [logq-abort not implemented exp-to-inst index [identity index-target-exp]]]
+      [elem-offset [calc-index-offset [type-of index-target-exp] index-exp]
        target-offset [deref-index-field-to-mem-offset index-target-exp]
        addr-exp [int-exp-add target-offset elem-offset]]
       addr-exp]
 
     [exp/field field-target-exp field-name]
     [let
-      [field-name-word [name/word field-name]
-       calc-field-offset
-       [func calc-field-offset [t]
-        [match [expand-custom t]
-          [type/record field-types]
-          [loop [i 0
-                res int-const-0
-                n [size field-types]]
-            [if [lt-s i n]
-              [let [fp [at field-types i]]
-                [if [eq-word [name/word [pair/fst fp]] field-name-word]
-                  res
-                  [continue
-                    res [int-exp-add res [type-to-size-of-exp [pair/snd fp]]]
-                    i [inc i]]]]
-              [logq-abort field not found [identity field-name-word]]]]
-
-          [type/union utypes]
-          [if [is-empty utypes]
-            [logq-abort union type empty does not allow field access]
-            [let [first-offset [calc-field-offset [first utypes]]]
-              [loop [i 1 n [size utypes]]
-                [if [lt-s i n]
-                  [let [fp [calc-field-offset [at utypes i]]]
-                    [when-not [exp-equals first-offset fp]
-                      [logq-abort union type field offsets do not match]]
-                    [continue i [inc i]]]
-                  first-offset]]]]
-
-          [logq-abort not implemented exp-to-inst field]]]
-       field-offset [calc-field-offset [type-of field-target-exp]]
+      [field-offset [calc-field-offset [type-of field-target-exp] [name/word field-name]]
        target-offset [deref-index-field-to-mem-offset field-target-exp]
        addr-exp [int-exp-add target-offset field-offset]]
       addr-exp]
@@ -1983,11 +2104,14 @@
     [match [get-desc-from-name n]
       [desc-kind/top td]
       [match [top-desc/kind td]
-        [top-desc-kind/value - --]
-        [wat-inst/global.get [name/word n]]
+        [top-desc-kind/value vd]
+        [do
+          [match [value-desc/type vd]
+            [type/func -]
+            [logq-abort not implemented exp-to-inst var [identity n]]
 
-        [top-desc-kind/function -]
-        [logq-abort function as value not implemented]
+            [do]]
+          [wat-inst/global.get [name/word n]]]
 
         [logq-abort not implemented exp-to-inst var [identity n] [identity td]]]
 
@@ -2013,35 +2137,35 @@
     [let [fnw [name/word fn]
           fd
           [match [top-desc/kind [get-top-desc-from-name fn]]
-            [top-desc-kind/function fd] fd
+            [top-desc-kind/value vd]
+            [match [value-desc/type vd]
+              [type/func tf] tf
+
+              [logq-abort not a function]]
             [logq-abort not a function]]
-          fkind [function-desc/kind fd]]
+          fkind [type-func/kind fd]]
       [if [eq-word [word def-comp-fn] fkind]
         [let [param-env [transient-kv-map]
-              params [function-desc/parameters fd]
-              comp [mk-exp-to-inst-compiler [transient-kv-map] param-env]
+              params [type-func/parameters fd]
+              parameter-names [type-func/parameter-names fd]
+              comp [mk-exp-to-inst-compiler [transient-kv-map] param-env] ; todo maybe we need to pass the type env
               es2i [exp2inst-compiler/exps-to-inst comp]
               bodies [exp-function/bodies [get top-funcs fnw]]]
           [assert [eq [size params] [size args]] call expected same number of arguments]
           [for i 0 [size args]
-            [set-kv-map param-env [name/word [pair/fst [at params i]]] [at args i]]]
+            [set-kv-map param-env [name/word [at parameter-names i]] [at args i]]]
           [es2i bodies]]
         [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]]]
 
-    [exp/call-functor fn targs]
+    [exp/call-functor fname targs]
     [let
-      [fd
-        [match [top-desc/kind [get-top-desc-from-name fn]]
-          [top-desc-kind/functor fd] fd
-          [logq-abort not a functor]]]
-      [assert [eq [size targs] [size [functor-desc/parameters fd]]] call-functor expected same number of arguments]
-      [let [functor-type-env [transient-kv-map]
-            empty-const-env [transient-kv-map]
-            comp [mk-exp-to-inst-compiler functor-type-env empty-const-env]
-            e2i [exp2inst-compiler/exp-to-inst comp]]
-        [for i 0 [size targs]
-          [set-kv-map functor-type-env [name/word [pair/fst [at [functor-desc/parameters fd] i]]] [at targs i]]]
-        [e2i [functor-desc/body fd]]]]
+      [fd [get-functor-desc fname]
+       targs-subst [list-map ta targs [type-substitute type-env ta]]
+       functor-type-env [functor-desc-to-type-env fd targs-subst]
+       empty-const-env [transient-kv-map]
+       comp [mk-exp-to-inst-compiler functor-type-env empty-const-env]
+       e2i [exp2inst-compiler/exp-to-inst comp]]
+      [e2i [functor-desc/body fd]]]
 
     [exp/if c t e]
     [wat-inst/if
@@ -2052,10 +2176,10 @@
     [exps-to-inst es]
 
     [exp/size-of-type t]
-    [exp-to-inst [type-to-size-of-exp [type-substitute type-env t]]]
+    [exp-to-inst [type-to-size-of-exp-current-tenv t]]
 
     [exp/size-of-exp e]
-    [exp-to-inst [type-to-size-of-exp [type-of [get-const e]]]]
+    [exp-to-inst [type-to-size-of-exp-current-tenv [type-of [get-const e]]]]
 
     [exp/let-loop ll-kind bindings bodies]
     [let
@@ -2097,6 +2221,16 @@
 
     [exp/field -field-target-exp -field-name]
     [deref-index-field-to-load exp]
+
+    [exp/pfield p-target-exp field-name]
+    [let
+      [pp [get-pointer-args [type-of p-target-exp]]]
+      [exp-to-inst [int-exp-add p-target-exp [calc-field-offset [pair/snd pp] [name/word field-name]]]]]
+
+    [exp/pindex p-target-exp index-exp]
+    [let
+      [pp [get-pointer-args [type-of p-target-exp]]]
+      [exp-to-inst [int-exp-add p-target-exp [calc-index-offset [pair/snd pp] index-exp]]]]
 
     [exp/assign dst src]
     [match dst
@@ -2146,6 +2280,9 @@
     [exp/cast t e]
     [exp-to-inst e]
 
+    [exp/annotation t e]
+    [exp-to-inst e]
+
     [logq-abort exp-to-inst not implemented [identity exp]]]]
 
 [func exps-to-inst [forms]
@@ -2182,7 +2319,24 @@
      funcs [growable-list]
      exports [growable-list]
      wdata [growable-list]
-     type-inst-env [transient-kv-map]]
+     add-func
+     [func af [name type-inst-env f]
+       [let
+        [const-env [transient-kv-map]
+         comp [mk-exp-to-inst-compiler type-inst-env const-env]
+         es2i [exp2inst-compiler/exps-to-inst comp]
+         inst [es2i [exp-function/bodies f]]
+         locals [clone-growable-to-frozen-list [exp2inst-compiler/glocals comp]]]
+        [push
+          funcs
+          [wat-func
+            [name/word [option-default [exp-function/name f] name]]
+            [list-map p [exp-function/parameters f]
+              [pair [name/word [pair/fst p]]
+                [type-to-wat-type [type-substitute type-inst-env [pair/snd p]]]]]
+            locals
+            [type-to-wat-types [type-substitute type-inst-env [exp-function/result f]]]
+            inst]]]]]
     [for-each top tops
       [match top
         [top-decl/memory n mem-exp]
@@ -2219,45 +2373,47 @@
             [let [nw [name/word n]
                   ekind
                   [match [top-desc/kind [get-top-desc-from-name n]]
-                    [top-desc-kind/value - --] [export-kind/global]
-                    [top-desc-kind/function -] [export-kind/func]
+                    [top-desc-kind/value -]
+                    [match [name-to-type n]
+                      [type/func -] [export-kind/func]
+                      [export-kind/global]]
                     [top-desc-kind/memory -] [export-kind/memory]]]
               [pair nw [pair ekind nw]]]]]
 
-        [top-decl/value k def-name exp]
-        [let
-          [const-env [transient-kv-map]
-           e2ic [mk-exp-to-inst-compiler type-inst-env const-env]
-           e2i [exp2inst-compiler/exp-to-inst e2ic]
-           inst [e2i exp]]
-          [assert [is-empty [clone-growable-to-frozen-list [exp2inst-compiler/glocals e2ic]]] compile expected no locals]
-          [push
-            globals
-            [wat-global
-              [name/word def-name]
-              [match k
-                [value-kind/mutable] [mut/var]
-                [value-kind/constant] [mut/const]]
-              [type-to-wat-type [type-of exp]]
-              inst]]]
+        [top-decl/value k def-name oexp]
+        [let [expand-functor-calls
+          [func expand-functor-calls [tenv exp]
+            [match exp
+              [exp/func f]
+              [add-func def-name tenv f]
+
+              [exp/call-functor fn targs]
+              [let
+                [fd [get-functor-desc fn]
+                 functor-type-env [functor-desc-to-type-env fd targs]]
+                [logq expand-functor-calls [name/word def-name] [identity functor-type-env]]
+                [expand-functor-calls functor-type-env [functor-desc/body fd]]]
+
+              [let
+                [const-env [transient-kv-map]
+                 type-inst-env [transient-kv-map]
+                 e2ic [mk-exp-to-inst-compiler type-inst-env const-env]
+                 e2i [exp2inst-compiler/exp-to-inst e2ic]
+                 inst [e2i exp]]
+                [assert [is-empty [clone-growable-to-frozen-list [exp2inst-compiler/glocals e2ic]]] compile expected no locals]
+                [push
+                  globals
+                  [wat-global
+                    [name/word def-name]
+                    [match k
+                      [value-kind/mutable] [mut/var]
+                      [value-kind/constant] [mut/const]]
+                    [type-to-wat-type [type-of exp]]
+                    inst]]]]]]
+              [expand-functor-calls [transient-kv-map] oexp]]
 
         [top-decl/function f]
-        [let
-          [const-env [transient-kv-map]
-           e2i [mk-exp-to-inst-compiler type-inst-env const-env]
-           es2i [exp2inst-compiler/exps-to-inst e2i]
-           inst [es2i [exp-function/bodies f]]
-           locals [clone-growable-to-frozen-list [exp2inst-compiler/glocals e2i]]]
-           [push
-            funcs
-            [wat-func
-              [name/word [option-get [exp-function/name f]]]
-              [list-map p [exp-function/parameters f]
-                [pair [name/word [pair/fst p]] [type-to-wat-type [pair/snd p]]]]
-              locals
-              [type-to-wat-types [exp-function/result f]]
-              inst]]]
-
+        [add-func [name [word -nooo-]] [transient-kv-map] f]
         ]]
     [for-each data [clone-growable-to-frozen-list datas]
       [push wdata
