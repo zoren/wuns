@@ -266,7 +266,7 @@
     [intrinsic-type [list [immediate-type/memory]] [list type-i32 type-i32 type-i32] type-tuple-empty]
 
     [[word memory.fill]]
-    [intrinsic-type [list [immediate-type/memory]] [list] type-tuple-empty]
+    [intrinsic-type [list [immediate-type/memory]] [list type-i32 type-i32 type-i32] type-tuple-empty]
 
     [logq-abort not implemented intrinsic [identity n]]]]
 
