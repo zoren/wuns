@@ -66,6 +66,13 @@
     [logq but got- [identity actual]]
     [logq-abort test assert failed]]]
 
+[defn test-assert-not-eq [js-expected actual]
+  [when [is-identical [to-js-value js-expected] [to-js-value actual]]
+    [logq test-assert-not-eq failed]
+    [logq expected [identity js-expected]]
+    [logq but got- [identity actual]]
+    [logq-abort test assert failed]]]
+
 [defn test-arithmetic []
   [let [forms
         [qlist
@@ -346,11 +353,14 @@
        [module [forms-to-module forms]
         mem [memory 1 2 0]
         mem-buf [memory-buffer mem]
+        byte-array-from-mem
+        [func bafm [data sz]
+          [byte-array-from-array-buffer [memory-buffer mem] data sz]]
         wasm-log
         [func wasm-log [data sz]
           [logq wasm-log
             [byte-array-to-string
-              [byte-array-from-array-buffer mem-buf data sz]]]]
+              [byte-array-from-mem data sz]]]]
         wasm-log-i32
         [func wasm-log-i32 [n]
           [logq wasm-log-i32 [identity n]]]
@@ -372,6 +382,8 @@
         list-get-form [get-export inst [word list-get-form]]
         list-data-array [get-export inst [word list-data-array]]
         validate-alloc [get-export inst [word validate-alloc]]
+        realloc [get-export inst [word realloc]]
+        get-number-of-frames [get-export inst [word get-number-of-frames]]
         alloc-word
         [func aw [w]
           [let
@@ -379,7 +391,7 @@
               sz [byte-array-size src]
               vec [js-app list-alloc-byte sz]
               data [js-value-to-i32 [js-app list-data-array vec]]
-              dst [byte-array-from-array-buffer mem-buf data sz]]
+              dst [byte-array-from-mem data sz]]
             [for i 0 sz
               [byte-array-set dst i [byte-array-get src i]]]
             vec]]
@@ -394,7 +406,7 @@
               [fw [js-app form-word-get pform]
                 data [js-value-to-i32 [js-app list-data-array fw]]
                 sz [js-value-to-i32 [js-app list-size fw]]
-                ar [byte-array-from-array-buffer mem-buf data sz]
+                ar [byte-array-from-mem data sz]
                 str [byte-array-to-string ar]]
               [form/word [string-to-word str]]]
 
@@ -442,4 +454,37 @@
             [test-assert-form-eq
               [pair/fst test]
               [pform-to-form [js-app parse [alloc-word [pair/snd test]]]]]]
+          [js-app validate-alloc]
+
+          [let
+            [n-frames [js-app get-number-of-frames]
+             p [js-app realloc 0 0 [i32 7]]
+             q [js-app realloc p 7 [i32 14]]]
+            ; if there are no allocations in between we should get the same pointer
+            [test-assert-eq q p]
+            [test-assert-eq [inc n-frames] [js-app get-number-of-frames]]
+            [js-app realloc q [i32 14] 7]
+            [js-app realloc q 7 0]
+            [test-assert-eq p [js-app realloc 0 0 [i32 6]]]
+            [js-app realloc q 6 0]]
+
+          [js-app validate-alloc]
+
+          [let
+            [n-frames [js-app get-number-of-frames]
+             p [js-app realloc 0 0 7]
+             q [js-app realloc 0 0 5]
+             r [js-app realloc p 7 8]]
+            [test-assert-not-eq r p]
+            [test-assert-eq [add 3 n-frames] [js-app get-number-of-frames]]
+            ; pop the top
+            [js-app realloc r 8 0]
+            [test-assert-eq [add 2 n-frames] [js-app get-number-of-frames]]
+            ; expect we can grow the new top
+            [test-assert-eq q [js-app realloc q 5 6]]
+            [js-app realloc q 6 0]
+            [test-assert-eq [add 1 n-frames] [js-app get-number-of-frames]]
+            [js-app realloc p 7 0]
+            [test-assert-eq n-frames [js-app get-number-of-frames]]]
+          [js-app realloc 0 0 [i32 65536]]
           [js-app validate-alloc]]]]]]

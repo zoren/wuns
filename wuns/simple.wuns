@@ -142,6 +142,7 @@
 
     [pindex exp exp]
     [pfield exp name]
+    [offset-of type name]
 
     [array type [list exp]]
     [tuple [list exp]]
@@ -199,6 +200,7 @@
     [exp/field t -] [may-side-effect t]
     [exp/pindex t i] [or [may-side-effect t] [may-side-effect i]]
     [exp/pfield t -] [may-side-effect t]
+    [exp/offset-of - --] false
     [exp/index t i] [or [may-side-effect t] [may-side-effect i]]
     [exp/intrinsic n - args]
     [or
@@ -692,7 +694,9 @@
                 [if [is-identical pt1 pt2]
                   [type/primitive pt1]
                   [logq-abort common-super-type exp types do not match [identity e1] [identity e2]]]]]]
-          [logq-abort common-super-type not implemented e2 [identity t1] [identity t2]]]]]]]
+          [logq-abort common-super-type not implemented e2 [identity t1] [identity t2]]]
+        [logq-abort common-super-type not implemented e3 [identity t1] [identity t2]]
+          ]]]]
 
 [func form-to-type [lctx outer-form]
   [form-to-type-type-env empty-type-env lctx outer-form]]
@@ -978,6 +982,15 @@
     [let [pexp [form-to-exp-type-kind-env type-kind-env lctx [second l]]
           field-name [form-to-name [third l]]]
       [exp/pfield pexp field-name]]
+
+    [[word offset-of]]
+    [let [t [form-to-type-type-env type-kind-env lctx [second l]]
+          field-name [form-to-name [third l]]]
+      [match [expand-custom t]
+        [type/record fields]
+        [exp/offset-of t field-name]
+
+        [logq-abort offset-of not a record [identity t]]]]
 
     [[word array]]
     [let [telem [form-to-type-type-env type-kind-env lctx [second l]]]
@@ -1476,6 +1489,9 @@
     [let
       [pp [get-pointer-args [type-of p-rec-exp]]]
       [type/pointer [pair/fst pp] [get-field-type [pair/snd pp] [name/word field-name]]]]
+
+    [exp/offset-of -t -field-name]
+    type-i32
 
     [exp/array elem-type elems]
     [type/array
@@ -2213,6 +2229,9 @@
     [let
       [pp [get-pointer-args [type-of p-target-exp]]]
       [exp-to-inst [int-exp-add p-target-exp [calc-field-offset [pair/snd pp] [name/word field-name]]]]]
+
+    [exp/offset-of t-rec field-name]
+    [exp-to-inst [calc-field-offset t-rec [name/word field-name]]]
 
     [exp/pindex p-target-exp index-exp]
     [let
