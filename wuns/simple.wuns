@@ -264,11 +264,6 @@
 
     [logq-abort not implemented intrinsic [identity n]]]]
 
-[defn try-get-primitive [t]
-  [match t
-    [type/primitive p] [option/some p]
-    [option/none]]]
-
 [defn type-substitute [type-env outer-t]
   [[func go [t]
     [match t
@@ -1796,16 +1791,14 @@
 
     [list [type-to-wat-type type]]]]
 
-[func try-get-primitive-exp [e]
-  [match e
-    [exp/integer pt -] [option/some pt]
-    [exp/float pt -] [option/some pt]
-    [exp/var n] [try-get-primitive [name-to-type n]]
-    [option/none]]]
-
 [func try-get-primitive [t]
   [match [expand-custom t]
-    [type/exp e] [try-get-primitive-exp e]
+    [type/exp e]
+    [match e
+      [exp/integer pt -] [option/some pt]
+      [exp/float pt -] [option/some pt]
+      [exp/var n] [try-get-primitive [name-to-type n]]
+      [option/none]]
     [type/primitive p] [option/some p]
     [type/pointer mt -] [option/some [get-memory-pointer-type mt]]
     [option/none]]]
