@@ -351,7 +351,7 @@
     [func t [forms]
       [let
        [module [forms-to-module forms]
-        mem [memory 1 2 0]
+        mem [memory 1 9 0]
         mem-buf [memory-buffer mem]
         byte-array-from-mem
         [func bafm [data sz]
@@ -372,6 +372,7 @@
         ---- [set-kv-map import-map [word env] [kv-map-to-object env]]
         inst [wasm-instantiate module [kv-map-to-object import-map]]
         parse [get-export inst [word parse]]
+        parse-n [get-export inst [word parse-n]]
         list-size [get-export inst [word list-size]]
         list-alloc-byte [get-export inst [word list-alloc-byte]]
         form-tag [get-export inst [word form-tag]]
@@ -384,6 +385,7 @@
         validate-alloc [get-export inst [word validate-alloc]]
         realloc [get-export inst [word realloc]]
         get-number-of-frames [get-export inst [word get-number-of-frames]]
+        num-frames-i32 [func nfi [] [js-value-to-i32 [js-app get-number-of-frames]]]
         alloc-word
         [func aw [w]
           [let
@@ -413,8 +415,8 @@
             [js-value-to-i32 [js-app form-list-is pform]]
             [let
               [fl [js-app form-list-get pform]
-                sz [js-value-to-i32 [js-app list-size fl]]
-                gl [growable-list]]
+               sz [js-value-to-i32 [js-app list-size fl]]
+               gl [growable-list]]
               [for i 0 sz
                 [push gl
                   [pf2f [js-app list-get-form fl i]]]]
@@ -453,16 +455,36 @@
           [for-each test tests
             [test-assert-form-eq
               [pair/fst test]
-              [pform-to-form [js-app parse [alloc-word [pair/snd test]]]]]]
+              [pform-to-form [js-app parse [alloc-word [pair/snd test]]]]]]]
+        [let
+          [tests
+            [list
+              [pair [qlist] [word ' ']]
+              [pair [qlist abc 123] [word 'abc 123']]
+              [pair [qlist abc [i32 123]] [word 'abc [i32 123]']]
+              ]]
+          [for-each test tests
+            [let
+              [expected [pair/fst test]
+               fl [js-app parse-n [alloc-word [pair/snd test]]]
+               sz [js-value-to-i32 [js-app list-size fl]]
+               gl [growable-list]]
+              [for i 0 sz
+                [push gl [pform-to-form [js-app list-get-form fl i]]]]
+              [test-assert-eq [size expected] sz]
+              [let [actual [clone-growable-to-frozen-list gl]]
+                [for i 0 sz
+                [test-assert-form-eq [at expected i] [at actual i]]]]]]]
+
           [js-app validate-alloc]
 
           [let
-            [n-frames [js-app get-number-of-frames]
+            [n-frames [num-frames-i32]
              p [js-app realloc 0 0 [i32 7]]
              q [js-app realloc p 7 [i32 14]]]
             ; if there are no allocations in between we should get the same pointer
             [test-assert-eq q p]
-            [test-assert-eq [inc n-frames] [js-app get-number-of-frames]]
+            [test-assert-eq [inc n-frames] [num-frames-i32]]
             [js-app realloc q [i32 14] 7]
             [js-app realloc q 7 0]
             [test-assert-eq p [js-app realloc 0 0 [i32 6]]]
@@ -471,7 +493,7 @@
           [js-app validate-alloc]
 
           [let
-            [n-frames [js-app get-number-of-frames]
+            [n-frames [num-frames-i32]
              p [js-app realloc 0 0 7]
              q [js-app realloc 0 0 5]
              r [js-app realloc p 7 8]]
@@ -487,4 +509,4 @@
             [js-app realloc p 7 0]
             [test-assert-eq n-frames [js-app get-number-of-frames]]]
           [js-app realloc 0 0 [i32 65536]]
-          [js-app validate-alloc]]]]]]
+          [js-app validate-alloc]]]]]

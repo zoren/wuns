@@ -1812,6 +1812,11 @@
     [type/empty]
     [list]
 
+    [type/union types]
+    [if [is-empty types]
+      [list]
+      [logq-abort not implemented type-to-wat-types [identity type]]]
+
     [list [type-to-wat-type type]]]]
 
 [func try-get-primitive [t]

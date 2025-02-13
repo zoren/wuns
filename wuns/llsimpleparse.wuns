@@ -518,3 +518,54 @@
           [log-abort [text 'unexpected character']]]]]]]
 
 [export make-stack parse list-size ]
+
+[defn parse-n [bytes [text]] [plist [pmem [form]]]
+  [let
+    [stack [make-stack stack-size init-capacity]
+     n-of-bytes [list-size bytes]
+     result [growable-list-alloc-init-form [i32 20]]]
+    [loop
+      [i 0
+       stack-index [i32 -1]]
+      [if [not [lt-s i n-of-bytes]]
+        [if [not [is-negative stack-index]]
+          [growable-list-push-form result [unwind-stack stack stack-index]]]
+        [let [c [list-get-byte bytes i]]
+          [ifs
+            [is-word-char c]
+            [let [word-end [scan-word-end bytes [inc i]]
+                  fw [form-word-alloc [list-slice-byte bytes i word-end]]]
+              [if [not [lt-s i word-end]] [log-abort [text 'scan-word-end returned i >= word-end']]]
+              [if [is-negative stack-index]
+                [growable-list-push-form result fw]
+                [growable-list-push-form [index [deref stack] stack-index] fw]]
+              [continue i word-end]]
+
+            [is-whitespace c]
+            [continue i [inc i]]
+
+            [eq c [i32 91]]
+            [do
+              [if [lt-s stack-size stack-index] [log-abort [text 'stack max depth reached']]]
+              [continue
+                i [inc i]
+                stack-index [inc stack-index]]]
+
+            [eq c [i32 93]]
+            [do
+              [if [is-negative stack-index] [log-abort [text 'unmatched end bracket']]]
+              [let [glist [index [deref stack] stack-index]
+                    form-list [growable-list-to-list-form glist]]
+                [growable-list-reset glist]
+                [let [fl [form-list-alloc form-list]]
+                  [if [eq stack-index 0]
+                    [growable-list-push-form result fl]
+                    [growable-list-push-form [index [deref stack] [dec stack-index]] fl]]
+                  [continue
+                    i [inc i]
+                    stack-index [dec stack-index]]]]]
+
+            [log-abort [text 'unexpected character']]]]]]
+        [growable-list-to-list-form result]]]
+
+[export parse-n]
