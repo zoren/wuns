@@ -57,17 +57,20 @@
 [defn mem-align [p [i32]] [i32]
   [align [i32 16] p]]
 
+[def-comp-fn log-abort [ar [array [u8]]] [union]
+  [log [data mem ar] [size-of-exp ar]]
+  [intrinsic unreachable]]
+
 [defn alloc-n [n-bytes [i32]] [i32]
-  [if [eq n-bytes 0] [intrinsic unreachable]]
+  [if [eq n-bytes 0] [log-abort [text 'alloc-n 0 bytes']]]
   [let
     [top-val [get-top]]
-    [if [eq top-val 0] [intrinsic unreachable]]
+    [if [eq top-val 0] [log-abort [text 'alloc-n top-val was 0']]]
     [let
       [align-bytes [mem-align n-bytes]
        mem-size-bytes [mul [intrinsic memory.size mem] [i32 65536]]
        new-top [add top-val align-bytes]]
-      [if [lt-s mem-size-bytes new-top]
-        [intrinsic unreachable]]
+      [if [lt-s mem-size-bytes new-top] [log-abort [text 'alloc-n out of memory, cannot grow yet']]]
       [set-top new-top]]
     top-val]]
 
@@ -109,9 +112,9 @@
 [export list-alloc-byte]
 
 [functor list-get [elem-type datatype]
-  [func [pvec [pmem [list-data elem-type -sz]]  i [i32]] [pmem [array elem-type]]
-    [if [lt-s i 0] [intrinsic unreachable]]
-    [if [lt-s i [list-size pvec]] [do] [intrinsic unreachable]]
+  [func [pvec [pmem [list-data elem-type -sz]] i [i32]] [pmem [array elem-type]]
+    [if [lt-s i 0] [log-abort [text 'list-get index negative']]]
+    [if [lt-s [list-size pvec] i] [log-abort [text 'list-get index out of bounds']]]
     [index [field [deref pvec] array] i]]]
 
 [defn list-data-array [pvec [plist -a]] [pmem [array -a]]
@@ -143,10 +146,9 @@
        cur-capacity [field [deref pglist] capacity]]
       [if [eq cur-size cur-capacity]
         [do
-          [log-ar [text 'not enough capacity']]
           [log-i32 cur-capacity]
           [log-i32 cur-size]
-          [intrinsic unreachable]]]
+          [log-abort [text 'growable-list-push not enough capacity']]]]
       [assign [index [deref [field [deref pglist] parray]] cur-size] elem]
       [assign [field [deref pglist] size] [inc cur-size]]]]]
 
@@ -213,7 +215,7 @@
 [export form-word-is]
 
 [defn form-word-get [pf [pmem [form]]] [text]
-  [if [not [form-word-is pf]] [intrinsic unreachable]]
+  [if [not [form-word-is pf]] [log-abort [text 'form-word-get not a form-word']]]
   [let [pfw [cast [pmem [form-word]] pf]]
     [field [deref pfw] pword]]]
 
@@ -225,7 +227,7 @@
 [export form-list-is]
 
 [defn form-list-get [pf [pmem [form]]] [plist [pmem [form]]]
-  [if [not [form-list-is pf]] [intrinsic unreachable]]
+  [if [not [form-list-is pf]] [log-abort [text 'form-list-get not a form-list']]]
   [let [pfl [cast [pmem [form-list]] pf]]
     [field [deref pfl] forms]]]
 
@@ -235,10 +237,7 @@
 
 [export list-get-form]
 
-[defn get-byte [pvec [plist [u8]] i [i32]] [i32]
-  [if [lt-s i 0] [intrinsic unreachable]]
-  [if [lt-s i [list-size pvec]] [do] [intrinsic unreachable]]
-  [index [field [deref pvec] array] i]]
+[def list-get-byte [list-get [u8]]]
 
 [def growable-list-alloc-init-form
   [growable-list-alloc-init [pmem [form]]]]
@@ -252,14 +251,13 @@
 [defn scan-word-end [bytes [plist [u8]] start [i32]] [i32]
   [loop [i start n-of-bytes [list-size bytes]]
     [if [lt-s i n-of-bytes]
-      [if [is-word-char [get-byte bytes i]]
+      [if [is-word-char [list-get-byte bytes i]]
         [continue i [inc i]]
         i]
       i]]]
 
-[defn make-stack [stack-size [i32] init-capacity [i32]]
-  [pmem [array [pmem [growable-list [pmem [form]]]]]]
-  [if [eq init-capacity 0] [intrinsic unreachable]]
+[defn make-stack [stack-size [i32] init-capacity [i32]] [pmem [array [pmem [growable-list [pmem [form]]]]]]
+  [if [le-s init-capacity 0] [log-abort [text 'make-stack init-capacity <= 0']]]
   [let [parray [alloc [array [pmem [growable-list [pmem [form]]]] [exp stack-size]]]]
     [loop [i 0]
       [if [lt-s i stack-size]
@@ -287,10 +285,6 @@
           [continue i [inc i]]]]]
     pdst]]
 
-[def-comp-fn log-abort [ar [array [u8]]] [union]
-  [log [data mem ar] [size-of-exp ar]]
-  [intrinsic unreachable]]
-
 [defn unwind-stack [stack [pmem [array [pmem [growable-list [pmem [form]]]]]] stack-index [i32]] [pmem [form]]
   [if [lt-s stack-index 0] [log-abort [text 'unwind-stack stack index negative']]]
   [loop [i stack-index]
@@ -314,16 +308,16 @@
       [if [is-negative stack-index]
         [cast [pmem [form]] 0]
         [unwind-stack stack stack-index]]
-      [let [c [get-byte bytes i]]
+      [let [c [list-get-byte bytes i]]
         [ifs
           [is-word-char c]
           [let [word-end [scan-word-end bytes [inc i]]
                 fw [form-word-alloc [list-slice-byte bytes i word-end]]]
+            [if [not [lt-s i word-end]] [log-abort [text 'scan-word-end returned i >= word-end']]]
             [if [is-negative stack-index]
               fw
               [do
                 [growable-list-push-form [index [deref stack] stack-index] fw]
-                [if [not [lt-s i word-end]] [intrinsic unreachable]]
                 [continue i word-end]]]]
 
           [is-whitespace c]
@@ -331,14 +325,14 @@
 
           [eq c [i32 91]]
           [do
-            [if [lt-s stack-size stack-index] [intrinsic unreachable]]
+            [if [lt-s stack-size stack-index] [log-abort [text 'stack max depth reached']]]
             [continue
               i [inc i]
               stack-index [inc stack-index]]]
 
           [eq c [i32 93]]
           [do
-            [if [is-negative stack-index] [intrinsic unreachable]]
+            [if [is-negative stack-index] [log-abort [text 'unmatched end bracket']]]
             [let [glist [index [deref stack] stack-index]
                   form-list [growable-list-to-list-form glist]]
               [growable-list-reset glist]
@@ -351,6 +345,6 @@
                       i [inc i]
                       stack-index [dec stack-index]]]]]]]
 
-          [intrinsic unreachable]]]]]]
+          [log-abort [text 'unexpected character']]]]]]]
 
 [export make-stack parse list-size ]
