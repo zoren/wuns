@@ -262,6 +262,12 @@
     [[word memory.grow]]
     [intrinsic-type [list [immediate-type/memory]] [list type-i32] type-i32]
 
+    [[word memory.copy]]
+    [intrinsic-type [list [immediate-type/memory]] [list type-i32 type-i32 type-i32] type-tuple-empty]
+
+    [[word memory.fill]]
+    [intrinsic-type [list [immediate-type/memory]] [list] type-tuple-empty]
+
     [logq-abort not implemented intrinsic [identity n]]]]
 
 [defn type-substitute [type-env outer-t]
@@ -872,24 +878,25 @@
           it [intrinsic-type-from-name [name/word intrinsic-name]]
           imm-params [intrinsic-type/immediate-parameters it]
           params [intrinsic-type/parameters it]
-          arity [add [size imm-params] [size params]]
+          arity-imm [size imm-params]
+          arity-exp [size params]
+          arity-total [add arity-imm arity-exp]
           gimm-args [growable-list]
           gargs [growable-list]]
-      [assert [eq arity [size arg-forms]] intrinsic
-        [identity intrinsic-name] expected [identity arity] arguments but got [size arg-forms]]
-      [for i 0 [size imm-params]
+      [assert [eq arity-total [size arg-forms]] intrinsic
+        [identity intrinsic-name] expected [identity arity-total] arguments but got [size arg-forms]]
+      [for i 0 arity-imm
         [let [p [at imm-params i]
-              arg-form [at arg-forms i]
-              ]
+              arg-form [at arg-forms i]]
           [todo assert arg is constant]
           [match p
             [immediate-type/memory]
             [let [mem-name [form-to-name arg-form]]
               [todo check is mem]
               [push gimm-args [imm-arg/memory mem-name]]]]]]
-      [for i [size imm-params] arity
-        [let [p [at params [add [size imm-params] i]]
-              arg-form [at arg-forms i]
+      [for i 0 arity-exp
+        [let [p [at params i]
+              arg-form [at arg-forms [add arity-imm i]]
               arg [form-to-exp-type-kind-env type-kind-env lctx arg-form]
               ta [type-of arg]]
           [assert [type-assignable p ta] intrinsic [identity intrinsic-name] expected [identity p] but got [identity ta]]
@@ -1855,7 +1862,6 @@
     [glocals [growable-list]]
   [letfn [
 [func type-to-size-of-exp-current-tenv [t]
-  [logq type-to-size-of-exp-current-tenv [identity t] [identity type-env]]
   [type-to-size-of-exp [type-substitute type-env t]]]
 
 [func deref-index-field-to-load [exp]
@@ -2112,8 +2118,7 @@
       [wat-inst/instruction
         [wasm-name-to-wat-byte-array [name/word n]]
         wimm-args
-        [list-map arg [slice args n-of-imm [size args]]
-          [exp-to-inst arg]]]]
+        [list-map arg args [exp-to-inst arg]]]]
 
     [exp/call fn args]
     [let [fnw [name/word fn]
@@ -2373,7 +2378,6 @@
               [let
                 [fd [get-functor-desc fn]
                  functor-type-env [functor-desc-to-type-env fd targs]]
-                [logq expand-functor-calls [name/word def-name] [identity functor-type-env]]
                 [expand-functor-calls functor-type-env [functor-desc/body fd]]]
 
               [let

@@ -407,7 +407,7 @@
                   [pf2f [js-app list-get-form fl i]]]]
               [form/list [clone-growable-to-frozen-list gl]]]
 
-            [logq-abort unknown form type]]]]
+            [logq-abort unknown form type [identity pform]]]]]
         [let [empty-vec [js-app list-alloc-byte [i32 0]]]
           [test-assert-eq [i32 0] [js-app list-size empty-vec]]
           [test-assert-eq [i32 0] [js-app parse empty-vec]]]
@@ -431,6 +431,8 @@
               [pair [quote [list]] [word '[list]']]
               [pair [quote [i32 5]] [word '[i32 5]']]
               [pair [quote [if b [i32 1] [i32 0]]] [word '[if b [i32 1] [i32 0]]']]
+              [pair [quote [list 0 1 2 3]] [word '[list 0 1 2 3]']]
+              [pair [quote [list 0 1 2 3 4 5 6 7 8 9]] [word '[list 0 1 2 3 4 5 6 7 8 9]']]
               [pair [quote parsed] [word 'parsed not-parsed']]
               [pair [quote []] [word '[  ']]
               [pair [quote [[]]] [word '[ [ ']]

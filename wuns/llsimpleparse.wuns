@@ -145,10 +145,16 @@
       [cur-size [field [deref pglist] size]
        cur-capacity [field [deref pglist] capacity]]
       [if [eq cur-size cur-capacity]
-        [do
-          [log-i32 cur-capacity]
-          [log-i32 cur-size]
-          [log-abort [text 'growable-list-push not enough capacity']]]]
+        [let
+          [new-capacity [mul cur-capacity 2]
+           new-array [alloc [array elem-type [exp new-capacity]]]]
+          [intrinsic memory.copy
+            mem
+            new-array
+            [field [deref pglist] parray]
+            [mul cur-capacity [size-of-type elem-type]]]
+          [assign [field [deref pglist] capacity] new-capacity]
+          [assign [field [deref pglist] parray] new-array]]]
       [assign [index [deref [field [deref pglist] parray]] cur-size] elem]
       [assign [field [deref pglist] size] [inc cur-size]]]]]
 
