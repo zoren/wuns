@@ -1,4 +1,6 @@
 {
+  "displayName": "wuns",
+  "name": "wuns",
   "scopeName": "source.wuns",
   "patterns": [
     {
@@ -6,6 +8,9 @@
     },
     {
       "include": "#word"
+    },
+    {
+      "include": "#text"
     }
   ],
   "repository": {
@@ -16,12 +21,61 @@
         },
         {
           "include": "#bracket-form"
+        },
+        {
+          "include": "#text"
         }
       ]
     },
     "word": {
       "match": "[-./0-9a-z]+",
       "name": "variable.other.wuns"
+    },
+    "qtext-double": {
+      "begin": "\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.wuns"
+        }
+      },
+      "end": "(\")|((?:[^\\\\\\n])$)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.end.wuns"
+        },
+        "2": {
+          "name": "invalid.illegal.newline.wuns"
+        }
+      },
+      "name": "string.quoted.double.wuns"
+    },
+    "qtext-single": {
+      "begin": "'",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.wuns"
+        }
+      },
+      "end": "(\\')|((?:[^\\\\\\n])$)",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.end.wuns"
+        },
+        "2": {
+          "name": "invalid.illegal.newline.wuns"
+        }
+      },
+      "name": "string.quoted.single.wuns"
+    },
+    "text": {
+      "patterns": [
+        {
+          "include": "#qtext-single"
+        },
+        {
+          "include": "#qtext-double"
+        }
+      ]
     },
     "bracket-form": {
       "begin": "\\[",
