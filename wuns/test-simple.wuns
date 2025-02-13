@@ -385,6 +385,9 @@
         pform-to-form
         [func pf2f [pform]
           [ifs
+            [is-identical [js-value-to-i32 pform] [i32 0]]
+            [logq-abort null form]
+
             [js-value-to-i32 [js-app form-word-is pform]]
             [let
               [fw [js-app form-word-get pform]
@@ -411,6 +414,16 @@
         [let
           [tests
             [list
+;              [pair 0 [word '']]
+              [pair 0 [word ' ']]
+              [pair 0 [word '    ']]]]
+          [for-each test tests
+            [test-assert-eq
+              [pair/fst test]
+              [js-app parse [alloc-word [pair/snd test]]]]]]
+        [let
+          [tests
+            [list
               [pair [quote a] [word 'a']]
               [pair [quote abc] [word 'abc']]
               [pair [quote kebab-123] [word 'kebab-123']]
@@ -418,7 +431,10 @@
               [pair [quote [list]] [word '[list]']]
               [pair [quote [i32 5]] [word '[i32 5]']]
               [pair [quote [if b [i32 1] [i32 0]]] [word '[if b [i32 1] [i32 0]]']]
-              [pair [quote parsed] [word 'parsed not-parsed']]]]
+              [pair [quote parsed] [word 'parsed not-parsed']]
+              [pair [quote []] [word '[  ']]
+              [pair [quote [[]]] [word '[ [ ']]
+              ]]
           [for-each test tests
             [test-assert-form-eq
               [pair/fst test]

@@ -917,7 +917,7 @@
     [[word continue]]
     [if-let [loop-vars [try-get-enclosing-loop-context lctx]]
       [do
-        [assert [is-odd [size l]] expected a pairs of assignments]
+        [assert [is-odd [size l]] expected pairs of assignments]
         [exp/continue
         [list-map p [pairwise-pairs [rest l]]
           [let [n [form-to-name [pair/fst p]]

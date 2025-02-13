@@ -60,11 +60,12 @@
 [defn alloc-n [n-bytes [i32]] [i32]
   [if [eq n-bytes 0] [intrinsic unreachable]]
   [let
-    [align-bytes [mem-align n-bytes]
-     top-val [get-top]
-     mem-size-bytes [mul [intrinsic memory.size mem] [i32 65536]]]
+    [top-val [get-top]]
     [if [eq top-val 0] [intrinsic unreachable]]
-    [let [new-top [add top-val align-bytes]]
+    [let
+      [align-bytes [mem-align n-bytes]
+       mem-size-bytes [mul [intrinsic memory.size mem] [i32 65536]]
+       new-top [add top-val align-bytes]]
       [if [lt-s mem-size-bytes new-top]
         [intrinsic unreachable]]
       [set-top new-top]]
@@ -286,7 +287,24 @@
           [continue i [inc i]]]]]
     pdst]]
 
-[defn parse [bytes [plist [u8]]] [pmem [form]]
+[def-comp-fn log-abort [ar [array [u8]]] [union]
+  [log [data mem ar] [size-of-exp ar]]
+  [intrinsic unreachable]]
+
+[defn unwind-stack [stack [pmem [array [pmem [growable-list [pmem [form]]]]]] stack-index [i32]] [pmem [form]]
+  [if [lt-s stack-index 0] [log-abort [text 'unwind-stack stack index negative']]]
+  [loop [i stack-index]
+    [let [glist [index [deref stack] i]
+          form-list [growable-list-to-list-form glist]]
+      [growable-list-reset glist]
+      [let [fl [form-list-alloc form-list]]
+        [if [eq i 0]
+          fl
+          [do
+            [growable-list-push-form [index [deref stack] [dec i]] fl]
+            [continue i [dec i]]]]]]]]
+
+[defn parse [bytes [text]] [pmem [form]]
   [loop
     [stack [make-stack stack-size init-capacity]
      n-of-bytes [list-size bytes]
@@ -295,10 +313,7 @@
     [if [not [lt-s i n-of-bytes]]
       [if [is-negative stack-index]
         [cast [pmem [form]] 0]
-        [do
-          [if [not [eq 0 stack-index]] [intrinsic unreachable]]
-          [form-list-alloc
-            [growable-list-to-list-form [index [deref stack] stack-index]]]]]
+        [unwind-stack stack stack-index]]
       [let [c [get-byte bytes i]]
         [ifs
           [is-word-char c]
