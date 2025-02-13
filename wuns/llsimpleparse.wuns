@@ -274,8 +274,7 @@
 [defn list-slice-byte [psrc [plist [u8]] start [i32] end [i32]] [plist [u8]]
   [let
     [sz [sub end start]
-     pdst [alloc [list-data [u8] [exp sz]]]]
-    [assign [field [deref pdst] size] sz]
+     pdst [list-alloc-byte sz]]
     [loop [i 0]
       [if [lt-s i sz]
         [do
