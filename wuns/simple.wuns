@@ -915,7 +915,7 @@
           [let [pname [form-to-name [pair/fst p]]
                 pexp [form-to-exp-type-kind-env type-kind-env let-loop-ctx [pair/snd p]]
                 pt [type-of pexp]]
-            [set-kv-map vars [name/word pname] [if is-let pt [lift-literal-type pt]]]
+            [set-kv-map vars [name/word pname] pt]
             [pair pname pexp]]]
         [list-map b [slice l 2 [size l]] [form-to-exp-type-kind-env type-kind-env let-loop-ctx b]]]]
 
@@ -1550,17 +1550,6 @@
       [error name-form name already defined]]
     [set-kv-map top-names n [pair type desc]]]]
 
-[func lift-literal-type [t]
-  [match t
-    [type/exp e]
-    [match e
-      [exp/integer pt -] [type/primitive pt]
-      [exp/float pt -] [type/primitive pt]
-      [exp/var n] [lift-literal-type [name-to-type n]]
-      t]
-
-    t]]
-
 [func form-to-type-kind [form]
   [match form
     [form/word w]
@@ -1618,7 +1607,7 @@
               [when-not is-mutable
                 [set-kv-map value-constants [name/word fname] resolved-be]]
               [bind-top name-form
-                [if is-mutable [lift-literal-type type] type]
+                type
                 [top-desc [top-desc-kind/value [value-desc kind type]] [imported-or-here/here]]]
               [option/some bt]]]
 
@@ -1827,7 +1816,7 @@
     [logq-abort not a primitive type [identity t]]]]
 
 [func type-to-size-of-exp [t]
-  [match [lift-literal-type [expand-custom t]]
+  [match [expand-custom t]
     [type/primitive p]
     [exp/integer type-primitive-i32 [primitive-type/bytes p]]
 
