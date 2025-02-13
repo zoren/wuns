@@ -61,21 +61,105 @@
   [log [data mem ar] [size-of-exp ar]]
   [intrinsic unreachable]]
 
-[defn alloc-n [n-bytes [i32]] [i32]
-  [if [eq n-bytes 0] [log-abort [text 'alloc-n 0 bytes']]]
-  [let
-    [top-val [get-top]]
-    [if [eq top-val 0] [log-abort [text 'alloc-n top-val was 0']]]
-    [let
-      [align-bytes [mem-align n-bytes]
-       mem-size-bytes [mul [intrinsic memory.size mem] [i32 65536]]
-       new-top [add top-val align-bytes]]
-      [if [lt-s mem-size-bytes new-top] [log-abort [text 'alloc-n out of memory, cannot grow yet']]]
-      [set-top new-top]]
-    top-val]]
-
 [datatype pmem [a datatype]
   [pointer [exp mem] a]]
+
+[defn memory-zero [p [pmem -a] n-bytes [i32]] [tuple]
+  [intrinsic memory.fill mem p 0 n-bytes]]
+
+; inspired by the lua lua_Alloc function signature
+; https://ligurio.github.io/lua-c-manual-pages/lua_Alloc.3.html
+
+[datatype alloc-stack-frame [byte-aligned-size [exp [i32]]]
+  [record
+    [frame-size [i32]]
+    [byte-size [i32]]
+    [byte-aligned-size [i32]]
+    [realloc-size [i32]] ; a size less than equal to the original for when the block is reallocated to a smaller size in place
+    [abandoned [i32]] ; when the block could not be reallocated in place
+    [data [array [u8] byte-aligned-size]]
+    [canary [i32]]
+    [frame-size-end [i32]]
+    ]]
+
+[def canary-value [i32 0xdeadbeef]]
+
+[mutable num-of-frames [i32 0]]
+
+[defn alloc-stack-frame-add [byte-size [i32]] [pmem [array [u8]]]
+  [let
+    [byte-aligned-size [mem-align byte-size]
+     frame-size [size-of-type [alloc-stack-frame [exp byte-aligned-size]]]
+     cur-top [get-top]
+     pframe [cast [pmem [alloc-stack-frame [exp byte-aligned-size]]] cur-top]
+     mem-size-bytes [mul [intrinsic memory.size mem] [i32 65536]]
+     new-top [add cur-top frame-size]
+     frame-data [pfield pframe data]]
+    [if [lt-s mem-size-bytes new-top] [log-abort [text 'alloc-n out of memory, cannot grow yet']]]
+    [set-top new-top]
+    [assign [field [deref pframe] frame-size] frame-size]
+    [assign [field [deref pframe] byte-size] byte-size]
+    [assign [field [deref pframe] byte-aligned-size] byte-aligned-size]
+    [assign [field [deref pframe] realloc-size] byte-size]
+    [assign [field [deref pframe] abandoned] 0]
+    [memory-zero frame-data byte-aligned-size]
+    [assign [field [deref pframe] canary] canary-value]
+    [assign [field [deref pframe] frame-size-end] frame-size]
+
+    [assign num-of-frames [inc num-of-frames]]
+
+    frame-data]]
+
+[defn validate-alloc [] [tuple]
+  [loop
+    [cur-top [get-top]
+     i static-mem-top
+     n-frames 0]
+    [if [lt-s i cur-top]
+      [let
+        [pframe [cast [pmem [alloc-stack-frame -a]] i]
+         frame-size [field [deref pframe] frame-size]
+         byte-size [field [deref pframe] byte-size]
+         byte-aligned-size [field [deref pframe] byte-aligned-size]
+         pframe-sized [cast [pmem [alloc-stack-frame [exp byte-aligned-size]]] i]
+         canary [field [deref pframe-sized] canary]
+         frame-size-end [field [deref pframe-sized] frame-size-end]]
+;        [log-ar [text 'frame']]
+;        [log-i32 i]
+;        [log-i32 frame-size]
+;        [log-i32 byte-size]
+;        [log-i32 byte-aligned-size]
+        [if [lt-s frame-size [size-of-type [alloc-stack-frame [exp 0]]]]
+          [log-abort [text 'validate-alloc frame-size < size-of-type alloc-stack-frame 0']]]
+        [if [not [eq [mem-align byte-size] byte-aligned-size]] [log-abort [text 'validate-alloc byte-size != byte-aligned-size']]]
+        [if [not [eq canary canary-value]] [log-abort [text 'validate-alloc canary value mismatch']]]
+        [if [not [eq frame-size frame-size-end]] [log-abort [text 'validate-alloc frame-size != frame-size-end']]]
+        [continue i [add i frame-size] n-frames [inc n-frames]]]
+      [do
+        [if [not [eq n-frames num-of-frames]]
+          [log-abort [text 'validate-alloc n-frames != num-of-frames']]]
+        [log-ar [text 'validate-alloc']]
+        [log-i32 n-frames]
+        ]]]]
+
+[export validate-alloc]
+
+[defn realloc [old-p [i32] old-n-bytes [i32] new-n-bytes [i32]] [i32]
+  [let
+    [old-n-bytes-align [mem-align old-n-bytes]
+     old-end [add old-p old-n-bytes-align]
+     new-n-bytes-align [mem-align new-n-bytes]
+     cur-top [get-top]]
+    [ifs
+      [eq old-n-bytes-align new-n-bytes-align]
+      old-p
+
+      [eq old-n-bytes 0]
+      [alloc-stack-frame-add new-n-bytes]
+
+      [log-abort [text 'realloc old-n-bytes-align != new-n-bytes-align']]]]]
+
+[defn alloc-n [n-bytes [i32]] [i32] [realloc 0 0 n-bytes]]
 
 [functor alloc [t datatype]
   [cast [pmem t] [alloc-n [size-of-type t]]]]

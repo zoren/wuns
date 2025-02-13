@@ -371,6 +371,7 @@
         form-word-get [get-export inst [word form-word-get]]
         list-get-form [get-export inst [word list-get-form]]
         list-data-array [get-export inst [word list-data-array]]
+        validate-alloc [get-export inst [word validate-alloc]]
         alloc-word
         [func aw [w]
           [let
@@ -440,4 +441,5 @@
           [for-each test tests
             [test-assert-form-eq
               [pair/fst test]
-              [pform-to-form [js-app parse [alloc-word [pair/snd test]]]]]]]]]]]
+              [pform-to-form [js-app parse [alloc-word [pair/snd test]]]]]]
+          [js-app validate-alloc]]]]]]
