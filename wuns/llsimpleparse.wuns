@@ -8,7 +8,13 @@
   [log-i32
     [func
       [n [i32]]
-      [tuple]]]]
+      [tuple]]]
+  [dump-mem
+    [func
+      [par [pointer [exp mem] -a]
+       n-bytes [i32]]
+      [tuple]]]
+      ]
 
 [def-comp-fn log-ar [ar [array [u8]]] [tuple]
   [log [data mem ar] [size-of-exp ar]]]
@@ -65,8 +71,14 @@
 [datatype pmem [a datatype]
   [pointer [exp mem] a]]
 
+[defn memory-fill [p [pmem -a] value [i32] n-bytes [i32]] [tuple]
+  [intrinsic memory.fill mem p value n-bytes]]
+
 [defn memory-zero [p [pmem -a] n-bytes [i32]] [tuple]
-  [intrinsic memory.fill mem p 0 n-bytes]]
+  [memory-fill p 0 n-bytes]]
+
+[defn mem-size-bytes [] [i32]
+  [intrinsic i32.shl [intrinsic memory.size mem] [i32 16]]]
 
 [datatype alloc-stack-frame [byte-aligned-size [exp [i32]]]
   [record
@@ -88,7 +100,7 @@
 
 [export get-number-of-frames]
 
-[defn validate-alloc-frame [pframe [pmem [alloc-stack-frame -a]]] [tuple]
+[defn alloc-frame-log [pframe [pmem [alloc-stack-frame -a]]] [tuple]
   [let
     [frame-size [field [deref pframe] frame-size]
      byte-size [field [deref pframe] byte-size]
@@ -98,11 +110,26 @@
      pframe-sized [cast [pmem [alloc-stack-frame [exp byte-aligned-size]]] pframe]
      canary [field [deref pframe-sized] canary]
      frame-size-end [field [deref pframe-sized] frame-size-end]]
-;        [log-ar [text 'frame']]
-;        [log-i32 i]
-;        [log-i32 frame-size]
-;        [log-i32 byte-size]
-;        [log-i32 byte-aligned-size]
+  [log-ar [text 'frame']]
+  [log-i32 frame-size]
+  [log-i32 byte-size]
+  [log-i32 realloc-size]
+  [log-i32 byte-aligned-size]]]
+
+[defn validate-alloc-frame [pframe [pmem [alloc-stack-frame -a]]] [tuple]
+  [if [lt-s pframe static-mem-top]
+    [log-abort [text 'validate-alloc-frame pframe < static-mem-top']]]
+  [if [lt-s [mem-size-bytes] [add pframe [size-of-type [alloc-stack-frame [exp [mem-align 1]]]]]]
+    [log-abort [text 'validate-alloc-frame mem-size-bytes < frame-size']]]
+  [let
+    [frame-size [field [deref pframe] frame-size]
+     byte-size [field [deref pframe] byte-size]
+     realloc-size [field [deref pframe] realloc-size]
+     byte-aligned-size [field [deref pframe] byte-aligned-size]
+     abandoned [field [deref pframe] abandoned]
+     pframe-sized [cast [pmem [alloc-stack-frame [exp byte-aligned-size]]] pframe]
+     canary [field [deref pframe-sized] canary]
+     frame-size-end [field [deref pframe-sized] frame-size-end]]
     [if [lt-s frame-size [size-of-type [alloc-stack-frame [exp 0]]]]
       [log-abort [text 'validate-alloc frame-size < size-of-type alloc-stack-frame 0']]]
     [if [ne [mem-align byte-size] byte-aligned-size]
@@ -114,7 +141,7 @@
     [if [ne canary canary-value] [log-abort [text 'validate-alloc canary value mismatch']]]
     [if [ne frame-size frame-size-end] [log-abort [text 'validate-alloc frame-size != frame-size-end']]]]]
 
-[defn validate-alloc [] [tuple]
+[defn validate-alloc [] [i32]
   [loop
     [cur-top [get-top]
      i static-mem-top
@@ -128,19 +155,17 @@
       [do
         [if [ne n-frames num-of-frames]
           [log-abort [text 'validate-alloc n-frames != num-of-frames']]]
-        [log-ar [text 'validate-alloc num of frames']]
-        [log-i32 n-frames]
-        ]]]]
+        n-frames]]]]
 
 [export validate-alloc]
 
 [defn resize-mem [frame-size [i32]] [tuple]
   [let
     [new-top [add [get-top] frame-size]
-     mem-size-bytes [intrinsic i32.shl [intrinsic memory.size mem] [i32 16]]]
-    [if [lt-s mem-size-bytes new-top]
+     mem-size [mem-size-bytes]]
+    [if [lt-s mem-size new-top]
       [let
-        [missing-bytes [sub new-top mem-size-bytes]
+        [missing-bytes [sub new-top mem-size]
          missing-pages [intrinsic i32.shr-s [align [i32 65536] missing-bytes] [i32 16]]
          res [intrinsic memory.grow mem missing-pages]]
         [if [is-negative res] [log-abort [text 'resize-mem memory.grow failed']]]
@@ -189,10 +214,46 @@
 
     frame-data]]
 
+[mutable overwrite-memory-value [i32 0xa0]]
+
+[defn overwrite-memory [pdata [pmem -a] n-bytes [i32]] [tuple]
+  [if [lt-s n-bytes 0] [log-abort [text 'overwrite n-bytes < 0']]]
+  ; write between 0xa0 and 0xfe to the memory
+  [let [overwrite-val overwrite-memory-value]
+    [memory-fill pdata overwrite-val n-bytes]
+    [assign overwrite-memory-value
+      [if [eq overwrite-val [i32 0xfe]]
+        [i32 0xa0]
+        [inc overwrite-val]]]]]
+
 [defn alloc-stack-frame-abandon [pframe [pmem [alloc-stack-frame -a]]] [tuple]
+  ; overwrite data area to avoid dangling pointers using it
+  [overwrite-memory [pfield pframe data] [field [deref pframe] byte-aligned-size]]
   [assign [field [deref pframe] abandoned] 1]]
 
 [def null [cast [pmem -a] [i32 0]]]
+
+[defn get-top-frame [] [pmem [alloc-stack-frame -a]]
+  [let [cur-top [get-top]]
+    [if [eq cur-top static-mem-top]
+      [cast [pmem [alloc-stack-frame -a]] null]
+      [let
+        [pframe-size [cast [pmem [i32]] [sub cur-top [size-of-type [i32]]]]
+         frame-size [deref pframe-size]
+         pframe [cast [pmem [alloc-stack-frame -a]] [sub cur-top frame-size]]]
+        [validate-alloc-frame pframe]
+        pframe]]]]
+
+[defn is-null [p [pmem -a]] [i32]
+  [eq [cast [i32] p] 0]]
+
+[defn alloc-stack-pop [] [tuple]
+  [let [pframe [get-top-frame]]
+    [if [is-null pframe]
+      [log-abort [text 'alloc-stack-pop stack empty']]]
+    [set-top pframe]
+    [assign num-of-frames [dec num-of-frames]]
+    [memory-zero pframe [field [deref pframe] frame-size]]]]
 
 ; inspired by the lua lua_Alloc function signature
 ; https://ligurio.github.io/lua-c-manual-pages/lua_Alloc.3.html
@@ -210,37 +271,69 @@
       [alloc-stack-frame-add new-n-bytes]]
 
     [let
+      ; find the frame from the data pointer
       [pframe-i [sub old-p [offset-of [alloc-stack-frame -a] data]]
        pframe [cast [pmem [alloc-stack-frame -a]] pframe-i]
-       frame-byte-size [field [deref pframe] frame-size]
-       byte-size [field [deref pframe] byte-size]
-       frame-end [add pframe-i frame-byte-size]
-       cur-top [get-top]]
+       frame-end [add pframe-i [field [deref pframe] frame-size]]]
       [validate-alloc-frame pframe]
-      ; find the frame
-      ; check if old-n matches the frame byte-size, should be realloc-size
-      [if [ne old-n-bytes byte-size]
-        [log-abort [text 'realloc old-n-bytes != byte-size']]]
-      ; check if the frame can be reallocated in place (is the last frame)
-      [if [eq cur-top frame-end]
-        ; if so, update the frame byte-size and byte-aligned-size
+      ; check if old-n matches the frame realloc-size
+      [if [ne old-n-bytes [field [deref pframe] realloc-size]]
+        [log-abort [text 'realloc old-n-bytes != realloc-size']]]
+      ; if the frame is the top frame
+      [if [eq [get-top] frame-end]
+        ; if we are freeing the frame
         [if [eq new-n-bytes 0]
           [do
             ; pop top frame
-            [log-ar [text 'realloc popping top frame']]
-            [set-top pframe-i]
-            [assign num-of-frames [dec num-of-frames]]
+            [alloc-stack-pop]
+            ; pop abandoned frames till we find a non-abandoned frame or the bottom of the stack
+            [loop []
+              [let [ptframe [get-top-frame]]
+                [if [not [is-null ptframe]]
+                  [if [eq [field [deref ptframe] abandoned] 1]
+                    [do
+                      [alloc-stack-pop]
+                      [continue]]]]]]
             null]
           [do
-            [log-ar [text 'realloc updating top frame']]
-            [alloc-stack-frame-update pframe new-n-bytes]]]
-        ; if not allocate a new frame copying over old data, then abandon the old frame
-        [let
-          [new-data [alloc-stack-frame-add new-n-bytes]]
-          [log-ar [text 'realloc allocating new frame']]
-          [intrinsic memory.copy mem new-data old-p old-n-bytes]
-          [alloc-stack-frame-abandon pframe]
-          new-data]]]]]
+            [if [eq [field [deref pframe] abandoned] 1]
+              [log-abort [text 'realloc top frame is abandoned, should not happen']]]
+            ; if we are updating the size of the frame
+            [if [ne old-n-bytes new-n-bytes]
+              [alloc-stack-frame-update pframe new-n-bytes]
+              old-p]]]
+        ; else, frame is not the last frame
+        [ifs
+          [eq new-n-bytes 0]
+          [do
+            [alloc-stack-frame-abandon pframe]
+            null]
+
+          [eq old-n-bytes new-n-bytes]
+          old-p
+
+          ; if we are within the frame size
+          [le-s new-n-bytes [field [deref pframe] byte-size]]
+          [do
+            [if [eq [field [deref pframe] abandoned] 1]
+              [log-abort [text 'realloc cannot update abandoned frame']]]
+            [assign [field [deref pframe] realloc-size] new-n-bytes]
+            [if [lt-s old-n-bytes new-n-bytes]
+              ; zero new memory area
+              [memory-zero
+                [cast [pmem -a] [add [pfield pframe data] old-n-bytes]]
+                [sub new-n-bytes old-n-bytes]]
+              ; overwrite now unused parts of the data area to avoid dangling pointers using it
+              [overwrite-memory
+                [cast [pmem -a] [add [pfield pframe data] new-n-bytes]]
+                [sub old-n-bytes new-n-bytes]]]
+            old-p]
+          ; else, allocate a new frame copying over old data, then abandon the old frame
+          [let
+            [new-data [alloc-stack-frame-add new-n-bytes]]
+            [intrinsic memory.copy mem new-data old-p old-n-bytes]
+            [alloc-stack-frame-abandon pframe]
+            new-data]]]]]]
 
 [export realloc]
 

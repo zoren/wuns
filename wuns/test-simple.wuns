@@ -59,12 +59,15 @@
 
 [defn f-inst [] [forms-to-inst [qlist [defn f [p [i32]] [tuple]] [export f]]]]
 
-[defn test-assert-eq [js-expected actual]
+[defn test-assert-eq-fn [js-expected actual messages]
   [when-not [is-identical [to-js-value js-expected] [to-js-value actual]]
     [logq test-assert-eq failed]
     [logq expected [identity js-expected]]
     [logq but got- [identity actual]]
     [logq-abort test assert failed]]]
+
+[defmacro test-assert-eq [js-expected actual .. messages]
+  [flist [quote test-assert-eq-fn] js-expected actual [quote-list messages]]]
 
 [defn test-assert-not-eq [js-expected actual]
   [when [is-identical [to-js-value js-expected] [to-js-value actual]]
@@ -352,7 +355,6 @@
       [let
        [module [forms-to-module forms]
         mem [memory 1 9 0]
-        mem-buf [memory-buffer mem]
         byte-array-from-mem
         [func bafm [data sz]
           [byte-array-from-array-buffer [memory-buffer mem] data sz]]
@@ -364,10 +366,16 @@
         wasm-log-i32
         [func wasm-log-i32 [n]
           [logq wasm-log-i32 [identity n]]]
+        wasm-dump-mem
+        [func wasm-dump-mem [p n]
+          [let
+            [ar [byte-array-from-mem p n]]
+            [logq wasm-dump-mem [identity p] [identity n] [identity ar]]]]
         env [transient-kv-map]
         - [set-kv-map env [word mem] [to-js-value mem]]
         -- [set-kv-map env [word log] [to-js-value wasm-log]]
         --- [set-kv-map env [word log-i32] [to-js-value wasm-log-i32]]
+        -f [set-kv-map env [word dump-mem] [to-js-value wasm-dump-mem]]
         import-map [transient-kv-map]
         ---- [set-kv-map import-map [word env] [kv-map-to-object env]]
         inst [wasm-instantiate module [kv-map-to-object import-map]]
@@ -386,14 +394,33 @@
         realloc [get-export inst [word realloc]]
         get-number-of-frames [get-export inst [word get-number-of-frames]]
         num-frames-i32 [func nfi [] [js-value-to-i32 [js-app get-number-of-frames]]]
+        fill-word
+        [func fill-word [jsp w]
+          [let
+            [src [word-to-byte-array w]
+             sz [byte-array-size src]
+             dst [byte-array-from-mem [js-value-to-i32 jsp] sz]]
+            [for i 0 sz
+              [byte-array-set dst i [byte-array-get src i]]]]]
+        read-mem-as-word
+        [func rmw [jsp sz]
+          [let
+            [ar [byte-array-from-mem [js-value-to-i32 jsp] sz]
+             str [byte-array-to-string ar]]
+            [string-to-word str]]]
+        read-mem-byte
+        [func rmb [jsp index]
+          [let
+            [ar [byte-array-from-mem [add [js-value-to-i32 jsp] index] 1]]
+            [byte-array-get ar 0]]]
         alloc-word
         [func aw [w]
           [let
             [src [word-to-byte-array w]
-              sz [byte-array-size src]
-              vec [js-app list-alloc-byte sz]
-              data [js-value-to-i32 [js-app list-data-array vec]]
-              dst [byte-array-from-mem data sz]]
+             sz [byte-array-size src]
+             vec [js-app list-alloc-byte sz]
+             data [js-value-to-i32 [js-app list-data-array vec]]
+             dst [byte-array-from-mem data sz]]
             [for i 0 sz
               [byte-array-set dst i [byte-array-get src i]]]
             vec]]
@@ -406,10 +433,10 @@
             [js-value-to-i32 [js-app form-word-is pform]]
             [let
               [fw [js-app form-word-get pform]
-                data [js-value-to-i32 [js-app list-data-array fw]]
-                sz [js-value-to-i32 [js-app list-size fw]]
-                ar [byte-array-from-mem data sz]
-                str [byte-array-to-string ar]]
+               data [js-value-to-i32 [js-app list-data-array fw]]
+               sz [js-value-to-i32 [js-app list-size fw]]
+               ar [byte-array-from-mem data sz]
+               str [byte-array-to-string ar]]
               [form/word [string-to-word str]]]
 
             [js-value-to-i32 [js-app form-list-is pform]]
@@ -491,22 +518,50 @@
             [js-app realloc q 6 0]]
 
           [js-app validate-alloc]
-
           [let
             [n-frames [num-frames-i32]
              p [js-app realloc 0 0 7]
              q [js-app realloc 0 0 5]
-             r [js-app realloc p 7 8]]
-            [test-assert-not-eq r p]
+             new-p [js-app realloc p 7 8]]
+            [test-assert-not-eq new-p p]
             [test-assert-eq [add 3 n-frames] [js-app get-number-of-frames]]
             ; pop the top
-            [js-app realloc r 8 0]
+            [js-app realloc new-p 8 0]
             [test-assert-eq [add 2 n-frames] [js-app get-number-of-frames]]
             ; expect we can grow the new top
             [test-assert-eq q [js-app realloc q 5 6]]
             [js-app realloc q 6 0]
-            [test-assert-eq [add 1 n-frames] [js-app get-number-of-frames]]
-            [js-app realloc p 7 0]
+            ; we should have popped all frames by now
             [test-assert-eq n-frames [js-app get-number-of-frames]]]
+          [let
+            [p [js-app realloc 0 0 7]
+             q [js-app realloc 0 0 5]
+             r [js-app realloc 0 0 6]]
+            [fill-word q [word '12345']]
+            ; shrink a non top frame, and expect the same pointer
+            [test-assert-eq q [js-app realloc q 5 3]]
+            [test-assert-eq [word 123] [read-mem-as-word q 3]]
+            ; 4 char is overwritten when shrinking
+            [test-assert-not-eq [word-to-char-code 4] [read-mem-byte q 3]]
+            ; 5 char is overwritten when shrinking
+            [test-assert-not-eq [word-to-char-code 5] [read-mem-byte q 4]]
+            ; grow it within the same frame
+            [test-assert-eq q [js-app realloc q 3 4]]
+            [test-assert-eq [word 123] [read-mem-as-word q 3]]
+            ; new byte is zeroed out
+            [test-assert-eq 0 [read-mem-byte q 3]]
+            ; grow it to its original size
+            [test-assert-eq q [js-app realloc q 4 5]]
+            [test-assert-eq [word 123] [read-mem-as-word q 3]]
+            ; new bytes are zeroed out
+            [test-assert-eq 0 [read-mem-byte q 3]]
+            [test-assert-eq 0 [read-mem-byte q 4]]
+            ; grow it beyond its original size, allocating a new frame
+            [let [new-q [js-app realloc q 5 6]]
+              [test-assert-not-eq q new-q]
+              [test-assert-eq [word 123] [read-mem-as-word new-q 3]]
+              [test-assert-eq 0 [read-mem-byte new-q 3]]
+              [test-assert-eq 0 [read-mem-byte new-q 4]]
+              [test-assert-eq 0 [read-mem-byte new-q 5]]]]
           [js-app realloc 0 0 [i32 65536]]
           [js-app validate-alloc]]]]]
