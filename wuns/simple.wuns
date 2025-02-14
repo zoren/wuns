@@ -104,7 +104,6 @@
 
     [func type-func]
     [functor [list [pair name type-kind]] type]
-    [empty]
     [apply-custom name [list type]]]
 
   type-func []
@@ -1808,9 +1807,6 @@
   [match [expand-custom type]
     [type/tuple types]
     [list-map t types [type-to-wat-type t]]
-
-    [type/empty]
-    [list]
 
     [type/union types]
     [if [is-empty types]
