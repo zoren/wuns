@@ -19,6 +19,10 @@
 [def-comp-fn log-ar [ar [array [u8]]] [tuple]
   [log [data mem ar] [size-of-exp ar]]]
 
+[def-comp-fn log-abort [ar [array [u8]]] [union]
+  [log [data mem ar] [size-of-exp ar]]
+  [intrinsic unreachable]]
+
 [def 0 [i32 0]]
 [def 1 [i32 1]]
 [def 2 [i32 2]]
@@ -63,10 +67,6 @@
 
 [defn mem-align [p [i32]] [i32]
   [align [i32 16] p]]
-
-[def-comp-fn log-abort [ar [array [u8]]] [union]
-  [log [data mem ar] [size-of-exp ar]]
-  [intrinsic unreachable]]
 
 [datatype pmem [a datatype]
   [pointer [exp mem] a]]
