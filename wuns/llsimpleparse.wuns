@@ -149,7 +149,7 @@
         [log-i32 missing-pages]]]
     [set-top new-top]]]
 
-[defn alloc-stack-frame-add [byte-size [i32]] [pmem [array [u8]]]
+[defn alloc-stack-frame-add [byte-size [i32]] [pmem -a]
   [let
     [byte-aligned-size [mem-align byte-size]
      frame-size [size-of-type [alloc-stack-frame [exp byte-aligned-size]]]
@@ -170,7 +170,7 @@
 
     frame-data]]
 
-[defn alloc-stack-frame-update [pframe [pmem [alloc-stack-frame -a]] new-byte-size [i32]] [pmem [array [u8]]]
+[defn alloc-stack-frame-update [pframe [pmem [alloc-stack-frame -a]] new-byte-size [i32]] [pmem -a]
   [if [eq new-byte-size 0] [log-abort [text 'alloc-stack-frame-update new-byte-size == 0']]]
   [let
     [old-frame-size [field [deref pframe] frame-size]
@@ -192,10 +192,12 @@
 [defn alloc-stack-frame-abandon [pframe [pmem [alloc-stack-frame -a]]] [tuple]
   [assign [field [deref pframe] abandoned] 1]]
 
+[def null [cast [pmem -a] [i32 0]]]
+
 ; inspired by the lua lua_Alloc function signature
 ; https://ligurio.github.io/lua-c-manual-pages/lua_Alloc.3.html
 
-[defn realloc [old-p [i32] old-n-bytes [i32] new-n-bytes [i32]] [i32]
+[defn realloc [old-p [pmem -a] old-n-bytes [i32] new-n-bytes [i32]] [pmem -a]
   [ifs
     [eq old-p 0]
     [do
@@ -228,7 +230,7 @@
             [log-ar [text 'realloc popping top frame']]
             [set-top pframe-i]
             [assign num-of-frames [dec num-of-frames]]
-            0]
+            null]
           [do
             [log-ar [text 'realloc updating top frame']]
             [alloc-stack-frame-update pframe new-n-bytes]]]
@@ -243,7 +245,11 @@
 [export realloc]
 
 [functor alloc [t datatype]
-  [cast [pmem t] [realloc 0 0 [size-of-type t]]]]
+  [cast [pmem t] [realloc null 0 [size-of-type t]]]]
+
+[defn free [old-p [pmem -a] old-n-bytes [i32]] [tuple]
+  [realloc old-p old-n-bytes 0]
+  [do]]
 
 [defn is-between-inclusive [lower [i32] c [i32] upper [i32]] [i32]
   [bitwise-and [le-s lower c] [le-s c upper]]]
@@ -476,7 +482,7 @@
      stack-index [i32 -1]]
     [if [not [lt-s i n-of-bytes]]
       [if [is-negative stack-index]
-        [cast [pmem [form]] 0]
+        [cast [pmem [form]] null]
         [unwind-stack stack stack-index]]
       [let [c [list-get-byte bytes i]]
         [ifs
