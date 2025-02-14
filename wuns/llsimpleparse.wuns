@@ -462,61 +462,64 @@
     [form-word]
     [form-list]]]
 
-[defn form-word-alloc [ptext [text]] [pmem [form]]
+[datatype pform []
+  [pmem [form]]]
+
+[defn form-word-alloc [ptext [text]] [pform]
   [let [p [alloc [form-word]]]
     [assign [field [deref p] tag] [annotation [exp form-word-tag] form-word-tag]]
     [assign [field [deref p] pword] ptext]
     p]]
 
-[defn form-list-alloc [pfs [plist [pmem [form]]]] [pmem [form]]
+[defn form-list-alloc [pfs [plist [pform]]] [pform]
   [let [p [alloc [form-list]]]
     [assign [field [deref p] tag] [annotation [exp form-list-tag] form-list-tag]]
     [assign [field [deref p] forms] pfs]
     p]]
 
-[defn form-tag [pf [pmem [form]]] [i32]
+[defn form-tag [pf [pform]] [i32]
   [field [deref pf] tag]]
 
 [export form-tag]
 
-[defn form-word-is [pf [pmem [form]]] [i32]
+[defn form-word-is [pf [pform]] [i32]
   [eq [field [deref pf] tag] form-word-tag]]
 
 [export form-word-is]
 
-[defn form-word-get [pf [pmem [form]]] [text]
+[defn form-word-get [pf [pform]] [text]
   [if [not [form-word-is pf]] [log-abort [text 'form-word-get not a form-word']]]
   [let [pfw [cast [pmem [form-word]] pf]]
     [field [deref pfw] pword]]]
 
 [export form-word-get]
 
-[defn form-list-is [pf [pmem [form]]] [i32]
+[defn form-list-is [pf [pform]] [i32]
   [eq [field [deref pf] tag] form-list-tag]]
 
 [export form-list-is]
 
-[defn form-list-get [pf [pmem [form]]] [plist [pmem [form]]]
+[defn form-list-get [pf [pform]] [plist [pform]]
   [if [not [form-list-is pf]] [log-abort [text 'form-list-get not a form-list']]]
   [let [pfl [cast [pmem [form-list]] pf]]
     [field [deref pfl] forms]]]
 
 [export form-list-get]
 
-[def list-get-form [list-get [pmem [form]]]]
+[def list-get-form [list-get [pform]]]
 
 [export list-get-form]
 
 [def list-get-byte [list-get [u8]]]
 
 [def growable-list-alloc-init-form
-  [growable-list-alloc-init [pmem [form]]]]
+  [growable-list-alloc-init [pform]]]
 
 [def growable-list-to-list-form
-  [growable-list-to-list [pmem [form]]]]
+  [growable-list-to-list [pform]]]
 
 [def growable-list-push-form
-  [growable-list-push [pmem [form]]]]
+  [growable-list-push [pform]]]
 
 [defn scan-word-end [bytes [plist [u8]] start [i32]] [i32]
   [loop [i start n-of-bytes [list-size bytes]]
@@ -526,9 +529,9 @@
         i]
       i]]]
 
-[defn make-stack [stack-size [i32] init-capacity [i32]] [pmem [array [pmem [growable-list [pmem [form]]]]]]
+[defn make-stack [stack-size [i32] init-capacity [i32]] [pmem [array [pmem [growable-list [pform]]]]]
   [if [le-s init-capacity 0] [log-abort [text 'make-stack init-capacity <= 0']]]
-  [let [parray [alloc [array [pmem [growable-list [pmem [form]]]] [exp stack-size]]]]
+  [let [parray [alloc [array [pmem [growable-list [pform]]] [exp stack-size]]]]
     [loop [i 0]
       [if [lt-s i stack-size]
         [do
@@ -554,7 +557,7 @@
           [continue i [inc i]]]]]
     pdst]]
 
-[defn unwind-stack [stack [pmem [array [pmem [growable-list [pmem [form]]]]]] stack-index [i32]] [pmem [form]]
+[defn unwind-stack [stack [pmem [array [pmem [growable-list [pform]]]]] stack-index [i32]] [pform]
   [if [lt-s stack-index 0] [log-abort [text 'unwind-stack stack index negative']]]
   [loop [i stack-index]
     [let [glist [index [deref stack] i]
@@ -567,7 +570,7 @@
             [growable-list-push-form [index [deref stack] [dec i]] fl]
             [continue i [dec i]]]]]]]]
 
-[defn parse [bytes [text]] [pmem [form]]
+[defn parse [bytes [text]] [pform]
   [loop
     [stack [make-stack stack-size init-capacity]
      n-of-bytes [list-size bytes]
@@ -575,7 +578,7 @@
      stack-index [i32 -1]]
     [if [not [lt-s i n-of-bytes]]
       [if [is-negative stack-index]
-        [cast [pmem [form]] null]
+        [cast [pform] null]
         [unwind-stack stack stack-index]]
       [let [c [list-get-byte bytes i]]
         [ifs
@@ -618,7 +621,7 @@
 
 [export make-stack parse list-size ]
 
-[defn parse-n [bytes [text]] [plist [pmem [form]]]
+[defn parse-n [bytes [text]] [plist [pform]]
   [let
     [stack [make-stack stack-size init-capacity]
      n-of-bytes [list-size bytes]
