@@ -390,7 +390,7 @@
         form-word-get [get-export inst [word form-word-get]]
         list-get-form [get-export inst [word list-get-form]]
         list-data-array [get-export inst [word list-data-array]]
-        validate-alloc [get-export inst [word validate-alloc]]
+        alloc-frames-validate-all [get-export inst [word alloc-frames-validate-all]]
         realloc [get-export inst [word realloc]]
         get-number-of-frames [get-export inst [word get-number-of-frames]]
         num-frames-i32 [func nfi [] [js-value-to-i32 [js-app get-number-of-frames]]]
@@ -503,7 +503,7 @@
                 [for i 0 sz
                 [test-assert-form-eq [at expected i] [at actual i]]]]]]]
 
-          [js-app validate-alloc]
+          [js-app alloc-frames-validate-all]
 
           [let
             [n-frames [num-frames-i32]
@@ -517,7 +517,7 @@
             [test-assert-eq p [js-app realloc 0 0 [i32 6]]]
             [js-app realloc q 6 0]]
 
-          [js-app validate-alloc]
+          [js-app alloc-frames-validate-all]
           [let
             [n-frames [num-frames-i32]
              p [js-app realloc 0 0 7]
@@ -532,7 +532,8 @@
             [test-assert-eq q [js-app realloc q 5 6]]
             [js-app realloc q 6 0]
             ; we should have popped all frames by now
-            [test-assert-eq n-frames [js-app get-number-of-frames]]]
+            [test-assert-eq n-frames [js-app get-number-of-frames]]
+            [js-app alloc-frames-validate-all]]
           [let
             [p [js-app realloc 0 0 7]
              q [js-app realloc 0 0 5]
@@ -564,4 +565,4 @@
               [test-assert-eq 0 [read-mem-byte new-q 4]]
               [test-assert-eq 0 [read-mem-byte new-q 5]]]]
           [js-app realloc 0 0 [i32 65536]]
-          [js-app validate-alloc]]]]]
+          [js-app alloc-frames-validate-all]]]]]
