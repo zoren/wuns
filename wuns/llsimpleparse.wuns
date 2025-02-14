@@ -50,7 +50,13 @@
 
 [defn is-odd [x [i32]] [i32] [bitwise-and x 1]]
 
+[datatype pmem [a datatype]
+  [pointer [exp mem] a]]
+
 [def static-mem-top [memory-static-top mem]]
+
+[defn static-is [p [pmem -a]] [i32]
+  [lt-s p static-mem-top]]
 
 [mutable mem-top [memory-static-top mem]]
 
@@ -67,9 +73,6 @@
 
 [defn mem-align [p [i32]] [i32]
   [align [i32 16] p]]
-
-[datatype pmem [a datatype]
-  [pointer [exp mem] a]]
 
 [defn memory-fill [p [pmem -a] value [i32] n-bytes [i32]] [tuple]
   [intrinsic memory.fill mem p value n-bytes]]
@@ -122,8 +125,8 @@
   [log-i32 byte-aligned-size]]]
 
 [defn alloc-frame-validate [pframe [pmem [alloc-stack-frame -a]]] [tuple]
-  [if [lt-s pframe static-mem-top]
-    [log-abort [text 'alloc-frame-validate pframe < static-mem-top']]]
+  [if [static-is pframe]
+    [log-abort [text 'alloc-frame-validate pframe points to static mem']]]
   [if [lt-s [mem-size-bytes] [add pframe [size-of-type [alloc-stack-frame [exp [mem-align 1]]]]]]
     [log-abort [text 'alloc-frame-validate mem-size-bytes < frame-size']]]
   [let
@@ -467,14 +470,18 @@
 
 [defn form-word-alloc [ptext [text]] [pform]
   [let [p [alloc [form-word]]]
-    [assign [field [deref p] tag] [annotation [exp form-word-tag] form-word-tag]]
-    [assign [field [deref p] pword] ptext]
+    [assign [deref p]
+      [record
+        tag [annotation [exp form-word-tag] form-word-tag]
+        pword ptext]]
     p]]
 
 [defn form-list-alloc [pfs [plist [pform]]] [pform]
   [let [p [alloc [form-list]]]
-    [assign [field [deref p] tag] [annotation [exp form-list-tag] form-list-tag]]
-    [assign [field [deref p] forms] pfs]
+    [assign [deref p]
+      [record
+        tag [annotation [exp form-list-tag] form-list-tag]
+        forms pfs]]
     p]]
 
 [defn form-tag [pf [pform]] [i32]
