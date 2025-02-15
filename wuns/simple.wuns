@@ -232,7 +232,7 @@
 [type data-active []
   [record
     [mem-name word]
-    [address wat-inst]
+    [address i32]
     [bytes byte-array]]]
 
 [defn intrinsic-type-from-name [n]
@@ -808,26 +808,32 @@
             [logq-abort not implemented form-to-type [identity form]]]]]]]]]
     [go outer-form]]]
 
-[func get-current-active-address-pair [mem-name-exp]
-  [let
-    [mem-name-word
-      [match [type-of mem-name-exp]
-        [type/exp mem-name-exp2]
-        [match mem-name-exp2
-          [exp/var mem-name] [name/word mem-name]
-          [logq-abort get-memory-name-from-type not a memory [identity mem-name-exp]]]
-        [logq-abort get-memory-name-from-type not a memory type]]
-     mem-name-type
-      [match [top-desc/kind [pair/snd [get top-names mem-name-word]]]
-        [top-desc-kind/memory mt] [memory-desc/type mt]
-        [logq-abort get-memory-name-from-type not a memory]]
-     offset-atom
-     [if-let [offset-atom [try-get active-data-map-offsets mem-name-word]]
-      offset-atom
-      [let [oa [atom [i32 16]]]
-        [set-kv-map active-data-map-offsets mem-name-word oa]
-        oa]]]
-    [pair mem-name-type offset-atom]]]
+[func get-memory-name-from-exp [mem-exp]
+  [match [type-of mem-exp]
+    [type/exp mem-name-exp]
+    [match mem-name-exp
+      [exp/var mem-name] [name/word mem-name]
+      [logq-abort get-memory-name-from-exp not a memory [identity mem-name-exp]]]
+    [logq-abort get-memory-name-from-exp not a memory type [identity mem-exp]]]]
+
+[func get-memory-name-from-type [mt]
+  [if-let [mem-exp [try-get-type-exp mt]]
+    [get-memory-name-from-exp mem-exp]
+    [logq-abort get-memory-name-from-type expected memory type [identity mt]]]]
+
+[func get-mem-type [mem-name-word]
+  [match [top-desc/kind [pair/snd [get top-names mem-name-word]]]
+    [top-desc-kind/memory mt] [memory-desc/type mt]
+    [logq-abort get-memory-name-from-type not a memory]]]
+
+[func get-memory-pointer-type [t] [get-mem-type [get-memory-name-from-type t]]]
+
+[func get-memory-offset-atom [mem-name-word]
+  [if-let [offset-atom [try-get active-data-map-offsets mem-name-word]]
+    offset-atom
+    [let [oa [atom [i32 16]]]
+      [set-kv-map active-data-map-offsets mem-name-word oa]
+      oa]]]
 
 [func form-special-to-exp [type-kind-env lctx fw l]
   [switch fw
@@ -1108,22 +1114,6 @@
           [continue i [inc i]]
           false]
         true]]]]
-
-[func get-memory-name-from-type [mt]
-  [if-let [mem-exp [try-get-type-exp mt]]
-    [match [type-of mem-exp]
-      [type/exp mem-name-exp]
-      [match mem-name-exp
-        [exp/var mem-name]
-        [name/word mem-name]
-        [logq-abort get-memory-name-from-type not a memory [identity mem-name-exp]]]
-      [logq-abort get-memory-name-from-type not a memory type [identity mt]]]
-    [logq-abort get-memory-name-from-type expected memory type [identity mt]]]]
-
-[func get-memory-pointer-type [t]
-  [match [top-desc/kind [pair/snd [get top-names [get-memory-name-from-type t]]]]
-    [top-desc-kind/memory mt] [memory-desc/type mt]
-    [logq-abort get-memory-name-from-type not a memory]]]
 
 [func type-assignable [tdst tsrc]
   [or [is-identical tdst tsrc]
@@ -2070,29 +2060,42 @@
         [exp/var n]
         [go [get-const e]]
 
-        [exp/size-of-exp e]
-        [go [type-to-size-of-exp [type-of [get-const e]]]]
+        [exp/size-of-exp se]
+        [go [type-to-size-of-exp [type-of [get-const se]]]]
+
+        [exp/annotation t ae]
+        [go ae]
+
+        [exp/data mem-name-exp data-exp]
+        [print-int32 bprinter 4 [data-proc [get-memory-name-from-exp mem-name-exp] data-exp]]
 
         [logq-abort not implemented exp-to-bytes [identity e]]]]]
     [go e]
     [printer-to-byte-array bprinter]]]
 
+[func data-proc [mem-name-word data-exp]
+  [let
+    [offset-atom [get-memory-offset-atom mem-name-word]
+     bytes [exp-to-bytes data-exp]
+     n-of-bytes [byte-array-size bytes]
+     current-offset [atom-get offset-atom]]
+    [assert-not [eq n-of-bytes 0] add-data expected non-empty data]
+    [atom-set offset-atom [add current-offset [align [i32 16] n-of-bytes]]]
+    [push datas [data-active mem-name-word current-offset bytes]]
+    current-offset]]
+
 [func get-const [e]
   [match e
     [exp/var v]
-    [let
-      [desc [get-desc-from-name v]
-       is-param
-        [match desc
-        [desc-kind/top td] false
-        [desc-kind/local ld]
-        [match ld
-          [local-context-kind/func] true
-          false]]]
-      [if is-param
-        [if-let [c [try-get const-env [name/word v]]]
-          c
-          e]
+    [match [get-desc-from-name v]
+      [desc-kind/top td]
+      [option-default [try-get value-constants [name/word v]] e]
+
+      [desc-kind/local ld]
+      [match ld
+        [local-context-kind/func]
+        [option-default [try-get const-env [name/word v]] e]
+
         e]]
     e]]
 
@@ -2263,31 +2266,15 @@
 
     [exp/data mem-name-exp data-exp]
     [let
-      [addr-pair [get-current-active-address-pair mem-name-exp]
-       offset-atom [pair/snd addr-pair]
-       bytes [exp-to-bytes data-exp]
-       n-of-bytes [byte-array-size bytes]
-       current-offset [atom-get offset-atom]
-       addr-exp [exp/integer [pair/fst addr-pair] current-offset]
-       addr-inst [exp-to-inst addr-exp]
-       mem-name
-        [match mem-name-exp
-          [exp/var mem-name] mem-name
-          [logq-abort add-data not a memory [identity mem-name-exp]]]]
-      [assert-not [eq n-of-bytes 0] add-data expected non-empty data]
-      [atom-set offset-atom [add current-offset [align [i32 16] n-of-bytes]]]
-      [todo this breaks if mem is a type var]
-      [push datas
-        [data-active
-          [name/word mem-name]
-          addr-inst
-          bytes]]
-      addr-inst]
+      [mem-name-word [get-memory-name-from-exp mem-name-exp]
+       addr [data-proc mem-name-word data-exp]
+       mem-type [get-mem-type mem-name-word]]
+      [exp-to-inst [exp/integer mem-type addr]]]
 
     [exp/memory-static-top mem-name]
-    [let [addr-pair [get-current-active-address-pair mem-name]
-          mem-type [pair/fst addr-pair]
-          offset-atom [pair/snd addr-pair]]
+    [let [mem-name-word [get-memory-name-from-exp mem-name]
+          mem-type [get-mem-type mem-name-word]
+          offset-atom [get-memory-offset-atom mem-name-word]]
       [wat-inst/lazy-integer-const [primitive-type/name mem-type] offset-atom]]
 
     [exp/cast t e]
@@ -2431,7 +2418,7 @@
       [push wdata
         [wat-data/active
           [data-active/mem-name data]
-          [data-active/address data]
+          [wat-inst/i32.const [int-to-word [data-active/address data]]]
           [data-active/bytes data]]]]
     [wat-output
       imports
