@@ -2301,7 +2301,6 @@
          es2i [exp2inst-compiler/exps-to-inst comp]
          inst [es2i [exp-function/bodies f]]
          tf [exp-function/type f]
-         param-types [type-func/parameters tf]
          locals [clone-growable-to-frozen-list [exp2inst-compiler/glocals comp]]]
         [push
           funcs
@@ -2309,9 +2308,9 @@
             [name/word [option-default [exp-function/name f] name]]
             [zip
               [list-map p [exp-function/parameters f] [name/word p]]
-              [list-map pt param-types [type-to-wat-type [type-substitute type-inst-env pt]]]]
+              [list-map pt [type-func/parameters tf] [type-to-wat-type [type-substitute type-inst-env pt]]]]
             locals
-            [type-to-wat-types [type-substitute type-inst-env [type-func/result [exp-function/type f]]]]
+            [type-to-wat-types [type-substitute type-inst-env [type-func/result tf]]]
             inst]]]]]
     [for-each top tops
       [match top
