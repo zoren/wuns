@@ -27,6 +27,7 @@
 [def 1 [i32 1]]
 [def 2 [i32 2]]
 [def 3 [i32 3]]
+[def 4 [i32 4]]
 
 [def false [i32 0]]
 [def true [i32 1]]
@@ -870,9 +871,9 @@
   [loop [i 0 n [list-size w] res 0]
     [if [lt-s i n]
       [let [cc [list-get-byte w i]]
-        [if [le-s [i32 48] cc]
+        [if [lt-s cc [i32 48]]
           [log-abort [text 'dec-word-to-i32 cc < 48']]]
-        [if [le-s cc [i32 57]]
+        [if [lt-s [i32 57] cc]
           [log-abort [text 'dec-word-to-i32 cc > 57']]]
         [continue
           res [add [mul res [i32 10]] [sub cc [i32 48]]]
@@ -908,3 +909,113 @@
           [log-abort [text 'form-to-exp unknown form-list case']]]]]
 
     [log-abort [text 'form-to-exp unknown form case']]]]
+
+[def prim-type-int-tag [i32 1]]
+[def prim-type-float-tag [i32 2]]
+
+[datatype prim-type []
+  [union
+    [record
+      [tag [exp prim-type-int-tag]]
+      [bytes [i32]]
+      [unsigned [i32]]]
+    [record
+      [tag [exp prim-type-float-tag]]
+      [bytes [i32]]]
+]]
+
+[def type-primitive-tag [i32 1]]
+
+[datatype wtype []
+  [union
+    [record
+      [tag [exp type-primitive-tag]]
+      [value [pmem [prim-type]]]]
+    ]]
+
+[def type-i32
+  [cast [pmem [wtype]]
+    [data mem
+      [record
+        tag [annotation [exp type-primitive-tag] type-primitive-tag]
+        value
+        [data mem
+          [record
+            tag [annotation [exp prim-type-int-tag] prim-type-int-tag]
+            bytes [i32 4]
+            unsigned [i32 0]]]]]]]
+
+[defn form-to-type [f [pmem [form]]] [pmem [wtype]]
+  [ifs
+    [form-word-is f]
+    [do
+      [log-abort [text 'form-to-type word case not implemented']]]
+
+    [form-list-is f]
+    [let [fl [form-list-get f]
+          n [list-size fl]
+          n-args [dec n]]
+      [if [eq n 0]
+        [log-abort [text 'form-to-type empty list not allowed']]]
+      [let [fw [form-word-get [list-get-form fl 0]]]
+        [ifs
+          [word-eq fw [static-list [text i32]]]
+          [do
+            [if [ne n-args 0]
+              [log-abort [text 'form-to-type i32 expects one argument']]]
+            type-i32]
+
+          [log-abort [text 'form-to-type unknown form-list case']]]]]
+
+    [log-abort [text 'form-to-type unknown form case']]]]
+
+[defn form-to-top [f [pmem [form]]] [tuple]
+  [ifs
+    [form-word-is f]
+    [do
+      [log-abort [text 'form-to-top word case not implemented']]]
+
+    [form-list-is f]
+    [let [fl [form-list-get f]
+          n [list-size fl]
+          n-args [dec n]]
+      [if [eq n 0]
+        [log-abort [text 'form-to-top empty list not allowed']]]
+      [let [fw [form-word-get [list-get-form fl 0]]]
+        [ifs
+          [word-eq fw [static-list [text defn]]]
+          [do
+            [if [lt-s n-args 3]
+              [log-abort [text 'form-to-top defn expects at least 3 arguments']]]
+            [let
+              [fname [form-word-get [list-get-form fl 1]]
+               param-list [form-list-get [list-get-form fl 2]]
+               n-of-param-forms [list-size param-list]
+               result-type [form-to-type [list-get-form fl 3]]]
+              [if [is-odd n-of-param-forms]
+                [log-abort [text 'form-to-top defn expects a parameter list with names and type pairs']]]
+              [loop [i 0]
+                [when [lt-s i [dec n-of-param-forms]]
+                  [form-word-get [list-get-form param-list i]]
+                  [form-to-type [list-get-form param-list [inc i]]]
+                  [continue i [add 2 i]]]]
+              [loop [j 4]
+                [when [lt-s j n]
+                  [form-to-exp [list-get-form fl j]]
+                  [continue j [inc j]]]]]]
+
+          [word-eq fw [static-list [text export]]]
+          [do
+            [if [lt-s n-args 3]
+              [log-abort [text 'form-to-top export expects at least 3 arguments']]]
+            [do
+              [loop [k 1]
+                [when [lt-s k n]
+                  [form-word-get [list-get-form fl k]]
+                  [continue k [inc k]]]]]]
+
+          [log-abort [text 'form-to-top unknown form-list case']]]]]
+
+    [log-abort [text 'form-to-top unknown form case']]]]
+
+[export form-to-top]

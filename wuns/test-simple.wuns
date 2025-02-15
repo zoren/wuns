@@ -395,6 +395,7 @@
         list-data-array [get-export inst [word list-data-array]]
         realloc [get-export inst [word realloc-debug]]
         get-number-of-frames [get-export inst [word get-number-of-frames]]
+        form-to-top [get-export inst [word form-to-top]]
         num-frames-i32 [func nfi [] [js-value-to-i32 [js-app get-number-of-frames]]]
         fill-word
         [func fill-word [jsp w]
@@ -513,7 +514,22 @@
                 [for i 0 sz
                 [test-assert-form-eq [at expected i] [at actual i]]]]
               [js-app list-forms-free fl]
-              [js-app text-free w]]]]]]]]
+              [js-app text-free w]]]]
+
+        [let
+          [tests
+            [list
+              [pair [qlist] [word '[defn f [] [i32] [i32 0]]']]
+              ]]
+          [for-each test tests
+            [let
+              [expected [pair/fst test]
+               w [alloc-word [pair/snd test]]
+               fl [js-app parse-n w]
+               sz [js-value-to-i32 [js-app list-size fl]]]
+              [for i 0 sz
+                [js-app form-to-top [js-app list-get-form fl i]]]
+              ]]]]]]]
 
 [defn test-realloc []
   [promise-then
