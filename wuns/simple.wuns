@@ -169,8 +169,8 @@
   [record
     [kind word]
     [name [option name]]
-    [parameters [list [pair name type]]]
-    [result type]
+    [type type-func]
+    [parameters [list name]]
     [bodies [list exp]]]]
 
 [defn exp-to-deref [exp]
@@ -964,8 +964,9 @@
             [pair pname pt]]]
        result [form-to-type-type-env type-kind-env param-ctx [third l]]
        bodies
-       [list-map b [slice l 3 [size l]] [form-to-exp-type-kind-env type-kind-env param-ctx b]]]
-      [exp/func [exp-function fw [option/none] params result bodies]]]
+       [list-map b [slice l 3 [size l]] [form-to-exp-type-kind-env type-kind-env param-ctx b]]
+       tf [type-func [list-map p params [pair/snd p]] result]]
+      [exp/func [exp-function fw [option/none] tf [list-map p params [pair/fst p]] bodies]]]
 
     [[word do]]
     [exp/do [list-map b [rest l] [form-to-exp-type-kind-env type-kind-env lctx b]]]
@@ -1502,10 +1503,7 @@
       [type/primitive type-primitive-i32]]
 
     [exp/func ef]
-    [type/func
-      [type-func
-        [list-map pp [exp-function/parameters ef] [pair/snd pp]]
-        [exp-function/result ef]]]
+    [type/func [exp-function/type ef]]
 
     [logq-abort type-of not implemented [identity exp]]]]
 
@@ -1715,18 +1713,18 @@
                return-type-form [fourth l]
                param-ctx [transient-kv-map]
                lctx [local-context-make-top param-ctx [local-context-kind/func]]
-               parameters
-               [list-map p [pairwise-pairs params-list]
-                 [let [pname [form-to-name [pair/fst p]]
-                       ptype [form-to-type lctx [pair/snd p]]]
-                  [set-kv-map param-ctx [name/word pname] ptype]
-                  [pair pname ptype]]]
-               return-type [form-to-type lctx return-type-form]]
+               param-pairs [pairwise-pairs params-list]
+               param-names [list-map p param-pairs [form-to-name [pair/fst p]]]
+               param-types [list-map p param-pairs [form-to-type lctx [pair/snd p]]]
+               return-type [form-to-type lctx return-type-form]
+               tf [type-func param-types return-type]]
               [bind-top name-form
-                [type/func [type-func [list-map pp parameters [pair/snd pp]] return-type]]
+                [type/func tf]
                 [top-desc
                   [top-desc-kind/value [value-desc value-kind-constant]]
                   [imported-or-here/here]]]
+              [for i 0 [size param-names]
+                [set-kv-map param-ctx [name/word [at param-names i]] [at param-types i]]]
               [let
                 [cbodies [list-map body [slice l 4 [size l]] [form-to-exp-type-kind-env empty-type-env lctx body]]
                  inferred-return-type [type-ofs cbodies]
@@ -1735,8 +1733,8 @@
                  [exp-function
                   fw
                   [option/some fname]
-                  parameters
-                  return-type
+                  tf
+                  param-names
                   cbodies]]
                 [set-kv-map top-funcs [name/word fname] exp-func]
                 [when-not [type-assignable return-type inferred-return-type]
@@ -2149,7 +2147,7 @@
                 param-env [transient-kv-map]]
             [assert [eq [size params] [size args]] call expected same number of arguments]
             [for i 0 [size args]
-              [set-kv-map param-env [name/word [pair/fst [at params i]]] [at args i]]]
+              [set-kv-map param-env [name/word [at params i]] [at args i]]]
             [let
               [comp [mk-exp-to-inst-compiler [transient-kv-map] param-env] ; todo maybe we need to pass the type env
                es2i [exp2inst-compiler/exps-to-inst comp]]
@@ -2313,16 +2311,18 @@
          comp [mk-exp-to-inst-compiler type-inst-env const-env]
          es2i [exp2inst-compiler/exps-to-inst comp]
          inst [es2i [exp-function/bodies f]]
+         tf [exp-function/type f]
+         param-types [type-func/parameters tf]
          locals [clone-growable-to-frozen-list [exp2inst-compiler/glocals comp]]]
         [push
           funcs
           [wat-func
             [name/word [option-default [exp-function/name f] name]]
-            [list-map p [exp-function/parameters f]
-              [pair [name/word [pair/fst p]]
-                [type-to-wat-type [type-substitute type-inst-env [pair/snd p]]]]]
+            [zip
+              [list-map p [exp-function/parameters f] [name/word p]]
+              [list-map pt param-types [type-to-wat-type [type-substitute type-inst-env pt]]]]
             locals
-            [type-to-wat-types [type-substitute type-inst-env [exp-function/result f]]]
+            [type-to-wat-types [type-substitute type-inst-env [type-func/result [exp-function/type f]]]]
             inst]]]]]
     [for-each top tops
       [match top

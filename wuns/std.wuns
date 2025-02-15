@@ -621,6 +621,12 @@
         [continue i [inc i]]]
       false]]]
 
+[defn zip [as bs]
+  [assert [eq [size as] [size bs]] zip requires equal length lists]
+  [let [gl [growable-list]]
+    [for i 0 [size as]
+      [push gl [pair [at as i] [at bs i]]]]
+    [clone-growable-to-frozen-list gl]]]
 
 [defn pairwise-pairs [l]
   [let [gl [growable-list]]
