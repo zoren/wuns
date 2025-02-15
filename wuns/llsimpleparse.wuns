@@ -88,6 +88,21 @@
 [defn is-null [p [pmem -a]] [i32]
   [eq [cast [i32] p] 0]]
 
+[defn resize-mem [frame-size [i32]] [tuple]
+  [let
+    [new-top [add [get-top] frame-size]
+     mem-size [mem-size-bytes]]
+    [if [lt-s mem-size new-top]
+      [let
+        [missing-bytes [sub new-top mem-size]
+         missing-pages [intrinsic i32.shr-s [align [i32 65536] missing-bytes] [i32 16]]
+         res [intrinsic memory.grow mem missing-pages]]
+        [if [is-negative res] [log-abort [text 'resize-mem memory.grow failed']]]
+        [log-ar [text 'resize-mem grew mem pages']]
+        [log-i32 missing-bytes]
+        [log-i32 missing-pages]]]
+    [set-top new-top]]]
+
 [datatype alloc-stack-frame [byte-aligned-size [exp [i32]]]
   [record
     [frame-size [i32]]
@@ -166,21 +181,6 @@
         n-frames]]]]
 
 [export alloc-frames-validate-all]
-
-[defn resize-mem [frame-size [i32]] [tuple]
-  [let
-    [new-top [add [get-top] frame-size]
-     mem-size [mem-size-bytes]]
-    [if [lt-s mem-size new-top]
-      [let
-        [missing-bytes [sub new-top mem-size]
-         missing-pages [intrinsic i32.shr-s [align [i32 65536] missing-bytes] [i32 16]]
-         res [intrinsic memory.grow mem missing-pages]]
-        [if [is-negative res] [log-abort [text 'resize-mem memory.grow failed']]]
-        [log-ar [text 'resize-mem grew mem pages']]
-        [log-i32 missing-bytes]
-        [log-i32 missing-pages]]]
-    [set-top new-top]]]
 
 [defn alloc-stack-frame-push [byte-size [i32]] [pmem -a]
   [let
