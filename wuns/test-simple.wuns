@@ -379,7 +379,6 @@
         import-map [transient-kv-map]
         ---- [set-kv-map import-map [word env] [kv-map-to-object env]]
         inst [wasm-instantiate module [kv-map-to-object import-map]]
-        parse [get-export inst [word parse]]
         parse-n [get-export inst [word parse-n]]
         form-free [get-export inst [word form-free]]
         list-forms-free [get-export inst [word list-forms-free]]
@@ -455,48 +454,27 @@
             [logq-abort unknown form type [identity pform]]]]]
         [let [empty-vec [js-app list-alloc-byte [i32 0]]]
           [test-assert-eq [i32 0] [js-app list-size empty-vec]]
-          [test-assert-eq [i32 0] [js-app parse empty-vec]]]
-        [let
-          [tests
-            [list
-;              [pair 0 [word '']]
-              [pair 0 [word ' ']]
-              [pair 0 [word '    ']]]]
-          [for-each test tests
-            [let [w [alloc-word [pair/snd test]]
-                  pform [js-app parse w]]
-              [test-assert-eq
-                [pair/fst test]
-                pform]
-              [js-app form-free pform]
-              [js-app text-free w]
-              ]]]
-        [let
-          [tests
-            [list
-              [pair [quote a] [word 'a']]
-              [pair [quote abc] [word 'abc']]
-              [pair [quote kebab-123] [word 'kebab-123']]
-              [pair [quote []] [word '[]']]
-              [pair [quote [list]] [word '[list]']]
-              [pair [quote [i32 5]] [word '[i32 5]']]
-              [pair [quote [if b [i32 1] [i32 0]]] [word '[if b [i32 1] [i32 0]]']]
-              [pair [quote [list 0 1 2 3]] [word '[list 0 1 2 3]']]
-              [pair [quote [list 0 1 2 3 4 5 6 7 8 9]] [word '[list 0 1 2 3 4 5 6 7 8 9]']]
-              [pair [quote parsed] [word 'parsed not-parsed']]
-              [pair [quote []] [word '[  ']]
-              [pair [quote [[]]] [word '[ [ ']]
-              ]]
-          [for-each test tests
-            [let [w [alloc-word [pair/snd test]]]
-              [test-assert-form-eq
-                [pair/fst test]
-                [pform-to-form [js-app parse w]]]
-              [js-app text-free w]]]]
+          [let [l [js-app parse-n empty-vec]]
+            [test-assert-eq [i32 0] [js-value-to-i32 [js-app list-size l]]]
+            [js-app list-forms-free l]
+            [js-app text-free empty-vec]]]
         [let
           [tests
             [list
               [pair [qlist] [word ' ']]
+              [pair [qlist] [word '    ']]
+              [pair [qlist a] [word 'a']]
+              [pair [qlist abc] [word 'abc']]
+              [pair [qlist kebab-123] [word 'kebab-123']]
+              [pair [qlist []] [word '[]']]
+              [pair [qlist [list]] [word '[list]']]
+              [pair [qlist [i32 5]] [word '[i32 5]']]
+              [pair [qlist [if b [i32 1] [i32 0]]] [word '[if b [i32 1] [i32 0]]']]
+              [pair [qlist [list 0 1 2 3]] [word '[list 0 1 2 3]']]
+              [pair [qlist [list 0 1 2 3 4 5 6 7 8 9]] [word '[list 0 1 2 3 4 5 6 7 8 9]']]
+              [pair [qlist parsed also-parsed] [word 'parsed also-parsed']]
+              [pair [qlist []] [word '[  ']]
+              [pair [qlist [[]]] [word '[ [ ']]
               [pair [qlist abc xyz] [word 'abc xyz']]
               [pair [qlist abc [i32 789]] [word 'abc [i32 789]']]
               ]]
@@ -562,8 +540,6 @@
         import-map [transient-kv-map]
         ---- [set-kv-map import-map [word env] [kv-map-to-object env]]
         inst [wasm-instantiate module [kv-map-to-object import-map]]
-        parse [get-export inst [word parse]]
-        parse-n [get-export inst [word parse-n]]
         form-free [get-export inst [word form-free]]
         alloc-frames-validate-all [get-export inst [word alloc-frames-validate-all]]
         realloc [get-export inst [word realloc-debug]]
