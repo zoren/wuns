@@ -108,7 +108,7 @@
 
   type-func []
   [record
-    [parameters [list [pair name type]]]
+    [parameters [list type]]
     [result type]]
 
   exp []
@@ -305,7 +305,7 @@
       [type/func tf]
       [type/func
         [type-func
-          [list-map pp [type-func/parameters tf] [pair [pair/fst pp] [go [pair/snd pp]]]]
+          [list-map pp [type-func/parameters tf] [go pp]]
           [go [type-func/result tf]]]]
 
       [logq-abort type-substitute not implemented [identity t]]]]
@@ -402,8 +402,7 @@
 
 [type value-desc []
   [record
-    [kind value-kind]
-    [type type]]]
+    [kind value-kind]]]
 
 [type top-desc-kind []
   [union
@@ -627,7 +626,7 @@
               [desc-kind/top td]
               [match [top-desc/kind td]
                 [top-desc-kind/value val-desc]
-                [match [value-desc/type val-desc]
+                [match [pair/fst desc]
                   [type/func tf]
                   [let
                     [params [type-func/parameters tf]
@@ -635,7 +634,7 @@
                     [assert [eq [size params] [size args]] call expected same number of arguments
                       [identity fn] n-of-params n-of-args]
                     [for i 0 [size params]
-                      [let [pt [pair/snd [at params i]]
+                      [let [pt [at params i]
                             targ [type-of [at cargs i]]]
                           [when-not [type-assignable pt targ]
                             [logq param [identity pt]]
@@ -1071,6 +1070,11 @@
     [pair/snd desc]
     [logq-abort get-desc-from-name not found [name/word n]]]]
 
+[func name-to-type [n]
+  [if-let [desc [try-get name-to-desc n]]
+    [pair/fst desc]
+    [logq-abort name-to-type not found [identity n]]]]
+
 [func get-top-desc-from-name [n]
   [match [get-desc-from-name n]
     [desc-kind/local -] [logq-abort unreachable export local]
@@ -1318,11 +1322,6 @@
     type-tuple-empty
     [type-of [last bodies]]]]
 
-[func name-to-type [n]
-  [if-let [desc [try-get name-to-desc n]]
-    [pair/fst desc]
-    [logq-abort name-to-type not found [identity n]]]]
-
 [func expand-custom [t]
   [match t
     [type/apply-custom type-name args]
@@ -1510,7 +1509,7 @@
     [exp/func ef]
     [type/func
       [type-func
-        [exp-function/parameters ef]
+        [list-map pp [exp-function/parameters ef] [pair/snd pp]]
         [exp-function/result ef]]]
 
     [logq-abort type-of not implemented [identity exp]]]]
@@ -1617,7 +1616,7 @@
                 [set-kv-map value-constants [name/word fname] resolved-be]]
               [bind-top name-form
                 type
-                [top-desc [top-desc-kind/value [value-desc kind type]] [imported-or-here/here]]]
+                [top-desc [top-desc-kind/value [value-desc kind]] [imported-or-here/here]]]
               [option/some bt]]]
 
           [[word memory]]
@@ -1669,7 +1668,7 @@
                   t
                   [match ik
                     [import-kind-decl/function ps rt]
-                    [type/func [type-func ps rt]]
+                    [type/func [type-func [list-map p ps [pair/snd p]] rt]]
 
                     [import-kind-decl/memory mem-exp]
                     [type/exp [exp/var m]]
@@ -1678,7 +1677,7 @@
                   ikd
                   [match ik
                     [import-kind-decl/function ps rt]
-                    [top-desc-kind/value [value-desc value-kind-constant t]]
+                    [top-desc-kind/value [value-desc value-kind-constant]]
 
                     [import-kind-decl/memory mem-exp]
                     [top-desc-kind/memory [mem-exp-to-mem-kind mem-exp]]
@@ -1728,11 +1727,11 @@
                   [set-kv-map param-ctx [name/word pname] ptype]
                   [pair pname ptype]]]
                return-type [form-to-type lctx return-type-form]
-               t [type/func [type-func parameters return-type]]]
+               t [type/func [type-func [list-map pp parameters [pair/snd pp]] return-type]]]
               [bind-top name-form
                 t
                 [top-desc
-                  [top-desc-kind/value [value-desc value-kind-constant t]]
+                  [top-desc-kind/value [value-desc value-kind-constant]]
                   [imported-or-here/here]]]
               [let
                 [cbodies [list-map body [slice l 4 [size l]] [form-to-exp-type-kind-env empty-type-env lctx body]]
@@ -2114,7 +2113,7 @@
       [match [top-desc/kind td]
         [top-desc-kind/value vd]
         [do
-          [match [value-desc/type vd]
+          [match [name-to-type n]
             [type/func -]
             [logq-abort not implemented exp-to-inst var [identity n]]
 
@@ -2145,21 +2144,22 @@
           fd
           [match [top-desc/kind [get-top-desc-from-name fn]]
             [top-desc-kind/value vd]
-            [match [value-desc/type vd]
+            [match [name-to-type fn]
               [type/func tf] tf
 
               [logq-abort not a function]]
             [logq-abort not a function]]]
       [if-let [efunc [try-get top-funcs fnw]]
         [if [eq-word [word def-comp-fn] [exp-function/kind efunc]]
-          [let [param-env [transient-kv-map]
-                params [type-func/parameters fd]
-                comp [mk-exp-to-inst-compiler [transient-kv-map] param-env] ; todo maybe we need to pass the type env
-                es2i [exp2inst-compiler/exps-to-inst comp]]
+          [let [params [exp-function/parameters efunc]
+                param-env [transient-kv-map]]
             [assert [eq [size params] [size args]] call expected same number of arguments]
             [for i 0 [size args]
               [set-kv-map param-env [name/word [pair/fst [at params i]]] [at args i]]]
-            [es2i [exp-function/bodies efunc]]]
+            [let
+              [comp [mk-exp-to-inst-compiler [transient-kv-map] param-env] ; todo maybe we need to pass the type env
+               es2i [exp2inst-compiler/exps-to-inst comp]]
+              [es2i [exp-function/bodies efunc]]]]
           [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]]
         [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]]]
 
