@@ -109,8 +109,7 @@
   type-func []
   [record
     [kind word]
-    [parameter-names [list name]]
-    [parameters [list type]]
+    [parameters [list [pair name type]]]
     [result type]]
 
   exp []
@@ -308,8 +307,7 @@
       [type/func
         [type-func
           [type-func/kind tf]
-          [type-func/parameter-names tf]
-          [list-map a [type-func/parameters tf] [go a]]
+          [list-map pp [type-func/parameters tf] [pair [pair/fst pp] [go [pair/snd pp]]]]
           [go [type-func/result tf]]]]
 
       [logq-abort type-substitute not implemented [identity t]]]]
@@ -639,7 +637,7 @@
                     [assert [eq [size params] [size args]] call expected same number of arguments
                       [identity fn] n-of-params n-of-args]
                     [for i 0 [size params]
-                      [let [pt [at params i]
+                      [let [pt [pair/snd [at params i]]
                             targ [type-of [at cargs i]]]
                           [when-not [type-assignable pt targ]
                             [logq param [identity pt]]
@@ -1515,8 +1513,7 @@
     [type/func
       [type-func
         [word func]
-        [list-map p [exp-function/parameters ef] [pair/fst p]]
-        [list-map p [exp-function/parameters ef] [pair/snd p]]
+        [exp-function/parameters ef]
         [exp-function/result ef]]]
 
     [logq-abort type-of not implemented [identity exp]]]]
@@ -1675,12 +1672,7 @@
                   t
                   [match ik
                     [import-kind-decl/function ps rt]
-                    [type/func
-                      [type-func
-                        fw
-                        [list-map p ps [pair/fst p]]
-                        [list-map p ps [pair/snd p]]
-                        rt]]
+                    [type/func [type-func fw ps rt]]
 
                     [import-kind-decl/memory mem-exp]
                     [type/exp [exp/var m]]
@@ -1704,20 +1696,20 @@
             [when-not [eq [size l] 4] [error form expected functor name params return-type bodies]]
             [let
               [name-form [second l]
-               params-list [get-list [third l]]
+               type-params-list [get-list [third l]]
                result-form [fourth l]
-               param-ctx [transient-kv-map]
-               parameters
-               [list-map p [pairwise-pairs params-list]
+               tparam-ctx [transient-kv-map]
+               tparameters
+               [list-map p [pairwise-pairs type-params-list]
                  [let [pname [form-to-name [pair/fst p]]
                        pkind [form-to-type-kind [pair/snd p]]]
-                  [set-kv-map param-ctx [name/word pname] pkind]
+                  [set-kv-map tparam-ctx [name/word pname] pkind]
                   [pair pname pkind]]]
-               exp [form-to-exp-type-kind-env param-ctx local-context-empty result-form]]
+               exp [form-to-exp-type-kind-env tparam-ctx local-context-empty result-form]]
               [bind-top name-form
-                [type/functor parameters [type-of exp]]
+                [type/functor tparameters [type-of exp]]
                 [top-desc
-                  [top-desc-kind/functor [functor-desc parameters exp]]
+                  [top-desc-kind/functor [functor-desc tparameters exp]]
                   [imported-or-here/here]]]
             [option/none]]]
 
@@ -1739,13 +1731,7 @@
                   [set-kv-map param-ctx [name/word pname] ptype]
                   [pair pname ptype]]]
                return-type [form-to-type lctx return-type-form]
-               t
-               [type/func
-                  [type-func
-                    fw
-                    [list-map p parameters [pair/fst p]]
-                    [list-map p parameters [pair/snd p]]
-                    return-type]]]
+               t [type/func [type-func fw parameters return-type]]]
               [bind-top name-form
                 t
                 [top-desc
@@ -2170,13 +2156,12 @@
       [if [eq-word [word def-comp-fn] fkind]
         [let [param-env [transient-kv-map]
               params [type-func/parameters fd]
-              parameter-names [type-func/parameter-names fd]
               comp [mk-exp-to-inst-compiler [transient-kv-map] param-env] ; todo maybe we need to pass the type env
               es2i [exp2inst-compiler/exps-to-inst comp]
               bodies [exp-function/bodies [get top-funcs fnw]]]
           [assert [eq [size params] [size args]] call expected same number of arguments]
           [for i 0 [size args]
-            [set-kv-map param-env [name/word [at parameter-names i]] [at args i]]]
+            [set-kv-map param-env [name/word [pair/fst [at params i]]] [at args i]]]
           [es2i bodies]]
         [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]]]
 
