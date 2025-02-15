@@ -350,7 +350,7 @@
 [def local-context-empty [local-context/empty]]
 
 [defn local-context-make-top [vars kind]
-  [local-context/frame local-context-empty vars kind]]
+  [local-context-make local-context-empty vars kind]]
 
 [defn try-get-local [lctx name]
   [loop [cur lctx]
@@ -2151,9 +2151,8 @@
               [type/func tf] tf
 
               [logq-abort not a function]]
-            [logq-abort not a function]]
-          fkind [type-func/kind fd]]
-      [if [eq-word [word def-comp-fn] fkind]
+            [logq-abort not a function]]]
+      [if [eq-word [word def-comp-fn] [type-func/kind fd]]
         [let [param-env [transient-kv-map]
               params [type-func/parameters fd]
               comp [mk-exp-to-inst-compiler [transient-kv-map] param-env] ; todo maybe we need to pass the type env
