@@ -108,7 +108,6 @@
 
   type-func []
   [record
-    [kind word]
     [parameters [list [pair name type]]]
     [result type]]
 
@@ -306,7 +305,6 @@
       [type/func tf]
       [type/func
         [type-func
-          [type-func/kind tf]
           [list-map pp [type-func/parameters tf] [pair [pair/fst pp] [go [pair/snd pp]]]]
           [go [type-func/result tf]]]]
 
@@ -1512,7 +1510,6 @@
     [exp/func ef]
     [type/func
       [type-func
-        [word func]
         [exp-function/parameters ef]
         [exp-function/result ef]]]
 
@@ -1672,7 +1669,7 @@
                   t
                   [match ik
                     [import-kind-decl/function ps rt]
-                    [type/func [type-func fw ps rt]]
+                    [type/func [type-func ps rt]]
 
                     [import-kind-decl/memory mem-exp]
                     [type/exp [exp/var m]]
@@ -1731,7 +1728,7 @@
                   [set-kv-map param-ctx [name/word pname] ptype]
                   [pair pname ptype]]]
                return-type [form-to-type lctx return-type-form]
-               t [type/func [type-func fw parameters return-type]]]
+               t [type/func [type-func parameters return-type]]]
               [bind-top name-form
                 t
                 [top-desc
@@ -1756,6 +1753,7 @@
                 [if is-defn
                   [option/some [top-decl/function exp-func]]
                   [option/none]]]]]
+
           [logq-abort not implemented [identity fw]]]]]]]
 
 [func top-forms-to-top-decls [forms]
@@ -2152,16 +2150,17 @@
 
               [logq-abort not a function]]
             [logq-abort not a function]]]
-      [if [eq-word [word def-comp-fn] [type-func/kind fd]]
-        [let [param-env [transient-kv-map]
-              params [type-func/parameters fd]
-              comp [mk-exp-to-inst-compiler [transient-kv-map] param-env] ; todo maybe we need to pass the type env
-              es2i [exp2inst-compiler/exps-to-inst comp]
-              bodies [exp-function/bodies [get top-funcs fnw]]]
-          [assert [eq [size params] [size args]] call expected same number of arguments]
-          [for i 0 [size args]
-            [set-kv-map param-env [name/word [pair/fst [at params i]]] [at args i]]]
-          [es2i bodies]]
+      [if-let [efunc [try-get top-funcs fnw]]
+        [if [eq-word [word def-comp-fn] [exp-function/kind efunc]]
+          [let [param-env [transient-kv-map]
+                params [type-func/parameters fd]
+                comp [mk-exp-to-inst-compiler [transient-kv-map] param-env] ; todo maybe we need to pass the type env
+                es2i [exp2inst-compiler/exps-to-inst comp]]
+            [assert [eq [size params] [size args]] call expected same number of arguments]
+            [for i 0 [size args]
+              [set-kv-map param-env [name/word [pair/fst [at params i]]] [at args i]]]
+            [es2i [exp-function/bodies efunc]]]
+          [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]]
         [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]]]
 
     [exp/call-functor fname targs]
