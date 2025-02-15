@@ -4,6 +4,9 @@
   "scopeName": "source.wuns",
   "patterns": [
     {
+			"include": "#comment"
+		},
+    {
       "include": "#form"
     },
     {
@@ -82,12 +85,12 @@
       "end": "\\]",
       "beginCaptures": {
         "0": {
-          "name": "punctuation.bracket.open"
+          "name": "punctuation.bracket.open.wuns"
         }
       },
       "endCaptures": {
         "0": {
-          "name": "punctuation.bracket.close"
+          "name": "punctuation.bracket.close.wuns"
         }
       },
       "name": "form.group",
@@ -96,6 +99,16 @@
           "include": "#form"
         }
       ]
-    }
+    },
+    "comment": {
+			"begin": "(?<!\\\\);",
+			"beginCaptures": {
+				"0": {
+					"name": "punctuation.definition.comment.wuns"
+				}
+			},
+			"end": "$",
+			"name": "comment.line.semicolon.wuns"
+		}
   }
 }
