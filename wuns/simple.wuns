@@ -1418,13 +1418,8 @@
         [logq-abort not a func]]]
 
     [exp/call-functor fname targs]
-    [let
-      [fd [get-functor-desc fname]
-       res-t [type-substitute [functor-desc-to-type-env fd targs] [type-of [functor-desc/body fd]]]]
-;      [logq type-of call-functor [name/word fname] [identity fd] [identity targs]]
-;      [logq type-of result type [identity res-t]]
-      res-t
-      ]
+    [let [fd [get-functor-desc fname]]
+      [type-substitute [functor-desc-to-type-env fd targs] [type-of [functor-desc/body fd]]]]
 
     [exp/cast t e]
     [expand-custom t]
@@ -1726,10 +1721,9 @@
                        ptype [form-to-type lctx [pair/snd p]]]
                   [set-kv-map param-ctx [name/word pname] ptype]
                   [pair pname ptype]]]
-               return-type [form-to-type lctx return-type-form]
-               t [type/func [type-func [list-map pp parameters [pair/snd pp]] return-type]]]
+               return-type [form-to-type lctx return-type-form]]
               [bind-top name-form
-                t
+                [type/func [type-func [list-map pp parameters [pair/snd pp]] return-type]]
                 [top-desc
                   [top-desc-kind/value [value-desc value-kind-constant]]
                   [imported-or-here/here]]]
