@@ -1753,23 +1753,22 @@
       [logq-abort not implemented lift-primitive [identity p]]]]]
 
 [func type-to-wat-type [t]
-  [match [expand-custom t]
-    [type/primitive p]
-    [do
-      [primitive-type/name [lift-primitive p]]]
+  [primitive-type/name
+    [match [expand-custom t]
+      [type/primitive p]
+      [lift-primitive p]
 
-    [type/exp e]
-    [match e
-      [exp/integer pt -]
-      [do
-        [primitive-type/name [lift-primitive pt]]]
+      [type/exp e]
+      [match e
+        [exp/integer pt -]
+        [lift-primitive pt]
 
-      [logq-abort not implemented type-to-wat-type [identity e]]]
+        [logq-abort not implemented type-to-wat-type [identity e]]]
 
-    [type/pointer mt -]
-    [primitive-type/name [get-memory-pointer-type mt]]
+      [type/pointer mt -]
+      [get-memory-pointer-type mt]
 
-    [logq-abort type-to-wat-type [identity t]]]]
+      [logq-abort type-to-wat-type [identity t]]]]]
 
 [func type-to-wat-types [type]
   [match [expand-custom type]
