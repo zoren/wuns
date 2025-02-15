@@ -1601,22 +1601,22 @@
               [name-form [second l]
                fname [form-to-name name-form]
                be [form-to-exp-type-kind-env empty-type-env local-context-empty [third l]]
-               type [type-of be]
                is-mutable [eq-word fw [word mutable]]
                kind [if is-mutable value-kind-mutable value-kind-constant]
                resolved-be [if-let [c [try-resolve-const be]] c be]]
               [when-not is-mutable
                 [set-kv-map value-constants [name/word fname] resolved-be]]
               [bind-top name-form
-                type
+                [type-of be]
                 [top-desc [top-desc-kind/value [value-desc kind]] [imported-or-here/here]]]
               [push top-decls [top-decl/value kind fname be]]]]
 
           [[word memory]]
           [let [mem-name [form-to-name [second l]]
-                mem-exp [form-list-to-mem-exp [rest l]]
-                t [type/exp [exp/var mem-name]]]
-            [bind-top [second l] t [top-desc [top-desc-kind/memory [mem-exp-to-mem-kind mem-exp]] [imported-or-here/here]]]
+                mem-exp [form-list-to-mem-exp [rest l]]]
+            [bind-top [second l]
+              [type/exp [exp/var mem-name]]
+              [top-desc [top-desc-kind/memory [mem-exp-to-mem-kind mem-exp]] [imported-or-here/here]]]
             [push top-decls [top-decl/memory mem-name mem-exp]]]
 
           [[word export]]
