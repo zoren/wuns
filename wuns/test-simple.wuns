@@ -381,6 +381,9 @@
         inst [wasm-instantiate module [kv-map-to-object import-map]]
         parse [get-export inst [word parse]]
         parse-n [get-export inst [word parse-n]]
+        form-free [get-export inst [word form-free]]
+        list-forms-free [get-export inst [word list-forms-free]]
+        text-free [get-export inst [word text-free]]
         list-size [get-export inst [word list-size]]
         list-alloc-byte [get-export inst [word list-alloc-byte]]
         form-tag [get-export inst [word form-tag]]
@@ -390,8 +393,7 @@
         form-word-get [get-export inst [word form-word-get]]
         list-get-form [get-export inst [word list-get-form]]
         list-data-array [get-export inst [word list-data-array]]
-        alloc-frames-validate-all [get-export inst [word alloc-frames-validate-all]]
-        realloc [get-export inst [word realloc]]
+        realloc [get-export inst [word realloc-debug]]
         get-number-of-frames [get-export inst [word get-number-of-frames]]
         num-frames-i32 [func nfi [] [js-value-to-i32 [js-app get-number-of-frames]]]
         fill-word
@@ -460,9 +462,14 @@
               [pair 0 [word ' ']]
               [pair 0 [word '    ']]]]
           [for-each test tests
-            [test-assert-eq
-              [pair/fst test]
-              [js-app parse [alloc-word [pair/snd test]]]]]]
+            [let [w [alloc-word [pair/snd test]]
+                  pform [js-app parse w]]
+              [test-assert-eq
+                [pair/fst test]
+                pform]
+              [js-app form-free pform]
+              [js-app text-free w]
+              ]]]
         [let
           [tests
             [list
@@ -480,20 +487,23 @@
               [pair [quote [[]]] [word '[ [ ']]
               ]]
           [for-each test tests
-            [test-assert-form-eq
-              [pair/fst test]
-              [pform-to-form [js-app parse [alloc-word [pair/snd test]]]]]]]
+            [let [w [alloc-word [pair/snd test]]]
+              [test-assert-form-eq
+                [pair/fst test]
+                [pform-to-form [js-app parse w]]]
+              [js-app text-free w]]]]
         [let
           [tests
             [list
               [pair [qlist] [word ' ']]
-              [pair [qlist abc 123] [word 'abc 123']]
-              [pair [qlist abc [i32 123]] [word 'abc [i32 123]']]
+              [pair [qlist abc xyz] [word 'abc xyz']]
+              [pair [qlist abc [i32 789]] [word 'abc [i32 789]']]
               ]]
           [for-each test tests
             [let
               [expected [pair/fst test]
-               fl [js-app parse-n [alloc-word [pair/snd test]]]
+               w [alloc-word [pair/snd test]]
+               fl [js-app parse-n w]
                sz [js-value-to-i32 [js-app list-size fl]]
                gl [growable-list]]
               [for i 0 sz
@@ -501,9 +511,67 @@
               [test-assert-eq [size expected] sz]
               [let [actual [clone-growable-to-frozen-list gl]]
                 [for i 0 sz
-                [test-assert-form-eq [at expected i] [at actual i]]]]]]]
+                [test-assert-form-eq [at expected i] [at actual i]]]]
+              [js-app list-forms-free fl]
+              [js-app text-free w]]]]]]]]
 
-          [js-app alloc-frames-validate-all]
+[defn test-realloc []
+  [promise-then
+    [read-parse-file-async [word llsimpleparse.wuns]]
+    [func t [forms]
+      [let
+       [module [forms-to-module forms]
+        mem [memory 1 9 0]
+        byte-array-from-mem
+        [func bafm [data sz]
+          [byte-array-from-array-buffer [memory-buffer mem] data sz]]
+        wasm-log
+        [func wasm-log [data sz]
+          [logq wasm-log
+            [byte-array-to-string
+              [byte-array-from-mem data sz]]]]
+        wasm-log-i32
+        [func wasm-log-i32 [n]
+          [logq wasm-log-i32 [identity n]]]
+        wasm-dump-mem
+        [func wasm-dump-mem [p n]
+          [let
+            [ar [byte-array-from-mem p n]]
+            [logq wasm-dump-mem [identity p] [identity n] [identity ar]]]]
+        env [transient-kv-map]
+        - [set-kv-map env [word mem] [to-js-value mem]]
+        -- [set-kv-map env [word log] [to-js-value wasm-log]]
+        --- [set-kv-map env [word log-i32] [to-js-value wasm-log-i32]]
+        -f [set-kv-map env [word dump-mem] [to-js-value wasm-dump-mem]]
+        import-map [transient-kv-map]
+        ---- [set-kv-map import-map [word env] [kv-map-to-object env]]
+        inst [wasm-instantiate module [kv-map-to-object import-map]]
+        parse [get-export inst [word parse]]
+        parse-n [get-export inst [word parse-n]]
+        form-free [get-export inst [word form-free]]
+        alloc-frames-validate-all [get-export inst [word alloc-frames-validate-all]]
+        realloc [get-export inst [word realloc-debug]]
+        get-number-of-frames [get-export inst [word get-number-of-frames]]
+        num-frames-i32 [func nfi [] [js-value-to-i32 [js-app get-number-of-frames]]]
+        fill-word
+        [func fill-word [jsp w]
+          [let
+            [src [word-to-byte-array w]
+             sz [byte-array-size src]
+             dst [byte-array-from-mem [js-value-to-i32 jsp] sz]]
+            [for i 0 sz
+              [byte-array-set dst i [byte-array-get src i]]]]]
+        read-mem-as-word
+        [func rmw [jsp sz]
+          [let
+            [ar [byte-array-from-mem [js-value-to-i32 jsp] sz]
+             str [byte-array-to-string ar]]
+            [string-to-word str]]]
+        read-mem-byte
+        [func rmb [jsp index]
+          [let
+            [ar [byte-array-from-mem [add [js-value-to-i32 jsp] index] 1]]
+            [byte-array-get ar 0]]]]
 
           [let
             [n-frames [num-frames-i32]
@@ -517,7 +585,6 @@
             [test-assert-eq p [js-app realloc 0 0 [i32 6]]]
             [js-app realloc q 6 0]]
 
-          [js-app alloc-frames-validate-all]
           [let
             [n-frames [num-frames-i32]
              p [js-app realloc 0 0 7]
@@ -563,6 +630,12 @@
               [test-assert-eq [word 123] [read-mem-as-word new-q 3]]
               [test-assert-eq 0 [read-mem-byte new-q 3]]
               [test-assert-eq 0 [read-mem-byte new-q 4]]
-              [test-assert-eq 0 [read-mem-byte new-q 5]]]]
-          [js-app realloc 0 0 [i32 65536]]
-          [js-app alloc-frames-validate-all]]]]]
+              [test-assert-eq 0 [read-mem-byte new-q 5]]
+              [js-app realloc new-q 6 0]]
+            [js-app realloc r 6 0]
+            [js-app realloc p 7 0]]
+          [let [big [js-app realloc 0 0 [i32 65536]]]
+            [js-app alloc-frames-validate-all]
+            [logq n-frames [js-app alloc-frames-validate-all]]
+            [js-app realloc big [i32 65536] 0]]
+          [logq n-frames [js-app alloc-frames-validate-all]]]]]]

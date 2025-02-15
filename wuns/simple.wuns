@@ -242,7 +242,10 @@
      [word i32.shl] [word i32.shr-s] [word i32.shr-u]
      [word i32.eq] [word i32.ne]
      [word i32.lt-s] [word i32.le-s]
-     [word i32.gt-s] [word i32.ge-s]]
+     [word i32.gt-s] [word i32.ge-s]
+     [word i32.lt-u] [word i32.le-u]
+     [word i32.gt-u] [word i32.ge-u]
+     ]
     [intrinsic-type [list] [list type-i32 type-i32] type-i32]
 
     [[word i64.add] [word i64.sub] [word i64.mul]
@@ -1782,19 +1785,24 @@
         [push top-decls top]]]
     [clone-growable-to-frozen-list top-decls]]]
 
+[func lift-primitive [p]
+  [if [primitive-is-wasm-value-type p]
+    p
+    [if [primitive-type-is-integer p]
+      type-primitive-i32
+      [logq-abort not implemented lift-primitive [identity p]]]]]
+
 [func type-to-wat-type [t]
   [match [expand-custom t]
     [type/primitive p]
     [do
-      [assert [primitive-is-wasm-value-type p]]
-      [primitive-type/name p]]
+      [primitive-type/name [lift-primitive p]]]
 
     [type/exp e]
     [match e
       [exp/integer pt -]
       [do
-        [assert [primitive-is-wasm-value-type pt]]
-        [primitive-type/name pt]]
+        [primitive-type/name [lift-primitive pt]]]
 
       [logq-abort not implemented type-to-wat-type [identity e]]]
 
@@ -2327,7 +2335,7 @@
      exports [growable-list]
      wdata [growable-list]
      add-func
-     [func af [name type-inst-env f]
+     [func add-func [name type-inst-env f]
        [let
         [const-env [transient-kv-map]
          comp [mk-exp-to-inst-compiler type-inst-env const-env]

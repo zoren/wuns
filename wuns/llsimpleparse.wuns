@@ -34,7 +34,9 @@
 [defn eq [x [i32] y [i32]] [i32] [intrinsic i32.eq x y]]
 [defn ne [x [i32] y [i32]] [i32] [intrinsic i32.ne x y]]
 [defn lt-s [x [i32] y [i32]] [i32] [intrinsic i32.lt-s x y]]
+[defn lt-u [x [i32] y [i32]] [i32] [intrinsic i32.lt-u x y]]
 [defn le-s [x [i32] y [i32]] [i32] [intrinsic i32.le-s x y]]
+[defn le-u [x [i32] y [i32]] [i32] [intrinsic i32.le-u x y]]
 [defn is-negative [x [i32]] [i32] [lt-s x 0]]
 
 [defn add [x [i32] y [i32]] [i32] [intrinsic i32.add x y]]
@@ -74,11 +76,17 @@
 [defn mem-align [p [i32]] [i32]
   [align [i32 16] p]]
 
+[defn mem-align-is [p [i32]] [i32]
+  [eq p [mem-align p]]]
+
 [defn memory-fill [p [pmem -a] value [i32] n-bytes [i32]] [tuple]
   [intrinsic memory.fill mem p value n-bytes]]
 
 [defn memory-zero [p [pmem -a] n-bytes [i32]] [tuple]
   [memory-fill p 0 n-bytes]]
+
+[defn memory-copy [pdst [pmem -a] psrc [pmem -a] n-bytes [i32]] [tuple]
+  [intrinsic memory.copy mem pdst psrc n-bytes]]
 
 [defn mem-size-bytes [] [i32]
   [intrinsic i32.shl [intrinsic memory.size mem] [i32 16]]]
@@ -88,10 +96,9 @@
 [defn is-null [p [pmem -a]] [i32]
   [eq [cast [i32] p] 0]]
 
-[defn resize-mem [frame-size [i32]] [tuple]
+[defn resize-mem-to-fit [new-top [i32]] [tuple]
   [let
-    [new-top [add [get-top] frame-size]
-     mem-size [mem-size-bytes]]
+    [mem-size [mem-size-bytes]]
     [if [lt-s mem-size new-top]
       [let
         [missing-bytes [sub new-top mem-size]
@@ -100,7 +107,12 @@
         [if [is-negative res] [log-abort [text 'resize-mem memory.grow failed']]]
         [log-ar [text 'resize-mem grew mem pages']]
         [log-i32 missing-bytes]
-        [log-i32 missing-pages]]]
+        [log-i32 missing-pages]]]]]
+
+[defn resize-mem [frame-size [i32]] [tuple]
+  [let
+    [new-top [add [get-top] frame-size]]
+    [resize-mem-to-fit new-top]
     [set-top new-top]]]
 
 [datatype alloc-stack-frame [byte-aligned-size [exp [i32]]]
@@ -133,13 +145,19 @@
      pframe-sized [cast [pmem [alloc-stack-frame [exp byte-aligned-size]]] pframe]
      canary [field [deref pframe-sized] canary]
      frame-size-end [field [deref pframe-sized] frame-size-end]]
-  [log-ar [text 'frame']]
+  [log-ar [text 'alloc-frame-log']]
   [log-i32 frame-size]
   [log-i32 byte-size]
   [log-i32 realloc-size]
-  [log-i32 byte-aligned-size]]]
+  [log-i32 byte-aligned-size]
+  [log-i32 abandoned]
+  [log-ar [text 'alloc-frame-log data start']]
+  [log [pfield pframe data] byte-size]
+  [log-ar [text 'alloc-frame-log data end']]
+  ]]
 
 [defn alloc-frame-validate [pframe [pmem [alloc-stack-frame -a]]] [tuple]
+  ; todo check if top is within memory bounds
   [if [static-is pframe]
     [log-abort [text 'alloc-frame-validate pframe points to static mem']]]
   [if [lt-s [mem-size-bytes] [add pframe [size-of-type [alloc-stack-frame [exp [mem-align 1]]]]]]
@@ -161,6 +179,8 @@
       [log-abort [text 'validate-alloc byte-size < realloc-size']]]
     [if [lt-s abandoned 0] [log-abort [text 'validate-alloc abandoned < 0']]]
     [if [lt-s 1 abandoned] [log-abort [text 'validate-alloc abandoned > 1']]]
+    ; todo check bytes after realloc-size and before byte-size are overwritten
+    ; todo check bytes after byte-size and before byte-aligned-size are properly zeroed
     [if [ne canary canary-value] [log-abort [text 'validate-alloc canary value mismatch']]]
     [if [ne frame-size frame-size-end] [log-abort [text 'validate-alloc frame-size != frame-size-end']]]]]
 
@@ -198,7 +218,7 @@
     [memory-zero frame-data byte-aligned-size]
     [assign [field [deref pframe] canary] canary-value]
     [assign [field [deref pframe] frame-size-end] frame-size]
-
+    [alloc-frame-validate pframe]
     [assign num-of-frames [inc num-of-frames]]
 
     frame-data]]
@@ -222,21 +242,21 @@
 
     frame-data]]
 
-[mutable overwrite-memory-value [i32 0xa0]]
+[mutable memory-overwrite-value [i32 0xa0]]
 
-[defn overwrite-memory [pdata [pmem -a] n-bytes [i32]] [tuple]
+[defn memory-overwrite [pdata [pmem -a] n-bytes [i32]] [tuple]
   [if [lt-s n-bytes 0] [log-abort [text 'overwrite n-bytes < 0']]]
   ; write between 0xa0 and 0xfe to the memory
-  [let [overwrite-val overwrite-memory-value]
+  [let [overwrite-val memory-overwrite-value]
     [memory-fill pdata overwrite-val n-bytes]
-    [assign overwrite-memory-value
+    [assign memory-overwrite-value
       [if [eq overwrite-val [i32 0xfe]]
         [i32 0xa0]
         [inc overwrite-val]]]]]
 
 [defn alloc-stack-frame-abandon [pframe [pmem [alloc-stack-frame -a]]] [tuple]
   ; overwrite data area to avoid dangling pointers using it
-  [overwrite-memory [pfield pframe data] [field [deref pframe] byte-aligned-size]]
+  [memory-overwrite [pfield pframe data] [field [deref pframe] byte-aligned-size]]
   [assign [field [deref pframe] abandoned] 1]]
 
 [defn get-top-frame [] [pmem [alloc-stack-frame -a]]
@@ -250,6 +270,14 @@
         [alloc-frame-validate pframe]
         pframe]]]]
 
+[defn alloc-frame-top-log [] [tuple]
+  [let [top-frame [get-top-frame]]
+    [if [is-null top-frame]
+      [log-ar [text 'alloc-frame-top-log stack is empty']]
+      [alloc-frame-log top-frame]]]]
+
+[export alloc-frame-top-log]
+
 [defn alloc-stack-pop [] [tuple]
   [let [pframe [get-top-frame]]
     [if [is-null pframe]
@@ -260,8 +288,9 @@
 
 ; inspired by the lua lua_Alloc function signature
 ; https://ligurio.github.io/lua-c-manual-pages/lua_Alloc.3.html
+; from https://nullprogram.com/blog/2023/12/17/
 
-[defn realloc [old-p [pmem -a] old-n-bytes [i32] new-n-bytes [i32]] [pmem -a]
+[defn realloc-debug [old-p [pmem -a] old-n-bytes [i32] new-n-bytes [i32]] [pmem -a]
   [ifs
     [eq old-p 0]
     [do
@@ -274,11 +303,15 @@
       [alloc-stack-frame-push new-n-bytes]]
 
     [let
+      ; todo check if old-p is a valid pointer first, non static and within memory bounds
       ; find the frame from the data pointer
       [pframe-i [sub old-p [offset-of [alloc-stack-frame -a] data]]
        pframe [cast [pmem [alloc-stack-frame -a]] pframe-i]
        frame-end [add pframe-i [field [deref pframe] frame-size]]]
       [alloc-frame-validate pframe]
+      [if [eq [field [deref pframe] abandoned] 1]
+        [log-abort [text 'realloc frame is abandoned, should not happen']]]
+
       ; check if old-n matches the frame realloc-size
       [if [ne old-n-bytes [field [deref pframe] realloc-size]]
         [log-abort [text 'realloc old-n-bytes != realloc-size']]]
@@ -327,18 +360,61 @@
                 [cast [pmem -a] [add [pfield pframe data] old-n-bytes]]
                 [sub new-n-bytes old-n-bytes]]
               ; overwrite now unused parts of the data area to avoid dangling pointers using it
-              [overwrite-memory
+              [memory-overwrite
                 [cast [pmem -a] [add [pfield pframe data] new-n-bytes]]
                 [sub old-n-bytes new-n-bytes]]]
             old-p]
           ; else, allocate a new frame copying over old data, then abandon the old frame
           [let
             [new-data [alloc-stack-frame-push new-n-bytes]]
-            [intrinsic memory.copy mem new-data old-p old-n-bytes]
+            [memory-copy new-data old-p old-n-bytes]
             [alloc-stack-frame-abandon pframe]
             new-data]]]]]]
 
-[export realloc]
+[export realloc-debug]
+
+[defn pointer-dynamic-is [p [pmem -a]] [i32]
+  [if [eq p 0]
+    1
+    [if [lt-u p static-mem-top]
+      0
+      [lt-u p [mem-size-bytes]]]]]
+
+[defn realloc-production [old-p [pmem -a] old-n-bytes [i32] new-n-bytes [i32]] [pmem -a]
+  [if [not [mem-align-is old-p]] [log-abort [text 'realloc-production old-p not aligned']]]
+  [if [not [pointer-dynamic-is old-p]] [log-abort [text 'realloc-production old-p not dynamic']]]
+  [let
+    [old-n-aligned [mem-align old-n-bytes]
+     new-n-aligned [mem-align new-n-bytes]
+     old-end [add old-p old-n-aligned]
+     cur-top [get-top]]
+    [if [eq old-end cur-top]
+      ; reallocating the top frame
+      [do
+        ; ensure the memory fits the new size
+        [if [lt-u old-n-aligned new-n-aligned]
+          [do
+            [resize-mem [sub new-n-aligned old-n-aligned]]
+            [memory-zero [cast [pmem -a] [add old-p old-n-bytes]] [sub new-n-bytes old-n-bytes]]
+            [memory-overwrite [cast [pmem -a] [add old-p new-n-bytes]] [sub new-n-aligned new-n-bytes]]]]
+        old-p]
+      [if [le-u new-n-bytes old-n-bytes]
+        ; not the top frame but smaller than before
+        [do
+          ; overwrite now unused parts of the data area to avoid dangling pointers using it
+          [memory-overwrite [cast [pmem -a] [add old-p new-n-bytes]] [sub old-n-bytes new-n-bytes]]
+          old-p]
+        ; else allocating a new frame
+        [let [new-p [cast [pmem -a] cur-top]]
+          [resize-mem new-n-aligned]
+          ; copy old data to new location
+          [memory-copy new-p old-p old-n-bytes]
+          ; abandon old frame
+          [memory-overwrite old-p old-n-aligned]
+          new-p]]]]]
+
+[defn realloc [old-p [pmem -a] old-n-bytes [i32] new-n-bytes [i32]] [pmem -a]
+  [realloc-production old-p old-n-bytes new-n-bytes]]
 
 [functor alloc [t datatype]
   [cast [pmem t] [realloc null 0 [size-of-type t]]]]
@@ -375,13 +451,18 @@
       [assign [field [deref p] size] sz]
       p]]]
 
+[functor list-free [elem-type datatype]
+  [func [pvec [pmem [list-data elem-type -sz]]] [tuple]
+    [if [not [static-is pvec]]
+      [free pvec [size-of-type [list-data elem-type [exp [field [deref pvec] size]]]]]]]]
+
 [def list-alloc-byte [list-alloc [u8]]]
 [export list-alloc-byte]
 
 [functor list-get [elem-type datatype]
-  [func [pvec [pmem [list-data elem-type -sz]] i [i32]] [pmem [array elem-type]]
+  [func [pvec [pmem [list-data elem-type -sz]] i [i32]] elem-type
     [if [lt-s i 0] [log-abort [text 'list-get index negative']]]
-    [if [lt-s [list-size pvec] i] [log-abort [text 'list-get index out of bounds']]]
+    [if [le-s [list-size pvec] i] [log-abort [text 'list-get index out of bounds']]]
     [index [field [deref pvec] array] i]]]
 
 [defn list-data-array [pvec [plist -a]] [pmem [array -a]]
@@ -405,6 +486,13 @@
           capacity init-capacity
           parray [alloc [array elem-type [exp init-capacity]]]]]
       p]]]
+
+[functor growable-list-free [elem-type datatype]
+  [func [pglist [pmem [growable-list elem-type]]] [tuple]
+    [let
+      [parray [field [deref pglist] parray]]
+      [free parray [size-of-type [array elem-type [exp [field [deref pglist] capacity]]]]]
+      [free pglist [size-of-type [growable-list elem-type]]]]]]
 
 [functor growable-list-push [elem-type datatype]
   [func [pglist [pmem [growable-list elem-type]] elem elem-type] [tuple]
@@ -517,10 +605,50 @@
 
 [export list-get-form]
 
+[def text-free [list-free [u8]]]
+
+[export text-free]
+
+[def list-free-form [list-free [pform]]]
+
+[defn form-free [pf [pform]] [tuple]
+  [if [not [static-is pf]]
+    [ifs
+      [form-word-is pf]
+      [let [pw [form-word-get pf]]
+        [if [not [static-is pw]]
+          [text-free pw]]
+        [free pf [size-of-type [form-word]]]]
+
+      [form-list-is pf]
+      [let [forms [form-list-get pf]]
+        [loop [i 0 n [list-size forms]]
+          [if [lt-s i n]
+            [do
+              [form-free [list-get-form forms i]]
+              [continue i [inc i]]]]]
+        [list-free-form forms]
+        [free pf [size-of-type [form-list]]]]
+
+      [log-abort [text 'form-free unknown form type']]]]]
+
+[defn list-forms-free [pfs [plist [pform]]] [tuple]
+  [loop [i 0 n [list-size pfs]]
+    [if [lt-s i n]
+      [do
+        [form-free [list-get-form pfs i]]
+        [continue i [inc i]]]]
+  [list-free-form pfs]]]
+
+[export form-free list-forms-free]
+
 [def list-get-byte [list-get [u8]]]
 
 [def growable-list-alloc-init-form
   [growable-list-alloc-init [pform]]]
+
+[def growable-list-free-form
+  [growable-list-free [pform]]]
 
 [def growable-list-to-list-form
   [growable-list-to-list [pform]]]
@@ -548,8 +676,16 @@
           [continue i [inc i]]]]]
     parray]]
 
-[def stack-size [i32 16]]
-[def init-capacity [i32 32]]
+[defn stack-free [pstack [pmem [array [pmem [growable-list [pform]]]]] stack-size [i32]] [tuple]
+  [loop [i 0]
+    [if [lt-s i stack-size]
+      [do
+        [growable-list-free-form [index [deref pstack] i]]
+        [continue i [inc i]]]]]
+  [free pstack [size-of-type [array [pmem [growable-list [pform]]] [exp stack-size]]]]]
+
+[def stack-size [i32 8]]
+[def init-capacity [i32 8]]
 
 [defn list-slice-byte [psrc [plist [u8]] start [i32] end [i32]] [plist [u8]]
   [let
@@ -585,8 +721,12 @@
      stack-index [i32 -1]]
     [if [not [lt-s i n-of-bytes]]
       [if [is-negative stack-index]
-        [cast [pform] null]
-        [unwind-stack stack stack-index]]
+        [do
+          [stack-free stack stack-size]
+          [cast [pform] null]]
+        [let [f [unwind-stack stack stack-index]]
+          [stack-free stack stack-size]
+          f]]
       [let [c [list-get-byte bytes i]]
         [ifs
           [is-word-char c]
@@ -594,7 +734,9 @@
                 fw [form-word-alloc [list-slice-byte bytes i word-end]]]
             [if [not [lt-s i word-end]] [log-abort [text 'scan-word-end returned i >= word-end']]]
             [if [is-negative stack-index]
-              fw
+              [do
+                [stack-free stack stack-size]
+                fw]
               [do
                 [growable-list-push-form [index [deref stack] stack-index] fw]
                 [continue i word-end]]]]
@@ -617,7 +759,9 @@
               [growable-list-reset glist]
               [let [fl [form-list-alloc form-list]]
                 [if [eq stack-index 0]
-                  fl
+                  [do
+                    [stack-free stack stack-size]
+                    fl]
                   [do
                     [growable-list-push-form [index [deref stack] [dec stack-index]] fl]
                     [continue
@@ -635,6 +779,7 @@
      result [growable-list-alloc-init-form [i32 20]]]
     [loop
       [i 0
+       ; todo let stack-index be 0 based instead and result be the top growable-list
        stack-index [i32 -1]]
       [if [not [lt-s i n-of-bytes]]
         [if [not [is-negative stack-index]]
@@ -675,6 +820,9 @@
                     stack-index [dec stack-index]]]]]
 
             [log-abort [text 'unexpected character']]]]]]
-        [growable-list-to-list-form result]]]
+        [stack-free stack stack-size]
+        [let [lres [growable-list-to-list-form result]]
+          [growable-list-free-form result]
+          lres]]]
 
 [export parse-n]
