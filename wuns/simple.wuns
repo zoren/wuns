@@ -847,6 +847,16 @@
       [common-super-type tt te]
       [exp/if c t e]]
 
+    [[word when]]
+    [let
+      [c [form-to-exp-type-kind-env type-kind-env lctx [second l]]
+       bodies [list-map b [slice l 2 [size l]] [form-to-exp-type-kind-env type-kind-env lctx b]]
+       t [exp/do bodies]
+       tt [type-of t]]
+      [when-not [type-assignable type-i32 [type-of c]] [logq-abort if condition not i32]]
+      [common-super-type tt type-tuple-empty]
+      [exp/if c t [exp/do [list]]]]
+
     [[word ifs]]
     [let [s [size l]]
       [assert-not [is-odd s] ifs requires an odd number of arguments]
