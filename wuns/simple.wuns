@@ -645,7 +645,7 @@
                             [logq param [identity pt]]
                             [logq arg-t [identity targ]]
                             [logq arg-e [at cargs i]]
-                            [logq-abort call expected assignable type [identity fn]]]]]
+                            [logq-abort call expected assignable type - [name/word fn]]]]]
                     [exp/call fn cargs]]]
 
                 [top-desc-kind/functor functor-desc]
@@ -1196,12 +1196,7 @@
             true
 
             [option/some dopt]
-            [match sopts
-              [option/none]
-              false
-
-              [option/some sopt]
-              [type-assignable dopt sopt]]]]
+            [type-assignable dopt [option-default sopts [type/wildcard [name [word -]]]]]]]
 
         [type-equals tdst tsrc]]
 
@@ -2074,6 +2069,9 @@
 
         [exp/var n]
         [go [get-const e]]
+
+        [exp/size-of-exp e]
+        [go [type-to-size-of-exp [type-of [get-const e]]]]
 
         [logq-abort not implemented exp-to-bytes [identity e]]]]]
     [go e]

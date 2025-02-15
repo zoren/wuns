@@ -28,6 +28,9 @@
 [def 2 [i32 2]]
 [def 3 [i32 3]]
 
+[def false [i32 0]]
+[def true [i32 1]]
+
 [def not
   [func [x [i32]] [i32] [if x 0 1]]]
 
@@ -826,3 +829,82 @@
           lres]]]
 
 [export parse-n]
+
+[defn word-eq [w1 [text] w2 [text]] [i32]
+  [if [eq w1 w2]
+    true
+    [let [n1 [list-size w1]
+          n2 [list-size w2]]
+      [if [eq n1 n2]
+        [loop [i 0]
+          [if [lt-s i n1]
+            [if [eq [list-get-byte w1 i] [list-get-byte w2 i]]
+              [continue i [inc i]]
+              false]
+            true]]
+        false]]]]
+
+[def exp-i32-tag [i32 1]]
+
+[datatype
+  wexp-i32 []
+  [record
+    [tag [exp exp-i32-tag]]
+    [value [i32]]]
+
+  wexp []
+  [union
+    [wexp-i32]
+    ]]
+
+[defn wexp-i32-alloc [i [i32]] [pmem [wexp]]
+  [let
+    [p [alloc [wexp-i32]]]
+    [assign [deref p]
+      [record
+        tag [annotation [exp exp-i32-tag] exp-i32-tag]
+        value i]]
+    p]]
+
+[defn dec-word-to-i32 [w [text]] [i32]
+  [loop [i 0 n [list-size w] res 0]
+    [if [lt-s i n]
+      [let [cc [list-get-byte w i]]
+        [if [le-s [i32 48] cc]
+          [log-abort [text 'dec-word-to-i32 cc < 48']]]
+        [if [le-s cc [i32 57]]
+          [log-abort [text 'dec-word-to-i32 cc > 57']]]
+        [continue
+          res [add [mul res [i32 10]] [sub cc [i32 48]]]
+          i [inc i]]]
+      res]]]
+
+[def-comp-fn static-list [ar [array [u8]]] [plist [u8]]
+  [data mem
+    [record
+      size [size-of-exp ar]
+      array ar]]]
+
+[defn form-to-exp [f [pmem [form]]] [pmem [wexp]]
+  [ifs
+    [form-word-is f]
+    [do
+      [log-abort [text 'form-to-exp word case not implemented']]]
+
+    [form-list-is f]
+    [let [fl [form-list-get f]
+          n [list-size fl]
+          n-args [dec n]]
+      [if [eq n 0]
+        [log-abort [text 'form-to-exp empty list not allowed']]]
+      [let [fw [form-word-get [list-get-form fl 0]]]
+        [ifs
+          [word-eq fw [static-list [text i32]]]
+          [do
+            [if [ne n-args 1]
+              [log-abort [text 'form-to-exp i32 expects one argument']]]
+            [wexp-i32-alloc [dec-word-to-i32 [form-word-get [list-get-form fl 1]]]]]
+
+          [log-abort [text 'form-to-exp unknown form-list case']]]]]
+
+    [log-abort [text 'form-to-exp unknown form case']]]]
