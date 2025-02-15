@@ -1582,12 +1582,13 @@
       [logq-abort try-resolve-const name not found [identity n]]]
     [option/none]]]
 
-[func top-form-to-top-decl [form]
-  [let [l [get-list form]]
+[func top-forms-to-top-decls [forms]
+  [let
+    [top-decls [growable-list]]
+    [for-each form forms
+    [let [l [get-list form]]
     [if [is-empty l]
-      [do
-        [error form expected non-empty list]
-        [option/none]]
+      [error form expected non-empty list]
       [let [f [first l]
             fw [get-word f]]
         [when [has top-names fw]
@@ -1603,24 +1604,23 @@
                type [type-of be]
                is-mutable [eq-word fw [word mutable]]
                kind [if is-mutable value-kind-mutable value-kind-constant]
-               bt [top-decl/value kind fname be]
                resolved-be [if-let [c [try-resolve-const be]] c be]]
               [when-not is-mutable
                 [set-kv-map value-constants [name/word fname] resolved-be]]
               [bind-top name-form
                 type
                 [top-desc [top-desc-kind/value [value-desc kind]] [imported-or-here/here]]]
-              [option/some bt]]]
+              [push top-decls [top-decl/value kind fname be]]]]
 
           [[word memory]]
           [let [mem-name [form-to-name [second l]]
                 mem-exp [form-list-to-mem-exp [rest l]]
                 t [type/exp [exp/var mem-name]]]
             [bind-top [second l] t [top-desc [top-desc-kind/memory [mem-exp-to-mem-kind mem-exp]] [imported-or-here/here]]]
-            [option/some [top-decl/memory mem-name mem-exp]]]
+            [push top-decls [top-decl/memory mem-name mem-exp]]]
 
           [[word export]]
-          [option/some
+          [push top-decls
             [top-decl/export
               [list-map fe [rest l]
                 [let [n [form-to-name fe]]
@@ -1646,8 +1646,7 @@
                   [set-kv-map param-map [name/word [pair/fst param-pair]] [pair/snd param-pair]]]
                 [let [datatype [form-to-type-type-env param-map local-context-empty [at l [add 2 i]]]]
                   [todo check datatype has datatype kind]
-                  [set-kv-map custom-types type-name-word datatype]]]]
-            [option/none]]
+                  [set-kv-map custom-types type-name-word datatype]]]]]
 
           [[word import]]
           [let
@@ -1678,7 +1677,7 @@
                     [logq-abort not implemented type-of import]]]
                   [bind-top [first import-list] t [top-desc ikd [imported-or-here/imported]]]
                   [pair m ik]]]]
-            [option/some [top-decl/import mod-name import-exps]]]
+            [push top-decls [top-decl/import mod-name import-exps]]]
 
           [[word functor]]
           [do
@@ -1699,8 +1698,7 @@
                 [type/functor tparameters [type-of exp]]
                 [top-desc
                   [top-desc-kind/functor [functor-desc tparameters exp]]
-                  [imported-or-here/here]]]
-            [option/none]]]
+                  [imported-or-here/here]]]]]
 
           [[word defn] [word def-comp-fn]]
           [do
@@ -1741,18 +1739,10 @@
                   [log return-type]
                   [log inferred-return-type]
                   [logq-abort return type mismatch [form-to-word name-form]]]
-                [if is-defn
-                  [option/some [top-decl/function exp-func]]
-                  [option/none]]]]]
+                [when is-defn
+                  [push top-decls [top-decl/function exp-func]]]]]]
 
           [logq-abort not implemented [identity fw]]]]]]]
-
-[func top-forms-to-top-decls [forms]
-  [let
-    [top-decls [growable-list]]
-    [for-each form forms
-      [when-let [top [top-form-to-top-decl form]]
-        [push top-decls top]]]
     [clone-growable-to-frozen-list top-decls]]]
 
 [func lift-primitive [p]
@@ -2419,8 +2409,8 @@
 [func f2o [forms]
   [let
     [tops [top-forms-to-top-decls forms]
-      output [compile tops]
-      errors [clone-growable-to-frozen-list gerrors]]
+     output [compile tops]
+     errors [clone-growable-to-frozen-list gerrors]]
     [when-not [is-empty errors]
       [logq listing errors]
       [log errors]
