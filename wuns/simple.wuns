@@ -108,6 +108,7 @@
 
   type-func []
   [record
+    [type-parameters [list [pair name type-kind]]]
     [parameters [list type]]
     [result type]]
 
@@ -305,6 +306,7 @@
       [type/func tf]
       [type/func
         [type-func
+          [type-func/type-parameters tf]
           [list-map pp [type-func/parameters tf] [go pp]]
           [go [type-func/result tf]]]]
 
@@ -965,7 +967,7 @@
        result [form-to-type-type-env type-kind-env param-ctx [third l]]
        bodies
        [list-map b [slice l 3 [size l]] [form-to-exp-type-kind-env type-kind-env param-ctx b]]
-       tf [type-func [list-map p params [pair/snd p]] result]]
+       tf [type-func [list] [list-map p params [pair/snd p]] result]]
       [exp/func [exp-function fw [option/none] tf [list-map p params [pair/fst p]] bodies]]]
 
     [[word do]]
@@ -1411,12 +1413,11 @@
     [expand-custom [common-super-type [type-of t] [type-of e]]]
 
     [exp/call fname args]
-    [let [ft [name-to-type fname]]
-      [match ft
-        [type/func tf]
-        [expand-custom [type-func/result tf]]
+    [match [name-to-type fname]
+      [type/func tf]
+      [expand-custom [type-func/result tf]]
 
-        [logq-abort not a func]]]
+      [logq-abort not a func]]
 
     [exp/call-functor fname targs]
     [let [fd [get-functor-desc fname]]
@@ -1660,7 +1661,7 @@
                   t
                   [match ik
                     [import-kind-decl/function ps rt]
-                    [type/func [type-func [list-map p ps [pair/snd p]] rt]]
+                    [type/func [type-func [list] [list-map p ps [pair/snd p]] rt]]
 
                     [import-kind-decl/memory mem-exp]
                     [type/exp [exp/var m]]
@@ -1709,13 +1710,13 @@
                is-defn [eq-word fw [word defn]]
                params-list [get-list [third l]]
                return-type-form [fourth l]
-               param-ctx [transient-kv-map]
-               lctx [local-context-make-top param-ctx [local-context-kind/func]]
                param-pairs [pairwise-pairs params-list]
                param-names [list-map p param-pairs [form-to-name [pair/fst p]]]
-               param-types [list-map p param-pairs [form-to-type lctx [pair/snd p]]]
-               return-type [form-to-type lctx return-type-form]
-               tf [type-func param-types return-type]]
+               param-types [list-map p param-pairs [form-to-type local-context-empty [pair/snd p]]]
+               return-type [form-to-type local-context-empty return-type-form]
+               tf [type-func [list] param-types return-type]
+               param-ctx [transient-kv-map]
+               lctx [local-context-make-top param-ctx [local-context-kind/func]]]
               [bind-top name-form
                 [type/func tf]
                 [top-desc
@@ -1727,13 +1728,7 @@
                 [cbodies [list-map body [slice l 4 [size l]] [form-to-exp-type-kind-env empty-type-env lctx body]]
                  inferred-return-type [type-ofs cbodies]
                  fname [form-to-name name-form]
-                 exp-func
-                 [exp-function
-                  fw
-                  [option/some fname]
-                  tf
-                  param-names
-                  cbodies]]
+                 exp-func [exp-function fw [option/some fname] tf param-names cbodies]]
                 [set-kv-map top-funcs [name/word fname] exp-func]
                 [when-not [type-assignable return-type inferred-return-type]
                   [log return-type]
