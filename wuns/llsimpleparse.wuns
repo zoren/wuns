@@ -62,7 +62,7 @@
 [def static-mem-top [memory-static-top mem]]
 
 [defn static-is [p [pmem -a]] [i32]
-  [lt-s p static-mem-top]]
+  [lt-s [cast [i32] p] static-mem-top]]
 
 [mutable mem-top [memory-static-top mem]]
 
@@ -84,13 +84,13 @@
   [eq p [mem-align p]]]
 
 [defn memory-fill [p [pmem -a] value [i32] n-bytes [i32]] [tuple]
-  [intrinsic memory.fill mem p value n-bytes]]
+  [intrinsic memory.fill mem [cast [i32] p] value n-bytes]]
 
 [defn memory-zero [p [pmem -a] n-bytes [i32]] [tuple]
   [memory-fill p 0 n-bytes]]
 
 [defn memory-copy [pdst [pmem -a] psrc [pmem -a] n-bytes [i32]] [tuple]
-  [intrinsic memory.copy mem pdst psrc n-bytes]]
+  [intrinsic memory.copy mem [cast [i32] pdst] [cast [i32] psrc] n-bytes]]
 
 [defn mem-size-bytes [] [i32]
   [intrinsic i32.shl [intrinsic memory.size mem] [i32 16]]]
@@ -164,7 +164,7 @@
   ; todo check if top is within memory bounds
   [if [static-is pframe]
     [log-abort [text 'alloc-frame-validate pframe points to static mem']]]
-  [if [lt-s [mem-size-bytes] [add pframe [size-of-type [alloc-stack-frame [exp [mem-align 1]]]]]]
+  [if [lt-s [mem-size-bytes] [add [cast [i32] pframe] [size-of-type [alloc-stack-frame [exp [mem-align 1]]]]]]
     [log-abort [text 'alloc-frame-validate mem-size-bytes < frame-size']]]
   [let
     [frame-size [field [deref pframe] frame-size]
@@ -286,7 +286,7 @@
   [let [pframe [get-top-frame]]
     [if [is-null pframe]
       [log-abort [text 'alloc-stack-pop stack empty']]]
-    [set-top pframe]
+    [set-top [cast [i32] pframe]]
     [assign num-of-frames [dec num-of-frames]]
     [memory-zero pframe [field [deref pframe] frame-size]]]]
 
@@ -296,20 +296,20 @@
 
 [defn realloc-debug [old-p [pmem -a] old-n-bytes [i32] new-n-bytes [i32]] [pmem -a]
   [ifs
-    [eq old-p 0]
+    [is-null old-p]
     [do
       [if [ne old-n-bytes 0] [log-abort [text 'realloc old-p == 0 && old-n-bytes != 0']]]
       [alloc-stack-frame-push new-n-bytes]]
 
     [eq old-n-bytes 0]
     [do
-      [if [ne old-p 0] [log-abort [text 'realloc old-n-bytes == 0 && old-p != 0']]]
+      [if [ne [cast [i32] old-p] 0] [log-abort [text 'realloc old-n-bytes == 0 && old-p != 0']]]
       [alloc-stack-frame-push new-n-bytes]]
 
     [let
       ; todo check if old-p is a valid pointer first, non static and within memory bounds
       ; find the frame from the data pointer
-      [pframe-i [sub old-p [offset-of [alloc-stack-frame -a] data]]
+      [pframe-i [sub [cast [i32] old-p] [offset-of [alloc-stack-frame -a] data]]
        pframe [cast [pmem [alloc-stack-frame -a]] pframe-i]
        frame-end [add pframe-i [field [deref pframe] frame-size]]]
       [alloc-frame-validate pframe]
@@ -378,19 +378,21 @@
 [export realloc-debug]
 
 [defn pointer-dynamic-is [p [pmem -a]] [i32]
-  [if [eq p 0]
+  [if [is-null p]
     1
-    [if [lt-u p static-mem-top]
+    [let [pi [cast [i32] p]]
+      [if [lt-u pi static-mem-top]
       0
-      [lt-u p [mem-size-bytes]]]]]
+      [lt-u pi [mem-size-bytes]]]]]]
 
 [defn realloc-production [old-p [pmem -a] old-n-bytes [i32] new-n-bytes [i32]] [pmem -a]
-  [if [not [mem-align-is old-p]] [log-abort [text 'realloc-production old-p not aligned']]]
+  [if [not [mem-align-is [cast [i32] old-p]]] [log-abort [text 'realloc-production old-p not aligned']]]
   [if [not [pointer-dynamic-is old-p]] [log-abort [text 'realloc-production old-p not dynamic']]]
   [let
     [old-n-aligned [mem-align old-n-bytes]
      new-n-aligned [mem-align new-n-bytes]
-     old-end [add old-p old-n-aligned]
+     old-pi [cast [i32] old-p]
+     old-end [add old-pi old-n-aligned]
      cur-top [get-top]]
     [if [eq old-end cur-top]
       ; reallocating the top frame
@@ -399,14 +401,14 @@
         [if [lt-u old-n-aligned new-n-aligned]
           [do
             [resize-mem [sub new-n-aligned old-n-aligned]]
-            [memory-zero [cast [pmem -a] [add old-p old-n-bytes]] [sub new-n-bytes old-n-bytes]]
-            [memory-overwrite [cast [pmem -a] [add old-p new-n-bytes]] [sub new-n-aligned new-n-bytes]]]]
+            [memory-zero [cast [pmem -a] [add old-pi old-n-bytes]] [sub new-n-bytes old-n-bytes]]
+            [memory-overwrite [cast [pmem -a] [add old-pi new-n-bytes]] [sub new-n-aligned new-n-bytes]]]]
         old-p]
       [if [le-u new-n-bytes old-n-bytes]
         ; not the top frame but smaller than before
         [do
           ; overwrite now unused parts of the data area to avoid dangling pointers using it
-          [memory-overwrite [cast [pmem -a] [add old-p new-n-bytes]] [sub old-n-bytes new-n-bytes]]
+          [memory-overwrite [cast [pmem -a] [add old-pi new-n-bytes]] [sub old-n-bytes new-n-bytes]]
           old-p]
         ; else allocating a new frame
         [let [new-p [cast [pmem -a] cur-top]]
@@ -466,7 +468,7 @@
 [export list-alloc-byte]
 
 [functor list-get [elem-type datatype]
-  [func [pvec [pmem [list-data elem-type -sz]] i [i32]] elem-type
+  [func [pvec [plist elem-type] i [i32]] elem-type
     [if [lt-s i 0] [log-abort [text 'list-get index negative']]]
     [if [le-s [list-size pvec] i] [log-abort [text 'list-get index out of bounds']]]
     [index [field [deref pvec] array] i]]]
@@ -946,6 +948,14 @@
                 [when [lt-s j n]
                   [form-to-exp [list-get-form fl j]]
                   [continue j [inc j]]]]]]
+
+          [word-eq fw [static-list [text def]]]
+          [do
+            [if [ne n-args 2]
+              [log-abort [text 'form-to-top def expects a name and an expression']]]
+            [let
+              [dname [form-word-get [list-get-form fl 1]]
+               exp [form-to-exp [list-get-form fl 2]]]]]
 
           [word-eq fw [static-list [text export]]]
           [do
