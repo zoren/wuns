@@ -91,7 +91,6 @@
     [primitive primitive-type]
     [var name]
     [wildcard name]
-    [passive-ref type]
     [pointer type type]
 
     [array type [option type]]
