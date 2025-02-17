@@ -93,6 +93,8 @@
     [wildcard name]
     [pointer type type]
 
+    [memory name]
+
     [array type [option type]]
     [tuple [list type]]
     [record [list [pair name type]]]
@@ -163,7 +165,8 @@
   [union
     [datatype]
     [non-datatype]
-    [exp type]]
+    [exp type]
+    [memory primitive-type]]
 
   exp-function []
   [record
@@ -542,6 +545,11 @@
     [kind type-kind]
     [params [list [pair name type-kind]]]]]
 
+[defn get-exp-var [e]
+  [match e
+    [exp/var n] [name/word n]
+    [logq-abort get-exp-var not a var [identity e]]]]
+
 [defn make-compiler []
 [let
   [gerrors [growable-list]
@@ -722,6 +730,7 @@
     [type/var n] [option/some [get type-env [name/word n]]]
     [type/wildcard wcn] [option/none]
     [type/exp e] [option/some [type-kind/exp [type-of e]]]
+    [type/memory mem-name] [option/some [type-kind/memory [get-mem-type [name/word mem-name]]]]
     [type/apply-custom tn -args] [option/some [type-signature/kind [get custom-type-signatures [name/word tn]]]]
     [type/primitive -] [option/some type-kind-datatype]
     [type/pointer - --] [option/some type-kind-datatype]
@@ -804,25 +813,18 @@
             [logq-abort not implemented form-to-type [identity form]]]]]]]]]
     [go outer-form]]]
 
-[func get-memory-name-from-exp [mem-exp]
-  [match [type-of mem-exp]
-    [type/exp mem-name-exp]
-    [match mem-name-exp
-      [exp/var mem-name] [name/word mem-name]
-      [logq-abort get-memory-name-from-exp not a memory [identity mem-name-exp]]]
-    [logq-abort get-memory-name-from-exp not a memory type [identity mem-exp]]]]
-
-[func get-memory-name-from-type [mt]
-  [if-let [mem-exp [try-get-type-exp mt]]
-    [get-memory-name-from-exp mem-exp]
-    [logq-abort get-memory-name-from-type expected memory type [identity mt]]]]
-
 [func get-mem-type [mem-name-word]
   [match [top-desc/kind [pair/snd [get top-names mem-name-word]]]
     [top-desc-kind/memory mt] [memory-desc/type mt]
-    [logq-abort get-memory-name-from-type not a memory]]]
 
-[func get-memory-pointer-type [t] [get-mem-type [get-memory-name-from-type t]]]
+    [logq-abort get-mem-type not a memory]]]
+
+[func get-memory-pointer-type [t]
+  [if-let [mem-texp [try-get-type-exp t]]
+    [match [type-of mem-texp]
+      [type/memory mem-name] [get-mem-type [name/word mem-name]]
+      [logq-abort get-memory-pointer-type not a memory type [identity mem-texp]]]
+    [logq-abort get-memory-pointer-type expected memory type [identity t]]]]
 
 [func get-memory-offset-atom [mem-name-word]
   [if-let [offset-atom [try-get active-data-map-offsets mem-name-word]]
@@ -1615,7 +1617,7 @@
           [let [mem-name [form-to-name [second l]]
                 mem-exp [form-list-to-mem-exp [rest l]]]
             [bind-top [second l]
-              [type/exp [exp/var mem-name]]
+              [type/memory mem-name]
               [top-desc [top-desc-kind/memory [mem-exp-to-mem-kind mem-exp]] [imported-or-here/here]]]
             [push top-decls [top-decl/memory mem-name mem-exp]]]
 
@@ -1663,7 +1665,7 @@
                     [type/func [type-func [list] [list-map p ps [pair/snd p]] rt]]
 
                     [import-kind-decl/memory mem-exp]
-                    [type/exp [exp/var m]]
+                    [type/memory m]
 
                     [logq-abort not implemented type-of import]]
                   ikd
@@ -1858,7 +1860,7 @@
           [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i32]
           target-prim]]
       [wat-inst-memargs-opt
-        [option/some [get-memory-name-from-type mt]]
+        [option/some [get-exp-var [option-get [try-get-type-exp mt]]]]
         offset-opt
         [option/none]]
       [exp-to-inst texp]]]]
@@ -1914,7 +1916,7 @@
               [wat-inst/store-opt
                 [wasm-name-to-wat-byte-array intr-name]
                 [wat-inst-memargs-opt
-                  [option/some [get-memory-name-from-type mt]]
+                  [option/some [get-exp-var [option-get [try-get-type-exp mt]]]]
                   offset-opt
                   [option/none]]
                 [exp-to-inst trimmed-target]
@@ -1949,7 +1951,7 @@
               [continue i [inc i]]]
             first-offset]]]]
 
-    [logq-abort not implemented exp-to-inst field [identity t]]]]
+    [logq-abort not implemented calc-field-offset [identity t]]]]
 
 [func calc-index-offset [t index-exp]
   [match t
@@ -1968,7 +1970,7 @@
               i [inc i]]]]]
       [logq-abort indexing of tuples only allowed with constants [identity index-exp]]]
 
-    [logq-abort not implemented exp-to-inst index [identity t]]]]
+    [logq-abort not implemented calc-index-offset index [identity t]]]]
 
 [func deref-index-field-to-mem-offset [exp]
   [match exp
@@ -2035,7 +2037,7 @@
         [go ae]
 
         [exp/data mem-name-exp data-exp]
-        [print-int32 bprinter 4 [data-proc [get-memory-name-from-exp mem-name-exp] data-exp]]
+        [print-int32 bprinter 4 [data-proc [get-exp-var mem-name-exp] data-exp]]
 
         [logq-abort not implemented exp-to-bytes [identity e]]]]]
     [go e]
@@ -2234,13 +2236,13 @@
 
     [exp/data mem-name-exp data-exp]
     [let
-      [mem-name-word [get-memory-name-from-exp mem-name-exp]
+      [mem-name-word [get-exp-var mem-name-exp]
        addr [data-proc mem-name-word data-exp]
        mem-type [get-mem-type mem-name-word]]
       [exp-to-inst [exp/integer mem-type addr]]]
 
     [exp/memory-static-top mem-name]
-    [let [mem-name-word [get-memory-name-from-exp mem-name]
+    [let [mem-name-word [get-exp-var mem-name]
           mem-type [get-mem-type mem-name-word]
           offset-atom [get-memory-offset-atom mem-name-word]]
       [wat-inst/lazy-integer-const [primitive-type/name mem-type] offset-atom]]
