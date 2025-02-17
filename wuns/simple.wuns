@@ -697,8 +697,8 @@
         [logq-abort common-super-type not implemented e3 [identity t1] [identity t2]]
           ]]]]
 
-[func form-to-type [lctx outer-form]
-  [form-to-type-type-env empty-type-env lctx outer-form]]
+[func form-to-type [outer-form]
+  [form-to-type-type-env empty-type-env local-context-empty outer-form]]
 
 [func type-kind-equals [tk1 tk2]
   [or [is-identical tk1 tk2]
@@ -1511,7 +1511,7 @@
 [func form-list-to-mem-exp [l]
   [assert [or [eq [size l] 3] [eq [size l] 4]] memory expected 3 or 4 elements]
   [let
-    [mt [form-to-type local-context-empty [second l]]
+    [mt [form-to-type [second l]]
      init-size-name [form-to-name [third l]]
      init-size [word-to-int [name/word init-size-name]]
      - [assert [lt-s 0 init-size] memory init-size must be greater than or equal to 0]
@@ -1541,8 +1541,8 @@
         [assert [eq [size l] 3] import func expected 2 elements]
         [import-kind-decl/function
           [list-map pp [pairwise-pairs [get-list [second l]]]
-            [pair [form-to-name [pair/fst pp]] [form-to-type local-context-empty [pair/snd pp]]]]
-          [form-to-type local-context-empty [third l]]]]
+            [pair [form-to-name [pair/fst pp]] [form-to-type [pair/snd pp]]]]
+          [form-to-type [third l]]]]
 
       [logq-abort not implemented import-kind [first l]]]]]
 
@@ -1561,7 +1561,7 @@
 
     [form/list ll]
     [switch [form-to-word [first ll]]
-      [[word exp]] [type-kind/exp [form-to-type local-context-empty [second ll]]]
+      [[word exp]] [type-kind/exp [form-to-type [second ll]]]
       [logq-abort type unknown kind]]]]
 
 [func try-resolve-const [exp]
@@ -1712,8 +1712,8 @@
                return-type-form [fourth l]
                param-pairs [pairwise-pairs params-list]
                param-names [list-map p param-pairs [form-to-name [pair/fst p]]]
-               param-types [list-map p param-pairs [form-to-type local-context-empty [pair/snd p]]]
-               return-type [form-to-type local-context-empty return-type-form]
+               param-types [list-map p param-pairs [form-to-type [pair/snd p]]]
+               return-type [form-to-type return-type-form]
                tf [type-func [list] param-types return-type]
                param-ctx [transient-kv-map]
                lctx [local-context-make-top param-ctx [local-context-kind/func]]]
