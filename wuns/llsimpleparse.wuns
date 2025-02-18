@@ -477,6 +477,11 @@
     [if [le-s [list-size pvec] i] [log-abort [text 'list-get index out of bounds']]]
     [index [field [deref pvec] array] i]]]
 
+[genfn list-get-gen [elem-type datatype] [pvec [pmem [list-data elem-type -sz]] i [i32]] elem-type
+  [if [lt-s i 0] [log-abort [text 'list-get index negative']]]
+  [if [le-s [list-size pvec] i] [log-abort [text 'list-get index out of bounds']]]
+  [index [field [deref pvec] array] i]]
+
 [defn list-data-array [pvec [plist -a]] [pmem [array -a]]
   [pfield pvec array]]
 
@@ -499,46 +504,42 @@
           parray [alloc [array elem-type [exp init-capacity]]]]]
       p]]]
 
-[functor growable-list-free [elem-type datatype]
-  [func [pglist [pmem [growable-list elem-type]]] [tuple]
-    [let
-      [parray [field [deref pglist] parray]]
-      [free parray [size-of-type [array elem-type [exp [field [deref pglist] capacity]]]]]
-      [free pglist [size-of-type [growable-list elem-type]]]]]]
+[genfn growable-list-free [elem-type datatype] [pglist [pmem [growable-list elem-type]]] [tuple]
+  [let
+    [parray [field [deref pglist] parray]]
+    [free parray [size-of-type [array elem-type [exp [field [deref pglist] capacity]]]]]
+    [free pglist [size-of-type [growable-list elem-type]]]]]
 
-[functor growable-list-push [elem-type datatype]
-  [func [pglist [pmem [growable-list elem-type]] elem elem-type] [tuple]
-    [let
-      [cur-size [field [deref pglist] size]
-       cur-capacity [field [deref pglist] capacity]]
-      [if [eq cur-size cur-capacity]
-        [let
-          [new-capacity [mul cur-capacity 2]
-           new-array
-           [cast [pmem [array elem-type]]
-            [realloc
-              [field [deref pglist] parray]
-              [size-of-type [array elem-type [exp cur-capacity]]]
-              [size-of-type [array elem-type [exp new-capacity]]]]]]
-          [assign [field [deref pglist] capacity] new-capacity]
-          [assign [field [deref pglist] parray] new-array]]]
-      [assign [index [deref [field [deref pglist] parray]] cur-size] elem]
-      [assign [field [deref pglist] size] [inc cur-size]]]]]
+[genfn growable-list-push [elem-type datatype] [pglist [pmem [growable-list elem-type]] elem elem-type] [tuple]
+  [let
+    [cur-size [field [deref pglist] size]
+      cur-capacity [field [deref pglist] capacity]]
+    [if [eq cur-size cur-capacity]
+      [let
+        [new-capacity [mul cur-capacity 2]
+          new-array
+          [cast [pmem [array elem-type]]
+          [realloc
+            [field [deref pglist] parray]
+            [size-of-type [array elem-type [exp cur-capacity]]]
+            [size-of-type [array elem-type [exp new-capacity]]]]]]
+        [assign [field [deref pglist] capacity] new-capacity]
+        [assign [field [deref pglist] parray] new-array]]]
+    [assign [index [deref [field [deref pglist] parray]] cur-size] elem]
+    [assign [field [deref pglist] size] [inc cur-size]]]]
 
-[functor growable-list-to-list [elem-type datatype]
-  [func [pglist [pmem [growable-list elem-type]]] [plist elem-type]
-    [let
-      [cur-size [field [deref pglist] size]
-       plist [cast [plist elem-type] [alloc [list-data elem-type [exp cur-size]]]]]
-      [assign [field [deref plist] size] cur-size]
-      [loop [i 0]
-        [if [lt-s i cur-size]
-          [do
-            [assign
-              [index [field [deref plist] array] i]
-              [index [deref [field [deref pglist] parray]] i]]
-            [continue i [inc i]]]]]
-      plist]]]
+[genfn growable-list-to-list [elem-type datatype] [pglist [pmem [growable-list elem-type]]] [plist elem-type]
+  [let
+    [cur-size [field [deref pglist] size]
+     plist [cast [plist elem-type] [alloc [list-data elem-type [exp cur-size]]]]]
+    [assign [field [deref plist] size] cur-size]
+    [loop [i 0]
+      [when [lt-s i cur-size]
+        [assign
+          [index [field [deref plist] array] i]
+          [index [deref [field [deref pglist] parray]] i]]
+        [continue i [inc i]]]]
+    plist]]
 
 [defn growable-list-reset [pglist [pmem [growable-list -a]]] [tuple]
   [assign [field [deref pglist] size] 0]]
@@ -635,7 +636,7 @@
         [loop [i 0 n [list-size forms]]
           [if [lt-s i n]
             [do
-              [form-free [list-get-form forms i]]
+              [form-free [list-get-gen forms i]]
               [continue i [inc i]]]]]
         [list-free-gen forms]
         [free pf [size-of-type [form-list]]]]
@@ -646,7 +647,7 @@
   [loop [i 0 n [list-size pfs]]
     [if [lt-s i n]
       [do
-        [form-free [list-get-form pfs i]]
+        [form-free [list-get-gen pfs i]]
         [continue i [inc i]]]]
   [list-free-gen pfs]]]
 
@@ -656,15 +657,6 @@
 
 [def growable-list-alloc-init-form
   [growable-list-alloc-init [pform]]]
-
-[def growable-list-free-form
-  [growable-list-free [pform]]]
-
-[def growable-list-to-list-form
-  [growable-list-to-list [pform]]]
-
-[def growable-list-push-form
-  [growable-list-push [pform]]]
 
 [defn scan-word-end [bytes [plist [u8]] start [i32]] [i32]
   [loop [i start n-of-bytes [list-size bytes]]
@@ -690,7 +682,7 @@
   [loop [i 0]
     [if [lt-s i stack-size]
       [do
-        [growable-list-free-form [index [deref pstack] i]]
+        [growable-list-free [index [deref pstack] i]]
         [continue i [inc i]]]]]
   [free pstack [size-of-type [array [pmem [growable-list [pform]]] [exp stack-size]]]]]
 
@@ -714,13 +706,13 @@
   [if [lt-s stack-index 0] [log-abort [text 'unwind-stack stack index negative']]]
   [loop [i stack-index]
     [let [glist [index [deref stack] i]
-          form-list [growable-list-to-list-form glist]]
+          form-list [growable-list-to-list glist]]
       [growable-list-reset glist]
       [let [fl [form-list-alloc form-list]]
         [if [eq i 0]
           fl
           [do
-            [growable-list-push-form [index [deref stack] [dec i]] fl]
+            [growable-list-push [index [deref stack] [dec i]] fl]
             [continue i [dec i]]]]]]]]
 
 [defn parse-n [bytes [text]] [plist [pform]]
@@ -734,7 +726,7 @@
        stack-index [i32 -1]]
       [if [not [lt-s i n-of-bytes]]
         [if [not [is-negative stack-index]]
-          [growable-list-push-form result [unwind-stack stack stack-index]]]
+          [growable-list-push result [unwind-stack stack stack-index]]]
         [let [c [list-get-byte bytes i]]
           [ifs
             [is-word-char c]
@@ -742,8 +734,8 @@
                   fw [form-word-alloc [list-slice-byte bytes i word-end]]]
               [if [not [lt-s i word-end]] [log-abort [text 'scan-word-end returned i >= word-end']]]
               [if [is-negative stack-index]
-                [growable-list-push-form result fw]
-                [growable-list-push-form [index [deref stack] stack-index] fw]]
+                [growable-list-push result fw]
+                [growable-list-push [index [deref stack] stack-index] fw]]
               [continue i word-end]]
 
             [is-whitespace c]
@@ -760,20 +752,20 @@
             [do
               [if [is-negative stack-index] [log-abort [text 'unmatched end bracket']]]
               [let [glist [index [deref stack] stack-index]
-                    form-list [growable-list-to-list-form glist]]
+                    form-list [growable-list-to-list glist]]
                 [growable-list-reset glist]
                 [let [fl [form-list-alloc form-list]]
                   [if [eq stack-index 0]
-                    [growable-list-push-form result fl]
-                    [growable-list-push-form [index [deref stack] [dec stack-index]] fl]]
+                    [growable-list-push result fl]
+                    [growable-list-push [index [deref stack] [dec stack-index]] fl]]
                   [continue
                     i [inc i]
                     stack-index [dec stack-index]]]]]
 
             [log-abort [text 'unexpected character']]]]]]
         [stack-free stack stack-size]
-        [let [lres [growable-list-to-list-form result]]
-          [growable-list-free-form result]
+        [let [lres [growable-list-to-list result]]
+          [growable-list-free result]
           lres]]]
 
 [export parse-n]
@@ -845,13 +837,13 @@
           n-args [dec n]]
       [if [eq n 0]
         [log-abort [text 'form-to-exp empty list not allowed']]]
-      [let [fw [form-word-get [list-get-form fl 0]]]
+      [let [fw [form-word-get [list-get-gen fl 0]]]
         [ifs
           [word-eq fw [static-list [text i32]]]
           [do
             [if [ne n-args 1]
               [log-abort [text 'form-to-exp i32 expects one argument']]]
-            [wexp-i32-alloc [dec-word-to-i32 [form-word-get [list-get-form fl 1]]]]]
+            [wexp-i32-alloc [dec-word-to-i32 [form-word-get [list-get-gen fl 1]]]]]
 
           [log-abort [text 'form-to-exp unknown form-list case']]]]]
 
@@ -904,7 +896,7 @@
           n-args [dec n]]
       [if [eq n 0]
         [log-abort [text 'form-to-type empty list not allowed']]]
-      [let [fw [form-word-get [list-get-form fl 0]]]
+      [let [fw [form-word-get [list-get-gen fl 0]]]
         [ifs
           [word-eq fw [static-list [text i32]]]
           [do
@@ -928,27 +920,27 @@
           n-args [dec n]]
       [if [eq n 0]
         [log-abort [text 'form-to-top empty list not allowed']]]
-      [let [fw [form-word-get [list-get-form fl 0]]]
+      [let [fw [form-word-get [list-get-gen fl 0]]]
         [ifs
           [word-eq fw [static-list [text defn]]]
           [do
             [if [lt-s n-args 3]
               [log-abort [text 'form-to-top defn expects at least 3 arguments']]]
             [let
-              [fname [form-word-get [list-get-form fl 1]]
-               param-list [form-list-get [list-get-form fl 2]]
+              [fname [form-word-get [list-get-gen fl 1]]
+               param-list [form-list-get [list-get-gen fl 2]]
                n-of-param-forms [list-size param-list]
-               result-type [form-to-type [list-get-form fl 3]]]
+               result-type [form-to-type [list-get-gen fl 3]]]
               [if [is-odd n-of-param-forms]
                 [log-abort [text 'form-to-top defn expects a parameter list with names and type pairs']]]
               [loop [i 0]
                 [when [lt-s i [dec n-of-param-forms]]
-                  [form-word-get [list-get-form param-list i]]
-                  [form-to-type [list-get-form param-list [inc i]]]
+                  [form-word-get [list-get-gen param-list i]]
+                  [form-to-type [list-get-gen param-list [inc i]]]
                   [continue i [add 2 i]]]]
               [loop [j 4]
                 [when [lt-s j n]
-                  [form-to-exp [list-get-form fl j]]
+                  [form-to-exp [list-get-gen fl j]]
                   [continue j [inc j]]]]]]
 
           [word-eq fw [static-list [text def]]]
@@ -956,8 +948,8 @@
             [if [ne n-args 2]
               [log-abort [text 'form-to-top def expects a name and an expression']]]
             [let
-              [dname [form-word-get [list-get-form fl 1]]
-               exp [form-to-exp [list-get-form fl 2]]]]]
+              [dname [form-word-get [list-get-gen fl 1]]
+               exp [form-to-exp [list-get-gen fl 2]]]]]
 
           [word-eq fw [static-list [text export]]]
           [do
@@ -966,7 +958,7 @@
             [do
               [loop [k 1]
                 [when [lt-s k n]
-                  [form-word-get [list-get-form fl k]]
+                  [form-word-get [list-get-gen fl k]]
                   [continue k [inc k]]]]]]
 
           [log-abort [text 'form-to-top unknown form-list case']]]]]
