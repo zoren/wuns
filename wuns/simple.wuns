@@ -1216,7 +1216,10 @@
                   false]]
               true]]]
 
-        [type-equals tdst tsrc]]
+        [type/apply-custom stn sargs]
+        [type-assignable-go tdst [expand-custom-1 stn sargs]]
+
+        false]
 
       [type/pointer dmem dtarget]
       [match [expand-custom-if-non-rec tsrc]
