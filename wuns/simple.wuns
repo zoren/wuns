@@ -133,7 +133,6 @@
     [cast type exp]
     [annotation type exp]
 
-    [ref exp]
     [deref exp]
 
     [index exp exp]
@@ -889,9 +888,6 @@
     [[word annotation]]
     [exp/annotation [form-to-type-type-env type-kind-env lctx [second l]] [form-to-exp-type-kind-env type-kind-env lctx [third l]]]
 
-    [[word ref]]
-    [exp/ref [form-to-exp-type-kind-env type-kind-env lctx [second l]]]
-
     [[word deref]]
     [exp/deref [form-to-exp-type-kind-env type-kind-env lctx [second l]]]
 
@@ -1516,11 +1512,6 @@
       [type/pointer - t]
       t
       [logq-abort type-of not a pointer [identity target] [type-of target]]]
-
-    [exp/ref target]
-    [do
-      [logq-abort not implemented type-of ref]
-      [type/pointer type-empty [type-of target]]]
 
     [exp/assign dst src]
     type-tuple-empty
