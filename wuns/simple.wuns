@@ -569,7 +569,10 @@
    name-to-form [transient-kv-map]
    custom-type-signatures [transient-kv-map]
    custom-types [transient-kv-map]
-   custom-types-recursive [set]]
+   custom-types-recursive [set]
+   gen-fn-specs-by-name [transient-kv-map]
+   wat-funcs [growable-list]
+   ]
 [letfn [
 [func error-form-fn [form message-form]
   [push gerrors [pair form message-form]]
@@ -647,19 +650,20 @@
                 [match [pair/fst desc]
                   [type/func tf]
                   [let
-                    [params [type-func/parameters tf]
-                     cargs [list-map arg args [form-to-exp-type-kind-env type-kind-env lctx arg]]]
+                    [tparams [type-func/type-parameters tf]
+                     params [type-func/parameters tf]
+                     cargs [list-map arg args [form-to-exp-type-kind-env type-kind-env lctx arg]]
+                     targs [list-map carg cargs [type-of carg]]]
                     [assert [eq [size params] [size args]] call expected same number of arguments
                       [identity fn] n-of-params n-of-args]
-                    [for i 0 [size params]
-                      [let [pt [at params i]
-                            targ [type-of [at cargs i]]]
-                          [when-not [type-assignable pt targ]
-                            [logq param [identity pt]]
-                            [logq arg-t [identity targ]]
-                            [logq arg-e [at cargs i]]
-                            [error form call expected assignable type]
-                            [logq-abort call expected assignable type - [name/word fn]]]]]
+                    [loop [i 0 n [size params] infer-env [transient-kv-map]]
+                      [when [lt-s i n]
+                        [let [pt [at params i]
+                              targ [at targs i]]
+                          [match [go-tai infer-env pt targ]
+                            [result/ok nenv] [continue i [inc i] infer-env nenv]
+                            [result/error err] [do [log err] [logq-abort form-to-exp-type-kind-env]]
+                            ]]]]
                     [exp/call fn cargs]]]
 
                 [top-desc-kind/functor functor-desc]
@@ -1267,6 +1271,155 @@
     ]
   ]
 
+[func go-tais [tenv dargs sargs]
+  [assert [eq [size dargs] [size sargs]] equal num of types]
+  [loop [i 0 n [size dargs] cur-tenv tenv]
+    [if [lt-s i n]
+      [let [res [go-tai cur-tenv [at dargs i] [at sargs i]]]
+        [match res
+          [result/ok ntenv]
+          [continue i [inc i] cur-tenv ntenv]
+
+          [result/error -]
+          res]]
+      [result/ok cur-tenv]]]]
+
+[func go-tai [tenv param-t arg-t]
+  [match param-t
+    [type/primitive dpt]
+    [match [expand-custom-if-non-rec arg-t]
+      [type/pointer mt t]
+      [if [is-identical dpt [get-memory-pointer-type mt]]
+        [result/ok tenv]
+        [result/error [qlist pointer type doesnt match]]]
+
+      [type/exp se]
+      [match se
+        [exp/integer spt -]
+        [if [is-identical dpt spt]
+          [result/ok tenv]
+           [result/error [qlist primitive type does not match exp]]]
+
+        [result/error [qlist primitive only integer supported]]]
+
+      [type/primitive spt]
+      [if [if [and [primitive-type-is-integer dpt] [primitive-type-is-integer spt]]
+        [le-s [primitive-type/bytes spt] [primitive-type/bytes dpt]]
+        [is-identical dpt spt]]
+        [result/ok tenv]
+        [result/error [qlist primitive type does not match primitive]]]
+
+      [result/error [qmlist primitive type does not match [identity dpt] [identity arg-t]]]]
+
+    [type/var n]
+    [do
+      [if-let [bound [try-get tenv [name/word n]]]
+        [if [type-assignable bound arg-t]
+          [result/ok tenv]
+          [result/error [qlist type-assignable-infer expected assignable type [identity bound] [identity arg-t]]]]
+        [let [ctenv [kv-map-copy tenv]]
+          [set-kv-map ctenv [name/word n] arg-t]
+          [result/ok ctenv]]]]
+
+    [type/wildcard -]
+    [result/ok tenv]
+
+    [type/pointer dmem dtarget]
+    [match [expand-custom-if-non-rec arg-t]
+      [type/pointer smem starget]
+      [result-bind [go-tai tenv dmem smem] nenv [go-tai nenv dtarget starget]]
+
+      [result/error [qlist type-assignable-infer not a pointer [identity arg-t]]]]
+
+    [type/exp e]
+    [match [expand-custom-if-non-rec arg-t]
+      [type/exp ae]
+      [if [exp-equals e ae]
+        [result/ok tenv]
+        [result/error [qmlist type-assignable-infer type/exp expected same type [identity param-t] [identity arg-t]]]]
+
+      [result/error [qlist type-assignable-infer not an exp [identity arg-t]]]]
+
+    [type/array det dopts]
+    [match arg-t
+      [type/array set sopts]
+      [let [elems-ass [go-tai tenv det set]]
+        [match dopts
+          [option/none]
+          elems-ass
+
+          [option/some ds]
+          [if-let [ss sopts]
+            [result-bind elems-ass nenv [go-tai nenv ds ss]]
+            elems-ass]]]
+
+        [logq-abort type-assignable-infer not an array]]
+
+    [type/tuple dts]
+    [match arg-t
+      [type/tuple sts]
+      [go-tais tenv dts sts]
+
+      [logq-abort not a tuple]]
+
+    [type/union dus]
+    [match arg-t
+      [type/union sus]
+      [do
+        [assert [eq [size dus] [size sus]] union sizes do not match]
+        [go-tais tenv dus sus]]
+
+      [type/apply-custom stn sargs]
+      [go-tai tenv param-t [expand-custom-n arg-t]]
+
+      [do
+        ;[exists dus [func type-ass-union [du] [type-assignable-go du tsrc]]]
+;        [logq-abort union not impl [identity dus] [identity arg-t]]
+;        [go-tai ]
+        [loop [i 0 n [size dus]]
+          [if [lt-s i n]
+            [let [res [go-tai tenv [at dus i] arg-t]]
+              [match res
+                [result/error -] [continue i [inc i]]
+                [result/ok -] res]]
+            [result/error [qlist no union match]]
+            ]]
+        ]]
+
+    [type/record dfs]
+    [match arg-t
+      [type/record sfs]
+      [do
+        [assert [eq [size dfs] [size sfs]] record sizes do not match]
+        [loop [i 0 n [size dfs] cur-tenv tenv]
+          [if [lt-s i n]
+            [let [df [at dfs i] sf [at sfs i]]
+              [if [eq-word [name/word [pair/fst df]] [name/word [pair/fst sf]]]
+                [result-bind
+                  [go-tai cur-tenv [pair/snd df] [pair/snd sf]]
+                  nenv
+                  [continue i [inc i] cur-tenv nenv]]
+                [result/error [qlist not same field names]]]]
+            [result/ok cur-tenv]]]]
+
+      [type/apply-custom stn sargs]
+      [go-tai tenv param-t [expand-custom-1 stn sargs]]
+
+      [logq-abort not a record]]
+
+    [type/apply-custom ptn pargs]
+    [match arg-t
+      [type/apply-custom atn aargs]
+      [if [eq-word [name/word ptn] [name/word atn]]
+        [go-tais tenv pargs aargs]
+        [go-tai tenv [expand-custom-n param-t] [expand-custom-n arg-t]]]
+
+      [go-tai tenv [expand-custom-n param-t] arg-t]
+      ]
+
+
+    [logq-abort type-assignable-infer not impl [identity param-t] [identity arg-t]]]]
+
 [func types-equal [ts1 ts2]
   [and
     [eq [size ts1] [size ts2]]
@@ -1490,7 +1643,9 @@
       [let [tps [type-func/type-parameters tf]]
         [if [is-empty tps]
           [type-func/result tf]
-          [logq-abort inference not implemented]]]
+          [match [go-tais [transient-kv-map] [type-func/parameters tf] [list-map arg args [type-of arg]]]
+            [result/ok tenv] [type-substitute tenv [type-func/result tf]]
+            [result/error -] [logq-abort type-of call args not assignable [identity fname] [identity tf] [identity args]]]]]
 
       [logq-abort not a func]]
 
@@ -1878,8 +2033,9 @@
                 [logq checking return type [form-to-word name-form]]
                 [logq dst [identity return-type]]
                 [logq src [identity inferred-return-type]]
-                [when-not [type-assignable return-type inferred-return-type]
-                  [logq-abort return type mismatch [form-to-word name-form]]]
+                [match [go-tai [transient-kv-map] return-type inferred-return-type]
+                  [result/ok -] [do]
+                  [result/error error] [do [log error] [logq-abort bla]]]
                 [when is-defn
                   [push top-decls [top-decl/function exp-func]]]]]]
 
@@ -1917,12 +2073,13 @@
                 [cbodies [list-map body [slice l 5 [size l]] [form-to-exp-type-kind-env tparam-ctx lctx body]]
                  inferred-return-type [type-ofs cbodies]
                  fname [form-to-name name-form]
-                 exp-func [exp-function fw [option/some fname] tf param-names cbodies]]
+                 exp-func [exp-function fw [option/some fname] tf param-names cbodies]
+                 ]
                 [set-kv-map top-funcs [name/word fname] exp-func]
-                [when-not [type-assignable return-type inferred-return-type]
-                  [log return-type]
-                  [log inferred-return-type]
-                  [logq-abort return type mismatch [form-to-word name-form]]]]]]
+                [match [go-tai [transient-kv-map] return-type inferred-return-type]
+                  [result/ok -] [do]
+                  [result/error error] [do [log error] [logq-abort error in genfn return type]]]
+                [do]]]]
 
           [logq-abort not implemented [identity fw]]]]]]]
     [clone-growable-to-frozen-list top-decls]]]
@@ -2255,6 +2412,38 @@
         e]]
     e]]
 
+[func exp-to-string [e]
+  [match e
+    [exp/integer pt n] [int-to-word n]
+    [exp/var n] [name/word n]
+    [logq-abort not implemented exp-to-string [identity e]]]]
+
+[func type-to-string [t]
+  [let [et [expand-custom-if-non-rec t]]
+    [match et
+    [type/wildcard -] [word wildcard]
+    [type/primitive pt] [primitive-type/name pt]
+    [type/pointer tmem ttar] [concat-words [type-to-string tmem] [concat-words [word -] [type-to-string ttar]]]
+    [type/exp e] [exp-to-string e]
+    [type/union uts] [concat-words [word union] [word-join [word -] [list-map ut uts [type-to-string ut]]]]
+    [type/record fields]
+    [concat-words [word record]
+      [word-join [word -] [list-map fp fields [concat-words [name/word [pair/fst fp]] [concat-words [word -] [type-to-string [pair/snd fp]]]]]]]
+    [type/tuple ts] [concat-words [word tuple] [word-join [word -] [list-map tt ts [type-to-string tt]]]]
+    [type/array et opt-s]
+    [concat-words [word array]
+      [if-let [size-type opt-s]
+        [concat-words [type-to-string et] [concat-words [word -] [type-to-string size-type]]]
+        [type-to-string et]]]
+    [type/apply-custom tn targs]
+    [if [is-empty targs]
+      [name/word tn]
+      [concat-words [name/word tn]
+        [concat-words [word -]
+          [word-join [word -] [list-map ta targs [type-to-string ta]]]]]]
+
+    [logq-abort type-to-string not implemented [identity et]]]]]
+
 [func exp-to-inst [exp]
   [match exp
     [exp/integer pt n]
@@ -2304,14 +2493,16 @@
 
     [exp/call fn args]
     [let [fnw [name/word fn]
-          fd
+          tf
           [match [top-desc/kind [get-top-desc-from-name fn]]
             [top-desc-kind/value vd]
             [match [name-to-type fn]
               [type/func tf] tf
 
               [logq-abort not a function]]
-            [logq-abort not a function]]]
+            [logq-abort not a function]]
+          parameters [type-func/parameters tf]]
+      [if [is-empty [type-func/type-parameters tf]]
       [if-let [efunc [try-get top-funcs fnw]]
         [if [eq-word [word def-comp-fn] [exp-function/kind efunc]]
           [let [params [exp-function/parameters efunc]
@@ -2323,8 +2514,28 @@
               [comp [mk-exp-to-inst-compiler [transient-kv-map] param-env] ; todo maybe we need to pass the type env
                es2i [exp2inst-compiler/exps-to-inst comp]]
               [es2i [exp-function/bodies efunc]]]]
-          [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]]
-        [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]]]
+          [wat-inst/call fnw [list-map arg args [exp-to-inst arg]]]]
+        [wat-inst/call fnw [list-map arg args [exp-to-inst arg]]]]
+      [match [go-tais [transient-kv-map] parameters [list-map arg args [type-of arg]]]
+        [result/ok tenv]
+        [let
+          [type-args [list-map tp [type-func/type-parameters tf] [get tenv [name/word [pair/fst tp]]]]
+           types-str [word-join [word -] [list-map ta type-args [type-to-string ta]]]
+           spec-name [concat-words fnw [concat-words [word --] types-str]]
+           specs-targs
+            [if-let [specs [try-get gen-fn-specs-by-name fnw]]
+              specs
+              [let [specs [transient-kv-map]]
+                [set-kv-map gen-fn-specs-by-name fnw specs]
+                specs]]]
+          [when-not [has specs-targs types-str]
+            [add-func spec-name tenv [get top-funcs fnw]]
+            [set-kv-map specs-targs types-str type-args]]
+          [wat-inst/call
+            spec-name
+            [list-map arg args [exp-to-inst arg]]]]
+
+        [result/error -] [logq-abort exp-to-inst call args not assignable [identity fn] [identity tf] [identity args]]]]]
 
     [exp/call-functor fname targs]
     [let
@@ -2467,33 +2678,31 @@
       [option/some [word-to-int [name/word max]]]
       [option/none]]]]
 
+[func add-func [fname type-inst-env f]
+  [let
+    [const-env [transient-kv-map]
+     comp [mk-exp-to-inst-compiler type-inst-env const-env]
+     es2i [exp2inst-compiler/exps-to-inst comp]
+     inst [es2i [exp-function/bodies f]]
+     tf [exp-function/type f]
+     locals [clone-growable-to-frozen-list [exp2inst-compiler/glocals comp]]]
+    [push wat-funcs
+      [wat-func
+        fname
+        [zip
+          [list-map p [exp-function/parameters f] [name/word p]]
+          [list-map pt [type-func/parameters tf] [type-to-wat-type [type-substitute type-inst-env pt]]]]
+        locals
+        [type-to-wat-types [type-substitute type-inst-env [type-func/result tf]]]
+        inst]]]]
+
 [func compile [tops]
   [let
     [imports [growable-list]
      memories [growable-list]
      globals [growable-list]
-     funcs [growable-list]
      exports [growable-list]
-     wdata [growable-list]
-     add-func
-     [func add-func [name type-inst-env f]
-       [let
-        [const-env [transient-kv-map]
-         comp [mk-exp-to-inst-compiler type-inst-env const-env]
-         es2i [exp2inst-compiler/exps-to-inst comp]
-         inst [es2i [exp-function/bodies f]]
-         tf [exp-function/type f]
-         locals [clone-growable-to-frozen-list [exp2inst-compiler/glocals comp]]]
-        [push
-          funcs
-          [wat-func
-            [name/word [option-default [exp-function/name f] name]]
-            [zip
-              [list-map p [exp-function/parameters f] [name/word p]]
-              [list-map pt [type-func/parameters tf] [type-to-wat-type [type-substitute type-inst-env pt]]]]
-            locals
-            [type-to-wat-types [type-substitute type-inst-env [type-func/result tf]]]
-            inst]]]]]
+     wdata [growable-list]]
     [for-each top tops
       [match top
         [top-decl/memory n mem-exp]
@@ -2542,7 +2751,7 @@
           [func expand-functor-calls [tenv exp]
             [match exp
               [exp/func f]
-              [add-func def-name tenv f]
+              [add-func [name/word def-name] tenv f]
 
               [exp/call-functor fn targs]
               [let
@@ -2569,7 +2778,7 @@
               [expand-functor-calls [transient-kv-map] oexp]]
 
         [top-decl/function f]
-        [add-func [name [word -nooo-]] [transient-kv-map] f]
+        [add-func [name/word [option-get [exp-function/name f]]] [transient-kv-map] f]
         ]]
     [for-each data [clone-growable-to-frozen-list datas]
       [push wdata
@@ -2581,7 +2790,7 @@
       imports
       memories
       globals
-      funcs
+      wat-funcs
       exports
       wdata]]]
 

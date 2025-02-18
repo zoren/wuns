@@ -320,6 +320,17 @@
           false-form]]]
     [logq-abort if-let requires a list as the first argument]]]
 
+[defmacro result-bind [f1 n f2]
+  [let [tmp [genword]]
+    [flist [quote let]
+      [flist tmp f1]
+      [flist
+        [quote match] tmp
+        [flist [quote result/ok] n]
+        f2
+        [quote [result/error -]]
+        tmp]]]]
+
 [defmacro when-let [binding-form .. forms]
   [match binding-form
     [form/list binding]
@@ -466,7 +477,12 @@
 [type pair [a b] [record [fst a] [snd b]]]
 [import ./runtime-lib/host.js kv-map-entries [type-scheme [k v]
   [func [[transient-kv-map k v]] [list [pair k v]]]]]
-
+[defn kv-map-copy [kvm]
+  [let [copy [transient-kv-map]]
+    [for-each
+     p [kv-map-entries kvm]
+      [set-kv-map copy [pair/fst p] [pair/snd p]]]
+    copy]]
 [defn mk-word [w] [flist [quote word] w]]
 
 [import ./runtime-lib/host.js has [type-scheme [k v] [func [[transient-kv-map k v] k] i32]]]
@@ -697,3 +713,12 @@
 [import ./runtime-lib/host.js mem-dump [func [memory i32 i32] [tuple]]]
 
 [defexpr qlist [.. fs] fs]
+
+[defmacro qmlist [.. fs]
+  [form/list
+    [concat
+      [list [quote list]]
+      [list-map form fs
+        [match form
+          [form/word w] [mk-quote form]
+          [form/list l] form]]]]]

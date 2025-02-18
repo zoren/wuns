@@ -464,6 +464,10 @@
     [if [not [static-is pvec]]
       [free pvec [size-of-type [list-data elem-type [exp [field [deref pvec] size]]]]]]]]
 
+[genfn list-free-gen [elem-type datatype] [pvec [pmem [list-data elem-type -sz]]] [tuple]
+  [if [not [static-is pvec]]
+    [free pvec [size-of-type [list-data elem-type [exp [field [deref pvec] size]]]]]]]
+
 [def list-alloc-byte [list-alloc [u8]]]
 [export list-alloc-byte]
 
@@ -617,8 +621,6 @@
 
 [export text-free]
 
-[def list-free-form [list-free [pform]]]
-
 [defn form-free [pf [pform]] [tuple]
   [if [not [static-is pf]]
     [ifs
@@ -635,7 +637,7 @@
             [do
               [form-free [list-get-form forms i]]
               [continue i [inc i]]]]]
-        [list-free-form forms]
+        [list-free-gen forms]
         [free pf [size-of-type [form-list]]]]
 
       [log-abort [text 'form-free unknown form type']]]]]
@@ -646,7 +648,7 @@
       [do
         [form-free [list-get-form pfs i]]
         [continue i [inc i]]]]
-  [list-free-form pfs]]]
+  [list-free-gen pfs]]]
 
 [export form-free list-forms-free]
 
