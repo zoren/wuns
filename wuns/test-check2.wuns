@@ -33,31 +33,6 @@
 [todo record tests]
 
 [def tests [list
-
-[test-ok i32
-  [type form []
-    [union
-      [word word]
-      [list [list form]]]]
-
-  [defn flist [.. elements] [form/list elements]]
-  [defexpr quote [f] f]
-
-  [defmacro def-extern [name type]
-    [flist [quote import] [quote host] name type]]
-
-  [def-extern abort [type-scheme [a] [func [] a]]]
-
-  [defn test-generalization [c]
-    [if c
-      [abort]
-      [word w]]
-    [if c
-      [abort]
-      [i32 1]]]
-    [test-generalization [i32 1]]
-    ]
-
   [test-ok i32 [i32 5]]
   [test-ok f64 [f64 1.5]]
   [test-ok word [word a]]
@@ -65,9 +40,9 @@
   [test-ok i32 [intrinsic i32.add [i32 1] [i32 2]]]
   [test-ok f64 [intrinsic f64.add [f64 1] [f64 1]]]
 
-  [test-errors i32 [[not unifiable - different types]] [if [word ok] [i32 5] [i32 5]]]
-  [test-errors i32 [[not unifiable - different types]] [if [i32 5] [i32 5] [word a]]]
-  [test-errors word [[not unifiable - different types]] [if [i32 5] [word a] [i32 5]]]
+  [test-errors i32 [[not unifiable - different types [i32] -vs- [word]]] [if [word ok] [i32 5] [i32 5]]]
+  [test-errors i32 [[not unifiable - different types [i32] -vs- [word]]] [if [i32 5] [i32 5] [word a]]]
+  [test-errors word [[not unifiable - different types [word] -vs- [i32]]] [if [i32 5] [word a] [i32 5]]]
   [test-ok i32 [if [i32 5] [i32 6] [i32 7]]]
   [test-ok word [if [i32 5] [word a] [word b]]]
 
@@ -109,7 +84,7 @@
         [list [list form]]]]
     [form/word [word a]]
     ]
-  [test-errors [type-scheme [a] a] [[not unifiable - different types]]
+  [test-errors [type-scheme [a] a] [[not unifiable - different types [i32] -vs- [func [[i32]] a]]]
     [[i32 5] [i32 6]]]
 
   [test-ok
@@ -162,10 +137,10 @@
     [[func f [.. p] p] [i32 5] [i32 6]]]
   [test-errors
     [list i32]
-    [[not unifiable - different types]]
+    [[not unifiable - different types ]]
     [[func f [.. p] p] [i32 5] [word a]]]
 
-  [test-errors i32 [[not unifiable - different types]]
+  [test-errors i32 [[not unifiable - different types [form] -vs- [i32]]]
     [defmacro qword [m]
       [i32 0]]
     [i32 0]]
@@ -192,17 +167,17 @@
   [type option [a] [union [none] [some a]]]
   [match [option/none] [option/none] [i32 5]]]
 
-[test-errors word [[not unifiable - different types]]
+[test-errors word [[not unifiable - different types [i32] -vs- [word]]]
   [switch [i32 0]
     [[i32 0]] [word zero]
     [[word a]] [word one]
     [word not-01]]]
-[test-errors word [[not unifiable - different types]]
+[test-errors word [[not unifiable - different types [i32] -vs- [word]]]
   [switch [i32 0]
       [[i32 0] [word a]]
       [word zero-a]
     [word not-01]]]
-[test-errors word [[not unifiable - different types]]
+[test-errors word [[not unifiable - different types [i32] -vs- [word]]]
   [switch [i32 0]
     [[i32 0]] [word zero]
     [[i32 1]] [word one]
@@ -218,12 +193,63 @@
     [word not-01]]]
 
 [test-ok i32
-  [letfn
-    [[func bla [n] [i32 5]]
-     [func m [] [bla [i32 5]] [bla [f64 5]]]]
-    [i32 4]]]
-
+  [letfn [
+    [func even [n]
+      [if n
+        [odd [intrinsic i32.sub n [i32 1]]]
+        [i32 1]]]
+    [func odd [n]
+      [if n
+        [even [intrinsic i32.sub n [i32 1]]]
+        [i32 0]]]]
+     [even [i32 0]]]]
 ]]
+
+[def even-odd
+  [list
+[quote
+[letfn [
+    [func even [n]
+      [if n
+        [odd [intrinsic i32.sub n [i32 1]]]
+        [i32 1]]]
+     [func odd [n]
+      [if n
+        [even [intrinsic i32.sub n [i32 1]]]
+        [i32 0]]]
+     ]
+     [even [i32 0]]]]]]
+
+[comment
+
+[check-top-and-exp-forms even-odd]
+
+[test-errors i32 [[not unifiable - different types [f64] -vs- [i32]]]
+  [let [
+    make-i32
+    [func mi [] [i32 0]]
+    make-error
+    [func me []
+      [intrinsic f64.add [make-i32] [f64 23.9]]]]
+    [i32 0]]]
+
+
+[test-errors i32 [[not unifiable - different types [f64] -vs- [i32]]]
+  [letfn [
+    [func make-i32 [] [i32 0]]
+    [func make-error []
+      [intrinsic f64.add [make-i32] [f64 23.9]]]]
+    [i32 0]]]
+
+
+[test-errors i32 [[not unifiable - different types [f64] -vs- [i32]]]
+  [letfn [
+    [func make-i32 []
+      [i32 0]]
+    [func make-error []
+      [intrinsic f64.add [make-i32] [f64 23.9]]]]
+    [i32 0]]]
+]
 
 [defn check-top-and-exp-forms [forms]
   [assert [not [is-empty forms]] check-top-and-exp-forms expects at least one form]
@@ -277,15 +303,37 @@
           [check-top-and-exp-forms forms]
           [func then [res]
             [let [actual-type [pair/fst res]
-              errors [pair/snd res]]
-            [when-not [eq [size expected-errors] [size errors]]
-              [log-location [first forms]]
-              [logq different number of errors than expected]
-              [logq expected]
-              [for-each error expected-errors [log error]]
-              [logq actual]
-              [for-each error errors [log-check-message error]]
-              [logq-abort test-error ]]
+                  errors [pair/snd res]]
+            [if-not [eq [size expected-errors] [size errors]]
+              [do
+                [log-location [first forms]]
+                [logq different number of errors than expected - expected [size expected-errors] but found [size errors]]
+                [logq expected]
+                [for-each error expected-errors [log error]]
+                [logq actual]
+                [for-each error errors [log-check-message error]]
+                [logq-abort test-error ]]
+              [for i 0 [size expected-errors]
+                [let [expected [at expected-errors i]
+                      actual [check-message/message [at errors i]]
+                      expected-list [form-to-list expected]
+                      actual-list [form-to-list actual]
+                      is-prefix
+                        [and
+                          [le-s [size expected-list] [size actual-list]]
+                          [loop [i 0 n [size expected-list]]
+                            [if [lt-s i n]
+                              [if [eq-form [at expected-list i] [at actual-list i]]
+                                [continue i [inc i]]
+                                false]
+                              true]]]]
+                  [when-not is-prefix
+                    [logq form [identity forms]]
+                    [logq expected error]
+                    [log expected]
+                    [logq but found]
+                    [log actual]
+                    ]]]]
 
             [when-not [eq-form actual-type expected-type]
               [logq test-error failed]
