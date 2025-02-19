@@ -808,6 +808,7 @@
         false]]]]
 
 [def exp-i32-tag [i32 1]]
+[def exp-if-tag [i32 2]]
 
 [datatype
   wexp-i32 []
@@ -815,18 +816,39 @@
     [tag [exp exp-i32-tag]]
     [value [i32]]]
 
+  wexp-if []
+  [record
+    [tag [exp exp-if-tag]]
+    [condition [pexp]]
+    [true [pexp]]
+    [false [pexp]]]
+
+  pexp [] [pmem [wexp]]
+
   wexp []
   [union
     [wexp-i32]
+    [wexp-if]
     ]]
 
-[defn wexp-i32-alloc [i [i32]] [pmem [wexp]]
+[defn wexp-i32-alloc [i [i32]] [pexp]
   [let
     [p [alloc [wexp-i32]]]
     [assign [deref p]
       [record
         tag [annotation [exp exp-i32-tag] exp-i32-tag]
         value i]]
+    p]]
+
+[defn wexp-if-alloc [c [pexp] t [pexp] e [pexp]] [pexp]
+  [let
+    [p [alloc [wexp-if]]]
+    [assign [deref p]
+      [record
+        tag [annotation [exp exp-if-tag] exp-if-tag]
+        condition c
+        true t
+        false e]]
     p]]
 
 ; look here for overflow check https://github.com/skeeto/scratch/blob/master/parsers/strtonum.c
@@ -855,6 +877,35 @@
       size [size-of-exp ar]
       array ar]]]
 
+[def type-i32 [i32 0x7f]]
+[def type-i64 [i32 0x7e]]
+[def type-f32 [i32 0x7d]]
+[def type-f64 [i32 0x7c]]
+
+[datatype wtype [] [i32]]
+
+[defn type-of [e [pexp]] [i32]
+  [let [tag [field [deref e] tag]]
+    [ifs
+      [eq tag exp-i32-tag]
+      type-i32
+
+      [log-abort [text 'type-of unknown tag']]]]]
+
+[defn type-assignable [dst [wtype] src [wtype]] [tuple]
+  [let
+    []
+    [when [ne dst src]
+      [log-abort [text 'type-assignable different types']]
+
+      ]]
+     ]
+
+[defn common-super-type [t1 [wtype] t2 [wtype]] [wtype]
+  [if [eq t1 t2]
+    t1
+    [log-abort [text 'common-super-type different types']]]]
+
 [defn form-to-exp [f [pmem [form]]] [pmem [wexp]]
   [ifs
     [form-word-is f]
@@ -875,46 +926,23 @@
               [log-abort [text 'form-to-exp i32 expects one argument']]]
             [wexp-i32-alloc [dec-word-to-i32 [form-word-get [list-get fl 1]]]]]
 
+          [word-eq fw [static-list [text if]]]
+          [do
+            [if [ne n-args 3]
+              [log-abort [text 'form-to-exp if expects 3 arguments']]]
+            [let
+              [c [form-to-exp [list-get fl 1]]
+               t [form-to-exp [list-get fl 2]]
+               e [form-to-exp [list-get fl 3]]]
+              [type-assignable type-i32 [type-of c]]
+              [common-super-type [type-of t] [type-of e]]
+              [wexp-if-alloc c t e]]]
+
           [log-abort [text 'form-to-exp unknown form-list case']]]]]
 
     [log-abort [text 'form-to-exp unknown form case']]]]
 
-[def prim-type-int-tag [i32 1]]
-[def prim-type-float-tag [i32 2]]
-
-[datatype prim-type []
-  [union
-    [record
-      [tag [exp prim-type-int-tag]]
-      [bytes [i32]]
-      [unsigned [i32]]]
-    [record
-      [tag [exp prim-type-float-tag]]
-      [bytes [i32]]]
-]]
-
-[def type-primitive-tag [i32 1]]
-
-[datatype wtype []
-  [union
-    [record
-      [tag [exp type-primitive-tag]]
-      [value [pmem [prim-type]]]]
-    ]]
-
-[def type-i32
-  [cast [pmem [wtype]]
-    [data mem
-      [record
-        tag [annotation [exp type-primitive-tag] type-primitive-tag]
-        value
-        [data mem
-          [record
-            tag [annotation [exp prim-type-int-tag] prim-type-int-tag]
-            bytes [i32 4]
-            unsigned [i32 0]]]]]]]
-
-[defn form-to-type [f [pmem [form]]] [pmem [wtype]]
+[defn form-to-type [f [pmem [form]]] [wtype]
   [ifs
     [form-word-is f]
     [do
@@ -931,7 +959,7 @@
           [word-eq fw [static-list [text i32]]]
           [do
             [if [ne n-args 0]
-              [log-abort [text 'form-to-type i32 expects one argument']]]
+              [log-abort [text 'form-to-type i32 expects no arguments']]]
             type-i32]
 
           [log-abort [text 'form-to-type unknown form-list case']]]]]
