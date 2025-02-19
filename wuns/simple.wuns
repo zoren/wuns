@@ -1390,7 +1390,7 @@
     [match arg-t
       [type/record sfs]
       [do
-        [assert [eq [size dfs] [size sfs]] record sizes do not match]
+        [assert [le-s [size dfs] [size sfs]] record sizes do not match [identity sfs] [identity dfs]]
         [loop [i 0 n [size dfs] cur-tenv tenv]
           [if [lt-s i n]
             [let [df [at dfs i] sf [at sfs i]]

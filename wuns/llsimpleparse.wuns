@@ -448,7 +448,7 @@
 [datatype plist [vp datatype]
   [pmem [list-data vp -size]]]
 
-[defn list-size [pvec [plist -a]] [i32]
+[defn list-size [pvec [pmem [record [size [i32]]]]] [i32]
   [field [deref pvec] size]]
 
 [export list-size]
@@ -502,9 +502,6 @@
     [free parray [size-of-type [array elem-type [exp [field [deref pglist] capacity]]]]]
     [free pglist [size-of-type [growable-list elem-type]]]]]
 
-[defn growable-list-size [pglist [pmem [growable-list -a]]] [i32]
-  [field [deref pglist] size]]
-
 [genfn growable-list-push [elem-type datatype] [pglist [pmem [growable-list elem-type]] elem elem-type] [tuple]
   [let
     [cur-size [field [deref pglist] size]
@@ -525,7 +522,7 @@
 
 [genfn growable-list-get [elem-type datatype] [pglist [pmem [growable-list elem-type]] i [i32]] elem-type
   [if [lt-s i 0] [log-abort [text 'growable-list-get i negative']]]
-  [if [le-s [growable-list-size pglist] i] [log-abort [text 'growable-list-get i out of bounds']]]
+  [if [le-s [list-size pglist] i] [log-abort [text 'growable-list-get i out of bounds']]]
   [index [deref [field [deref pglist] parray]] i]]
 
 [genfn growable-list-to-list [elem-type datatype] [pglist [pmem [growable-list elem-type]]] [plist elem-type]
@@ -747,7 +744,7 @@
                word-size [sub word-end i]
                w
                ; scan texts to see if we already have allocated the word
-               [loop [txts-i 0 txts-sz [growable-list-size texts]]
+               [loop [txts-i 0 txts-sz [list-size texts]]
                 [if [lt-s txts-i txts-sz]
                   [let
                     [cur-txt [growable-list-get texts txts-i]
