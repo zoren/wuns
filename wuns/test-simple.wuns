@@ -391,7 +391,7 @@
         form-list-get [get-export inst [word form-list-get]]
         form-word-get [get-export inst [word form-word-get]]
         list-get-form [get-export inst [word list-get-form]]
-        list-data-array [get-export inst [word list-data-array]]
+        list-data-byte-array [get-export inst [word list-data-byte-array]]
         realloc [get-export inst [word realloc-debug]]
         get-number-of-frames [get-export inst [word get-number-of-frames]]
         form-to-top [get-export inst [word form-to-top]]
@@ -421,7 +421,7 @@
             [src [word-to-byte-array w]
              sz [byte-array-size src]
              vec [js-app list-alloc-byte sz]
-             data [js-value-to-i32 [js-app list-data-array vec]]
+             data [js-value-to-i32 [js-app list-data-byte-array vec]]
              dst [byte-array-from-mem data sz]]
             [for i 0 sz
               [byte-array-set dst i [byte-array-get src i]]]
@@ -435,7 +435,7 @@
             [js-value-to-i32 [js-app form-word-is pform]]
             [let
               [fw [js-app form-word-get pform]
-               data [js-value-to-i32 [js-app list-data-array fw]]
+               data [js-value-to-i32 [js-app list-data-byte-array fw]]
                sz [js-value-to-i32 [js-app list-size fw]]
                ar [byte-array-from-mem data sz]
                str [byte-array-to-string ar]]
@@ -454,7 +454,8 @@
             [logq-abort unknown form type [identity pform]]]]]
         [let [empty-vec [js-app list-alloc-byte [i32 0]]]
           [test-assert-eq [i32 0] [js-app list-size empty-vec]]
-          [let [l [js-app parse-n empty-vec]]
+          [let [js-ar [js-app parse-n empty-vec]
+                l [first [js-value-to-array js-ar]]]
             [test-assert-eq [i32 0] [js-value-to-i32 [js-app list-size l]]]
             [js-app list-forms-free l]
             [js-app text-free empty-vec]]]
@@ -482,7 +483,8 @@
             [let
               [expected [pair/fst test]
                w [alloc-word [pair/snd test]]
-               fl [js-app parse-n w]
+               js-ar [js-app parse-n w]
+               fl [first [js-value-to-array js-ar]]
                sz [js-value-to-i32 [js-app list-size fl]]
                gl [growable-list]]
               [for i 0 sz
@@ -497,13 +499,16 @@
         [let
           [tests
             [list
-              [pair [qlist] [word '[defn f [] [i32] [i32 0]]']]
+              [pair [qlist] [word '[defn f [] [i32] [i32 0]] [def d [i32 5]]']]
+              [pair [qlist] [word '[defn f [] [i32] [i32 2147483647]] [export f]']]
+;              [pair [qlist] [word '[defn f [] [i32] [i32 2147483648]]']]
               ]]
           [for-each test tests
             [let
               [expected [pair/fst test]
                w [alloc-word [pair/snd test]]
-               fl [js-app parse-n w]
+               parse-res [js-value-to-array [js-app parse-n w]]
+               fl [first parse-res]
                sz [js-value-to-i32 [js-app list-size fl]]]
               [for i 0 sz
                 [js-app form-to-top [js-app list-get-form fl i]]]

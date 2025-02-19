@@ -471,10 +471,13 @@
   [if [le-s [list-size pvec] i] [log-abort [text 'list-get index out of bounds']]]
   [index [field [deref pvec] array] i]]
 
-[defn list-data-array [pvec [plist -a]] [pmem [array -a]]
+[genfn list-data-array [a datatype] [pvec [plist a]] [pmem [array a]]
   [pfield pvec array]]
 
-[export list-data-array]
+[defn list-data-byte-array [pvec [plist [u8]]] [pmem [array [u8]]]
+  [list-data-array pvec]]
+
+[export list-data-byte-array]
 
 [datatype growable-list [a datatype]
   [record
@@ -499,10 +502,13 @@
     [free parray [size-of-type [array elem-type [exp [field [deref pglist] capacity]]]]]
     [free pglist [size-of-type [growable-list elem-type]]]]]
 
+[defn growable-list-size [pglist [pmem [growable-list -a]]] [i32]
+  [field [deref pglist] size]]
+
 [genfn growable-list-push [elem-type datatype] [pglist [pmem [growable-list elem-type]] elem elem-type] [tuple]
   [let
     [cur-size [field [deref pglist] size]
-      cur-capacity [field [deref pglist] capacity]]
+     cur-capacity [field [deref pglist] capacity]]
     [if [eq cur-size cur-capacity]
       [let
         [new-capacity [mul cur-capacity 2]
@@ -516,6 +522,11 @@
         [assign [field [deref pglist] parray] new-array]]]
     [assign [index [deref [field [deref pglist] parray]] cur-size] elem]
     [assign [field [deref pglist] size] [inc cur-size]]]]
+
+[genfn growable-list-get [elem-type datatype] [pglist [pmem [growable-list elem-type]] i [i32]] elem-type
+  [if [lt-s i 0] [log-abort [text 'growable-list-get i negative']]]
+  [if [le-s [growable-list-size pglist] i] [log-abort [text 'growable-list-get i out of bounds']]]
+  [index [deref [field [deref pglist] parray]] i]]
 
 [genfn growable-list-to-list [elem-type datatype] [pglist [pmem [growable-list elem-type]]] [plist elem-type]
   [let
@@ -617,10 +628,8 @@
   [if [not [static-is pf]]
     [ifs
       [form-word-is pf]
-      [let [pw [form-word-get pf]]
-        [if [not [static-is pw]]
-          [text-free pw]]
-        [free pf [size-of-type [form-word]]]]
+      ; we no longer free the word here as they can be shared between forms
+      [free pf [size-of-type [form-word]]]
 
       [form-list-is pf]
       [let [forms [form-list-get pf]]
@@ -704,10 +713,24 @@
             [growable-list-push [index [deref stack] [dec i]] fl]
             [continue i [dec i]]]]]]]]
 
-[defn parse-n [bytes [text]] [plist [pform]]
+[def growable-list-alloc-init-text
+  [growable-list-alloc-init [text]]]
+
+[defn memory-compare [p1 [pmem [array [u8]]] p2 [pmem [array [u8]]] n-bytes [i32]] [i32]
+  [loop [i 0]
+    [if [lt-s i n-bytes]
+      [let [diff [sub [index [deref p1] i] [index [deref p2] i]]]
+        [if [eq diff 0]
+          [continue i [inc i]]
+          diff]]
+      [i32 0]]]]
+
+[defn parse-n [bytes [text]] [tuple [plist [pform]] [plist [text]]]
   [let
     [stack [make-stack stack-size init-capacity]
+     texts [growable-list-alloc-init-text [i32 10]]
      n-of-bytes [list-size bytes]
+     bytes-array [list-data-array bytes]
      result [growable-list-alloc-init-form [i32 20]]]
     [loop
       [i 0
@@ -719,8 +742,25 @@
         [let [c [list-get bytes i]]
           [ifs
             [is-word-char c]
-            [let [word-end [scan-word-end bytes [inc i]]
-                  fw [form-word-alloc [list-slice-byte bytes i word-end]]]
+            [let
+              [word-end [scan-word-end bytes [inc i]]
+               word-size [sub word-end i]
+               w
+               ; scan texts to see if we already have allocated the word
+               [loop [txts-i 0 txts-sz [growable-list-size texts]]
+                [if [lt-s txts-i txts-sz]
+                  [let
+                    [cur-txt [growable-list-get texts txts-i]
+                     cur-sz [list-size cur-txt]]
+                    [if [eq cur-sz word-size]
+                      [if [eq 0 [memory-compare [list-data-array cur-txt] [cast [pmem [array [u8]]] [pindex bytes-array i]] word-size]]
+                        cur-txt
+                        [continue txts-i [inc txts-i]]]
+                      [continue txts-i [inc txts-i]]]]
+                  [let [new-word [list-slice-byte bytes i word-end]]
+                    [growable-list-push texts new-word]
+                    new-word]]]
+               fw [form-word-alloc w]]
               [if [not [lt-s i word-end]] [log-abort [text 'scan-word-end returned i >= word-end']]]
               [if [is-negative stack-index]
                 [growable-list-push result fw]
@@ -753,9 +793,12 @@
 
             [log-abort [text 'unexpected character']]]]]]
         [stack-free stack stack-size]
-        [let [lres [growable-list-to-list result]]
+        [let
+          [lres [growable-list-to-list result]
+           txts-res [growable-list-to-list texts]]
           [growable-list-free result]
-          lres]]]
+          [growable-list-free texts]
+          [tuple lres txts-res]]]]
 
 [export parse-n]
 
@@ -765,12 +808,7 @@
     [let [n1 [list-size w1]
           n2 [list-size w2]]
       [if [eq n1 n2]
-        [loop [i 0]
-          [if [lt-s i n1]
-            [if [eq [list-get w1 i] [list-get w2 i]]
-              [continue i [inc i]]
-              false]
-            true]]
+        [eq [memory-compare [list-data-array w1] [list-data-array w2] n1] 0]
         false]]]]
 
 [def exp-i32-tag [i32 1]]
@@ -949,8 +987,8 @@
 
           [word-eq fw [static-list [text export]]]
           [do
-            [if [lt-s n-args 3]
-              [log-abort [text 'form-to-top export expects at least 3 arguments']]]
+            [if [lt-s n-args 1]
+              [log-abort [text 'form-to-top export expects at least 1 arguments']]]
             [do
               [loop [k 1]
                 [when [lt-s k n]
