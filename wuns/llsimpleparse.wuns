@@ -795,17 +795,24 @@
         value i]]
     p]]
 
+; look here for overflow check https://github.com/skeeto/scratch/blob/master/parsers/strtonum.c
 [defn dec-word-to-i32 [w [text]] [i32]
-  [loop [i 0 n [list-size w] res 0]
-    [if [lt-s i n]
-      [let [cc [list-get-byte w i]]
+  [loop [i 0 ws [list-size w] res 0]
+    [if [lt-s i ws]
+      [let [cc [list-get w i]]
         [if [lt-s cc [i32 48]]
           [log-abort [text 'dec-word-to-i32 cc < 48']]]
         [if [lt-s [i32 57] cc]
           [log-abort [text 'dec-word-to-i32 cc > 57']]]
-        [continue
-          res [add [mul res [i32 10]] [sub cc [i32 48]]]
-          i [inc i]]]
+        ; here we should check for overflow and abort if it happens
+        [let
+          [n [mul res [i32 10]]
+           s [add n [sub cc [i32 48]]]]
+          [if [lt-s s n]
+            [log-abort [text 'dec-word-to-i32 overflow']]]
+          [continue
+            res s
+            i [inc i]]]]
       res]]]
 
 [def-comp-fn static-list [ar [array [u8]]] [plist [u8]]
