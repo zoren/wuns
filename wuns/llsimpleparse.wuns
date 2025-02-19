@@ -684,17 +684,10 @@
 [def stack-size [i32 8]]
 [def init-capacity [i32 8]]
 
-[defn list-slice-byte [psrc [plist [u8]] start [i32] end [i32]] [plist [u8]]
+[defn list-slice-byte-array [psrc [pmem [array [u8]]] sz [i32]] [plist [u8]]
   [let
-    [sz [sub end start]
-     pdst [list-alloc-byte sz]]
-    [loop [i 0]
-      [if [lt-s i sz]
-        [do
-          [assign
-            [index [field [deref pdst] array] i]
-            [index [field [deref psrc] array] [add start i]]]
-          [continue i [inc i]]]]]
+    [pdst [list-alloc-byte sz]]
+    [memory-copy [list-data-array pdst] psrc sz]
     pdst]]
 
 [defn unwind-stack [stack [pmem [array [pmem [growable-list [pform]]]]] stack-index [i32]] [pform]
@@ -722,6 +715,19 @@
           diff]]
       [i32 0]]]]
 
+[defn text-intern [texts [pmem [growable-list [text]]] pw [pmem [array [u8]]] word-size [i32]] [text]
+  [loop [txts-i 0 txts-sz [list-size texts]]
+    [if [lt-s txts-i txts-sz]
+      [let
+        [cur-txt [growable-list-get texts txts-i]
+         cur-sz [list-size cur-txt]]
+        [if [eq cur-sz word-size]
+          [if [eq 0 [memory-compare [list-data-array cur-txt] pw word-size]]
+            cur-txt
+            [continue txts-i [inc txts-i]]]
+          [continue txts-i [inc txts-i]]]]
+      [cast [text] [i32 0]]]]]
+
 [defn parse-n [bytes [text]] [tuple [plist [pform]] [plist [text]]]
   [let
     [stack [make-stack stack-size init-capacity]
@@ -742,21 +748,15 @@
             [let
               [word-end [scan-word-end bytes [inc i]]
                word-size [sub word-end i]
+               p [cast [pmem [array [u8]]] [pindex bytes-array i]]
+               w-opt [text-intern texts p word-size]
                w
-               ; scan texts to see if we already have allocated the word
-               [loop [txts-i 0 txts-sz [list-size texts]]
-                [if [lt-s txts-i txts-sz]
-                  [let
-                    [cur-txt [growable-list-get texts txts-i]
-                     cur-sz [list-size cur-txt]]
-                    [if [eq cur-sz word-size]
-                      [if [eq 0 [memory-compare [list-data-array cur-txt] [cast [pmem [array [u8]]] [pindex bytes-array i]] word-size]]
-                        cur-txt
-                        [continue txts-i [inc txts-i]]]
-                      [continue txts-i [inc txts-i]]]]
-                  [let [new-word [list-slice-byte bytes i word-end]]
-                    [growable-list-push texts new-word]
-                    new-word]]]]
+               [if [eq w-opt [i32 0]]
+                [let
+                  [new-word [list-slice-byte-array p word-size]]
+                  [growable-list-push texts new-word]
+                  new-word]
+                  w-opt]]
               [growable-list-push
                 [if [is-negative stack-index]
                   result
