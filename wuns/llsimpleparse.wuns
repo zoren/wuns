@@ -459,25 +459,14 @@
       [assign [field [deref p] size] sz]
       p]]]
 
-[functor list-free [elem-type datatype]
-  [func [pvec [pmem [list-data elem-type -sz]]] [tuple]
-    [if [not [static-is pvec]]
-      [free pvec [size-of-type [list-data elem-type [exp [field [deref pvec] size]]]]]]]]
-
-[genfn list-free-gen [elem-type datatype] [pvec [pmem [list-data elem-type -sz]]] [tuple]
+[genfn list-free [elem-type datatype] [pvec [pmem [list-data elem-type -sz]]] [tuple]
   [if [not [static-is pvec]]
     [free pvec [size-of-type [list-data elem-type [exp [field [deref pvec] size]]]]]]]
 
 [def list-alloc-byte [list-alloc [u8]]]
 [export list-alloc-byte]
 
-[functor list-get [elem-type datatype]
-  [func [pvec [plist elem-type] i [i32]] elem-type
-    [if [lt-s i 0] [log-abort [text 'list-get index negative']]]
-    [if [le-s [list-size pvec] i] [log-abort [text 'list-get index out of bounds']]]
-    [index [field [deref pvec] array] i]]]
-
-[genfn list-get-gen [elem-type datatype] [pvec [pmem [list-data elem-type -sz]] i [i32]] elem-type
+[genfn list-get [elem-type datatype] [pvec [pmem [list-data elem-type -sz]] i [i32]] elem-type
   [if [lt-s i 0] [log-abort [text 'list-get index negative']]]
   [if [le-s [list-size pvec] i] [log-abort [text 'list-get index out of bounds']]]
   [index [field [deref pvec] array] i]]
@@ -614,11 +603,13 @@
 
 [export form-list-get]
 
-[def list-get-form [list-get [pform]]]
+[defn list-get-form [pfl [plist [pform]] i [i32]] [pform]
+  [list-get pfl i]]
 
 [export list-get-form]
 
-[def text-free [list-free [u8]]]
+[defn text-free [txt [text]] [tuple]
+  [list-free txt]]
 
 [export text-free]
 
@@ -636,9 +627,9 @@
         [loop [i 0 n [list-size forms]]
           [if [lt-s i n]
             [do
-              [form-free [list-get-gen forms i]]
+              [form-free [list-get forms i]]
               [continue i [inc i]]]]]
-        [list-free-gen forms]
+        [list-free forms]
         [free pf [size-of-type [form-list]]]]
 
       [log-abort [text 'form-free unknown form type']]]]]
@@ -647,13 +638,11 @@
   [loop [i 0 n [list-size pfs]]
     [if [lt-s i n]
       [do
-        [form-free [list-get-gen pfs i]]
+        [form-free [list-get pfs i]]
         [continue i [inc i]]]]
-  [list-free-gen pfs]]]
+  [list-free pfs]]]
 
 [export form-free list-forms-free]
-
-[def list-get-byte [list-get [u8]]]
 
 [def growable-list-alloc-init-form
   [growable-list-alloc-init [pform]]]
@@ -661,7 +650,7 @@
 [defn scan-word-end [bytes [plist [u8]] start [i32]] [i32]
   [loop [i start n-of-bytes [list-size bytes]]
     [if [lt-s i n-of-bytes]
-      [if [is-word-char [list-get-byte bytes i]]
+      [if [is-word-char [list-get bytes i]]
         [continue i [inc i]]
         i]
       i]]]
@@ -727,7 +716,7 @@
       [if [not [lt-s i n-of-bytes]]
         [if [not [is-negative stack-index]]
           [growable-list-push result [unwind-stack stack stack-index]]]
-        [let [c [list-get-byte bytes i]]
+        [let [c [list-get bytes i]]
           [ifs
             [is-word-char c]
             [let [word-end [scan-word-end bytes [inc i]]
@@ -778,7 +767,7 @@
       [if [eq n1 n2]
         [loop [i 0]
           [if [lt-s i n1]
-            [if [eq [list-get-byte w1 i] [list-get-byte w2 i]]
+            [if [eq [list-get w1 i] [list-get w2 i]]
               [continue i [inc i]]
               false]
             true]]
@@ -837,13 +826,13 @@
           n-args [dec n]]
       [if [eq n 0]
         [log-abort [text 'form-to-exp empty list not allowed']]]
-      [let [fw [form-word-get [list-get-gen fl 0]]]
+      [let [fw [form-word-get [list-get fl 0]]]
         [ifs
           [word-eq fw [static-list [text i32]]]
           [do
             [if [ne n-args 1]
               [log-abort [text 'form-to-exp i32 expects one argument']]]
-            [wexp-i32-alloc [dec-word-to-i32 [form-word-get [list-get-gen fl 1]]]]]
+            [wexp-i32-alloc [dec-word-to-i32 [form-word-get [list-get fl 1]]]]]
 
           [log-abort [text 'form-to-exp unknown form-list case']]]]]
 
@@ -896,7 +885,7 @@
           n-args [dec n]]
       [if [eq n 0]
         [log-abort [text 'form-to-type empty list not allowed']]]
-      [let [fw [form-word-get [list-get-gen fl 0]]]
+      [let [fw [form-word-get [list-get fl 0]]]
         [ifs
           [word-eq fw [static-list [text i32]]]
           [do
@@ -920,27 +909,27 @@
           n-args [dec n]]
       [if [eq n 0]
         [log-abort [text 'form-to-top empty list not allowed']]]
-      [let [fw [form-word-get [list-get-gen fl 0]]]
+      [let [fw [form-word-get [list-get fl 0]]]
         [ifs
           [word-eq fw [static-list [text defn]]]
           [do
             [if [lt-s n-args 3]
               [log-abort [text 'form-to-top defn expects at least 3 arguments']]]
             [let
-              [fname [form-word-get [list-get-gen fl 1]]
-               param-list [form-list-get [list-get-gen fl 2]]
+              [fname [form-word-get [list-get fl 1]]
+               param-list [form-list-get [list-get fl 2]]
                n-of-param-forms [list-size param-list]
-               result-type [form-to-type [list-get-gen fl 3]]]
+               result-type [form-to-type [list-get fl 3]]]
               [if [is-odd n-of-param-forms]
                 [log-abort [text 'form-to-top defn expects a parameter list with names and type pairs']]]
               [loop [i 0]
                 [when [lt-s i [dec n-of-param-forms]]
-                  [form-word-get [list-get-gen param-list i]]
-                  [form-to-type [list-get-gen param-list [inc i]]]
+                  [form-word-get [list-get param-list i]]
+                  [form-to-type [list-get param-list [inc i]]]
                   [continue i [add 2 i]]]]
               [loop [j 4]
                 [when [lt-s j n]
-                  [form-to-exp [list-get-gen fl j]]
+                  [form-to-exp [list-get fl j]]
                   [continue j [inc j]]]]]]
 
           [word-eq fw [static-list [text def]]]
@@ -948,8 +937,8 @@
             [if [ne n-args 2]
               [log-abort [text 'form-to-top def expects a name and an expression']]]
             [let
-              [dname [form-word-get [list-get-gen fl 1]]
-               exp [form-to-exp [list-get-gen fl 2]]]]]
+              [dname [form-word-get [list-get fl 1]]
+               exp [form-to-exp [list-get fl 2]]]]]
 
           [word-eq fw [static-list [text export]]]
           [do
@@ -958,7 +947,7 @@
             [do
               [loop [k 1]
                 [when [lt-s k n]
-                  [form-word-get [list-get-gen fl k]]
+                  [form-word-get [list-get fl k]]
                   [continue k [inc k]]]]]]
 
           [log-abort [text 'form-to-top unknown form-list case']]]]]
