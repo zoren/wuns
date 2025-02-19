@@ -756,12 +756,12 @@
                       [continue txts-i [inc txts-i]]]]
                   [let [new-word [list-slice-byte bytes i word-end]]
                     [growable-list-push texts new-word]
-                    new-word]]]
-               fw [form-word-alloc w]]
-              [if [not [lt-s i word-end]] [log-abort [text 'scan-word-end returned i >= word-end']]]
-              [if [is-negative stack-index]
-                [growable-list-push result fw]
-                [growable-list-push [index [deref stack] stack-index] fw]]
+                    new-word]]]]
+              [growable-list-push
+                [if [is-negative stack-index]
+                  result
+                  [index [deref stack] stack-index]]
+                [form-word-alloc w]]
               [continue i word-end]]
 
             [is-whitespace c]
