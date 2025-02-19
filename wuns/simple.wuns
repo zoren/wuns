@@ -555,6 +555,10 @@
     [exp/var n] [name/word n]
     [logq-abort get-exp-var not a var [identity e]]]]
 
+[defn pairwise-pairs-check [l]
+  [assert-not [is-odd [size l]] pairwise-pairs-check expected even number of elements]
+  [pairwise-pairs l]]
+
 [defn make-compiler []
 [let
   [gerrors [growable-list]
@@ -947,7 +951,7 @@
        let-loop-ctx [local-context-make lctx vars [if is-let [local-context-kind/let] [local-context-kind/loop]]]]
       [exp/let-loop
         [if is-let [let-or-loop/let] [let-or-loop/loop]]
-        [list-map p [pairwise-pairs [get-list [second l]]]
+        [list-map p [pairwise-pairs-check [get-list [second l]]]
           [let [pname [form-to-name [pair/fst p]]
                 pexp [form-to-exp-type-kind-env type-kind-env let-loop-ctx [pair/snd p]]
                 pt [type-of pexp]]
@@ -960,7 +964,7 @@
       [do
         [assert [is-odd [size l]] expected pairs of assignments]
         [exp/continue
-        [list-map p [pairwise-pairs [rest l]]
+        [list-map p [pairwise-pairs-check [rest l]]
           [let [n [form-to-name [pair/fst p]]
                 e [form-to-exp-type-kind-env type-kind-env lctx [pair/snd p]]]
             [if-let [t [try-get loop-vars [name/word n]]]
@@ -974,7 +978,7 @@
       [vars [transient-kv-map]
        param-ctx [local-context-make lctx vars [local-context-kind/func]]
        params
-       [list-map p [pairwise-pairs [get-list [second l]]]
+       [list-map p [pairwise-pairs-check [get-list [second l]]]
           [let [pname [form-to-name [pair/fst p]]
                 pt [form-to-type-type-env type-kind-env lctx [pair/snd p]]]
             [set-kv-map vars [name/word pname] pt]
@@ -1049,7 +1053,7 @@
 
     [[word record]]
     [exp/record
-      [list-map p [pairwise-pairs [rest l]]
+      [list-map p [pairwise-pairs-check [rest l]]
         [pair [form-to-name [pair/fst p]] [form-to-exp-type-kind-env type-kind-env lctx [pair/snd p]]]]]
 
     [[word data]]
@@ -1766,7 +1770,7 @@
       [do
         [assert [eq [size l] 3] import func expected 2 elements]
         [import-kind-decl/function
-          [list-map pp [pairwise-pairs [get-list [second l]]]
+          [list-map pp [pairwise-pairs-check [get-list [second l]]]
             [pair [form-to-name [pair/fst pp]] [form-to-type [pair/snd pp]]]]
           [form-to-type [third l]]]]
 
@@ -1926,7 +1930,7 @@
                  param-form [at l [inc i]]
                  param-map [transient-kv-map]
                  type-params
-                 [list-map param-pair [pairwise-pairs [get-list param-form]]
+                 [list-map param-pair [pairwise-pairs-check [get-list param-form]]
                   [let [pn [form-to-name [pair/fst param-pair]]
                         pk [form-to-type-kind [pair/snd param-pair]]]
                     [set-kv-map param-map [name/word pn] pk]
@@ -1989,7 +1993,7 @@
                result-form [fourth l]
                tparam-ctx [transient-kv-map]
                tparameters
-               [list-map p [pairwise-pairs type-params-list]
+               [list-map p [pairwise-pairs-check type-params-list]
                  [let [pname [form-to-name [pair/fst p]]
                        pkind [form-to-type-kind [pair/snd p]]]
                   [set-kv-map tparam-ctx [name/word pname] pkind]
@@ -2010,7 +2014,7 @@
                is-defn [eq-word fw [word defn]]
                params-list [get-list [third l]]
                return-type-form [fourth l]
-               param-pairs [pairwise-pairs params-list]
+               param-pairs [pairwise-pairs-check params-list]
                param-names [list-map p param-pairs [form-to-name [pair/fst p]]]
                param-types [list-map p param-pairs [form-to-type [pair/snd p]]]
                return-type [form-to-type return-type-form]
@@ -2050,12 +2054,12 @@
                return-type-form [at l 4]
                tparam-ctx [transient-kv-map]
                tparameters
-               [list-map p [pairwise-pairs type-params-list]
+               [list-map p [pairwise-pairs-check type-params-list]
                  [let [pname [form-to-name [pair/fst p]]
                        pkind [form-to-type-kind [pair/snd p]]]
                   [set-kv-map tparam-ctx [name/word pname] pkind]
                   [pair pname pkind]]]
-               param-pairs [pairwise-pairs params-list]
+               param-pairs [pairwise-pairs-check params-list]
                param-names [list-map p param-pairs [form-to-name [pair/fst p]]]
                param-types [list-map p param-pairs [form-to-type-type-env tparam-ctx local-context-empty [pair/snd p]]]
                return-type [form-to-type-type-env tparam-ctx local-context-empty return-type-form]
