@@ -32,8 +32,7 @@
 [def false [i32 0]]
 [def true [i32 1]]
 
-[def not
-  [func [x [i32]] [i32] [if x 0 1]]]
+[defn not [x [i32]] [i32] [if x 0 1]]
 
 [defn eq [x [i32] y [i32]] [i32] [intrinsic i32.eq x y]]
 [defn ne [x [i32] y [i32]] [i32] [intrinsic i32.ne x y]]
@@ -92,7 +91,16 @@
 [defn memory-copy [pdst [pmem -a] psrc [pmem -a] n-bytes [i32]] [tuple]
   [intrinsic memory.copy mem [cast [i32] pdst] [cast [i32] psrc] n-bytes]]
 
-[defn mem-size-bytes [] [i32]
+[defn memory-compare [p1 [pmem [array [u8]]] p2 [pmem [array [u8]]] n-bytes [i32]] [i32]
+  [loop [i 0]
+    [if [lt-s i n-bytes]
+      [let [diff [sub [index [deref p1] i] [index [deref p2] i]]]
+        [if [eq diff 0]
+          [continue i [inc i]]
+          diff]]
+      [i32 0]]]]
+
+[defn memory-size-bytes [] [i32]
   [intrinsic i32.shl [intrinsic memory.size mem] [i32 16]]]
 
 [def null [cast [pmem -a] [i32 0]]]
@@ -102,7 +110,7 @@
 
 [defn resize-mem-to-fit [new-top [i32]] [tuple]
   [let
-    [mem-size [mem-size-bytes]]
+    [mem-size [memory-size-bytes]]
     [if [lt-s mem-size new-top]
       [let
         [missing-bytes [sub new-top mem-size]
@@ -164,8 +172,8 @@
   ; todo check if top is within memory bounds
   [if [static-is pframe]
     [log-abort [text 'alloc-frame-validate pframe points to static mem']]]
-  [if [lt-s [mem-size-bytes] [add [cast [i32] pframe] [size-of-type [alloc-stack-frame [exp [mem-align 1]]]]]]
-    [log-abort [text 'alloc-frame-validate mem-size-bytes < frame-size']]]
+  [if [lt-s [memory-size-bytes] [add [cast [i32] pframe] [size-of-type [alloc-stack-frame [exp [mem-align 1]]]]]]
+    [log-abort [text 'alloc-frame-validate memory-size-bytes < frame-size']]]
   [let
     [frame-size [field [deref pframe] frame-size]
      byte-size [field [deref pframe] byte-size]
@@ -383,7 +391,7 @@
     [let [pi [cast [i32] p]]
       [if [lt-u pi static-mem-top]
       0
-      [lt-u pi [mem-size-bytes]]]]]]
+      [lt-u pi [memory-size-bytes]]]]]]
 
 [defn realloc-production [old-p [pmem -a] old-n-bytes [i32] new-n-bytes [i32]] [pmem -a]
   [if [not [mem-align-is [cast [i32] old-p]]] [log-abort [text 'realloc-production old-p not aligned']]]
@@ -705,15 +713,6 @@
 
 [def growable-list-alloc-init-text
   [growable-list-alloc-init [text]]]
-
-[defn memory-compare [p1 [pmem [array [u8]]] p2 [pmem [array [u8]]] n-bytes [i32]] [i32]
-  [loop [i 0]
-    [if [lt-s i n-bytes]
-      [let [diff [sub [index [deref p1] i] [index [deref p2] i]]]
-        [if [eq diff 0]
-          [continue i [inc i]]
-          diff]]
-      [i32 0]]]]
 
 [defn text-intern [texts [pmem [growable-list [text]]] pw [pmem [array [u8]]] word-size [i32]] [text]
   [loop [txts-i 0 txts-sz [list-size texts]]
