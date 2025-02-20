@@ -510,21 +510,25 @@
     [free parray [size-of-type [array elem-type [exp [field [deref pglist] capacity]]]]]
     [free pglist [size-of-type [growable-list elem-type]]]]]
 
+[genfn growable-list-resize [elem-type datatype] [pglist [pmem [growable-list elem-type]] new-capacity [i32]] [tuple]
+  [let
+    [cur-capacity [field [deref pglist] capacity]
+     cur-size [field [deref pglist] size]]
+    [if [le-s new-capacity cur-size] [log-abort [text 'growable-list-resize new-capacity < cur-size']]]
+    [assign [field [deref pglist] capacity] new-capacity]
+    [assign [field [deref pglist] parray]
+      [cast [pmem [array elem-type]]
+        [realloc
+          [field [deref pglist] parray]
+          [size-of-type [array elem-type [exp cur-capacity]]]
+          [size-of-type [array elem-type [exp new-capacity]]]]]]]]
+
 [genfn growable-list-push [elem-type datatype] [pglist [pmem [growable-list elem-type]] elem elem-type] [tuple]
   [let
     [cur-size [field [deref pglist] size]
      cur-capacity [field [deref pglist] capacity]]
     [if [eq cur-size cur-capacity]
-      [let
-        [new-capacity [mul cur-capacity 2]
-          new-array
-          [cast [pmem [array elem-type]]
-          [realloc
-            [field [deref pglist] parray]
-            [size-of-type [array elem-type [exp cur-capacity]]]
-            [size-of-type [array elem-type [exp new-capacity]]]]]]
-        [assign [field [deref pglist] capacity] new-capacity]
-        [assign [field [deref pglist] parray] new-array]]]
+      [growable-list-resize pglist [mul cur-capacity 2]]]
     [assign [index [deref [field [deref pglist] parray]] cur-size] elem]
     [assign [field [deref pglist] size] [inc cur-size]]]]
 

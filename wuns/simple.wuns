@@ -2541,7 +2541,7 @@
               [es2i [exp-function/bodies efunc]]]]
           [wat-inst/call fnw [list-map arg args [exp-to-inst arg]]]]
         [wat-inst/call fnw [list-map arg args [exp-to-inst arg]]]]
-      [match [go-tais [transient-kv-map] parameters [list-map arg args [type-of arg]]]
+      [match [go-tais [transient-kv-map] parameters [list-map arg args [type-substitute type-env [type-of arg]]]]
         [result/ok tenv]
         [let
           [type-args [list-map tp [type-func/type-parameters tf] [get tenv [name/word [pair/fst tp]]]]
