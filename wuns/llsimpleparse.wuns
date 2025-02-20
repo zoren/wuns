@@ -559,6 +559,9 @@
 [datatype text []
   [plist [u8]]]
 
+[defn log-text [txt [text]] [tuple]
+  [log [list-data-array txt] [list-size txt]]]
+
 [datatype assoc-entry [key datatype value datatype]
   [record
     [key key]
@@ -576,6 +579,16 @@
     [assign [field [index [deref [field [deref pglist] parray]] cur-size] key] key]
     [assign [field [index [deref [field [deref pglist] parray]] cur-size] value] value]
     [assign [field [deref pglist] size] [inc cur-size]]]]
+
+[genfn assoc-list-get-entry [k datatype v datatype] [pglist [p-assoc-list k v] key k] [pmem [assoc-entry k v]]
+  [loop
+    [cur-size [field [deref pglist] size]
+     i 0]
+    [if [lt-s i cur-size]
+      [if [eq [field [index [deref [field [deref pglist] parray]] i] key] key]
+        [pindex [field [deref pglist] parray] i]
+        [continue i [inc i]]]
+      [cast [pmem [assoc-entry k v]] [i32 0]]]]]
 
 [def form-word-tag [i32 10]]
 [def form-list-tag [i32 11]]
@@ -942,37 +955,19 @@
 
 [datatype wtype [] [i32]]
 
-[defn type-of [e [pexp]] [i32]
-  [let [tag [field [deref e] tag]]
-    [ifs
-      [eq tag exp-i32-tag]
-      type-i32
-
-      [log-abort [text 'type-of unknown tag']]]]]
-
-[defn type-assignable [dst [wtype] src [wtype]] [tuple]
-  [let
-    []
-    [when [ne dst src]
-      [log-abort [text 'type-assignable different types']]
-
-      ]]
-     ]
-
-[defn common-super-type [t1 [wtype] t2 [wtype]] [wtype]
-  [if [eq t1 t2]
-    t1
-    [log-abort [text 'common-super-type different types']]]]
+[def global-desc-defn-tag [i32 1]]
 
 [datatype global-desc-defn []
   [record
-    [tag [exp [i32 1]]]
+    [tag [exp global-desc-defn-tag]]
     [parameters [plist [tuple [text] [wtype]]]]
     [result [wtype]]]]
 
+[def global-desc-def-tag [i32 2]]
+
 [datatype global-desc-def []
   [record
-    [tag [exp [i32 2]]]
+    [tag [exp global-desc-def-tag]]
     [type [wtype]]]]
 
 [datatype global-context-kind []
@@ -983,21 +978,28 @@
 [datatype global-context []
   [record
     [errors [p-growable-list [text]]]
-    [names [p-assoc-list [text] [pmem [global-context-kind]]]]]]
+    [names [p-assoc-list [text] [pmem [global-context-kind]]]]
+    [form-offsets [p-assoc-list [pform] [i32]]]
+    [exp-types [p-assoc-list [pexp] [wtype]]]
+    ]]
 
 [def assoc-list-text [growable-list-alloc-init [text]]]
 [def assoc-list-alloc-text-global-context-kind [growable-list-alloc-init [assoc-entry [text] [pmem [global-context-kind]]]]]
+[def assoc-list-exp-type [growable-list-alloc-init [assoc-entry [pexp] [wtype]]]]
 
-[defn global-context-alloc [] [pmem [global-context]]
+[defn global-context-alloc [form-offsets [p-assoc-list [pform] [i32]]] [pmem [global-context]]
   [let
     [p [alloc [global-context]]]
     [assign [field [deref p] errors] [assoc-list-text [i32 10]]]
     [assign [field [deref p] names] [assoc-list-alloc-text-global-context-kind [i32 10]]]
+    [assign [field [deref p] form-offsets] form-offsets]
+    [assign [field [deref p] exp-types] [assoc-list-exp-type [i32 10]]]
     p]]
 
 [defn global-context-free [gctx [pmem [global-context]]] [tuple]
   [growable-list-free [field [deref gctx] errors]]
   [growable-list-free [field [deref gctx] names]]
+  [growable-list-free [field [deref gctx] exp-types]]
   [free gctx [size-of-type [global-context]]]]
 
 [export global-context-alloc global-context-free]
@@ -1010,11 +1012,9 @@
   [record
     [context-kind [local-context-kind]]
     [outer [pmem [local-context -sz]]]
-    [locals [list-data [tuple [text] [wtype]] size]]]]
+    [locals [list-data [assoc-entry [text] [wtype]] size]]]]
 
-[datatype
-  plocal-context []
-  [pmem [local-context -sz]]]
+[datatype plocal-context [] [pmem [local-context -sz]]]
 
 [def local-context-empty [cast [plocal-context] [i32 0]]]
 
@@ -1034,21 +1034,67 @@
        tuple-array [list-data-array locals]]
       [if [lt-s i n]
         [do
-          [if [word-eq [index [index [deref tuple-array] i] [i32 0]] name]
-            [tuple cur-ctx [index [index [deref tuple-array] i] [i32 1]]]
+          [if [word-eq [field [index [deref tuple-array] i] key] name]
+            [tuple cur-ctx [field [index [deref tuple-array] i] value]]
             [continue i [inc i] cur-ctx [field [deref lctx] outer]]]]
         [tuple local-context-empty type-i32]]]]]
 
-[defn form-to-exp [gctx [pmem [global-context]] lctx [plocal-context] f [pmem [form]]] [pmem [wexp]]
+[defn push-error [gctx [pmem [global-context]] form [pform] msg [text]] [tuple]
+  [let
+    [errors [field [deref gctx] errors]
+     p-entry [assoc-list-get-entry [field [deref gctx] form-offsets] form]]
+    [if [is-null p-entry]
+      [log-abort [text 'push-error form not found in form-offsets']]]
+    [growable-list-push errors msg]]]
+
+[defn type-of [gctx [pmem [global-context]] lctx [plocal-context] e [pexp]] [i32]
+  [let [tag [field [deref e] tag]]
+    [ifs
+      [eq tag exp-i32-tag]
+      type-i32
+
+      [let [annotated-type [assoc-list-get-entry [field [deref gctx] exp-types] e]]
+        [if [is-null annotated-type]
+          [do
+            [log-i32 tag]
+            [log-i32 annotated-type]
+            [log-i32 [list-size [field [deref gctx] exp-types]]]
+            [log-abort [text 'type-of not annotated']]
+            [i32 -1]]
+          [field [deref annotated-type] value]]]]]]
+
+[defn type-assignable [dst [wtype] src [wtype]] [tuple]
+  [when [ne dst src]
+    [log-i32 dst]
+    [log-i32 src]
+    [log-abort [text 'type-assignable different types']]]]
+
+[defn common-super-type [t1 [wtype] t2 [wtype]] [wtype]
+  [if [eq t1 t2]
+    t1
+    [log-abort [text 'common-super-type different types']]]]
+
+[defn annotate [gctx [pmem [global-context]] exp [pexp] t [wtype]] [tuple]
+  [assoc-list-push [field [deref gctx] exp-types] exp t]]
+
+[defn form-to-exp [gctx [pmem [global-context]] lctx [plocal-context] f [pmem [form]]] [pexp]
   [ifs
     [form-word-is f]
     [let
       [w [form-word-get f]
-       [found-ctx var-type] [local-context-lookup lctx w]]
-      [when [eq found-ctx local-context-empty]
-        ; check global context
-        [log-abort [text 'form-to-exp variable not found in local context']]]
-      [wexp-var-alloc w]]
+       [found-ctx lvar-type] [local-context-lookup lctx w]
+       exp [wexp-var-alloc w]]
+      [if [ne found-ctx local-context-empty]
+        [annotate gctx exp lvar-type]
+        [let [p-entry [assoc-list-get-entry [field [deref gctx] names] w]]
+          [if [is-null p-entry]
+            [push-error gctx f [data mem [text 'variable not found']]]
+            [let
+              [pdesc [field [deref p-entry] value]]
+              [if [eq [field [deref pdesc] tag] global-desc-def-tag]
+                [annotate gctx exp [field [deref [cast [pmem [global-desc-def]] pdesc]] type]]
+                [push-error gctx f [data mem [text 'variable not a def']]]]]]]]
+      exp]
 
     [form-list-is f]
     [let [fl [form-list-get f]
@@ -1071,10 +1117,11 @@
             [let
               [c [form-to-exp gctx lctx [list-get fl 1]]
                t [form-to-exp gctx lctx [list-get fl 2]]
-               e [form-to-exp gctx lctx [list-get fl 3]]]
-              [type-assignable type-i32 [type-of c]]
-              [common-super-type [type-of t] [type-of e]]
-              [wexp-if-alloc c t e]]]
+               e [form-to-exp gctx lctx [list-get fl 3]]
+               if-form [wexp-if-alloc c t e]]
+              [type-assignable type-i32 [type-of gctx lctx c]]
+              [annotate gctx if-form [common-super-type [type-of gctx lctx t] [type-of gctx lctx e]]]
+              if-form]]
 
           [log-abort [text 'form-to-exp unknown form-list case']]]]]
 
@@ -1136,15 +1183,15 @@
                ]
               [if [is-odd n-of-param-forms]
                 [log-abort [text 'form-to-top defn expects a parameter list with names and type pairs']]]
-              [loop [i 0]
+              [loop [i 0 ti 0]
                 [when [lt-s i [dec n-of-param-forms]]
                   [let
                     [lname [form-word-get [list-get param-list i]]
                      ltype [form-to-type gctx [list-get param-list [inc i]]]]
                     [assign
-                      [index [index [deref locals-array] [half i]] [i32 0]] lname
-                      [tuple lname ltype]]
-                    [continue i [add 2 i]]]]]
+                      [index [deref locals-array] ti]
+                      [record key lname value ltype]]
+                    [continue i [add 2 i] ti [inc ti]]]]]
               [loop [j 4]
                 [when [lt-s j n]
                   [form-to-exp gctx lctx [list-get fl j]]
@@ -1177,11 +1224,16 @@
 [defn parse-translate [bytes [text]] [pmem [global-context]]
   [let
     [[forms texts form-offsets] [parse-n bytes]
-     gctx [global-context-alloc]]
+     gctx [global-context-alloc form-offsets]]
     [loop [i 0 n [list-size forms]]
       [when [lt-s i n]
         [form-to-top gctx [growable-list-get forms i]]
         [continue i [inc i]]]]
+    [let [errors [field [deref gctx] errors]]
+      [loop [j 0 nerr [list-size errors]]
+        [when [lt-s j nerr]
+          [log-text [growable-list-get errors j]]
+          [continue j [inc j]]]]]
     gctx]]
 
 [export parse-translate]
