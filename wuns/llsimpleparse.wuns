@@ -493,8 +493,11 @@
     [capacity [i32]]
     [parray [pmem [array a]]]]]
 
+[datatype p-growable-list [a datatype]
+  [pmem [growable-list a]]]
+
 [functor growable-list-alloc-init [elem-type datatype]
-  [func [init-capacity [i32]] [pmem [growable-list elem-type]]
+  [func [init-capacity [i32]] [p-growable-list elem-type]
     [let
       [p [alloc [growable-list elem-type]]]
       [assign [deref p]
@@ -504,13 +507,13 @@
           parray [alloc [array elem-type [exp init-capacity]]]]]
       p]]]
 
-[genfn growable-list-free [elem-type datatype] [pglist [pmem [growable-list elem-type]]] [tuple]
+[genfn growable-list-free [elem-type datatype] [pglist [p-growable-list elem-type]] [tuple]
   [let
     [parray [field [deref pglist] parray]]
     [free parray [size-of-type [array elem-type [exp [field [deref pglist] capacity]]]]]
     [free pglist [size-of-type [growable-list elem-type]]]]]
 
-[genfn growable-list-resize [elem-type datatype] [pglist [pmem [growable-list elem-type]] new-capacity [i32]] [tuple]
+[genfn growable-list-resize [elem-type datatype] [pglist [p-growable-list elem-type] new-capacity [i32]] [tuple]
   [let
     [cur-capacity [field [deref pglist] capacity]
      cur-size [field [deref pglist] size]]
@@ -523,7 +526,7 @@
           [size-of-type [array elem-type [exp cur-capacity]]]
           [size-of-type [array elem-type [exp new-capacity]]]]]]]]
 
-[genfn growable-list-push [elem-type datatype] [pglist [pmem [growable-list elem-type]] elem elem-type] [tuple]
+[genfn growable-list-push [elem-type datatype] [pglist [p-growable-list elem-type] elem elem-type] [tuple]
   [let
     [cur-size [field [deref pglist] size]
      cur-capacity [field [deref pglist] capacity]]
@@ -532,12 +535,12 @@
     [assign [index [deref [field [deref pglist] parray]] cur-size] elem]
     [assign [field [deref pglist] size] [inc cur-size]]]]
 
-[genfn growable-list-get [elem-type datatype] [pglist [pmem [growable-list elem-type]] i [i32]] elem-type
+[genfn growable-list-get [elem-type datatype] [pglist [p-growable-list elem-type] i [i32]] elem-type
   [if [lt-s i 0] [log-abort [text 'growable-list-get i negative']]]
   [if [le-s [list-size pglist] i] [log-abort [text 'growable-list-get i out of bounds']]]
   [index [deref [field [deref pglist] parray]] i]]
 
-[genfn growable-list-to-list [elem-type datatype] [pglist [pmem [growable-list elem-type]]] [plist elem-type]
+[genfn growable-list-to-list [elem-type datatype] [pglist [p-growable-list elem-type]] [plist elem-type]
   [let
     [cur-size [field [deref pglist] size]
      plist [cast [plist elem-type] [alloc [list-data elem-type [exp cur-size]]]]]
@@ -550,34 +553,29 @@
         [continue i [inc i]]]]
     plist]]
 
-[defn growable-list-reset [pglist [pmem [growable-list -a]]] [tuple]
+[defn growable-list-reset [pglist [p-growable-list -a]] [tuple]
   [assign [field [deref pglist] size] 0]]
 
 [datatype text []
   [plist [u8]]]
 
-[datatype hash-entry [key datatype value datatype]
+[datatype assoc-entry [key datatype value datatype]
   [record
     [key key]
-;    [hash [i32]]
     [value value]]]
 
-[datatype hash [key datatype value datatype]
-  [record
-    [size [i32]]
-    [capacity [i32]]
-    [parray [pmem [array [hash-entry key value]]]]]]
+[datatype p-assoc-list [key datatype value datatype]
+  [p-growable-list [assoc-entry key value]]]
 
-[functor hash-alloc [key datatype value datatype]
-  [func [init-capacity [i32]] [pmem [hash key value]]
-    [let
-      [p [alloc [hash key value]]]
-      [assign [deref p]
-        [record
-          size 0
-          capacity init-capacity
-          parray [alloc [array [hash-entry key value] [exp init-capacity]]]]]
-      p]]]
+[genfn assoc-list-push [k datatype v datatype] [pglist [p-assoc-list k v] key k value v] [tuple]
+  [let
+    [cur-size [field [deref pglist] size]
+     cur-capacity [field [deref pglist] capacity]]
+    [if [eq cur-size cur-capacity]
+      [growable-list-resize pglist [mul cur-capacity 2]]]
+    [assign [field [index [deref [field [deref pglist] parray]] cur-size] key] key]
+    [assign [field [index [deref [field [deref pglist] parray]] cur-size] value] value]
+    [assign [field [deref pglist] size] [inc cur-size]]]]
 
 [def form-word-tag [i32 10]]
 [def form-list-tag [i32 11]]
@@ -696,9 +694,9 @@
         i]
       i]]]
 
-[defn make-stack [stack-size [i32] init-capacity [i32]] [pmem [array [pmem [growable-list [pform]]]]]
+[defn make-stack [stack-size [i32] init-capacity [i32]] [pmem [array [p-growable-list [pform]]]]
   [if [le-s init-capacity 0] [log-abort [text 'make-stack init-capacity <= 0']]]
-  [let [parray [alloc [array [pmem [growable-list [pform]]] [exp stack-size]]]]
+  [let [parray [alloc [array [p-growable-list [pform]] [exp stack-size]]]]
     [loop [i 0]
       [if [lt-s i stack-size]
         [do
@@ -708,13 +706,13 @@
           [continue i [inc i]]]]]
     parray]]
 
-[defn stack-free [pstack [pmem [array [pmem [growable-list [pform]]]]] stack-size [i32]] [tuple]
+[defn stack-free [pstack [pmem [array [p-growable-list [pform]]]] stack-size [i32]] [tuple]
   [loop [i 0]
     [if [lt-s i stack-size]
       [do
         [growable-list-free [index [deref pstack] i]]
         [continue i [inc i]]]]]
-  [free pstack [size-of-type [array [pmem [growable-list [pform]]] [exp stack-size]]]]]
+  [free pstack [size-of-type [array [p-growable-list [pform]] [exp stack-size]]]]]
 
 [def stack-size [i32 8]]
 [def init-capacity [i32 8]]
@@ -725,7 +723,7 @@
     [memory-copy [list-data-array pdst] psrc sz]
     pdst]]
 
-[defn unwind-stack [stack [pmem [array [pmem [growable-list [pform]]]]] stack-index [i32]] [pform]
+[defn unwind-stack [stack [pmem [array [p-growable-list [pform]]]] stack-index [i32]] [pform]
   [if [lt-s stack-index 0] [log-abort [text 'unwind-stack stack index negative']]]
   [loop [i stack-index]
     [let [glist [index [deref stack] i]
@@ -741,7 +739,7 @@
 [def growable-list-alloc-init-text
   [growable-list-alloc-init [text]]]
 
-[defn text-intern [texts [pmem [growable-list [text]]] pw [pmem [array [u8]]] word-size [i32]] [text]
+[defn text-intern [texts [p-growable-list [text]] pw [pmem [array [u8]]] word-size [i32]] [text]
   [loop [txts-i 0 txts-sz [list-size texts]]
     [if [lt-s txts-i txts-sz]
       [let
@@ -754,13 +752,21 @@
           [continue txts-i [inc txts-i]]]]
       [cast [text] [i32 0]]]]]
 
-[defn parse-n [bytes [text]] [tuple [plist [pform]] [plist [text]]]
+[def assoc-list-alloc-form-index [growable-list-alloc-init [assoc-entry [pform] [i32]]]]
+
+[defn parse-n [bytes [text]]
+  [tuple
+    [p-growable-list [pform]]
+    [p-growable-list [text]]
+    [p-assoc-list [pform] [i32]]
+    ]
   [let
     [stack [make-stack stack-size init-capacity]
-     texts [growable-list-alloc-init-text [i32 10]]
      n-of-bytes [list-size bytes]
      bytes-array [list-data-array bytes]
-     result [growable-list-alloc-init-form [i32 20]]]
+     result [growable-list-alloc-init-form [i32 16]]
+     texts [growable-list-alloc-init-text [i32 10]]
+     form-offsets [assoc-list-alloc-form-index [i32 128]]]
     [loop
       [i 0
        ; todo let stack-index be 0 based instead and result be the top growable-list
@@ -782,12 +788,14 @@
                   [new-word [list-slice-byte-array p word-size]]
                   [growable-list-push texts new-word]
                   new-word]
-                  w-opt]]
+                  w-opt]
+               fw [form-word-alloc w]]
+              [assoc-list-push form-offsets fw i]
               [growable-list-push
                 [if [is-negative stack-index]
                   result
                   [index [deref stack] stack-index]]
-                [form-word-alloc w]]
+                fw]
               [continue i word-end]]
 
             [is-whitespace c]
@@ -807,6 +815,7 @@
                     form-list [growable-list-to-list glist]]
                 [growable-list-reset glist]
                 [let [fl [form-list-alloc form-list]]
+                  [assoc-list-push form-offsets fl i]
                   [if [eq stack-index 0]
                     [growable-list-push result fl]
                     [growable-list-push [index [deref stack] [dec stack-index]] fl]]
@@ -816,14 +825,20 @@
 
             [log-abort [text 'unexpected character']]]]]]
         [stack-free stack stack-size]
-        [let
-          [lres [growable-list-to-list result]
-           txts-res [growable-list-to-list texts]]
-          [growable-list-free result]
-          [growable-list-free texts]
-          [tuple lres txts-res]]]]
+        [tuple result texts
+        form-offsets
+        ]]]
 
-[export parse-n]
+[defn parse-all-forms [bytes [text]] [plist [pform]]
+  [let
+    [[gforms gtexts gform-offsets] [parse-n bytes]
+     forms [growable-list-to-list gforms]]
+    [growable-list-free gtexts]
+    [growable-list-free gforms]
+    [growable-list-free gform-offsets]
+    forms]]
+
+[export parse-all-forms]
 
 [defn word-eq [w1 [text] w2 [text]] [i32]
   [if [eq w1 w2]
@@ -967,17 +982,25 @@
 
 [datatype global-context []
   [record
-    [names [pmem [hash [text] [pmem [global-context-kind]]]]]]]
+    [errors [p-growable-list [text]]]
+    [names [p-assoc-list [text] [pmem [global-context-kind]]]]]]
 
-[def hash-alloc-text-global-context-kind [hash-alloc [text] [pmem [global-context-kind]]]]
+[def assoc-list-text [growable-list-alloc-init [text]]]
+[def assoc-list-alloc-text-global-context-kind [growable-list-alloc-init [assoc-entry [text] [pmem [global-context-kind]]]]]
 
 [defn global-context-alloc [] [pmem [global-context]]
   [let
     [p [alloc [global-context]]]
-    [assign [field [deref p] names] [hash-alloc-text-global-context-kind [i32 10]]]
+    [assign [field [deref p] errors] [assoc-list-text [i32 10]]]
+    [assign [field [deref p] names] [assoc-list-alloc-text-global-context-kind [i32 10]]]
     p]]
 
-[export global-context-alloc]
+[defn global-context-free [gctx [pmem [global-context]]] [tuple]
+  [growable-list-free [field [deref gctx] errors]]
+  [growable-list-free [field [deref gctx] names]]
+  [free gctx [size-of-type [global-context]]]]
+
+[export global-context-alloc global-context-free]
 
 [datatype local-context-kind []
   [i32]]
@@ -1019,9 +1042,12 @@
 [defn form-to-exp [gctx [pmem [global-context]] lctx [plocal-context] f [pmem [form]]] [pmem [wexp]]
   [ifs
     [form-word-is f]
-    [let [w [form-word-get f]]
-      ; todo check if it was actually found!
-      [local-context-lookup lctx w]
+    [let
+      [w [form-word-get f]
+       [found-ctx var-type] [local-context-lookup lctx w]]
+      [when [eq found-ctx local-context-empty]
+        ; check global context
+        [log-abort [text 'form-to-exp variable not found in local context']]]
       [wexp-var-alloc w]]
 
     [form-list-is f]
@@ -1147,3 +1173,15 @@
     [log-abort [text 'form-to-top unknown form case']]]]
 
 [export form-to-top]
+
+[defn parse-translate [bytes [text]] [pmem [global-context]]
+  [let
+    [[forms texts form-offsets] [parse-n bytes]
+     gctx [global-context-alloc]]
+    [loop [i 0 n [list-size forms]]
+      [when [lt-s i n]
+        [form-to-top gctx [growable-list-get forms i]]
+        [continue i [inc i]]]]
+    gctx]]
+
+[export parse-translate]
