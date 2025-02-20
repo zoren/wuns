@@ -717,12 +717,3 @@
 [import ./runtime-lib/host.js mem-dump [func [memory i32 i32] [tuple]]]
 
 [defexpr qlist [.. fs] fs]
-
-[defmacro qmlist [.. fs]
-  [form/list
-    [concat
-      [list [quote list]]
-      [list-map form fs
-        [match form
-          [form/word w] [mk-quote form]
-          [form/list l] form]]]]]

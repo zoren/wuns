@@ -1326,7 +1326,7 @@
         [result/ok tenv]
         [result/error [qlist primitive type does not match primitive]]]
 
-      [result/error [qmlist primitive type does not match [identity dpt] [identity arg-t]]]]
+      [result/error [qlist primitive type does not match]]]
 
     [type/var n]
     [do
@@ -1346,14 +1346,14 @@
       [type/pointer smem starget]
       [result-bind [go-tai tenv dmem smem] nenv [go-tai nenv dtarget starget]]
 
-      [result/error [qmlist type-assignable-infer not a pointer [identity param-t] [identity arg-t]]]]
+      [result/error [qlist type-assignable-infer not a pointer]]]
 
     [type/exp e]
     [match [expand-custom-if-non-rec arg-t]
       [type/exp ae]
       [if [exp-equals e ae]
         [result/ok tenv]
-        [result/error [qmlist type-assignable-infer type/exp expected same type [identity param-t] [identity arg-t]]]]
+        [result/error [qlist type-assignable-infer type/exp expected same type]]]
 
       [result/error [qlist type-assignable-infer not an exp [identity arg-t]]]]
 
