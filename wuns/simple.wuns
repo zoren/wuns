@@ -659,18 +659,10 @@
                   [let
                     [tparams [type-func/type-parameters tf]
                      params [type-func/parameters tf]
-                     cargs [list-map arg args [form-to-exp-type-kind-env type-kind-env lctx arg]]
-                     targs [list-map carg cargs [type-of carg]]]
+                     cargs [list-map arg args [form-to-exp-type-kind-env type-kind-env lctx arg]]]
                     [assert [eq [size params] [size args]] call expected same number of arguments
                       [identity fn] n-of-params n-of-args]
-                    [loop [i 0 n [size params] infer-env [transient-kv-map]]
-                      [when [lt-s i n]
-                        [let [pt [at params i]
-                              targ [at targs i]]
-                          [match [go-tai infer-env pt targ]
-                            [result/ok nenv] [continue i [inc i] infer-env nenv]
-                            [result/error err] [do [log err] [logq-abort form-to-exp-type-kind-env]]
-                            ]]]]
+                    [for-each carg cargs [type-of carg]]
                     [exp/call fn cargs]]]
 
                 [top-desc-kind/functor functor-desc]
