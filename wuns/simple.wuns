@@ -2461,6 +2461,9 @@
 
     [logq-abort type-to-string not implemented [identity et]]]]]
 
+[func type-to-wat-types-current [t]
+  [type-to-wat-types [type-substitute type-env t]]]
+
 [func exp-to-inst [exp]
   [match exp
     [exp/integer pt n]
@@ -2566,7 +2569,7 @@
 
     [exp/if c t e]
     [wat-inst/if
-      [type-to-wat-types [type-of exp]]
+      [type-to-wat-types-current [type-of exp]]
       [exp-to-inst c] [exp-to-inst t] [exp-to-inst e]]
 
     [exp/do es]
@@ -2584,7 +2587,7 @@
        [list-map b bindings
         [let [ns [pair/fst b]
               e [pair/snd b]
-              ts [type-to-wat-types [type-of e]]]
+              ts [type-to-wat-types-current [type-of e]]]
           [assert [eq [size ns] [size ts]] let-loop expected same number of names and types]
           [for i 0 [size ns]
             [push glocals [pair [name/word [at ns i]] [at ts i]]]]
@@ -2603,7 +2606,7 @@
             [list
               [wat-inst/loop
                 [word loop-label]
-                [type-to-wat-types [type-ofs bodies]]
+                [type-to-wat-types-current [type-ofs bodies]]
                 [exps-to-inst bodies]]]]]]]
 
     [exp/continue assignments]
@@ -2681,7 +2684,7 @@
       [list]
       [concat
         [list-map form [slice forms 0 [dec [size forms]]]
-          [loop [res [exp-to-inst form] i [size [type-to-wat-types [type-of form]]]]
+          [loop [res [exp-to-inst form] i [size [type-to-wat-types-current [type-of form]]]]
               [if i
                 [continue
                   res [wat-inst-word [word drop] res]
