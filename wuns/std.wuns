@@ -192,7 +192,7 @@
 
 [defmacro ifs [.. clauses]
   [let [s [size clauses]]
-    [assert [is-odd s] ifs requires an odd number of arguments]
+    [assert [is-odd s] ifs macro requires an odd number of arguments]
     [loop
       [i [dec s]
        res [at clauses -1]]

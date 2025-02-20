@@ -552,6 +552,29 @@
 [datatype text []
   [plist [u8]]]
 
+[datatype hash-entry [key datatype value datatype]
+  [record
+    [key key]
+;    [hash [i32]]
+    [value value]]]
+
+[datatype hash [key datatype value datatype]
+  [record
+    [size [i32]]
+    [capacity [i32]]
+    [parray [pmem [array [hash-entry key value]]]]]]
+
+[functor hash-alloc [key datatype value datatype]
+  [func [init-capacity [i32]] [pmem [hash key value]]
+    [let
+      [p [alloc [hash key value]]]
+      [assign [deref p]
+        [record
+          size 0
+          capacity init-capacity
+          parray [alloc [array [hash-entry key value] [exp init-capacity]]]]]
+      p]]]
+
 [def form-word-tag [i32 10]]
 [def form-list-tag [i32 11]]
 
@@ -808,13 +831,19 @@
         false]]]]
 
 [def exp-i32-tag [i32 1]]
-[def exp-if-tag [i32 2]]
+[def exp-var-tag [i32 2]]
+[def exp-if-tag [i32 3]]
 
 [datatype
   wexp-i32 []
   [record
     [tag [exp exp-i32-tag]]
     [value [i32]]]
+
+  wexp-var []
+  [record
+    [tag [exp exp-var-tag]]
+    [name [text]]]
 
   wexp-if []
   [record
@@ -828,6 +857,7 @@
   wexp []
   [union
     [wexp-i32]
+    [wexp-var]
     [wexp-if]
     ]]
 
@@ -838,6 +868,15 @@
       [record
         tag [annotation [exp exp-i32-tag] exp-i32-tag]
         value i]]
+    p]]
+
+[defn wexp-var-alloc [name [text]] [pexp]
+  [let
+    [p [alloc [wexp-var]]]
+    [assign [deref p]
+      [record
+        tag [annotation [exp exp-var-tag] exp-var-tag]
+        name name]]
     p]]
 
 [defn wexp-if-alloc [c [pexp] t [pexp] e [pexp]] [pexp]
@@ -906,11 +945,80 @@
     t1
     [log-abort [text 'common-super-type different types']]]]
 
-[defn form-to-exp [f [pmem [form]]] [pmem [wexp]]
+[datatype global-desc-defn []
+  [record
+    [tag [exp [i32 1]]]
+    [parameters [plist [tuple [text] [wtype]]]]
+    [result [wtype]]]]
+
+[datatype global-desc-def []
+  [record
+    [tag [exp [i32 2]]]
+    [type [wtype]]]]
+
+[datatype global-context-kind []
+  [union
+    [global-desc-defn]
+    [global-desc-def]]]
+
+[datatype global-context []
+  [record
+    [names [pmem [hash [text] [pmem [global-context-kind]]]]]]]
+
+[def hash-alloc-text-global-context-kind [hash-alloc [text] [pmem [global-context-kind]]]]
+
+[defn global-context-alloc [] [pmem [global-context]]
+  [let
+    [p [alloc [global-context]]]
+    [assign [field [deref p] names] [hash-alloc-text-global-context-kind [i32 10]]]
+    p]]
+
+[export global-context-alloc]
+
+[datatype local-context-kind []
+  [i32]]
+
+[datatype
+  local-context [size [exp [i32]]]
+  [record
+    [context-kind [local-context-kind]]
+    [outer [pmem [local-context -sz]]]
+    [locals [list-data [tuple [text] [wtype]] size]]]]
+
+[datatype
+  plocal-context []
+  [pmem [local-context -sz]]]
+
+[def local-context-empty [cast [plocal-context] [i32 0]]]
+
+[defn local-context-alloc [kind [i32] outer [plocal-context] size [i32]] [plocal-context]
+  [let
+    [p [alloc [local-context [exp size]]]]
+    [assign [field [deref p] context-kind] kind]
+    [assign [field [deref p] outer] outer]
+    [assign [field [field [deref p] locals] size] size]
+    p]]
+
+[defn local-context-lookup [lctx [plocal-context] name [text]] [tuple [plocal-context] [wtype]]
+  [loop [i 0 cur-ctx lctx]
+    [let
+      [locals [pfield lctx locals]
+       n [list-size locals]
+       tuple-array [list-data-array locals]]
+      [if [lt-s i n]
+        [do
+          [if [word-eq [index [index [deref tuple-array] i] [i32 0]] name]
+            [tuple cur-ctx [index [index [deref tuple-array] i] [i32 1]]]
+            [continue i [inc i] cur-ctx [field [deref lctx] outer]]]]
+        [tuple local-context-empty type-i32]]]]]
+
+[defn form-to-exp [gctx [pmem [global-context]] lctx [plocal-context] f [pmem [form]]] [pmem [wexp]]
   [ifs
     [form-word-is f]
-    [do
-      [log-abort [text 'form-to-exp word case not implemented']]]
+    [let [w [form-word-get f]]
+      ; todo check if it was actually found!
+      [local-context-lookup lctx w]
+      [wexp-var-alloc w]]
 
     [form-list-is f]
     [let [fl [form-list-get f]
@@ -931,9 +1039,9 @@
             [if [ne n-args 3]
               [log-abort [text 'form-to-exp if expects 3 arguments']]]
             [let
-              [c [form-to-exp [list-get fl 1]]
-               t [form-to-exp [list-get fl 2]]
-               e [form-to-exp [list-get fl 3]]]
+              [c [form-to-exp gctx lctx [list-get fl 1]]
+               t [form-to-exp gctx lctx [list-get fl 2]]
+               e [form-to-exp gctx lctx [list-get fl 3]]]
               [type-assignable type-i32 [type-of c]]
               [common-super-type [type-of t] [type-of e]]
               [wexp-if-alloc c t e]]]
@@ -942,7 +1050,7 @@
 
     [log-abort [text 'form-to-exp unknown form case']]]]
 
-[defn form-to-type [f [pmem [form]]] [wtype]
+[defn form-to-type [gctx [pmem [global-context]] f [pmem [form]]] [wtype]
   [ifs
     [form-word-is f]
     [do
@@ -966,7 +1074,11 @@
 
     [log-abort [text 'form-to-type unknown form case']]]]
 
-[defn form-to-top [f [pmem [form]]] [tuple]
+[defn half [i [i32]] [i32] [intrinsic i32.shr-s i 1]]
+
+[def context-kind-func [i32 1]]
+
+[defn form-to-top [gctx [pmem [global-context]] f [pmem [form]]] [tuple]
   [ifs
     [form-word-is f]
     [do
@@ -987,18 +1099,25 @@
             [let
               [fname [form-word-get [list-get fl 1]]
                param-list [form-list-get [list-get fl 2]]
+               result-type [form-to-type gctx [list-get fl 3]]
                n-of-param-forms [list-size param-list]
-               result-type [form-to-type [list-get fl 3]]]
+               lctx [local-context-alloc context-kind-func local-context-empty [half n-of-param-forms]]
+               locals-array [list-data-array [pfield lctx locals]]
+               ]
               [if [is-odd n-of-param-forms]
                 [log-abort [text 'form-to-top defn expects a parameter list with names and type pairs']]]
               [loop [i 0]
                 [when [lt-s i [dec n-of-param-forms]]
-                  [form-word-get [list-get param-list i]]
-                  [form-to-type [list-get param-list [inc i]]]
-                  [continue i [add 2 i]]]]
+                  [let
+                    [lname [form-word-get [list-get param-list i]]
+                     ltype [form-to-type gctx [list-get param-list [inc i]]]]
+                    [assign
+                      [index [index [deref locals-array] [half i]] [i32 0]] lname
+                      [tuple lname ltype]]
+                    [continue i [add 2 i]]]]]
               [loop [j 4]
                 [when [lt-s j n]
-                  [form-to-exp [list-get fl j]]
+                  [form-to-exp gctx lctx [list-get fl j]]
                   [continue j [inc j]]]]]]
 
           [word-eq fw [static-list [text def]]]
@@ -1007,7 +1126,7 @@
               [log-abort [text 'form-to-top def expects a name and an expression']]]
             [let
               [dname [form-word-get [list-get fl 1]]
-               exp [form-to-exp [list-get fl 2]]]]]
+               exp [form-to-exp gctx local-context-empty [list-get fl 2]]]]]
 
           [word-eq fw [static-list [text export]]]
           [do

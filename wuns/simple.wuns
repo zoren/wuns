@@ -639,7 +639,10 @@
       [exp/var n]]
 
     [form/list l]
-    [let [ff [first l]
+    [let [- [when [is-empty l]
+      [log-location form]
+      [logq-abort empty-list]]
+          ff [first l]
           args [rest l]]
       [if-let [fw [try-get-word ff]]
         [let [fn [form-to-name ff]]
@@ -1333,7 +1336,7 @@
       [type/pointer smem starget]
       [result-bind [go-tai tenv dmem smem] nenv [go-tai nenv dtarget starget]]
 
-      [result/error [qlist type-assignable-infer not a pointer [identity arg-t]]]]
+      [result/error [qmlist type-assignable-infer not a pointer [identity param-t] [identity arg-t]]]]
 
     [type/exp e]
     [match [expand-custom-if-non-rec arg-t]
@@ -1409,7 +1412,7 @@
       [type/apply-custom stn sargs]
       [go-tai tenv param-t [expand-custom-1 stn sargs]]
 
-      [logq-abort not a record]]
+      [logq-abort not a record [identity arg-t]]]
 
     [type/apply-custom ptn pargs]
     [match arg-t

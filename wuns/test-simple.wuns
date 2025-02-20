@@ -394,6 +394,7 @@
         list-data-byte-array [get-export inst [word list-data-byte-array]]
         realloc [get-export inst [word realloc-debug]]
         get-number-of-frames [get-export inst [word get-number-of-frames]]
+        global-context-alloc [get-export inst [word global-context-alloc]]
         form-to-top [get-export inst [word form-to-top]]
         num-frames-i32 [func nfi [] [js-value-to-i32 [js-app get-number-of-frames]]]
         fill-word
@@ -502,6 +503,8 @@
               [pair [qlist] [word '[defn f [] [i32] [i32 0]] [def d [i32 5]]']]
               [pair [qlist] [word '[defn f [] [i32] [i32 2147483647]] [export f]']]
               [pair [qlist] [word '[defn f [] [i32] [if [i32 1] [i32 2] [i32 3]]] [export f]']]
+              [pair [qlist] [word '[defn not [x [i32]] [i32] [if x [i32 0] [i32 1]]] [export not]']]
+              [pair [qlist] [word '[defn not [x [i32]] [i32] [if p [i32 0] [i32 1]]] [export not]']]
 ;              [pair [qlist] [word '[defn f [] [i32] [i32 2147483648]]']]
               ]]
           [for-each test tests
@@ -512,7 +515,7 @@
                fl [first parse-res]
                sz [js-value-to-i32 [js-app list-size fl]]]
               [for i 0 sz
-                [js-app form-to-top [js-app list-get-form fl i]]]
+                [js-app form-to-top [js-app global-context-alloc] [js-app list-get-form fl i]]]
               ]]]]]]]
 
 [defn test-realloc []
