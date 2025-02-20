@@ -126,7 +126,7 @@
     [size-of-exp exp]
 
     [if exp exp exp]
-    [let-loop let-or-loop [list [pair name exp]] [list exp]]
+    [let-loop let-or-loop [list [pair [list name] exp]] [list exp]]
     [continue [list [pair name exp]]]
     [do [list exp]]
 
@@ -955,11 +955,21 @@
       [exp/let-loop
         [if is-let [let-or-loop/let] [let-or-loop/loop]]
         [list-map p [pairwise-pairs-check [get-list [second l]]]
-          [let [pname [form-to-name [pair/fst p]]
-                pexp [form-to-exp-type-kind-env type-kind-env let-loop-ctx [pair/snd p]]
-                pt [type-of pexp]]
-            [set-kv-map vars [name/word pname] pt]
-            [pair pname pexp]]]
+          [let [pexp [form-to-exp-type-kind-env type-kind-env let-loop-ctx [pair/snd p]]
+                types [get-tuple-type-elements [type-of pexp]]]
+            [match [pair/fst p]
+              [form/word -]
+              [let [pname [form-to-name [pair/fst p]]]
+                [assert [eq [size types] 1] [identity fw] expected 1 element tuple [identity pname]]
+                [set-kv-map vars [name/word pname] [first types]]
+                [pair [list pname] pexp]]
+
+              [form/list pname-forms]
+              [let [pnames [list-map pf pname-forms [form-to-name pf]]]
+                [assert [eq [size pnames] [size types]] [identity fw] expected same number of names as types]
+                [for i 0 [size pnames]
+                  [set-kv-map vars [name/word [at pnames i]] [at types i]]]
+                [pair pnames pexp]]]]]
         [list-map b [slice l 2 [size l]] [form-to-exp-type-kind-env type-kind-env let-loop-ctx b]]]]
 
     [[word continue]]
@@ -1367,7 +1377,7 @@
       [type/tuple sts]
       [go-tais tenv dts sts]
 
-      [logq-abort not a tuple]]
+      [logq-abort not a tuple [identity arg-t]]]
 
     [type/union dus]
     [match arg-t
@@ -1632,6 +1642,14 @@
     [pair m p]
 
     [logq-abort get-pointer-args not a pointer [identity t]]]]
+
+[func get-tuple-type-elements [t]
+  [let [et [expand-custom-n t]]
+    [match et
+      [type/tuple es]
+      es
+
+      [list et]]]]
 
 [func type-of [exp]
   [match exp
@@ -2572,10 +2590,16 @@
     [let
       [bind-insts
        [list-map b bindings
-        [let [n [name/word [pair/fst b]]
-              e [pair/snd b]]
-          [push glocals [pair n [type-to-wat-type [type-of e]]]]
-          [wat-inst/local.set n [exp-to-inst e]]]]]
+        [let [ns [pair/fst b]
+              e [pair/snd b]
+              ts [type-to-wat-types [type-of e]]]
+          [assert [eq [size ns] [size ts]] let-loop expected same number of names and types]
+          [for i 0 [size ns]
+            [push glocals [pair [name/word [at ns i]] [at ts i]]]]
+          [wat-inst/instructions
+            [concat
+              [list [exp-to-inst e]]
+              [list-map n [reverse ns] [wat-inst/local.set-no [name/word n]]]]]]]]
       [match ll-kind
         [let-or-loop/let]
         [wat-inst/instructions

@@ -26,6 +26,7 @@
     [lazy-integer-const word [atom i32]]
     [local.get word]
     [local.set word wat-inst]
+    [local.set-no word]
     [global.get word]
     [global.set word wat-inst]
     [instruction byte-array [list wat-immediate] [list wat-inst]]
@@ -293,6 +294,10 @@
 
     [wat-inst/local.set w e]
     [wat-list [wat/word [word local.set]] [wat/dollar w] [wat-inst-to-out e]]
+
+    [wat-inst/local.set-no w]
+    [wat-list [wat/word [word local.set]] [wat/dollar w]]
+
 
     [wat-inst/global.get w]
     [wat-list [wat/word [word global.get]] [wat/dollar w]]

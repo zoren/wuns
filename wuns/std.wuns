@@ -202,6 +202,10 @@
           res [flist [quote if] [at clauses [sub i 2]] [at clauses [dec i]] res]
           i [sub i 2]]]]]]
 
+[defn reverse [l]
+  [let [n [size l]]
+    [list-init-func n [func f [i] [at l [sub [dec n] i]]]]]]
+
 [comment and relies on there only being one falsy value [i32 0]
         it will not return any other falsy value as or returns the first truthy argument]
 [defmacro and [.. clauses]
