@@ -952,6 +952,7 @@
 [def type-i64 [i32 0x7e]]
 [def type-f32 [i32 0x7d]]
 [def type-f64 [i32 0x7c]]
+[def type-error [i32 -1]]
 
 [datatype wtype [] [i32]]
 
@@ -1047,7 +1048,7 @@
       [log-abort [text 'push-error form not found in form-offsets']]]
     [growable-list-push errors msg]]]
 
-[defn type-of [gctx [pmem [global-context]] lctx [plocal-context] e [pexp]] [i32]
+[defn type-of [gctx [pmem [global-context]] e [pexp]] [i32]
   [let [tag [field [deref e] tag]]
     [ifs
       [eq tag exp-i32-tag]
@@ -1063,11 +1064,8 @@
             [i32 -1]]
           [field [deref annotated-type] value]]]]]]
 
-[defn type-assignable [dst [wtype] src [wtype]] [tuple]
-  [when [ne dst src]
-    [log-i32 dst]
-    [log-i32 src]
-    [log-abort [text 'type-assignable different types']]]]
+[defn type-assignable [dst [wtype] src [wtype]] [i32]
+  [eq dst src]]
 
 [defn common-super-type [t1 [wtype] t2 [wtype]] [wtype]
   [if [eq t1 t2]
@@ -1083,17 +1081,23 @@
     [let
       [w [form-word-get f]
        [found-ctx lvar-type] [local-context-lookup lctx w]
-       exp [wexp-var-alloc w]]
-      [if [ne found-ctx local-context-empty]
-        [annotate gctx exp lvar-type]
-        [let [p-entry [assoc-list-get-entry [field [deref gctx] names] w]]
-          [if [is-null p-entry]
-            [push-error gctx f [data mem [text 'variable not found']]]
-            [let
-              [pdesc [field [deref p-entry] value]]
-              [if [eq [field [deref pdesc] tag] global-desc-def-tag]
-                [annotate gctx exp [field [deref [cast [pmem [global-desc-def]] pdesc]] type]]
-                [push-error gctx f [data mem [text 'variable not a def']]]]]]]]
+       exp [wexp-var-alloc w]
+       var-type
+        [if [ne found-ctx local-context-empty]
+          lvar-type
+          [let [p-entry [assoc-list-get-entry [field [deref gctx] names] w]]
+            [if [is-null p-entry]
+              [do
+                [push-error gctx f [static-list [text 'variable not found']]]
+                type-error]
+              [let
+                [pdesc [field [deref p-entry] value]]
+                [if [eq [field [deref pdesc] tag] global-desc-def-tag]
+                  [field [deref [cast [pmem [global-desc-def]] pdesc]] type]
+                  [do
+                    [push-error gctx f [static-list [text 'variable not a def']]]
+                    type-error]]]]]]]
+      [annotate gctx exp var-type]
       exp]
 
     [form-list-is f]
@@ -1119,8 +1123,9 @@
                t [form-to-exp gctx lctx [list-get fl 2]]
                e [form-to-exp gctx lctx [list-get fl 3]]
                if-form [wexp-if-alloc c t e]]
-              [type-assignable type-i32 [type-of gctx lctx c]]
-              [annotate gctx if-form [common-super-type [type-of gctx lctx t] [type-of gctx lctx e]]]
+              [when [not [type-assignable type-i32 [type-of gctx c]]]
+                [push-error gctx [list-get fl 1] [static-list [text 'if condition not i32']]]]
+              [annotate gctx if-form [common-super-type [type-of gctx t] [type-of gctx e]]]
               if-form]]
 
           [log-abort [text 'form-to-exp unknown form-list case']]]]]
