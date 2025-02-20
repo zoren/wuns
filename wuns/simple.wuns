@@ -958,7 +958,7 @@
 
               [form/list pname-forms]
               [let [pnames [list-map pf pname-forms [form-to-name pf]]]
-                [assert [eq [size pnames] [size types]] [identity fw] expected same number of names as types]
+                [assert [eq [size pnames] [size types]] [identity fw] expected same number of names as types [identity pnames] [identity types]]
                 [for i 0 [size pnames]
                   [set-kv-map vars [name/word [at pnames i]] [at types i]]]
                 [pair pnames pexp]]]]]
@@ -1142,143 +1142,10 @@
       false]
     false]]
 
-[func types-assignable [dargs sargs]
-  [and
-    [eq [size dargs] [size sargs]]
-    [loop [i 0 n [size dargs]]
-      [if [lt-s i n]
-        [if [type-assignable [at dargs i] [at sargs i]]
-          [continue i [inc i]]
-          false]
-        true]]]]
-
-[func type-assignable-go [tdst tsrc]
-  [logq type-assignable-go]
-  [log tdst]
-  [log tsrc]
-  [log]
-  [or [is-identical tdst tsrc]
-    [match tdst
-      [type/apply-custom dtn dargs]
-      [match tsrc
-        [type/apply-custom stn sargs]
-        [let
-          [dnw [name/word dtn]
-           snw [name/word stn]]
-          [if [eq-word dnw snw]
-          [types-assignable dargs sargs]
-          [if [and [type-recursive-is dtn] [type-recursive-is stn]]
-            [do
-              [logq type-assignable-go not implemented recursive type [identity dtn] [identity stn]]
-              false]
-            [type-assignable-go [expand-custom-if-non-rec tdst] [expand-custom-if-non-rec tsrc]]]]]
-
-        [type-assignable-go [expand-custom-n tdst] tsrc]]
-
-      [type/union dus]
-      [match tsrc
-        [type/union sus]
-        [and [eq [size dus] [size sus]] [types-assignable dus sus]]
-
-        [type/apply-custom stn sargs]
-        [type-assignable-go tdst [expand-custom-1 stn sargs]]
-
-        [or [type-equals tdst tsrc]
-          [exists dus [func type-ass-union [du] [type-assignable-go du tsrc]]]]]
-
-      [type/wildcard -]
-      true
-
-      [type/primitive dpt]
-      [match tsrc
-        [type/pointer mt t]
-        [is-identical dpt [get-memory-pointer-type mt]]
-
-        [type/exp se]
-        [match se
-          [exp/integer spt -]
-          [is-identical dpt spt]
-
-          [type-equals tdst tsrc]]
-
-        [type/primitive spt]
-        [if [and [primitive-type-is-integer dpt] [primitive-type-is-integer spt]]
-          [le-s [primitive-type/bytes spt] [primitive-type/bytes dpt]]
-          [is-identical dpt spt]]
-
-        [type-equals tdst tsrc]]
-
-      [type/tuple dts]
-      [match tsrc
-        [type/tuple sts]
-        [types-assignable dts sts]
-
-        [type-equals tdst tsrc]]
-
-      [type/record dfs]
-      [match tsrc
-        [type/record sfs]
-        [and
-          [eq [size dfs] [size sfs]]
-          [loop [i 0 n [size dfs]]
-            [if [lt-s i n]
-              [let [df [at dfs i] sf [at sfs i]]
-                [if [and [eq-word [name/word [pair/fst df]] [name/word [pair/fst sf]]]
-                         [type-assignable-go [pair/snd df] [pair/snd sf]]]
-                  [continue i [inc i]]
-                  false]]
-              true]]]
-
-        [type/apply-custom stn sargs]
-        [type-assignable-go tdst [expand-custom-1 stn sargs]]
-
-        false]
-
-      [type/pointer dmem dtarget]
-      [match [expand-custom-if-non-rec tsrc]
-        [type/pointer smem starget]
-        [and
-          [type-equals dmem smem]
-          [type-assignable-go dtarget starget]]
-
-        [type-equals tdst tsrc]]
-
-      [type/array det dopts]
-      [match tsrc
-        [type/array set sopts]
-        [let [elems-ass [type-assignable-go det set]]
-          [logq type/array det [identity det]]
-          [logq type/array set [identity set]]
-          [logq type/array ass [identity elems-ass]]
-          [and
-          [type-assignable-go det set]
-          [match dopts
-            [option/none]
-            true
-
-            [option/some ds]
-            [if-let [ss sopts]
-              true
-              true]]]]
-
-        false]
-
-      [type-equals tdst tsrc]]]]
-
 [func type-assignable [tdst tsrc]
-  [type-assignable-go tdst tsrc]
-  [let
-    [expanded-dst [expand-custom-n tdst]
-     expanded-src [expand-custom-n tsrc]]
-    [logq type-assignable]
-    [log tdst]
-    [log expanded-dst]
-    [log tsrc]
-    [log expanded-src]
-    [log]
-    [type-assignable-go expanded-dst expanded-src]
-    ]
-  ]
+  [match [go-tai [transient-kv-map] tdst tsrc]
+    [result/ok -] true
+    [result/error -] false]]
 
 [func go-tais [tenv dargs sargs]
   [assert [eq [size dargs] [size sargs]] equal num of types]
@@ -1296,7 +1163,7 @@
 [func go-tai [tenv param-t arg-t]
   [match param-t
     [type/primitive dpt]
-    [match [expand-custom-if-non-rec arg-t]
+    [match [expand-custom-n arg-t]
       [type/pointer mt t]
       [if [is-identical dpt [get-memory-pointer-type mt]]
         [result/ok tenv]
@@ -1313,8 +1180,8 @@
 
       [type/primitive spt]
       [if [if [and [primitive-type-is-integer dpt] [primitive-type-is-integer spt]]
-        [le-s [primitive-type/bytes spt] [primitive-type/bytes dpt]]
-        [is-identical dpt spt]]
+            [le-s [primitive-type/bytes spt] [primitive-type/bytes dpt]]
+            [is-identical dpt spt]]
         [result/ok tenv]
         [result/error [qlist primitive type does not match primitive]]]
 
@@ -1334,7 +1201,7 @@
     [result/ok tenv]
 
     [type/pointer dmem dtarget]
-    [match [expand-custom-if-non-rec arg-t]
+    [match [expand-custom-n arg-t]
       [type/pointer smem starget]
       [result-bind [go-tai tenv dmem smem] nenv [go-tai nenv dtarget starget]]
 
