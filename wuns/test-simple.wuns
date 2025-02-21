@@ -276,6 +276,28 @@
     [test-assert-eq [i32 4] [js-app proj1]]
     [test-assert-eq [i32 5] [js-app proj2]]]]
 
+[defn test-tuple-parameters []
+  [let [forms
+        [qlist
+          [defn proj1 [t [tuple [i32] [i32]]] [i32]
+            [let [[a b] t]
+              a]]
+
+          [defn proj2 [t [tuple [i32] [i32]]] [i32]
+            [let [[a b] t]
+              b]]
+
+          [defn main [] [i32]
+            [intrinsic i32.sub
+              [proj1 [tuple [i32 3] [i32 5]]]
+              [proj2 [tuple [i32 3] [i32 5]]]]]
+
+          [export main]]
+        inst [forms-to-inst forms]
+        main [get-export inst [word main]]]
+    [test-assert-eq [i32 -2] [js-app main]]
+    ]]
+
 [defn test-assert-form-eq [expected actual]
   [when-not [eq-form expected actual]
     [logq test-assert-form-eq failed]
@@ -367,6 +389,7 @@
   [test-record-exp]
   [test-tuple-exp]
   [test-tuple-let-destructure]
+  [test-tuple-parameters]
   [test-func-exp]
   ]
 

@@ -2359,7 +2359,10 @@
         [do
           [match [name-to-type n]
             [type/func -]
-            [logq-abort not implemented exp-to-inst var [identity n]]
+            [logq-abort not allowed function as value]
+
+            [type/tuple ts]
+            [logq-abort not implemented global tuples]
 
             [do]]
           [wat-inst/global.get [name/word n]]]
@@ -2367,7 +2370,15 @@
         [logq-abort not implemented exp-to-inst var [identity n] [identity td]]]
 
       [desc-kind/local ld]
-      [wat-inst/local.get [name/word n]]]
+      [match [name-to-type n]
+        [type/tuple ts]
+        [let [ginsts [growable-list]
+              vn [name/word n]]
+          [for i 0 [size ts]
+            [push ginsts [wat-inst/local.get [concat-words vn [int-to-word i]]]]]
+          [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]
+
+        [wat-inst/local.get [name/word n]]]]
 
     [exp/intrinsic n imm-args args]
     [let [intrin-t [intrinsic-type-from-name [name/word n]]
@@ -2584,13 +2595,24 @@
      es2i [exp2inst-compiler/exps-to-inst comp]
      inst [es2i [exp-function/bodies f]]
      tf [exp-function/type f]
-     locals [clone-growable-to-frozen-list [exp2inst-compiler/glocals comp]]]
+     locals [clone-growable-to-frozen-list [exp2inst-compiler/glocals comp]]
+     param-types [type-func/parameters tf]
+     param-names [exp-function/parameters f]
+     gparams [growable-list]]
+    [for i 0 [size param-names]
+      [let [pt [at param-types i]
+            pnw [name/word [at param-names i]]]
+        [match [expand-custom-n pt]
+          [type/tuple types]
+          [for j 0 [size types]
+            [push gparams
+              [pair [concat-words pnw [int-to-word j]] [type-to-wat-type [at types j]]]]]
+
+          [push gparams [pair pnw [type-to-wat-type [type-substitute type-inst-env pt]]]]]]]
     [push wat-funcs
       [wat-func
         fname
-        [zip
-          [list-map p [exp-function/parameters f] [name/word p]]
-          [list-map pt [type-func/parameters tf] [type-to-wat-type [type-substitute type-inst-env pt]]]]
+        [clone-growable-to-frozen-list gparams]
         locals
         [type-to-wat-types [type-substitute type-inst-env [type-func/result tf]]]
         inst]]]]
