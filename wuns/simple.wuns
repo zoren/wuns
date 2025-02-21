@@ -2052,27 +2052,6 @@
 [func type-to-size-of-exp-current-tenv [t]
   [type-to-size-of-exp [type-substitute type-env t]]]
 
-[func deref-index-field-to-load [target]
-  [let
-    [ttarget [type-of target]
-     ptup [get-pointer-args ttarget]
-     mt [pair/fst [get-pointer-args ttarget]]
-     mem-name-some [option/some [get-exp-var [option-get [try-get-type-exp mt]]]]
-     exp-const-pair-opt [try-get-i32-add-const target]
-     offset-opt [option-map pair/snd exp-const-pair-opt]
-     target-prim [type-to-primitive [type-substitute type-env [pair/snd ptup]]]
-     texp [option-default [option-map pair/fst exp-const-pair-opt] target]]
-    [wat-inst/load-opt
-      [wasm-name-to-wat-byte-array
-        [prim-types-to-load-inst-name
-          [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i32]
-          target-prim]]
-      [wat-inst-memargs-opt
-        mem-name-some
-        offset-opt
-        [option/none]]
-      [exp-to-inst texp]]]]
-
 [func calc-field-offset [t field-name-word]
   [match [expand-custom-n t]
     [type/record field-types]
@@ -2399,9 +2378,6 @@
     [exp/tuple elems]
     [wat-inst/instructions [list-map elem elems [exp-to-inst elem]]]
 
-    [exp/deref target]
-    [deref-index-field-to-load target]
-
     [exp/pfield p-target-exp field-name]
     [let
       [pp [get-pointer-args [type-of p-target-exp]]]
@@ -2421,6 +2397,25 @@
       [wat-inst/global.set [name/word n] [exp-to-inst src]]
 
       [logq-abort not implemented exp-to-inst assign [identity dst]]]
+
+    [exp/deref target]
+    [let
+     [ptup [get-pointer-args [type-of target]]
+      mem-name-some [option/some [get-exp-var [option-get [try-get-type-exp [pair/fst ptup]]]]]
+      exp-const-pair-opt [try-get-i32-add-const target]
+      offset-opt [option-map pair/snd exp-const-pair-opt]
+      target-prim [type-to-primitive [type-substitute type-env [pair/snd ptup]]]
+      texp [option-default [option-map pair/fst exp-const-pair-opt] target]]
+      [wat-inst/load-opt
+        [wasm-name-to-wat-byte-array
+          [prim-types-to-load-inst-name
+            [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i32]
+            target-prim]]
+        [wat-inst-memargs-opt
+          mem-name-some
+          offset-opt
+          [option/none]]
+        [exp-to-inst texp]]]
 
     [exp/passign target src]
     [let
