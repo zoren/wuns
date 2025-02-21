@@ -370,6 +370,12 @@
   [test-func-exp]
   ]
 
+; [func wasm-dump-mem [p n]
+;   [let
+;   ; consider https://en.wikipedia.org/wiki/Code_page_437
+;     [ar [byte-array-from-mem p n]]
+;     [logq wasm-dump-mem [identity p] [identity n] [identity ar]]]]
+
 [defn test-parse []
   [promise-then
     [read-parse-file-async [word llsimpleparse.wuns]]
@@ -388,16 +394,10 @@
         wasm-log-i32
         [func wasm-log-i32 [n]
           [logq wasm-log-i32 [identity n]]]
-        wasm-dump-mem
-        [func wasm-dump-mem [p n]
-          [let
-            [ar [byte-array-from-mem p n]]
-            [logq wasm-dump-mem [identity p] [identity n] [identity ar]]]]
         env [transient-kv-map]
         - [set-kv-map env [word mem] [to-js-value mem]]
         -- [set-kv-map env [word log] [to-js-value wasm-log]]
         --- [set-kv-map env [word log-i32] [to-js-value wasm-log-i32]]
-        -f [set-kv-map env [word dump-mem] [to-js-value wasm-dump-mem]]
         import-map [transient-kv-map]
         ---- [set-kv-map import-map [word env] [kv-map-to-object env]]
         inst [wasm-instantiate module [kv-map-to-object import-map]]
@@ -556,16 +556,10 @@
         wasm-log-i32
         [func wasm-log-i32 [n]
           [logq wasm-log-i32 [identity n]]]
-        wasm-dump-mem
-        [func wasm-dump-mem [p n]
-          [let
-            [ar [byte-array-from-mem p n]]
-            [logq wasm-dump-mem [identity p] [identity n] [identity ar]]]]
         env [transient-kv-map]
         - [set-kv-map env [word mem] [to-js-value mem]]
         -- [set-kv-map env [word log] [to-js-value wasm-log]]
         --- [set-kv-map env [word log-i32] [to-js-value wasm-log-i32]]
-        -f [set-kv-map env [word dump-mem] [to-js-value wasm-dump-mem]]
         import-map [transient-kv-map]
         ---- [set-kv-map import-map [word env] [kv-map-to-object env]]
         inst [wasm-instantiate module [kv-map-to-object import-map]]

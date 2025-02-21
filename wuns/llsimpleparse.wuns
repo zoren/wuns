@@ -9,11 +9,6 @@
     [func
       [n [i32]]
       [tuple]]]
-  [dump-mem
-    [func
-      [par [pointer [exp mem] -a]
-       n-bytes [i32]]
-      [tuple]]]
       ]
 
 [def-comp-fn log-ar [ar [array [u8]]] [tuple]
