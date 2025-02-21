@@ -574,13 +574,13 @@
 [genfn assoc-list-push [k datatype v datatype] [pglist [p-assoc-list k v] key k value v] [tuple]
   [growable-list-push pglist [tuple key value]]]
 
-[genfn assoc-list-get-entry [k datatype v datatype] [pglist [p-assoc-list k v] key k] [pmem [tuple k v]]
+[genfn assoc-list-get-value [k datatype v datatype] [pglist [p-assoc-list k v] key k] [pmem v]
   [loop
     [cur-size [deref [pfield pglist size]]
      i 0]
     [if [lt-s i cur-size]
       [if [eq [deref [pindex [pindex [deref [pfield pglist parray]] i] [i32 0]]] key]
-        [pindex [deref [pfield pglist parray]] i]
+        [pindex [pindex [deref [pfield pglist parray]] i] [i32 1]]
         [continue i [inc i]]]
       [cast [pmem [tuple k v]] [i32 0]]]]]
 
@@ -1041,8 +1041,8 @@
 [defn push-error [gctx [pmem [global-context]] form [pform] msg [text]] [tuple]
   [let
     [errors [deref [pfield gctx errors]]
-     p-entry [assoc-list-get-entry [deref [pfield gctx form-offsets]] form]]
-    [when [is-null p-entry]
+     p-value [assoc-list-get-value [deref [pfield gctx form-offsets]] form]]
+    [when [is-null p-value]
       [log-i32 [list-size [deref [pfield gctx form-offsets]]]]
       [log-assoc [deref [pfield gctx form-offsets]]]
       [log-abort [text 'push-error form not found in form-offsets']]]
@@ -1055,7 +1055,7 @@
       type-i32
 
       [let [exp-types [deref [pfield gctx exp-types]]
-            annotated-type [assoc-list-get-entry exp-types e]]
+            annotated-type [assoc-list-get-value exp-types e]]
         [if [is-null annotated-type]
           [do
             [log-i32 tag]
@@ -1063,7 +1063,7 @@
             [log-i32 [list-size exp-types]]
             [log-abort [text 'type-of not annotated']]
             [i32 -1]]
-          [deref [pindex annotated-type [i32 1]]]]]]]]
+          [deref annotated-type]]]]]]
 
 [defn type-assignable [dst [wtype] src [wtype]] [i32]
   [eq dst src]]
@@ -1086,13 +1086,12 @@
        var-type
         [if [ne found-ctx local-context-empty]
           lvar-type
-          [let [p-entry [assoc-list-get-entry [deref [pfield gctx names]] w]]
-            [if [is-null p-entry]
+          [let [ppdesc [assoc-list-get-value [deref [pfield gctx names]] w]]
+            [if [is-null ppdesc]
               [do
                 [push-error gctx f [static-list [text 'variable not found']]]
                 type-error]
-              [let
-                [pdesc [deref [pindex p-entry [i32 1]]]]
+              [let [pdesc [deref ppdesc]]
                 [if [eq [deref [pfield pdesc tag]] global-desc-def-tag]
                   [deref [pfield [cast [pmem [global-desc-def]] pdesc] type]]
                   [do
