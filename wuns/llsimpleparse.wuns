@@ -217,14 +217,14 @@
      pframe [cast [pmem [alloc-stack-frame [exp byte-aligned-size]]] cur-top]
      frame-data [pfield pframe data]]
     [resize-mem frame-size]
-    [assign [deref [pfield pframe frame-size]] frame-size]
-    [assign [deref [pfield pframe byte-size]] byte-size]
-    [assign [deref [pfield pframe byte-aligned-size]] byte-aligned-size]
-    [assign [deref [pfield pframe realloc-size]] byte-size]
-    [assign [deref [pfield pframe abandoned]] 0]
+    [passign [pfield pframe frame-size] frame-size]
+    [passign [pfield pframe byte-size] byte-size]
+    [passign [pfield pframe byte-aligned-size] byte-aligned-size]
+    [passign [pfield pframe realloc-size] byte-size]
+    [passign [pfield pframe abandoned] 0]
     [memory-zero frame-data byte-aligned-size]
-    [assign [deref [pfield pframe canary]] canary-value]
-    [assign [deref [pfield pframe frame-size-end]] frame-size]
+    [passign [pfield pframe canary] canary-value]
+    [passign [pfield pframe frame-size-end] frame-size]
     [alloc-frame-validate pframe]
     [assign num-of-frames [inc num-of-frames]]
 
@@ -239,13 +239,13 @@
      frame-size [size-of-type [alloc-stack-frame [exp byte-aligned-size]]]
      frame-data [pfield pframe data]]
     [resize-mem [sub frame-size old-frame-size]]
-    [assign [deref [pfield pframe frame-size]] frame-size]
-    [assign [deref [pfield pframe byte-size]] new-byte-size]
-    [assign [deref [pfield pframe byte-aligned-size]] byte-aligned-size]
-    [assign [deref [pfield pframe realloc-size]] new-byte-size]
-    [assign [deref [pfield pframe abandoned]] 0]
-    [assign [deref [pfield pframe-sized canary]] canary-value]
-    [assign [deref [pfield pframe-sized frame-size-end]] frame-size]
+    [passign [pfield pframe frame-size] frame-size]
+    [passign [pfield pframe byte-size] new-byte-size]
+    [passign [pfield pframe byte-aligned-size] byte-aligned-size]
+    [passign [pfield pframe realloc-size] new-byte-size]
+    [passign [pfield pframe abandoned] 0]
+    [passign [pfield pframe-sized canary] canary-value]
+    [passign [pfield pframe-sized frame-size-end] frame-size]
 
     frame-data]]
 
@@ -264,7 +264,7 @@
 [defn alloc-stack-frame-abandon [pframe [pmem [alloc-stack-frame -a]]] [tuple]
   ; overwrite data area to avoid dangling pointers using it
   [memory-overwrite [pfield pframe data] [deref [pfield pframe byte-aligned-size]]]
-  [assign [deref [pfield pframe abandoned]] 1]]
+  [passign [pfield pframe abandoned] 1]]
 
 [defn get-top-frame [] [pmem [alloc-stack-frame -a]]
   [let [cur-top [get-top]]
@@ -360,7 +360,7 @@
           [do
             [if [eq [deref [pfield pframe abandoned]] 1]
               [log-abort [text 'realloc cannot update abandoned frame']]]
-            [assign [deref [pfield pframe realloc-size]] new-n-bytes]
+            [passign [pfield pframe realloc-size] new-n-bytes]
             [if [lt-s old-n-bytes new-n-bytes]
               ; zero new memory area
               [memory-zero
@@ -465,7 +465,7 @@
 [functor list-alloc [elem-type datatype]
   [func [sz [i32]] [plist elem-type]
     [let [p [alloc [list-data elem-type [exp sz]]]]
-      [assign [deref [pfield p size]] sz]
+      [passign [pfield p size] sz]
       p]]]
 
 [genfn list-free [elem-type datatype] [pvec [pmem [list-data elem-type -sz]]] [tuple]
@@ -501,7 +501,7 @@
   [func [init-capacity [i32]] [p-growable-list elem-type]
     [let
       [p [alloc [growable-list elem-type]]]
-      [assign [deref p]
+      [passign p
         [record
           size 0
           capacity init-capacity
@@ -519,8 +519,8 @@
     [cur-capacity [deref [pfield pglist capacity]]
      cur-size [deref [pfield pglist size]]]
     [if [le-s new-capacity cur-size] [log-abort [text 'growable-list-resize new-capacity < cur-size']]]
-    [assign [deref [pfield pglist capacity]] new-capacity]
-    [assign [deref [pfield pglist parray]]
+    [passign [pfield pglist capacity] new-capacity]
+    [passign [pfield pglist parray]
       [cast [pmem [array elem-type]]
         [realloc
           [deref [pfield pglist parray]]
@@ -533,8 +533,8 @@
      cur-capacity [deref [pfield pglist capacity]]]
     [if [eq cur-size cur-capacity]
       [growable-list-resize pglist [mul cur-capacity 2]]]
-    [assign [deref [pindex [deref [pfield pglist parray]] cur-size]] elem]
-    [assign [deref [pfield pglist size]] [inc cur-size]]]]
+    [passign [pindex [deref [pfield pglist parray]] cur-size] elem]
+    [passign [pfield pglist size] [inc cur-size]]]]
 
 [genfn growable-list-get [elem-type datatype] [pglist [p-growable-list elem-type] i [i32]] elem-type
   [if [lt-s i 0] [log-abort [text 'growable-list-get i negative']]]
@@ -545,17 +545,17 @@
   [let
     [cur-size [deref [pfield pglist size]]
      plist [cast [plist elem-type] [alloc [list-data elem-type [exp cur-size]]]]]
-    [assign [deref [pfield plist size]] cur-size]
+    [passign [pfield plist size] cur-size]
     [loop [i 0]
       [when [lt-s i cur-size]
-        [assign
-          [deref [pindex [pfield plist array] i]]
+        [passign
+          [pindex [pfield plist array] i]
           [deref [pindex [deref [pfield pglist parray]] i]]]
         [continue i [inc i]]]]
     plist]]
 
 [defn growable-list-reset [pglist [p-growable-list -a]] [tuple]
-  [assign [deref [pfield pglist size]] 0]]
+  [passign [pfield pglist size] 0]]
 
 [datatype text []
   [plist [u8]]]
@@ -608,7 +608,7 @@
 
 [defn form-word-alloc [ptext [text]] [pform]
   [let [p [alloc [form-word]]]
-    [assign [deref p]
+    [passign p
       [record
         tag [annotation [exp form-word-tag] form-word-tag]
         pword ptext]]
@@ -616,7 +616,7 @@
 
 [defn form-list-alloc [pfs [plist [pform]]] [pform]
   [let [p [alloc [form-list]]]
-    [assign [deref p]
+    [passign p
       [record
         tag [annotation [exp form-list-tag] form-list-tag]
         forms pfs]]
@@ -707,8 +707,8 @@
     [loop [i 0]
       [if [lt-s i stack-size]
         [do
-          [assign
-            [deref [pindex parray i]]
+          [passign
+            [pindex parray i]
             [growable-list-alloc-init-form init-capacity]]
           [continue i [inc i]]]]]
     parray]]
@@ -890,7 +890,7 @@
 [defn wexp-i32-alloc [i [i32]] [pexp]
   [let
     [p [alloc [wexp-i32]]]
-    [assign [deref p]
+    [passign p
       [record
         tag [annotation [exp exp-i32-tag] exp-i32-tag]
         value i]]
@@ -899,7 +899,7 @@
 [defn wexp-var-alloc [name [text]] [pexp]
   [let
     [p [alloc [wexp-var]]]
-    [assign [deref p]
+    [passign p
       [record
         tag [annotation [exp exp-var-tag] exp-var-tag]
         name name]]
@@ -908,7 +908,7 @@
 [defn wexp-if-alloc [c [pexp] t [pexp] e [pexp]] [pexp]
   [let
     [p [alloc [wexp-if]]]
-    [assign [deref p]
+    [passign p
       [record
         tag [annotation [exp exp-if-tag] exp-if-tag]
         condition c
@@ -979,10 +979,10 @@
 [defn global-context-alloc [form-offsets [p-assoc-list [pform] [i32]]] [pmem [global-context]]
   [let
     [p [alloc [global-context]]]
-    [assign [deref [pfield p errors]] [assoc-list-text [i32 10]]]
-    [assign [deref [pfield p names]] [assoc-list-alloc-text-global-context-kind [i32 10]]]
-    [assign [deref [pfield p form-offsets]] form-offsets]
-    [assign [deref [pfield p exp-types]] [assoc-list-exp-type [i32 10]]]
+    [passign [pfield p errors] [assoc-list-text [i32 10]]]
+    [passign [pfield p names] [assoc-list-alloc-text-global-context-kind [i32 10]]]
+    [passign [pfield p form-offsets] form-offsets]
+    [passign [pfield p exp-types] [assoc-list-exp-type [i32 10]]]
     p]]
 
 [defn global-context-free [gctx [pmem [global-context]]] [tuple]
@@ -1010,9 +1010,9 @@
 [defn local-context-alloc [kind [i32] outer [plocal-context] size [i32]] [plocal-context]
   [let
     [p [alloc [local-context [exp size]]]]
-    [assign [deref [pfield p context-kind]] kind]
-    [assign [deref [pfield p outer]] outer]
-    [assign [deref [pfield [pfield p locals] size]] size]
+    [passign [pfield p context-kind] kind]
+    [passign [pfield p outer] outer]
+    [passign [pfield [pfield p locals] size] size]
     p]]
 
 [defn local-context-lookup [lctx [plocal-context] name [text]] [tuple [plocal-context] [wtype]]
@@ -1194,8 +1194,8 @@
                   [let
                     [lname [form-word-get [list-get param-list i]]
                      ltype [form-to-type gctx [list-get param-list [inc i]]]]
-                    [assign
-                      [deref [pindex locals-array ti]]
+                    [passign
+                      [pindex locals-array ti]
                       [tuple lname ltype]]
                     [continue i [add 2 i] ti [inc ti]]]]]
               [loop [j 4]

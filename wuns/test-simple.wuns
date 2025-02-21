@@ -132,7 +132,7 @@
   [cast [pointer [exp mem] [f64]] [i32 16]]]
 
 [defn set [v [f64]] [tuple]
-  [assign [deref p-f64] v]]
+  [passign p-f64 v]]
 
 [defn get [] [f64] [deref p-f64]]
 
@@ -162,7 +162,7 @@
   [cast [pointer [exp mem] [i64]] [i32 16]]]
 
 [defn set [v [i64]] [tuple]
-  [assign [deref p-i64] v]]
+  [passign p-i64 v]]
 
 [defn get [] [i64] [deref p-i64]]
 
@@ -192,10 +192,10 @@
   [cast [pointer [exp mem] [array [i32]]] [i32 16]]]
 
 [defn set [i [i32] v [i32]] [tuple]
-  [assign [index [deref p-ar] i] v]]
+  [passign [pindex p-ar i] v]]
 
 [defn get [i [i32]] [i32]
-  [index [deref p-ar] i]]
+  [deref [pindex p-ar i]]]
 
 [export set get]]
      inst [forms-to-inst forms]
@@ -218,11 +218,11 @@
 
 [defn make-array [n [i32]] [pointer [exp mem] [array [i32]]]
   [let [p [cast [pointer [exp mem] [array [i32]]] [i32 16]]]
-    [assign [deref p] [array [i32] [intrinsic i32.add [i32 1] n] [intrinsic i32.add [i32 2] n] [intrinsic i32.add [i32 3] n]]]
+    [passign p [array [i32] [intrinsic i32.add [i32 1] n] [intrinsic i32.add [i32 2] n] [intrinsic i32.add [i32 3] n]]]
     p]]
 
 [defn get [p [pointer [exp mem] [array [i32]]] i [i32]] [i32]
-  [index [deref p] i]]
+  [deref [pindex p i]]]
 
 [export make-array get]]
      inst [forms-to-inst forms]
@@ -241,14 +241,14 @@
 
 [defn make-record [n [i32]] [pointer [exp mem] [record [f [f64]] [i [i32]]]]
   [let [p [cast [pointer [exp mem] [record [f [f64]] [i [i32]]]] [i32 16]]]
-    [assign [deref p] [record f [f64 1.1] i n]]
+    [passign p [record f [f64 1.1] i n]]
     p]]
 
 [defn get-f [p [pointer [exp mem] [record [f [f64]] [i [i32]]]]] [f64]
-  [field [deref p] f]]
+  [deref [pfield p f]]]
 
 [defn get-i [p [pointer [exp mem] [record [f [f64]] [i [i32]]]]] [i32]
-  [field [deref p] i]]
+  [deref [pfield p i]]]
 
 [export make-record get-f get-i]]
      inst [forms-to-inst forms]
@@ -267,23 +267,34 @@
 
 [defn make-tuple [n [i32]] [pointer [exp mem] [tuple [f64] [i32]]]
   [let [p [cast [pointer [exp mem] [tuple [f64] [i32]]] [i32 16]]]
-    [assign [deref p] [tuple [f64 1.1] n]]
+    [passign p [tuple [f64 1.1] n]]
     p]]
 
+; [defn get-tuple [ptup [pointer [exp mem] [tuple [f64] [i32]]]] [tuple [f64] [i32]]
+;   [deref ptup]]
+
 [defn get-1 [p [pointer [exp mem] [tuple [f64] [i32]]]] [f64]
-  [index [deref p] [i32 0]]]
+  [deref [pindex p [i32 0]]]]
 
 [defn get-2 [p [pointer [exp mem] [tuple [f64] [i32]]]] [i32]
-  [index [deref p] [i32 1]]]
+  [deref [pindex p [i32 1]]]]
 
 [export make-tuple get-1 get-2]]
      inst [forms-to-inst forms]
      make-tuple [get-export inst [word make-tuple]]
+    ;  get-tuple [get-export inst [word get-tuple]]
      get-1 [get-export inst [word get-1]]
      get-2 [get-export inst [word get-2]]]
-    [let [p [js-app make-tuple [i32 3]]]
+    [let [p [js-app make-tuple [i32 3]]
+          ;tup [js-value-to-array [js-app get-tuple p]]
+          ]
       [test-assert-eq [f64 1.1] [js-app get-1 p]]
-      [test-assert-eq [i32 3] [js-app get-2 p]]]]
+      [test-assert-eq [i32 3] [js-app get-2 p]]
+      ; [test-assert-eq 2 [size tup]]
+      ; [test-assert-eq [f64 1.1] [at tup [i32 0]]]
+      ; [test-assert-eq [i32 3] [at tup [i32 1]]]
+
+      ]]
 
 [let
     [forms
@@ -292,17 +303,17 @@
 
 [defn alloc-tuple [t [tuple [f64] [i32]]] [pointer [exp mem] [tuple [f64] [i32]]]
   [let [p [cast [pointer [exp mem] [tuple [f64] [i32]]] [i32 16]]]
-    [assign [deref p] t]
+    [passign p t]
     p]]
 
 [defn make-tuple [] [pointer [exp mem] [tuple [f64] [i32]]]
   [alloc-tuple [tuple [f64 1.1] [i32 3]]]]
 
 [defn get-1 [p [pointer [exp mem] [tuple [f64] [i32]]]] [f64]
-  [index [deref p] [i32 0]]]
+  [deref [pindex p [i32 0]]]]
 
 [defn get-2 [p [pointer [exp mem] [tuple [f64] [i32]]]] [i32]
-  [index [deref p] [i32 1]]]
+  [deref [pindex p [i32 1]]]]
 
 [export make-tuple get-1 get-2]]
      inst [forms-to-inst forms]
@@ -406,7 +417,7 @@
   [func [init-capacity [i32]] [pmem [growable-list elem-type]]
     [let
       [p [alloc [growable-list elem-type]]]
-      [assign [deref p]
+      [passign p
         [record
           size [i32 0]
           capacity init-capacity
@@ -606,7 +617,7 @@
               [pair [qlist] [word '[defn f [] [i32] [i32 0]] [def d [i32 5]]']]
               [pair [qlist] [word '[defn f [] [i32] [i32 2147483647]] [export f]']]
               [pair [qlist] [word '[defn f [] [i32] [if [i32 1] [i32 2] [i32 3]]] [export f]']]
-;              [pair [quote [compile-error variable not found]] [word '[defn not [x [i32]] [i32] [if p [i32 0] [i32 1]]]']]
+              [pair [quote [compile-error variable not found]] [word '[defn not [x [i32]] [i32] [if p [i32 0] [i32 1]]]']]
               [pair [qlist] [word '[defn not [x [i32]] [i32] [if x [i32 0] [i32 1]]] [export not]']]
 ;              [pair [qlist] [word '[defn f [] [i32] [i32 2147483648]]']]
               ]]
