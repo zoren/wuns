@@ -1,10 +1,15 @@
 [load wat.wuns]
 [load interpreter-externs.wuns]
 
+[def initial-memory-offset [i32 256]]
+[def memory-alignment [i32 16]]
+
 [defn align [p x]
   [intrinsic i32.and
     [add x [dec p]]
     [intrinsic i32.xor [i32 -1] [dec p]]]]
+
+[defn memory-align [x] [align memory-alignment x]]
 
 [type primitive-type []
   [record
@@ -843,7 +848,7 @@
 [func get-memory-offset-atom [mem-name-word]
   [if-let [offset-atom [try-get active-data-map-offsets mem-name-word]]
     offset-atom
-    [let [oa [atom [i32 16]]]
+    [let [oa [atom initial-memory-offset]]
       [set-kv-map active-data-map-offsets mem-name-word oa]
       oa]]]
 
@@ -2277,7 +2282,7 @@
      n-of-bytes [byte-array-size bytes]
      current-offset [atom-get offset-atom]]
     [assert-not [eq n-of-bytes 0] add-data expected non-empty data]
-    [atom-set offset-atom [add current-offset [align [i32 16] n-of-bytes]]]
+    [atom-set offset-atom [add current-offset [memory-align n-of-bytes]]]
     [push datas [data-active mem-name-word current-offset bytes]]
     current-offset]]
 
