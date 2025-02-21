@@ -451,6 +451,12 @@
 [datatype plist [vp datatype]
   [pmem [list-data vp -size]]]
 
+[def-comp-fn static-list [ar [array [u8]]] [plist [u8]]
+  [data mem
+    [record
+      size [size-of-exp ar]
+      array ar]]]
+
 [defn list-size [pvec [pmem [record [size [i32]]]]] [i32]
   [field [deref pvec] size]]
 
@@ -936,12 +942,6 @@
             res s
             i [inc i]]]]
       res]]]
-
-[def-comp-fn static-list [ar [array [u8]]] [plist [u8]]
-  [data mem
-    [record
-      size [size-of-exp ar]
-      array ar]]]
 
 [def type-i32 [i32 0x7f]]
 [def type-i64 [i32 0x7e]]

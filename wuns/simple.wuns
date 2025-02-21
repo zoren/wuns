@@ -2393,8 +2393,9 @@
 
               [logq-abort not a function]]
             [logq-abort not a function]]
-          parameters [type-func/parameters tf]]
-      [if [is-empty [type-func/type-parameters tf]]
+          parameter-types [type-func/parameters tf]
+          type-parameters [type-func/type-parameters tf]]
+    [if [is-empty type-parameters]
       [if-let [efunc [try-get top-funcs fnw]]
         [if [eq-word [word def-comp-fn] [exp-function/kind efunc]]
           [let [params [exp-function/parameters efunc]
@@ -2408,10 +2409,10 @@
               [es2i [exp-function/bodies efunc]]]]
           [wat-inst/call fnw [list-map arg args [exp-to-inst arg]]]]
         [wat-inst/call fnw [list-map arg args [exp-to-inst arg]]]]
-      [match [go-tais [transient-kv-map] parameters [list-map arg args [type-substitute type-env [type-of arg]]]]
+      [match [go-tais [transient-kv-map] parameter-types [list-map arg args [type-substitute type-env [type-of arg]]]]
         [result/ok tenv]
         [let
-          [type-args [list-map tp [type-func/type-parameters tf] [get tenv [name/word [pair/fst tp]]]]
+          [type-args [list-map tp type-parameters [get tenv [name/word [pair/fst tp]]]]
            types-str [word-join [word -] [list-map ta type-args [type-to-string ta]]]
            spec-name [concat-words fnw [concat-words [word --] types-str]]
            specs-targs
