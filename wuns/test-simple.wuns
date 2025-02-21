@@ -270,8 +270,8 @@
     [passign p [tuple [f64 1.1] n]]
     p]]
 
-; [defn get-tuple [ptup [pointer [exp mem] [tuple [f64] [i32]]]] [tuple [f64] [i32]]
-;   [deref ptup]]
+[defn get-tuple [ptup [pointer [exp mem] [tuple [f64] [i32]]]] [tuple [f64] [i32]]
+  [deref ptup]]
 
 [defn get-1 [p [pointer [exp mem] [tuple [f64] [i32]]]] [f64]
   [deref [pindex p [i32 0]]]]
@@ -279,10 +279,10 @@
 [defn get-2 [p [pointer [exp mem] [tuple [f64] [i32]]]] [i32]
   [deref [pindex p [i32 1]]]]
 
-[export make-tuple get-1 get-2]]
+[export make-tuple get-1 get-2 get-tuple]]
      inst [forms-to-inst forms]
      make-tuple [get-export inst [word make-tuple]]
-    ;  get-tuple [get-export inst [word get-tuple]]
+     get-tuple [get-export inst [word get-tuple]]
      get-1 [get-export inst [word get-1]]
      get-2 [get-export inst [word get-2]]]
     [let [p [js-app make-tuple [i32 3]]

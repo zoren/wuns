@@ -2402,20 +2402,32 @@
     [let
      [ptup [get-pointer-args [type-of target]]
       mem-name-some [option/some [get-exp-var [option-get [try-get-type-exp [pair/fst ptup]]]]]
-      exp-const-pair-opt [try-get-i32-add-const target]
-      offset-opt [option-map pair/snd exp-const-pair-opt]
-      target-prim [type-to-primitive [type-substitute type-env [pair/snd ptup]]]
-      texp [option-default [option-map pair/fst exp-const-pair-opt] target]]
-      [wat-inst/load-opt
-        [wasm-name-to-wat-byte-array
-          [prim-types-to-load-inst-name
-            [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i32]
-            target-prim]]
-        [wat-inst-memargs-opt
-          mem-name-some
-          offset-opt
-          [option/none]]
-        [exp-to-inst texp]]]
+      ginsts [growable-list]
+      do-it
+      [func di [ttarget cur-target]
+        [match ttarget
+          [type/tuple elem-types]
+          [loop [i 0 n [size elem-types] acc cur-target]
+            [when [lt-s i n]
+              [let
+                [telem [at elem-types i]]
+                [di telem acc]
+                [continue i [inc i] acc [int-exp-add acc [type-to-size-of-exp-current-tenv telem]]]]]]
+
+          [let [target-prim [type-to-primitive ttarget]]
+            [push ginsts
+              [wat-inst/load-opt
+                [wasm-name-to-wat-byte-array
+                  [prim-types-to-load-inst-name
+                    [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i32]
+                    target-prim]]
+                [wat-inst-memargs-opt
+                  mem-name-some
+                  [option/none]
+                  [option/none]]
+                [exp-to-inst target]]]]]]]
+      [do-it [type-substitute type-env [pair/snd ptup]] target]
+      [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]
 
     [exp/passign target src]
     [let
