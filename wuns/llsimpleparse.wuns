@@ -900,31 +900,15 @@
         value i]]
     p]]
 
-[defn wexp-var-alloc [name [text]] [pexp]
-  [let
-    [p [alloc [wexp-var]]]
-    [passign p
-      [record
-        tag [annotation [exp exp-var-tag] exp-var-tag]
-        name name]]
-    p]]
-
-[defn wexp-if-alloc [c [pexp] t [pexp] e [pexp]] [pexp]
-  [let
-    [p [alloc [wexp-if]]]
-    [passign p
-      [record
-        tag [annotation [exp exp-if-tag] exp-if-tag]
-        condition c
-        true t
-        false e]]
-    p]]
-
 [def type-i32 [i32 0x7f]]
 [def type-i64 [i32 0x7e]]
 [def type-f32 [i32 0x7d]]
 [def type-f64 [i32 0x7c]]
-[def type-error [i32 -1]]
+[def type-v128 [i32 0x7b]]
+; wasm empty block type is 0x40
+[def type-empty [i32 0x40]]
+
+[def type-error [i32 0]]
 
 [datatype wtype [] [i32]]
 
@@ -1099,7 +1083,6 @@
     [let
       [w [form-word-get f]
        [found-ctx lvar-type] [local-context-lookup lctx w]
-       exp [wexp-var-alloc w]
        var-type
         [if [ne found-ctx local-context-empty]
           lvar-type
@@ -1113,7 +1096,12 @@
                   [deref [pfield [cast [pmem [global-desc-def]] pdesc] type]]
                   [do
                     [push-error gctx f [static-list [text 'variable not a def']]]
-                    type-error]]]]]]]
+                    type-error]]]]]]
+       exp [alloc [wexp-var]]]
+      [passign exp
+        [record
+          tag [annotation [exp exp-var-tag] exp-var-tag]
+          name w]]
       [annotate gctx exp var-type]
       exp]
 
@@ -1126,14 +1114,14 @@
       [let [fw [form-word-get [list-get fl 0]]]
         [ifs
           [word-eq fw [static-list [text i32]]]
-          [do
-            [if [ne n-args 1]
+          [let
+            [value
+             [if [ne n-args 1]
               [do
                 [push-error gctx f [static-list [text 'form-to-exp i32 expects one argument']]]
-                [wexp-i32-alloc [i32 0]]]
-              [let
-                [word-form [list-get fl 1]]
-                [wexp-i32-alloc [dec-word-to-i32-error gctx word-form]]]]]
+                [i32 0]]
+              [dec-word-to-i32-error gctx [list-get fl 1]]]]
+             [wexp-i32-alloc [wexp-i32-alloc value]]]
 
           [word-eq fw [static-list [text if]]]
           [do
@@ -1143,7 +1131,13 @@
               [c [form-to-exp gctx lctx [list-get fl 1]]
                t [form-to-exp gctx lctx [list-get fl 2]]
                e [form-to-exp gctx lctx [list-get fl 3]]
-               if-exp [wexp-if-alloc c t e]]
+               if-exp [alloc [wexp-if]]]
+              [passign if-exp
+                [record
+                  tag [annotation [exp exp-if-tag] exp-if-tag]
+                  condition c
+                  true t
+                  false e]]
               [when [not [type-assignable type-i32 [type-of gctx c]]]
                 [push-error gctx [list-get fl 1] [static-list [text 'if condition not i32']]]]
               [annotate gctx if-exp [common-super-type [type-of gctx t] [type-of gctx e]]]
