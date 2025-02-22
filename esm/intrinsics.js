@@ -1,5 +1,25 @@
 export const intrinsicsInfo = {}
 
+{
+  const bigintInstructions = [
+    { name: 'add', op: '+' },
+    { name: 'sub', op: '-' },
+    { name: 'mul', op: '*' },
+    { name: 'and', op: '&' },
+    { name: 'or', op: '|' },
+    { name: 'xor', op: '^' },
+    { name: 'shl', op: '<<' },
+    { name: 'shr-s', op: '>>' },
+    { name: 'shr-u', op: '>>>' },
+
+    { name: 'lt-s', op: '<', alias: 'less-than-signed' },
+    { name: 'gt-s', op: '>', alias: 'greater-than-signed' },
+    { name: 'le-s', op: '<=', alias: 'less-than-or-equal-signed' },
+    { name: 'ge-s', op: '>=', alias: 'greater-than-or-equal-signed' },
+  ]
+  for (const { op, name } of bigintInstructions) intrinsicsInfo[`bigint.${name}`] = { op }
+}
+
 const i32Instructions = [
   { name: 'add', op: '+' },
   { name: 'sub', op: '-', alias: 'subtract' },

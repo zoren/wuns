@@ -9,8 +9,8 @@
 [type wat-inst-memargs-opt []
   [record
     [memory [option word]]
-    [offset [option i32]]
-    [alignment [option i32]]]]
+    [offset [option word]]
+    [alignment [option word]]]]
 
 [type wat-immediate []
   [union
@@ -144,12 +144,23 @@
   [assert [le-s n-bytes 8] print-i32 expected 8 or fewer bytes got [identity n-bytes]]
   [loop
     [i 0
-      cur n]
+     cur n]
     [when [lt-s i n-bytes]
       [print-byte printer [intrinsic i32.and [i32 0xff] cur]]
       [continue
         i [inc i]
         cur [intrinsic i32.shr-s cur [i32 8]]]]]]
+
+[defn print-bigint [printer n-bytes n]
+  [assert [le-s n-bytes 8] print-i32 expected 8 or fewer bytes got [identity n-bytes]]
+  [loop
+    [i 0
+     cur n]
+    [when [lt-s i n-bytes]
+      [print-byte printer [bigint-to-i32 [intrinsic bigint.and [bigint 0xff] cur]]]
+      [continue
+        i [inc i]
+        cur [intrinsic bigint.shr-s cur [bigint 8]]]]]]
 
 [defn int-to-hex-ascii [i]
   [if [lt-s i [i32 10]]
@@ -249,10 +260,10 @@
         [list [wat-list [wat/word [word memory]] [wat/dollar m]]]
         [list]]
       [if-let [offset [wat-inst-memargs-opt/offset ma]]
-        [list [wat/eq-pair [word offset] [int-to-word offset]]]
+        [list [wat/eq-pair [word offset] offset]]
         [list]]
       [if-let [align [wat-inst-memargs-opt/alignment ma]]
-        [list [wat/eq-pair [word align] [int-to-word align]]]
+        [list [wat/eq-pair [word align] align]]
         [list]]]]]
 
 [defn wat-inst-to-out [i]

@@ -469,6 +469,29 @@
 ;     [ar [byte-array-from-mem p n]]
 ;     [logq wasm-dump-mem [identity p] [identity n] [identity ar]]]]
 
+[defn byte-array-from-mem [mem data sz]
+  [byte-array-from-array-buffer [memory-buffer mem] data sz]]
+
+[defn make-import-object [mem]
+  [let
+    [wasm-log
+      [func wasm-log [data sz]
+        [logq wasm-log [byte-array-to-string [byte-array-from-mem mem data sz]]]]
+     wasm-log-i32
+      [func wasm-log-i32 [n]
+        [logq wasm-log-i32 [identity n]]]
+     wasm-log-i64
+      [func wasm-log-i64 [n]
+        [logq wasm-log-i64 [identity n]]]
+     env [transient-kv-map]]
+    [set-kv-map env [word mem] [to-js-value mem]]
+    [set-kv-map env [word log] [to-js-value wasm-log]]
+    [set-kv-map env [word log-i32] [to-js-value wasm-log-i32]]
+    [set-kv-map env [word log-i64] [to-js-value wasm-log-i64]]
+    [let [import-map [transient-kv-map]]
+      [set-kv-map import-map [word env] [kv-map-to-object env]]
+      [kv-map-to-object import-map]]]]
+
 [defn test-parse []
   [promise-then
     [read-parse-file-async [word llsimpleparse.wuns]]
@@ -476,24 +499,8 @@
       [let
        [module [forms-to-module forms]
         mem [memory 1 9 0]
-        byte-array-from-mem
-        [func bafm [data sz]
-          [byte-array-from-array-buffer [memory-buffer mem] data sz]]
-        wasm-log
-        [func wasm-log [data sz]
-          [logq wasm-log
-            [byte-array-to-string
-              [byte-array-from-mem data sz]]]]
-        wasm-log-i32
-        [func wasm-log-i32 [n]
-          [logq wasm-log-i32 [identity n]]]
-        env [transient-kv-map]
-        - [set-kv-map env [word mem] [to-js-value mem]]
-        -- [set-kv-map env [word log] [to-js-value wasm-log]]
-        --- [set-kv-map env [word log-i32] [to-js-value wasm-log-i32]]
-        import-map [transient-kv-map]
-        ---- [set-kv-map import-map [word env] [kv-map-to-object env]]
-        inst [wasm-instantiate module [kv-map-to-object import-map]]
+        import-obj [make-import-object mem]
+        inst [wasm-instantiate module import-obj]
         parse-all-forms [get-export inst [word parse-all-forms]]
         form-free [get-export inst [word form-free]]
         list-forms-free [get-export inst [word list-forms-free]]
@@ -518,19 +525,19 @@
           [let
             [src [word-to-byte-array w]
              sz [byte-array-size src]
-             dst [byte-array-from-mem [js-value-to-i32 jsp] sz]]
+             dst [byte-array-from-mem mem [js-value-to-i32 jsp] sz]]
             [for i 0 sz
               [byte-array-set dst i [byte-array-get src i]]]]]
         read-mem-as-word
         [func rmw [jsp sz]
           [let
-            [ar [byte-array-from-mem [js-value-to-i32 jsp] sz]
+            [ar [byte-array-from-mem mem [js-value-to-i32 jsp] sz]
              str [byte-array-to-string ar]]
             [string-to-word str]]]
         read-mem-byte
         [func rmb [jsp index]
           [let
-            [ar [byte-array-from-mem [add [js-value-to-i32 jsp] index] 1]]
+            [ar [byte-array-from-mem mem [add [js-value-to-i32 jsp] index] 1]]
             [byte-array-get ar 0]]]
         alloc-word
         [func aw [w]
@@ -539,7 +546,7 @@
              sz [byte-array-size src]
              vec [js-app list-alloc-byte sz]
              data [js-value-to-i32 [js-app list-data-byte-array vec]]
-             dst [byte-array-from-mem data sz]]
+             dst [byte-array-from-mem mem data sz]]
             [for i 0 sz
               [byte-array-set dst i [byte-array-get src i]]]
             vec]]
@@ -554,7 +561,7 @@
               [fw [js-app form-word-get pform]
                data [js-value-to-i32 [js-app list-data-byte-array fw]]
                sz [js-value-to-i32 [js-app list-size fw]]
-               ar [byte-array-from-mem data sz]
+               ar [byte-array-from-mem mem data sz]
                str [byte-array-to-string ar]]
               [form/word [string-to-word str]]]
 
@@ -617,9 +624,9 @@
               [pair [qlist] [word '[defn f [] [i32] [i32 0]] [def d [i32 5]]']]
               [pair [qlist] [word '[defn f [] [i32] [i32 2147483647]] [export f]']]
               [pair [qlist] [word '[defn f [] [i32] [if [i32 1] [i32 2] [i32 3]]] [export f]']]
-              [pair [quote [compile-error variable not found]] [word '[defn not [x [i32]] [i32] [if p [i32 0] [i32 1]]]']]
+              [pair [qlist [compile-error variable not found]] [word '[defn not [x [i32]] [i32] [if p [i32 0] [i32 1]]]']]
               [pair [qlist] [word '[defn not [x [i32]] [i32] [if x [i32 0] [i32 1]]] [export not]']]
-              [pair [qlist] [word '[defn f [] [i32] [i32 2147483648]]']]
+              [pair [qlist] [word '[defn f [] [i32] [i32 4294967296]]']]
               ]]
           [for-each test tests
             [let
@@ -638,24 +645,8 @@
       [let
        [module [forms-to-module forms]
         mem [memory 1 9 0]
-        byte-array-from-mem
-        [func bafm [data sz]
-          [byte-array-from-array-buffer [memory-buffer mem] data sz]]
-        wasm-log
-        [func wasm-log [data sz]
-          [logq wasm-log
-            [byte-array-to-string
-              [byte-array-from-mem data sz]]]]
-        wasm-log-i32
-        [func wasm-log-i32 [n]
-          [logq wasm-log-i32 [identity n]]]
-        env [transient-kv-map]
-        - [set-kv-map env [word mem] [to-js-value mem]]
-        -- [set-kv-map env [word log] [to-js-value wasm-log]]
-        --- [set-kv-map env [word log-i32] [to-js-value wasm-log-i32]]
-        import-map [transient-kv-map]
-        ---- [set-kv-map import-map [word env] [kv-map-to-object env]]
-        inst [wasm-instantiate module [kv-map-to-object import-map]]
+        import-obj [make-import-object mem]
+        inst [wasm-instantiate module import-obj]
         form-free [get-export inst [word form-free]]
         alloc-frames-validate-all [get-export inst [word alloc-frames-validate-all]]
         realloc [get-export inst [word realloc-debug]]
@@ -666,19 +657,19 @@
           [let
             [src [word-to-byte-array w]
              sz [byte-array-size src]
-             dst [byte-array-from-mem [js-value-to-i32 jsp] sz]]
+             dst [byte-array-from-mem mem [js-value-to-i32 jsp] sz]]
             [for i 0 sz
               [byte-array-set dst i [byte-array-get src i]]]]]
         read-mem-as-word
         [func rmw [jsp sz]
           [let
-            [ar [byte-array-from-mem [js-value-to-i32 jsp] sz]
+            [ar [byte-array-from-mem mem [js-value-to-i32 jsp] sz]
              str [byte-array-to-string ar]]
             [string-to-word str]]]
         read-mem-byte
         [func rmb [jsp index]
           [let
-            [ar [byte-array-from-mem [add [js-value-to-i32 jsp] index] 1]]
+            [ar [byte-array-from-mem mem [add [js-value-to-i32 jsp] index] 1]]
             [byte-array-get ar 0]]]]
 
           [let

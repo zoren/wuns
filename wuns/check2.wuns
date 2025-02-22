@@ -493,6 +493,18 @@
               [unify-report gctx type-i32 [go level lctx b] b]
               type-i32]
 
+            [is-bigint-bin-inst [syntax-word/word inst-name]]
+            [do
+              [unify-report gctx type-bigint [go level lctx a] a]
+              [unify-report gctx type-bigint [go level lctx b] b]
+              type-bigint]
+
+            [is-bigint-comp-inst [syntax-word/word inst-name]]
+            [do
+              [unify-report gctx type-bigint [go level lctx a] a]
+              [unify-report gctx type-bigint [go level lctx b] b]
+              type-i32]
+
             [is-f64-bin-inst [syntax-word/word inst-name]]
             [do
               [unify-report gctx type-f64 [go level lctx a] a]

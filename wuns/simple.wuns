@@ -64,13 +64,13 @@
   [switch [primitive-type/prefix pt]
     [[word i]]
     [let [bits [primitive-type/bits pt]
-          pow2 [intrinsic i32.shl 1 [dec bits]]]
-        [pair [sub 0 pow2] [dec pow2]]]
+          pow2 [intrinsic bigint.shl [bigint 1] [i32-to-bigint [dec bits]]]]
+        [pair [intrinsic bigint.sub [bigint 0] pow2] [intrinsic bigint.sub pow2 [bigint 1]]]]
 
     [[word u]]
     [let [bits [primitive-type/bits pt]
-          pow2 [intrinsic i32.shl 1 bits]]
-        [pair 0 [dec pow2]]]
+          pow2 [intrinsic bigint.shl [bigint 1] [i32-to-bigint bits]]]
+        [pair [bigint 0] [intrinsic bigint.sub pow2 [bigint 1]]]]
 
     [logq-abort unsupported literal type]]]
 
@@ -120,7 +120,7 @@
 
   exp []
   [union
-    [integer primitive-type i32]
+    [integer primitive-type bigint]
     [float primitive-type f64]
     [var name]
 
@@ -475,23 +475,25 @@
 [defn mk-exp-i32-add [a b]
   [exp/intrinsic [name [word i32.add]] [list] [list a b]]]
 
-[defn mk-exp-i32 [n] [exp/integer type-primitive-i32 n]]
+[defn mk-exp-i32 [bi] [exp/integer type-primitive-i32 bi]]
+
+[defn mk-exp-i32-i32 [i] [mk-exp-i32 [i32-to-bigint i]]]
 
 [defn int-exp-add [a b]
   [if-let [i [try-get-int-const a]]
-    [if [eq i 0]
+    [if [is-identical i [bigint 0]]
       b
       [if-let [j [try-get-int-const b]]
-        [mk-exp-i32 [add i j]]
+        [mk-exp-i32 [intrinsic bigint.add i j]]
         [mk-exp-i32-add a b]]]
     [if-let [j [try-get-int-const b]]
-      [if [eq j 0]
+      [if [is-identical j [bigint 0]]
         a
         [mk-exp-i32-add a b]]
       [mk-exp-i32-add a b]]]]
 
-[def int-const-0 [mk-exp-i32 0]]
-[def int-const-1 [mk-exp-i32 1]]
+[def int-const-0 [mk-exp-i32 [bigint 0]]]
+[def int-const-1 [mk-exp-i32 [bigint 1]]]
 
 [defn try-get-i32-add-const [e]
   [match e
@@ -500,7 +502,7 @@
       [if [eq-word [name/word n] [word i32.add]]
         [if-let [i [try-get-int-const a]]
           [if-let [j [try-get-int-const b]]
-            [option/some [pair int-const-0 [add i j]]]
+            [option/some [pair int-const-0 [intrinsic bigint.add i j]]]
             [option/some [pair b i]]]
           [if-let [j [try-get-int-const b]]
             [option/some [pair a j]]
@@ -514,15 +516,15 @@
 [defn int-exp-mul [a b]
   [if-let [i [try-get-int-const a]]
     [ifs
-      [eq i 0] int-const-0
-      [eq i 1] b
+      [is-identical i [bigint 0]] int-const-0
+      [is-identical i [bigint 1]] b
       [if-let [j [try-get-int-const b]]
-        [mk-exp-i32 [mul i j]]
+        [mk-exp-i32 [intrinsic bigint.mul i j]]
         [mk-exp-i32-mul a b]]]
     [if-let [j [try-get-int-const b]]
       [ifs
-        [eq j 0] int-const-0
-        [eq j 1] a
+        [is-identical j [bigint 0]] int-const-0
+        [is-identical j [bigint 1]] a
         [mk-exp-i32-mul a b]]
       [mk-exp-i32-mul a b]]]]
 
@@ -1043,7 +1045,7 @@
     [let [gl [growable-list]
           w [form-to-word [second l]]]
       [for i 0 [word-byte-size w]
-        [push gl [exp/integer type-primitive-u8 [char-code-at w i]]]]
+        [push gl [exp/integer type-primitive-u8 [i32-to-bigint [char-code-at w i]]]]]
       [exp/array type-u8 [clone-growable-to-frozen-list gl]]]
 
     [[word tuple]]
@@ -1071,11 +1073,10 @@
       [let [n [form-to-name [second l]]]
         [switch [primitive-type/prefix pt]
           [[word i] [word u]]
-          [let [i [word-to-int [name/word n]]
+          [let [i [word-to-bigint [name/word n]]
                 range [primitive-integer-type-min-max-range pt]]
-            [todo there are issues with word-to-int when integer is greater than 2 to the 31 power]
-            [when [lt-s i [pair/fst range]] [error [second l] literal below min]]
-            [when [lt-s [pair/snd range] i] [error [second l] literal above max]]
+            [when [intrinsic bigint.lt-s i [pair/fst range]] [error [second l] literal below min]]
+            [when [intrinsic bigint.lt-s [pair/snd range] i] [error [second l] literal above max]]
             [exp/integer pt i]]
 
           [[word f]]
@@ -1125,7 +1126,7 @@
     [exp/integer pt1 i1]
     [match e2
       [exp/integer pt2 i2]
-      [and [is-identical pt1 pt2] [eq i1 i2]]
+      [and [is-identical pt1 pt2] [is-identical i1 i2]]
 
       false]
 
@@ -1478,7 +1479,7 @@
       [exp/integer pt i]
       [do
         [assert [is-identical pt type-primitive-i32] index expected i32]
-        [at elem-types i]]
+        [at elem-types [bigint-to-i32 i]]]
 
       [logq-abort indexing of tuples only allowed with constants [identity index-exp]]]
     [logq-abort indexing only allowed for array and tuple types [identity t]]]]
@@ -1580,7 +1581,7 @@
     [exp/array elem-type elems]
     [type/array
       elem-type
-      [option/some [type/exp [exp/integer type-primitive-i32 [size elems]]]]]
+      [option/some [type/exp [exp/integer type-primitive-i32 [i32-to-bigint [size elems]]]]]]
 
     [exp/tuple elems]
     [if [eq [size elems] 1]
@@ -2004,13 +2005,13 @@
 [func type-to-size-of-exp [t]
   [match [expand-custom-n t]
     [type/primitive p]
-    [exp/integer type-primitive-i32 [primitive-type/bytes p]]
+    [mk-exp-i32-i32 [primitive-type/bytes p]]
 
     [type/exp e]
     [type-to-size-of-exp [type-of e]]
 
     [type/pointer mt t]
-    [exp/integer type-primitive-i32 [primitive-type/bytes [get-memory-pointer-type mt]]]
+    [mk-exp-i32-i32 [primitive-type/bytes [get-memory-pointer-type mt]]]
 
     [type/array et opt-st]
     [if-let [size-type opt-st]
@@ -2087,9 +2088,9 @@
     [type/tuple elem-types]
     [if-let [ie [try-get-int-const index-exp]]
       [let [n [size elem-types]]
-        [assert [lt-s ie n] index out of bounds]
+        [assert [intrinsic bigint.lt-s ie [i32-to-bigint n]] index out of bounds]
         [loop [i 0 acc int-const-0]
-          [if [eq ie i]
+          [if [is-identical ie [i32-to-bigint i]]
             acc
             [continue
               acc [int-exp-add acc [type-to-size-of-exp-current-tenv [at elem-types i]]]
@@ -2109,7 +2110,7 @@
           [assert [eq [intrinsic i32.rem-s [printer-index bprinter] n-bytes] [i32 0]]
             exp-to-bytes expected natural alignment [identity pt]]
           [assert [primitive-type-is-integer pt] exp-to-bytes expected integer type [identity pt]]
-          [print-int32 bprinter n-bytes n]]
+          [print-bigint bprinter n-bytes n]]
 
         [exp/float pt f]
         [let [n-bytes [primitive-type/bytes pt]]
@@ -2176,7 +2177,7 @@
 
 [func exp-to-string [e]
   [match e
-    [exp/integer pt n] [int-to-word n]
+    [exp/integer pt n] [bigint-to-word n]
     [exp/var n] [name/word n]
     [logq-abort not implemented exp-to-string [identity e]]]]
 
@@ -2214,9 +2215,10 @@
     [exp/integer pt n]
     [[switch [primitive-type/name pt]
       [[word i32]] wat-inst/i32.const
+      [[word u32]] wat-inst/i32.const
       [[word i64]] wat-inst/i64.const
       [logq-abort not implemented exp-to-inst integer [identity pt]]]
-      [int-to-word n]]
+      [bigint-to-word n]]
 
     [exp/float pt f]
     [[switch [primitive-type/name pt]
@@ -2454,7 +2456,7 @@
               [wasm-name-to-wat-byte-array intr-name]
               [wat-inst-memargs-opt
                 mem-name-some
-                offset-opt
+                [option-map bigint-to-word offset-opt]
                 [option/none]]
               [exp-to-inst trimmed-target]
               wat-src]]]]
@@ -2498,7 +2500,7 @@
               [loop [i 0 n [size elems]]
                 [when [lt-s i n]
                   [assign-exp
-                    [int-exp-add target-offset [int-exp-mul [mk-exp-i32 i] size-of-int-exp]]
+                    [int-exp-add target-offset [int-exp-mul [mk-exp-i32-i32 i] size-of-int-exp]]
                     tvalue-elem
                     [at elems i]]
                   [continue i [inc i]]]]]]
@@ -2536,7 +2538,7 @@
       [mem-name-word [get-exp-var mem-name-exp]
        addr [data-proc mem-name-word data-exp]
        mem-type [get-mem-type mem-name-word]]
-      [exp-to-inst [exp/integer mem-type addr]]]
+      [exp-to-inst [exp/integer mem-type [i32-to-bigint addr]]]]
 
     [exp/memory-static-top mem-name]
     [let [mem-name-word [get-exp-var mem-name]

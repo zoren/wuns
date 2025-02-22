@@ -9,6 +9,10 @@
     [func
       [n [i32]]
       [tuple]]]
+  [log-i64
+    [func
+      [n [i64]]
+      [tuple]]]
       ]
 
 [def-comp-fn log-ar [ar [array [u8]]] [tuple]
@@ -130,11 +134,11 @@
     [realloc-size [i32]] ; a size less than equal to the original for when the block is reallocated to a smaller size in place
     [abandoned [i32]] ; when the block could not be reallocated in place
     [data [array [u8] byte-aligned-size]]
-    [canary [i32]]
+    [canary [i64]]
     [frame-size-end [i32]]
     ]]
 
-[def canary-value [i32 0xdeadbeef]]
+[def canary-value [i64 0xdeadbeef]]
 
 [mutable num-of-frames [i32 0]]
 
@@ -188,7 +192,7 @@
     [if [lt-s 1 abandoned] [log-abort [text 'validate-alloc abandoned > 1']]]
     ; todo check bytes after realloc-size and before byte-size are overwritten
     ; todo check bytes after byte-size and before byte-aligned-size are properly zeroed
-    [if [ne canary canary-value] [log-abort [text 'validate-alloc canary value mismatch']]]
+    [if [intrinsic i64.ne canary canary-value] [log-abort [text 'validate-alloc canary value mismatch']]]
     [if [ne frame-size frame-size-end] [log-abort [text 'validate-alloc frame-size != frame-size-end']]]]]
 
 [defn alloc-frames-validate-all [] [i32]
@@ -1045,14 +1049,14 @@
         [let [cc [list-get w i]]
           [if [not [is-between-inclusive [i64 48] cc [i64 57]]]
             [do
-              [push-error gctx word-form [static-list [text 'dec-word-to-i64 cc < 48 or cc > 57']]]
+              [push-error gctx word-form [static-list [text 'not a valid digit']]]
               [i64 0]]
             [let
               [n [intrinsic i64.mul res [i64 10]]
                s [intrinsic i64.add n [intrinsic i64.sub cc [i64 48]]]]
               [if [intrinsic i64.lt-s s n]
                 [do
-                  [push-error gctx word-form [static-list [text 'dec-word-to-i64 overflow']]]
+                  [push-error gctx word-form [static-list [text 'i64 overflow']]]
                   [i64 0]]
                 [continue
                   res s
@@ -1136,10 +1140,13 @@
             [value
              [if [ne n-args 1]
               [do
-                [push-error gctx f [static-list [text 'form-to-exp i32 expects one argument']]]
+                [push-error gctx f [static-list [text 'expects one argument']]]
                 [i64 0]]
               [dec-word-to-i64-error gctx [list-get fl 1]]]]
-             [wexp-i32-alloc value]]
+            [when [intrinsic i64.le-s [i64 4294967296] value]
+              [log-i64 value]
+              [push-error gctx f [static-list [text 'i32 value out of range']]]]
+            [wexp-i32-alloc value]]
 
           [word-eq fw [static-list [text if]]]
           [do

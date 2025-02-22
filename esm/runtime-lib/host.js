@@ -283,6 +283,21 @@ const int_to_word = (i) => {
   return String(i)
 }
 export { int_to_word as 'int-to-word' }
+const bigint_to_word = (i) => {
+  if (typeof i !== 'bigint') throw new Error('bigint-to-word expects bigint: ' + i)
+  return String(i)
+}
+export { bigint_to_word as 'bigint-to-word' }
+const i32_to_bigint = (i) => {
+  if (!isSigned32BitInteger(i)) throw new Error('i32-to-bigint expects number: ' + i)
+  return BigInt(i)
+}
+export { i32_to_bigint as 'i32-to-bigint' }
+const bigint_to_i32 = (i) => {
+  if (typeof i !== 'bigint') throw new Error('bigint-to-i32 expects bigint: ' + i)
+  return Number(i) | 0
+}
+export { bigint_to_i32 as 'bigint-to-i32' }
 const f64_to_word = (f) => {
   if (typeof f !== 'number') throw new Error('f64-to-word expects number: ' + f)
   return String(f)
@@ -295,6 +310,11 @@ const word_to_int = (word) => {
   return i | 0
 }
 export { word_to_int as 'word-to-int' }
+const word_to_bigint = (word) => {
+  if (typeof word !== 'string') throw new Error('word-to-int expects string')
+  return BigInt(word)
+}
+export { word_to_bigint as 'word-to-bigint' }
 const word_to_f64 = (word) => {
   if (typeof word !== 'string') throw new Error('word-to-f64 expects string')
   const f = +word

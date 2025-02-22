@@ -213,7 +213,7 @@
 [defn builtin-type-arity-ok [type-name n-of-type-args]
   [switch type-name
     [[word tuple]] [option/some true]
-    [[word i32] [word f64] [word word]] [option/some [eq n-of-type-args 0]]
+    [[word i32] [word f64] [word word] [word bigint]] [option/some [eq n-of-type-args 0]]
     [[word list]] [option/some [eq n-of-type-args 1]]
     [[word memory]] [option/some [eq n-of-type-args 0]]
     [option/none]]]
@@ -321,6 +321,19 @@
      [word i32.shl] [word i32.shr-s] [word i32.shr-u]
      [word i32.eq] [word i32.lt-s] [word i32.le-s]]
     true
+    false]]
+
+[defn is-bigint-bin-inst [w2]
+  [switch w2
+    [[word bigint.add] [word bigint.sub] [word bigint.mul]
+     [word bigint.and] [word bigint.or] [word bigint.xor]
+     [word bigint.shl] [word bigint.shr-s] [word bigint.shr-u]]
+    true
+    false]]
+
+[defn is-bigint-comp-inst [w2]
+  [switch w2
+    [[word bigint.eq] [word bigint.lt-s] [word bigint.le-s]] true
     false]]
 
 [defn is-f64-bin-inst [w2]
@@ -759,7 +772,10 @@
                 [let [inst-sname [get-sword [get-arg 0]]
                       inst-name [syntax-word/word inst-sname]]
                   [bexp/intrinsic inst-sname
-                    [if [or [is-i32-bin-inst inst-name] [is-f64-bin-inst inst-name] [is-f64-comp-inst inst-name]]
+                    [if [or
+                          [is-i32-bin-inst inst-name]
+                          [is-bigint-bin-inst inst-name] [is-bigint-comp-inst inst-name]
+                          [is-f64-bin-inst inst-name] [is-f64-comp-inst inst-name]]
                       [do
                         [assert-n-args 3]
                         [intrinsic-args/bin [form-to-ast lstack [get-arg 1]] [form-to-ast lstack [get-arg 2]]]]
