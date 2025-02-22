@@ -1012,7 +1012,7 @@
           [if [word-eq [deref [pindex [pindex tuple-array i] [i32 0]]] name]
             [tuple cur-ctx [deref [pindex [pindex tuple-array i] [i32 1]]]]
             [continue i [inc i] cur-ctx [deref [pfield lctx outer]]]]]
-        [tuple local-context-empty type-i32]]]]]
+        [tuple local-context-empty type-error]]]]]
 
 [defn log-assoc [pglist [p-assoc-list [pexp] [wtype]]] [tuple]
   [loop
@@ -1238,8 +1238,12 @@
               [loop [i 0 ti 0]
                 [when [lt-s i [dec n-of-param-forms]]
                   [let
-                    [lname [form-word-get [list-get param-list i]]
+                    [lname-form [list-get param-list i]
+                     lname [form-word-get lname-form]
+                     [found-ctx lvar-type] [local-context-lookup lctx lname]
                      ltype [form-to-type gctx [list-get param-list [inc i]]]]
+                    [if [ne found-ctx local-context-empty]
+                      [push-error gctx lname-form [static-list [text 'name already defined']]]]
                     [passign
                       [pindex locals-array ti]
                       [tuple lname ltype]]
