@@ -824,11 +824,14 @@
 
     [logq-abort get-mem-type not a memory]]]
 
+[func get-memory-exp-type [mem-name-exp]
+  [match [type-of mem-name-exp]
+    [type/memory mem-name] [get-mem-type [name/word mem-name]]
+    [logq-abort not a type/memory [identity mem-name-exp]]]]
+
 [func get-memory-pointer-type [t]
   [if-let [mem-texp [try-get-type-exp t]]
-    [match [type-of mem-texp]
-      [type/memory mem-name] [get-mem-type [name/word mem-name]]
-      [logq-abort get-memory-pointer-type not a memory type [identity mem-texp]]]
+    [get-memory-exp-type mem-texp]
     [logq-abort get-memory-pointer-type expected memory type [identity t]]]]
 
 [func get-memory-offset-atom [mem-name-word]
@@ -926,7 +929,7 @@
           [match p
             [immediate-type/memory]
             [let [mem-name [form-to-name arg-form]]
-              [todo check is mem]
+              [get-mem-type [name/word mem-name]]
               [push gimm-args [imm-arg/memory mem-name]]]]]]
       [for i 0 arity-exp
         [let [p [at params i]
@@ -1060,9 +1063,9 @@
 
     [[word memory-static-top]]
     [let
-      [mem-name [form-to-exp-type-kind-env type-kind-env lctx [second l]]]
-      [todo check is mem]
-      [exp/memory-static-top mem-name]]
+      [mem-name-exp [form-to-exp-type-kind-env type-kind-env lctx [second l]]]
+      [get-memory-exp-type mem-name-exp]
+      [exp/memory-static-top mem-name-exp]]
 
     [if-let [pt [try-get primitive-types-by-name fw]]
       [let [n [form-to-name [second l]]]
@@ -1590,10 +1593,8 @@
     [exp/data mem-name data-exp]
     [type/pointer [type/exp mem-name] [type-of data-exp]]
 
-    [exp/memory-static-top mem-name]
-    [do
-      [todo use mem type]
-      [type/primitive type-primitive-i32]]
+    [exp/memory-static-top mem-name-exp]
+    [type/primitive [get-memory-exp-type mem-name-exp]]
 
     [exp/func ef]
     [type/func [exp-function/type ef]]
