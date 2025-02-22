@@ -948,15 +948,20 @@
     [global-desc-defn]
     [global-desc-def]]]
 
+[datatype error []
+  [record
+    [message [text]]
+    [offset [i32]]]]
+
 [datatype global-context []
   [record
-    [errors [p-growable-list [text]]]
+    [errors [p-growable-list [error]]]
     [names [p-assoc-list [text] [pmem [global-context-kind]]]]
     [form-offsets [p-assoc-list [pform] [i32]]]
     [exp-types [p-assoc-list [pexp] [wtype]]]
     ]]
 
-[def assoc-list-text [growable-list-alloc-init [text]]]
+[def assoc-list-error [growable-list-alloc-init [error]]]
 [def assoc-list-alloc-text-global-context-kind [growable-list-alloc-init [tuple [text] [pmem [global-context-kind]]]]]
 [def assoc-list-exp-type [growable-list-alloc-init [tuple [pexp] [wtype]]]]
 
@@ -965,7 +970,7 @@
     [p [alloc [global-context]]]
     [passign p
       [record
-        errors [assoc-list-text [i32 10]]
+        errors [assoc-list-error [i32 10]]
         names [assoc-list-alloc-text-global-context-kind [i32 10]]
         form-offsets form-offsets
         exp-types [assoc-list-exp-type [i32 10]]]]
@@ -1027,12 +1032,15 @@
 [defn push-error [gctx [pmem [global-context]] form [pform] msg [text]] [tuple]
   [let
     [errors [deref [pfield gctx errors]]
-     p-value [assoc-list-get-value [deref [pfield gctx form-offsets]] form]]
-    [when [is-null p-value]
+     p-offset [assoc-list-get-value [deref [pfield gctx form-offsets]] form]]
+    [when [is-null p-offset]
       [log-i32 [list-size [deref [pfield gctx form-offsets]]]]
       [log-assoc [deref [pfield gctx form-offsets]]]
       [log-abort [text 'push-error form not found in form-offsets']]]
-    [growable-list-push errors msg]]]
+    [growable-list-push errors
+      [record
+        message msg
+        offset [deref p-offset]]]]]
 
 [defn dec-word-to-i32-error [gctx [pmem [global-context]] word-form [pform]] [i32]
   [let
