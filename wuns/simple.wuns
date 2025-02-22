@@ -1256,9 +1256,9 @@
     [type/record dfs]
     [match arg-t
       [type/record sfs]
-      [do
-        [assert [le-s [size dfs] [size sfs]] record sizes do not match [identity sfs] [identity dfs]]
-        [loop [i 0 n [size dfs] cur-tenv tenv]
+      [if [lt-s [size dfs] [size sfs]]
+        [result/error [qlist fewer fields in destination than in source]]
+        [loop [i 0 n [size sfs] cur-tenv tenv]
           [if [lt-s i n]
             [let [df [at dfs i] sf [at sfs i]]
               [if [eq-word [name/word [pair/fst df]] [name/word [pair/fst sf]]]

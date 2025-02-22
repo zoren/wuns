@@ -217,11 +217,13 @@
      pframe [cast [pmem [alloc-stack-frame [exp byte-aligned-size]]] cur-top]
      frame-data [pfield pframe data]]
     [resize-mem frame-size]
-    [passign [pfield pframe frame-size] frame-size]
-    [passign [pfield pframe byte-size] byte-size]
-    [passign [pfield pframe byte-aligned-size] byte-aligned-size]
-    [passign [pfield pframe realloc-size] byte-size]
-    [passign [pfield pframe abandoned] 0]
+    [passign pframe
+      [record
+        frame-size frame-size
+        byte-size byte-size
+        byte-aligned-size byte-aligned-size
+        realloc-size byte-size
+        abandoned 0]]
     [memory-zero frame-data byte-aligned-size]
     [passign [pfield pframe canary] canary-value]
     [passign [pfield pframe frame-size-end] frame-size]
@@ -239,11 +241,13 @@
      frame-size [size-of-type [alloc-stack-frame [exp byte-aligned-size]]]
      frame-data [pfield pframe data]]
     [resize-mem [sub frame-size old-frame-size]]
-    [passign [pfield pframe frame-size] frame-size]
-    [passign [pfield pframe byte-size] new-byte-size]
-    [passign [pfield pframe byte-aligned-size] byte-aligned-size]
-    [passign [pfield pframe realloc-size] new-byte-size]
-    [passign [pfield pframe abandoned] 0]
+    [passign pframe
+      [record
+        frame-size frame-size
+        byte-size new-byte-size
+        byte-aligned-size byte-aligned-size
+        realloc-size new-byte-size
+        abandoned 0]]
     [passign [pfield pframe-sized canary] canary-value]
     [passign [pfield pframe-sized frame-size-end] frame-size]
 
@@ -979,10 +983,12 @@
 [defn global-context-alloc [form-offsets [p-assoc-list [pform] [i32]]] [pmem [global-context]]
   [let
     [p [alloc [global-context]]]
-    [passign [pfield p errors] [assoc-list-text [i32 10]]]
-    [passign [pfield p names] [assoc-list-alloc-text-global-context-kind [i32 10]]]
-    [passign [pfield p form-offsets] form-offsets]
-    [passign [pfield p exp-types] [assoc-list-exp-type [i32 10]]]
+    [passign p
+      [record
+        errors [assoc-list-text [i32 10]]
+        names [assoc-list-alloc-text-global-context-kind [i32 10]]
+        form-offsets form-offsets
+        exp-types [assoc-list-exp-type [i32 10]]]]
     p]]
 
 [defn global-context-free [gctx [pmem [global-context]]] [tuple]
