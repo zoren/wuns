@@ -920,26 +920,6 @@
         false e]]
     p]]
 
-; look here for overflow check https://github.com/skeeto/scratch/blob/master/parsers/strtonum.c
-[defn dec-word-to-i32 [w [text]] [i32]
-  [loop [i 0 ws [list-size w] res 0]
-    [if [lt-s i ws]
-      [let [cc [list-get w i]]
-        [if [lt-s cc [i32 48]]
-          [log-abort [text 'dec-word-to-i32 cc < 48']]]
-        [if [lt-s [i32 57] cc]
-          [log-abort [text 'dec-word-to-i32 cc > 57']]]
-        ; here we should check for overflow and abort if it happens
-        [let
-          [n [mul res [i32 10]]
-           s [add n [sub cc [i32 48]]]]
-          [if [lt-s s n]
-            [log-abort [text 'dec-word-to-i32 overflow']]]
-          [continue
-            res s
-            i [inc i]]]]
-      res]]]
-
 [def type-i32 [i32 0x7f]]
 [def type-i64 [i32 0x7e]]
 [def type-f32 [i32 0x7d]]
@@ -1054,6 +1034,29 @@
       [log-abort [text 'push-error form not found in form-offsets']]]
     [growable-list-push errors msg]]]
 
+[defn dec-word-to-i32-error [gctx [pmem [global-context]] word-form [pform]] [i32]
+  [let
+    [w [form-word-get word-form]
+     ws [list-size w]]
+    [loop [i 0 res 0]
+      [if [lt-s i ws]
+        [let [cc [list-get w i]]
+          [if [bitwise-ior [lt-s cc [i32 48]] [lt-s [i32 57] cc]]
+            [do
+              [push-error gctx word-form [static-list [text 'dec-word-to-i32 cc < 48 or cc > 57']]]
+              0]
+            [let
+              [n [mul res [i32 10]]
+               s [add n [sub cc [i32 48]]]]
+              [if [lt-s s n]
+                [do
+                  [push-error gctx word-form [static-list [text 'dec-word-to-i32 overflow']]]
+                  0]
+                [continue
+                  res s
+                  i [inc i]]]]]]
+        res]]]]
+
 [defn type-of [gctx [pmem [global-context]] e [pexp]] [i32]
   [let [tag [deref [pfield e tag]]]
     [ifs
@@ -1117,8 +1120,12 @@
           [word-eq fw [static-list [text i32]]]
           [do
             [if [ne n-args 1]
-              [log-abort [text 'form-to-exp i32 expects one argument']]]
-            [wexp-i32-alloc [dec-word-to-i32 [form-word-get [list-get fl 1]]]]]
+              [do
+                [push-error gctx f [static-list [text 'form-to-exp i32 expects one argument']]]
+                [wexp-i32-alloc [i32 0]]]
+              [let
+                [word-form [list-get fl 1]]
+                [wexp-i32-alloc [dec-word-to-i32-error gctx word-form]]]]]
 
           [word-eq fw [static-list [text if]]]
           [do
@@ -1128,11 +1135,11 @@
               [c [form-to-exp gctx lctx [list-get fl 1]]
                t [form-to-exp gctx lctx [list-get fl 2]]
                e [form-to-exp gctx lctx [list-get fl 3]]
-               if-form [wexp-if-alloc c t e]]
+               if-exp [wexp-if-alloc c t e]]
               [when [not [type-assignable type-i32 [type-of gctx c]]]
                 [push-error gctx [list-get fl 1] [static-list [text 'if condition not i32']]]]
-              [annotate gctx if-form [common-super-type [type-of gctx t] [type-of gctx e]]]
-              if-form]]
+              [annotate gctx if-exp [common-super-type [type-of gctx t] [type-of gctx e]]]
+              if-exp]]
 
           [log-abort [text 'form-to-exp unknown form-list case']]]]]
 
