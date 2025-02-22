@@ -1165,7 +1165,7 @@
         [exp/integer spt -]
         [if [is-identical dpt spt]
           [result/ok tenv]
-           [result/error [qlist primitive type does not match exp]]]
+          [result/error [qlist primitive type does not match exp]]]
 
         [result/error [qlist primitive only integer supported]]]
 
@@ -1220,14 +1220,16 @@
             [result-bind elems-ass nenv [go-tai nenv ds ss]]
             elems-ass]]]
 
-        [logq-abort type-assignable-infer not an array]]
+        [result/error [qlist type-assignable-infer not an array]]]
 
     [type/tuple dts]
     [match arg-t
       [type/tuple sts]
-      [go-tais tenv dts sts]
+      [if [lt-s [size dts] [size sts]]
+        [result/error [qlist fewer tuple elements in destination than in source]]
+        [go-tais tenv dts sts]]
 
-      [logq-abort not a tuple [identity arg-t]]]
+      [result/error [qlist not a tuple [identity arg-t]]]]
 
     [type/union dus]
     [match arg-t
@@ -1239,19 +1241,13 @@
       [type/apply-custom stn sargs]
       [go-tai tenv param-t [expand-custom-n arg-t]]
 
-      [do
-        ;[exists dus [func type-ass-union [du] [type-assignable-go du tsrc]]]
-;        [logq-abort union not impl [identity dus] [identity arg-t]]
-;        [go-tai ]
-        [loop [i 0 n [size dus]]
-          [if [lt-s i n]
-            [let [res [go-tai tenv [at dus i] arg-t]]
-              [match res
-                [result/error -] [continue i [inc i]]
-                [result/ok -] res]]
-            [result/error [qlist no union match]]
-            ]]
-        ]]
+      [loop [i 0 n [size dus]]
+        [if [lt-s i n]
+          [let [res [go-tai tenv [at dus i] arg-t]]
+            [match res
+              [result/error -] [continue i [inc i]]
+              [result/ok -] res]]
+          [result/error [qlist no union match]]]]]
 
     [type/record dfs]
     [match arg-t
@@ -1272,7 +1268,7 @@
       [type/apply-custom stn sargs]
       [go-tai tenv param-t [expand-custom-1 stn sargs]]
 
-      [logq-abort not a record [identity arg-t]]]
+      [result/error [qlist not a record [identity arg-t]]]]
 
     [type/apply-custom ptn pargs]
     [match arg-t
@@ -1281,11 +1277,9 @@
         [go-tais tenv pargs aargs]
         [go-tai tenv [expand-custom-n param-t] [expand-custom-n arg-t]]]
 
-      [go-tai tenv [expand-custom-n param-t] arg-t]
-      ]
+      [go-tai tenv [expand-custom-n param-t] arg-t]]
 
-
-    [logq-abort type-assignable-infer not impl [identity param-t] [identity arg-t]]]]
+    [result/error [qlist type-assignable-infer not impl [identity param-t] [identity arg-t]]]]]
 
 [func types-equal [ts1 ts2]
   [and
