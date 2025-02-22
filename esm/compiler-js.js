@@ -156,52 +156,6 @@ const typeInst = (typeName, ...args) => Object.freeze({ typeKind: 'inst', typeNa
 const typeFunc = (parameters, restParameter, result) =>
   Object.freeze({ typeKind: 'func', parameters, restParameter, result })
 
-const makeTypeValidator = (typeContext, params) => {
-  const subst = new Set(params)
-  const go = (form) => {
-    {
-      const typeWord = tryGetFormWord(form)
-      if (typeWord) {
-        if (subst.has(typeWord)) return typeVar(typeWord)
-        return go(makeFormList([form]))
-      }
-    }
-    const typeList = getFormList(form)
-    if (typeList.length === 0) throw new CompileError('empty type list', form)
-    const [first, ...rest] = typeList
-    const firstWord = getFormWord(first)
-    switch (firstWord) {
-      case 'i32':
-      case 'f64':
-        if (rest.length !== 0) throw new CompileError('built-in type expected no arguments', form)
-        return typeInst(firstWord)
-      case 'word':
-        if (rest.length !== 0) throw new CompileError('expects no arguments', form)
-        return typeInst(firstWord)
-      case 'list':
-        if (rest.length !== 1) throw new CompileError('expects one argument', form)
-        return typeInst(firstWord, go(rest[0]))
-      case 'func': {
-        if (rest.length !== 2) throw new CompileError('func expects two arguments', form)
-        const [paramsForm, returnTypeForm] = rest
-        const params = getFormList(paramsForm)
-        if (params.length > 1 && tryGetFormWord(params.at(-2)) === '..')
-          throw new CompileError('rest parameter not implemented', form)
-        const returnType = go(returnTypeForm)
-        return typeFunc(params.map(go), null, returnType)
-      }
-      case 'tuple':
-        return typeInst('tuple', rest.map(go))
-    }
-    const userDef = typeContext.get(firstWord)
-    if (!userDef) throw new CompileError('unknown type: ' + firstWord, first)
-    const { params } = userDef
-    if (params.length !== rest.length) throw new CompileError('wrong number of type parameters', form)
-    return typeInst(firstWord, ...rest.map((t) => go(t)))
-  }
-  return go
-}
-
 const expSpecialFormsExp = {
   i32: (tail) => {
     if (tail.length !== 1) throw new CompileError('i32 expected one argument')
@@ -663,9 +617,6 @@ const topSpecialForms = {
     for (let i = 0; i < forms.length; i += 3) {
       const typeName = getFormWord(forms[i])
       const descObj = typeContext.get(typeName)
-      const typeParams = descObj.params
-      const typeValidator = makeTypeValidator(typeContext, typeParams)
-      const validateType = (typeForm) => typeValidator(typeForm)
 
       const body = getFormList(forms[i + 2])
       const typeKind = getFormWord(body[0])
@@ -680,10 +631,7 @@ const topSpecialForms = {
             const unionCaseName = getFormWord(unionCase[0])
             const qualName = typePrefix + unionCaseName
             const paramtypes = unionCase.slice(1)
-            const parameters = paramtypes.map((pt, i) => {
-              validateType(pt)
-              return `p${i}`
-            })
+            const parameters = paramtypes.map((_, i) => `p${i}`)
             const ctor = jsArrowExpNoRest(parameters, mkTaggedObject(qualName, ...parameters.map((p) => jsVar(p))))
             const defDesc = await setDef(topContext, qualName, 'unionCtor', ctor)
             defDesc.paramDesc = { parameters }
@@ -704,8 +652,7 @@ const topSpecialForms = {
             const jsProjecter = jsArrowExpNoRest(['record'], jsSubscript(jsVar('record'), jsString(fieldName)))
             await setDef(topContext, projecterName, 'recordProj', jsProjecter)
             const typeForm = recordField[1]
-            const fieldType = validateType(typeForm)
-            fields.push({ name: fieldName, typeForm, fieldType })
+            fields.push({ name: fieldName, typeForm })
           }
           const jsConstructor = jsArrowExpNoRest(fieldNames, mkObject(...fieldNames.map((f) => [f, jsVar(f)])))
           await setDef(topContext, typeName, 'recordCtor', jsConstructor)
