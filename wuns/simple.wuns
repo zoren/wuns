@@ -1973,6 +1973,9 @@
     [type/tuple types]
     [list-map t types [type-to-wat-type t]]
 
+    [type/record fields]
+    [list-map field fields [type-to-wat-type [pair/snd field]]]
+
     [type/union types]
     [if [is-empty types]
       [list]
@@ -2372,6 +2375,9 @@
     [exp/tuple elems]
     [wat-inst/instructions [list-map elem elems [exp-to-inst elem]]]
 
+    [exp/record fields]
+    [wat-inst/instructions [list-map field fields [exp-to-inst [pair/snd field]]]]
+
     [exp/pfield p-target-exp field-name]
     [let
       [pp [get-pointer-args [type-of p-target-exp]]]
@@ -2403,8 +2409,14 @@
           [type/tuple elem-types]
           [loop [i 0 n [size elem-types] acc cur-target]
             [when [lt-s i n]
-              [let
-                [telem [at elem-types i]]
+              [let [telem [at elem-types i]]
+                [di telem acc]
+                [continue i [inc i] acc [int-exp-add acc [type-to-size-of-exp-current-tenv telem]]]]]]
+
+          [type/record fields]
+          [loop [i 0 n [size fields] acc cur-target]
+            [when [lt-s i n]
+              [let [telem [pair/snd [at fields i]]]
                 [di telem acc]
                 [continue i [inc i] acc [int-exp-add acc [type-to-size-of-exp-current-tenv telem]]]]]]
 
@@ -2460,6 +2472,19 @@
                       acc
                       [type-to-primitive telem]
                       [wat-inst/local.get [concat-words vn-src [int-to-word i]]]]
+                    [continue i [inc i] acc [int-exp-add acc [type-to-size-of-exp-current-tenv telem]]]]]]]
+
+            [type/record fields]
+            [let [vn-src [name/word src-name]]
+              [loop [i 0 n [size fields] acc int-const-0]
+                [when [lt-s i n]
+                  [let
+                    [field [at fields i]
+                     telem [pair/snd field]]
+                    [add-prim
+                      acc
+                      [type-to-primitive telem]
+                      [wat-inst/local.get [concat-words vn-src [name/word [pair/fst field]]]]]
                     [continue i [inc i] acc [int-exp-add acc [type-to-size-of-exp-current-tenv telem]]]]]]]
 
             [add-prim target-offset [type-to-primitive tsrc] [exp-to-inst src]]]
@@ -2572,6 +2597,12 @@
           [for j 0 [size types]
             [push gparams
               [pair [concat-words pnw [int-to-word j]] [type-to-wat-type [at types j]]]]]
+
+          [type/record fields]
+          [for j 0 [size fields]
+            [push gparams
+              [let [field [at fields j]]
+                [pair [concat-words pnw [name/word [pair/fst field]]] [type-to-wat-type [pair/snd field]]]]]]
 
           [push gparams [pair pnw [type-to-wat-type ept]]]]]]
     [push wat-funcs
