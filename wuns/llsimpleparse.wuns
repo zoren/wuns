@@ -1206,18 +1206,18 @@
       [push-error gctx pf [static-list [text 'not a form-list']]]
       list-empty-pform]]]
 
-[defn form-to-top [gctx [pmem [global-context]] f [pmem [form]]] [tuple]
+[defn form-to-top [gctx [pmem [global-context]] form [pmem [form]]] [tuple]
   [ifs
-    [form-word-is f]
+    [form-word-is form]
     [do
       [log-abort [text 'form-to-top word case not implemented']]]
 
-    [form-list-is f]
-    [let [fl [form-list-get f]
+    [form-list-is form]
+    [let [fl [form-list-get form]
           n [list-size fl]
           n-args [dec n]]
       [if [eq n 0]
-        [log-abort [text 'form-to-top empty list not allowed']]]
+        [push-error gctx form [static-list [text 'form-to-top empty list not allowed']]]]
       [let [fw [form-word-get [list-get fl 0]]]
         [ifs
           [word-eq fw [static-list [text defn]]]
@@ -1226,9 +1226,9 @@
               [log-abort [text 'form-to-top defn expects at least 3 arguments']]]
             [let
               [name-form [list-get fl 1]
-               fname [form-word-get name-form]
                param-list [form-list-get-report gctx [list-get fl 2]]
                result-type [form-to-type gctx [list-get fl 3]]
+               fname [form-word-get name-form]
                n-of-param-forms [list-size param-list]
                lctx [local-context-alloc context-kind-func local-context-empty [half n-of-param-forms]]
                locals-array [list-data-array [pfield lctx locals]]
@@ -1255,11 +1255,12 @@
               [loop [j 4 bodies [list-alloc-pexp [sub n 4]]]
                 [if [lt-s j n]
                   [do
+                    ; list-map would have been nice here
                     [list-set bodies [sub j 4] [form-to-exp gctx lctx [list-get fl j]]]
                     [continue j [inc j]]]
                   [do
                     [when [not [type-assignable result-type [type-ofs gctx [cast [plist [pexp]] bodies]]]]
-                      [push-error gctx f [static-list [text 'result type mismatch']]]]
+                      [push-error gctx form [static-list [text 'result type mismatch']]]]
                     [passign [pfield desc body] bodies]]]]]]
 
           [word-eq fw [static-list [text def]]]
