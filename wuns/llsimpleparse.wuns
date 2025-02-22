@@ -484,6 +484,11 @@
   [if [le-s [list-size pvec] i] [log-abort [text 'list-get index out of bounds']]]
   [deref [pindex [pfield pvec array] i]]]
 
+[genfn list-set [elem-type datatype] [pvec [pmem [list-data elem-type -sz]] i [i32] elem elem-type] [tuple]
+  [if [lt-s i 0] [log-abort [text 'list-set index negative']]]
+  [if [le-s [list-size pvec] i] [log-abort [text 'list-set index out of bounds']]]
+  [passign [pindex [pfield pvec array] i] elem]]
+
 [genfn list-data-array [a datatype] [pvec [plist a]] [pmem [array a]]
   [pfield pvec array]]
 
@@ -539,6 +544,11 @@
       [growable-list-resize pglist [mul cur-capacity 2]]]
     [passign [pindex [deref [pfield pglist parray]] cur-size] elem]
     [passign [pfield pglist size] [inc cur-size]]]]
+
+[genfn growable-list-get-p [elem-type datatype] [pglist [p-growable-list elem-type] i [i32]] [pmem elem-type]
+  [if [lt-s i 0] [log-abort [text 'growable-list-get i negative']]]
+  [if [le-s [list-size pglist] i] [log-abort [text 'growable-list-get i out of bounds']]]
+  [pindex [deref [pfield pglist parray]] i]]
 
 [genfn growable-list-get [elem-type datatype] [pglist [p-growable-list elem-type] i [i32]] elem-type
   [if [lt-s i 0] [log-abort [text 'growable-list-get i negative']]]
@@ -906,7 +916,7 @@
 [def type-f64 [i32 0x7c]]
 [def type-v128 [i32 0x7b]]
 ; wasm empty block type is 0x40
-[def type-empty [i32 0x40]]
+[def type-tuple-empty [i32 0x40]]
 
 [def type-error [i32 0]]
 
@@ -918,14 +928,15 @@
   [record
     [tag [exp global-desc-defn-tag]]
     [parameters [plist [tuple [text] [wtype]]]]
-    [result [wtype]]]]
+    [result [wtype]]
+    [body [plist [pexp]]]]]
 
 [def global-desc-def-tag [i32 2]]
 
 [datatype global-desc-def []
   [record
     [tag [exp global-desc-def-tag]]
-    [type [wtype]]]]
+    [exp [pexp]]]]
 
 [datatype global-context-kind []
   [union
@@ -1008,7 +1019,6 @@
     [cur-size [deref [pfield pglist size]]
      i 0]
     [when [lt-s i cur-size]
-
       [log-i32 [deref [pindex [pindex [deref [pfield pglist parray]] i] [i32 0]]]]
       [log-i32 [deref [pindex [pindex [deref [pfield pglist parray]] i] [i32 1]]]]
       [continue i [inc i]]]]]
@@ -1066,6 +1076,12 @@
             [i32 -1]]
           [deref annotated-type]]]]]]
 
+[defn type-ofs [gctx [pmem [global-context]] es [plist [pexp]]] [wtype]
+  [let [sz [list-size es]]
+    [if sz
+      [type-of gctx [list-get es [dec sz]]]
+      type-tuple-empty]]]
+
 [defn type-assignable [dst [wtype] src [wtype]] [i32]
   [eq dst src]]
 
@@ -1076,6 +1092,8 @@
 
 [defn annotate [gctx [pmem [global-context]] exp [pexp] t [wtype]] [tuple]
   [assoc-list-push [deref [pfield gctx exp-types]] exp t]]
+
+[def list-alloc-pexp [list-alloc [pexp]]]
 
 [defn form-to-exp [gctx [pmem [global-context]] lctx [plocal-context] f [pmem [form]]] [pexp]
   [ifs
@@ -1093,7 +1111,7 @@
                 type-error]
               [let [pdesc [deref ppdesc]]
                 [if [eq [deref [pfield pdesc tag]] global-desc-def-tag]
-                  [deref [pfield [cast [pmem [global-desc-def]] pdesc] type]]
+                  [type-of gctx [deref [pfield [cast [pmem [global-desc-def]] pdesc] exp]]]
                   [do
                     [push-error gctx f [static-list [text 'variable not a def']]]
                     type-error]]]]]]
@@ -1175,6 +1193,19 @@
 
 [def context-kind-func [i32 1]]
 
+[functor list-empty [t datatype]
+  [cast [plist t] [data mem [record size [i32 0]]]]]
+
+[def list-empty-pform [list-empty [pform]]]
+
+[defn form-list-get-report [gctx [pmem [global-context]] pf [pform]] [plist [pform]]
+  [if [form-list-is pf]
+    [let [pfl [cast [pmem [form-list]] pf]]
+      [deref [pfield pfl forms]]]
+    [do
+      [push-error gctx pf [static-list [text 'not a form-list']]]
+      list-empty-pform]]]
+
 [defn form-to-top [gctx [pmem [global-context]] f [pmem [form]]] [tuple]
   [ifs
     [form-word-is f]
@@ -1194,15 +1225,16 @@
             [if [lt-s n-args 3]
               [log-abort [text 'form-to-top defn expects at least 3 arguments']]]
             [let
-              [fname [form-word-get [list-get fl 1]]
-               param-list [form-list-get [list-get fl 2]]
+              [name-form [list-get fl 1]
+               fname [form-word-get name-form]
+               param-list [form-list-get-report gctx [list-get fl 2]]
                result-type [form-to-type gctx [list-get fl 3]]
                n-of-param-forms [list-size param-list]
                lctx [local-context-alloc context-kind-func local-context-empty [half n-of-param-forms]]
                locals-array [list-data-array [pfield lctx locals]]
-               ]
+               desc [alloc [global-desc-defn]]]
               [if [is-odd n-of-param-forms]
-                [log-abort [text 'form-to-top defn expects a parameter list with names and type pairs']]]
+                [push-error gctx name-form [static-list [text 'form-to-top defn expects a parameter list with names and type pairs']]]]
               [loop [i 0 ti 0]
                 [when [lt-s i [dec n-of-param-forms]]
                   [let
@@ -1212,10 +1244,23 @@
                       [pindex locals-array ti]
                       [tuple lname ltype]]
                     [continue i [add 2 i] ti [inc ti]]]]]
-              [loop [j 4]
-                [when [lt-s j n]
-                  [form-to-exp gctx lctx [list-get fl j]]
-                  [continue j [inc j]]]]]]
+              [if [assoc-list-get-value [deref [pfield gctx names]] fname]
+                [push-error gctx name-form [static-list [text 'name already defined']]]]
+              [passign desc
+                [record
+                  tag [annotation [exp global-desc-defn-tag] global-desc-defn-tag]
+                  parameters [cast [plist [tuple [text] [wtype]]] [pfield lctx locals]]
+                  result result-type]]
+              [assoc-list-push [deref [pfield gctx names]] fname desc]
+              [loop [j 4 bodies [list-alloc-pexp [sub n 4]]]
+                [if [lt-s j n]
+                  [do
+                    [list-set bodies [sub j 4] [form-to-exp gctx lctx [list-get fl j]]]
+                    [continue j [inc j]]]
+                  [do
+                    [when [not [type-assignable result-type [type-ofs gctx [cast [plist [pexp]] bodies]]]]
+                      [push-error gctx f [static-list [text 'result type mismatch']]]]
+                    [passign [pfield desc body] bodies]]]]]]
 
           [word-eq fw [static-list [text def]]]
           [do
@@ -1223,9 +1268,13 @@
               [log-abort [text 'form-to-top def expects a name and an expression']]]
             [let
               [dname [form-word-get [list-get fl 1]]
-               exp [form-to-exp gctx local-context-empty [list-get fl 2]]]
-              ; insert the desc
-               ]]
+               exp [form-to-exp gctx local-context-empty [list-get fl 2]]
+               def-desc [alloc [global-desc-def]]]
+              [passign def-desc
+                [record
+                  tag [annotation [exp global-desc-def-tag] global-desc-def-tag]
+                  exp exp]]
+              [assoc-list-push [deref [pfield gctx names]] dname def-desc]]]
 
           [word-eq fw [static-list [text export]]]
           [do
@@ -1254,8 +1303,10 @@
     [let [errors [deref [pfield gctx errors]]]
       [loop [j 0 nerr [list-size errors]]
         [when [lt-s j nerr]
-          [log-text [growable-list-get errors j]]
-          [continue j [inc j]]]]]
+          [let [error [growable-list-get-p errors j]]
+            [log-text [deref [pfield error message]]]
+            [log-i32 [deref [pfield error offset]]]
+            [continue j [inc j]]]]]]
     gctx]]
 
 [export parse-translate]

@@ -1894,7 +1894,7 @@
                 [set-kv-map top-funcs [name/word fname] exp-func]
                 [match [go-tai [transient-kv-map] return-type inferred-return-type]
                   [result/ok -] [do]
-                  [result/error error] [do [log error] [logq-abort bla]]]
+                  [result/error error] [do [log error] [logq-abort [identity fw] error in return type [name/word fname]]]]
                 [when is-defn
                   [push top-decls [top-decl/function exp-func]]]]]]
 
