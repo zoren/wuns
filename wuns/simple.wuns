@@ -1948,7 +1948,7 @@
   [if [primitive-is-wasm-value-type p]
     p
     [if [primitive-type-is-integer p]
-      type-primitive-i32
+      type-primitive-i64
       [logq-abort not implemented lift-primitive [identity p]]]]]
 
 [func type-to-wat-type [t]
@@ -2426,7 +2426,7 @@
               [wat-inst/load-opt
                 [wasm-name-to-wat-byte-array
                   [prim-types-to-load-inst-name
-                    [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i32]
+                    [if [primitive-is-wasm-value-type target-prim] target-prim type-primitive-i64]
                     target-prim]]
                 [wat-inst-memargs-opt
                   mem-name-some

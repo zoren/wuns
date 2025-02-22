@@ -86,14 +86,14 @@
 [defn memory-copy [pdst [pmem -a] psrc [pmem -a] n-bytes [i32]] [tuple]
   [intrinsic memory.copy mem [cast [i32] pdst] [cast [i32] psrc] n-bytes]]
 
-[defn memory-compare [p1 [pmem [array [u8]]] p2 [pmem [array [u8]]] n-bytes [i32]] [i32]
+[defn memory-compare [p1 [pmem [array [u8]]] p2 [pmem [array [u8]]] n-bytes [i32]] [i64]
   [loop [i 0]
     [if [lt-s i n-bytes]
-      [let [diff [sub [deref [pindex p1 i]] [deref [pindex p2 i]]]]
-        [if [eq diff 0]
+      [let [diff [intrinsic i64.sub [deref [pindex p1 i]] [deref [pindex p2 i]]]]
+        [if [intrinsic i64.eq diff [i64 0]]
           [continue i [inc i]]
           diff]]
-      [i32 0]]]]
+      [i64 0]]]]
 
 [defn memory-size-bytes [] [i32]
   [intrinsic i32.shl [intrinsic memory.size mem] [i32 16]]]
@@ -436,16 +436,16 @@
   [realloc old-p old-n-bytes 0]
   [do]]
 
-[defn is-between-inclusive [lower [i32] c [i32] upper [i32]] [i32]
-  [bitwise-and [le-s lower c] [le-s c upper]]]
+[defn is-between-inclusive [lower [i64] c [i64] upper [i64]] [i32]
+  [bitwise-and [intrinsic i64.le-s lower c] [intrinsic i64.le-s c upper]]]
 
-[defn is-whitespace [c [i32]] [i32]
-  [bitwise-ior [eq c [i32 32]] [eq c [i32 10]]]]
+[defn is-whitespace [c [i64]] [i32]
+  [bitwise-ior [intrinsic i64.eq c [i64 32]] [intrinsic i64.eq c [i64 10]]]]
 
-[defn is-word-char [c [i32]] [i32]
+[defn is-word-char [c [i64]] [i32]
   [bitwise-ior
-    [is-between-inclusive [i32 97] c [i32 122]]
-    [is-between-inclusive [i32 45] c [i32 57]]]]
+    [is-between-inclusive [i64 97] c [i64 122]]
+    [is-between-inclusive [i64 45] c [i64 57]]]]
 
 [datatype list-data [a datatype size [exp [i32]]]
   [record
@@ -767,7 +767,7 @@
         [cur-txt [growable-list-get texts txts-i]
          cur-sz [list-size cur-txt]]
         [if [eq cur-sz word-size]
-          [if [eq 0 [memory-compare [list-data-array cur-txt] pw word-size]]
+          [if [intrinsic i64.eq [i64 0] [memory-compare [list-data-array cur-txt] pw word-size]]
             cur-txt
             [continue txts-i [inc txts-i]]]
           [continue txts-i [inc txts-i]]]]
@@ -822,14 +822,14 @@
             [is-whitespace c]
             [continue i [inc i]]
 
-            [eq c [i32 91]]
+            [intrinsic i64.eq c [i64 91]]
             [do
               [if [lt-s stack-size stack-index] [log-abort [text 'stack max depth reached']]]
               [continue
                 i [inc i]
                 stack-index [inc stack-index]]]
 
-            [eq c [i32 93]]
+            [intrinsic i64.eq c [i64 93]]
             [do
               [if [is-negative stack-index] [log-abort [text 'unmatched end bracket']]]
               [let [glist [deref [pindex stack stack-index]]
@@ -867,7 +867,7 @@
     [let [n1 [list-size w1]
           n2 [list-size w2]]
       [if [eq n1 n2]
-        [eq [memory-compare [list-data-array w1] [list-data-array w2] n1] 0]
+        [intrinsic i64.eq [i64 0] [memory-compare [list-data-array w1] [list-data-array w2] n1]]
         false]]]]
 
 [def exp-i32-tag [i32 1]]
@@ -878,7 +878,7 @@
   wexp-i32 []
   [record
     [tag [exp exp-i32-tag]]
-    [value [i32]]]
+    [value [i64]]]
 
   wexp-var []
   [record
@@ -901,7 +901,7 @@
     [wexp-if]
     ]]
 
-[defn wexp-i32-alloc [i [i32]] [pexp]
+[defn wexp-i32-alloc [i [i64]] [pexp]
   [let
     [p [alloc [wexp-i32]]]
     [passign p
@@ -1036,24 +1036,24 @@
         message msg
         offset [deref p-offset]]]]]
 
-[defn dec-word-to-i32-error [gctx [pmem [global-context]] word-form [pform]] [i32]
+[defn dec-word-to-i64-error [gctx [pmem [global-context]] word-form [pform]] [i64]
   [let
     [w [form-word-get word-form]
      ws [list-size w]]
-    [loop [i 0 res 0]
+    [loop [i 0 res [i64 0]]
       [if [lt-s i ws]
         [let [cc [list-get w i]]
-          [if [bitwise-ior [lt-s cc [i32 48]] [lt-s [i32 57] cc]]
+          [if [not [is-between-inclusive [i64 48] cc [i64 57]]]
             [do
-              [push-error gctx word-form [static-list [text 'dec-word-to-i32 cc < 48 or cc > 57']]]
-              0]
+              [push-error gctx word-form [static-list [text 'dec-word-to-i64 cc < 48 or cc > 57']]]
+              [i64 0]]
             [let
-              [n [mul res [i32 10]]
-               s [add n [sub cc [i32 48]]]]
-              [if [lt-s s n]
+              [n [intrinsic i64.mul res [i64 10]]
+               s [intrinsic i64.add n [intrinsic i64.sub cc [i64 48]]]]
+              [if [intrinsic i64.lt-s s n]
                 [do
-                  [push-error gctx word-form [static-list [text 'dec-word-to-i32 overflow']]]
-                  0]
+                  [push-error gctx word-form [static-list [text 'dec-word-to-i64 overflow']]]
+                  [i64 0]]
                 [continue
                   res s
                   i [inc i]]]]]]
@@ -1137,9 +1137,9 @@
              [if [ne n-args 1]
               [do
                 [push-error gctx f [static-list [text 'form-to-exp i32 expects one argument']]]
-                [i32 0]]
-              [dec-word-to-i32-error gctx [list-get fl 1]]]]
-             [wexp-i32-alloc [wexp-i32-alloc value]]]
+                [i64 0]]
+              [dec-word-to-i64-error gctx [list-get fl 1]]]]
+             [wexp-i32-alloc value]]
 
           [word-eq fw [static-list [text if]]]
           [do
