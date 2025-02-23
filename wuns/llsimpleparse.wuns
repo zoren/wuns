@@ -1158,6 +1158,9 @@
     [word-eq fw [static-list [text i64]]]
     [tuple true [i64 8]]
 
+    [word-eq fw [static-list [text u64]]]
+    [tuple false [i64 8]]
+
     [log-abort [text 'primitive-int-name-to-signed-size unknown word']]]]
 
 [defn form-to-exp [gctx [pmem [global-context]] lctx [plocal-context] f [pmem [form]]] [pexp]
@@ -1200,7 +1203,7 @@
             [word-eq fw [static-list [text i8]]] [word-eq fw [static-list [text u8]]]
             [word-eq fw [static-list [text i16]]] [word-eq fw [static-list [text u16]]]
             [word-eq fw [static-list [text i32]]] [word-eq fw [static-list [text u32]]]
-            [word-eq fw [static-list [text i64]]]]
+            [word-eq fw [static-list [text i64]]] [word-eq fw [static-list [text u64]]]]
           [let
             [[signed byte-size] [primitive-int-name-to-signed-size fw]
               bit-size [intrinsic i64.mul byte-size [i64 8]]
