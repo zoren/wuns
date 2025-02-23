@@ -1059,7 +1059,7 @@
             [let
               [n [intrinsic i64.mul res [i64 10]]
                s [intrinsic i64.add n [intrinsic i64.sub cc [i64 48]]]]
-              [if [intrinsic i64.lt-s s n]
+              [if [intrinsic i64.lt-u s n]
                 [do
                   [push-error gctx word-form [static-list [text 'i64 overflow']]]
                   [i64 0]]
