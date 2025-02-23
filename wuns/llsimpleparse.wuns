@@ -138,7 +138,8 @@
     [frame-size-end [i32]]
     ]]
 
-[def canary-value [i64 0xdeadbeef]]
+; cacacadeadbeef in little endian
+[def canary-value [i64 0xefbeaddecacaca]]
 
 [mutable num-of-frames [i32 0]]
 

@@ -367,12 +367,93 @@
     [test-assert-eq [i32 -2] [js-app main]]
     ]]
 
-[defn test-assert-form-eq [expected actual]
-  [when-not [eq-form expected actual]
-    [logq test-assert-form-eq failed]
-    [logq expected [identity expected]]
-    [logq but got- [identity actual]]
-    [logq-abort test assert failed]]]
+[defn test-pointer-assign-primitives []
+  [let
+    [forms
+      [qlist
+[memory mem [i32] 1]
+
+[defn set-i8-i32 [p [pointer [exp mem] [i8]] v [i32]] [tuple] [passign p v]]
+
+[defn set-i8-i64 [p [pointer [exp mem] [i8]] v [i64]] [tuple] [passign p v]]
+
+[defn get-i8 [p [pointer [exp mem] [i8]]] [i64] [deref p]]
+
+[export set-i8-i32 set-i8-i64 get-i8]]
+     inst [forms-to-inst forms]
+     get-i8 [get-export inst [word get-i8]]
+     set-i8-i32 [get-export inst [word set-i8-i32]]
+     set-i8-i64 [get-export inst [word set-i8-i64]]
+     p [i32 16]
+     q [i32 17]]
+    [test-assert-eq [bigint 0] [js-app get-i8 p]]
+    [js-app set-i8-i64 q [bigint 2]]
+    ; if a too large instruction is used this will overwrite 2
+    [js-app set-i8-i64 p [bigint 1]]
+    [test-assert-eq [bigint 1] [js-app get-i8 p]]
+    [test-assert-eq [bigint 2] [js-app get-i8 q]]
+    [js-app set-i8-i64 p [bigint 127]]
+    [test-assert-eq [bigint 127] [js-app get-i8 p]]
+    [js-app set-i8-i64 p [bigint 128]]
+    [test-assert-eq [bigint -128] [js-app get-i8 p]]]
+  [let
+    [forms
+      [qlist
+[memory mem [i32] 1]
+
+[defn set-i16-i32 [p [pointer [exp mem] [i16]] v [i32]] [tuple] [passign p v]]
+
+[defn set-i16-i64 [p [pointer [exp mem] [i16]] v [i64]] [tuple] [passign p v]]
+
+[defn get-i16 [p [pointer [exp mem] [i16]]] [i64] [deref p]]
+
+[export set-i16-i32 set-i16-i64 get-i16]]
+     inst [forms-to-inst forms]
+     get-i16 [get-export inst [word get-i16]]
+     set-i16-i32 [get-export inst [word set-i16-i32]]
+     set-i16-i64 [get-export inst [word set-i16-i64]]
+     p [i32 16]
+     q [i32 18]]
+    [test-assert-eq [bigint 0] [js-app get-i16 p]]
+    [js-app set-i16-i64 q [bigint 2]]
+    ; if a too large instruction is used this will overwrite 2
+    [js-app set-i16-i64 p [bigint 1]]
+    [test-assert-eq [bigint 1] [js-app get-i16 p]]
+    [test-assert-eq [bigint 2] [js-app get-i16 q]]
+    [js-app set-i16-i64 p [bigint 32767]]
+    [test-assert-eq [bigint 32767] [js-app get-i16 p]]
+    [js-app set-i16-i64 p [bigint 32768]]
+    [test-assert-eq [bigint -32768] [js-app get-i16 p]]]
+
+[let
+    [forms
+      [qlist
+[memory mem [i32] 1]
+
+[defn set-i32-i32 [p [pointer [exp mem] [i32]] v [i32]] [tuple] [passign p v]]
+
+[defn set-i32-i64 [p [pointer [exp mem] [i32]] v [i64]] [tuple] [passign p v]]
+
+[defn get-i32 [p [pointer [exp mem] [i32]]] [i32] [deref p]]
+
+[export set-i32-i32 set-i32-i64 get-i32]]
+     inst [forms-to-inst forms]
+     get-i32 [get-export inst [word get-i32]]
+     set-i32-i32 [get-export inst [word set-i32-i32]]
+     set-i32-i64 [get-export inst [word set-i32-i64]]
+     p [i32 16]
+     q [i32 20]]
+    [test-assert-eq [i32 0] [js-app get-i32 p]]
+    [js-app set-i32-i64 q [bigint 2]]
+    ; if a too large instruction is used this will overwrite 2
+    [js-app set-i32-i64 p [bigint 1]]
+    [test-assert-eq [i32 1] [js-app get-i32 p]]
+    [test-assert-eq [i32 2] [js-app get-i32 q]]
+    [js-app set-i32-i64 p [bigint 2147483647]]
+    [test-assert-eq [i32 2147483647] [js-app get-i32 p]]
+    [js-app set-i32-i64 p [bigint 2147483648]]
+    [test-assert-eq [i32 -2147483648] [js-app get-i32 p]]]
+  ]
 
 [defn test-func-exp []
   [let
@@ -454,6 +535,7 @@
   [test-mutable]
   [test-pointers-float]
   [test-pointers]
+  [test-pointer-assign-primitives]
   [test-array]
   [test-array-exp]
   [test-record-exp]
@@ -491,6 +573,13 @@
     [let [import-map [transient-kv-map]]
       [set-kv-map import-map [word env] [kv-map-to-object env]]
       [kv-map-to-object import-map]]]]
+
+[defn test-assert-form-eq [expected actual]
+  [when-not [eq-form expected actual]
+    [logq test-assert-form-eq failed]
+    [logq expected [identity expected]]
+    [logq but got- [identity actual]]
+    [logq-abort test assert failed]]]
 
 [defn test-parse []
   [promise-then

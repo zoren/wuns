@@ -904,10 +904,9 @@
     [[word passign]]
     [let [dst [form-to-exp-type-kind-env type-kind-env lctx [second l]]
           src [form-to-exp-type-kind-env type-kind-env lctx [third l]]
-          tdst [type-of dst]
-          pp [get-pointer-args tdst]
+          tdst [pair/snd [get-pointer-args [type-of dst]]]
           tsrc [type-of src]]
-      [when-not [type-assignable [pair/snd pp] tsrc]
+      [when-not [type-assignable tdst tsrc]
         [logq-abort typing passign failed [identity l]]]
       [exp/passign dst src]]
 
@@ -1140,19 +1139,19 @@
 [func type-assignable [tdst tsrc]
   [match [go-tai [transient-kv-map] tdst tsrc]
     [result/ok -] true
-    [result/error -] false]]
+    [result/error err]
+    [do
+      [log err]
+      false]]]
 
 [func go-tais [tenv dargs sargs]
   [assert [eq [size dargs] [size sargs]] equal num of types]
   [loop [i 0 n [size dargs] cur-tenv tenv]
     [if [lt-s i n]
-      [let [res [go-tai cur-tenv [at dargs i] [at sargs i]]]
-        [match res
-          [result/ok ntenv]
-          [continue i [inc i] cur-tenv ntenv]
-
-          [result/error -]
-          res]]
+      [result-bind
+        [go-tai cur-tenv [at dargs i] [at sargs i]]
+        ntenv
+        [continue i [inc i] cur-tenv ntenv]]
       [result/ok cur-tenv]]]]
 
 [func go-tai [tenv param-t arg-t]
@@ -1174,11 +1173,12 @@
         [result/error [qlist primitive only integer supported]]]
 
       [type/primitive spt]
-      [if [if [and [primitive-type-is-integer dpt] [primitive-type-is-integer spt]]
-            [le-s [primitive-type/bytes spt] [primitive-type/bytes dpt]]
-            [is-identical dpt spt]]
+      [if
+        [or
+          [is-identical dpt spt]
+          [and [primitive-type-is-integer dpt] [primitive-type-is-integer spt]]]
         [result/ok tenv]
-        [result/error [qlist primitive type does not match primitive]]]
+        [result/error [qlist primitive type does not match]]]
 
       [result/error [qlist primitive type does not match]]]
 
@@ -2210,6 +2210,9 @@
 [func type-to-wat-types-current [t]
   [type-to-wat-types [type-substitute type-env t]]]
 
+[func type-substitute-expand [t]
+  [expand-custom-n [type-substitute type-env t]]]
+
 [func exp-to-inst [exp]
   [match exp
     [exp/integer pt n]
@@ -2440,13 +2443,13 @@
 
     [exp/passign target src]
     [let
-    [mt [pair/fst [get-pointer-args [type-of target]]]
-     mem-name-some [option/some [get-exp-var [option-get [try-get-type-exp mt]]]]
+    [ptup [get-pointer-args [type-of target]]
+     mem-name-some [option/some [get-exp-var [option-get [try-get-type-exp [pair/fst ptup]]]]]
      ginsts [growable-list]
      add-prim
-      [func add-prim [target-offset src-prim wat-src]
+      [func add-prim [target-offset dst-prim src-prim wat-src]
         [let
-          [intr-name [prim-types-to-store-inst-name src-prim src-prim]
+          [intr-name [prim-types-to-store-inst-name dst-prim src-prim]
            p-p-offset [int-exp-add target target-offset]
            exp-const-pair-opt [try-get-i32-add-const p-p-offset]
            offset-opt [option-map pair/snd exp-const-pair-opt]
@@ -2461,19 +2464,21 @@
               [exp-to-inst trimmed-target]
               wat-src]]]]
      assign-exp
-     [func assign-exp [target-offset tsrc src]
+     [func assign-exp [target-offset tdst src]
         [match src
           [exp/var src-name]
-          [match tsrc
+          [match [type-substitute-expand [type-of src]]
             [type/tuple elem-types]
             [let [vn-src [name/word src-name]]
               [loop [i 0 n [size elem-types] acc int-const-0]
                 [when [lt-s i n]
                   [let
-                    [telem [at elem-types i]]
+                    [telem [type-substitute-expand [at elem-types i]]
+                     ptelem [type-to-primitive telem]]
                     [add-prim
                       acc
-                      [type-to-primitive telem]
+                      ptelem
+                      ptelem
                       [wat-inst/local.get [concat-words vn-src [int-to-word i]]]]
                     [continue i [inc i] acc [int-exp-add acc [type-to-size-of-exp-current-tenv telem]]]]]]]
 
@@ -2483,14 +2488,16 @@
                 [when [lt-s i n]
                   [let
                     [field [at fields i]
-                     telem [pair/snd field]]
+                     telem [type-substitute-expand [pair/snd field]]
+                     ptelem [type-to-primitive telem]]
                     [add-prim
                       acc
-                      [type-to-primitive telem]
+                      ptelem
+                      ptelem
                       [wat-inst/local.get [concat-words vn-src [name/word [pair/fst field]]]]]
                     [continue i [inc i] acc [int-exp-add acc [type-to-size-of-exp-current-tenv telem]]]]]]]
 
-            [add-prim target-offset [type-to-primitive tsrc] [exp-to-inst src]]]
+            [add-prim target-offset [type-to-primitive [type-substitute-expand tdst]] [type-to-primitive [type-substitute-expand [type-of src]]] [exp-to-inst src]]]
 
           [exp/array tvalue-elem elems]
           [do
@@ -2527,10 +2534,14 @@
                   [assign-exp [int-exp-add target-offset acc] tfield field-exp]
                   [continue i [inc i] acc [int-exp-add acc [type-to-size-of-exp-current-tenv tfield]]]]]]]
 
-          [add-prim target-offset [type-to-primitive [type-substitute type-env tsrc]] [exp-to-inst src]]]]
-     tsrc [expand-custom-n [type-substitute type-env [type-of src]]]
+          [add-prim
+            target-offset
+            [type-to-primitive [type-substitute-expand [type-of src]]]
+            [type-to-primitive [type-substitute-expand [type-of src]]]
+            [exp-to-inst src]]]]
+     tdst [pair/snd ptup]
      orig-offset int-const-0]
-    [assign-exp orig-offset tsrc src]
+    [assign-exp orig-offset tdst src]
     [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]
 
     [exp/data mem-name-exp data-exp]
