@@ -880,10 +880,12 @@
 [def exp-if-tag [i32 3]]
 
 [datatype
-  wexp-i32 []
+  wexp-integer []
   [record
     [tag [exp exp-i32-tag]]
-    [value [i64]]]
+    [value [i64]]
+    [negative [i32]]
+    [byte-size [i64]]]
 
   wexp-var []
   [record
@@ -901,18 +903,20 @@
 
   wexp []
   [union
-    [wexp-i32]
+    [wexp-integer]
     [wexp-var]
     [wexp-if]
     ]]
 
-[defn wexp-i32-alloc [i [i64]] [pexp]
+[defn wexp-integer-alloc [i [i64] negative [i32] byte-size [i64]] [pexp]
   [let
-    [p [alloc [wexp-i32]]]
+    [p [alloc [wexp-integer]]]
     [passign p
       [record
         tag [annotation [exp exp-i32-tag] exp-i32-tag]
-        value i]]
+        value i
+        negative negative
+        byte-size byte-size]]
     p]]
 
 [def type-i32 [i32 0x7f]]
@@ -1041,7 +1045,7 @@
         message msg
         offset [deref p-offset]]]]]
 
-[defn dec-word-to-i64-error [gctx [pmem [global-context]] word-form [pform]] [i64]
+[defn dec-word-to-i64-unsigned [gctx [pmem [global-context]] word-form [pform]] [i64]
   [let
     [w [form-word-get word-form]
      ws [list-size w]]
@@ -1063,6 +1067,37 @@
                   res s
                   i [inc i]]]]]]
         res]]]]
+
+; https://github.com/skeeto/scratch/blob/master/parsers/strtonum.c
+[defn dec-word-to-i64-signed [gctx [pmem [global-context]] word-form [pform]] [tuple [i32] [i64]]
+  [let
+    [w [form-word-get word-form]
+     ws [list-size w]
+     first [list-get w 0]]
+    [if [intrinsic i64.eq first [i64 45]]
+      [tuple
+        true
+        [loop [i 1 res [i64 0]]
+          [if [lt-s i ws]
+            [let [cc [list-get w i]]
+              [if [not [is-between-inclusive [i64 48] cc [i64 57]]]
+                [do
+                  [push-error gctx word-form [static-list [text 'not a valid digit']]]
+                  [i64 0]]
+                [let
+                  [n [intrinsic i64.mul res [i64 10]]
+                   s [intrinsic i64.sub n [intrinsic i64.sub cc [i64 48]]]]
+                  [if [intrinsic i64.lt-s n s]
+                    [do
+                      [push-error gctx word-form [static-list [text 'i64 underflow']]]
+                      [i64 0]]
+                    [continue
+                      res s
+                      i [inc i]]]]]]
+            res]]]
+      [tuple
+        false
+        [dec-word-to-i64-unsigned gctx word-form]]]]]
 
 [defn type-of [gctx [pmem [global-context]] e [pexp]] [i32]
   [let [tag [deref [pfield e tag]]]
@@ -1100,6 +1135,31 @@
 
 [def list-alloc-pexp [list-alloc [pexp]]]
 
+[defn primitive-int-name-to-signed-size [fw [text]] [tuple [i32] [i64]]
+  [ifs
+    [word-eq fw [static-list [text i8]]]
+    [tuple true [i64 1]]
+
+    [word-eq fw [static-list [text u8]]]
+    [tuple false [i64 1]]
+
+    [word-eq fw [static-list [text i16]]]
+    [tuple true [i64 2]]
+
+    [word-eq fw [static-list [text u16]]]
+    [tuple false [i64 2]]
+
+    [word-eq fw [static-list [text i32]]]
+    [tuple true [i64 4]]
+
+    [word-eq fw [static-list [text u32]]]
+    [tuple false [i64 4]]
+
+    [word-eq fw [static-list [text i64]]]
+    [tuple true [i64 8]]
+
+    [log-abort [text 'primitive-int-name-to-signed-size unknown word']]]]
+
 [defn form-to-exp [gctx [pmem [global-context]] lctx [plocal-context] f [pmem [form]]] [pexp]
   [ifs
     [form-word-is f]
@@ -1136,18 +1196,36 @@
         [log-abort [text 'form-to-exp empty list not allowed']]]
       [let [fw [form-word-get [list-get fl 0]]]
         [ifs
-          [word-eq fw [static-list [text i32]]]
+          [or
+            [word-eq fw [static-list [text i8]]] [word-eq fw [static-list [text u8]]]
+            [word-eq fw [static-list [text i16]]] [word-eq fw [static-list [text u16]]]
+            [word-eq fw [static-list [text i32]]] [word-eq fw [static-list [text u32]]]
+            [word-eq fw [static-list [text i64]]]]
           [let
-            [value
+            [[signed byte-size] [primitive-int-name-to-signed-size fw]
+              bit-size [intrinsic i64.mul byte-size [i64 8]]
+             [negative value]
              [if [ne n-args 1]
               [do
                 [push-error gctx f [static-list [text 'expects one argument']]]
-                [i64 0]]
-              [dec-word-to-i64-error gctx [list-get fl 1]]]]
-            [when [intrinsic i64.le-s [i64 4294967296] value]
-              [log-i64 value]
-              [push-error gctx f [static-list [text 'i32 value out of range']]]]
-            [wexp-i32-alloc value]]
+                [tuple [i32 0] [i64 0]]]
+              [dec-word-to-i64-signed gctx [list-get fl 1]]]]
+            [if signed
+              [let
+                [pow2 [intrinsic i64.shl [i64 1] [intrinsic i64.sub bit-size [i64 1]]]
+                 lower [intrinsic i64.sub [i64 0] pow2]
+                 upper [intrinsic i64.sub pow2 [i64 1]]]
+                [when [intrinsic i64.lt-s value lower]
+                  [push-error gctx f [static-list [text 'signed value out of range']]]]
+                [when [intrinsic i64.lt-s upper value]
+                  [push-error gctx f [static-list [text 'signed value out of range']]]]]
+              [do
+                [when negative
+                  [push-error gctx f [static-list [text 'negative value for unsigned type']]]]
+                [let [unsigned-upper [intrinsic i64.shl [i64 1] bit-size]]
+                  [when [intrinsic i64.le-s unsigned-upper value]
+                    [push-error gctx f [static-list [text 'unsigned value out of range']]]]]]]
+            [wexp-integer-alloc value negative byte-size]]
 
           [word-eq fw [static-list [text if]]]
           [do
