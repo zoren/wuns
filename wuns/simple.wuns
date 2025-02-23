@@ -881,6 +881,41 @@
               res]
             i [sub i 2]]]]]
 
+    [[word and]]
+    [let
+      [clauses [rest l]
+       s [size clauses]
+       expanded
+        [if [is-zero s]
+          [quote [i32 1]]
+          [loop
+            [i [dec s]
+            res [at clauses -1]]
+            [if [eq i 0]
+              res
+              [continue
+                res [flist [quote if] [at clauses [dec i]] res [quote [i32 0]]]
+                i [dec i]]]]]]
+      [form-to-exp-type-kind-env type-kind-env lctx expanded]]
+
+    [[word or]]
+    [let
+      [clauses [rest l]
+       s [size clauses]
+       expanded
+        [if [is-zero s]
+          [quote [i32 0]]
+          [loop [i [dec s] res [at clauses -1]]
+            [if [eq i 0]
+              res
+              [continue
+                res
+                [let [w [genword]]
+                  [flist [quote let] [flist w [at clauses [dec i]]]
+                    [flist [quote if] w w res]]]
+                i [dec i]]]]]]
+      [form-to-exp-type-kind-env type-kind-env lctx expanded]]
+
     [[word cast]]
     [exp/cast [form-to-type-type-env type-kind-env lctx [second l]] [form-to-exp-type-kind-env type-kind-env lctx [third l]]]
 
