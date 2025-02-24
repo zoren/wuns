@@ -1054,7 +1054,9 @@
           [let [n [form-to-name [pair/fst p]]
                 e [form-to-exp-type-kind-env type-kind-env lctx [pair/snd p]]]
             [if-let [ldesc [try-get loop-vars [name/word n]]]
-              [assert [type-assignable [local-var-desc/type ldesc] [type-of e]] continue expected assignable type [identity n] [identity ldesc] [type-of e]]
+              [do
+                [assert [type-assignable [local-var-desc/type ldesc] [type-of e]] continue expected assignable type [identity n] [identity ldesc] [type-of e]]
+                [set-kv-map name-to-desc n [name-desc [local-var-desc/type ldesc] [desc-kind/local [local-name-desc [local-context-kind/loop] ldesc]]]]]
               [logq-abort continue not a loop var]]
             [pair n e]]]]]
       [logq-abort continue not in loop]]
@@ -2469,7 +2471,12 @@
     [wat-inst/instructions
       [concat
         [list-map a assignments
-          [wat-inst/local.set [name/word [pair/fst a]] [exp-to-inst [pair/snd a]]]]
+          [let
+            [n [pair/fst a]
+             ndesc [get-name-desc-from-name n]
+             ldesc [get-local-desc-from-name-desc ndesc]
+             wat-name [if-let [new-name [local-var-desc/new-name [local-name-desc/desc ldesc]]] new-name [name/word n]]]
+            [wat-inst/local.set wat-name [exp-to-inst [pair/snd a]]]]]
         [list [wat-inst/br [word loop-label]]]]]
 
     [exp/tuple elems]
