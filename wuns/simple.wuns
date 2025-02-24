@@ -419,6 +419,11 @@
     [local local-context-kind]
     [top top-desc]]]
 
+[type name-desc []
+  [record
+    [type type]
+    [kind desc-kind]]]
+
 [type exp2inst-compiler []
   [record
     [exp-to-inst [func [exp] wat-inst]]
@@ -612,9 +617,9 @@
     [name-word [name/word name]
      opt-desc
      [if-let [ldesc [try-get-local lctx name-word]]
-      [option/some [pair [pair/fst ldesc] [desc-kind/local [pair/snd ldesc]]]]
+      [option/some [name-desc [pair/fst ldesc] [desc-kind/local [pair/snd ldesc]]]]
       [if-let [td [try-get top-names name-word]]
-        [option/some [pair [pair/fst td] [desc-kind/top [pair/snd td]]]]
+        [option/some [name-desc [pair/fst td] [desc-kind/top [pair/snd td]]]]
         [option/none]]]]
     [when-let [desc opt-desc]
       [set-kv-map name-to-desc name desc]]
@@ -643,14 +648,14 @@
       [if-let [fw [try-get-word ff]]
         [let [fn [form-to-name ff]]
           [if-let [desc [try-lookup-bind-name lctx fn]]
-            [match [pair/snd desc]
+            [match [name-desc/kind desc]
               [desc-kind/local kind]
               [logq-abort form-to-exp-type-kind-env not a top def [identity ff]]
 
               [desc-kind/top td]
               [match [top-desc/kind td]
                 [top-desc-kind/value val-desc]
-                [match [pair/fst desc]
+                [match [name-desc/type desc]
                   [type/func tf]
                   [let
                     [tparams [type-func/type-parameters tf]
@@ -676,7 +681,7 @@
                             [logq-abort call-functor expected same type [identity tk] [identity pk]]]]]]
                     [exp/call-functor fn targs]]]
 
-                [logq-abort form-to-exp-type-kind-env not a function [identity ff] [pair/snd desc]]
+                [logq-abort form-to-exp-type-kind-env not a function [identity ff] [identity desc]]
                     ]]
 
           [form-special-to-exp type-kind-env lctx fw l]]]
@@ -1124,26 +1129,33 @@
           [logq-abort unsupported literal type]]]
       [logq-abort form-special-to-exp not impl [identity fw]]]]]
 
-[func get-desc-from-name [n]
+[func get-name-desc-from-name [n]
   [if-let [desc [try-get name-to-desc n]]
-    [pair/snd desc]
-    [logq-abort get-desc-from-name not found [name/word n]]]]
+    desc
+    [logq-abort get-name-desc-from-name not found [name/word n]]]]
 
-[func name-to-type [n]
-  [if-let [desc [try-get name-to-desc n]]
-    [pair/fst desc]
-    [logq-abort name-to-type not found [identity n]]]]
+[func get-top-desc-from-name-desc [nd]
+  [match [name-desc/kind nd]
+    [desc-kind/top td] td
+    [logq-abort get-top-desc-from-name-desc not a global]]]
 
-[func get-top-desc-from-name [n]
-  [match [get-desc-from-name n]
-    [desc-kind/local -] [logq-abort unreachable export local]
-    [desc-kind/top td] td]]
+[func get-functor-desc-from-top-desc-kind [tdk]
+  [match tdk
+    [top-desc-kind/functor fd] fd
+    [logq-abort not a functor]]]
+
+[func get-functor-desc [fn]
+  [get-functor-desc-from-top-desc-kind
+    [top-desc/kind
+      [get-top-desc-from-name-desc
+        [get-name-desc-from-name fn]]]]]
 
 [func names-same-binding [n1 n2]
   [and
     [eq-word [name/word n1] [name/word n2]]
     [let
-      [d1 [get-desc-from-name n1] d2 [get-desc-from-name n2]]
+      [d1 [name-desc/kind [get-name-desc-from-name n1]]
+       d2 [name-desc/kind [get-name-desc-from-name n2]]]
       [match d1
         [desc-kind/local ld1]
         [match d2
@@ -1468,11 +1480,6 @@
 
     targ]]
 
-[func get-functor-desc [fn]
-  [match [top-desc/kind [get-top-desc-from-name fn]]
-    [top-desc-kind/functor fd] fd
-    [logq-abort not a functor]]]
-
 [func functor-desc-to-type-env [fd targs]
   [assert [eq [size targs] [size [functor-desc/parameters fd]]] call-functor expected same number of arguments]
   [let [functor-type-env [transient-kv-map]]
@@ -1549,7 +1556,7 @@
     [common-super-type [type-of t] [type-of e]]
 
     [exp/call fname args]
-    [match [name-to-type fname]
+    [match [name-desc/type [get-name-desc-from-name fname]]
       [type/func tf]
       [let [tps [type-func/type-parameters tf]]
         [if [is-empty tps]
@@ -1571,7 +1578,7 @@
     t
 
     [exp/var n]
-    [name-to-type n]
+    [name-desc/type [get-name-desc-from-name n]]
 
     [exp/intrinsic intrinsic-name imm-args args]
     [intrinsic-type/result [intrinsic-type-from-name [name/word intrinsic-name]]]
@@ -1700,8 +1707,8 @@
   [match exp
     [exp/var n]
     [if-let [desc [try-get name-to-desc n]]
-      [let [t [pair/fst desc]]
-        [match [pair/snd desc]
+      [let [t [name-desc/type desc]]
+        [match [name-desc/kind desc]
           [desc-kind/local ld]
           [option/none]
 
@@ -2029,7 +2036,7 @@
     [match e
       [exp/integer pt -] [option/some pt]
       [exp/float pt -] [option/some pt]
-      [exp/var n] [try-get-primitive [name-to-type n]]
+      [exp/var n] [try-get-primitive [name-desc/type [get-name-desc-from-name n]]]
       [option/none]]
     [type/primitive p] [option/some p]
     [type/pointer mt -] [option/some [get-memory-pointer-type mt]]
@@ -2201,7 +2208,7 @@
 [func get-const [e]
   [match e
     [exp/var v]
-    [match [get-desc-from-name v]
+    [match [name-desc/kind [get-name-desc-from-name v]]
       [desc-kind/top td]
       [option-default [try-get value-constants [name/word v]] e]
 
@@ -2268,33 +2275,36 @@
       [logq-abort not implemented exp-to-inst float [identity pt]]] [f64-to-word f]]
 
     [exp/var n]
-    [match [get-desc-from-name n]
-      [desc-kind/top td]
-      [match [top-desc/kind td]
-        [top-desc-kind/value vd]
-        [do
-          [match [name-to-type n]
-            [type/func -]
-            [logq-abort not allowed function as value]
+    [let
+      [ndesc [get-name-desc-from-name n]
+       ntype [name-desc/type ndesc]]
+      [match [name-desc/kind ndesc]
+        [desc-kind/top td]
+        [match [top-desc/kind td]
+          [top-desc-kind/value vd]
+          [do
+            [match ntype
+              [type/func -]
+              [logq-abort not allowed function as value]
 
-            [type/tuple ts]
-            [logq-abort not implemented global tuples]
+              [type/tuple ts]
+              [logq-abort not implemented global tuples]
 
-            [do]]
-          [wat-inst/global.get [name/word n]]]
+              [do]]
+            [wat-inst/global.get [name/word n]]]
 
-        [logq-abort not implemented exp-to-inst var [identity n] [identity td]]]
+          [logq-abort not implemented exp-to-inst var [identity n] [identity td]]]
 
-      [desc-kind/local ld]
-      [match [name-to-type n]
-        [type/tuple ts]
-        [let [ginsts [growable-list]
-              vn [name/word n]]
-          [for i 0 [size ts]
-            [push ginsts [wat-inst/local.get [concat-words vn [int-to-word i]]]]]
-          [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]
+        [desc-kind/local ld]
+        [match ntype
+          [type/tuple ts]
+          [let [ginsts [growable-list]
+                vn [name/word n]]
+            [for i 0 [size ts]
+              [push ginsts [wat-inst/local.get [concat-words vn [int-to-word i]]]]]
+            [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]
 
-        [wat-inst/local.get [name/word n]]]]
+          [wat-inst/local.get [name/word n]]]]]
 
     [exp/intrinsic n imm-args args]
     [let [intrin-t [intrinsic-type-from-name [name/word n]]
@@ -2312,10 +2322,11 @@
 
     [exp/call fn args]
     [let [fnw [name/word fn]
+          fndesc [get-name-desc-from-name fn]
           tf
-          [match [top-desc/kind [get-top-desc-from-name fn]]
+          [match [top-desc/kind [get-top-desc-from-name-desc fndesc]]
             [top-desc-kind/value vd]
-            [match [name-to-type fn]
+            [match [name-desc/type fndesc]
               [type/func tf] tf
 
               [logq-abort not a function]]
@@ -2706,10 +2717,11 @@
         [for-each n names
           [push exports
             [let [nw [name/word n]
+                  ndesc [get-name-desc-from-name n]
                   ekind
-                  [match [top-desc/kind [get-top-desc-from-name n]]
+                  [match [top-desc/kind [get-top-desc-from-name-desc ndesc]]
                     [top-desc-kind/value -]
-                    [match [name-to-type n]
+                    [match [name-desc/type ndesc]
                       [type/func -] [export-kind/func]
                       [export-kind/global]]
                     [top-desc-kind/memory -] [export-kind/memory]]]
