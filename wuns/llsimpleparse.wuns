@@ -513,6 +513,8 @@
 
 [functor growable-list-alloc-init [elem-type datatype]
   [func [init-capacity [i32]] [p-growable-list elem-type]
+    [when [le-s init-capacity 0]
+      [log-abort [text 'growable-list-alloc-init init-capacity <= 0']]]
     [let
       [p [alloc [growable-list elem-type]]]
       [passign p
@@ -532,7 +534,8 @@
   [let
     [cur-capacity [deref [pfield pglist capacity]]
      cur-size [deref [pfield pglist size]]]
-    [if [le-s new-capacity cur-size] [log-abort [text 'growable-list-resize new-capacity < cur-size']]]
+    [when [le-s new-capacity cur-size]
+      [log-abort [text 'growable-list-resize new-capacity < cur-size']]]
     [passign [pfield pglist capacity] new-capacity]
     [passign [pfield pglist parray]
       [cast [pmem [array elem-type]]
@@ -545,6 +548,8 @@
   [let
     [cur-size [deref [pfield pglist size]]
      cur-capacity [deref [pfield pglist capacity]]]
+    [when [le-s cur-capacity 0]
+      [log-abort [text 'growable-list-push capacity <= 0']]]
     [if [eq cur-size cur-capacity]
       [growable-list-resize pglist [mul cur-capacity 2]]]
     [passign [pindex [deref [pfield pglist parray]] cur-size] elem]
@@ -963,6 +968,7 @@
     [names [p-assoc-list [text] [pmem [global-context-kind]]]]
     [form-offsets [p-assoc-list [pform] [i32]]]
     [exp-types [p-assoc-list [pexp] [wtype]]]
+    [exports [p-assoc-list [text] [pmem [global-context-kind]]]]
     ]]
 
 [def assoc-list-error [growable-list-alloc-init [error]]]
@@ -977,7 +983,8 @@
         errors [assoc-list-error [i32 10]]
         names [assoc-list-alloc-text-global-context-kind [i32 10]]
         form-offsets form-offsets
-        exp-types [assoc-list-exp-type [i32 10]]]]
+        exp-types [assoc-list-exp-type [i32 10]]
+        exports [assoc-list-alloc-text-global-context-kind [i32 10]]]]
     p]]
 
 [defn global-context-free [gctx [pmem [global-context]]] [tuple]
@@ -1200,7 +1207,7 @@
       [let [fw [form-word-get [list-get fl 0]]]
         [ifs
           [or
-            [word-eq fw [static-list [text i8]]] [word-eq fw [static-list [text u8]]]
+            [word-eq fw [static-list [text i8]]]  [word-eq fw [static-list [text u8]]]
             [word-eq fw [static-list [text i16]]] [word-eq fw [static-list [text u16]]]
             [word-eq fw [static-list [text i32]]] [word-eq fw [static-list [text u32]]]
             [word-eq fw [static-list [text i64]]] [word-eq fw [static-list [text u64]]]]
@@ -1374,11 +1381,19 @@
           [do
             [if [lt-s n-args 1]
               [log-abort [text 'form-to-top export expects at least 1 arguments']]]
-            [do
+            [let
+              [names [deref [pfield gctx names]]
+               exports [deref [pfield gctx exports]]]
               [loop [k 1]
                 [when [lt-s k n]
-                  [form-word-get [list-get fl k]]
-                  [continue k [inc k]]]]]]
+                  [let
+                    [ef [list-get fl k]
+                     export-name [form-word-get ef]
+                     edesc [assoc-list-get-value names export-name]]
+                    [if [is-null edesc]
+                      [push-error gctx ef [static-list [text 'export name not found']]]
+                      [assoc-list-push exports export-name [deref edesc]]]
+                    [continue k [inc k]]]]]]]
 
           [log-abort [text 'form-to-top unknown form-list case']]]]]
 
