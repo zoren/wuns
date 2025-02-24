@@ -150,7 +150,7 @@
     [record [list [pair name exp]]]
 
     [assign exp exp]
-    [passign exp exp]
+    [passign i32 exp exp]
 
     [data
       ; a memory
@@ -962,14 +962,18 @@
         [logq-abort typing assign failed [identity fw] [identity l]]]
       [exp/assign dst src]]
 
-    [[word passign]]
+    [[word passign] [word pinit]]
     [let [dst [form-to-exp-type-kind-env type-kind-env lctx [second l]]
           src [form-to-exp-type-kind-env type-kind-env lctx [third l]]
           tdst [pair/snd [get-pointer-args [type-of dst]]]
-          tsrc [type-of src]]
+          tsrc [type-of src]
+          is-init [eq-word [word pinit] fw]]
       [when-not [type-assignable tdst tsrc]
-        [logq-abort typing passign failed [identity l]]]
-      [exp/passign dst src]]
+        [logq-abort typing [identity fw] failed [identity l]]]
+      [when is-init
+        [when-not [type-assignable tsrc tdst]
+          [logq-abort pinit did not init all data]]]
+      [exp/passign is-init dst src]]
 
     [[word intrinsic]]
     [let [intrinsic-name [form-to-name [second l]]
@@ -1631,7 +1635,7 @@
     [exp/assign dst src]
     type-tuple-empty
 
-    [exp/passign dst src]
+    [exp/passign -is-init dst src]
     type-tuple-empty
 
     [exp/let-loop ll-kind bindings bodies]
@@ -2544,7 +2548,7 @@
       [do-it [type-substitute type-env [pair/snd ptup]] target]
       [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]
 
-    [exp/passign target src]
+    [exp/passign is-init target src]
     [let
     [ptup [get-pointer-args [type-of target]]
      mem-name-some [option/some [get-exp-var [option-get [try-get-type-exp [pair/fst ptup]]]]]

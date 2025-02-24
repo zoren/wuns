@@ -517,7 +517,7 @@
       [log-abort [text 'growable-list-alloc-init init-capacity <= 0']]]
     [let
       [p [alloc [growable-list elem-type]]]
-      [passign p
+      [pinit p
         [record
           size 0
           capacity init-capacity
@@ -568,7 +568,8 @@
 [genfn growable-list-to-list [elem-type datatype] [pglist [p-growable-list elem-type]] [plist elem-type]
   [let
     [cur-size [deref [pfield pglist size]]
-     plist [cast [plist elem-type] [alloc [list-data elem-type [exp cur-size]]]]]
+    ; todo allow functors to call functors to clean this up
+     plist [alloc [list-data elem-type [exp cur-size]]]]
     [passign [pfield plist size] cur-size]
     [loop [i 0]
       [when [lt-s i cur-size]
@@ -632,7 +633,7 @@
 
 [defn form-word-alloc [ptext [text]] [pform]
   [let [p [alloc [form-word]]]
-    [passign p
+    [pinit p
       [record
         tag [annotation [exp form-word-tag] form-word-tag]
         pword ptext]]
@@ -640,7 +641,7 @@
 
 [defn form-list-alloc [pfs [plist [pform]]] [pform]
   [let [p [alloc [form-list]]]
-    [passign p
+    [pinit p
       [record
         tag [annotation [exp form-list-tag] form-list-tag]
         forms pfs]]
@@ -916,7 +917,7 @@
 [defn wexp-integer-alloc [i [i64] negative [i32] byte-size [i64]] [pexp]
   [let
     [p [alloc [wexp-integer]]]
-    [passign p
+    [pinit p
       [record
         tag [annotation [exp exp-i32-tag] exp-i32-tag]
         value i
@@ -978,13 +979,14 @@
 [defn global-context-alloc [form-offsets [p-assoc-list [pform] [i32]]] [pmem [global-context]]
   [let
     [p [alloc [global-context]]]
-    [passign p
+    [pinit p
       [record
         errors [assoc-list-error [i32 10]]
         names [assoc-list-alloc-text-global-context-kind [i32 10]]
         form-offsets form-offsets
         exp-types [assoc-list-exp-type [i32 10]]
-        exports [assoc-list-alloc-text-global-context-kind [i32 10]]]]
+        exports [assoc-list-alloc-text-global-context-kind [i32 10]]
+        ]]
     p]]
 
 [defn global-context-free [gctx [pmem [global-context]]] [tuple]
@@ -1185,7 +1187,7 @@
                     [push-error gctx f [static-list [text 'variable not a def']]]
                     type-error]]]]]]
        exp [alloc [wexp-var]]]
-      [passign exp
+      [pinit exp
         [record
           tag [annotation [exp exp-var-tag] exp-var-tag]
           name w]]
@@ -1240,7 +1242,7 @@
                t [form-to-exp gctx lctx [list-get fl 2]]
                e [form-to-exp gctx lctx [list-get fl 3]]
                if-exp [alloc [wexp-if]]]
-              [passign if-exp
+              [pinit if-exp
                 [record
                   tag [annotation [exp exp-if-tag] exp-if-tag]
                   condition c
@@ -1365,7 +1367,7 @@
               [dname [form-word-get [list-get fl 1]]
                exp [form-to-exp gctx local-context-empty [list-get fl 2]]
                def-desc [alloc [global-desc-def]]]
-              [passign def-desc
+              [pinit def-desc
                 [record
                   tag [annotation [exp global-desc-def-tag] global-desc-def-tag]
                   exp exp]]
