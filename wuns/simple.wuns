@@ -124,7 +124,7 @@
     [float primitive-type f64]
     [var name]
 
-    [call name [list exp]]
+    [call exp [list exp]]
     [call-functor name [list type]]
     [intrinsic name [list imm-arg] [list exp]]
     [size-of-type type]
@@ -630,21 +630,23 @@
       [log-location f]
       [logq-abort expected word [identity f]]]]]
 
+[func try-get-name [lctx name-word]
+  [loop [cur lctx]
+    [match cur
+      [local-context/empty]
+      [if-let [td [try-get top-names name-word]]
+        [option/some [name-desc [pair/fst td] [desc-kind/top [pair/snd td]]]]
+        [option/none]]
+
+      [local-context/frame outer names kind]
+      [if-let [ldesc [try-get names name-word]]
+        [option/some [name-desc [local-var-desc/type ldesc] [desc-kind/local [local-name-desc kind ldesc]]]]
+        [continue cur outer]]]]]
+
 [func try-lookup-bind-name [lctx name]
   [let
     [name-word [name/word name]
-     opt-desc
-     [loop [cur lctx]
-      [match cur
-        [local-context/empty]
-        [if-let [td [try-get top-names name-word]]
-          [option/some [name-desc [pair/fst td] [desc-kind/top [pair/snd td]]]]
-          [option/none]]
-
-        [local-context/frame outer names kind]
-        [if-let [ldesc [try-get names name-word]]
-          [option/some [name-desc [local-var-desc/type ldesc] [desc-kind/local [local-name-desc kind ldesc]]]]
-          [continue cur outer]]]]]
+     opt-desc [try-get-name lctx name-word]]
     [when-let [desc opt-desc]
       [set-kv-map name-to-desc name desc]]
     opt-desc]]
@@ -664,46 +666,52 @@
       [exp/var n]]
 
     [form/list l]
-    [let [- [when [is-empty l]
-      [log-location form]
-      [logq-abort empty-list]]
-          ff [first l]
-          args [rest l]]
-      [if-let [fw [try-get-word ff]]
-        [let [fn [form-to-name ff]]
-          [if-let [desc [try-lookup-bind-name lctx fn]]
-            [match [top-desc/kind [get-top-desc-from-name-desc desc]]
-              [top-desc-kind/value val-desc]
-              [match [name-desc/type desc]
-                [type/func tf]
-                [let
-                  [tparams [type-func/type-parameters tf]
-                   params [type-func/parameters tf]
-                   cargs [list-map arg args [form-to-exp-type-kind-env type-kind-env lctx arg]]]
-                  [assert [eq [size params] [size args]] call expected same number of arguments
-                    [identity fn] n-of-params n-of-args]
-                  [for-each carg cargs [type-of carg]]
-                  [exp/call fn cargs]]]
-
-              [top-desc-kind/functor functor-desc]
+    [do
+      [when [is-empty l]
+        [log-location form]
+        [logq-abort empty-list]]
+      [let
+        [ff [first l]
+         proc-form
+         [func pf []
+          [let [fe [form-to-exp-type-kind-env type-kind-env lctx ff]]
+            [match [type-of fe]
+              [type/func tf]
               [let
-                [param-pairs [functor-desc/parameters functor-desc]]
-                [assert [eq [size param-pairs] [size args]] call expected same number of arguments
-                  [identity fn] n-of-params n-of-args]
+                [tparams [type-func/type-parameters tf]
+                 params [type-func/parameters tf]
+                 args [rest l]
+                 cargs [list-map arg args [form-to-exp-type-kind-env type-kind-env lctx arg]]]
+                [assert [eq [size params] [size args]] form-to-exp expected same number of arguments]
+                [for-each carg cargs [type-of carg]]
+                [exp/call fe cargs]]
+
+              [type/functor tparams tbody]
+              [let [args [rest l]]
+                [assert [eq [size tparams] [size args]] functor call expected same number of arguments]
                 [let [targs [list-map arg args [form-to-type-type-env type-kind-env lctx arg]]]
-                  [for i 0 [size param-pairs]
-                    [let [pp [at param-pairs i]
+                  [for i 0 [size tparams]
+                    [let [pp [at tparams i]
                           pk [pair/snd pp]
                           targ [at targs i]]
                       [when-let [tk [type-to-type-kind-opt type-kind-env targ]]
                         [when-not [type-kind-equals pk tk]
                           [logq-abort call-functor expected same type [identity tk] [identity pk]]]]]]
-                  [exp/call-functor fn targs]]]
+                  [match fe
+                    [exp/var fn]
+                    [exp/call-functor fn targs]
 
-              [logq-abort form-to-exp-type-kind-env not a function [identity ff] [identity desc]]]
+                    [logq-abort can only call named functors]]]]
 
-          [form-special-to-exp type-kind-env lctx fw l]]]
-        [logq-abort form-to-exp-type-kind-env not a word [identity ff]]]]]]
+              [logq-abort form-to-exp-type-kind-env not a function [identity ff]]]]]]
+        [match ff
+          [form/word fw]
+          [if-let [- [try-get-name lctx fw]]
+            [proc-form]
+            [form-special-to-exp type-kind-env lctx fw l]]
+
+          [form/list -]
+          [proc-form]]]]]]
 
 [func common-super-type [t1 t2]
   [ifs
@@ -1598,15 +1606,15 @@
     [exp/if c t e]
     [common-super-type [type-of t] [type-of e]]
 
-    [exp/call fname args]
-    [match [name-desc/type [get-name-desc-from-name fname]]
+    [exp/call fexp args]
+    [match [type-of fexp]
       [type/func tf]
       [let [tps [type-func/type-parameters tf]]
         [if [is-empty tps]
           [type-func/result tf]
           [match [go-tais [transient-kv-map] [type-func/parameters tf] [list-map arg args [type-of arg]]]
             [result/ok tenv] [type-substitute tenv [type-func/result tf]]
-            [result/error -] [logq-abort type-of call args not assignable [identity fname] [identity tf] [identity args]]]]]
+            [result/error -] [logq-abort type-of call args not assignable [identity fexp] [identity tf] [identity args]]]]]
 
       [logq-abort not a func]]
 
@@ -2366,19 +2374,16 @@
         wimm-args
         [list-map arg args [exp-to-inst arg]]]]
 
-    [exp/call fn args]
-    [let [fnw [name/word fn]
-          fndesc [get-name-desc-from-name fn]
-          tf
-          [match [top-desc/kind [get-top-desc-from-name-desc fndesc]]
-            [top-desc-kind/value vd]
-            [match [name-desc/type fndesc]
-              [type/func tf] tf
-
-              [logq-abort not a function]]
+    [exp/call fexp args]
+    [let [tf
+          [match [type-of fexp]
+            [type/func tf] tf
             [logq-abort not a function]]
           parameter-types [type-func/parameters tf]
-          type-parameters [type-func/type-parameters tf]]
+          type-parameters [type-func/type-parameters tf]
+          fnw [match fexp
+                [exp/var n] [name/word n]
+                [logq-abort not implemented exp-to-inst call [identity fexp]]]]
     [if [is-empty type-parameters]
       [if-let [efunc [try-get top-funcs fnw]]
         [if [eq-word [word def-comp-fn] [exp-function/kind efunc]]
@@ -2412,7 +2417,7 @@
             spec-name
             [list-map arg args [exp-to-inst arg]]]]
 
-        [result/error -] [logq-abort exp-to-inst call args not assignable [identity fn] [identity tf] [identity args]]]]]
+        [result/error -] [logq-abort exp-to-inst call args not assignable [identity fexp] [identity tf] [identity args]]]]]
 
     [exp/call-functor fname targs]
     [let
