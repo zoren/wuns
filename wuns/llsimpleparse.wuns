@@ -437,6 +437,11 @@
 [functor alloc [t datatype]
   [cast [pmem t] [realloc null 0 [size-of-type t]]]]
 
+[genfn alloc-init [t datatype] [v t] [pmem t]
+  [let [p [realloc null 0 [size-of-type t]]]
+    [pinit p v]
+    p]]
+
 [defn free [old-p [pmem -a] old-n-bytes [i32]] [tuple]
   [realloc old-p old-n-bytes 0]
   [do]]
@@ -515,14 +520,11 @@
   [func [init-capacity [i32]] [p-growable-list elem-type]
     [when [le-s init-capacity 0]
       [log-abort [text 'growable-list-alloc-init init-capacity <= 0']]]
-    [let
-      [p [alloc [growable-list elem-type]]]
-      [pinit p
-        [record
-          size 0
-          capacity init-capacity
-          parray [alloc [array elem-type [exp init-capacity]]]]]
-      p]]]
+    [alloc-init
+      [record
+        size 0
+        capacity init-capacity
+        parray [alloc [array elem-type [exp init-capacity]]]]]]]
 
 [genfn growable-list-free [elem-type datatype] [pglist [p-growable-list elem-type]] [tuple]
   [let
@@ -588,11 +590,6 @@
 [defn log-text [txt [text]] [tuple]
   [log [list-data-array txt] [list-size txt]]]
 
-; [datatype assoc-entry [key datatype value datatype]
-;   [record
-;     [key key]
-;     [value value]]]
-
 [datatype p-assoc-list [key datatype value datatype]
   [p-growable-list [tuple key value]]]
 
@@ -632,20 +629,16 @@
   [pmem [form]]]
 
 [defn form-word-alloc [ptext [text]] [pform]
-  [let [p [alloc [form-word]]]
-    [pinit p
-      [record
-        tag [annotation [exp form-word-tag] form-word-tag]
-        pword ptext]]
-    p]]
+  [alloc-init
+    [record
+      tag [annotation [exp form-word-tag] form-word-tag]
+      pword ptext]]]
 
 [defn form-list-alloc [pfs [plist [pform]]] [pform]
-  [let [p [alloc [form-list]]]
-    [pinit p
-      [record
-        tag [annotation [exp form-list-tag] form-list-tag]
-        forms pfs]]
-    p]]
+  [alloc-init
+    [record
+      tag [annotation [exp form-list-tag] form-list-tag]
+      forms pfs]]]
 
 [defn form-tag [pf [pform]] [i32]
   [deref [pfield pf tag]]]
@@ -915,15 +908,12 @@
     ]]
 
 [defn wexp-integer-alloc [i [i64] negative [i32] byte-size [i64]] [pexp]
-  [let
-    [p [alloc [wexp-integer]]]
-    [pinit p
-      [record
-        tag [annotation [exp exp-i32-tag] exp-i32-tag]
-        value i
-        negative negative
-        byte-size byte-size]]
-    p]]
+  [alloc-init
+    [record
+      tag [annotation [exp exp-i32-tag] exp-i32-tag]
+      value i
+      negative negative
+      byte-size byte-size]]]
 
 [def type-i32 [i32 0x7f]]
 [def type-i64 [i32 0x7e]]
@@ -977,17 +967,13 @@
 [def assoc-list-exp-type [growable-list-alloc-init [tuple [pexp] [wtype]]]]
 
 [defn global-context-alloc [form-offsets [p-assoc-list [pform] [i32]]] [pmem [global-context]]
-  [let
-    [p [alloc [global-context]]]
-    [pinit p
-      [record
-        errors [assoc-list-error [i32 10]]
-        names [assoc-list-alloc-text-global-context-kind [i32 10]]
-        form-offsets form-offsets
-        exp-types [assoc-list-exp-type [i32 10]]
-        exports [assoc-list-alloc-text-global-context-kind [i32 10]]
-        ]]
-    p]]
+  [alloc-init
+    [record
+      errors [assoc-list-error [i32 10]]
+      names [assoc-list-alloc-text-global-context-kind [i32 10]]
+      form-offsets form-offsets
+      exp-types [assoc-list-exp-type [i32 10]]
+      exports [assoc-list-alloc-text-global-context-kind [i32 10]]]]]
 
 [defn global-context-free [gctx [pmem [global-context]]] [tuple]
   [growable-list-free [deref [pfield gctx errors]]]
@@ -1186,11 +1172,11 @@
                   [do
                     [push-error gctx f [static-list [text 'variable not a def']]]
                     type-error]]]]]]
-       exp [alloc [wexp-var]]]
-      [pinit exp
+       exp
+       [alloc-init
         [record
           tag [annotation [exp exp-var-tag] exp-var-tag]
-          name w]]
+          name w]]]
       [annotate gctx exp var-type]
       exp]
 
@@ -1241,13 +1227,13 @@
               [c [form-to-exp gctx lctx [list-get fl 1]]
                t [form-to-exp gctx lctx [list-get fl 2]]
                e [form-to-exp gctx lctx [list-get fl 3]]
-               if-exp [alloc [wexp-if]]]
-              [pinit if-exp
+               if-exp
+               [alloc-init
                 [record
                   tag [annotation [exp exp-if-tag] exp-if-tag]
                   condition c
                   true t
-                  false e]]
+                  false e]]]
               [when [not [type-assignable type-i32 [type-of gctx c]]]
                 [push-error gctx [list-get fl 1] [static-list [text 'if condition not i32']]]]
               [annotate gctx if-exp [common-super-type [type-of gctx t] [type-of gctx e]]]
@@ -1366,11 +1352,11 @@
             [let
               [dname [form-word-get [list-get fl 1]]
                exp [form-to-exp gctx local-context-empty [list-get fl 2]]
-               def-desc [alloc [global-desc-def]]]
-              [pinit def-desc
+               def-desc
+               [alloc-init
                 [record
                   tag [annotation [exp global-desc-def-tag] global-desc-def-tag]
-                  exp exp]]
+                  exp exp]]]
               [assoc-list-push [deref [pfield gctx names]] dname def-desc]]]
 
           [word-eq fw [static-list [text export]]]
