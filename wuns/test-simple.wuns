@@ -529,6 +529,23 @@
     [test-assert-eq [i32 8] [js-app get-so-i64]]
     ]]
 
+[defn test-local-vars []
+  [let
+    [forms
+      [qlist
+    [defn test-locals [] [i32]
+      [let [x [i32 0]]
+       x]
+      [let [x [i32 2]]
+       x]]
+
+    [export test-locals]]
+     inst [forms-to-inst forms]
+     test-locals [get-export inst [word test-locals]]]
+
+    [test-assert-eq [i32 2] [js-app test-locals]]
+    ]]
+
 [defn test-all []
   [test-arithmetic]
   [test-tuple-return]
@@ -543,6 +560,7 @@
   [test-tuple-let-destructure]
   [test-tuple-parameters]
   [test-func-exp]
+  [test-local-vars]
   ]
 
 ; [func wasm-dump-mem [p n]

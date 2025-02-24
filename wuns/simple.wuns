@@ -335,11 +335,16 @@
     [export [list name]]]]
 
 [type local-context-kind []
-  [union [func] [let] [loop] [type-decl]]]
+  [union
+    [func [transient-kv-map word i32]]
+    [let] [loop] [type-decl]]]
 
 [type local-var-desc []
   [record
-    [type type]]]
+    [type type]
+    [new-name [option word]]]]
+
+[defn param-desc [t] [local-var-desc t [option/none]]]
 
 [type local-context []
   [union
@@ -352,7 +357,7 @@
 [def local-context-empty [local-context/empty]]
 
 [defn local-context-make-func [param-ctx]
-  [local-context-make local-context-empty param-ctx [local-context-kind/func]]]
+  [local-context-make local-context-empty param-ctx [local-context-kind/func [transient-kv-map]]]]
 
 [defn try-get-enclosing-loop-context [lctx]
   [loop [cur lctx]
@@ -368,8 +373,21 @@
         [local-context-kind/let]
         [continue cur outer]
 
-        [local-context-kind/func]
+        [local-context-kind/func -]
         [option/none]]]]]
+
+[defn get-enclosing-func-context [lctx]
+  [loop [cur lctx]
+    [match cur
+      [local-context/empty]
+      [logq-abort get-enclosing-func-context not in a function]
+
+      [local-context/frame outer names kind]
+      [match kind
+        [local-context-kind/func fctx]
+        fctx
+
+        [continue cur outer]]]]]
 
 [type functor-desc []
   [record
@@ -407,9 +425,14 @@
     [kind top-desc-kind]
     [imported imported-or-here]]]
 
+[type local-name-desc []
+  [record
+    [context-kind local-context-kind]
+    [desc local-var-desc]]]
+
 [type desc-kind []
   [union
-    [local local-context-kind]
+    [local local-name-desc]
     [top top-desc]]]
 
 [type name-desc []
@@ -618,7 +641,7 @@
 
         [local-context/frame outer names kind]
         [if-let [ldesc [try-get names name-word]]
-          [option/some [name-desc [local-var-desc/type ldesc] [desc-kind/local kind]]]
+          [option/some [name-desc [local-var-desc/type ldesc] [desc-kind/local [local-name-desc kind ldesc]]]]
           [continue cur outer]]]]]
     [when-let [desc opt-desc]
       [set-kv-map name-to-desc name desc]]
@@ -647,41 +670,35 @@
       [if-let [fw [try-get-word ff]]
         [let [fn [form-to-name ff]]
           [if-let [desc [try-lookup-bind-name lctx fn]]
-            [match [name-desc/kind desc]
-              [desc-kind/local kind]
-              [logq-abort form-to-exp-type-kind-env not a top def [identity ff]]
-
-              [desc-kind/top td]
-              [match [top-desc/kind td]
-                [top-desc-kind/value val-desc]
-                [match [name-desc/type desc]
-                  [type/func tf]
-                  [let
-                    [tparams [type-func/type-parameters tf]
-                     params [type-func/parameters tf]
-                     cargs [list-map arg args [form-to-exp-type-kind-env type-kind-env lctx arg]]]
-                    [assert [eq [size params] [size args]] call expected same number of arguments
-                      [identity fn] n-of-params n-of-args]
-                    [for-each carg cargs [type-of carg]]
-                    [exp/call fn cargs]]]
-
-                [top-desc-kind/functor functor-desc]
+            [match [top-desc/kind [get-top-desc-from-name-desc desc]]
+              [top-desc-kind/value val-desc]
+              [match [name-desc/type desc]
+                [type/func tf]
                 [let
-                  [param-pairs [functor-desc/parameters functor-desc]]
-                  [assert [eq [size param-pairs] [size args]] call expected same number of arguments
+                  [tparams [type-func/type-parameters tf]
+                   params [type-func/parameters tf]
+                   cargs [list-map arg args [form-to-exp-type-kind-env type-kind-env lctx arg]]]
+                  [assert [eq [size params] [size args]] call expected same number of arguments
                     [identity fn] n-of-params n-of-args]
-                  [let [targs [list-map arg args [form-to-type-type-env type-kind-env lctx arg]]]
-                    [for i 0 [size param-pairs]
-                      [let [pp [at param-pairs i]
-                            pk [pair/snd pp]
-                            targ [at targs i]]
-                        [when-let [tk [type-to-type-kind-opt type-kind-env targ]]
-                          [when-not [type-kind-equals pk tk]
-                            [logq-abort call-functor expected same type [identity tk] [identity pk]]]]]]
-                    [exp/call-functor fn targs]]]
+                  [for-each carg cargs [type-of carg]]
+                  [exp/call fn cargs]]]
 
-                [logq-abort form-to-exp-type-kind-env not a function [identity ff] [identity desc]]
-                    ]]
+              [top-desc-kind/functor functor-desc]
+              [let
+                [param-pairs [functor-desc/parameters functor-desc]]
+                [assert [eq [size param-pairs] [size args]] call expected same number of arguments
+                  [identity fn] n-of-params n-of-args]
+                [let [targs [list-map arg args [form-to-type-type-env type-kind-env lctx arg]]]
+                  [for i 0 [size param-pairs]
+                    [let [pp [at param-pairs i]
+                          pk [pair/snd pp]
+                          targ [at targs i]]
+                      [when-let [tk [type-to-type-kind-opt type-kind-env targ]]
+                        [when-not [type-kind-equals pk tk]
+                          [logq-abort call-functor expected same type [identity tk] [identity pk]]]]]]
+                  [exp/call-functor fn targs]]]
+
+              [logq-abort form-to-exp-type-kind-env not a function [identity ff] [identity desc]]]
 
           [form-special-to-exp type-kind-env lctx fw l]]]
         [logq-abort form-to-exp-type-kind-env not a word [identity ff]]]]]]
@@ -989,9 +1006,25 @@
     [[word let] [word loop]]
     [let
       [vars [transient-kv-map]
-       add-var [func av [n t] [set-kv-map vars [name/word n] [local-var-desc t]]]
        is-let [eq-word fw [word let]]
-       let-loop-ctx [local-context-make lctx vars [if is-let [local-context-kind/let] [local-context-kind/loop]]]]
+       lck [if is-let [local-context-kind/let] [local-context-kind/loop]]
+       local-var-counts [get-enclosing-func-context lctx]
+       add-var
+       [func av [n t]
+        [let
+          [nw [name/word n]
+           new-name-opt
+           [if-let [c [try-get local-var-counts nw]]
+            [do
+              [set-kv-map local-var-counts nw [inc c]]
+              [option/some [concat-words nw [int-to-word c]]]]
+            [do
+              [set-kv-map local-var-counts nw 1]
+              [option/none]]]
+           ldesc [local-var-desc t new-name-opt]]
+          [set-kv-map name-to-desc n [name-desc t [desc-kind/local [local-name-desc lck ldesc]]]]
+          [set-kv-map vars nw ldesc]]]
+       let-loop-ctx [local-context-make lctx vars lck]]
       [exp/let-loop
         [if is-let [let-or-loop/let] [let-or-loop/loop]]
         [list-map p [pairwise-pairs-check [get-list [second l]]]
@@ -1034,7 +1067,7 @@
        [list-map p [pairwise-pairs-check [get-list [second l]]]
           [let [pname [form-to-name [pair/fst p]]
                 pt [form-to-type-type-env type-kind-env lctx [pair/snd p]]]
-            [set-kv-map vars [name/word pname] [local-var-desc pt]]
+            [set-kv-map vars [name/word pname] [param-desc pt]]
             [pair pname pt]]]
        result [form-to-type-type-env type-kind-env param-ctx [third l]] ; todo should we pass lctx instead?
        bodies
@@ -1139,6 +1172,11 @@
     [desc-kind/top td] td
     [logq-abort get-top-desc-from-name-desc not a global]]]
 
+[func get-local-desc-from-name-desc [nd]
+  [match [name-desc/kind nd]
+    [desc-kind/local ld] ld
+    [logq-abort get-local-desc-from-name-desc not a local]]]
+
 [func get-functor-desc-from-top-desc-kind [tdk]
   [match tdk
     [top-desc-kind/functor fd] fd
@@ -1158,10 +1196,7 @@
        d2 [name-desc/kind [get-name-desc-from-name n2]]]
       [match d1
         [desc-kind/local ld1]
-        [match d2
-          [desc-kind/local ld2]
-          [is-identical ld1 ld2]
-          false]
+        false
 
         [desc-kind/top td1]
         [match d2
@@ -1709,16 +1744,16 @@
     [if-let [desc [try-get name-to-desc n]]
       [let [t [name-desc/type desc]]
         [match [name-desc/kind desc]
-          [desc-kind/local ld]
-          [option/none]
-
           [desc-kind/top td]
           [match [top-desc/kind td]
             [top-desc-kind/value vd]
             [if [is-identical [value-desc/kind vd] value-kind-constant]
               [option/some [get value-constants [name/word n]]]
               [option/none]]
-            [option/none]]]]
+            [option/none]]
+
+          ; default
+          [option/none]]]
       [logq-abort try-resolve-const name not found [identity n]]]
     [option/none]]]
 
@@ -1932,7 +1967,7 @@
                   [top-desc-kind/value [value-desc value-kind-constant]]
                   [imported-or-here/here]]]
               [for i 0 [size param-names]
-                [set-kv-map param-ctx [name/word [at param-names i]] [local-var-desc [at param-types i]]]]
+                [set-kv-map param-ctx [name/word [at param-names i]] [param-desc [at param-types i]]]]
               [let
                 [cbodies [list-map body [slice l 4 [size l]] [form-to-exp-type-kind-env empty-type-env lctx body]]
                  inferred-return-type [type-ofs cbodies]
@@ -1974,7 +2009,7 @@
                   [top-desc-kind/value [value-desc value-kind-constant]]
                   [imported-or-here/here]]]
               [for i 0 [size param-names]
-                [set-kv-map param-ctx [name/word [at param-names i]] [local-var-desc [at param-types i]]]]
+                [set-kv-map param-ctx [name/word [at param-names i]] [param-desc [at param-types i]]]]
               [let
                 [cbodies [list-map body [slice l 5 [size l]] [form-to-exp-type-kind-env tparam-ctx lctx body]]
                  inferred-return-type [type-ofs cbodies]
@@ -2213,9 +2248,11 @@
       [option-default [try-get value-constants [name/word v]] e]
 
       [desc-kind/local ld]
-      [match ld
-        [local-context-kind/func]
-        [option-default [try-get const-env [name/word v]] e]
+      [match [local-name-desc/context-kind ld]
+        [local-context-kind/func -]
+        [do
+          ; in def-comp-fn parameters are constants
+          [option-default [try-get const-env [name/word v]] e]]
 
         e]]
     e]]
@@ -2295,16 +2332,17 @@
 
           [logq-abort not implemented exp-to-inst var [identity n] [identity td]]]
 
-        [desc-kind/local ld]
-        [match ntype
-          [type/tuple ts]
-          [let [ginsts [growable-list]
-                vn [name/word n]]
-            [for i 0 [size ts]
-              [push ginsts [wat-inst/local.get [concat-words vn [int-to-word i]]]]]
-            [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]
+        [desc-kind/local ldesc]
+        [let
+          [wat-name [if-let [new-name [local-var-desc/new-name [local-name-desc/desc ldesc]]] new-name [name/word n]]]
+          [match ntype
+            [type/tuple ts]
+            [let [ginsts [growable-list]]
+              [for i 0 [size ts]
+                [push ginsts [wat-inst/local.get [concat-words wat-name [int-to-word i]]]]]
+              [wat-inst/instructions [clone-growable-to-frozen-list ginsts]]]
 
-          [wat-inst/local.get [name/word n]]]]]
+            [wat-inst/local.get wat-name]]]]]
 
     [exp/intrinsic n imm-args args]
     [let [intrin-t [intrinsic-type-from-name [name/word n]]
@@ -2398,14 +2436,21 @@
        [list-map b bindings
         [let [ns [pair/fst b]
               e [pair/snd b]
-              ts [type-to-wat-types-current [type-of e]]]
-          [assert [eq [size ns] [size ts]] let-loop expected same number of names and types]
+              gset-insts [growable-list]]
           [for i 0 [size ns]
-            [push glocals [pair [name/word [at ns i]] [at ts i]]]]
+            [push glocals
+              [let
+                [n [at ns i]
+                 ndesc [get-name-desc-from-name n]
+                 ldesc [get-local-desc-from-name-desc ndesc]
+                 wat-name [if-let [new-name [local-var-desc/new-name [local-name-desc/desc ldesc]]] new-name [name/word n]]
+                 t [name-desc/type ndesc]]
+                [push gset-insts [wat-inst/local.set-no wat-name]]
+                [pair wat-name [type-to-wat-type [type-substitute type-env t]]]]]]
           [wat-inst/instructions
             [concat
               [list [exp-to-inst e]]
-              [list-map n [reverse ns] [wat-inst/local.set-no [name/word n]]]]]]]]
+              [reverse [clone-growable-to-frozen-list gset-insts]]]]]]]
       [match ll-kind
         [let-or-loop/let]
         [wat-inst/instructions
