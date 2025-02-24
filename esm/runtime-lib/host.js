@@ -389,12 +389,12 @@ const byte_array_set = (byte_array, index, value) => {
   byte_array[index] = value
 }
 export { byte_array_set as 'byte-array-set' }
+const textDecoder = new TextDecoder()
 const byte_array_log_as_string = (byte_array) => {
   if (!(byte_array instanceof Uint8Array)) throw new Error('byte-array-log-as-string expects byte array')
-  return console.log(String.fromCharCode(...byte_array))
+  return console.log(textDecoder.decode(byte_array))
 }
 export { byte_array_log_as_string as 'byte-array-log-as-string' }
-const textDecoder = new TextDecoder()
 const byte_array_to_string = (byte_array) => {
   if (!(byte_array instanceof Uint8Array)) throw new Error('byte-array-to-string expects byte array')
   return textDecoder.decode(byte_array)
