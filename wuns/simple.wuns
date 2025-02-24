@@ -337,10 +337,14 @@
 [type local-context-kind []
   [union [func] [let] [loop] [type-decl]]]
 
+[type local-var-desc []
+  [record
+    [type type]]]
+
 [type local-context []
   [union
     [empty]
-    [frame [local-context] [transient-kv-map word type] local-context-kind]]]
+    [frame [local-context] [transient-kv-map word local-var-desc] local-context-kind]]]
 
 [defn local-context-make [outer vars kind]
   [local-context/frame outer vars kind]]
@@ -349,17 +353,6 @@
 
 [defn local-context-make-func [param-ctx]
   [local-context-make local-context-empty param-ctx [local-context-kind/func]]]
-
-[defn try-get-local [lctx name]
-  [loop [cur lctx]
-    [match cur
-      [local-context/empty]
-      [option/none]
-
-      [local-context/frame outer names kind]
-      [if-let [v [try-get names name]]
-        [option/some [pair v kind]]
-        [continue cur outer]]]]]
 
 [defn try-get-enclosing-loop-context [lctx]
   [loop [cur lctx]
@@ -616,11 +609,17 @@
   [let
     [name-word [name/word name]
      opt-desc
-     [if-let [ldesc [try-get-local lctx name-word]]
-      [option/some [name-desc [pair/fst ldesc] [desc-kind/local [pair/snd ldesc]]]]
-      [if-let [td [try-get top-names name-word]]
-        [option/some [name-desc [pair/fst td] [desc-kind/top [pair/snd td]]]]
-        [option/none]]]]
+     [loop [cur lctx]
+      [match cur
+        [local-context/empty]
+        [if-let [td [try-get top-names name-word]]
+          [option/some [name-desc [pair/fst td] [desc-kind/top [pair/snd td]]]]
+          [option/none]]
+
+        [local-context/frame outer names kind]
+        [if-let [ldesc [try-get names name-word]]
+          [option/some [name-desc [local-var-desc/type ldesc] [desc-kind/local kind]]]
+          [continue cur outer]]]]]
     [when-let [desc opt-desc]
       [set-kv-map name-to-desc name desc]]
     opt-desc]]
@@ -990,6 +989,7 @@
     [[word let] [word loop]]
     [let
       [vars [transient-kv-map]
+       add-var [func av [n t] [set-kv-map vars [name/word n] [local-var-desc t]]]
        is-let [eq-word fw [word let]]
        let-loop-ctx [local-context-make lctx vars [if is-let [local-context-kind/let] [local-context-kind/loop]]]]
       [exp/let-loop
@@ -1001,14 +1001,14 @@
               [form/word -]
               [let [pname [form-to-name [pair/fst p]]]
                 [assert [eq [size types] 1] [identity fw] expected 1 element tuple [identity pname]]
-                [set-kv-map vars [name/word pname] [first types]]
+                [add-var pname [first types]]
                 [pair [list pname] pexp]]
 
               [form/list pname-forms]
               [let [pnames [list-map pf pname-forms [form-to-name pf]]]
                 [assert [eq [size pnames] [size types]] [identity fw] expected same number of names as types [identity pnames] [identity types]]
                 [for i 0 [size pnames]
-                  [set-kv-map vars [name/word [at pnames i]] [at types i]]]
+                  [add-var [at pnames i] [at types i]]]
                 [pair pnames pexp]]]]]
         [list-map b [slice l 2 [size l]] [form-to-exp-type-kind-env type-kind-env let-loop-ctx b]]]]
 
@@ -1020,8 +1020,8 @@
         [list-map p [pairwise-pairs-check [rest l]]
           [let [n [form-to-name [pair/fst p]]
                 e [form-to-exp-type-kind-env type-kind-env lctx [pair/snd p]]]
-            [if-let [t [try-get loop-vars [name/word n]]]
-              [assert [type-assignable t [type-of e]] continue expected assignable type [identity n] [identity t] [type-of e]]
+            [if-let [ldesc [try-get loop-vars [name/word n]]]
+              [assert [type-assignable [local-var-desc/type ldesc] [type-of e]] continue expected assignable type [identity n] [identity ldesc] [type-of e]]
               [logq-abort continue not a loop var]]
             [pair n e]]]]]
       [logq-abort continue not in loop]]
@@ -1034,7 +1034,7 @@
        [list-map p [pairwise-pairs-check [get-list [second l]]]
           [let [pname [form-to-name [pair/fst p]]
                 pt [form-to-type-type-env type-kind-env lctx [pair/snd p]]]
-            [set-kv-map vars [name/word pname] pt]
+            [set-kv-map vars [name/word pname] [local-var-desc pt]]
             [pair pname pt]]]
        result [form-to-type-type-env type-kind-env param-ctx [third l]] ; todo should we pass lctx instead?
        bodies
@@ -1932,7 +1932,7 @@
                   [top-desc-kind/value [value-desc value-kind-constant]]
                   [imported-or-here/here]]]
               [for i 0 [size param-names]
-                [set-kv-map param-ctx [name/word [at param-names i]] [at param-types i]]]
+                [set-kv-map param-ctx [name/word [at param-names i]] [local-var-desc [at param-types i]]]]
               [let
                 [cbodies [list-map body [slice l 4 [size l]] [form-to-exp-type-kind-env empty-type-env lctx body]]
                  inferred-return-type [type-ofs cbodies]
@@ -1974,7 +1974,7 @@
                   [top-desc-kind/value [value-desc value-kind-constant]]
                   [imported-or-here/here]]]
               [for i 0 [size param-names]
-                [set-kv-map param-ctx [name/word [at param-names i]] [at param-types i]]]
+                [set-kv-map param-ctx [name/word [at param-names i]] [local-var-desc [at param-types i]]]]
               [let
                 [cbodies [list-map body [slice l 5 [size l]] [form-to-exp-type-kind-env tparam-ctx lctx body]]
                  inferred-return-type [type-ofs cbodies]
