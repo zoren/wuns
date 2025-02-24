@@ -342,9 +342,11 @@
 [type local-var-desc []
   [record
     [type type]
-    [new-name [option word]]]]
+    [wat-name word]]]
 
-[defn param-desc [t] [local-var-desc t [option/none]]]
+[defn set-param-desc [param-ctx n t]
+  [let [w [name/word n]]
+    [set-kv-map param-ctx w [local-var-desc t w]]]]
 
 [type local-context []
   [union
@@ -1013,15 +1015,15 @@
        [func av [n t]
         [let
           [nw [name/word n]
-           new-name-opt
+           wat-name
            [if-let [c [try-get local-var-counts nw]]
             [do
               [set-kv-map local-var-counts nw [inc c]]
-              [option/some [concat-words nw [int-to-word c]]]]
+              [concat-words nw [int-to-word c]]]
             [do
               [set-kv-map local-var-counts nw 1]
-              [option/none]]]
-           ldesc [local-var-desc t new-name-opt]]
+              nw]]
+           ldesc [local-var-desc t wat-name]]
           [set-kv-map name-to-desc n [name-desc t [desc-kind/local [local-name-desc lck ldesc]]]]
           [set-kv-map vars nw ldesc]]]
        let-loop-ctx [local-context-make lctx vars lck]]
@@ -1069,7 +1071,7 @@
        [list-map p [pairwise-pairs-check [get-list [second l]]]
           [let [pname [form-to-name [pair/fst p]]
                 pt [form-to-type-type-env type-kind-env lctx [pair/snd p]]]
-            [set-kv-map vars [name/word pname] [param-desc pt]]
+            [set-param-desc vars pname pt]
             [pair pname pt]]]
        result [form-to-type-type-env type-kind-env param-ctx [third l]] ; todo should we pass lctx instead?
        bodies
@@ -1969,7 +1971,7 @@
                   [top-desc-kind/value [value-desc value-kind-constant]]
                   [imported-or-here/here]]]
               [for i 0 [size param-names]
-                [set-kv-map param-ctx [name/word [at param-names i]] [param-desc [at param-types i]]]]
+                [set-param-desc param-ctx [at param-names i] [at param-types i]]]
               [let
                 [cbodies [list-map body [slice l 4 [size l]] [form-to-exp-type-kind-env empty-type-env lctx body]]
                  inferred-return-type [type-ofs cbodies]
@@ -2011,7 +2013,7 @@
                   [top-desc-kind/value [value-desc value-kind-constant]]
                   [imported-or-here/here]]]
               [for i 0 [size param-names]
-                [set-kv-map param-ctx [name/word [at param-names i]] [param-desc [at param-types i]]]]
+                [set-param-desc param-ctx [at param-names i] [at param-types i]]]
               [let
                 [cbodies [list-map body [slice l 5 [size l]] [form-to-exp-type-kind-env tparam-ctx lctx body]]
                  inferred-return-type [type-ofs cbodies]
@@ -2336,7 +2338,7 @@
 
         [desc-kind/local ldesc]
         [let
-          [wat-name [if-let [new-name [local-var-desc/new-name [local-name-desc/desc ldesc]]] new-name [name/word n]]]
+          [wat-name [local-var-desc/wat-name [local-name-desc/desc ldesc]]]
           [match ntype
             [type/tuple ts]
             [let [ginsts [growable-list]]
@@ -2445,7 +2447,7 @@
                 [n [at ns i]
                  ndesc [get-name-desc-from-name n]
                  ldesc [get-local-desc-from-name-desc ndesc]
-                 wat-name [if-let [new-name [local-var-desc/new-name [local-name-desc/desc ldesc]]] new-name [name/word n]]
+                 wat-name [local-var-desc/wat-name [local-name-desc/desc ldesc]]
                  t [name-desc/type ndesc]]
                 [push gset-insts [wat-inst/local.set-no wat-name]]
                 [pair wat-name [type-to-wat-type [type-substitute type-env t]]]]]]
@@ -2475,7 +2477,7 @@
             [n [pair/fst a]
              ndesc [get-name-desc-from-name n]
              ldesc [get-local-desc-from-name-desc ndesc]
-             wat-name [if-let [new-name [local-var-desc/new-name [local-name-desc/desc ldesc]]] new-name [name/word n]]]
+             wat-name [local-var-desc/wat-name [local-name-desc/desc ldesc]]]
             [wat-inst/local.set wat-name [exp-to-inst [pair/snd a]]]]]
         [list [wat-inst/br [word loop-label]]]]]
 
