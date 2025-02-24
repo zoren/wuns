@@ -334,18 +334,21 @@
     [function exp-function]
     [export [list name]]]]
 
-[type local-context [var-info context-kind]
+[type local-context-kind []
+  [union [func] [let] [loop] [type-decl]]]
+
+[type local-context []
   [union
     [empty]
-    [frame [local-context var-info context-kind] [transient-kv-map word var-info] context-kind]]]
+    [frame [local-context] [transient-kv-map word type] local-context-kind]]]
 
 [defn local-context-make [outer vars kind]
   [local-context/frame outer vars kind]]
 
 [def local-context-empty [local-context/empty]]
 
-[defn local-context-make-top [vars kind]
-  [local-context-make local-context-empty vars kind]]
+[defn local-context-make-func [param-ctx]
+  [local-context-make local-context-empty param-ctx [local-context-kind/func]]]
 
 [defn try-get-local [lctx name]
   [loop [cur lctx]
@@ -357,9 +360,6 @@
       [if-let [v [try-get names name]]
         [option/some [pair v kind]]
         [continue cur outer]]]]]
-
-[type local-context-kind []
-  [union [func] [let] [loop] [type-decl]]]
 
 [defn try-get-enclosing-loop-context [lctx]
   [loop [cur lctx]
@@ -1029,7 +1029,7 @@
     [[word func]]
     [let
       [vars [transient-kv-map]
-       param-ctx [local-context-make lctx vars [local-context-kind/func]]
+       param-ctx [local-context-make-func vars]
        params
        [list-map p [pairwise-pairs-check [get-list [second l]]]
           [let [pname [form-to-name [pair/fst p]]
@@ -1925,7 +1925,7 @@
                return-type [form-to-type return-type-form]
                tf [type-func [list] param-types return-type]
                param-ctx [transient-kv-map]
-               lctx [local-context-make-top param-ctx [local-context-kind/func]]]
+               lctx [local-context-make-func param-ctx]]
               [bind-top name-form
                 [type/func tf]
                 [top-desc
@@ -1967,7 +1967,7 @@
                return-type [form-to-type-type-env tparam-ctx local-context-empty return-type-form]
                tf [type-func tparameters param-types return-type]
                param-ctx [transient-kv-map]
-               lctx [local-context-make-top param-ctx [local-context-kind/func]]]
+               lctx [local-context-make-func param-ctx]]
               [bind-top name-form
                 [type/func tf]
                 [top-desc
