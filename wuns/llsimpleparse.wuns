@@ -1052,29 +1052,6 @@
         message msg
         offset [deref p-offset]]]]]
 
-[defn dec-word-to-i64-unsigned [gctx [pmem [global-context]] word-form [pform]] [i64]
-  [let
-    [w [form-word-get word-form]
-     ws [list-size w]]
-    [loop [i 0 res [i64 0]]
-      [if [lt-s i ws]
-        [let [cc [list-get w i]]
-          [if [not [is-between-inclusive [i64 48] cc [i64 57]]]
-            [do
-              [push-error gctx word-form [static-list [text 'not a valid digit']]]
-              [i64 0]]
-            [let
-              [n [intrinsic i64.mul res [i64 10]]
-               s [intrinsic i64.add n [intrinsic i64.sub cc [i64 48]]]]
-              [if [intrinsic i64.lt-u s n]
-                [do
-                  [push-error gctx word-form [static-list [text 'i64 overflow']]]
-                  [i64 0]]
-                [continue
-                  res s
-                  i [inc i]]]]]]
-        res]]]]
-
 ; https://github.com/skeeto/scratch/blob/master/parsers/strtonum.c
 [defn dec-word-to-i64-signed [gctx [pmem [global-context]] word-form [pform]] [tuple [i32] [i64]]
   [let
@@ -1104,7 +1081,24 @@
             res]]]
       [tuple
         false
-        [dec-word-to-i64-unsigned gctx word-form]]]]]
+        [loop [i 0 res [i64 0]]
+          [if [lt-s i ws]
+            [let [cc [list-get w i]]
+              [if [not [is-between-inclusive [i64 48] cc [i64 57]]]
+                [do
+                  [push-error gctx word-form [static-list [text 'not a valid digit']]]
+                  [i64 0]]
+                [let
+                  [n [intrinsic i64.mul res [i64 10]]
+                  s [intrinsic i64.add n [intrinsic i64.sub cc [i64 48]]]]
+                  [if [intrinsic i64.lt-u s n]
+                    [do
+                      [push-error gctx word-form [static-list [text 'i64 overflow']]]
+                      [i64 0]]
+                    [continue
+                      res s
+                      i [inc i]]]]]]
+            res]]]]]]
 
 [defn type-of [gctx [pmem [global-context]] e [pexp]] [i32]
   [let [tag [deref [pfield e tag]]]
