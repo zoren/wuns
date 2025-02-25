@@ -15,11 +15,11 @@
       [tuple]]]
       ]
 
-[def-comp-fn log-ar [ar [array [u8]]] [tuple]
-  [log [data mem ar] [size-of-exp ar]]]
+[genfn log-ar [sz [exp [i32]]] [byte-array [array [u8] sz]] [tuple]
+  [log [data mem byte-array] [reify sz]]]
 
-[def-comp-fn log-abort [ar [array [u8]]] [union]
-  [log [data mem ar] [size-of-exp ar]]
+[genfn log-abort [sz [exp [i32]]] [byte-array [array [u8] sz]] [union]
+  [log [data mem byte-array] [reify sz]]
   [intrinsic unreachable]]
 
 [def 0 [i32 0]]
@@ -472,11 +472,11 @@
 [datatype plist [vp datatype]
   [pmem [list-data vp -size]]]
 
-[def-comp-fn static-list [ar [array [u8]]] [plist [u8]]
+[genfn static-list [sz [exp [i32]]] [byte-array [array [u8] sz]] [plist [u8]]
   [data mem
     [record
-      size [size-of-exp ar]
-      array ar]]]
+      size [reify sz]
+      array byte-array]]]
 
 [defn list-size [pvec [pmem [record [size [i32]]]]] [i32]
   [deref [pfield pvec size]]]

@@ -128,6 +128,8 @@
     [call-functor name [list type]]
     [instantiate exp [list type]]
 
+    [reify type]
+
     [intrinsic name [list imm-arg] [list exp]]
     [size-of-type type]
     [size-of-exp exp]
@@ -615,7 +617,7 @@
    custom-types-recursive [set]
    gen-fn-specs-by-name [transient-kv-map]
    wat-funcs [growable-list]
-   ]
+   type-var-name-to-kind [transient-kv-map]]
 [letfn [
 [func error-form-fn [form message-form]
   [push gerrors [pair form message-form]]
@@ -821,10 +823,11 @@
     [if [starts-with-dash w]
       [type/wildcard [form-to-name form]]
       [let [n [form-to-name form]]
-        [when-not [has type-env [name/word n]]
-          [logq-abort tenv type var not found [name/word n] [identity type-env]]
-
-          [error-name n type var not found]]
+        [if-let [tkind [try-get type-env [name/word n]]]
+          [set-kv-map type-var-name-to-kind n tkind]
+          [do
+            [logq-abort tenv type var not found [name/word n] [identity type-env]]
+            [error-name n type var not found]]]
         [type/var n]]]
 
     [form/list l]
@@ -1195,6 +1198,9 @@
     [exp/instantiate
       [form-to-exp-type-kind-env type-kind-env lctx [second l]]
       [list-map a [slice l 2 [size l]] [form-to-type-type-env type-kind-env lctx a]]]
+
+    [[word reify]]
+    [exp/reify [form-to-type-type-env type-kind-env lctx [second l]]]
 
     [if-let [pt [try-get primitive-types-by-name fw]]
       [let [n [form-to-name [second l]]]
@@ -1749,6 +1755,14 @@
     [exp/func ef]
     [type/func [exp-function/type ef]]
 
+    [exp/reify t]
+    [match t
+      [type/var sz]
+      [match [get type-var-name-to-kind sz]
+        [type-kind/exp t] t
+
+        [logq-abort reify not an exp [identity t]]]]
+
     [logq-abort type-of not implemented [identity exp]]]]
 
 [func form-list-to-mem-exp [l]
@@ -2284,7 +2298,9 @@
         [for-each field fields [go [pair/snd field]]]
 
         [exp/var n]
-        [go [get-constant e]]
+        [if-let [c [try-get-constant e]]
+          [go c]
+          [logq-abort not a constant [identity e]]]
 
         [exp/size-of-exp se]
         [go [type-to-size-of-exp [type-of [get-constant se]]]]
@@ -2294,6 +2310,14 @@
 
         [exp/data mem-name-exp data-exp]
         [print-int32 bprinter 4 [data-proc [get-exp-var mem-name-exp] data-exp]]
+
+        [exp/reify t]
+        [match [type-substitute-expand t]
+          [type/exp e]
+          [if-let [c [try-get-constant e]]
+            [go c]
+            [logq-abort reify value not a constant [identity e]]]
+          [logq-abort not implemented exp-to-bytes reify [identity t]]]
 
         [logq-abort not implemented exp-to-bytes [identity e]]]]]
     [go e]
@@ -2310,22 +2334,28 @@
     [push datas [data-active mem-name-word current-offset bytes]]
     current-offset]]
 
-[func get-constant [e]
+[func try-get-constant [e]
   [match e
+    [exp/integer - --]
+    [option/some e]
+
     [exp/var v]
     [match [name-desc/kind [get-name-desc-from-name v]]
       [desc-kind/top td]
-      [option-default [try-get value-constants [name/word v]] e]
+      [try-get value-constants [name/word v]]
 
       [desc-kind/local ld]
       [match [local-name-desc/context-kind ld]
         [local-context-kind/func -]
         [do
           ; in def-comp-fn parameters are constants
-          [option-default [try-get const-env [name/word v]] e]]
+          [try-get const-env [name/word v]]]
 
-        e]]
-    e]]
+        [option/none]]]
+    [option/none]]]
+
+[func get-constant [e]
+  [option-default [try-get-constant e] e]]
 
 [func exp-to-string [e]
   [match e
@@ -2481,8 +2511,35 @@
             [type/func tf] tf
             [logq-abort not a function]]
           parameter-types [type-func/parameters tf]
-          type-parameters [type-func/type-parameters tf]]
-    [if [is-empty type-parameters]
+          type-parameters [type-func/type-parameters tf]
+          has-array-param
+          [exists parameter-types
+            [func is-array [t]
+              [match [expand-custom-n t]
+                [type/array - --] true
+                false]]]]
+;    [logq call [identity fexp] [identity has-array-param]]
+    [ifs
+      has-array-param
+      [let [efunc [get top-funcs [get-exp-var fexp]]
+            params [exp-function/parameters efunc]
+            param-env [transient-kv-map]
+            ;tenv [make-type-env ]
+            ]
+        [assert [eq [size params] [size args]] call expected same number of arguments]
+        [match [go-tais [transient-kv-map] parameter-types [list-map arg args [type-substitute type-env [type-of arg]]]]
+          [result/ok tenv]
+          [do
+            [for i 0 [size args]
+              [set-kv-map param-env [name/word [at params i]] [at args i]]]
+            [let
+              [comp [mk-exp-to-inst-compiler tenv param-env] ; todo maybe we need to pass the type env
+              es2i [exp2inst-compiler/exps-to-inst comp]]
+              [es2i [exp-function/bodies efunc]]]]
+
+          [result/error -] [logq-abort exp-to-inst call args not assignable [identity fexp] [identity tf] [identity args]]]]
+
+      [is-empty type-parameters]
       [match fexp
         [exp/var fn]
         [if-let [efunc [try-get top-funcs [name/word fn]]]
@@ -2534,6 +2591,11 @@
        comp [mk-exp-to-inst-compiler functor-type-env empty-const-env]
        e2i [exp2inst-compiler/exp-to-inst comp]]
       [e2i [functor-desc/body fd]]]
+
+    [exp/reify t]
+    [match [type-substitute-expand t]
+      [type/exp e] [exp-to-inst e]
+      [logq-abort not implemented exp-to-inst reify [identity t]]]
 
     [exp/if c t e]
     [wat-inst/if
