@@ -1199,7 +1199,9 @@
           n [list-size fl]
           n-args [dec n]]
       [if [eq n 0]
-        [log-abort [text 'form-to-exp empty list not allowed']]]
+        [do
+          [push-error gctx f [static-list [text 'empty list not allowed']]]
+          [cast [pexp] null]]
       [let [fw [form-word-get-report gctx [list-get fl 0]]]
         [ifs
           [or
@@ -1253,7 +1255,9 @@
               [annotate gctx if-exp [common-super-type [type-of gctx t] [type-of gctx e]]]
               if-exp]]
 
-          [log-abort [text 'form-to-exp unknown form-list case']]]]]
+          [do
+            [log-text fw]
+            [log-abort [text 'form-to-exp unknown form-list case']]]]]]]
 
     [log-abort [text 'form-to-exp unknown form case']]]]
 
@@ -1285,6 +1289,30 @@
 
 [def context-kind-func [i32 1]]
 
+
+[defn forms-to-local-context [gctx [pmem [global-context]] param-list [plist [pform]]] [plocal-context]
+  [let
+    [n-of-param-forms [list-size param-list]
+     lctx [local-context-alloc context-kind-func local-context-empty [half n-of-param-forms]]
+     locals-array [list-data-array [pfield lctx locals]]]
+    [if [is-odd n-of-param-forms]
+      [push-error gctx [list-get param-list [dec n-of-param-forms]]
+        [static-list [text 'form-to-top defn expects a parameter list with names and type pairs']]]]
+    [loop [i 0 ti 0]
+      [when [lt-s i [dec n-of-param-forms]]
+        [let
+          [lname-form [list-get param-list i]
+           lname [form-word-get lname-form]
+           [found-ctx lvar-type] [local-context-lookup lctx lname]
+           ltype [form-to-type gctx [list-get param-list [inc i]]]]
+          [if [ne found-ctx local-context-empty]
+            [push-error gctx lname-form [static-list [text 'name already defined']]]]
+          [passign
+            [pindex locals-array ti]
+            [tuple lname ltype]]
+          [continue i [add 2 i] ti [inc ti]]]]]
+    lctx]]
+
 [defn form-to-top [gctx [pmem [global-context]] form [pmem [form]]] [tuple]
   [ifs
     [form-word-is form]
@@ -1309,24 +1337,10 @@
                result-type [form-to-type gctx [list-get fl 3]]
                fname [form-word-get-report gctx name-form]
                n-of-param-forms [list-size param-list]
-               lctx [local-context-alloc context-kind-func local-context-empty [half n-of-param-forms]]
-               locals-array [list-data-array [pfield lctx locals]]
+               lctx [forms-to-local-context gctx param-list]
                desc [[instantiate alloc-fn [global-desc-defn]]]]
               [if [is-odd n-of-param-forms]
                 [push-error gctx name-form [static-list [text 'form-to-top defn expects a parameter list with names and type pairs']]]]
-              [loop [i 0 ti 0]
-                [when [lt-s i [dec n-of-param-forms]]
-                  [let
-                    [lname-form [list-get param-list i]
-                     lname [form-word-get-report gctx lname-form]
-                     [found-ctx lvar-type] [local-context-lookup lctx lname]
-                     ltype [form-to-type gctx [list-get param-list [inc i]]]]
-                    [if [ne found-ctx local-context-empty]
-                      [push-error gctx lname-form [static-list [text 'name already defined']]]]
-                    [passign
-                      [pindex locals-array ti]
-                      [tuple lname ltype]]
-                    [continue i [add 2 i] ti [inc ti]]]]]
               [if [assoc-list-get-value [deref [pfield gctx names]] fname]
                 [push-error gctx name-form [static-list [text 'name already defined']]]]
               [passign desc
@@ -1378,7 +1392,9 @@
                       [assoc-list-push exports export-name [deref edesc]]]
                     [continue k [inc k]]]]]]]
 
-          [log-abort [text 'form-to-top unknown form-list case']]]]]
+          [do
+            [log-text fw]
+            [log-abort [text 'form-to-top unknown form-list case']]]]]]
 
     [log-abort [text 'form-to-top unknown form case']]]]
 
