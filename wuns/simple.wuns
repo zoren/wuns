@@ -2388,17 +2388,16 @@
             [do]
 
             [exp/var vn]
-            [let [desc [get-name-desc-from-name vn]]
-              [match [name-desc/kind desc]
-                [desc-kind/top td]
-                [do
-                  ; we do not pass it as it is available globally
-                  ]
+            [match [name-desc/kind [get-name-desc-from-name vn]]
+              [desc-kind/top td]
+              [do
+                ; we do not pass it as it is available globally
+                ]
 
-                [desc-kind/local ld]
-                [do
-                  [push type-arg-params [pair [name/word vn] [word i32]]]
-                  [push type-arg-exps e]]]]
+              [desc-kind/local ld]
+              [do
+                [push type-arg-params [pair [name/word vn] [word i32]]]
+                [push type-arg-exps e]]]
 
             [do
               [logq-abort type exp in type arg not supported yet [identity e]]]]
