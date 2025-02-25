@@ -1040,10 +1040,26 @@
 [defn is-digit [cc [i64]] [i32]
   [is-between-inclusive [i64 48] cc [i64 57]]]
 
+[defn form-word-get-report [gctx [pmem [global-context]] pf [pform]] [text]
+  [if [form-word-is pf]
+    [let [pfw [cast [pmem [form-word]] pf]]
+      [deref [pfield pfw pword]]]
+    [do
+      [push-error gctx pf [static-list [text 'not a form-list']]]
+      [static-list [text '']]]]]
+
+[defn form-list-get-report [gctx [pmem [global-context]] pf [pform]] [plist [pform]]
+  [if [form-list-is pf]
+    [let [pfl [cast [pmem [form-list]] pf]]
+      [deref [pfield pfl forms]]]
+    [do
+      [push-error gctx pf [static-list [text 'not a form-list']]]
+      [cast [plist [pform]] empty-list]]]]
+
 ; https://github.com/skeeto/scratch/blob/master/parsers/strtonum.c
 [defn dec-word-to-i64-signed [gctx [pmem [global-context]] word-form [pform]] [tuple [i32] [i64]]
   [let
-    [w [form-word-get word-form]
+    [w [form-word-get-report gctx word-form]
      ws [list-size w]
      first [list-get w 0]]
     [if [intrinsic i64.eq first [i64 45]]
@@ -1150,19 +1166,11 @@
 
     [log-abort [text 'primitive-int-name-to-signed-size unknown word']]]]
 
-[defn form-list-get-report [gctx [pmem [global-context]] pf [pform]] [plist [pform]]
-  [if [form-list-is pf]
-    [let [pfl [cast [pmem [form-list]] pf]]
-      [deref [pfield pfl forms]]]
-    [do
-      [push-error gctx pf [static-list [text 'not a form-list']]]
-      [cast [plist [pform]] empty-list]]]]
-
 [defn form-to-exp [gctx [pmem [global-context]] lctx [plocal-context] f [pmem [form]]] [pexp]
   [ifs
     [form-word-is f]
     [let
-      [w [form-word-get f]
+      [w [form-word-get-report gctx f]
        [found-ctx lvar-type] [local-context-lookup lctx w]
        var-type
         [if [ne found-ctx local-context-empty]
@@ -1192,7 +1200,7 @@
           n-args [dec n]]
       [if [eq n 0]
         [log-abort [text 'form-to-exp empty list not allowed']]]
-      [let [fw [form-word-get [list-get fl 0]]]
+      [let [fw [form-word-get-report gctx [list-get fl 0]]]
         [ifs
           [or
             [word-eq fw [static-list [text i8]]]  [word-eq fw [static-list [text u8]]]
@@ -1261,7 +1269,7 @@
           n-args [dec n]]
       [if [eq n 0]
         [log-abort [text 'form-to-type empty list not allowed']]]
-      [let [fw [form-word-get [list-get fl 0]]]
+      [let [fw [form-word-get-report gctx [list-get fl 0]]]
         [ifs
           [word-eq fw [static-list [text i32]]]
           [do
@@ -1289,7 +1297,7 @@
           n-args [dec n]]
       [if [eq n 0]
         [push-error gctx form [static-list [text 'form-to-top empty list not allowed']]]]
-      [let [fw [form-word-get [list-get fl 0]]]
+      [let [fw [form-word-get-report gctx [list-get fl 0]]]
         [ifs
           [word-eq fw [static-list [text defn]]]
           [do
@@ -1299,7 +1307,7 @@
               [name-form [list-get fl 1]
                param-list [form-list-get-report gctx [list-get fl 2]]
                result-type [form-to-type gctx [list-get fl 3]]
-               fname [form-word-get name-form]
+               fname [form-word-get-report gctx name-form]
                n-of-param-forms [list-size param-list]
                lctx [local-context-alloc context-kind-func local-context-empty [half n-of-param-forms]]
                locals-array [list-data-array [pfield lctx locals]]
@@ -1310,7 +1318,7 @@
                 [when [lt-s i [dec n-of-param-forms]]
                   [let
                     [lname-form [list-get param-list i]
-                     lname [form-word-get lname-form]
+                     lname [form-word-get-report gctx lname-form]
                      [found-ctx lvar-type] [local-context-lookup lctx lname]
                      ltype [form-to-type gctx [list-get param-list [inc i]]]]
                     [if [ne found-ctx local-context-empty]
@@ -1343,7 +1351,7 @@
             [if [ne n-args 2]
               [log-abort [text 'form-to-top def expects a name and an expression']]]
             [let
-              [dname [form-word-get [list-get fl 1]]
+              [dname [form-word-get-report gctx [list-get fl 1]]
                exp [form-to-exp gctx local-context-empty [list-get fl 2]]
                def-desc
                [alloc-init
@@ -1363,7 +1371,7 @@
                 [when [lt-s k n]
                   [let
                     [ef [list-get fl k]
-                     export-name [form-word-get ef]
+                     export-name [form-word-get-report gctx ef]
                      edesc [assoc-list-get-value names export-name]]
                     [if [is-null edesc]
                       [push-error gctx ef [static-list [text 'export name not found']]]
