@@ -472,6 +472,8 @@
 [datatype plist [vp datatype]
   [pmem [list-data vp -size]]]
 
+[def empty-list [cast [plist -a] [data mem [record size 0]]]]
+
 [genfn static-list [sz [exp [i32]]] [byte-array [array [u8] sz]] [plist [u8]]
   [data mem
     [record
@@ -1154,7 +1156,7 @@
       [deref [pfield pfl forms]]]
     [do
       [push-error gctx pf [static-list [text 'not a form-list']]]
-      [cast [plist [pform]] [data mem [record size [i32 0]]]]]]]
+      [cast [plist [pform]] empty-list]]]]
 
 [defn form-to-exp [gctx [pmem [global-context]] lctx [plocal-context] f [pmem [form]]] [pexp]
   [ifs
