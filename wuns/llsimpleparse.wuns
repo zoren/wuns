@@ -1289,7 +1289,6 @@
 
 [def context-kind-func [i32 1]]
 
-
 [defn forms-to-local-context [gctx [pmem [global-context]] param-list [plist [pform]]] [plocal-context]
   [let
     [n-of-param-forms [list-size param-list]
@@ -1312,6 +1311,19 @@
             [tuple lname ltype]]
           [continue i [add 2 i] ti [inc ti]]]]]
     lctx]]
+
+[defn forms-to-exps [gctx [pmem [global-context]]
+                     lctx [plocal-context]
+                     fl [plist [pform]]
+                     start [i32]
+                     end [i32]] [plist [pexp]]
+  [loop [j start bodies [[instantiate list-alloc [pexp]] [sub end start]]]
+    [if [lt-s j end]
+      [do
+        ; list-map would have been nice here
+        [list-set bodies [sub j start] [form-to-exp gctx lctx [list-get fl j]]]
+        [continue j [inc j]]]
+      bodies]]]
 
 [defn form-to-top [gctx [pmem [global-context]] form [pmem [form]]] [tuple]
   [ifs
@@ -1336,11 +1348,8 @@
                param-list [form-list-get-report gctx [list-get fl 2]]
                result-type [form-to-type gctx [list-get fl 3]]
                fname [form-word-get-report gctx name-form]
-               n-of-param-forms [list-size param-list]
                lctx [forms-to-local-context gctx param-list]
                desc [[instantiate alloc-fn [global-desc-defn]]]]
-              [if [is-odd n-of-param-forms]
-                [push-error gctx name-form [static-list [text 'form-to-top defn expects a parameter list with names and type pairs']]]]
               [if [assoc-list-get-value [deref [pfield gctx names]] fname]
                 [push-error gctx name-form [static-list [text 'name already defined']]]]
               [passign desc
@@ -1349,16 +1358,10 @@
                   parameters [cast [plist [tuple [text] [wtype]]] [pfield lctx locals]]
                   result result-type]]
               [assoc-list-push [deref [pfield gctx names]] fname desc]
-              [loop [j 4 bodies [[instantiate list-alloc [pexp]] [sub n 4]]]
-                [if [lt-s j n]
-                  [do
-                    ; list-map would have been nice here
-                    [list-set bodies [sub j 4] [form-to-exp gctx lctx [list-get fl j]]]
-                    [continue j [inc j]]]
-                  [do
-                    [when [not [type-assignable result-type [type-ofs gctx [cast [plist [pexp]] bodies]]]]
-                      [push-error gctx form [static-list [text 'result type mismatch']]]]
-                    [passign [pfield desc body] bodies]]]]]]
+              [let [bodies [forms-to-exps gctx lctx fl 4 n]]
+                [when [not [type-assignable result-type [type-ofs gctx bodies]]]
+                  [push-error gctx form [static-list [text 'result type mismatch']]]]
+                [passign [pfield desc body] bodies]]]]
 
           [word-eq fw [static-list [text def]]]
           [do
