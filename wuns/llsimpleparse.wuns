@@ -431,20 +431,27 @@
           [memory-overwrite old-p old-n-aligned]
           new-p]]]]]
 
+[def is-debug [i32 1]]
+
 [defn realloc [old-p [pmem -a] old-n-bytes [i32] new-n-bytes [i32]] [pmem -a]
-  [realloc-production old-p old-n-bytes new-n-bytes]]
+  [if is-debug
+    [realloc-debug old-p old-n-bytes new-n-bytes]
+    [realloc-production old-p old-n-bytes new-n-bytes]]]
 
-[functor alloc [t datatype]
-  [cast [pmem t] [realloc null 0 [size-of-type t]]]]
-
-[genfn alloc-init [t datatype] [v t] [pmem t]
-  [let [p [realloc null 0 [size-of-type t]]]
-    [pinit p v]
-    p]]
+[defn alloc-bytes [n-bytes [i32]] [pmem -a]
+  [realloc null 0 n-bytes]]
 
 [defn free [old-p [pmem -a] old-n-bytes [i32]] [tuple]
   [realloc old-p old-n-bytes 0]
   [do]]
+
+[genfn alloc-fn [t datatype] [] [pmem t]
+  [alloc-bytes [size-of-type t]]]
+
+[genfn alloc-init [t datatype] [v t] [pmem t]
+  [let [p [[instantiate alloc-fn t]]]
+    [pinit p v]
+    p]]
 
 [defn is-between-inclusive [lower [i64] c [i64] upper [i64]] [i32]
   [bitwise-and [intrinsic i64.le-s lower c] [intrinsic i64.le-s c upper]]]
@@ -476,17 +483,16 @@
 
 [export list-size]
 
-[functor list-alloc [elem-type datatype]
-  [func [sz [i32]] [plist elem-type]
-    [let [p [alloc [list-data elem-type [exp sz]]]]
-      [passign [pfield p size] sz]
-      p]]]
+[genfn list-alloc [elem-type datatype] [lafn-sz [i32]] [plist elem-type]
+  [let [p [[instantiate alloc-fn [list-data elem-type [exp lafn-sz]]]]]
+    [passign [pfield p size] lafn-sz]
+    p]]
 
 [genfn list-free [elem-type datatype] [pvec [pmem [list-data elem-type -sz]]] [tuple]
   [if [not [static-is pvec]]
     [free pvec [size-of-type [list-data elem-type [exp [deref [pfield pvec size]]]]]]]]
 
-[def list-alloc-byte [list-alloc [u8]]]
+[defn list-alloc-byte [sz [i32]] [plist [u8]] [[instantiate list-alloc [u8]] sz]]
 [export list-alloc-byte]
 
 [genfn list-get [elem-type datatype] [pvec [pmem [list-data elem-type -sz]] i [i32]] elem-type
@@ -516,15 +522,14 @@
 [datatype p-growable-list [a datatype]
   [pmem [growable-list a]]]
 
-[functor growable-list-alloc-init [elem-type datatype]
-  [func [init-capacity [i32]] [p-growable-list elem-type]
-    [when [le-s init-capacity 0]
-      [log-abort [text 'growable-list-alloc-init init-capacity <= 0']]]
-    [alloc-init
-      [record
-        size 0
-        capacity init-capacity
-        parray [alloc [array elem-type [exp init-capacity]]]]]]]
+[genfn growable-list-alloc-init [elem-type datatype] [init-capacity [i32]] [p-growable-list elem-type]
+  [when [le-s init-capacity 0]
+    [log-abort [text 'growable-list-alloc-init init-capacity <= 0']]]
+  [alloc-init
+    [record
+      size 0
+      capacity init-capacity
+      parray [[instantiate alloc-fn [array elem-type [exp init-capacity]]]]]]]
 
 [genfn growable-list-free [elem-type datatype] [pglist [p-growable-list elem-type]] [tuple]
   [let
@@ -570,9 +575,7 @@
 [genfn growable-list-to-list [elem-type datatype] [pglist [p-growable-list elem-type]] [plist elem-type]
   [let
     [cur-size [deref [pfield pglist size]]
-    ; todo allow functors to call functors to clean this up
-     plist [alloc [list-data elem-type [exp cur-size]]]]
-    [passign [pfield plist size] cur-size]
+     plist [[instantiate list-alloc elem-type] cur-size]]
     [loop [i 0]
       [when [lt-s i cur-size]
         [passign
@@ -708,9 +711,6 @@
 
 [export form-free list-forms-free]
 
-[def growable-list-alloc-init-form
-  [growable-list-alloc-init [pform]]]
-
 [defn scan-word-end [bytes [plist [u8]] start [i32]] [i32]
   [loop [i start n-of-bytes [list-size bytes]]
     [if [lt-s i n-of-bytes]
@@ -721,13 +721,14 @@
 
 [defn make-stack [stack-size [i32] init-capacity [i32]] [pmem [array [p-growable-list [pform]]]]
   [if [le-s init-capacity 0] [log-abort [text 'make-stack init-capacity <= 0']]]
-  [let [parray [alloc [array [p-growable-list [pform]] [exp stack-size]]]]
+  [let [parray [[instantiate alloc-fn [array [p-growable-list [pform]] [exp stack-size]]]]]
     [loop [i 0]
       [if [lt-s i stack-size]
         [do
           [passign
             [pindex parray i]
-            [growable-list-alloc-init-form init-capacity]]
+            [[instantiate growable-list-alloc-init [pform]] init-capacity]
+            ]
           [continue i [inc i]]]]]
     parray]]
 
@@ -761,9 +762,6 @@
             [growable-list-push [deref [pindex stack [dec i]]] fl]
             [continue i [dec i]]]]]]]]
 
-[def growable-list-alloc-init-text
-  [growable-list-alloc-init [text]]]
-
 [defn text-intern [texts [p-growable-list [text]] pw [pmem [array [u8]]] word-size [i32]] [text]
   [loop [txts-i 0 txts-sz [list-size texts]]
     [if [lt-s txts-i txts-sz]
@@ -777,8 +775,6 @@
           [continue txts-i [inc txts-i]]]]
       [cast [text] [i32 0]]]]]
 
-[def assoc-list-alloc-form-index [growable-list-alloc-init [tuple [pform] [i32]]]]
-
 [defn parse-n [bytes [text]]
   [tuple
     [p-growable-list [pform]]
@@ -789,9 +785,9 @@
     [stack [make-stack stack-size init-capacity]
      n-of-bytes [list-size bytes]
      bytes-array [list-data-array bytes]
-     result [growable-list-alloc-init-form [i32 16]]
-     texts [growable-list-alloc-init-text [i32 10]]
-     form-offsets [assoc-list-alloc-form-index [i32 128]]]
+     result [[instantiate growable-list-alloc-init [pform]] [i32 16]]
+     texts [[instantiate growable-list-alloc-init [text]] [i32 10]]
+     form-offsets [[instantiate growable-list-alloc-init [tuple [pform] [i32]]] [i32 128]]]
     [loop
       [i 0
        ; todo let stack-index be 0 based instead and result be the top growable-list
@@ -962,18 +958,17 @@
     [exports [p-assoc-list [text] [pmem [global-context-kind]]]]
     ]]
 
-[def assoc-list-error [growable-list-alloc-init [error]]]
-[def assoc-list-alloc-text-global-context-kind [growable-list-alloc-init [tuple [text] [pmem [global-context-kind]]]]]
-[def assoc-list-exp-type [growable-list-alloc-init [tuple [pexp] [wtype]]]]
+[genfn assoc-list-alloc [k datatype v datatype] [sz [i32]] [p-assoc-list k v]
+  [[instantiate growable-list-alloc-init [tuple k v]] sz]]
 
 [defn global-context-alloc [form-offsets [p-assoc-list [pform] [i32]]] [pmem [global-context]]
   [alloc-init
     [record
-      errors [assoc-list-error [i32 10]]
-      names [assoc-list-alloc-text-global-context-kind [i32 10]]
+      errors [[instantiate growable-list-alloc-init [error]] [i32 10]]
+      names [[instantiate assoc-list-alloc [text] [pmem [global-context-kind]]] [i32 10]]
       form-offsets form-offsets
-      exp-types [assoc-list-exp-type [i32 10]]
-      exports [assoc-list-alloc-text-global-context-kind [i32 10]]]]]
+      exp-types [[instantiate assoc-list-alloc [pexp] [wtype]] [i32 10]]
+      exports [[instantiate assoc-list-alloc [text] [pmem [global-context-kind]]] [i32 10]]]]]
 
 [defn global-context-free [gctx [pmem [global-context]]] [tuple]
   [growable-list-free [deref [pfield gctx errors]]]
@@ -999,7 +994,7 @@
 
 [defn local-context-alloc [kind [i32] outer [plocal-context] size [i32]] [plocal-context]
   [let
-    [p [alloc [local-context [exp size]]]]
+    [p [[instantiate alloc-fn [local-context [exp size]]]]]
     [passign [pfield p context-kind] kind]
     [passign [pfield p outer] outer]
     [passign [pfield [pfield p locals] size] size]
@@ -1040,6 +1035,9 @@
         message msg
         offset [deref p-offset]]]]]
 
+[defn is-digit [cc [i64]] [i32]
+  [is-between-inclusive [i64 48] cc [i64 57]]]
+
 ; https://github.com/skeeto/scratch/blob/master/parsers/strtonum.c
 [defn dec-word-to-i64-signed [gctx [pmem [global-context]] word-form [pform]] [tuple [i32] [i64]]
   [let
@@ -1052,7 +1050,7 @@
         [loop [i 1 res [i64 0]]
           [if [lt-s i ws]
             [let [cc [list-get w i]]
-              [if [not [is-between-inclusive [i64 48] cc [i64 57]]]
+              [if [not [is-digit cc]]
                 [do
                   [push-error gctx word-form [static-list [text 'not a valid digit']]]
                   [i64 0]]
@@ -1072,7 +1070,7 @@
         [loop [i 0 res [i64 0]]
           [if [lt-s i ws]
             [let [cc [list-get w i]]
-              [if [not [is-between-inclusive [i64 48] cc [i64 57]]]
+              [if [not [is-digit cc]]
                 [do
                   [push-error gctx word-form [static-list [text 'not a valid digit']]]
                   [i64 0]]
@@ -1121,8 +1119,6 @@
 
 [defn annotate [gctx [pmem [global-context]] exp [pexp] t [wtype]] [tuple]
   [assoc-list-push [deref [pfield gctx exp-types]] exp t]]
-
-[def list-alloc-pexp [list-alloc [pexp]]]
 
 [defn primitive-int-name-to-signed-size [fw [text]] [tuple [i32] [i64]]
   [ifs
@@ -1271,18 +1267,13 @@
 
 [def context-kind-func [i32 1]]
 
-[functor list-empty [t datatype]
-  [cast [plist t] [data mem [record size [i32 0]]]]]
-
-[def list-empty-pform [list-empty [pform]]]
-
 [defn form-list-get-report [gctx [pmem [global-context]] pf [pform]] [plist [pform]]
   [if [form-list-is pf]
     [let [pfl [cast [pmem [form-list]] pf]]
       [deref [pfield pfl forms]]]
     [do
       [push-error gctx pf [static-list [text 'not a form-list']]]
-      list-empty-pform]]]
+      [cast [plist [pform]] [data mem [record size [i32 0]]]]]]]
 
 [defn form-to-top [gctx [pmem [global-context]] form [pmem [form]]] [tuple]
   [ifs
@@ -1310,7 +1301,7 @@
                n-of-param-forms [list-size param-list]
                lctx [local-context-alloc context-kind-func local-context-empty [half n-of-param-forms]]
                locals-array [list-data-array [pfield lctx locals]]
-               desc [alloc [global-desc-defn]]]
+               desc [[instantiate alloc-fn [global-desc-defn]]]]
               [if [is-odd n-of-param-forms]
                 [push-error gctx name-form [static-list [text 'form-to-top defn expects a parameter list with names and type pairs']]]]
               [loop [i 0 ti 0]
@@ -1334,7 +1325,7 @@
                   parameters [cast [plist [tuple [text] [wtype]]] [pfield lctx locals]]
                   result result-type]]
               [assoc-list-push [deref [pfield gctx names]] fname desc]
-              [loop [j 4 bodies [list-alloc-pexp [sub n 4]]]
+              [loop [j 4 bodies [[instantiate list-alloc [pexp]] [sub n 4]]]
                 [if [lt-s j n]
                   [do
                     ; list-map would have been nice here

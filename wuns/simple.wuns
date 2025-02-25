@@ -126,6 +126,8 @@
 
     [call exp [list exp]]
     [call-functor name [list type]]
+    [instantiate exp [list type]]
+
     [intrinsic name [list imm-arg] [list exp]]
     [size-of-type type]
     [size-of-exp exp]
@@ -267,6 +269,24 @@
     [intrinsic-type [list [immediate-type/memory]] [list type-i32 type-i32 type-i32] type-tuple-empty]
 
     [logq-abort not implemented intrinsic [identity n]]]]
+
+[defn type-iterate [f]
+  [func go [t]
+    [f t]
+    [match t
+      [type/var -] [do]
+      [type/wildcard -] [do]
+      [type/primitive -] [do]
+      [type/exp -] [do]
+
+      [type/tuple ts] [for-each tt ts [go tt]]
+      [type/pointer mt pt] [do [go mt] [go pt]]
+      [type/array at opt-et] [do [go at] [when-let [et opt-et] [go et]]]
+      [type/record fs] [for-each ff fs [go [pair/snd ff]]]
+      [type/union ts] [for-each tt ts [go tt]]
+      [type/apply-custom tn args] [for-each arg args [go arg]]
+      [type/func tf] [do [for-each pp [type-func/parameters tf] [go pp]] [go [type-func/result tf]]]
+      [logq-abort type-iterate not implemented [identity t]]]]]
 
 [defn type-substitute [type-env outer-t]
   [[func go [t]
@@ -630,6 +650,13 @@
       [log-location f]
       [logq-abort expected word [identity f]]]]]
 
+[func form-to-word-report [f]
+  [if-let [w [try-get-word f]]
+    w
+    [do
+      [log-location f]
+      [logq-abort form-to-word-report expected word [identity f]]]]]
+
 [func try-get-name [lctx name-word]
   [loop [cur lctx]
     [match cur
@@ -673,7 +700,7 @@
       [let
         [ff [first l]
          proc-form
-         [func pf []
+         [func form-to-exp-type-kind-env-proc-form []
           [let [fe [form-to-exp-type-kind-env type-kind-env lctx ff]]
             [match [type-of fe]
               [type/func tf]
@@ -682,7 +709,11 @@
                  params [type-func/parameters tf]
                  args [rest l]
                  cargs [list-map arg args [form-to-exp-type-kind-env type-kind-env lctx arg]]]
-                [assert [eq [size params] [size args]] form-to-exp expected same number of arguments]
+                [assert [eq [size params] [size args]]
+                  form-to-exp expected same number of arguments [identity fe]
+[size params] [size args]
+                  ]
+                ; todo start checking assignability again when we have type env
                 [for-each carg cargs [type-of carg]]
                 [exp/call fe cargs]]
 
@@ -784,7 +815,7 @@
 
 [func form-to-type-type-env [type-env lctx outer-form]
   [letfn [
-  [func go [form]
+  [func go-f2t-te [form]
     [match form
     [form/word w]
     [if [starts-with-dash w]
@@ -797,12 +828,12 @@
         [type/var n]]]
 
     [form/list l]
-    [let [type-name-word [form-to-word [first l]]
+    [let [type-name-word [form-to-word-report [first l]]
           n-of-args [dec [size l]]]
       [assert-not [is-empty l] form-to-type expected non-empty list]
       [if-let [custom-type-signature [try-get custom-type-signatures type-name-word]]
         [let [type-params [type-signature/params custom-type-signature]
-              targs [list-map a [rest l] [go a]]]
+              targs [list-map a [rest l] [go-f2t-te a]]]
           [assert [eq n-of-args [size type-params]] form-to-type expected same number of arguments
             [identity type-name-word] [size type-params] [identity n-of-args]]
           [for i 0 [size type-params]
@@ -815,35 +846,35 @@
           [type/apply-custom [form-to-name [first l]] targs]]
         [switch type-name-word
           [[word tuple]]
-          [type/tuple [list-map t [rest l] [go t]]]
+          [type/tuple [list-map t [rest l] [go-f2t-te t]]]
 
           [[word record]]
           [type/record
             [list-map pf [rest l]
               [let [p [get-list pf]]
-                [pair [form-to-name [first p]] [go [second p]]]]]]
+                [pair [form-to-name [first p]] [go-f2t-te [second p]]]]]]
 
           [[word union]]
-          [type/union [list-map a [rest l] [go a]]]
+          [type/union [list-map a [rest l] [go-f2t-te a]]]
 
           [[word pointer]]
           [do
             [assert [eq n-of-args 2] form-to-type expected 2 elements [identity type-name-word] [identity n-of-args]]
-            [let [mt [go [second l]]
-                  target-type [go [third l]]]
+            [let [mt [go-f2t-te [second l]]
+                  target-type [go-f2t-te [third l]]]
               [type/pointer mt target-type]]]
 
           [[word exp]]
           [let [be [form-to-exp-type-kind-env type-env lctx [second l]]]
-            [type/exp [if-let [c [try-resolve-const be]] c be]]]
+            [type/exp [if-let [c [try-resolve-constant be]] c be]]]
 
           [[word array]]
           [ifs
             [eq [size l] 2]
-            [type/array [go [second l]] [option/none]]
+            [type/array [go-f2t-te [second l]] [option/none]]
 
             [eq [size l] 3]
-            [type/array [go [second l]] [option/some [go [third l]]]]
+            [type/array [go-f2t-te [second l]] [option/some [go-f2t-te [third l]]]]
 
             [logq-abort array expected 2 or 3 elements]]
 
@@ -852,7 +883,7 @@
               [assert [eq n-of-args 0] form-to-type primitive takes no arguments [identity type-name-word]]
               [type/primitive p]]
             [logq-abort not implemented form-to-type [identity form]]]]]]]]]
-    [go outer-form]]]
+    [go-f2t-te outer-form]]]
 
 [func get-mem-type [mem-name-word]
   [match [top-desc/kind [pair/snd [get top-names mem-name-word]]]
@@ -1134,7 +1165,7 @@
 
     [[word text]]
     [let [gl [growable-list]
-          w [form-to-word [second l]]]
+          w [form-to-word-report [second l]]]
       [for i 0 [word-byte-size w]
         [push gl [exp/integer type-primitive-u8 [i32-to-bigint [char-code-at w i]]]]]
       [exp/array type-u8 [clone-growable-to-frozen-list gl]]]
@@ -1159,6 +1190,11 @@
       [mem-name-exp [form-to-exp-type-kind-env type-kind-env lctx [second l]]]
       [get-memory-exp-type mem-name-exp]
       [exp/memory-static-top mem-name-exp]]
+
+    [[word instantiate]]
+    [exp/instantiate
+      [form-to-exp-type-kind-env type-kind-env lctx [second l]]
+      [list-map a [slice l 2 [size l]] [form-to-type-type-env type-kind-env lctx a]]]
 
     [if-let [pt [try-get primitive-types-by-name fw]]
       [let [n [form-to-name [second l]]]
@@ -1531,6 +1567,14 @@
 
     targ]]
 
+[func make-type-env [parameter-names targs]
+  [assert [eq [size parameter-names] [size targs]] make-type-env expected same number of arguments
+    [identity parameter-names] [identity targs]]
+  [let [functor-type-env [transient-kv-map]]
+    [for i 0 [size targs]
+      [set-kv-map functor-type-env [at parameter-names i] [at targs i]]]
+    functor-type-env]]
+
 [func functor-desc-to-type-env [fd targs]
   [assert [eq [size targs] [size [functor-desc/parameters fd]]] call-functor expected same number of arguments]
   [let [functor-type-env [transient-kv-map]]
@@ -1617,6 +1661,15 @@
             [result/error -] [logq-abort type-of call args not assignable [identity fexp] [identity tf] [identity args]]]]]
 
       [logq-abort not a func]]
+
+    [exp/instantiate fexp targs]
+    [match [type-of fexp]
+      [type/func tf]
+      [let
+        [tenv [make-type-env [list-map tpn [type-func/type-parameters tf] [name/word [pair/fst tpn]]] targs]]
+        [type-substitute tenv [type/func [type-func [list] [type-func/parameters tf] [type-func/result tf]]]]]
+
+      [logq-abort not a value [type-of fexp]]]
 
     [exp/call-functor fname targs]
     [let [fd [get-functor-desc fname]]
@@ -1722,7 +1775,7 @@
 [func form-to-import-kind [form]
   [let [l [get-list form]]
     [assert-not [is-empty l] form-to-import-kind expected non-empty list]
-    [switch [form-to-word [first l]]
+    [switch [form-to-word-report [first l]]
       [[word memory]]
       [import-kind-decl/memory [form-list-to-mem-exp l]]
 
@@ -1736,11 +1789,13 @@
 
       [logq-abort not implemented import-kind [first l]]]]]
 
-[func bind-top [name-form type desc]
-  [let [n [get-word name-form]]
-    [when [has top-names n]
-      [error name-form name already defined]]
-    [set-kv-map top-names n [pair type desc]]]]
+[func bind-top [name type desc]
+  [let
+    [w [name/word name]]
+    [set-kv-map name-to-desc name [name-desc type [desc-kind/top desc]]]
+    [when [has top-names w]
+      [error-name name name already defined]]
+    [set-kv-map top-names w [pair type desc]]]]
 
 [func form-to-type-kind [form]
   [match form
@@ -1750,11 +1805,11 @@
       [logq-abort type unknown kind]]
 
     [form/list ll]
-    [switch [form-to-word [first ll]]
+    [switch [form-to-word-report [first ll]]
       [[word exp]] [type-kind/exp [form-to-type [second ll]]]
       [logq-abort type unknown kind]]]]
 
-[func try-resolve-const [exp]
+[func try-resolve-constant [exp]
   [match exp
     [exp/var n]
     [if-let [desc [try-get name-to-desc n]]
@@ -1770,7 +1825,7 @@
 
           ; default
           [option/none]]]
-      [logq-abort try-resolve-const name not found [identity n]]]
+      [logq-abort try-resolve-constant name not found [identity n]]]
     [option/none]]]
 
 [func expand-custom-non-rec [param-map]
@@ -1858,10 +1913,10 @@
                be [form-to-exp-type-kind-env empty-type-env local-context-empty [third l]]
                is-mutable [eq-word fw [word mutable]]
                kind [if is-mutable value-kind-mutable value-kind-constant]
-               resolved-be [if-let [c [try-resolve-const be]] c be]]
+               resolved-be [if-let [c [try-resolve-constant be]] c be]]
               [when-not is-mutable
                 [set-kv-map value-constants [name/word fname] resolved-be]]
-              [bind-top name-form
+              [bind-top fname
                 [type-of be]
                 [top-desc [top-desc-kind/value [value-desc kind]] [imported-or-here/here]]]
               [push top-decls [top-decl/value kind fname be]]]]
@@ -1869,7 +1924,7 @@
           [[word memory]]
           [let [mem-name [form-to-name [second l]]
                 mem-exp [form-list-to-mem-exp [rest l]]]
-            [bind-top [second l]
+            [bind-top mem-name
               [type/memory mem-name]
               [top-desc [top-desc-kind/memory [mem-exp-to-mem-kind mem-exp]] [imported-or-here/here]]]
             [push top-decls [top-decl/memory mem-name mem-exp]]]
@@ -1886,7 +1941,7 @@
           [let [type-desc-list [growable-list]]
             [for-3 i 1 [size l]
               [let
-                [type-name-word [form-to-word [at l i]]
+                [type-name-word [form-to-word-report [at l i]]
                  param-form [at l [inc i]]
                  param-map [transient-kv-map]
                  type-params
@@ -1898,7 +1953,7 @@
                 [set-kv-map custom-type-signatures type-name-word [type-signature type-kind-datatype type-params param-map]]]]
             [for-3 i 1 [size l]
               [let
-                [type-name-word [form-to-word [at l i]]
+                [type-name-word [form-to-word-report [at l i]]
                  type-sig [get custom-type-signatures type-name-word]
                  param-map [type-signature/param-map type-sig]]
                 [let
@@ -1936,7 +1991,7 @@
                     [top-desc-kind/memory [mem-exp-to-mem-kind mem-exp]]
 
                     [logq-abort not implemented type-of import]]]
-                  [bind-top [first import-list] t [top-desc ikd [imported-or-here/imported]]]
+                  [bind-top m t [top-desc ikd [imported-or-here/imported]]]
                   [pair m ik]]]]
             [push top-decls [top-decl/import mod-name import-exps]]]
 
@@ -1955,7 +2010,7 @@
                   [set-kv-map tparam-ctx [name/word pname] pkind]
                   [pair pname pkind]]]
                exp [form-to-exp-type-kind-env tparam-ctx local-context-empty result-form]]
-              [bind-top name-form
+              [bind-top [form-to-name name-form]
                 [type/functor tparameters [type-of exp]]
                 [top-desc
                   [top-desc-kind/functor [functor-desc tparameters exp]]
@@ -1967,6 +2022,7 @@
               [error form function expected name params return-type bodies]]
             [let
               [name-form [second l]
+               fname [form-to-name name-form]
                is-defn [eq-word fw [word defn]]
                params-list [get-list [third l]]
                return-type-form [fourth l]
@@ -1977,7 +2033,7 @@
                tf [type-func [list] param-types return-type]
                param-ctx [transient-kv-map]
                lctx [local-context-make-func param-ctx]]
-              [bind-top name-form
+              [bind-top fname
                 [type/func tf]
                 [top-desc
                   [top-desc-kind/value [value-desc value-kind-constant]]
@@ -1987,7 +2043,6 @@
               [let
                 [cbodies [list-map body [slice l 4 [size l]] [form-to-exp-type-kind-env empty-type-env lctx body]]
                  inferred-return-type [type-ofs cbodies]
-                 fname [form-to-name name-form]
                  exp-func [exp-function fw [option/some fname] tf param-names cbodies]]
                 [set-kv-map top-funcs [name/word fname] exp-func]
                 [match [go-tai [transient-kv-map] return-type inferred-return-type]
@@ -2018,8 +2073,9 @@
                return-type [form-to-type-type-env tparam-ctx local-context-empty return-type-form]
                tf [type-func tparameters param-types return-type]
                param-ctx [transient-kv-map]
-               lctx [local-context-make-func param-ctx]]
-              [bind-top name-form
+               lctx [local-context-make-func param-ctx]
+               fname [form-to-name name-form]]
+              [bind-top fname
                 [type/func tf]
                 [top-desc
                   [top-desc-kind/value [value-desc value-kind-constant]]
@@ -2029,9 +2085,7 @@
               [let
                 [cbodies [list-map body [slice l 5 [size l]] [form-to-exp-type-kind-env tparam-ctx lctx body]]
                  inferred-return-type [type-ofs cbodies]
-                 fname [form-to-name name-form]
-                 exp-func [exp-function fw [option/some fname] tf param-names cbodies]
-                 ]
+                 exp-func [exp-function fw [option/some fname] tf param-names cbodies]]
                 [set-kv-map top-funcs [name/word fname] exp-func]
                 [match [go-tai [transient-kv-map] return-type inferred-return-type]
                   [result/ok -] [do]
@@ -2230,10 +2284,10 @@
         [for-each field fields [go [pair/snd field]]]
 
         [exp/var n]
-        [go [get-const e]]
+        [go [get-constant e]]
 
         [exp/size-of-exp se]
-        [go [type-to-size-of-exp [type-of [get-const se]]]]
+        [go [type-to-size-of-exp [type-of [get-constant se]]]]
 
         [exp/annotation t ae]
         [go ae]
@@ -2256,7 +2310,7 @@
     [push datas [data-active mem-name-word current-offset bytes]]
     current-offset]]
 
-[func get-const [e]
+[func get-constant [e]
   [match e
     [exp/var v]
     [match [name-desc/kind [get-name-desc-from-name v]]
@@ -2310,6 +2364,54 @@
 
 [func type-substitute-expand [t]
   [expand-custom-n [type-substitute type-env t]]]
+
+[func add-specialized [fnw tenv type-args args]
+  [let[
+    subst-types [list-map ta type-args [type-substitute type-env ta]]
+    types-str [word-join [word -] [list-map ta subst-types [type-to-string ta]]]
+    spec-name [concat-words fnw [concat-words [word --] types-str]]
+    specs-targs
+    [if-let [specs [try-get gen-fn-specs-by-name fnw]]
+      specs
+      [let [specs [transient-kv-map]]
+        [set-kv-map gen-fn-specs-by-name fnw specs]
+        specs]]
+    type-arg-params [growable-list]
+    type-arg-exps [growable-list]
+    type-arg-exp-iterator
+    [type-iterate
+      [func f [t]
+        [match t
+          [type/exp e]
+          [match e
+            [exp/integer -pt -n]
+            [do]
+
+            [exp/var vn]
+            [let [desc [get-name-desc-from-name vn]]
+              [match [name-desc/kind desc]
+                [desc-kind/top td]
+                [do
+                  ; we do not pass it as it is available globally
+                  ]
+
+                [desc-kind/local ld]
+                [do
+                  [push type-arg-params [pair [name/word vn] [word i32]]]
+                  [push type-arg-exps e]]]]
+
+            [do
+              [logq-abort type exp in type arg not supported yet [identity e]]]]
+
+          [do]]]]]
+  [for-each type-arg subst-types
+    [type-arg-exp-iterator type-arg]]
+  [when-not [has specs-targs types-str]
+    [add-func spec-name tenv [get top-funcs fnw] [clone-growable-to-frozen-list type-arg-params]]
+    [set-kv-map specs-targs types-str subst-types]]
+  [wat-inst/call spec-name
+    [list-map arg [concat [clone-growable-to-frozen-list type-arg-exps] args]
+      [exp-to-inst arg]]]]]
 
 [func exp-to-inst [exp]
   [match exp
@@ -2380,44 +2482,49 @@
             [type/func tf] tf
             [logq-abort not a function]]
           parameter-types [type-func/parameters tf]
-          type-parameters [type-func/type-parameters tf]
-          fnw [match fexp
-                [exp/var n] [name/word n]
-                [logq-abort not implemented exp-to-inst call [identity fexp]]]]
+          type-parameters [type-func/type-parameters tf]]
     [if [is-empty type-parameters]
-      [if-let [efunc [try-get top-funcs fnw]]
-        [if [eq-word [word def-comp-fn] [exp-function/kind efunc]]
-          [let [params [exp-function/parameters efunc]
-                param-env [transient-kv-map]]
-            [assert [eq [size params] [size args]] call expected same number of arguments]
-            [for i 0 [size args]
-              [set-kv-map param-env [name/word [at params i]] [at args i]]]
-            [let
-              [comp [mk-exp-to-inst-compiler [transient-kv-map] param-env] ; todo maybe we need to pass the type env
-               es2i [exp2inst-compiler/exps-to-inst comp]]
-              [es2i [exp-function/bodies efunc]]]]
-          [wat-inst/call fnw [list-map arg args [exp-to-inst arg]]]]
-        [wat-inst/call fnw [list-map arg args [exp-to-inst arg]]]]
+      [match fexp
+        [exp/var fn]
+        [if-let [efunc [try-get top-funcs [name/word fn]]]
+          [if [eq-word [word def-comp-fn] [exp-function/kind efunc]]
+            [let [params [exp-function/parameters efunc]
+                  param-env [transient-kv-map]]
+              [assert [eq [size params] [size args]] call expected same number of arguments]
+              [for i 0 [size args]
+                [set-kv-map param-env [name/word [at params i]] [at args i]]]
+              [let
+                [comp [mk-exp-to-inst-compiler [transient-kv-map] param-env] ; todo maybe we need to pass the type env
+                 es2i [exp2inst-compiler/exps-to-inst comp]]
+                [es2i [exp-function/bodies efunc]]]]
+            [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]]
+          [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]]
+
+        [exp/instantiate fexp type-args]
+        [let
+          [itf
+            [match [type-of fexp]
+              [type/func tf] tf
+              [logq-abort instantiate only works on functions]]
+           itype-parameters [type-func/type-parameters itf]
+           fnw [get-exp-var fexp]
+           - [logq exp-to-inst exp/call exp/instantiate [identity fexp] [identity itype-parameters] [identity type-args]]
+           subst-types [list-map ta type-args [type-substitute type-env ta]]
+           tenv [make-type-env [list-map tpn itype-parameters [name/word [pair/fst tpn]]] subst-types]]
+          [add-specialized fnw tenv type-args args]]
+
+        [logq-abort not implemented exp-to-inst call [identity fexp] [identity tf] [identity args]]]
       [match [go-tais [transient-kv-map] parameter-types [list-map arg args [type-substitute type-env [type-of arg]]]]
         [result/ok tenv]
         [let
           [type-args [list-map tp type-parameters [get tenv [name/word [pair/fst tp]]]]
-           types-str [word-join [word -] [list-map ta type-args [type-to-string ta]]]
-           spec-name [concat-words fnw [concat-words [word --] types-str]]
-           specs-targs
-            [if-let [specs [try-get gen-fn-specs-by-name fnw]]
-              specs
-              [let [specs [transient-kv-map]]
-                [set-kv-map gen-fn-specs-by-name fnw specs]
-                specs]]]
-          [when-not [has specs-targs types-str]
-            [add-func spec-name tenv [get top-funcs fnw]]
-            [set-kv-map specs-targs types-str type-args]]
-          [wat-inst/call
-            spec-name
-            [list-map arg args [exp-to-inst arg]]]]
+           fnw [get-exp-var fexp]]
+          [add-specialized fnw tenv type-args args]]
 
         [result/error -] [logq-abort exp-to-inst call args not assignable [identity fexp] [identity tf] [identity args]]]]]
+
+    [exp/instantiate fexp type-args]
+    [logq-abort top level instantiate is not currently supported]
 
     [exp/call-functor fname targs]
     [let
@@ -2441,7 +2548,7 @@
     [exp-to-inst [type-to-size-of-exp-current-tenv t]]
 
     [exp/size-of-exp e]
-    [exp-to-inst [type-to-size-of-exp-current-tenv [type-of [get-const e]]]]
+    [exp-to-inst [type-to-size-of-exp-current-tenv [type-of [get-constant e]]]]
 
     [exp/let-loop ll-kind bindings bodies]
     [let
@@ -2703,7 +2810,7 @@
       [option/some [word-to-int [name/word max]]]
       [option/none]]]]
 
-[func add-func [fname type-inst-env f]
+[func add-func [fname type-inst-env f extra-parameters]
   [let
     [const-env [transient-kv-map]
      comp [mk-exp-to-inst-compiler type-inst-env const-env]
@@ -2714,6 +2821,8 @@
      param-types [type-func/parameters tf]
      param-names [exp-function/parameters f]
      gparams [growable-list]]
+    [for-each extra extra-parameters
+      [push gparams extra]]
     [for i 0 [size param-names]
       [let [pt [at param-types i]
             pnw [name/word [at param-names i]]
@@ -2795,7 +2904,7 @@
           [func expand-functor-calls [tenv exp]
             [match exp
               [exp/func f]
-              [add-func [name/word def-name] tenv f]
+              [add-func [name/word def-name] tenv f [list]]
 
               [exp/call-functor fn targs]
               [let
@@ -2822,7 +2931,7 @@
               [expand-functor-calls [transient-kv-map] oexp]]
 
         [top-decl/function f]
-        [add-func [name/word [option-get [exp-function/name f]]] [transient-kv-map] f]
+        [add-func [name/word [option-get [exp-function/name f]]] [transient-kv-map] f [list]]
         ]]
     [for-each data [clone-growable-to-frozen-list datas]
       [push wdata
