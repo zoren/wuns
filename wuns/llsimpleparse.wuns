@@ -1148,6 +1148,14 @@
 
     [log-abort [text 'primitive-int-name-to-signed-size unknown word']]]]
 
+[defn form-list-get-report [gctx [pmem [global-context]] pf [pform]] [plist [pform]]
+  [if [form-list-is pf]
+    [let [pfl [cast [pmem [form-list]] pf]]
+      [deref [pfield pfl forms]]]
+    [do
+      [push-error gctx pf [static-list [text 'not a form-list']]]
+      [cast [plist [pform]] [data mem [record size [i32 0]]]]]]]
+
 [defn form-to-exp [gctx [pmem [global-context]] lctx [plocal-context] f [pmem [form]]] [pexp]
   [ifs
     [form-word-is f]
@@ -1177,7 +1185,7 @@
       exp]
 
     [form-list-is f]
-    [let [fl [form-list-get f]
+    [let [fl [form-list-get-report gctx f]
           n [list-size fl]
           n-args [dec n]]
       [if [eq n 0]
@@ -1246,7 +1254,7 @@
       [log-abort [text 'form-to-type word case not implemented']]]
 
     [form-list-is f]
-    [let [fl [form-list-get f]
+    [let [fl [form-list-get-report gctx f]
           n [list-size fl]
           n-args [dec n]]
       [if [eq n 0]
@@ -1267,14 +1275,6 @@
 
 [def context-kind-func [i32 1]]
 
-[defn form-list-get-report [gctx [pmem [global-context]] pf [pform]] [plist [pform]]
-  [if [form-list-is pf]
-    [let [pfl [cast [pmem [form-list]] pf]]
-      [deref [pfield pfl forms]]]
-    [do
-      [push-error gctx pf [static-list [text 'not a form-list']]]
-      [cast [plist [pform]] [data mem [record size [i32 0]]]]]]]
-
 [defn form-to-top [gctx [pmem [global-context]] form [pmem [form]]] [tuple]
   [ifs
     [form-word-is form]
@@ -1282,7 +1282,7 @@
       [log-abort [text 'form-to-top word case not implemented']]]
 
     [form-list-is form]
-    [let [fl [form-list-get form]
+    [let [fl [form-list-get-report gctx form]
           n [list-size fl]
           n-args [dec n]]
       [if [eq n 0]
