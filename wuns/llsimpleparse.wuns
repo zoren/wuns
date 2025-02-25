@@ -925,6 +925,13 @@
 
 [datatype wtype [] [i32]]
 
+[datatype type-kind []
+  ; datatype
+  ; func
+  ; exp type
+
+  [i32]]
+
 [def global-desc-defn-tag [i32 1]]
 
 [datatype global-desc-defn []
@@ -934,7 +941,17 @@
     [result [wtype]]
     [body [plist [pexp]]]]]
 
-[def global-desc-def-tag [i32 2]]
+[def global-desc-genfn-tag [i32 2]]
+
+[datatype global-desc-genfn []
+  [record
+    [tag [exp global-desc-genfn-tag]]
+    [type-parameters [plist [tuple [text] [type-kind]]]]
+    [parameters [plist [tuple [text] [wtype]]]]
+    [result [wtype]]
+    [body [plist [pexp]]]]]
+
+[def global-desc-def-tag [i32 3]]
 
 [datatype global-desc-def []
   [record
@@ -944,6 +961,7 @@
 [datatype global-context-kind []
   [union
     [global-desc-defn]
+    [global-desc-genfn]
     [global-desc-def]]]
 
 [datatype error []
@@ -1261,11 +1279,17 @@
 
     [log-abort [text 'form-to-exp unknown form case']]]]
 
-[defn form-to-type [gctx [pmem [global-context]] f [pmem [form]]] [wtype]
+[defn form-to-type [gctx [pmem [global-context]] type-kind-env [p-assoc-list [text] [type-kind]] f [pmem [form]]] [wtype]
   [ifs
     [form-word-is f]
-    [do
-      [log-abort [text 'form-to-type word case not implemented']]]
+    [let
+      [var-name [form-word-get f]
+       kind [assoc-list-get-value type-kind-env var-name]]
+      [when [is-null kind]
+        [log-assoc type-kind-env]
+        [log-text var-name]
+        [push-error gctx f [static-list [text 'unknown type var']]]]
+      [i32 -1]]
 
     [form-list-is f]
     [let [fl [form-list-get-report gctx f]
@@ -1289,7 +1313,9 @@
 
 [def context-kind-func [i32 1]]
 
-[defn forms-to-local-context [gctx [pmem [global-context]] param-list [plist [pform]]] [plocal-context]
+[defn forms-to-local-context [gctx [pmem [global-context]]
+                              type-kind-env [p-assoc-list [text] [type-kind]]
+                              param-list [plist [pform]]] [plocal-context]
   [let
     [n-of-param-forms [list-size param-list]
      lctx [local-context-alloc context-kind-func local-context-empty [half n-of-param-forms]]
@@ -1303,7 +1329,7 @@
           [lname-form [list-get param-list i]
            lname [form-word-get lname-form]
            [found-ctx lvar-type] [local-context-lookup lctx lname]
-           ltype [form-to-type gctx [list-get param-list [inc i]]]]
+           ltype [form-to-type gctx type-kind-env [list-get param-list [inc i]]]]
           [if [ne found-ctx local-context-empty]
             [push-error gctx lname-form [static-list [text 'name already defined']]]]
           [passign
@@ -1311,6 +1337,35 @@
             [tuple lname ltype]]
           [continue i [add 2 i] ti [inc ti]]]]]
     lctx]]
+
+[defn forms-to-type-params [gctx [pmem [global-context]] param-list [plist [pform]]] [plist [tuple [text] [type-kind]]]
+  [let
+    [n-of-param-forms [list-size param-list]
+     result [[instantiate list-alloc [tuple [text] [type-kind]]] [half n-of-param-forms]]
+     darray [list-data-array result]]
+    [if [is-odd n-of-param-forms]
+      [push-error gctx [list-get param-list [dec n-of-param-forms]]
+        [static-list [text 'form-to-top defn expects a parameter list with names and type pairs']]]]
+    [loop [i 0 ti 0]
+      [when [lt-s i [dec n-of-param-forms]]
+        [let
+          [name-form [list-get param-list i]
+           kind-form [list-get param-list [inc i]]
+           name [form-word-get-report gctx name-form]
+           kind
+           [ifs
+            [form-word-is kind-form]
+            [let [kind-w [form-word-get kind-form]]
+              [ifs [word-eq kind-w [static-list [text datatype]]]
+                [i32 1]
+                [log-abort [text 'forms-to-type-params unknown type-kind']]]]
+
+            [log-abort [text 'forms-to-type-params unknown type-kind']]]]
+          [passign
+            [pindex darray ti]
+            [tuple name kind]]
+          [continue i [add 2 i] ti [inc ti]]]]]
+    [cast [plist [tuple [text] [type-kind]]] empty-list]]]
 
 [defn forms-to-exps [gctx [pmem [global-context]]
                      lctx [plocal-context]
@@ -1346,19 +1401,49 @@
             [let
               [name-form [list-get fl 1]
                param-list [form-list-get-report gctx [list-get fl 2]]
-               result-type [form-to-type gctx [list-get fl 3]]
+               result-type [form-to-type gctx empty-list [list-get fl 3]]
                fname [form-word-get-report gctx name-form]
-               lctx [forms-to-local-context gctx param-list]
+               lctx [forms-to-local-context gctx empty-list param-list]
                desc [[instantiate alloc-fn [global-desc-defn]]]]
               [if [assoc-list-get-value [deref [pfield gctx names]] fname]
                 [push-error gctx name-form [static-list [text 'name already defined']]]]
               [passign desc
                 [record
                   tag [annotation [exp global-desc-defn-tag] global-desc-defn-tag]
-                  parameters [cast [plist [tuple [text] [wtype]]] [pfield lctx locals]]
+                  parameters [pfield lctx locals]
                   result result-type]]
               [assoc-list-push [deref [pfield gctx names]] fname desc]
               [let [bodies [forms-to-exps gctx lctx fl 4 n]]
+                [when [not [type-assignable result-type [type-ofs gctx bodies]]]
+                  [push-error gctx form [static-list [text 'result type mismatch']]]]
+                [passign [pfield desc body] bodies]]]]
+
+          [word-eq fw [static-list [text genfn]]]
+          [do
+            [if [lt-s n-args 4]
+              [log-abort [text 'form-to-top genfn expects at least 4 arguments']]]
+            [let
+              [name-form [list-get fl 1]
+               type-param-list [form-list-get-report gctx [list-get fl 2]]
+               param-list [form-list-get-report gctx [list-get fl 3]]
+               result-type-form [list-get fl 4]
+
+               fname [form-word-get-report gctx name-form]
+               type-param-assoc [forms-to-type-params gctx type-param-list]
+
+               lctx [forms-to-local-context gctx type-param-assoc param-list]
+               desc [[instantiate alloc-fn [global-desc-genfn]]]
+               result-type [form-to-type gctx type-param-assoc result-type-form]]
+              [if [assoc-list-get-value [deref [pfield gctx names]] fname]
+                [push-error gctx name-form [static-list [text 'name already defined']]]]
+              [passign desc
+                [record
+                  tag [annotation [exp global-desc-genfn-tag] global-desc-genfn-tag]
+                  type-parameters type-param-assoc
+                  parameters [pfield lctx locals]
+                  result result-type]]
+              [assoc-list-push [deref [pfield gctx names]] fname desc]
+              [let [bodies [forms-to-exps gctx lctx fl [i32 5] n]]
                 [when [not [type-assignable result-type [type-ofs gctx bodies]]]
                   [push-error gctx form [static-list [text 'result type mismatch']]]]
                 [passign [pfield desc body] bodies]]]]
