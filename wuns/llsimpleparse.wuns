@@ -958,11 +958,20 @@
     [tag [exp global-desc-def-tag]]
     [exp [pexp]]]]
 
+[def global-desc-mutable-tag [i32 4]]
+
+[datatype global-desc-mutable []
+  [record
+    [tag [exp global-desc-mutable-tag]]
+    [exp [pexp]]]]
+
 [datatype global-context-kind []
   [union
     [global-desc-defn]
     [global-desc-genfn]
-    [global-desc-def]]]
+    [global-desc-def]
+    [global-desc-mutable]
+    ]]
 
 [datatype error []
   [record
@@ -1461,6 +1470,20 @@
                   tag [annotation [exp global-desc-def-tag] global-desc-def-tag]
                   exp exp]]]
               [assoc-list-push [deref [pfield gctx names]] dname def-desc]]]
+
+          [word-eq fw [static-list [text mutable]]]
+          [do
+            [if [ne n-args 2]
+              [log-abort [text 'form-to-top mutable expects a name and an expression']]]
+            [let
+              [dname [form-word-get-report gctx [list-get fl 1]]
+               exp [form-to-exp gctx local-context-empty [list-get fl 2]]
+               mutable-desc
+               [alloc-init
+                [record
+                  tag [annotation [exp global-desc-mutable-tag] global-desc-mutable-tag]
+                  exp exp]]]
+              [assoc-list-push [deref [pfield gctx names]] dname mutable-desc]]]
 
           [word-eq fw [static-list [text export]]]
           [do
