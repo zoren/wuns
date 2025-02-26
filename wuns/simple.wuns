@@ -774,7 +774,10 @@
                   [type/primitive pt1]
                   [logq-abort common-super-type exp types do not match [identity e1] [identity e2]]]]]]
           [logq-abort common-super-type not implemented e2 [identity t1] [identity t2]]]
-        [logq-abort common-super-type not implemented e3 [identity t1] [identity t2]]
+        [do
+          [log t1]
+          [log t2]
+          [logq-abort common-super-type not implemented e3]]
           ]]]]
 
 [func form-to-type [outer-form]
@@ -920,9 +923,11 @@
           tt [type-of t]
           te [type-of e]]
       [when-not [type-assignable type-i32 [type-of c]] [logq-abort if condition not i32]]
+      [logq form-special-to-exp common-super-type [identity fw] [identity c] [identity t] [identity e]]
       [common-super-type tt te]
       [exp/if c t e]]
 
+    ; make these as (compile-time) macros instead
     [[word when]]
     [let
       [c [form-to-exp-type-kind-env type-kind-env lctx [second l]]
@@ -930,6 +935,7 @@
        t [exp/do bodies]
        tt [type-of t]]
       [when-not [type-assignable type-i32 [type-of c]] [logq-abort if condition not i32]]
+      [logq form-special-to-exp common-super-type [identity fw]]
       [common-super-type tt type-tuple-empty]
       [exp/if c t [exp/do [list]]]]
 
@@ -1605,9 +1611,11 @@
       type-empty
       [loop [i 1 n [size utypes] field-type [get-field-type [first utypes] field-name-word]]
         [if [lt-s i n]
-          [continue
-            field-type [common-super-type field-type [get-field-type [at utypes i] field-name-word]]
-            i [inc i]]
+          [do
+            [logq common-super-type get-field-type]
+            [continue
+              field-type [common-super-type field-type [get-field-type [at utypes i] field-name-word]]
+              i [inc i]]]
           field-type]]]
 
     [type/apply-custom tn args]
@@ -2061,11 +2069,14 @@
                 [set-kv-map top-funcs [name/word fname] exp-func]
                 [match [go-tai [transient-kv-map] return-type inferred-return-type]
                   [result/ok -] [do]
-                  [result/error error] [do [log error] [logq-abort [identity fw] error in return type [name/word fname]]]]
+                  [result/error error] [do [log error]
+                    [log return-type]
+                    [log inferred-return-type]
+                    [logq-abort [identity fw] error in return type [name/word fname]]]]
                 [when is-defn
                   [push top-decls [top-decl/function exp-func]]]]]]
 
-          [[word genfn]]
+          [[word genfn] [word comptimefn]]
           [do
             [when [lt-s [size l] 4]
               [error form expected genfn name params bodies]]
@@ -2299,13 +2310,19 @@
 
         [exp/var n]
         [if-let [c [try-get-constant e]]
-          [go c]
+          [do
+            [when [eq-word [name/word n] [word type-i32]]
+              [logq exp-to-bytes var [name/word n] is constant [identity c]]]
+            [go c]]
           [logq-abort not a constant [identity e]]]
 
         [exp/size-of-exp se]
         [go [type-to-size-of-exp [type-of [get-constant se]]]]
 
         [exp/annotation t ae]
+        [go ae]
+
+        [exp/cast t ae]
         [go ae]
 
         [exp/data mem-name-exp data-exp]
@@ -2352,6 +2369,18 @@
           [try-get const-env [name/word v]]]
 
         [option/none]]]
+
+    [exp/cast - e]
+    [try-get-constant e]
+
+    [exp/data mem-name-exp data-exp]
+    [let
+      [mem-name-word [get-exp-var mem-name-exp]]
+      [option/some
+        [exp/integer
+          [get-mem-type mem-name-word]
+          [i32-to-bigint [data-proc mem-name-word data-exp]]]]]
+
     [option/none]]]
 
 [func get-constant [e]
@@ -2506,55 +2535,49 @@
         [list-map arg args [exp-to-inst arg]]]]
 
     [exp/call fexp args]
-    [let [tf
-          [match [type-of fexp]
-            [type/func tf] tf
-            [logq-abort not a function]]
-          parameter-types [type-func/parameters tf]
-          type-parameters [type-func/type-parameters tf]
-          has-array-param
-          [exists parameter-types
-            [func is-array [t]
-              [match [expand-custom-n t]
-                [type/array - --] true
-                false]]]]
-;    [logq call [identity fexp] [identity has-array-param]]
-    [ifs
-      has-array-param
-      [let [efunc [get top-funcs [get-exp-var fexp]]
-            params [exp-function/parameters efunc]
-            param-env [transient-kv-map]
-            ;tenv [make-type-env ]
-            ]
-        [assert [eq [size params] [size args]] call expected same number of arguments]
-        [match [go-tais [transient-kv-map] parameter-types [list-map arg args [type-substitute type-env [type-of arg]]]]
-          [result/ok tenv]
-          [do
-            [for i 0 [size args]
-              [set-kv-map param-env [name/word [at params i]] [at args i]]]
-            [let
-              [comp [mk-exp-to-inst-compiler tenv param-env] ; todo maybe we need to pass the type env
-              es2i [exp2inst-compiler/exps-to-inst comp]]
-              [es2i [exp-function/bodies efunc]]]]
+    [let
+      [tf
+        [match [type-of fexp]
+          [type/func tf] tf
+          [logq-abort not a function]]
+       parameter-types [type-func/parameters tf]
+       type-parameters [type-func/type-parameters tf]
+       tenv
+        [if [is-empty type-parameters]
+          [transient-kv-map]
+          [match [go-tais [transient-kv-map] parameter-types [list-map arg args [type-substitute type-env [type-of arg]]]]
+            [result/ok inferred-tenv]
+            inferred-tenv
 
-          [result/error -] [logq-abort exp-to-inst call args not assignable [identity fexp] [identity tf] [identity args]]]]
-
-      [is-empty type-parameters]
+            [result/error -] [logq-abort exp-to-inst call args not assignable [identity fexp] [identity tf] [identity args]]]]]
       [match fexp
         [exp/var fn]
-        [if-let [efunc [try-get top-funcs [name/word fn]]]
-          [if [eq-word [word def-comp-fn] [exp-function/kind efunc]]
-            [let [params [exp-function/parameters efunc]
-                  param-env [transient-kv-map]]
-              [assert [eq [size params] [size args]] call expected same number of arguments]
-              [for i 0 [size args]
-                [set-kv-map param-env [name/word [at params i]] [at args i]]]
-              [let
-                [comp [mk-exp-to-inst-compiler [transient-kv-map] param-env] ; todo maybe we need to pass the type env
-                 es2i [exp2inst-compiler/exps-to-inst comp]]
-                [es2i [exp-function/bodies efunc]]]]
-            [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]]
-          [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]]
+        [if
+          [match [top-desc/imported [pair/snd [get top-names [name/word fn]]]]
+            [imported-or-here/imported] true
+            false]
+          [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]
+          [let
+            [efunc [get top-funcs [get-exp-var fexp]]]
+            [if [eq-word [word comptimefn] [exp-function/kind efunc]]
+              [let [params [exp-function/parameters efunc]
+                    param-env [transient-kv-map]]
+                [assert [eq [size params] [size args]] call expected same number of arguments]
+                [for i 0 [size args]
+                  [set-kv-map param-env [name/word [at params i]] [at args i]]]
+  ;              [logq calling comptime [name/word fn]]
+                [let
+                  [comp [mk-exp-to-inst-compiler tenv param-env] ; todo maybe we need to pass the type env
+                  es2i [exp2inst-compiler/exps-to-inst comp]]
+                  [es2i [exp-function/bodies efunc]]]]
+              ; not comp time
+              [if [is-empty type-parameters]
+                ; no type args so we can just emit a call-functor
+                [wat-inst/call [name/word fn] [list-map arg args [exp-to-inst arg]]]
+                ; infer type arguments from expression arguments
+                [let
+                  [type-args [list-map tp type-parameters [get tenv [name/word [pair/fst tp]]]]]
+                  [add-specialized [name/word fn] tenv type-args args]]]]]]
 
         [exp/instantiate fexp type-args]
         [let
@@ -2563,21 +2586,11 @@
               [type/func tf] tf
               [logq-abort instantiate only works on functions]]
            itype-parameters [type-func/type-parameters itf]
-           fnw [get-exp-var fexp]
-           - [logq exp-to-inst exp/call exp/instantiate [identity fexp] [identity itype-parameters] [identity type-args]]
            subst-types [list-map ta type-args [type-substitute type-env ta]]
-           tenv [make-type-env [list-map tpn itype-parameters [name/word [pair/fst tpn]]] subst-types]]
-          [add-specialized fnw tenv type-args args]]
+           ntenv [make-type-env [list-map tpn itype-parameters [name/word [pair/fst tpn]]] subst-types]]
+          [add-specialized [get-exp-var fexp] ntenv type-args args]]
 
-        [logq-abort not implemented exp-to-inst call [identity fexp] [identity tf] [identity args]]]
-      [match [go-tais [transient-kv-map] parameter-types [list-map arg args [type-substitute type-env [type-of arg]]]]
-        [result/ok tenv]
-        [let
-          [type-args [list-map tp type-parameters [get tenv [name/word [pair/fst tp]]]]
-           fnw [get-exp-var fexp]]
-          [add-specialized fnw tenv type-args args]]
-
-        [result/error -] [logq-abort exp-to-inst call args not assignable [identity fexp] [identity tf] [identity args]]]]]
+        [logq-abort not implemented exp-to-inst call [identity fexp] [identity tf] [identity args]]]]
 
     [exp/instantiate fexp type-args]
     [logq-abort top level instantiate is not currently supported]
