@@ -204,6 +204,7 @@ const expSpecialFormsExp = {
     if (tail.length !== 3) throw new CompileError('if expected three arguments')
     return jsTernary(...tail.map((f) => compExp(ctx, f, defEnv)))
   },
+  tuple: (tail, ctx, defEnv) => jsArray(tail.map((f) => compExp(ctx, f, defEnv)))
 }
 Object.freeze(expSpecialFormsExp)
 

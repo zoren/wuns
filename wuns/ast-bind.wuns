@@ -66,6 +66,7 @@
     [var syntax-word]
     [literal literal]
     [intrinsic syntax-word intrinsic-args]
+    [tuple [list bexp]]
     [if bexp bexp bexp]
     [let [list [pair syntax-word bexp]] [list bexp]]
     [loop [list [pair syntax-word bexp]] [list bexp]]
@@ -767,6 +768,9 @@
 
                 [[word word]]
                 [bexp/literal [literal/word [get-sword [get-arg 0]]]]
+
+                [[word tuple]]
+                [bexp/tuple [list-map arg [rest l] [form-to-ast lstack arg]]]
 
                 [[word intrinsic]]
                 [let [inst-sname [get-sword [get-arg 0]]

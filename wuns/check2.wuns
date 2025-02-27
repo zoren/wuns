@@ -483,6 +483,11 @@
         [bexp/literal l]
         [literal-to-type l]
 
+        [exp/tuple ts]
+        [if [is-empty ts]
+          type-empty-tuple
+          [make-type-list [word tuple] [list-map t ts [go level lctx t]]]]
+
         [bexp/intrinsic inst-name ic]
         [match ic
           [intrinsic-args/bin a b]
