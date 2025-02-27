@@ -2323,7 +2323,12 @@
               [write-text writer space]
               [write-dollar-id writer name]
               [write-text writer space]
-              [write-text writer [type-to-wasm-type [type-of gctx exp]]]
+              [if [deref [pfield dd mutable]]
+                [do
+                  [write-text writer [static-list [text '(mut ']]]
+                  [write-text writer [type-to-wasm-type [type-of gctx exp]]]
+                  [write-text writer rparen]]
+                [write-text writer [type-to-wasm-type [type-of gctx exp]]]]
 
               [write-text writer space]
               [write-wasm-exp writer [exp-to-wasm-exp gctx exp]]

@@ -979,6 +979,13 @@
            def-var [get-export def-var-inst [word def-var]]]
           [test-assert-eq [i32 5] [js-app def-var]]]
 
+        [let
+          [mut-var-inst
+            [translate-instantiate
+              [word '[mutable d [i32 5]] [defn mut-var [] [i32] d] [export mut-var]']]
+           mut-var [get-export mut-var-inst [word mut-var]]]
+          [test-assert-eq [i32 5] [js-app mut-var]]]
+
         ; [let
         ;   [not-inst
         ;     [translate-instantiate
