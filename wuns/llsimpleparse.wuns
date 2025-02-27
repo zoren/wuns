@@ -480,23 +480,29 @@
 [datatype plist [vp datatype]
   [pmem [list-data vp -size]]]
 
-[def empty-list [cast [plist -a] [data mem [record size 0]]]]
-
 [comptimefn static-list [t datatype sz [exp [i32]]] [array [array t sz]] [plist t]
   [data mem
     [record
       size [reify sz]
       array array]]]
 
+[def empty-list [cast [plist -a] [static-list [array [i32]]]]]
+
 [defn list-size [pvec [pmem [record [size [i32]]]]] [i32]
   [deref [pfield pvec size]]]
 
 [export list-size]
 
+[defn list-empty-is [pvec [pmem [record [size [i32]]]]] [i32]
+  [eq [i32 0] [list-size pvec]]]
+
 [genfn list-alloc [elem-type datatype] [lafn-sz [i32]] [plist elem-type]
-  [let [p [[instantiate alloc-fn [list-data elem-type [exp lafn-sz]]]]]
-    [passign [pfield p size] lafn-sz]
-    p]]
+  ; return empty list if size is 0
+  [if [eq lafn-sz 0]
+    empty-list
+    [let [p [[instantiate alloc-fn [list-data elem-type [exp lafn-sz]]]]]
+      [passign [pfield p size] lafn-sz]
+      p]]]
 
 [genfn list-free [elem-type datatype] [pvec [pmem [list-data elem-type -sz]]] [tuple]
   [if [not [static-is pvec]]
@@ -514,6 +520,10 @@
   [if [lt-s i 0] [log-abort [text 'list-get index negative']]]
   [if [le-s [list-size pvec] i] [log-abort [text 'list-get index out of bounds']]]
   [deref [pindex [pfield pvec array] i]]]
+
+[genfn list-last [elem-type datatype] [pvec [pmem [list-data elem-type -sz]]] elem-type
+  [if [list-empty-is pvec] [log-abort [text 'list-last list is empty']]]
+  [deref [pindex [pfield pvec array] [dec [list-size pvec]]]]]
 
 [genfn list-set [elem-type datatype] [pvec [pmem [list-data elem-type -sz]] i [i32] elem elem-type] [tuple]
   [if [lt-s i 0] [log-abort [text 'list-set index negative']]]
@@ -995,10 +1005,12 @@
         types [cast [wtype] [data mem [record size 0]]]]]]]
 
 [defn type-tuple-alloc [types [plist [pmem [wtype-data]]]] [wtype]
-  [alloc-init
-    [record
-      tag [annotation [exp type-tuple-tag] type-tuple-tag]
-      types types]]]
+  [if [list-empty-is types]
+    type-tuple-empty
+    [alloc-init
+      [record
+        tag [annotation [exp type-tuple-tag] type-tuple-tag]
+        types types]]]]
 
 [datatype type-kind []
   ; datatype
@@ -1292,10 +1304,9 @@
           [deref annotated-type]]]]]]
 
 [defn type-ofs [gctx [pmem [global-context]] es [plist [pexp]]] [wtype]
-  [let [sz [list-size es]]
-    [if [eq sz 0]
-      type-tuple-empty
-      [type-of gctx [list-get es [dec sz]]]]]]
+  [if [list-empty-is es]
+    type-tuple-empty
+    [type-of gctx [list-last es]]]]
 
 [defn type-assignable [dst [wtype] src [wtype]] [i32]
   [eq dst src]]
@@ -1334,7 +1345,9 @@
     [word-eq fw [static-list [text u64]]]
     [tuple false [i64 8]]
 
-    [log-abort [text 'primitive-int-name-to-signed-size unknown word']]]]
+    [do
+      [log-text fw]
+      [log-abort [text 'primitive-int-name-to-signed-size unknown word']]]]]
 
 [defn form-to-exp [gctx [pmem [global-context]] lctx [plocal-context] f [pmem [form]]] [pexp]
   [ifs
@@ -1394,7 +1407,9 @@
               [ifs
                 [word-eq fw [static-list [text i32]]] type-i32
                 [word-eq fw [static-list [text i64]]] type-i64
-                [log-abort [text 'form-to-exp primitive-int-name-to-signed-size unknown word']]]]
+                [do
+                  [log-text fw]
+                  [log-abort [text 'form-to-exp primitive-int-name-to-signed-size unknown word']]]]]
             [if signed
               [let
                 [pow2 [intrinsic i64.shl [i64 1] [intrinsic i64.sub bit-size [i64 1]]]
@@ -1826,45 +1841,6 @@
         [growable-list-free gl]
         result]]]]
 
-[defn exp-to-wasm-exp [exp [pexp]] [pwasm-exp]
-  [let [tag [deref [pfield exp tag]]]
-    [ifs
-      [eq tag exp-integer-tag]
-      [let
-        [iexp [cast [pmem [wexp-integer]] exp]
-         negative [deref [pfield iexp negative]]
-         value [deref [pfield iexp value]]
-         type [deref [pfield iexp type]]
-         txt [integer-to-text value negative]]
-        [cast [pwasm-exp]
-          [alloc-init
-            [record
-              tag [annotation [exp wasm-constant-tag] wasm-constant-tag]
-              type type
-              value txt]]]]
-
-      [eq tag exp-intrinsic-tag]
-      [let
-        [iexp [cast [pmem [wexp-intrinsic]] exp]
-         iname [deref [pfield iexp iname]]
-         arguments [deref [pfield iexp arguments]]
-         nargs [list-size arguments]
-         warguments [[instantiate list-alloc [pmem [wasm-exp]]] nargs]]
-        [loop [i 0]
-          [when [lt-s i nargs]
-            [list-set warguments i [exp-to-wasm-exp [list-get arguments i]]]
-            [continue i [inc i]]]]
-        [cast [pwasm-exp]
-          [alloc-init
-            [record
-              tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
-              name iname
-              arguments warguments]]]]
-
-        [do
-          [log-i32 tag]
-          [log-abort [text 'exp-to-wasm-exp unknown tag']]]]]]
-
 [def i32-text [static-list [text 'i32']]]
 [def i64-text [static-list [text 'i64']]]
 [def f32-text [static-list [text 'f32']]]
@@ -1878,7 +1854,23 @@
     [eq t type-i64]
     i64-text
 
-    [log-abort [text 'type-to-wasm-type unknown type']]]]
+    [let [tag [deref [pfield t tag]]]
+      [ifs
+        [eq tag type-integer-tag]
+        [let
+          [int-type [cast [pmem [type-integer]] t]]
+          [when [not [deref [pfield int-type signed]]]
+            [log-i32 [deref [pfield int-type n-bytes]]]
+            [log-abort [text 'type-to-wasm-type unsigned integer not supported']]]
+          [ifs
+            [eq [deref [pfield int-type n-bytes]] [i32 4]]
+            i32-text
+
+            [eq [deref [pfield int-type n-bytes]] [i32 8]]
+            i64-text
+
+            [log-abort [text 'type-to-wasm-type integer not supported']]]]
+          [log-abort [text 'type-to-wasm-type non-integer not supported']]]]]]
 
 [defn flatten-wuns-type [gl [p-growable-list [wtype]] t [wtype]] []
   [let [tag [deref [pfield t tag]]]
@@ -1904,6 +1896,64 @@
         [continue i [inc i]]]]
     [growable-list-free types]
     wasm-types]]
+
+[defn exp-to-wasm-exp [gctx [pmem [global-context]] exp [pexp]] [pwasm-exp]
+  [let [tag [deref [pfield exp tag]]]
+    [ifs
+      [eq tag exp-integer-tag]
+      [let
+        [iexp [cast [pmem [wexp-integer]] exp]
+         negative [deref [pfield iexp negative]]
+         value [deref [pfield iexp value]]
+         type [deref [pfield iexp type]]
+         txt [integer-to-text value negative]]
+        [cast [pwasm-exp]
+          [alloc-init
+            [record
+              tag [annotation [exp wasm-constant-tag] wasm-constant-tag]
+              type type
+              value txt]]]]
+
+      [eq tag exp-intrinsic-tag]
+      [let
+        [iexp [cast [pmem [wexp-intrinsic]] exp]
+         iname [deref [pfield iexp iname]]
+         arguments [deref [pfield iexp arguments]]
+         nargs [list-size arguments]
+         warguments [[instantiate list-alloc [pmem [wasm-exp]]] nargs]]
+        [loop [i 0]
+          [when [lt-s i nargs]
+            [list-set warguments i [exp-to-wasm-exp gctx [list-get arguments i]]]
+            [continue i [inc i]]]]
+        [cast [pwasm-exp]
+          [alloc-init
+            [record
+              tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+              name iname
+              arguments warguments]]]]
+
+      [eq tag exp-if-tag]
+      [let
+        [iexp [cast [pmem [wexp-if]] exp]
+         condition [deref [pfield iexp condition]]
+         true [deref [pfield iexp true]]
+         false [deref [pfield iexp false]]
+         econd [exp-to-wasm-exp gctx condition]
+         etrue [exp-to-wasm-exp gctx true]
+         efalse [exp-to-wasm-exp gctx false]
+         tif [type-of gctx exp]]
+        [cast [pwasm-exp]
+          [alloc-init
+            [record
+              tag [annotation [exp wasm-if-tag] wasm-if-tag]
+              result [type-to-wasm-types tif]
+              condition econd
+              true etrue
+              false efalse]]]]
+
+        [do
+          [log-i32 tag]
+          [log-abort [text 'exp-to-wasm-exp unknown tag']]]]]]
 
 [datatype writer []
   [p-growable-list [text]]]
@@ -1951,6 +2001,22 @@
   [write-text writer dollar]
   [write-text writer txt]]
 
+[defn write-results [writer [writer] results [plist [wasm-type]]] []
+  [let
+    [n-results [list-size results]]
+    [when [ne n-results 0]
+      [write-text writer space]
+
+      [write-text writer lparen]
+      [write-text writer [static-list [text result]]]
+      [loop [i 0]
+        [when [lt-s i n-results]
+          [write-text writer space]
+          [write-text writer [list-get results i]]
+          [continue i [inc i]]]]
+
+      [write-text writer rparen]]]]
+
 [defn write-wasm-exp [writer [writer] exp [pwasm-exp]] [tuple]
   [write-text writer lparen]
   [let [tag [deref [pfield exp tag]]]
@@ -1973,13 +2039,39 @@
             [write-wasm-exp writer [list-get args i]]
             [continue i [inc i]]]]]
 
+      [eq tag wasm-if-tag]
+      [let
+        [cexp [cast [pmem [wasm-if]] exp]]
+        [write-text writer [static-list [text 'if']]]
+
+        [write-results writer [deref [pfield cexp result]]]
+
+        [write-text writer space]
+        [write-wasm-exp writer [deref [pfield cexp condition]]]
+        [write-text writer space]
+
+        [write-text writer lparen]
+        [write-text writer [static-list [text then]]]
+        [write-text writer space]
+        [write-wasm-exp writer [deref [pfield cexp true]]]
+        [write-text writer rparen]
+
+        [write-text writer space]
+
+        [write-text writer lparen]
+        [write-text writer [static-list [text else]]]
+        [write-text writer space]
+        [write-wasm-exp writer [deref [pfield cexp false]]]
+        [write-text writer rparen]
+        ]
+
       [log-abort [text 'write-wasm-exp unknown tag']]]]
 
   [write-text writer rparen]]
 
 [def indent [static-list [text '  ']]]
 
-[defn write-func-desc-to-wasm [writer [writer] fname [text] func-desc [pmem [global-desc-func]]] []
+[defn write-func-desc-to-wasm [writer [writer] gctx [pmem [global-context]] fname [text] func-desc [pmem [global-desc-func]]] []
   [write-text writer lparen]
   [write-text writer [static-list [text func]]]
   [write-text writer space]
@@ -2012,21 +2104,7 @@
           [write-text writer rparen]]
         [continue i [inc i]]]]
 
-    [let
-      [results [type-to-wasm-types result]
-       n-results [list-size results]]
-      [when [ne n-results 0]
-        [write-text writer space]
-
-        [write-text writer lparen]
-        [write-text writer [static-list [text result]]]
-        [loop [i 0]
-          [when [lt-s i n-results]
-            [write-text writer space]
-            [write-text writer [list-get results i]]
-            [continue i [inc i]]]]
-
-        [write-text writer rparen]]]
+    [write-results writer [type-to-wasm-types result]]
 
     ; todo locals here...
 
@@ -2036,7 +2114,7 @@
       [when [lt-s i n]
         [write-text writer newline]
 
-        [write-wasm-exp writer [exp-to-wasm-exp [list-get body i]]]
+        [write-wasm-exp writer [exp-to-wasm-exp gctx [list-get body i]]]
         [continue i [inc i]]]]
 
         ]
@@ -2084,7 +2162,7 @@
           tag [deref [pfield desc tag]]]
           [ifs
             [eq tag global-desc-func-tag]
-            [write-func-desc-to-wasm writer name desc]
+            [write-func-desc-to-wasm writer gctx name desc]
 
             [log-ar [text 'write-global-context ignoring unknown tag']]]
           [continue i [inc i]]]]]

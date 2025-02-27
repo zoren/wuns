@@ -901,12 +901,11 @@
           [let
            [wuns-text [alloc-text wuns-string]
             wat-text [js-app parse-translate-to-wat wuns-text]
-            wat-string [ptext-to-string wat-text]
-            wasm-byte-array [wat-to-wasm-byte-array wat-string]]
+            wat-string [ptext-to-string wat-text]]
            [log wat-string]
            [js-app text-free wuns-text]
            [js-app text-free wat-text]
-           [byte-array-to-wasm-module wasm-byte-array]]]
+           [byte-array-to-wasm-module [wat-to-wasm-byte-array wat-string]]]]
          translate-instantiate
          [func ti [wuns-string]
            [wasm-instantiate [translate-to-module wuns-string] empty-object]]
@@ -917,8 +916,8 @@
               [word '[defn f [] ['] t
               [word '] '] src
               [word '] [export f]']]
-              sinst [translate-instantiate mod-src]
-              f [get-export sinst [word f]]]
+             sinst [translate-instantiate mod-src]
+             f [get-export sinst [word f]]]
             [test-assert-eq expected [js-app f]]]]
          ]
         [test-constant [i32 1337] [word i32] [word '[i32 1337]']]
@@ -936,4 +935,16 @@
         [test-constant [i32 1337] [word i32] [word '[intrinsic i32.add [i32 1] [i32 1336]]']]
         [test-constant [i32 1337] [word i32] [word '[intrinsic i32.sub [i32 1] [i32 -1336]]']]
         [test-constant [i32 119] [word i32] [word '[intrinsic i32.mul [i32 7] [i32 17]]']]
+
+        [test-constant [i32 2] [word i32] [word '[if [i32 0] [i32 1] [i32 2]]']]
+        [test-constant [i32 2] [word i32] [word '[if [i32 1] [i32 2] [i32 3]]']]
+
+        ; [let
+        ;   [not-inst
+        ;     [translate-instantiate
+        ;       [word '[defn not [p [i32]] [i32] [if p [i32 0] [i32 1]]] [export not]']]
+        ;    wnot [get-export not-inst [word not]]]
+        ;   [test-assert-eq [i32 1] [js-app wnot [i32 0]]]
+        ;   [test-assert-eq [i32 0] [js-app wnot [i32 1]]]
+        ;   [test-assert-eq [i32 0] [js-app wnot [i32 1337]]]]
           ]]]]
