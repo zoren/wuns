@@ -932,4 +932,10 @@
         [test-constant [bigint -9223372036854775808] [word i64] [word '[i64 -9223372036854775808]']]
        ; [test-constant [bigint 9223372036854775808] [word i64] [word '[i64 9223372036854775808]']] fails!
 ;        [test-constant [bigint 18446744073709551617] [word i64] [word '[i64 18446744073709551617]']] fails
+
+
+        [test-constant [i32 1337] [word i32] [word '[intrinsic i32.add [i32 1] [i32 1336]]']]
+        [test-constant [i32 1337] [word i32] [word '[intrinsic i32.sub [i32 1] [i32 -1336]]']]
+        [test-constant [i32 119] [word i32] [word '[intrinsic i32.mul [i32 7] [i32 17]]']]
+
           ]]]]

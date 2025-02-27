@@ -971,13 +971,6 @@
       iname name
       arguments args]]]
 
-; [defn wtype-integer-alloc [n-bytes [i32] signed [boolean]] [wtype-data]
-;   [cast [wtype]
-;     [record
-;       tag [annotation [exp type-integer-tag] type-integer-tag]
-;       n-bytes n-bytes
-;       signed signed]]]
-
 [def type-i32
   [cast [wtype]
     [data mem [record
@@ -1217,15 +1210,32 @@
 [def i32i32
   [static-list [array [wtype] type-i32 type-i32]]]
 
-[defn intrinsic-name-to-type [name [text]] [tuple [plist [wtype]] [wtype]]
-  [ifs
-    [word-eq name [static-list [text i32.add]]]
-    [tuple i32i32 type-i32]
+[datatype intrinsic-info []
+  [record
+    [name [text]]
+    [parameters [plist [wtype]]]
+    [result [wtype]]
+    ]]
 
-    [word-eq name [static-list [text i32.sub]]]
-    [tuple i32i32 type-i32]
+[def intrinsics
+  [static-list
+    [array [intrinsic-info]
+      [record name [static-list [text i32.add]] parameters i32i32 result type-i32]
+      [record name [static-list [text i32.sub]] parameters i32i32 result type-i32]
+      [record name [static-list [text i32.mul]] parameters i32i32 result type-i32]
+      ]]]
 
-    [log-abort [text 'intrinsic-name-to-type unknown name']]]]
+[defn get-intrinsic-by-name [name [text]] [pmem [intrinsic-info]]
+  [loop
+    [cur-size [list-size intrinsics]
+     arr [list-data-array intrinsics]
+     i 0]
+    [if [lt-s i cur-size]
+      [let [pintrin [pindex arr i]]
+        [if [word-eq [deref [pfield pintrin name]] name]
+          pintrin
+          [continue i [inc i]]]]
+      [cast [pmem [intrinsic-info]] [i32 0]]]]]
 
 [defn type-of [gctx [pmem [global-context]] e [pexp]] [wtype]
   [let [tag [deref [pfield e tag]]]
@@ -1238,8 +1248,11 @@
       [eq tag exp-intrinsic-tag]
       [let
         [intr [cast [pmem [wexp-intrinsic]] e]
-         [params result] [intrinsic-name-to-type [deref [pfield intr iname]]]]
-        result]
+         intrinsic-info [get-intrinsic-by-name [deref [pfield intr iname]]]]
+        [when [is-null intrinsic-info]
+          [log-text [deref [pfield intr iname]]]
+          [log-abort [text 'type-of not found intrinsic-info']]]
+        [deref [pfield intrinsic-info result]]]
 
       [let [exp-types [deref [pfield gctx exp-types]]
             annotated-type [assoc-list-get-value exp-types e]]
@@ -1398,7 +1411,8 @@
               [log-abort [text 'form-to-exp intrinsic expects at least a name argument']]]
             [let
               [name [form-word-get-report gctx [list-get fl 1]]
-               [params result] [intrinsic-name-to-type name]
+               intrinsic-info [get-intrinsic-by-name name]
+               params [deref [pfield intrinsic-info parameters]]
                n-intrinsic-args [dec n-args]
                args [[instantiate list-alloc [pexp]] n-intrinsic-args]]
               [when [ne [list-size params] n-intrinsic-args]
