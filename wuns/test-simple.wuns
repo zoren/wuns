@@ -965,6 +965,13 @@
            two-tup [get-export two-tup-inst [word two-tup]]]
           [test-assert-eq [tuple [i32 5] [bigint 1337]] [js-app two-tup]]]
 
+        [let
+          [tup-drop-inst
+            [translate-instantiate
+              [word '[defn tup-drop [] [i32] [tuple [i32 5] [i64 1337]] [i32 5]] [export tup-drop]']]
+           tup-drop [get-export tup-drop-inst [word tup-drop]]]
+          [test-assert-eq [i32 5] [js-app tup-drop]]]
+
         ; [let
         ;   [not-inst
         ;     [translate-instantiate

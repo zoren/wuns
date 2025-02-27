@@ -1957,6 +1957,20 @@
             [log-abort [text 'type-to-wasm-type integer not supported']]]]
           [log-abort [text 'type-to-wasm-type non-integer not supported']]]]]]
 
+[defn wuns-type-to-num-of-primitives [t [wtype]] [i32]
+  [let [tag [deref [pfield t tag]]]
+    [if [eq tag type-tuple-tag]
+      [let
+        [types [deref [pfield [cast [pmem [type-tuple]] t] types]]
+         n-types [list-size types]]
+        [loop [i 0 res 0]
+          [if [lt-s i n-types]
+            [continue
+              res [add res [wuns-type-to-num-of-primitives [list-get types i]]]
+              i [inc i]]
+            res]]]
+      [i32 1]]]]
+
 [defn flatten-wuns-type [gl [p-growable-list [wtype]] t [wtype]] []
   [let [tag [deref [pfield t tag]]]
     [if [eq tag type-tuple-tag]
@@ -2188,6 +2202,16 @@
 
 [def indent [static-list [text '  ']]]
 
+[defn wasm-drop [wasme [pwasm-exp]] [pwasm-exp]
+  [let [arguments [[instantiate list-alloc [pmem [wasm-exp]]] 1]]
+    [list-set arguments 0 wasme]
+    [cast [pwasm-exp]
+      [alloc-init
+        [record
+          tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+          name [static-list [text 'drop']]
+          arguments arguments]]]]]
+
 [defn write-func-desc-to-wasm [writer [writer] gctx [pmem [global-context]] fname [text] func-desc [pmem [global-desc-func]]] []
   [write-text writer lparen]
   [write-text writer [static-list [text func]]]
@@ -2225,16 +2249,21 @@
 
     ; todo locals here...
 
-    [when [lt-s 1 [list-size body]]
-      [log-abort [text 'write-func-desc-to-wasm multiple bodies not yet supported']]]
     [loop [i 0 n [list-size body]]
       [when [lt-s i n]
-        [write-text writer newline]
-
-        [write-wasm-exp writer [exp-to-wasm-exp gctx [list-get body i]]]
-        [continue i [inc i]]]]
-
-        ]
+        [let [b [list-get body i]]
+          [write-text writer newline]
+          [write-wasm-exp writer [exp-to-wasm-exp gctx b]]
+          [when [lt-s i [dec n]]
+            [let
+              [t [type-of gctx b]
+               n-prim [wuns-type-to-num-of-primitives t]]
+              [loop [j 0]
+                [when [lt-s j n-prim]
+                  [write-text writer [static-list [text ' (drop)']]]
+                  [continue j [inc j]]]]]]
+          [continue i [inc i]]]]]
+          ]
 
   [write-text writer rparen]
   [write-text writer newline]
