@@ -242,7 +242,9 @@
 
     [[word i64.add] [word i64.sub] [word i64.mul]
      [word i64.and] [word i64.or] [word i64.xor]
-     [word i64.shl] [word i64.shr-s] [word i64.shr-u]]
+     [word i64.shl] [word i64.shr-s] [word i64.shr-u]
+     [word i64.div-s] [word i64.div-u] [word i64.rem-s] [word i64.rem-u]
+     ]
     [intrinsic-type [list] [list type-i64 type-i64] type-i64]
 
     [[word i64.eq]   [word i64.ne]
@@ -254,6 +256,9 @@
 
     [[word f64.add] [word f64.sub] [word f64.mul]]
     [intrinsic-type [list] [list type-f64 type-f64] type-f64]
+
+    [[word i32.wrap-i64]]
+    [intrinsic-type [list] [list type-i64] type-i32]
 
     [[word unreachable]]
     [intrinsic-type [list] [list] type-empty]
@@ -2299,14 +2304,14 @@
               [exp/integer pt n]
               [let [n-bytes [primitive-type/bytes pt]]
                 [assert [eq [intrinsic i32.rem-s [printer-index bprinter] n-bytes] [i32 0]]
-                  exp-to-bytes expected natural alignment [identity pt]]
+                  exp-to-bytes expected natural alignment [identity pt] [identity n]]
                 [assert [primitive-type-is-integer pt] exp-to-bytes expected integer type [identity pt]]
                 [print-bigint bprinter n-bytes n]]
 
               [exp/float pt f]
               [let [n-bytes [primitive-type/bytes pt]]
                 [assert [eq [intrinsic i32.rem-s [printer-index bprinter] n-bytes] [i32 0]]
-                  exp-to-bytes expected natural alignment [identity pt]]
+                  exp-to-bytes expected natural alignment [identity pt] ]
                 [assert [eq-word [primitive-type/prefix pt] [word f]] exp-to-bytes expected float type [identity pt]]
                 [loop
                   [i 0

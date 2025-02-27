@@ -626,6 +626,7 @@
         global-context-free [get-export inst [word global-context-free]]
         parse-translate [get-export inst [word parse-translate]]
         form-to-top [get-export inst [word form-to-top]]
+        test-writer [get-export inst [word test-writer]]
         num-frames-i32 [func nfi [] [js-value-to-i32 [js-app get-number-of-frames]]]
         fill-word
         [func fill-word [jsp w]
@@ -657,6 +658,13 @@
             [for i 0 sz
               [byte-array-set dst i [byte-array-get src i]]]
             vec]]
+        ptext-to-string
+        [func p2s [p]
+          [let
+            [data [js-value-to-i32 [js-app list-data-byte-array p]]
+             sz [js-value-to-i32 [js-app list-size p]]
+             ar [byte-array-from-mem mem data sz]]
+            [byte-array-to-string ar]]]
         pform-to-form
         [func pf2f [pform]
           [ifs
@@ -666,10 +674,7 @@
             [js-value-to-i32 [js-app form-word-is pform]]
             [let
               [fw [js-app form-word-get pform]
-               data [js-value-to-i32 [js-app list-data-byte-array fw]]
-               sz [js-value-to-i32 [js-app list-size fw]]
-               ar [byte-array-from-mem mem data sz]
-               str [byte-array-to-string ar]]
+               str [ptext-to-string fw]]
               [form/word [string-to-word str]]]
 
             [js-value-to-i32 [js-app form-list-is pform]]
@@ -731,9 +736,24 @@
               [pair [qlist] [word '[defn f [] [i32] [i32 0]] [def d [i32 5]]']]
               [pair [qlist] [word '[defn f [] [i32] [i32 2147483647]] [export f]']]
               [pair [qlist] [word '[defn f [] [i32] [if [i32 1] [i32 2] [i32 3]]] [export f]']]
-              [pair [qlist [compile-error variable not found]] [word '[defn not [x [i32]] [i32] [if p [i32 0] [i32 1]]]']]
+;              [pair [qlist [compile-error variable not found]] [word '[defn not [x [i32]] [i32] [if p [i32 0] [i32 1]]]']]
               [pair [qlist] [word '[defn not [x [i32]] [i32] [if x [i32 0] [i32 1]]] [export not]']]
-              [pair [qlist] [word '[defn f [] [i32] [i32 4294967296]]']]
+;              [pair [qlist] [word '[defn f [] [i32] [i32 4294967295]]']]
+              [pair [qlist] [word '[defn f [] [i32] [i32 -1]]']]
+              ; [pair [qlist [compile-error bla]] [word '[defn f [] [i32] [u32 -1]]']]
+              [pair [qlist [compile-error bla]] [word '[defn f [] [i32] [i8 127]]']]
+;              [pair [qlist [compile-error bla]] [word '[defn f [] [i32] [u8 -1]]']]
+              [pair [qlist [compile-error bla]] [word '[defn f [] [i32] [u8 255]]']]
+
+              [pair [qlist [compile-error bla]] [word '[defn f [] [i32] [i64 -9223372036854775808]]']] ;9.223.372.036.854.775.808
+              [pair [qlist [compile-error bla]] [word '[defn f [] [i32] [i64 9223372036854775807]]']] ;9.223.372.036.854.775.808
+              [pair [qlist [compile-error bla]] [word '[defn f [] [i32] [u64 18446744073709551617]]']] ; 18.446.744.073.709.551.616
+              [pair [qlist [compile-error bla]] [word '[genfn g [t datatype] [v t] [i32] [i32 0]]']]
+
+              [pair [qlist] [word '[mutable m [i32 0]] [export m]']]
+              [pair [qlist] [word '[defn add [x [i32] y [i32]] [i32] [intrinsic i32.add x y]]']]
+
+
               ]]
           [for-each test tests
             [let
@@ -743,7 +763,9 @@
               [do]
               [js-app text-free w]
               [js-app global-context-free gctx]
-              ]]]]]]]
+              ]]
+          [logq writer said [ptext-to-string [js-app test-writer]]]
+              ]]]]]
 
 [defn test-realloc []
   [promise-then
