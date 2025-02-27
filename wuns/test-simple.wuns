@@ -972,6 +972,13 @@
            tup-drop [get-export tup-drop-inst [word tup-drop]]]
           [test-assert-eq [i32 5] [js-app tup-drop]]]
 
+        [let
+          [def-var-inst
+            [translate-instantiate
+              [word '[def d [i32 5]] [defn def-var [] [i32] d] [export def-var]']]
+           def-var [get-export def-var-inst [word def-var]]]
+          [test-assert-eq [i32 5] [js-app def-var]]]
+
         ; [let
         ;   [not-inst
         ;     [translate-instantiate

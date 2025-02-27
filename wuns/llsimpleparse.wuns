@@ -1057,20 +1057,13 @@
 [datatype global-desc-def []
   [record
     [tag [exp global-desc-def-tag]]
-    [exp [pexp]]]]
-
-[def global-desc-mutable-tag [i32 4]]
-
-[datatype global-desc-mutable []
-  [record
-    [tag [exp global-desc-mutable-tag]]
-    [exp [pexp]]]]
+    [exp [pexp]]
+    [mutable [i32]]]]
 
 [datatype global-context-kind []
   [union
     [global-desc-func]
     [global-desc-def]
-    [global-desc-mutable]
     ]]
 
 [datatype error []
@@ -1751,7 +1744,9 @@
                   [push-error gctx form [static-list [text 'result type mismatch']]]]
                 [passign [pfield desc body] bodies]]]]
 
-          [word-eq fw [static-list [text def]]]
+          [or
+            [word-eq fw [static-list [text def]]]
+            [word-eq fw [static-list [text mutable]]]]
           [do
             [if [ne n-args 2]
               [log-abort [text 'form-to-top def expects a name and an expression']]]
@@ -1762,22 +1757,9 @@
                [alloc-init
                 [record
                   tag [annotation [exp global-desc-def-tag] global-desc-def-tag]
-                  exp exp]]]
+                  exp exp
+                  mutable [word-eq fw [static-list [text mutable]]]]]]
               [assoc-list-push [deref [pfield gctx names]] dname def-desc]]]
-
-          [word-eq fw [static-list [text mutable]]]
-          [do
-            [if [ne n-args 2]
-              [log-abort [text 'form-to-top mutable expects a name and an expression']]]
-            [let
-              [dname [form-word-get-report gctx [list-get fl 1]]
-               exp [form-to-exp gctx local-context-empty [list-get fl 2]]
-               mutable-desc
-               [alloc-init
-                [record
-                  tag [annotation [exp global-desc-mutable-tag] global-desc-mutable-tag]
-                  exp exp]]]
-              [assoc-list-push [deref [pfield gctx names]] dname mutable-desc]]]
 
           [word-eq fw [static-list [text datatype]]]
           [do
@@ -1855,7 +1837,7 @@
   [record
     [tag [exp wasm-intrinsic-tag]]
     [name [text]]
-;    [immediate-arguments [plist [imm-arg]]]
+    [immediate-arguments [plist [text]]]
     [arguments [plist [pmem [wasm-exp]]]]]
 
   wasm-call []
@@ -1955,7 +1937,9 @@
             i64-text
 
             [log-abort [text 'type-to-wasm-type integer not supported']]]]
-          [log-abort [text 'type-to-wasm-type non-integer not supported']]]]]]
+        [do
+          [log-i32 tag]
+          [log-abort [text 'type-to-wasm-type non-integer not supported']]]]]]]
 
 [defn wuns-type-to-num-of-primitives [t [wtype]] [i32]
   [let [tag [deref [pfield t tag]]]
@@ -2013,6 +1997,20 @@
               type type
               value txt]]]]
 
+      [eq tag exp-var-tag]
+      [let
+        [iexp [cast [pmem [wexp-var]] exp]
+         name [deref [pfield iexp name]]
+         iargs [[instantiate list-alloc [text]] 1]]
+        [list-set iargs 0 name]
+        [cast [pwasm-exp]
+          [alloc-init
+            [record
+              tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+              name [static-list [text global.get]]
+              immediate-arguments iargs
+              arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]
+
       [eq tag exp-intrinsic-tag]
       [let
         [iexp [cast [pmem [wexp-intrinsic]] exp]
@@ -2029,6 +2027,7 @@
             [record
               tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
               name iname
+              immediate-arguments [cast [plist [text]] empty-list]
               arguments warguments]]]]
 
       [eq tag exp-if-tag]
@@ -2148,9 +2147,15 @@
       [eq tag wasm-intrinsic-tag]
       [let
         [cexp [cast [pmem [wasm-intrinsic]] exp]
+         iargs [deref [pfield cexp immediate-arguments]]
          args [deref [pfield cexp arguments]]]
         [write-text writer lparen]
         [write-text writer [deref [pfield cexp name]]]
+        [loop [i 0 n [list-size iargs]]
+          [when [lt-s i n]
+            [write-text writer space]
+            [write-dollar-id writer [list-get iargs i]]
+            [continue i [inc i]]]]
         [loop [i 0 n [list-size args]]
           [when [lt-s i n]
             [write-text writer space]
@@ -2229,7 +2234,6 @@
           [pp [list-get-p parameters i]
            wuns-type [deref [pindex pp [i32 1]]]
            wasm-types [type-to-wasm-types wuns-type]]
-          [when [ne [list-size wasm-types] 1]]
           [write-text writer space]
 
           [write-text writer lparen]
@@ -2240,7 +2244,7 @@
           [write-dollar-id writer [deref [pindex pp [i32 0]]]]
           [write-text writer space]
 
-          [write-text writer [type-to-wasm-type [deref [pindex pp [i32 1]]]]]
+          [write-text writer [type-to-wasm-type wuns-type]]
 
           [write-text writer rparen]]
         [continue i [inc i]]]]
@@ -2303,12 +2307,28 @@
       [when [lt-s i n]
         [let
           [assoc-pair [growable-list-get-p names i]
-          name [deref [pindex assoc-pair [i32 0]]]
-          desc [deref [pindex assoc-pair [i32 1]]]
-          tag [deref [pfield desc tag]]]
+           name [deref [pindex assoc-pair [i32 0]]]
+           desc [deref [pindex assoc-pair [i32 1]]]
+           tag [deref [pfield desc tag]]]
           [ifs
             [eq tag global-desc-func-tag]
             [write-func-desc-to-wasm writer gctx name desc]
+
+            [eq tag global-desc-def-tag]
+            [let
+              [dd [cast [pmem [global-desc-def]] desc]
+               exp [deref [pfield dd exp]]]
+              [write-text writer lparen]
+              [write-text writer [static-list [text global]]]
+              [write-text writer space]
+              [write-dollar-id writer name]
+              [write-text writer space]
+              [write-text writer [type-to-wasm-type [type-of gctx exp]]]
+
+              [write-text writer space]
+              [write-wasm-exp writer [exp-to-wasm-exp gctx exp]]
+              [write-text writer rparen]
+              [write-text writer newline]]
 
             [log-ar [text 'write-global-context ignoring unknown tag']]]
           [continue i [inc i]]]]]
