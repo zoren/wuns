@@ -48,7 +48,7 @@
     [form/word w] w
     [abort [list [quote [form-to-word requires a word as its argument]]]]]]
 
-[import ./runtime-lib/host.js concat-words [func [word word] word]]
+[import ./runtime-lib/host.js concat-words [func [.. word] word]]
 
 [defmacro def-bin-i32-inst [name]
   [def-instruction-macro name [form/word [concat-words [word i32.] [form-to-word name]]]]]

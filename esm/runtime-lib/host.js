@@ -87,10 +87,10 @@ const char_code_at = (s, index) => {
   return s.at(index).charCodeAt(0)
 }
 export { char_code_at as 'char-code-at' }
-const concat_words = (word_1, word_2) => {
-  if (typeof word_1 !== 'string') throw new Error('concat-words expects string')
-  if (typeof word_2 !== 'string') throw new Error('concat-words expects string')
-  return word_1 + word_2
+const concat_words = (... words) => {
+  for (const w of words)
+    if (typeof w !== 'string') throw new Error('concat-words expects string')
+  return words.join('')
 }
 export { concat_words as 'concat-words' }
 const string_join = (separator, strings) => {
