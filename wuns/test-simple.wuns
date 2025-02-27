@@ -627,7 +627,6 @@
         parse-translate [get-export inst [word parse-translate]]
         parse-translate-to-wat [get-export inst [word parse-translate-to-wat]]
         form-to-top [get-export inst [word form-to-top]]
-        test-writer [get-export inst [word test-writer]]
         num-frames-i32 [func nfi [] [js-value-to-i32 [js-app get-number-of-frames]]]
         fill-word
         [func fill-word [jsp w]
@@ -765,7 +764,6 @@
               [js-app text-free w]
               [js-app global-context-free gctx]
               ]]
-          [logq writer said [ptext-to-string [js-app test-writer]]]
           [logq parse-translate-to-wat
             [ptext-to-string
               [parse-translate-to-wat [alloc-word [word '[defn f [] [i32] [i32 0]] [export f]']]]]]
