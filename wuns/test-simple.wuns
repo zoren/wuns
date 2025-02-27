@@ -56,8 +56,20 @@
 
 [defn f-inst [] [forms-to-inst [qlist [defn f [p [i32]] [tuple]] [export f]]]]
 
+[defn deep-equal-js [v1 v2]
+  [or
+    [is-identical v1 v2]
+    [and [js-value-is-array v1] [js-value-is-array v2]
+      [let [sz [size v1]]
+        [and [eq sz [size v2]]
+          [loop [i 0]
+            [if [lt-s i sz]
+              [and [deep-equal-js [at v1 i] [at v2 i]]
+                [continue i [inc i]]]
+              true]]]]]]]
+
 [defn test-assert-eq-fn [js-expected actual messages]
-  [when-not [is-identical [to-js-value js-expected] [to-js-value actual]]
+  [when-not [deep-equal-js [to-js-value js-expected] [to-js-value actual]]
     [logq test-assert-eq failed]
     [logq expected [identity js-expected]]
     [logq but got- [identity actual]]
@@ -938,6 +950,20 @@
 
         [test-constant [i32 2] [word i32] [word '[if [i32 0] [i32 1] [i32 2]]']]
         [test-constant [i32 2] [word i32] [word '[if [i32 1] [i32 2] [i32 3]]']]
+
+        [let
+          [empty-tup-inst
+            [translate-instantiate
+              [word '[defn empty-tup [] []] [export empty-tup]']]
+           empty-tup [get-export empty-tup-inst [word empty-tup]]]
+          [test-assert-eq true [is-undefined [js-app empty-tup]]]]
+
+        [let
+          [two-tup-inst
+            [translate-instantiate
+              [word '[defn two-tup [] [tuple [i32] [i64]] [tuple [i32 5] [i64 1337]]] [export two-tup]']]
+           two-tup [get-export two-tup-inst [word two-tup]]]
+          [test-assert-eq [tuple [i32 5] [bigint 1337]] [js-app two-tup]]]
 
         ; [let
         ;   [not-inst
