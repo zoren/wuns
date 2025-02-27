@@ -6,18 +6,13 @@
       [evaluate-top-async evaluator [quote [load llmacro.wuns]]]
       [func t [-] evaluator]]]]
 
-[import ./runtime-lib/wabt.js wat-to-wasm-byte-array [func [byte-array] byte-array]]
+[import ./runtime-lib/wabt.js wat-to-wasm-byte-array [func [string] byte-array]]
 
 [type wasm-module [] [union]]
 
 [import ./runtime-lib/wasm.js byte-array-to-wasm-module [func [byte-array] wasm-module]]
 
 [import ./runtime-lib/wasm.js memory-buffer [func [memory] array-buffer]]
-
-[defn output-to-module [output]
-  [let [wat-string [wat-to-wat-bytes [output-to-wat output]]]
-    [byte-array-log-as-string wat-string]
-    [byte-array-to-wasm-module [wat-to-wasm-byte-array wat-string]]]]
 
 [def empty-object [kv-map-to-object [transient-kv-map]]]
 
@@ -48,8 +43,10 @@
 [defn forms-to-module [forms]
   [let
     [compiler [make-compiler]
-     output [compiler forms]]
-    [output-to-module output]]]
+     output [compiler forms]
+     wat-string [byte-array-to-string [wat-to-wat-bytes [output-to-wat output]]]]
+;    [log wat-string]
+    [byte-array-to-wasm-module [wat-to-wasm-byte-array wat-string]]]]
 
 [defn forms-to-inst [forms]
   [let
@@ -625,7 +622,6 @@
         get-number-of-frames [get-export inst [word get-number-of-frames]]
         global-context-free [get-export inst [word global-context-free]]
         parse-translate [get-export inst [word parse-translate]]
-        parse-translate-to-wat [get-export inst [word parse-translate-to-wat]]
         form-to-top [get-export inst [word form-to-top]]
         num-frames-i32 [func nfi [] [js-value-to-i32 [js-app get-number-of-frames]]]
         fill-word
@@ -764,9 +760,6 @@
               [js-app text-free w]
               [js-app global-context-free gctx]
               ]]
-          [logq parse-translate-to-wat
-            [ptext-to-string
-              [parse-translate-to-wat [alloc-word [word '[defn f [] [i32] [i32 0]] [export f]']]]]]
               ]]]]]
 
 [defn test-realloc []
@@ -869,3 +862,64 @@
             [logq n-frames [js-app alloc-frames-validate-all]]
             [js-app realloc big [i32 65536] 0]]
           [logq n-frames [js-app alloc-frames-validate-all]]]]]]
+
+
+[defn test-self-translate []
+  [promise-then
+    [read-parse-file-async [word llsimpleparse.wuns]]
+    [func t [forms]
+      [let
+       [module [forms-to-module forms]
+        mem [memory 1 9 0]
+        import-obj [make-import-object mem]
+        inst [wasm-instantiate module import-obj]
+        parse-translate-to-wat [get-export inst [word parse-translate-to-wat]]
+        list-size [get-export inst [word list-size]]
+        list-data-byte-array [get-export inst [word list-data-byte-array]]
+        list-alloc-byte [get-export inst [word list-alloc-byte]]
+        alloc-text
+        [func at [w]
+          [let
+            [src [word-to-byte-array w]
+             sz [byte-array-size src]
+             vec [js-app list-alloc-byte sz]
+             data [js-value-to-i32 [js-app list-data-byte-array vec]]
+             dst [byte-array-from-mem mem data sz]]
+            [for i 0 sz
+              [byte-array-set dst i [byte-array-get src i]]]
+            vec]]
+        text-free [get-export inst [word text-free]]
+        ptext-to-string
+        [func p2s [p]
+          [let
+            [data [js-value-to-i32 [js-app list-data-byte-array p]]
+             sz [js-value-to-i32 [js-app list-size p]]
+             ar [byte-array-from-mem mem data sz]]
+            [byte-array-to-string ar]]]
+        translate-to-module
+        [func translate [wuns-string]
+          [let
+           [wuns-text [alloc-text wuns-string]
+            wat-text [js-app parse-translate-to-wat wuns-text]
+            wat-string [ptext-to-string wat-text]
+            wasm-byte-array [wat-to-wasm-byte-array wat-string]]
+           [log wat-string]
+           [js-app text-free wuns-text]
+           [js-app text-free wat-text]
+           [byte-array-to-wasm-module wasm-byte-array]]]]
+        [let
+          [mod [translate-to-module [word '[defn f [] [i32] [i32 1337]] [export f]']]
+           sinst [wasm-instantiate mod empty-object]
+           f [get-export sinst [word f]]]
+          [test-assert-eq [i32 1337] [js-app f]]]
+        ; [let
+        ;   [mod [translate-to-module [word '[defn f [] [i32] [i32 -1337]] [export f]']]
+        ;    sinst [wasm-instantiate mod empty-object]
+        ;    f [get-export sinst [word f]]]
+        ;   [test-assert-eq [i32 -1337] [js-app f]]]
+        [let
+          [mod [translate-to-module [word '[defn f [] [i64] [i64 4294967296]] [export f]']]
+           sinst [wasm-instantiate mod empty-object]
+           f [get-export sinst [word f]]]
+          [test-assert-eq [bigint 4294967296] [js-app f]]]
+          ]]]]

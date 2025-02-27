@@ -2,7 +2,7 @@ import wabtProm from 'wabt'
 const wabt = await wabtProm()
 
 const wat_to_wasm_byte_array = (inputBuffer) => {
-  if (!(inputBuffer instanceof Uint8Array)) throw new Error('expects Uint8Array')
+  if (typeof inputBuffer !== 'string') throw new Error('expects string')
   try {
     /**
      * @typedef {import('wabt')} PWabtModule
