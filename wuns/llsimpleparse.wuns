@@ -1207,6 +1207,9 @@
                       i [inc i]]]]]]
             res]]]]]]
 
+[def i32-singleton
+  [static-list [array [wtype] type-i32]]]
+
 [def i32i32
   [static-list [array [wtype] type-i32 type-i32]]]
 
@@ -1220,9 +1223,33 @@
 [def intrinsics
   [static-list
     [array [intrinsic-info]
+      [record name [static-list [text i32.eqz]] parameters i32-singleton result type-i32]
+
+      [record name [static-list [text i32.eq]] parameters i32i32 result type-i32]
+      [record name [static-list [text i32.ne]] parameters i32i32 result type-i32]
+
+      ; lt gt and friends...
+
+      [record name [static-list [text i32.clz]] parameters i32-singleton result type-i32]
+      [record name [static-list [text i32.ctz]] parameters i32-singleton result type-i32]
+      [record name [static-list [text i32.popcnt]] parameters i32-singleton result type-i32]
+
       [record name [static-list [text i32.add]] parameters i32i32 result type-i32]
       [record name [static-list [text i32.sub]] parameters i32i32 result type-i32]
       [record name [static-list [text i32.mul]] parameters i32i32 result type-i32]
+
+      [record name [static-list [text i32.and]] parameters i32i32 result type-i32]
+      [record name [static-list [text i32.or]] parameters i32i32 result type-i32]
+      [record name [static-list [text i32.xor]] parameters i32i32 result type-i32]
+
+      [record name [static-list [text i32.shl]] parameters i32i32 result type-i32]
+      ; [record name [static-list [text i32.shr-s]] parameters i32i32 result type-i32]
+      ; [record name [static-list [text i32.shr-u]] parameters i32i32 result type-i32]
+
+      [record name [static-list [text i32.rotl]] parameters i32i32 result type-i32]
+      [record name [static-list [text i32.rotr]] parameters i32i32 result type-i32]
+
+
       ]]]
 
 [defn get-intrinsic-by-name [name [text]] [pmem [intrinsic-info]]
@@ -1374,9 +1401,9 @@
                  lower [intrinsic i64.sub [i64 0] pow2]
                  upper [intrinsic i64.sub pow2 [i64 1]]]
                 [when [intrinsic i64.lt-s value lower]
-                  [push-error gctx f [static-list [text 'signed value out of range']]]]
+                  [push-error gctx f [static-list [text 'signed value out of range, too low']]]]
                 [when [intrinsic i64.lt-s upper value]
-                  [push-error gctx f [static-list [text 'signed value out of range']]]]]
+                  [push-error gctx f [static-list [text 'signed value out of range, too high']]]]]
               [do
                 [when negative
                   [push-error gctx f [static-list [text 'negative value for unsigned type']]]]
@@ -1412,11 +1439,17 @@
             [let
               [name [form-word-get-report gctx [list-get fl 1]]
                intrinsic-info [get-intrinsic-by-name name]
-               params [deref [pfield intrinsic-info parameters]]
                n-intrinsic-args [dec n-args]
-               args [[instantiate list-alloc [pexp]] n-intrinsic-args]]
-              [when [ne [list-size params] n-intrinsic-args]
-                [push-error gctx f [static-list [text 'form-to-exp intrinsic expects the right number of arguments']]]]
+               args [[instantiate list-alloc [pexp]] n-intrinsic-args]
+               params
+               [if [is-null intrinsic-info]
+                [do
+                  [push-error gctx [list-get fl 1] [static-list [text 'intrinsic not found']]]
+                  [cast [plist [wtype]] empty-list]]
+                [let [params [deref [pfield intrinsic-info parameters]]]
+                  [when [ne [list-size params] n-intrinsic-args]
+                    [push-error gctx f [static-list [text 'form-to-exp intrinsic expects the right number of arguments']]]]
+                  params]]]
               [loop [i 2]
                 [when [lt-s i n]
                   [list-set args [sub i 2] [form-to-exp gctx lctx [list-get fl i]]]
@@ -2076,11 +2109,16 @@
 [defn parse-translate-to-wat [bytes [text]] [text]
   [let
     [gctx [parse-translate bytes]
-     writer [[instantiate growable-list-alloc-init [text]] [i32 128]]]
-  [write-global-context writer gctx]
-  [global-context-free gctx]
-  [let [wat [writer-to-text writer]]
-    [growable-list-free writer]
-    wat]]]
+     errors [deref [pfield gctx errors]]]
+    [when [ne [list-size errors] 0]
+      [log-i32 [list-size errors]]
+      [log-abort [text 'parse-translate-to-wat there were errors']]]
+    [let
+      [writer [[instantiate growable-list-alloc-init [text]] [i32 128]]]
+      [write-global-context writer gctx]
+      [global-context-free gctx]
+      [let [wat [writer-to-text writer]]
+        [growable-list-free writer]
+        wat]]]]
 
 [export parse-translate-to-wat]
