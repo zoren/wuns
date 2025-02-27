@@ -1756,7 +1756,8 @@
         [do
           [loop [cur n]
             [when [intrinsic i64.ne cur [i64 0]]
-              [let [rem [intrinsic i64.rem-s cur [i64 10]]]
+              [let
+                [rem [intrinsic i64.sub [i64 0] [intrinsic i64.rem-s cur [i64 10]]]]
                 [growable-list-push gl [intrinsic i64.add [i64 48] rem]]
                 [continue cur [intrinsic i64.div-s cur [i64 10]]]]]]
           [growable-list-push gl [i64 45]]]

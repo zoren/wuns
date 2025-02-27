@@ -906,20 +906,30 @@
            [log wat-string]
            [js-app text-free wuns-text]
            [js-app text-free wat-text]
-           [byte-array-to-wasm-module wasm-byte-array]]]]
-        [let
-          [mod [translate-to-module [word '[defn f [] [i32] [i32 1337]] [export f]']]
-           sinst [wasm-instantiate mod empty-object]
-           f [get-export sinst [word f]]]
-          [test-assert-eq [i32 1337] [js-app f]]]
-        ; [let
-        ;   [mod [translate-to-module [word '[defn f [] [i32] [i32 -1337]] [export f]']]
-        ;    sinst [wasm-instantiate mod empty-object]
-        ;    f [get-export sinst [word f]]]
-        ;   [test-assert-eq [i32 -1337] [js-app f]]]
-        [let
-          [mod [translate-to-module [word '[defn f [] [i64] [i64 4294967296]] [export f]']]
-           sinst [wasm-instantiate mod empty-object]
-           f [get-export sinst [word f]]]
-          [test-assert-eq [bigint 4294967296] [js-app f]]]
+           [byte-array-to-wasm-module wasm-byte-array]]]
+         translate-instantiate
+         [func ti [wuns-string]
+           [wasm-instantiate [translate-to-module wuns-string] empty-object]]
+         test-constant
+         [func tc [expected t src]
+          [let
+            [mod-src [concat-words
+              [word '[defn f [] ['] t
+              [word '] '] src
+              [word '] [export f]']]
+              sinst [translate-instantiate mod-src]
+              f [get-export sinst [word f]]]
+            [test-assert-eq expected [js-app f]]]]
+         ]
+        [test-constant [i32 1337] [word i32] [word '[i32 1337]']]
+        [test-constant [i32 -1] [word i32] [word '[i32 -1]']]
+        [test-constant [i32 -2147483648] [word i32] [word '[i32 -2147483648]']]
+        [test-constant [i32 2147483647] [word i32] [word '[i32 2147483647]']]
+        [test-constant [i32 4294967295] [word i32] [word '[i32 4294967295]']]
+
+        [test-constant [bigint 4294967296] [word i64] [word '[i64 4294967296]']]
+        [test-constant [bigint 9223372036854775807] [word i64] [word '[i64 9223372036854775807]']]
+        [test-constant [bigint -9223372036854775808] [word i64] [word '[i64 -9223372036854775808]']]
+       ; [test-constant [bigint 9223372036854775808] [word i64] [word '[i64 9223372036854775808]']] fails!
+;        [test-constant [bigint 18446744073709551617] [word i64] [word '[i64 18446744073709551617]']] fails
           ]]]]
