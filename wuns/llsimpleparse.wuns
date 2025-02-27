@@ -896,7 +896,7 @@
     [tag [exp exp-integer-tag]]
     [negative [i32]]
     [value [i64]]
-    [byte-size [i32]]]
+    [type [text]]]
 
   wexp-var []
   [record
@@ -926,13 +926,13 @@
     [wexp-intrinsic]
     ]]
 
-[defn wexp-integer-alloc [i [i64] negative [i32] byte-size [i32]] [pexp]
+[defn wexp-integer-alloc [i [i64] negative [i32] type [text]] [pexp]
   [alloc-init
     [record
       tag [annotation [exp exp-integer-tag] exp-integer-tag]
       negative negative
       value i
-      byte-size byte-size]]]
+      type type]]]
 
 [defn wexp-intrinsic-alloc [name [text] args [plist [pexp]]] [pexp]
   [alloc-init
@@ -1367,7 +1367,7 @@
                 [let [unsigned-upper [intrinsic i64.shl [i64 1] bit-size]]
                   [when [intrinsic i64.le-s unsigned-upper value]
                     [push-error gctx f [static-list [text 'unsigned value out of range']]]]]]]
-            [wexp-integer-alloc value negative [intrinsic i32.wrap-i64 byte-size]]]
+            [wexp-integer-alloc value negative fw]]
 
           [word-eq fw [static-list [text if]]]
           [do
@@ -1664,101 +1664,6 @@
 
 [export form-to-top]
 
-[datatype writer []
-  [p-growable-list [text]]]
-
-[defn write-text [writer [writer] txt [text]] [tuple]
-  [growable-list-push writer txt]]
-
-[defn writer-total-size [writer [writer]] [i32]
-  [loop [i 0 n [list-size writer] total-size 0]
-    [if [lt-s i n]
-      [continue
-        total-size [add total-size [list-size [growable-list-get writer i]]]
-        i [inc i]]
-      total-size]]]
-
-[defn writer-to-text [writer [writer]] [text]
-  [let
-    [total-size [writer-total-size writer]
-     result [list-alloc-byte total-size]
-     result-data [list-data-array result]]
-    [loop [i 0 n [list-size writer] offset 0]
-      [if [lt-s i n]
-        [let
-          [txt [growable-list-get writer i]
-           txt-size [list-size txt]]
-          [memory-copy [pindex result-data offset] [list-data-array txt] txt-size]
-          [continue
-            offset [add offset txt-size]
-            i [inc i]]]]]
-    result]]
-
-[def lparen [static-list [text '(']]]
-[def rparen [static-list [text ')']]]
-[def dollar [static-list [text '$']]]
-[def dquote [static-list [text '"']]]
-[def space [static-list [text ' ']]]
-[def newline [static-list [array [u8] [u8 10]]]]
-
-[defn paren [writer [writer] txt [text]] [tuple]
-  [write-text writer lparen]
-  [write-text writer txt]
-  [write-text writer rparen]]
-
-[defn write-dollar-id [writer [writer] txt [text]] [tuple]
-  [write-text writer dollar]
-  [write-text writer txt]]
-
-[defn glist-to-text [gl [p-growable-list [i64]]] [text]
-  [let
-    [n [list-size gl]
-     result [list-alloc-byte n]
-     result-data [list-data-array result]]
-    [loop [i 0]
-      [when [lt-s i n]
-        [passign [pindex result-data i] [deref [pindex [deref [pfield gl parray]] [dec [sub n i]]]]]
-        [continue i [inc i]]]]
-    result]]
-
-[defn integer-to-text [n [i64] negative [i32]] [text]
-  [if
-    [intrinsic i64.eq n [i64 0]]
-    [static-list [text 0]]
-
-    [let [gl [[instantiate growable-list-alloc-init [i64]] [i32 10]]]
-      [if negative
-        [do
-          [loop [cur n]
-            [when [intrinsic i64.ne cur [i64 0]]
-              [let [rem [intrinsic i64.rem-s cur [i64 10]]]
-                [growable-list-push gl [intrinsic i64.add [i64 48] rem]]
-                [continue cur [intrinsic i64.div-s cur [i64 10]]]]]]
-          [growable-list-push gl [i64 45]]]
-        [do
-          [loop [cur n]
-            [when [intrinsic i64.ne cur [i64 0]]
-              [let [rem [intrinsic i64.rem-s cur [i64 10]]]
-                [growable-list-push gl [intrinsic i64.add [i64 48] rem]]
-                [continue cur [intrinsic i64.div-s cur [i64 10]]]]]]
-          [growable-list-push gl [i64 43]]]]
-      [glist-to-text gl]]]]
-
-[defn write-exp [writer [writer] exp [pexp]] [tuple]
-  [write-text writer lparen]
-  [let [tag [deref [pfield exp tag]]]
-    [ifs
-      [eq tag exp-integer-tag]
-      [let [iexp [cast [pmem [wexp-integer]] exp]]
-        [write-text writer [static-list [text 'i32']]]
-        [write-text writer space]
-        [write-text writer [integer-to-text [deref [pfield iexp value]] [deref [pfield iexp negative]]]]]
-
-      [log-abort [text 'write-exp unknown tag']]]]
-
-  [write-text writer rparen]]
-
-
 [datatype wasm-type [] [text]]
 
 [def wasm-constant-tag [i32 1]]
@@ -1813,6 +1718,121 @@
 
 [datatype pwasm-exp [] [pmem [wasm-exp]]]
 
+[defn integer-to-text [n [i64] negative [i32]] [text]
+  [if [intrinsic i64.eq n [i64 0]]
+    [static-list [text 0]]
+    [let [gl [[instantiate growable-list-alloc-init [i64]] [i32 10]]]
+      [if negative
+        [do
+          [loop [cur n]
+            [when [intrinsic i64.ne cur [i64 0]]
+              [let [rem [intrinsic i64.rem-s cur [i64 10]]]
+                [growable-list-push gl [intrinsic i64.add [i64 48] rem]]
+                [continue cur [intrinsic i64.div-s cur [i64 10]]]]]]
+          [growable-list-push gl [i64 45]]]
+        [do
+          [loop [cur n]
+            [when [intrinsic i64.ne cur [i64 0]]
+              [let [rem [intrinsic i64.rem-s cur [i64 10]]]
+                [growable-list-push gl [intrinsic i64.add [i64 48] rem]]
+                [continue cur [intrinsic i64.div-s cur [i64 10]]]]]]
+          [growable-list-push gl [i64 43]]]]
+      [let
+        [rsz [list-size gl]
+         result [list-alloc-byte rsz]
+         result-data [list-data-array result]]
+        [loop [i 0]
+          [when [lt-s i rsz]
+            [passign [pindex result-data i] [deref [pindex [deref [pfield gl parray]] [dec [sub rsz i]]]]]
+            [continue i [inc i]]]]
+        [growable-list-free gl]
+        result]]]]
+
+[defn exp-to-wasm-exp [exp [pexp]] [pwasm-exp]
+  [let [tag [deref [pfield exp tag]]]
+    [ifs
+      [eq tag exp-integer-tag]
+      [let
+        [iexp [cast [pmem [wexp-integer]] exp]
+         negative [deref [pfield iexp negative]]
+         value [deref [pfield iexp value]]
+         type [deref [pfield iexp type]]
+         txt [integer-to-text value negative]]
+        [cast [pwasm-exp]
+          [alloc-init
+            [record
+              tag [annotation [exp wasm-constant-tag] wasm-constant-tag]
+              type type
+              value txt]]]]
+
+      [eq tag exp-intrinsic-tag]
+      [let
+        [iexp [cast [pmem [wexp-intrinsic]] exp]
+         iname [deref [pfield iexp iname]]
+         arguments [deref [pfield iexp arguments]]
+         nargs [list-size arguments]
+         warguments [[instantiate list-alloc [pmem [wasm-exp]]] nargs]]
+        [loop [i 0]
+          [when [lt-s i nargs]
+            [list-set warguments i [exp-to-wasm-exp [list-get arguments i]]]
+            [continue i [inc i]]]]
+        [cast [pwasm-exp]
+          [alloc-init
+            [record
+              tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+              name iname
+              arguments warguments]]]]
+
+        [do
+          [log-i32 tag]
+          [log-abort [text 'exp-to-wasm-exp unknown tag']]]]]]
+
+[datatype writer []
+  [p-growable-list [text]]]
+
+[defn write-text [writer [writer] txt [text]] [tuple]
+  [growable-list-push writer txt]]
+
+[defn writer-total-size [writer [writer]] [i32]
+  [loop [i 0 n [list-size writer] total-size 0]
+    [if [lt-s i n]
+      [continue
+        total-size [add total-size [list-size [growable-list-get writer i]]]
+        i [inc i]]
+      total-size]]]
+
+[defn writer-to-text [writer [writer]] [text]
+  [let
+    [total-size [writer-total-size writer]
+     result [list-alloc-byte total-size]
+     result-data [list-data-array result]]
+    [loop [i 0 n [list-size writer] offset 0]
+      [if [lt-s i n]
+        [let
+          [txt [growable-list-get writer i]
+           txt-size [list-size txt]]
+          [memory-copy [pindex result-data offset] [list-data-array txt] txt-size]
+          [continue
+            offset [add offset txt-size]
+            i [inc i]]]]]
+    result]]
+
+[def lparen [static-list [text '(']]]
+[def rparen [static-list [text ')']]]
+[def dollar [static-list [text '$']]]
+[def dquote [static-list [text '"']]]
+[def space [static-list [text ' ']]]
+[def newline [static-list [array [u8] [u8 10]]]]
+
+[defn paren [writer [writer] txt [text]] [tuple]
+  [write-text writer lparen]
+  [write-text writer txt]
+  [write-text writer rparen]]
+
+[defn write-dollar-id [writer [writer] txt [text]] [tuple]
+  [write-text writer dollar]
+  [write-text writer txt]]
+
 [defn write-wasm-exp [writer [writer] exp [pwasm-exp]] [tuple]
   [write-text writer lparen]
   [let [tag [deref [pfield exp tag]]]
@@ -1834,7 +1854,7 @@
             [write-wasm-exp writer [list-get args i]]
             [continue i [inc i]]]]]
 
-      [log-abort [text 'write-exp unknown tag']]]]
+      [log-abort [text 'write-wasm-exp unknown tag']]]]
 
   [write-text writer rparen]]
 
@@ -1843,9 +1863,9 @@
 [defn write-func
   [writer [writer]
    func-name [text]
-   parameters [plist [tuple [text] [text]]]
-   locals [plist [tuple [text] [text]]]
-   result [plist [text]]
+   parameters [plist [tuple [text] [wasm-type]]]
+   locals [plist [tuple [text] [wasm-type]]]
+   result [plist [wasm-type]]
    bodies [plist [pwasm-exp]]] [tuple]
   [write-text writer lparen]
   [write-text writer [static-list [text func]]]
