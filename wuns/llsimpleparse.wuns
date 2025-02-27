@@ -951,8 +951,7 @@
   [record
     [tag [exp type-error-tag]]]]
 
-[datatype
-  type-integer []
+[datatype type-integer []
   [record
     [tag [exp type-integer-tag]]
     [n-bytes [i32]]
@@ -1002,6 +1001,12 @@
         tag [annotation [exp type-tuple-tag] type-tuple-tag]
         types [cast [wtype] [data mem [record size 0]]]]]]]
 
+[defn type-tuple-alloc [types [plist [pmem [wtype-data]]]] [wtype]
+  [alloc-init
+    [record
+      tag [annotation [exp type-tuple-tag] type-tuple-tag]
+      types types]]]
+
 [datatype type-kind []
   ; datatype
   ; func
@@ -1009,23 +1014,15 @@
 
   [i32]]
 
-[def global-desc-defn-tag [i32 1]]
+[def global-desc-func-tag [i32 2]]
 
-[datatype global-desc-defn []
+[datatype global-desc-func []
   [record
-    [tag [exp global-desc-defn-tag]]
-    [parameters [plist [tuple [text] [wtype]]]]
-    [result [wtype]]
-    [body [plist [pexp]]]]]
-
-[def global-desc-genfn-tag [i32 2]]
-
-[datatype global-desc-genfn []
-  [record
-    [tag [exp global-desc-genfn-tag]]
+    [tag [exp global-desc-func-tag]]
     [type-parameters [plist [tuple [text] [type-kind]]]]
     [parameters [plist [tuple [text] [wtype]]]]
     [result [wtype]]
+    ; [locals [plist [tuple [text] [wtype]]]]
     [body [plist [pexp]]]]]
 
 [def global-desc-def-tag [i32 3]]
@@ -1044,8 +1041,7 @@
 
 [datatype global-context-kind []
   [union
-    [global-desc-defn]
-    [global-desc-genfn]
+    [global-desc-func]
     [global-desc-def]
     [global-desc-mutable]
     ]]
@@ -1465,9 +1461,10 @@
 
 [def context-kind-func [i32 1]]
 
-[defn forms-to-local-context [gctx [pmem [global-context]]
-                              type-kind-env [p-assoc-list [text] [type-kind]]
-                              param-list [plist [pform]]] [plocal-context]
+[defn parameter-forms-to-local-context
+  [gctx [pmem [global-context]]
+   type-kind-env [p-assoc-list [text] [type-kind]]
+   param-list [plist [pform]]] [plocal-context]
   [let
     [n-of-param-forms [list-size param-list]
      lctx [local-context-alloc context-kind-func local-context-empty [half n-of-param-forms]]
@@ -1555,13 +1552,14 @@
                param-list [form-list-get-report gctx [list-get fl 2]]
                result-type [form-to-type gctx empty-list [list-get fl 3]]
                fname [form-word-get-report gctx name-form]
-               lctx [forms-to-local-context gctx empty-list param-list]
-               desc [[instantiate alloc-fn [global-desc-defn]]]]
+               lctx [parameter-forms-to-local-context gctx empty-list param-list]
+               desc [[instantiate alloc-fn [global-desc-func]]]]
               [if [assoc-list-get-value [deref [pfield gctx names]] fname]
                 [push-error gctx name-form [static-list [text 'name already defined']]]]
               [passign desc
                 [record
-                  tag [annotation [exp global-desc-defn-tag] global-desc-defn-tag]
+                  tag [annotation [exp global-desc-func-tag] global-desc-func-tag]
+                  type-parameters [cast [plist [tuple [text] [wtype]]] empty-list]
                   parameters [pfield lctx locals]
                   result result-type]]
               [assoc-list-push [deref [pfield gctx names]] fname desc]
@@ -1583,14 +1581,14 @@
                fname [form-word-get-report gctx name-form]
                type-param-assoc [forms-to-type-params gctx type-param-list]
 
-               lctx [forms-to-local-context gctx type-param-assoc param-list]
-               desc [[instantiate alloc-fn [global-desc-genfn]]]
+               lctx [parameter-forms-to-local-context gctx type-param-assoc param-list]
+               desc [[instantiate alloc-fn [global-desc-func]]]
                result-type [form-to-type gctx type-param-assoc result-type-form]]
               [if [assoc-list-get-value [deref [pfield gctx names]] fname]
                 [push-error gctx name-form [static-list [text 'name already defined']]]]
               [passign desc
                 [record
-                  tag [annotation [exp global-desc-genfn-tag] global-desc-genfn-tag]
+                  tag [annotation [exp global-desc-func-tag] global-desc-func-tag]
                   type-parameters type-param-assoc
                   parameters [pfield lctx locals]
                   result result-type]]
@@ -1663,6 +1661,25 @@
     [log-abort [text 'form-to-top unknown form case']]]]
 
 [export form-to-top]
+
+[defn parse-translate [bytes [text]] [pmem [global-context]]
+  [let
+    [[forms texts form-offsets] [parse-n bytes]
+     gctx [global-context-alloc form-offsets]]
+    [loop [i 0 n [list-size forms]]
+      [when [lt-s i n]
+        [form-to-top gctx [growable-list-get forms i]]
+        [continue i [inc i]]]]
+    [let [errors [deref [pfield gctx errors]]]
+      [loop [j 0 nerr [list-size errors]]
+        [when [lt-s j nerr]
+          [let [error [growable-list-get-p errors j]]
+            [log-text [deref [pfield error message]]]
+            [log-i32 [deref [pfield error offset]]]
+            [continue j [inc j]]]]]]
+    gctx]]
+
+[export parse-translate]
 
 [datatype wasm-type [] [text]]
 
@@ -1787,6 +1804,46 @@
           [log-i32 tag]
           [log-abort [text 'exp-to-wasm-exp unknown tag']]]]]]
 
+[def i32-text [static-list [text 'i32']]]
+[def i64-text [static-list [text 'i64']]]
+[def f32-text [static-list [text 'f32']]]
+[def f64-text [static-list [text 'f64']]]
+
+[defn type-to-wasm-type [t [wtype]] [wasm-type]
+  [ifs
+    [eq t type-i32]
+    i32-text
+
+    [eq t type-i64]
+    i64-text
+
+    [log-abort [text 'type-to-wasm-type unknown type']]]]
+
+[defn flatten-wuns-type [gl [p-growable-list [wtype]] t [wtype]] []
+  [let [tag [deref [pfield t tag]]]
+    [if [eq tag type-tuple-tag]
+      [let
+        [types [deref [pfield [cast [pmem [type-tuple]] t] types]]
+         n-types [list-size types]]
+        [loop [i 0]
+          [when [lt-s i n-types]
+            [flatten-wuns-type gl [list-get types i]]
+            [continue i [inc i]]]]]
+      [growable-list-push gl t]]]]
+
+[defn type-to-wasm-types [t [wtype]] [plist [wasm-type]]
+  [let
+    [types [[instantiate growable-list-alloc-init [wtype]] [i32 8]]
+     [] [flatten-wuns-type types t]
+     n-types [list-size types]
+     wasm-types [[instantiate list-alloc [wasm-type]] n-types]]
+    [loop [i 0]
+      [when [lt-s i n-types]
+        [list-set wasm-types i [type-to-wasm-type [growable-list-get types i]]]
+        [continue i [inc i]]]]
+    [growable-list-free types]
+    wasm-types]]
+
 [datatype writer []
   [p-growable-list [text]]]
 
@@ -1860,6 +1917,142 @@
 
 [def indent [static-list [text '  ']]]
 
+[defn write-func-desc-to-wasm [writer [writer] fname [text] func-desc [pmem [global-desc-func]]] []
+  [write-text writer lparen]
+  [write-text writer [static-list [text func]]]
+  [write-text writer space]
+
+  [write-dollar-id writer fname]
+
+  [let
+    [parameters [deref [pfield func-desc parameters]]
+     result [deref [pfield func-desc result]]
+     body [deref [pfield func-desc body]]]
+    [loop [i 0 n [list-size parameters]]
+      [when [lt-s i n]
+        [let
+          [pp [list-get-p parameters i]
+           wuns-type [deref [pindex pp [i32 1]]]
+           wasm-types [type-to-wasm-types wuns-type]]
+          [when [ne [list-size wasm-types] 1]]
+          [write-text writer space]
+
+          [write-text writer lparen]
+
+          [write-text writer [static-list [text param]]]
+          [write-text writer space]
+
+          [write-dollar-id writer [deref [pindex pp [i32 0]]]]
+          [write-text writer space]
+
+          [write-text writer [type-to-wasm-type [deref [pindex pp [i32 1]]]]]
+
+          [write-text writer rparen]]
+        [continue i [inc i]]]]
+
+    [let
+      [results [type-to-wasm-types result]
+       n-results [list-size results]]
+      [when [ne n-results 0]
+        [write-text writer space]
+
+        [write-text writer lparen]
+        [write-text writer [static-list [text result]]]
+        [loop [i 0]
+          [when [lt-s i n-results]
+            [write-text writer space]
+            [write-text writer [list-get results i]]
+            [continue i [inc i]]]]
+
+        [write-text writer rparen]]]
+
+    ; todo locals here...
+
+    [when [lt-s 1 [list-size body]]
+      [log-abort [text 'write-func-desc-to-wasm multiple bodies not yet supported']]]
+    [loop [i 0 n [list-size body]]
+      [when [lt-s i n]
+        [write-text writer newline]
+
+        [write-wasm-exp writer [exp-to-wasm-exp [list-get body i]]]
+        [continue i [inc i]]]]
+
+        ]
+
+  [write-text writer rparen]
+  [write-text writer newline]
+  ]
+
+[defn write-export [writer [writer] export-name [text] export-kind [text] internal-name [text]] [tuple]
+  [write-text writer lparen]
+  [write-text writer [static-list [text 'export']]]
+  [write-text writer space]
+
+  [write-text writer dquote]
+  [write-text writer export-name]
+  [write-text writer dquote]
+
+  [write-text writer space]
+
+  [write-text writer lparen]
+
+  [write-text writer export-kind]
+
+  [write-text writer space]
+
+  [write-dollar-id writer internal-name]
+
+  [write-text writer rparen]
+  [write-text writer rparen]
+  [write-text writer newline]
+  ]
+
+[defn write-global-context [writer [writer] gctx [pmem [global-context]]] []
+  [let
+    [names [deref [pfield gctx names]]
+     exports [deref [pfield gctx names]]]
+    [loop
+      [n [list-size names]
+       i 0]
+      [when [lt-s i n]
+        [let
+          [assoc-pair [growable-list-get-p names i]
+          name [deref [pindex assoc-pair [i32 0]]]
+          desc [deref [pindex assoc-pair [i32 1]]]
+          tag [deref [pfield desc tag]]]
+          [ifs
+            [eq tag global-desc-func-tag]
+            [write-func-desc-to-wasm writer name desc]
+
+            [log-ar [text 'write-global-context ignoring unknown tag']]]
+          [continue i [inc i]]]]]
+    [loop
+      [n [list-size exports]
+       i 0]
+      [when [lt-s i n]
+        [let
+          [assoc-pair [growable-list-get-p exports i]
+           name [deref [pindex assoc-pair [i32 0]]]
+           desc [deref [pindex assoc-pair [i32 1]]]
+           tag [deref [pfield desc tag]]]
+          [ifs
+            [eq tag global-desc-func-tag]
+            [write-export writer name [static-list [text 'func']] name]
+
+            [log-ar [text 'write-global-context ignoring unknown tag']]]
+          [continue i [inc i]]]]]
+
+          ]]
+
+[defn parse-translate-to-wat [bytes [text]] [text]
+  [let
+    [gctx [parse-translate bytes]
+     writer [[instantiate growable-list-alloc-init [text]] [i32 128]]]
+  [write-global-context writer gctx]
+  [writer-to-text writer]]]
+
+[export parse-translate-to-wat]
+
 [defn write-func
   [writer [writer]
    func-name [text]
@@ -1902,8 +2095,7 @@
           [write-text writer [list-get result i]]
           [continue i [inc i]]]]
 
-      [write-text writer rparen]
-      ]]
+      [write-text writer rparen]]]
 
   [write-text writer newline]
 
@@ -1938,28 +2130,6 @@
   [write-text writer newline]
   ]
 
-[defn write-export [writer [writer] export-name [text] internal-name [text]] [tuple]
-  [write-text writer lparen]
-  [write-text writer [static-list [text 'export']]]
-  [write-text writer space]
-
-  [write-text writer dquote]
-  [write-text writer export-name]
-  [write-text writer dquote]
-
-  [write-text writer space]
-
-  [write-dollar-id writer internal-name]
-
-  [write-text writer rparen]
-  [write-text writer newline]
-  ]
-
-[def i32-text [static-list [text 'i32']]]
-[def i64-text [static-list [text 'i64']]]
-[def f32-text [static-list [text 'f32']]]
-[def f64-text [static-list [text 'f64']]]
-
 [defn test-writer [] [text]
   [let
     [writer [[instantiate growable-list-alloc-init [text]] [i32 10]]]
@@ -1990,27 +2160,8 @@
 
               ]]]
 
-    [write-export writer [static-list [text 'external0']] [static-list [text 'internal']]]
+    [write-export writer [static-list [text 'external0']] [static-list [text 'func']] [static-list [text 'internal']]]
 
     [writer-to-text writer]]]
 
 [export test-writer]
-
-[defn parse-translate [bytes [text]] [pmem [global-context]]
-  [let
-    [[forms texts form-offsets] [parse-n bytes]
-     gctx [global-context-alloc form-offsets]]
-    [loop [i 0 n [list-size forms]]
-      [when [lt-s i n]
-        [form-to-top gctx [growable-list-get forms i]]
-        [continue i [inc i]]]]
-    [let [errors [deref [pfield gctx errors]]]
-      [loop [j 0 nerr [list-size errors]]
-        [when [lt-s j nerr]
-          [let [error [growable-list-get-p errors j]]
-            [log-text [deref [pfield error message]]]
-            [log-i32 [deref [pfield error offset]]]
-            [continue j [inc j]]]]]]
-    gctx]]
-
-[export parse-translate]

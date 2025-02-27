@@ -625,6 +625,7 @@
         get-number-of-frames [get-export inst [word get-number-of-frames]]
         global-context-free [get-export inst [word global-context-free]]
         parse-translate [get-export inst [word parse-translate]]
+        parse-translate-to-wat [get-export inst [word parse-translate-to-wat]]
         form-to-top [get-export inst [word form-to-top]]
         test-writer [get-export inst [word test-writer]]
         num-frames-i32 [func nfi [] [js-value-to-i32 [js-app get-number-of-frames]]]
@@ -765,6 +766,9 @@
               [js-app global-context-free gctx]
               ]]
           [logq writer said [ptext-to-string [js-app test-writer]]]
+          [logq parse-translate-to-wat
+            [ptext-to-string
+              [parse-translate-to-wat [alloc-word [word '[defn f [] [i32] [i32 0]] [export f]']]]]]
               ]]]]]
 
 [defn test-realloc []

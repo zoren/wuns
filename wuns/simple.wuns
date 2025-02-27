@@ -839,61 +839,62 @@
         [type/var n]]]
 
     [form/list l]
-    [let [type-name-word [form-to-word-report [first l]]
-          n-of-args [dec [size l]]]
-      [assert-not [is-empty l] form-to-type expected non-empty list]
-      [if-let [custom-type-signature [try-get custom-type-signatures type-name-word]]
-        [let [type-params [type-signature/params custom-type-signature]
-              targs [list-map a [rest l] [go-f2t-te a]]]
-          [assert [eq n-of-args [size type-params]] form-to-type expected same number of arguments
-            [identity type-name-word] [size type-params] [identity n-of-args]]
-          [for i 0 [size type-params]
-            [let
-              [tp [at type-params i]
-               targ [at targs i]]
-              [when-let [arg-kind [type-to-type-kind-opt type-env targ]]
-                [when-not [type-kind-equals [pair/snd tp] arg-kind]
-                  [logq-abort form-to-type type mismatch [identity targ] [identity tp]]]]]]
-          [type/apply-custom [form-to-name [first l]] targs]]
-        [switch type-name-word
-          [[word tuple]]
-          [type/tuple [list-map t [rest l] [go-f2t-te t]]]
+    [if [is-empty l]
+      [type/tuple [list]]
+      [let [type-name-word [form-to-word-report [first l]]
+            n-of-args [dec [size l]]]
+        [if-let [custom-type-signature [try-get custom-type-signatures type-name-word]]
+          [let [type-params [type-signature/params custom-type-signature]
+                targs [list-map a [rest l] [go-f2t-te a]]]
+            [assert [eq n-of-args [size type-params]] form-to-type expected same number of arguments
+              [identity type-name-word] [size type-params] [identity n-of-args]]
+            [for i 0 [size type-params]
+              [let
+                [tp [at type-params i]
+                targ [at targs i]]
+                [when-let [arg-kind [type-to-type-kind-opt type-env targ]]
+                  [when-not [type-kind-equals [pair/snd tp] arg-kind]
+                    [logq-abort form-to-type type mismatch [identity targ] [identity tp]]]]]]
+            [type/apply-custom [form-to-name [first l]] targs]]
+          [switch type-name-word
+            [[word tuple]]
+            [type/tuple [list-map t [rest l] [go-f2t-te t]]]
 
-          [[word record]]
-          [type/record
-            [list-map pf [rest l]
-              [let [p [get-list pf]]
-                [pair [form-to-name [first p]] [go-f2t-te [second p]]]]]]
+            [[word record]]
+            [type/record
+              [list-map pf [rest l]
+                [let [p [get-list pf]]
+                  [pair [form-to-name [first p]] [go-f2t-te [second p]]]]]]
 
-          [[word union]]
-          [type/union [list-map a [rest l] [go-f2t-te a]]]
+            [[word union]]
+            [type/union [list-map a [rest l] [go-f2t-te a]]]
 
-          [[word pointer]]
-          [do
-            [assert [eq n-of-args 2] form-to-type expected 2 elements [identity type-name-word] [identity n-of-args]]
-            [let [mt [go-f2t-te [second l]]
-                  target-type [go-f2t-te [third l]]]
-              [type/pointer mt target-type]]]
-
-          [[word exp]]
-          [let [be [form-to-exp-type-kind-env type-env lctx [second l]]]
-            [type/exp [if-let [c [try-resolve-constant be]] c be]]]
-
-          [[word array]]
-          [ifs
-            [eq [size l] 2]
-            [type/array [go-f2t-te [second l]] [option/none]]
-
-            [eq [size l] 3]
-            [type/array [go-f2t-te [second l]] [option/some [go-f2t-te [third l]]]]
-
-            [logq-abort array expected 2 or 3 elements]]
-
-          [if-let [p [try-get primitive-types-by-name type-name-word]]
+            [[word pointer]]
             [do
-              [assert [eq n-of-args 0] form-to-type primitive takes no arguments [identity type-name-word]]
-              [type/primitive p]]
-            [logq-abort not implemented form-to-type [identity form]]]]]]]]]
+              [assert [eq n-of-args 2] form-to-type expected 2 elements [identity type-name-word] [identity n-of-args]]
+              [let [mt [go-f2t-te [second l]]
+                    target-type [go-f2t-te [third l]]]
+                [type/pointer mt target-type]]]
+
+            [[word exp]]
+            [let [be [form-to-exp-type-kind-env type-env lctx [second l]]]
+              [type/exp [if-let [c [try-resolve-constant be]] c be]]]
+
+            [[word array]]
+            [ifs
+              [eq [size l] 2]
+              [type/array [go-f2t-te [second l]] [option/none]]
+
+              [eq [size l] 3]
+              [type/array [go-f2t-te [second l]] [option/some [go-f2t-te [third l]]]]
+
+              [logq-abort array expected 2 or 3 elements]]
+
+            [if-let [p [try-get primitive-types-by-name type-name-word]]
+              [do
+                [assert [eq n-of-args 0] form-to-type primitive takes no arguments [identity type-name-word]]
+                [type/primitive p]]
+              [logq-abort not implemented form-to-type [identity form]]]]]]]]]]
     [go-f2t-te outer-form]]]
 
 [func get-mem-type [mem-name-word]
@@ -1684,7 +1685,10 @@
           [type-func/result tf]
           [match [go-tais [transient-kv-map] [type-func/parameters tf] [list-map arg args [type-of arg]]]
             [result/ok tenv] [type-substitute tenv [type-func/result tf]]
-            [result/error -] [logq-abort type-of call args not assignable [identity fexp] [identity tf] [identity args]]]]]
+            [result/error -] [do
+
+;              [log-location [exp-location exp]]
+              [logq-abort type-of call args not assignable [identity fexp] [identity tf] [identity args]]]]]]
 
       [logq-abort not a func]]
 
