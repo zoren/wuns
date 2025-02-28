@@ -626,6 +626,16 @@
 [genfn assoc-list-push [k datatype v datatype] [pglist [p-assoc-list k v] key k value v] [tuple]
   [growable-list-push pglist [tuple key value]]]
 
+[genfn assoc-list-get-entry [k datatype v datatype] [pglist [p-assoc-list k v] key k] [pmem [tuple k v]]
+  [loop
+    [cur-size [deref [pfield pglist size]]
+     i 0]
+    [if [lt-s i cur-size]
+      [if [eq [deref [pindex [pindex [deref [pfield pglist parray]] i] [i32 0]]] key]
+        [pindex [deref [pfield pglist parray]] i]
+        [continue i [inc i]]]
+      [cast [pmem [tuple k v]] [i32 0]]]]]
+
 [genfn assoc-list-get-value [k datatype v datatype] [pglist [p-assoc-list k v] key k] [pmem v]
   [loop
     [cur-size [deref [pfield pglist size]]
@@ -634,7 +644,7 @@
       [if [eq [deref [pindex [pindex [deref [pfield pglist parray]] i] [i32 0]]] key]
         [pindex [pindex [deref [pfield pglist parray]] i] [i32 1]]
         [continue i [inc i]]]
-      [cast [pmem [tuple k v]] [i32 0]]]]]
+      [cast [pmem v] [i32 0]]]]]
 
 [def form-word-tag [i32 10]]
 [def form-list-tag [i32 11]]
@@ -1083,14 +1093,20 @@
 
 [datatype plocal-context [] [pmem [local-context -sz]]]
 
+[datatype local-frame []
+  [record
+    [context-kind [local-context-kind]]
+    [variables [p-assoc-list [text] [wtype]]]]]
+
 [datatype global-context []
   [record
     [errors [p-growable-list [error]]]
     [names [p-assoc-list [text] [pmem [global-desc-kind]]]]
     [form-offsets [p-assoc-list [pform] [i32]]]
     [exp-types [p-assoc-list [pexp] [wtype]]]
-    [exp-local-context [p-assoc-list [pexp] [plocal-context]]]
+    [exp-local-context [p-assoc-list [pexp] [i32]]]
     [exports [p-assoc-list [text] [pmem [global-desc-kind]]]]
+    [local-stack [p-growable-list [local-frame]]]
     ]]
 
 [genfn assoc-list-alloc [k datatype v datatype] [sz [i32]] [p-assoc-list k v]
@@ -1103,8 +1119,10 @@
       names [[instantiate assoc-list-alloc [text] [pmem [global-desc-kind]]] [i32 10]]
       form-offsets form-offsets
       exp-types [[instantiate assoc-list-alloc [pexp] [wtype]] [i32 10]]
-      exp-local-context [[instantiate assoc-list-alloc [pexp] [plocal-context]] [i32 10]]
-      exports [[instantiate assoc-list-alloc [text] [pmem [global-desc-kind]]] [i32 10]]]]]
+      exp-local-context [[instantiate assoc-list-alloc [pexp] [i32]] [i32 10]]
+      exports [[instantiate assoc-list-alloc [text] [pmem [global-desc-kind]]] [i32 10]]
+      local-stack [[instantiate growable-list-alloc-init [local-frame]] [i32 10]]
+]]]
 
 [defn global-context-free [gctx [pmem [global-context]]] [tuple]
   [growable-list-free [deref [pfield gctx errors]]]
@@ -1112,6 +1130,7 @@
   [growable-list-free [deref [pfield gctx exp-types]]]
   [growable-list-free [deref [pfield gctx exp-local-context]]]
   [growable-list-free [deref [pfield gctx exports]]]
+  [growable-list-free [deref [pfield gctx local-stack]]]
   [free gctx [size-of-type [global-context]]]]
 
 [export global-context-alloc global-context-free]
@@ -1147,6 +1166,21 @@
             [tuple [cast [plocal-context] 0] type-error]
             [continue cur-ctx outer]]]
         [tuple cur-ctx [deref ptype]]]]]]
+
+[defn local-stack-lookup [gctx [pmem [global-context]] name [text]] [tuple [i32] [wtype]]
+  [let
+    [stack [deref [pfield gctx local-stack]]
+     stack-size [list-size stack]]
+    [loop [i stack-size]
+      [if [eq i 0]
+        [tuple false [cast [wtype] 0]]
+        [let
+          [frame [growable-list-get-p stack [dec i]]
+           locals [deref [pfield frame variables]]
+           ptup [assoc-list-get-entry locals name]]
+          [if [is-null ptup]
+            [continue i [dec i]]
+            [tuple true [deref [pindex ptup [i32 1]]]]]]]]]]
 
 [defn log-assoc [pglist [p-assoc-list [pexp] [wtype]]] [tuple]
   [log-i32 [deref [pfield pglist size]]]
@@ -1406,23 +1440,22 @@
 [defn annotate [gctx [pmem [global-context]] exp [pexp] t [wtype]] [tuple]
   [assoc-list-push [deref [pfield gctx exp-types]] exp t]]
 
-[defn annotate-local [gctx [pmem [global-context]] exp [pexp] lctx [plocal-context]] [tuple]
-  [assoc-list-push [deref [pfield gctx exp-local-context]] exp lctx]]
+[defn annotate-local [gctx [pmem [global-context]] exp [pexp]] [tuple]
+  [assoc-list-push [deref [pfield gctx exp-local-context]] exp [i32 1]]]
 
-[defn form-to-exp [gctx [pmem [global-context]] lctx [plocal-context] f [pmem [form]]] [pexp]
+[defn form-to-exp [gctx [pmem [global-context]] f [pmem [form]]] [pexp]
   [ifs
     [form-word-is f]
     [let
       [w [form-word-get-report gctx f]
-       [found-ctx lvar-type] [local-context-lookup lctx w]
+       [found lvar-type] [local-stack-lookup gctx w]
        var-type
-        [if [ne found-ctx local-context-empty]
+        [if found
           lvar-type
           [let [ppdesc [assoc-list-get-value [deref [pfield gctx names]] w]]
             [if [is-null ppdesc]
               [do
                 [log-text w]
-                [log-assoc [pfield found-ctx locals]]
                 [push-error gctx f [static-list [text 'variable not found']]]
                 type-error]
               [let [pdesc [deref ppdesc]]
@@ -1438,8 +1471,8 @@
           name w]]]
       ; todo maybe drop the type annotation as the type can be gotten from lctx
       [annotate gctx exp var-type]
-      [when [ne found-ctx local-context-empty]
-        [annotate-local gctx exp found-ctx]]
+      [when found
+        [annotate-local gctx exp]]
       exp]
 
     [form-list-is f]
@@ -1495,17 +1528,19 @@
             [if [ne n-args 3]
               [log-abort [text 'form-to-exp if expects 3 arguments']]]
             [let
-              [c [form-to-exp gctx lctx [list-get fl 1]]
-               t [form-to-exp gctx lctx [list-get fl 2]]
-               e [form-to-exp gctx lctx [list-get fl 3]]
+              [c [form-to-exp gctx [list-get fl 1]]
+               t [form-to-exp gctx [list-get fl 2]]
+               e [form-to-exp gctx [list-get fl 3]]
                if-exp
                [alloc-init
                 [record
                   tag [annotation [exp exp-if-tag] exp-if-tag]
                   condition c
                   true t
-                  false e]]]
-              [when [not [type-assignable type-i32 [type-of gctx c]]]
+                  false e]]
+               tc [type-of gctx c]]
+              [when [not [type-assignable type-i32 tc]]
+                [log-i32 tc]
                 [push-error gctx [list-get fl 1] [static-list [text 'if condition not i32']]]]
               [annotate gctx if-exp [common-super-type [type-of gctx t] [type-of gctx e]]]
               if-exp]]
@@ -1514,7 +1549,7 @@
           [let [exps [[instantiate list-alloc [pexp]] n-args]]
             [loop [i 1]
               [when [lt-s i n]
-                [list-set exps [dec i] [form-to-exp gctx lctx [list-get fl i]]]
+                [list-set exps [dec i] [form-to-exp gctx [list-get fl i]]]
                 [continue i [inc i]]]]
             [wexp-tuple-alloc exps]]
 
@@ -1538,7 +1573,7 @@
                   params]]]
               [loop [i 2]
                 [when [lt-s i n]
-                  [list-set args [sub i 2] [form-to-exp gctx lctx [list-get fl i]]]
+                  [list-set args [sub i 2] [form-to-exp gctx [list-get fl i]]]
                   [continue i [inc i]]]]
               [loop [i 0 nn [list-size params]]
                 [when [lt-s i nn]
@@ -1643,6 +1678,55 @@
           [continue i [add 2 i] ti [inc ti]]]]]
     lctx]]
 
+[defn parameter-forms-to-list
+  [gctx [pmem [global-context]]
+   type-kind-env [p-assoc-list [text] [type-kind]]
+   param-list [plist [pform]]] [plist [tuple [text] [wtype]]]
+  [let
+    [n-of-param-forms [list-size param-list]
+     parameters [[instantiate list-alloc [tuple [text] [wtype]]] [half n-of-param-forms]]
+     parameters-array [list-data-array parameters]]
+    [if [is-odd n-of-param-forms]
+      [push-error gctx [list-get param-list [dec n-of-param-forms]]
+        [static-list [text 'functions expect a parameter list with names and type pairs']]]]
+    [loop [i 0 ti 0]
+      [when [lt-s i n-of-param-forms]
+        [let
+          [lname [form-word-get [list-get param-list i]]
+           ltype [form-to-type gctx type-kind-env [list-get param-list [inc i]]]]
+          [passign
+            [pindex parameters-array ti]
+            [tuple lname ltype]]
+          [continue i [add 2 i] ti [inc ti]]]]]
+    parameters]]
+
+[defn push-parameter-forms-local-stack
+  [gctx [pmem [global-context]]
+   type-kind-env [p-assoc-list [text] [type-kind]]
+   param-list [plist [pform]]] []
+  [let
+    [n-of-param-forms [list-size param-list]
+     stack [deref [pfield gctx local-stack]]
+     variables [[instantiate assoc-list-alloc [text] [wtype]] [i32 10]]]
+    [when [ne [list-size stack] 0]
+      [log-abort [text 'push-parameter-forms-local-stack stack not empty']]]
+    [if [is-odd n-of-param-forms]
+      [push-error gctx [list-get param-list [dec n-of-param-forms]]
+        [static-list [text 'functions expect a parameter list with names and type pairs']]]]
+    [loop [i 0 ti 0]
+      [when [lt-s i n-of-param-forms]
+        [let
+          [lname-form [list-get param-list i]
+           type-form [list-get param-list [inc i]]
+           lname [form-word-get lname-form]
+           ltype [form-to-type gctx type-kind-env type-form]]
+          [assoc-list-push variables lname ltype]
+          [continue i [add 2 i] ti [inc ti]]]]]
+    [growable-list-push stack
+      [record
+        context-kind context-kind-func
+        variables variables]]]]
+
 [defn forms-to-type-params [gctx [pmem [global-context]] param-list [plist [pform]]] [plist [tuple [text] [type-kind]]]
   [let
     [n-of-param-forms [list-size param-list]
@@ -1673,7 +1757,6 @@
     [cast [plist [tuple [text] [type-kind]]] empty-list]]]
 
 [defn forms-to-exps [gctx [pmem [global-context]]
-                     lctx [plocal-context]
                      fl [plist [pform]]
                      start [i32]
                      end [i32]] [plist [pexp]]
@@ -1681,7 +1764,7 @@
     [if [lt-s j end]
       [do
         ; list-map would have been nice here
-        [list-set bodies [sub j start] [form-to-exp gctx lctx [list-get fl j]]]
+        [list-set bodies [sub j start] [form-to-exp gctx [list-get fl j]]]
         [continue j [inc j]]]
       bodies]]]
 
@@ -1708,18 +1791,19 @@
                param-list [form-list-get-report gctx [list-get fl 2]]
                result-type [form-to-type gctx empty-list [list-get fl 3]]
                fname [form-word-get-report gctx name-form]
-               lctx [parameter-forms-to-local-context gctx empty-list param-list]
+               parameters [parameter-forms-to-list gctx empty-list param-list]
                desc [[instantiate alloc-fn [global-desc-func]]]]
+              [push-parameter-forms-local-stack gctx empty-list param-list]
               [if [assoc-list-get-value [deref [pfield gctx names]] fname]
                 [push-error gctx name-form [static-list [text 'name already defined']]]]
               [passign desc
                 [record
                   tag [annotation [exp global-desc-func-tag] global-desc-func-tag]
                   type-parameters [cast [plist [tuple [text] [wtype]]] empty-list]
-                  parameters [pfield lctx locals]
+                  parameters parameters
                   result result-type]]
               [assoc-list-push [deref [pfield gctx names]] fname desc]
-              [let [bodies [forms-to-exps gctx lctx fl 4 n]]
+              [let [bodies [forms-to-exps gctx fl 4 n]]
                 [when [not [type-assignable result-type [type-ofs gctx bodies]]]
                   [push-error gctx form [static-list [text 'result type mismatch']]]]
                 [passign [pfield desc body] bodies]]]]
@@ -1732,27 +1816,8 @@
               [name-form [list-get fl 1]
                type-param-list [form-list-get-report gctx [list-get fl 2]]
                param-list [form-list-get-report gctx [list-get fl 3]]
-               result-type-form [list-get fl 4]
-
-               fname [form-word-get-report gctx name-form]
-               type-param-assoc [forms-to-type-params gctx type-param-list]
-
-               lctx [parameter-forms-to-local-context gctx type-param-assoc param-list]
-               desc [[instantiate alloc-fn [global-desc-func]]]
-               result-type [form-to-type gctx type-param-assoc result-type-form]]
-              [if [assoc-list-get-value [deref [pfield gctx names]] fname]
-                [push-error gctx name-form [static-list [text 'name already defined']]]]
-              [passign desc
-                [record
-                  tag [annotation [exp global-desc-func-tag] global-desc-func-tag]
-                  type-parameters type-param-assoc
-                  parameters [pfield lctx locals]
-                  result result-type]]
-              [assoc-list-push [deref [pfield gctx names]] fname desc]
-              [let [bodies [forms-to-exps gctx lctx fl [i32 5] n]]
-                [when [not [type-assignable result-type [type-ofs gctx bodies]]]
-                  [push-error gctx form [static-list [text 'result type mismatch']]]]
-                [passign [pfield desc body] bodies]]]]
+               result-type-form [list-get fl 4]]
+               [log-abort [text 'form-to-top genfn not implemented']]]]
 
           [or
             [text-eq fw [static-list [text def]]]
@@ -1762,7 +1827,7 @@
               [log-abort [text 'form-to-top def expects a name and an expression']]]
             [let
               [dname [form-word-get-report gctx [list-get fl 1]]
-               exp [form-to-exp gctx local-context-empty [list-get fl 2]]
+               exp [form-to-exp gctx [list-get fl 2]]
                def-desc
                [alloc-init
                 [record
@@ -2012,15 +2077,15 @@
         [iexp [cast [pmem [wexp-var]] exp]
          name [deref [pfield iexp name]]
          iargs [[instantiate list-alloc [text]] 1]
-         annotated-lctx [assoc-list-get-value [deref [pfield gctx exp-local-context]] exp]]
+         is-local [assoc-list-get-value [deref [pfield gctx exp-local-context]] exp]]
         [list-set iargs 0 name]
         [alloc-init
           [record
             tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
             name
-            [if [is-null annotated-lctx]
-              [static-list [text global.get]]
-              [static-list [text local.get]]]
+            [if is-local
+              [static-list [text local.get]]
+              [static-list [text global.get]]]
             immediate-arguments iargs
             arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]
 
