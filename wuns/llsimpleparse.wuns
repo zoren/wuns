@@ -1089,13 +1089,27 @@
 
   [i32]]
 
+[def pattern-var-tag [i32 1]]
+
+[datatype pattern-var []
+  [record
+    [tag [exp pattern-var-tag]]
+    [name [text]]]]
+
+[datatype
+  pattern []
+  [union
+    [pattern-var]]]
+
+[datatype ppattern [] [pmem [pattern]]]
+
 [def global-desc-func-tag [i32 2]]
 
 [datatype global-desc-func []
   [record
     [tag [exp global-desc-func-tag]]
     [type-parameters [plist [tuple [text] [type-kind]]]]
-    [parameter-names [plist [text]]]
+    [parameter-patterns [plist [ppattern]]]
     [parameter-types [plist [wtype]]]
     [result [wtype]]
     ; [locals [plist [tuple [text] [wtype]]]]
@@ -1693,11 +1707,12 @@
 [defn parameter-forms-to-lists
   [gctx [pmem [global-context]]
    type-kind-env [p-assoc-list [text] [type-kind]]
-   param-list [plist [pform]]] [tuple [plist [text]] [plist [wtype]]]
+   param-list [plist [pform]]]
+   [tuple [plist [ppattern]] [plist [wtype]]]
   [let
     [n-of-param-forms [list-size param-list]
-     parameter-names [[instantiate list-alloc [text]] [half n-of-param-forms]]
-     parameter-names-array [list-data-array parameter-names]
+     parameter-patterns [[instantiate list-alloc [ppattern]] [half n-of-param-forms]]
+     parameter-patterns-array [list-data-array parameter-patterns]
      parameter-types [[instantiate list-alloc [wtype]] [half n-of-param-forms]]
      parameter-types-array [list-data-array parameter-types]]
     [if [is-odd n-of-param-forms]
@@ -1708,26 +1723,36 @@
         [let
           [lname [form-word-get [list-get param-list i]]
            ltype [form-to-type gctx type-kind-env [list-get param-list [inc i]]]]
-          [passign [pindex parameter-names-array ti] lname]
+          [passign [pindex parameter-patterns-array ti]
+            [alloc-init
+              [record
+                tag [annotation [exp pattern-var-tag] pattern-var-tag]
+                name lname]]]
           [passign [pindex parameter-types-array ti] ltype]
           [continue i [add 2 i] ti [inc ti]]]]]
-    [tuple parameter-names parameter-types]]]
+    [tuple parameter-patterns parameter-types]]]
 
 [defn push-parameter-forms-local-stack
   [gctx [pmem [global-context]]
    type-kind-env [p-assoc-list [text] [type-kind]]
-   parameter-names [plist [text]]
+   parameter-patterns [plist [ppattern]]
    parameter-types [plist [wtype]]
    ] []
   [let
-    [n-of-param-forms [list-size parameter-names]
+    [n-of-param-forms [list-size parameter-patterns]
      stack [deref [pfield gctx local-stack]]
      variables [[instantiate assoc-list-alloc [text] [wtype]] [i32 10]]]
     [when [ne [list-size stack] 0]
       [log-abort [text 'push-parameter-forms-local-stack stack not empty']]]
     [loop [i 0]
       [when [lt-s i n-of-param-forms]
-        [assoc-list-push variables [list-get parameter-names i] [list-get parameter-types i]]
+        [let
+          [pat [list-get parameter-patterns i]
+           tag [deref [pfield pat tag]]]
+          [if [eq tag pattern-var-tag]
+            [let [pvar [cast [pmem [pattern-var]] pat]]
+              [assoc-list-push variables [deref [pfield pvar name]] [list-get parameter-types i]]]
+            [log-abort [text 'unknown pattern tag']]]]
         [continue i [inc i]]]]
     [growable-list-push stack
       [record
@@ -1798,16 +1823,16 @@
                param-list [form-list-get-report gctx [list-get fl 2]]
                result-type [form-to-type gctx empty-list [list-get fl 3]]
                fname [form-word-get-report gctx name-form]
-               [pnames ptypes] [parameter-forms-to-lists gctx empty-list param-list]
+               [ppatterns ptypes] [parameter-forms-to-lists gctx empty-list param-list]
                desc [[instantiate alloc-fn [global-desc-func]]]]
-              [push-parameter-forms-local-stack gctx empty-list pnames ptypes]
+              [push-parameter-forms-local-stack gctx empty-list ppatterns ptypes]
               [if [assoc-list-get-value [deref [pfield gctx names]] fname]
                 [push-error gctx name-form [static-list [text 'name already defined']]]]
               [passign desc
                 [record
                   tag [annotation [exp global-desc-func-tag] global-desc-func-tag]
                   type-parameters [cast [plist [tuple [text] [wtype]]] empty-list]
-                  parameter-names pnames
+                  parameter-patterns ppatterns
                   parameter-types ptypes
                   result result-type]]
               [assoc-list-push [deref [pfield gctx names]] fname desc]
@@ -2379,7 +2404,7 @@
   [write-text writer type]
   [write-text writer rparen]]
 
-[defn write-func-param-by-type [writer [writer] pname [text] gl [p-growable-list [text]] t [wtype]] []
+[defn write-func-param-by-type [writer [writer] ppat [ppattern] gl [p-growable-list [text]] t [wtype]] []
   [if [eq [deref [pfield t tag]] type-tuple-tag]
     [loop [types [deref [pfield [cast [pmem [type-tuple]] t] types]]
            n-types [list-size types]
@@ -2387,11 +2412,17 @@
       [when [lt-s i n-types]
         [let [txt [integer-to-text [intrinsic i64.extend-i32-s i] false]]
           [growable-list-push gl txt]
-          [write-func-param-by-type writer pname gl [list-get types i]]
+          [write-func-param-by-type writer ppat gl [list-get types i]]
           [growable-list-pop gl]
           ; [text-free txt]
           [continue i [inc i]]]]]
-    [write-func-param writer pname gl [type-to-wasm-type t]]]]
+    [let [tag [deref [pfield ppat tag]]]
+      [ifs [eq tag pattern-var-tag]
+        [let
+          [pp [cast [pmem [pattern-var]] ppat]
+           pname [deref [pfield pp name]]]
+          [write-func-param writer pname gl [type-to-wasm-type t]]]
+        [log-abort [text 'write-func-param-by-type unknown tag']]]]]]
 
 [defn write-func-desc-to-wasm [writer [writer] gctx [pmem [global-context]] fname [text] func-desc [pmem [global-desc-func]]] []
   [write-text writer lparen]
@@ -2401,17 +2432,17 @@
   [write-dollar-id writer fname]
 
   [let
-    [pnames [deref [pfield func-desc parameter-names]]
+    [ppats [deref [pfield func-desc parameter-patterns]]
      ptypes [deref [pfield func-desc parameter-types]]
      result [deref [pfield func-desc result]]
      body [deref [pfield func-desc body]]
      gl [[instantiate growable-list-alloc-init [text]] 8]]
-    [loop [i 0 n [list-size pnames]]
+    [loop [i 0 n [list-size ppats]]
       [when [lt-s i n]
         [let
-          [pname [list-get pnames i]
+          [ppat [list-get ppats i]
            wuns-type [list-get ptypes i]]
-          [write-func-param-by-type writer pname gl wuns-type]]
+          [write-func-param-by-type writer ppat gl wuns-type]]
         [continue i [inc i]]]]
     [growable-list-free gl]
 
