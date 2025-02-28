@@ -2325,6 +2325,7 @@
                     [continue i [inc i]]]]]
 
               [exp/array - es]
+              ; todo we should check that the element size will make the array aligned
               [for-each elem es [e2b elem]]
 
               [exp/tuple es]
