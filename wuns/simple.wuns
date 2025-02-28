@@ -260,6 +260,9 @@
     [[word i32.wrap-i64]]
     [intrinsic-type [list] [list type-i64] type-i32]
 
+    [[word i64.extend-i32-s]]
+    [intrinsic-type [list] [list type-i32] type-i64]
+
     [[word unreachable]]
     [intrinsic-type [list] [list] type-empty]
 

@@ -1363,7 +1363,7 @@
         [if [eq n 0]
           type-tuple-empty
           [loop [types [[instantiate list-alloc [pmem [wtype-data]]] n]
-                  i 0]
+                 i 0]
             [if [lt-s i n]
               [do
                 [list-set types i [type-of gctx [list-get elements i]]]
@@ -2097,6 +2097,64 @@
     [deref [pfield [cast [pmem [wexp-var]] exp] name]]
     [log-abort [text 'exp-get-var-name not a var']]]]
 
+[datatype writer []
+  [p-growable-list [text]]]
+
+[defn writer-total-size [writer [writer]] [i32]
+  [loop [i 0 n [list-size writer] total-size 0]
+    [if [lt-s i n]
+      [continue
+        total-size [add total-size [list-size [growable-list-get writer i]]]
+        i [inc i]]
+      total-size]]]
+
+[defn writer-to-text [writer [writer]] [text]
+  [let
+    [total-size [writer-total-size writer]
+     result [list-alloc-byte total-size]
+     result-data [list-data-array result]]
+    [loop [i 0 n [list-size writer] offset 0]
+      [if [lt-s i n]
+        [let
+          [txt [growable-list-get writer i]
+           txt-size [list-size txt]]
+          [memory-copy [pindex result-data offset] [list-data-array txt] txt-size]
+          [continue
+            offset [add offset txt-size]
+            i [inc i]]]]]
+    result]]
+
+[defn local-get-param-by-type [gl [p-growable-list [text]] t [wtype]] [pwasm-exp]
+  [if [eq [deref [pfield t tag]] type-tuple-tag]
+    [loop [types [deref [pfield [cast [pmem [type-tuple]] t] types]]
+           n-types [list-size types]
+           insts [[instantiate list-alloc [pwasm-exp]] n-types]
+           i 0]
+      [if [lt-s i n-types]
+        [let [txt [integer-to-text [intrinsic i64.extend-i32-s i] false]]
+          [growable-list-push gl [static-list [text -]]]
+          [growable-list-push gl txt]
+          [list-set insts i [local-get-param-by-type gl [list-get types i]]]
+          [growable-list-pop gl]
+          [growable-list-pop gl]
+          [continue i [inc i]]]
+        [cast [pwasm-exp]
+          [alloc-init
+            [record
+              tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
+              insts insts]]]]]
+    [let
+      [iargs [[instantiate list-alloc [text]] 1]
+       concatted-name [writer-to-text gl]]
+      [list-set iargs 0 concatted-name]
+      [cast [pwasm-exp]
+        [alloc-init
+          [record
+            tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+            name [static-list [text local.get]]
+            immediate-arguments iargs
+            arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]]]
+
 [defn exp-to-wasm-exp [gctx [pmem [global-context]] exp [pexp]] [pwasm-exp]
   [let [tag [deref [pfield exp tag]]]
     [ifs
@@ -2118,18 +2176,21 @@
       [let
         [iexp [cast [pmem [wexp-var]] exp]
          name [deref [pfield iexp name]]
-         iargs [[instantiate list-alloc [text]] 1]
          is-local [assoc-list-get-value [deref [pfield gctx exp-local-context]] exp]]
-        [list-set iargs 0 name]
-        [alloc-init
-          [record
-            tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
-            name
-            [if is-local
-              [static-list [text local.get]]
-              [static-list [text global.get]]]
-            immediate-arguments iargs
-            arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]
+        [if is-local
+          [let [gl [[instantiate growable-list-alloc-init [text]] [i32 10]]]
+            [growable-list-push gl name]
+            [local-get-param-by-type gl [type-of gctx exp]]]
+          [let
+            [iargs [[instantiate list-alloc [text]] 1]]
+            [list-set iargs 0 name]
+            [alloc-init
+              [record
+                tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+                name
+                [static-list [text global.get]]
+                immediate-arguments iargs
+                arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]]
 
       [eq tag exp-intrinsic-tag]
       [let
@@ -2211,35 +2272,8 @@
           [log-i32 tag]
           [log-abort [text 'exp-to-wasm-exp unknown tag']]]]]]
 
-[datatype writer []
-  [p-growable-list [text]]]
-
 [defn write-text [writer [writer] txt [text]] [tuple]
   [growable-list-push writer txt]]
-
-[defn writer-total-size [writer [writer]] [i32]
-  [loop [i 0 n [list-size writer] total-size 0]
-    [if [lt-s i n]
-      [continue
-        total-size [add total-size [list-size [growable-list-get writer i]]]
-        i [inc i]]
-      total-size]]]
-
-[defn writer-to-text [writer [writer]] [text]
-  [let
-    [total-size [writer-total-size writer]
-     result [list-alloc-byte total-size]
-     result-data [list-data-array result]]
-    [loop [i 0 n [list-size writer] offset 0]
-      [if [lt-s i n]
-        [let
-          [txt [growable-list-get writer i]
-           txt-size [list-size txt]]
-          [memory-copy [pindex result-data offset] [list-data-array txt] txt-size]
-          [continue
-            offset [add offset txt-size]
-            i [inc i]]]]]
-    result]]
 
 [def lparen [static-list [text '(']]]
 [def rparen [static-list [text ')']]]
@@ -2358,6 +2392,35 @@
           name [static-list [text 'drop']]
           arguments arguments]]]]]
 
+[defn write-func-param [writer [writer] pname [text] pname-postfixes [p-growable-list [text]] type [text]] []
+  [write-text writer space]
+  [write-text writer lparen]
+  [write-text writer [static-list [text param]]]
+  [write-text writer space]
+  [write-dollar-id writer pname]
+  [loop [i 0 n [list-size pname-postfixes]]
+    [when [lt-s i n]
+      [write-text writer [static-list [text -]]]
+      [write-text writer [growable-list-get pname-postfixes i]]
+      [continue i [inc i]]]]
+  [write-text writer space]
+  [write-text writer type]
+  [write-text writer rparen]]
+
+[defn write-func-param-by-type [writer [writer] pname [text] gl [p-growable-list [text]] t [wtype]] []
+  [if [eq [deref [pfield t tag]] type-tuple-tag]
+    [loop [types [deref [pfield [cast [pmem [type-tuple]] t] types]]
+           n-types [list-size types]
+           i 0]
+      [when [lt-s i n-types]
+        [let [txt [integer-to-text [intrinsic i64.extend-i32-s i] false]]
+          [growable-list-push gl txt]
+          [write-func-param-by-type writer pname gl [list-get types i]]
+          [growable-list-pop gl]
+          ; [text-free txt]
+          [continue i [inc i]]]]]
+    [write-func-param writer pname gl [type-to-wasm-type t]]]]
+
 [defn write-func-desc-to-wasm [writer [writer] gctx [pmem [global-context]] fname [text] func-desc [pmem [global-desc-func]]] []
   [write-text writer lparen]
   [write-text writer [static-list [text func]]]
@@ -2369,27 +2432,16 @@
     [pnames [deref [pfield func-desc parameter-names]]
      ptypes [deref [pfield func-desc parameter-types]]
      result [deref [pfield func-desc result]]
-     body [deref [pfield func-desc body]]]
+     body [deref [pfield func-desc body]]
+     gl [[instantiate growable-list-alloc-init [text]] 8]]
     [loop [i 0 n [list-size pnames]]
       [when [lt-s i n]
         [let
           [pname [list-get pnames i]
-           wuns-type [list-get ptypes i]
-           wasm-types [type-to-wasm-types wuns-type]]
-          [write-text writer space]
-
-          [write-text writer lparen]
-
-          [write-text writer [static-list [text param]]]
-          [write-text writer space]
-
-          [write-dollar-id writer pname]
-          [write-text writer space]
-
-          [write-text writer [type-to-wasm-type wuns-type]]
-
-          [write-text writer rparen]]
+           wuns-type [list-get ptypes i]]
+          [write-func-param-by-type writer pname gl wuns-type]]
         [continue i [inc i]]]]
+    [growable-list-free gl]
 
     [write-results writer [type-to-wasm-types result]]
 

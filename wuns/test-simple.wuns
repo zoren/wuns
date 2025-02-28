@@ -1010,4 +1010,15 @@
           [test-assert-eq [i32 0] [js-app not-not [i32 0]]]
           [test-assert-eq [i32 1] [js-app not-not [i32 1]]]
           [test-assert-eq [i32 1] [js-app not-not [i32 1337]]]]
-          ]]]]
+
+
+        [let
+          [inst
+            [translate-instantiate
+[word '[defn get-tup [t [tuple [i32] [i64]]] [tuple [i32] [i64]] t] [export get-tup]']]
+           get-tup [get-export inst [word get-tup]]]
+          [test-assert-eq [tuple [i32 0] [bigint 67]] [js-app get-tup [i32 0] [bigint 67]]]
+
+
+
+          ]]]]]
