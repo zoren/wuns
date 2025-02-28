@@ -1467,26 +1467,26 @@
        var-type
         [if found
           lvar-type
-          [let [ppdesc [assoc-list-get-value [deref [pfield gctx names]] w]]
-            [if [is-null ppdesc]
+          [let [[gfound pdesc] [lookup-global gctx w]]
+            [ifs
+              [not gfound]
               [do
                 [log-text w]
                 [push-error gctx f [static-list [text 'variable not found']]]
                 type-error]
-              [let [pdesc [deref ppdesc]]
-                [ifs
-                  [eq [deref [pfield pdesc tag]] global-desc-def-tag]
-                  [type-of gctx [deref [pfield [cast [pmem [global-desc-def]] pdesc] exp]]]
 
-                  [eq [deref [pfield pdesc tag]] global-desc-func-tag]
-                  [let [fdesc [cast [pmem [global-desc-func]] pdesc]]
-                    [type-function-alloc
-                      [deref [pfield fdesc parameter-types]]
-                      [deref [pfield fdesc result]]]]
+              [eq [deref [pfield pdesc tag]] global-desc-def-tag]
+              [type-of gctx [deref [pfield [cast [pmem [global-desc-def]] pdesc] exp]]]
 
-                  [do
-                    [push-error gctx f [static-list [text 'variable not a def']]]
-                    type-error]]]]]]
+              [eq [deref [pfield pdesc tag]] global-desc-func-tag]
+              [let [fdesc [cast [pmem [global-desc-func]] pdesc]]
+                [type-function-alloc
+                  [deref [pfield fdesc parameter-types]]
+                  [deref [pfield fdesc result]]]]
+
+              [do
+                [push-error gctx f [static-list [text 'global variable has unknown tag']]]
+                type-error]]]]
        exp
        [alloc-init
         [record
