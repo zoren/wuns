@@ -1716,25 +1716,19 @@
 [defn push-parameter-forms-local-stack
   [gctx [pmem [global-context]]
    type-kind-env [p-assoc-list [text] [type-kind]]
-   param-list [plist [pform]]] []
+   parameters-names [plist [text]]
+   parameters-types [plist [wtype]]
+   ] []
   [let
-    [n-of-param-forms [list-size param-list]
+    [n-of-param-forms [list-size parameters-names]
      stack [deref [pfield gctx local-stack]]
      variables [[instantiate assoc-list-alloc [text] [wtype]] [i32 10]]]
     [when [ne [list-size stack] 0]
       [log-abort [text 'push-parameter-forms-local-stack stack not empty']]]
-    [if [is-odd n-of-param-forms]
-      [push-error gctx [list-get param-list [dec n-of-param-forms]]
-        [static-list [text 'functions expect a parameter list with names and type pairs']]]]
-    [loop [i 0 ti 0]
+    [loop [i 0]
       [when [lt-s i n-of-param-forms]
-        [let
-          [lname-form [list-get param-list i]
-           type-form [list-get param-list [inc i]]
-           lname [form-word-get lname-form]
-           ltype [form-to-type gctx type-kind-env type-form]]
-          [assoc-list-push variables lname ltype]
-          [continue i [add 2 i] ti [inc ti]]]]]
+        [assoc-list-push variables [list-get parameters-names i] [list-get parameters-types i]]
+        [continue i [inc i]]]]
     [growable-list-push stack
       [record
         context-kind context-kind-func
@@ -1806,7 +1800,7 @@
                fname [form-word-get-report gctx name-form]
                [pnames ptypes] [parameter-forms-to-lists gctx empty-list param-list]
                desc [[instantiate alloc-fn [global-desc-func]]]]
-              [push-parameter-forms-local-stack gctx empty-list param-list]
+              [push-parameter-forms-local-stack gctx empty-list pnames ptypes]
               [if [assoc-list-get-value [deref [pfield gctx names]] fname]
                 [push-error gctx name-form [static-list [text 'name already defined']]]]
               [passign desc
