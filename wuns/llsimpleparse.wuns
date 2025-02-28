@@ -589,6 +589,14 @@
     [passign [pindex [deref [pfield pglist parray]] cur-size] elem]
     [passign [pfield pglist size] [inc cur-size]]]]
 
+[genfn growable-list-pop [elem-type datatype] [pglist [p-growable-list elem-type]] [tuple]
+  [let
+    [cur-size [deref [pfield pglist size]]
+     cur-capacity [deref [pfield pglist capacity]]]
+    [when [eq cur-size 0]
+      [log-abort [text 'growable-list-pop size == 0']]]
+    [passign [pfield pglist size] [dec cur-size]]]]
+
 [genfn growable-list-get-p [elem-type datatype] [pglist [p-growable-list elem-type] i [i32]] [pmem elem-type]
   [if [lt-s i 0] [log-abort [text 'growable-list-get i negative']]]
   [if [le-s [list-size pglist] i] [log-abort [text 'growable-list-get i out of bounds']]]
@@ -910,6 +918,7 @@
 [def type-error-tag [i32 3]]
 [def type-integer-tag [i32 1]]
 [def type-tuple-tag [i32 2]]
+[def type-function-tag [i32 4]]
 
 [datatype type-error []
   [record
@@ -927,6 +936,12 @@
     [tag [exp type-tuple-tag]]
     [types [plist [pmem [wtype-data]]]]]
 
+  type-function []
+  [record
+    [tag [exp type-function-tag]]
+    [parameters [plist [pmem [wtype-data]]]]
+    [result [pmem [wtype-data]]]]
+
   wtype-data []
   [union
     [type-error]
@@ -940,6 +955,7 @@
 [def exp-if-tag [i32 3]]
 [def exp-intrinsic-tag [i32 4]]
 [def exp-tuple-tag [i32 5]]
+[def exp-call-tag [i32 6]]
 
 [datatype
   wexp-integer []
@@ -967,6 +983,12 @@
     [iname [text]]
     [arguments [plist [pexp]]]]
 
+  wexp-call []
+  [record
+    [tag [exp exp-call-tag]]
+    [func [pexp]]
+    [arguments [plist [pexp]]]]
+
   wexp-tuple []
   [record
     [tag [exp exp-tuple-tag]]
@@ -980,6 +1002,7 @@
     [wexp-var]
     [wexp-if]
     [wexp-intrinsic]
+    [wexp-call]
     [wexp-tuple]
     ]]
 
@@ -996,6 +1019,13 @@
     [record
       tag [annotation [exp exp-intrinsic-tag] exp-intrinsic-tag]
       iname name
+      arguments args]]]
+
+[defn wexp-call-alloc [func [pexp] args [plist [pexp]]] [pexp]
+  [alloc-init
+    [record
+      tag [annotation [exp exp-call-tag] exp-call-tag]
+      func func
       arguments args]]]
 
 [def exp-tuple-empty
@@ -1036,13 +1066,21 @@
         tag [annotation [exp type-tuple-tag] type-tuple-tag]
         types [cast [plist [wtype]] empty-list]]]]]
 
-[defn type-tuple-alloc [types [plist [pmem [wtype-data]]]] [wtype]
+[defn type-tuple-alloc [types [plist [wtype]]] [wtype]
   [if [list-empty-is types]
     type-tuple-empty
     [alloc-init
       [record
         tag [annotation [exp type-tuple-tag] type-tuple-tag]
         types types]]]]
+
+[defn type-function-alloc [parameters [plist [wtype]] result [wtype]] [wtype]
+  [cast [wtype]
+    [alloc-init
+    [record
+      tag [annotation [exp type-function-tag] type-function-tag]
+      parameters parameters
+      result result]]]]
 
 [datatype type-kind []
   ; datatype
@@ -1057,7 +1095,8 @@
   [record
     [tag [exp global-desc-func-tag]]
     [type-parameters [plist [tuple [text] [type-kind]]]]
-    [parameters [plist [tuple [text] [wtype]]]]
+    [parameter-names [plist [text]]]
+    [parameter-types [plist [wtype]]]
     [result [wtype]]
     ; [locals [plist [tuple [text] [wtype]]]]
     [body [plist [pexp]]]]]
@@ -1305,20 +1344,31 @@
           [log-abort [text 'type-of not found intrinsic-info']]]
         [deref [pfield intrinsic-info result]]]
 
-        [eq tag exp-tuple-tag]
-        [let
-          [exp [cast [pmem [wexp-tuple]] e]
-           elements [deref [pfield exp elements]]
-           n [list-size elements]]
-          [if [eq n 0]
-            type-tuple-empty
-            [loop [types [[instantiate list-alloc [pmem [wtype-data]]] n]
-                   i 0]
-              [if [lt-s i n]
-                [do
-                  [list-set types i [type-of gctx [list-get elements i]]]
-                  [continue i [inc i]]]
-                [type-tuple-alloc types]]]]]
+      [eq tag exp-call-tag]
+      [let
+        [exp [cast [pmem [wexp-call]] e]
+         tf [type-of gctx [deref [pfield exp func]]]
+         type-tag [deref [pfield tf tag]]]
+        [if [eq type-tag type-function-tag]
+          [deref [pfield [cast [pmem [type-function]] tf] result]]
+          [do
+            [log-i32 type-tag]
+            [log-abort [text 'type-of not a function type']]]]]
+
+      [eq tag exp-tuple-tag]
+      [let
+        [exp [cast [pmem [wexp-tuple]] e]
+          elements [deref [pfield exp elements]]
+          n [list-size elements]]
+        [if [eq n 0]
+          type-tuple-empty
+          [loop [types [[instantiate list-alloc [pmem [wtype-data]]] n]
+                  i 0]
+            [if [lt-s i n]
+              [do
+                [list-set types i [type-of gctx [list-get elements i]]]
+                [continue i [inc i]]]
+              [type-tuple-alloc types]]]]]
 
       [let [exp-types [deref [pfield gctx exp-types]]
             annotated-type [assoc-list-get-value exp-types e]]
@@ -1402,6 +1452,12 @@
 [defn annotate-local [gctx [pmem [global-context]] exp [pexp]] [tuple]
   [assoc-list-push [deref [pfield gctx exp-local-context]] exp [i32 1]]]
 
+[defn lookup-global [gctx [pmem [global-context]] w [text]] [tuple [boolean] [pmem [global-desc-kind]]]
+  [let [ppdesc [assoc-list-get-value [deref [pfield gctx names]] w]]
+    [if [is-null ppdesc]
+      [tuple false [cast [pmem [global-desc-kind]] null]]
+      [tuple true [deref ppdesc]]]]]
+
 [defn form-to-exp [gctx [pmem [global-context]] f [pmem [form]]] [pexp]
   [ifs
     [form-word-is f]
@@ -1418,8 +1474,16 @@
                 [push-error gctx f [static-list [text 'variable not found']]]
                 type-error]
               [let [pdesc [deref ppdesc]]
-                [if [eq [deref [pfield pdesc tag]] global-desc-def-tag]
+                [ifs
+                  [eq [deref [pfield pdesc tag]] global-desc-def-tag]
                   [type-of gctx [deref [pfield [cast [pmem [global-desc-def]] pdesc] exp]]]
+
+                  [eq [deref [pfield pdesc tag]] global-desc-func-tag]
+                  [let [fdesc [cast [pmem [global-desc-func]] pdesc]]
+                    [type-function-alloc
+                      [deref [pfield fdesc parameter-types]]
+                      [deref [pfield fdesc result]]]]
+
                   [do
                     [push-error gctx f [static-list [text 'variable not a def']]]
                     type-error]]]]]]
@@ -1442,8 +1506,23 @@
         [do
           [push-error gctx f [static-list [text 'empty list not allowed']]]
           [cast [pexp] null]]
-      [let [fw [form-word-get-report gctx [list-get fl 0]]]
+      [let [ff [list-get fl 0]
+            fw [form-word-get-report gctx ff]
+            [lfound ltype] [local-stack-lookup gctx fw]
+            [gfound gdesc] [lookup-global gctx fw]]
+        [when lfound
+          [log-abort [text 'calling a local variable as a function not yet supported']]]
         [ifs
+          gfound
+          [let
+            [fexp [form-to-exp gctx ff]
+             args [[instantiate list-alloc [pexp]] n-args]]
+            [loop [i 1]
+              [when [lt-s i n]
+                [list-set args [sub i 1] [form-to-exp gctx [list-get fl i]]]
+                [continue i [inc i]]]]
+            [wexp-call-alloc fexp args]]
+
           [or
             [text-eq fw [static-list [text i8]]]  [text-eq fw [static-list [text u8]]]
             [text-eq fw [static-list [text i16]]] [text-eq fw [static-list [text u16]]]
@@ -1633,6 +1712,29 @@
           [continue i [add 2 i] ti [inc ti]]]]]
     parameters]]
 
+[defn parameter-forms-to-lists
+  [gctx [pmem [global-context]]
+   type-kind-env [p-assoc-list [text] [type-kind]]
+   param-list [plist [pform]]] [tuple [plist [text]] [plist [wtype]]]
+  [let
+    [n-of-param-forms [list-size param-list]
+     parameters-names [[instantiate list-alloc [text]] [half n-of-param-forms]]
+     parameters-names-array [list-data-array parameters-names]
+     parameters-types [[instantiate list-alloc [wtype]] [half n-of-param-forms]]
+     parameters-types-array [list-data-array parameters-types]]
+    [if [is-odd n-of-param-forms]
+      [push-error gctx [list-get param-list [dec n-of-param-forms]]
+        [static-list [text 'functions expect a parameter list with names and type pairs']]]]
+    [loop [i 0 ti 0]
+      [when [lt-s i n-of-param-forms]
+        [let
+          [lname [form-word-get [list-get param-list i]]
+           ltype [form-to-type gctx type-kind-env [list-get param-list [inc i]]]]
+          [passign [pindex parameters-names-array ti] lname]
+          [passign [pindex parameters-types-array ti] ltype]
+          [continue i [add 2 i] ti [inc ti]]]]]
+    [tuple parameters-names parameters-types]]]
+
 [defn push-parameter-forms-local-stack
   [gctx [pmem [global-context]]
    type-kind-env [p-assoc-list [text] [type-kind]]
@@ -1724,7 +1826,7 @@
                param-list [form-list-get-report gctx [list-get fl 2]]
                result-type [form-to-type gctx empty-list [list-get fl 3]]
                fname [form-word-get-report gctx name-form]
-               parameters [parameter-forms-to-list gctx empty-list param-list]
+               [pnames ptypes] [parameter-forms-to-lists gctx empty-list param-list]
                desc [[instantiate alloc-fn [global-desc-func]]]]
               [push-parameter-forms-local-stack gctx empty-list param-list]
               [if [assoc-list-get-value [deref [pfield gctx names]] fname]
@@ -1733,12 +1835,14 @@
                 [record
                   tag [annotation [exp global-desc-func-tag] global-desc-func-tag]
                   type-parameters [cast [plist [tuple [text] [wtype]]] empty-list]
-                  parameters parameters
+                  parameter-names pnames
+                  parameter-types ptypes
                   result result-type]]
               [assoc-list-push [deref [pfield gctx names]] fname desc]
               [let [bodies [forms-to-exps gctx fl 4 n]]
                 [when [not [type-assignable result-type [type-ofs gctx bodies]]]
                   [push-error gctx form [static-list [text 'result type mismatch']]]]
+                [growable-list-pop [deref [pfield gctx local-stack]]]
                 [passign [pfield desc body] bodies]]]]
 
           [text-eq fw [static-list [text genfn]]]
@@ -1988,6 +2092,11 @@
     [growable-list-free types]
     wasm-types]]
 
+[defn exp-get-var-name [exp [pexp]] [text]
+  [if [eq [deref [pfield exp tag]] exp-var-tag]
+    [deref [pfield [cast [pmem [wexp-var]] exp] name]]
+    [log-abort [text 'exp-get-var-name not a var']]]]
+
 [defn exp-to-wasm-exp [gctx [pmem [global-context]] exp [pexp]] [pwasm-exp]
   [let [tag [deref [pfield exp tag]]]
     [ifs
@@ -2039,6 +2148,27 @@
               tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
               name iname
               immediate-arguments [cast [plist [text]] empty-list]
+              arguments warguments]]]]
+
+      [eq tag exp-call-tag]
+      [let
+        [iexp [cast [pmem [wexp-call]] exp]
+         func [deref [pfield iexp func]]
+         arguments [deref [pfield iexp arguments]]
+         nargs [list-size arguments]
+         iargs [[instantiate list-alloc [text]] 1]
+         warguments [[instantiate list-alloc [pmem [wasm-exp]]] nargs]]
+        [list-set iargs 0 [exp-get-var-name func]]
+        [loop [i 0]
+          [when [lt-s i nargs]
+            [list-set warguments i [exp-to-wasm-exp gctx [list-get arguments i]]]
+            [continue i [inc i]]]]
+        [cast [pwasm-exp]
+          [alloc-init
+            [record
+              tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+              name [static-list [text call]]
+              immediate-arguments iargs
               arguments warguments]]]]
 
       [eq tag exp-if-tag]
@@ -2236,14 +2366,15 @@
   [write-dollar-id writer fname]
 
   [let
-    [parameters [deref [pfield func-desc parameters]]
+    [pnames [deref [pfield func-desc parameter-names]]
+     ptypes [deref [pfield func-desc parameter-types]]
      result [deref [pfield func-desc result]]
      body [deref [pfield func-desc body]]]
-    [loop [i 0 n [list-size parameters]]
+    [loop [i 0 n [list-size pnames]]
       [when [lt-s i n]
         [let
-          [pp [list-get-p parameters i]
-           wuns-type [deref [pindex pp [i32 1]]]
+          [pname [list-get pnames i]
+           wuns-type [list-get ptypes i]
            wasm-types [type-to-wasm-types wuns-type]]
           [write-text writer space]
 
@@ -2252,7 +2383,7 @@
           [write-text writer [static-list [text param]]]
           [write-text writer space]
 
-          [write-dollar-id writer [deref [pindex pp [i32 0]]]]
+          [write-dollar-id writer pname]
           [write-text writer space]
 
           [write-text writer [type-to-wasm-type wuns-type]]

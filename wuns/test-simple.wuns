@@ -994,4 +994,20 @@
           [test-assert-eq [i32 1] [js-app wnot [i32 0]]]
           [test-assert-eq [i32 0] [js-app wnot [i32 1]]]
           [test-assert-eq [i32 0] [js-app wnot [i32 1337]]]]
+
+        [let
+          [inst
+            [translate-instantiate
+              [word '[defn f [] [i32] [i32 5]] [defn g [] [i32] [intrinsic i32.add [i32 1] [f]]] [export g]']]
+           g [get-export inst [word g]]]
+          [test-assert-eq [i32 6] [js-app g]]]
+
+        [let
+          [inst
+            [translate-instantiate
+[word '[defn not [p [i32]] [i32] [if p [i32 0] [i32 1]]] [defn not-not [p [i32]] [i32] [not [not p]]] [export not-not]']]
+           not-not [get-export inst [word not-not]]]
+          [test-assert-eq [i32 0] [js-app not-not [i32 0]]]
+          [test-assert-eq [i32 1] [js-app not-not [i32 1]]]
+          [test-assert-eq [i32 1] [js-app not-not [i32 1337]]]]
           ]]]]
