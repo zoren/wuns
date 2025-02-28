@@ -1071,12 +1071,25 @@
     [message [text]]
     [offset [i32]]]]
 
+[datatype local-context-kind []
+  [i32]]
+
+[datatype
+  local-context [size [exp [i32]]]
+  [record
+    [context-kind [local-context-kind]]
+    [outer [pmem [local-context -sz]]]
+    [locals [list-data [tuple [text] [wtype]] size]]]]
+
+[datatype plocal-context [] [pmem [local-context -sz]]]
+
 [datatype global-context []
   [record
     [errors [p-growable-list [error]]]
     [names [p-assoc-list [text] [pmem [global-context-kind]]]]
     [form-offsets [p-assoc-list [pform] [i32]]]
     [exp-types [p-assoc-list [pexp] [wtype]]]
+    [exp-local-context [p-assoc-list [pexp] [plocal-context]]]
     [exports [p-assoc-list [text] [pmem [global-context-kind]]]]
     ]]
 
@@ -1090,27 +1103,18 @@
       names [[instantiate assoc-list-alloc [text] [pmem [global-context-kind]]] [i32 10]]
       form-offsets form-offsets
       exp-types [[instantiate assoc-list-alloc [pexp] [wtype]] [i32 10]]
+      exp-local-context [[instantiate assoc-list-alloc [pexp] [plocal-context]] [i32 10]]
       exports [[instantiate assoc-list-alloc [text] [pmem [global-context-kind]]] [i32 10]]]]]
 
 [defn global-context-free [gctx [pmem [global-context]]] [tuple]
   [growable-list-free [deref [pfield gctx errors]]]
   [growable-list-free [deref [pfield gctx names]]]
   [growable-list-free [deref [pfield gctx exp-types]]]
+  [growable-list-free [deref [pfield gctx exp-local-context]]]
+  [growable-list-free [deref [pfield gctx exports]]]
   [free gctx [size-of-type [global-context]]]]
 
 [export global-context-alloc global-context-free]
-
-[datatype local-context-kind []
-  [i32]]
-
-[datatype
-  local-context [size [exp [i32]]]
-  [record
-    [context-kind [local-context-kind]]
-    [outer [pmem [local-context -sz]]]
-    [locals [list-data [tuple [text] [wtype]] size]]]]
-
-[datatype plocal-context [] [pmem [local-context -sz]]]
 
 [def local-context-empty [cast [plocal-context] [i32 0]]]
 
@@ -1369,9 +1373,6 @@
     t1
     [log-abort [text 'common-super-type different types']]]]
 
-[defn annotate [gctx [pmem [global-context]] exp [pexp] t [wtype]] [tuple]
-  [assoc-list-push [deref [pfield gctx exp-types]] exp t]]
-
 [defn primitive-int-name-to-signed-size [fw [text]] [tuple [i32] [i64]]
   [ifs
     [word-eq fw [static-list [text i8]]]
@@ -1402,6 +1403,12 @@
       [log-text fw]
       [log-abort [text 'primitive-int-name-to-signed-size unknown word']]]]]
 
+[defn annotate [gctx [pmem [global-context]] exp [pexp] t [wtype]] [tuple]
+  [assoc-list-push [deref [pfield gctx exp-types]] exp t]]
+
+[defn annotate-local [gctx [pmem [global-context]] exp [pexp] lctx [plocal-context]] [tuple]
+  [assoc-list-push [deref [pfield gctx exp-local-context]] exp lctx]]
+
 [defn form-to-exp [gctx [pmem [global-context]] lctx [plocal-context] f [pmem [form]]] [pexp]
   [ifs
     [form-word-is f]
@@ -1429,7 +1436,10 @@
         [record
           tag [annotation [exp exp-var-tag] exp-var-tag]
           name w]]]
+      ; todo maybe drop the type annotation as the type can be gotten from lctx
       [annotate gctx exp var-type]
+      [when [ne found-ctx local-context-empty]
+        [annotate-local gctx exp found-ctx]]
       exp]
 
     [form-list-is f]
@@ -1768,7 +1778,7 @@
 
           [word-eq fw [static-list [text import]]]
           [do
-            [log-abort [text 'form-to-top import not implemented']]
+           [log-abort [text 'form-to-top import not implemented']]
           ]
 
           [word-eq fw [static-list [text export]]]
@@ -2001,15 +2011,18 @@
       [let
         [iexp [cast [pmem [wexp-var]] exp]
          name [deref [pfield iexp name]]
-         iargs [[instantiate list-alloc [text]] 1]]
+         iargs [[instantiate list-alloc [text]] 1]
+         annotated-lctx [assoc-list-get-value [deref [pfield gctx exp-local-context]] exp]]
         [list-set iargs 0 name]
-        [cast [pwasm-exp]
-          [alloc-init
-            [record
-              tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
-              name [static-list [text global.get]]
-              immediate-arguments iargs
-              arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]
+        [alloc-init
+          [record
+            tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+            name
+            [if [is-null annotated-lctx]
+              [static-list [text global.get]]
+              [static-list [text local.get]]]
+            immediate-arguments iargs
+            arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]
 
       [eq tag exp-intrinsic-tag]
       [let
@@ -2257,6 +2270,7 @@
       [when [lt-s i n]
         [let [b [list-get body i]]
           [write-text writer newline]
+          [write-text writer indent]
           [write-wasm-exp writer [exp-to-wasm-exp gctx b]]
           [when [lt-s i [dec n]]
             [let

@@ -986,12 +986,12 @@
            mut-var [get-export mut-var-inst [word mut-var]]]
           [test-assert-eq [i32 5] [js-app mut-var]]]
 
-        ; [let
-        ;   [not-inst
-        ;     [translate-instantiate
-        ;       [word '[defn not [p [i32]] [i32] [if p [i32 0] [i32 1]]] [export not]']]
-        ;    wnot [get-export not-inst [word not]]]
-        ;   [test-assert-eq [i32 1] [js-app wnot [i32 0]]]
-        ;   [test-assert-eq [i32 0] [js-app wnot [i32 1]]]
-        ;   [test-assert-eq [i32 0] [js-app wnot [i32 1337]]]]
+        [let
+          [not-inst
+            [translate-instantiate
+              [word '[defn not [p [i32]] [i32] [if p [i32 0] [i32 1]]] [export not]']]
+           wnot [get-export not-inst [word not]]]
+          [test-assert-eq [i32 1] [js-app wnot [i32 0]]]
+          [test-assert-eq [i32 0] [js-app wnot [i32 1]]]
+          [test-assert-eq [i32 0] [js-app wnot [i32 1337]]]]
           ]]]]
