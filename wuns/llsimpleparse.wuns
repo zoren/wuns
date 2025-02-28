@@ -1690,28 +1690,6 @@
 
 [def context-kind-func [i32 1]]
 
-[defn parameter-forms-to-list
-  [gctx [pmem [global-context]]
-   type-kind-env [p-assoc-list [text] [type-kind]]
-   param-list [plist [pform]]] [plist [tuple [text] [wtype]]]
-  [let
-    [n-of-param-forms [list-size param-list]
-     parameters [[instantiate list-alloc [tuple [text] [wtype]]] [half n-of-param-forms]]
-     parameters-array [list-data-array parameters]]
-    [if [is-odd n-of-param-forms]
-      [push-error gctx [list-get param-list [dec n-of-param-forms]]
-        [static-list [text 'functions expect a parameter list with names and type pairs']]]]
-    [loop [i 0 ti 0]
-      [when [lt-s i n-of-param-forms]
-        [let
-          [lname [form-word-get [list-get param-list i]]
-           ltype [form-to-type gctx type-kind-env [list-get param-list [inc i]]]]
-          [passign
-            [pindex parameters-array ti]
-            [tuple lname ltype]]
-          [continue i [add 2 i] ti [inc ti]]]]]
-    parameters]]
-
 [defn parameter-forms-to-lists
   [gctx [pmem [global-context]]
    type-kind-env [p-assoc-list [text] [type-kind]]
