@@ -1060,7 +1060,7 @@
     [exp [pexp]]
     [mutable [i32]]]]
 
-[datatype global-context-kind []
+[datatype global-desc-kind []
   [union
     [global-desc-func]
     [global-desc-def]
@@ -1086,11 +1086,11 @@
 [datatype global-context []
   [record
     [errors [p-growable-list [error]]]
-    [names [p-assoc-list [text] [pmem [global-context-kind]]]]
+    [names [p-assoc-list [text] [pmem [global-desc-kind]]]]
     [form-offsets [p-assoc-list [pform] [i32]]]
     [exp-types [p-assoc-list [pexp] [wtype]]]
     [exp-local-context [p-assoc-list [pexp] [plocal-context]]]
-    [exports [p-assoc-list [text] [pmem [global-context-kind]]]]
+    [exports [p-assoc-list [text] [pmem [global-desc-kind]]]]
     ]]
 
 [genfn assoc-list-alloc [k datatype v datatype] [sz [i32]] [p-assoc-list k v]
@@ -1100,11 +1100,11 @@
   [alloc-init
     [record
       errors [[instantiate growable-list-alloc-init [error]] [i32 10]]
-      names [[instantiate assoc-list-alloc [text] [pmem [global-context-kind]]] [i32 10]]
+      names [[instantiate assoc-list-alloc [text] [pmem [global-desc-kind]]] [i32 10]]
       form-offsets form-offsets
       exp-types [[instantiate assoc-list-alloc [pexp] [wtype]] [i32 10]]
       exp-local-context [[instantiate assoc-list-alloc [pexp] [plocal-context]] [i32 10]]
-      exports [[instantiate assoc-list-alloc [text] [pmem [global-context-kind]]] [i32 10]]]]]
+      exports [[instantiate assoc-list-alloc [text] [pmem [global-desc-kind]]] [i32 10]]]]]
 
 [defn global-context-free [gctx [pmem [global-context]]] [tuple]
   [growable-list-free [deref [pfield gctx errors]]]
