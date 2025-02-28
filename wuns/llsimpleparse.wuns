@@ -1084,15 +1084,6 @@
 [datatype local-context-kind []
   [i32]]
 
-[datatype
-  local-context [size [exp [i32]]]
-  [record
-    [context-kind [local-context-kind]]
-    [outer [pmem [local-context -sz]]]
-    [locals [list-data [tuple [text] [wtype]] size]]]]
-
-[datatype plocal-context [] [pmem [local-context -sz]]]
-
 [datatype local-frame []
   [record
     [context-kind [local-context-kind]]
@@ -1134,38 +1125,6 @@
   [free gctx [size-of-type [global-context]]]]
 
 [export global-context-alloc global-context-free]
-
-[def local-context-empty [cast [plocal-context] [i32 0]]]
-
-[defn local-context-alloc [kind [i32] outer [plocal-context] size [i32]] [plocal-context]
-  [let
-    [p [[instantiate alloc-fn [local-context [exp size]]]]]
-    [passign [pfield p context-kind] kind]
-    [passign [pfield p outer] outer]
-    [passign [pfield [pfield p locals] size] size]
-    p]]
-
-[defn locals-lookup [locals [plist [tuple [text] [wtype]]] name [text]] [pmem [wtype]]
-  [loop
-    [n [list-size locals]
-     tuple-array [list-data-array locals]
-     i 0]
-    [if [lt-s i n]
-      [let [ptup [pindex tuple-array i]]
-        [if [text-eq [deref [pindex ptup [i32 0]]] name]
-          [pindex ptup [i32 1]]
-          [continue i [inc i]]]]
-      [cast [pmem [wtype]] [i32 0]]]]]
-
-[defn local-context-lookup [lctx [plocal-context] name [text]] [tuple [plocal-context] [wtype]]
-  [loop [cur-ctx lctx]
-    [let [ptype [locals-lookup [pfield lctx locals] name]]
-      [if [is-null ptype]
-        [let [outer [deref [pfield lctx outer]]]
-          [if [is-null outer]
-            [tuple [cast [plocal-context] 0] type-error]
-            [continue cur-ctx outer]]]
-        [tuple cur-ctx [deref ptype]]]]]]
 
 [defn local-stack-lookup [gctx [pmem [global-context]] name [text]] [tuple [i32] [wtype]]
   [let
@@ -1651,32 +1610,6 @@
 [defn half [i [i32]] [i32] [intrinsic i32.shr-s i 1]]
 
 [def context-kind-func [i32 1]]
-
-[defn parameter-forms-to-local-context
-  [gctx [pmem [global-context]]
-   type-kind-env [p-assoc-list [text] [type-kind]]
-   param-list [plist [pform]]] [plocal-context]
-  [let
-    [n-of-param-forms [list-size param-list]
-     lctx [local-context-alloc context-kind-func local-context-empty [half n-of-param-forms]]
-     locals-array [list-data-array [pfield lctx locals]]]
-    [if [is-odd n-of-param-forms]
-      [push-error gctx [list-get param-list [dec n-of-param-forms]]
-        [static-list [text 'functions expect a parameter list with names and type pairs']]]]
-    [loop [i 0 ti 0]
-      [when [lt-s i n-of-param-forms]
-        [let
-          [lname-form [list-get param-list i]
-           lname [form-word-get lname-form]
-           [found-ctx lvar-type] [local-context-lookup lctx lname]
-           ltype [form-to-type gctx type-kind-env [list-get param-list [inc i]]]]
-          [if [ne found-ctx local-context-empty]
-            [push-error gctx lname-form [static-list [text 'name already defined']]]]
-          [passign
-            [pindex locals-array ti]
-            [tuple lname ltype]]
-          [continue i [add 2 i] ti [inc ti]]]]]
-    lctx]]
 
 [defn parameter-forms-to-list
   [gctx [pmem [global-context]]
