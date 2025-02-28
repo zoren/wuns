@@ -30,6 +30,8 @@
 [def 8 [i32 8]]
 [def 16 [i32 16]]
 
+[datatype boolean [] [i32]]
+
 [def false [i32 0]]
 [def true [i32 1]]
 
@@ -886,7 +888,7 @@
 
 [export parse-all-forms]
 
-[defn word-eq [w1 [text] w2 [text]] [i32]
+[defn text-eq [w1 [text] w2 [text]] [boolean]
   [if [eq w1 w2]
     true
     [let [n1 [list-size w1]
@@ -894,8 +896,6 @@
       [if [eq n1 n2]
         [intrinsic i64.eq [i64 0] [memory-compare [list-data-array w1] [list-data-array w2] n1]]
         false]]]]
-
-[datatype boolean [] [i32]]
 
 [def type-error-tag [i32 3]]
 [def type-integer-tag [i32 1]]
@@ -1133,7 +1133,7 @@
      i 0]
     [if [lt-s i n]
       [let [ptup [pindex tuple-array i]]
-        [if [word-eq [deref [pindex ptup [i32 0]]] name]
+        [if [text-eq [deref [pindex ptup [i32 0]]] name]
           [pindex ptup [i32 1]]
           [continue i [inc i]]]]
       [cast [pmem [wtype]] [i32 0]]]]]
@@ -1171,9 +1171,6 @@
         message msg
         offset [deref p-offset]]]]]
 
-[defn is-digit [cc [i64]] [i32]
-  [is-between-inclusive [i64 48] cc [i64 57]]]
-
 [defn form-word-get-report [gctx [pmem [global-context]] pf [pform]] [text]
   [if [form-word-is pf]
     [let [pfw [cast [pmem [form-word]] pf]]
@@ -1189,6 +1186,9 @@
     [do
       [push-error gctx pf [static-list [text 'not a form-list']]]
       [cast [plist [pform]] empty-list]]]]
+
+[defn is-digit [cc [i64]] [i32]
+  [is-between-inclusive [i64 48] cc [i64 57]]]
 
 ; https://github.com/skeeto/scratch/blob/master/parsers/strtonum.c
 [defn dec-word-to-i64-signed [gctx [pmem [global-context]] word-form [pform]] [tuple [i32] [i64]]
@@ -1290,7 +1290,7 @@
      i 0]
     [if [lt-s i cur-size]
       [let [pintrin [pindex arr i]]
-        [if [word-eq [deref [pfield pintrin name]] name]
+        [if [text-eq [deref [pfield pintrin name]] name]
           pintrin
           [continue i [inc i]]]]
       [cast [pmem [intrinsic-info]] [i32 0]]]]]
@@ -1375,28 +1375,28 @@
 
 [defn primitive-int-name-to-signed-size [fw [text]] [tuple [i32] [i64]]
   [ifs
-    [word-eq fw [static-list [text i8]]]
+    [text-eq fw [static-list [text i8]]]
     [tuple true [i64 1]]
 
-    [word-eq fw [static-list [text u8]]]
+    [text-eq fw [static-list [text u8]]]
     [tuple false [i64 1]]
 
-    [word-eq fw [static-list [text i16]]]
+    [text-eq fw [static-list [text i16]]]
     [tuple true [i64 2]]
 
-    [word-eq fw [static-list [text u16]]]
+    [text-eq fw [static-list [text u16]]]
     [tuple false [i64 2]]
 
-    [word-eq fw [static-list [text i32]]]
+    [text-eq fw [static-list [text i32]]]
     [tuple true [i64 4]]
 
-    [word-eq fw [static-list [text u32]]]
+    [text-eq fw [static-list [text u32]]]
     [tuple false [i64 4]]
 
-    [word-eq fw [static-list [text i64]]]
+    [text-eq fw [static-list [text i64]]]
     [tuple true [i64 8]]
 
-    [word-eq fw [static-list [text u64]]]
+    [text-eq fw [static-list [text u64]]]
     [tuple false [i64 8]]
 
     [do
@@ -1453,10 +1453,10 @@
       [let [fw [form-word-get-report gctx [list-get fl 0]]]
         [ifs
           [or
-            [word-eq fw [static-list [text i8]]]  [word-eq fw [static-list [text u8]]]
-            [word-eq fw [static-list [text i16]]] [word-eq fw [static-list [text u16]]]
-            [word-eq fw [static-list [text i32]]] [word-eq fw [static-list [text u32]]]
-            [word-eq fw [static-list [text i64]]] [word-eq fw [static-list [text u64]]]]
+            [text-eq fw [static-list [text i8]]]  [text-eq fw [static-list [text u8]]]
+            [text-eq fw [static-list [text i16]]] [text-eq fw [static-list [text u16]]]
+            [text-eq fw [static-list [text i32]]] [text-eq fw [static-list [text u32]]]
+            [text-eq fw [static-list [text i64]]] [text-eq fw [static-list [text u64]]]]
           [let
             [[signed byte-size] [primitive-int-name-to-signed-size fw]
               bit-size [intrinsic i64.mul byte-size [i64 8]]
@@ -1468,8 +1468,8 @@
               [dec-word-to-i64-signed gctx [list-get fl 1]]]
               type
               [ifs
-                [word-eq fw [static-list [text i32]]] type-i32
-                [word-eq fw [static-list [text i64]]] type-i64
+                [text-eq fw [static-list [text i32]]] type-i32
+                [text-eq fw [static-list [text i64]]] type-i64
                 [do
                   [log-text fw]
                   [log-abort [text 'form-to-exp primitive-int-name-to-signed-size unknown word']]]]]
@@ -1490,7 +1490,7 @@
                     [push-error gctx f [static-list [text 'unsigned value out of range']]]]]]]
             [wexp-integer-alloc value negative type]]
 
-          [word-eq fw [static-list [text if]]]
+          [text-eq fw [static-list [text if]]]
           [do
             [if [ne n-args 3]
               [log-abort [text 'form-to-exp if expects 3 arguments']]]
@@ -1510,7 +1510,7 @@
               [annotate gctx if-exp [common-super-type [type-of gctx t] [type-of gctx e]]]
               if-exp]]
 
-          [word-eq fw [static-list [text tuple]]]
+          [text-eq fw [static-list [text tuple]]]
           [let [exps [[instantiate list-alloc [pexp]] n-args]]
             [loop [i 1]
               [when [lt-s i n]
@@ -1518,7 +1518,7 @@
                 [continue i [inc i]]]]
             [wexp-tuple-alloc exps]]
 
-          [word-eq fw [static-list [text intrinsic]]]
+          [text-eq fw [static-list [text intrinsic]]]
           [do
             [if [eq n-args 0]
               [log-abort [text 'form-to-exp intrinsic expects at least a name argument']]]
@@ -1587,19 +1587,19 @@
         type-tuple-empty
         [let [fw [form-word-get-report gctx [list-get fl 0]]]
           [ifs
-            [word-eq fw [static-list [text i32]]]
+            [text-eq fw [static-list [text i32]]]
             [do
               [if [ne n-args 0]
                 [log-abort [text 'form-to-type i32 expects no arguments']]]
               type-i32]
 
-            [word-eq fw [static-list [text i64]]]
+            [text-eq fw [static-list [text i64]]]
             [do
               [if [ne n-args 0]
                 [log-abort [text 'form-to-type i64 expects no arguments']]]
               type-i64]
 
-            [word-eq fw [static-list [text tuple]]]
+            [text-eq fw [static-list [text tuple]]]
             [if [eq n-args 0]
               type-tuple-empty
               [let [ts [[instantiate list-alloc [pmem [wtype-data]]] n-args]]
@@ -1661,7 +1661,7 @@
            [ifs
             [form-word-is kind-form]
             [let [kind-w [form-word-get kind-form]]
-              [ifs [word-eq kind-w [static-list [text datatype]]]
+              [ifs [text-eq kind-w [static-list [text datatype]]]
                 [i32 1]
                 [log-abort [text 'forms-to-type-params unknown type-kind']]]]
 
@@ -1699,7 +1699,7 @@
         [push-error gctx form [static-list [text 'form-to-top empty list not allowed']]]]
       [let [fw [form-word-get-report gctx [list-get fl 0]]]
         [ifs
-          [word-eq fw [static-list [text defn]]]
+          [text-eq fw [static-list [text defn]]]
           [do
             [if [lt-s n-args 3]
               [log-abort [text 'form-to-top defn expects at least 3 arguments']]]
@@ -1724,7 +1724,7 @@
                   [push-error gctx form [static-list [text 'result type mismatch']]]]
                 [passign [pfield desc body] bodies]]]]
 
-          [word-eq fw [static-list [text genfn]]]
+          [text-eq fw [static-list [text genfn]]]
           [do
             [if [lt-s n-args 4]
               [log-abort [text 'form-to-top genfn expects at least 4 arguments']]]
@@ -1755,8 +1755,8 @@
                 [passign [pfield desc body] bodies]]]]
 
           [or
-            [word-eq fw [static-list [text def]]]
-            [word-eq fw [static-list [text mutable]]]]
+            [text-eq fw [static-list [text def]]]
+            [text-eq fw [static-list [text mutable]]]]
           [do
             [if [ne n-args 2]
               [log-abort [text 'form-to-top def expects a name and an expression']]]
@@ -1768,20 +1768,20 @@
                 [record
                   tag [annotation [exp global-desc-def-tag] global-desc-def-tag]
                   exp exp
-                  mutable [word-eq fw [static-list [text mutable]]]]]]
+                  mutable [text-eq fw [static-list [text mutable]]]]]]
               [assoc-list-push [deref [pfield gctx names]] dname def-desc]]]
 
-          [word-eq fw [static-list [text datatype]]]
+          [text-eq fw [static-list [text datatype]]]
           [do
             [log-abort [text 'form-to-top datatype not implemented']]
           ]
 
-          [word-eq fw [static-list [text import]]]
+          [text-eq fw [static-list [text import]]]
           [do
            [log-abort [text 'form-to-top import not implemented']]
           ]
 
-          [word-eq fw [static-list [text export]]]
+          [text-eq fw [static-list [text export]]]
           [do
             [if [lt-s n-args 1]
               [log-abort [text 'form-to-top export expects at least 1 arguments']]]
