@@ -1033,5 +1033,12 @@
            get-tup [get-export inst [word get-tup]]]
           [test-assert-eq true [is-undefined [js-app get-tup]]]]
 
+        [let
+          [inst
+            [translate-instantiate
+[word '[defn get-tup [[tuple si bi] [tuple [i32] [i64]]] [tuple [i64] [i32]] [tuple bi si]] [export get-tup]']]
+           get-tup [get-export inst [word get-tup]]]
+          [test-assert-eq [tuple [bigint 67] [i32 4]] [js-app get-tup [i32 4] [bigint 67]]]]
 
-          ]]]]]
+
+          ]]]]
