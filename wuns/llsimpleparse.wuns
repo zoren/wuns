@@ -1696,10 +1696,10 @@
    param-list [plist [pform]]] [tuple [plist [text]] [plist [wtype]]]
   [let
     [n-of-param-forms [list-size param-list]
-     parameters-names [[instantiate list-alloc [text]] [half n-of-param-forms]]
-     parameters-names-array [list-data-array parameters-names]
-     parameters-types [[instantiate list-alloc [wtype]] [half n-of-param-forms]]
-     parameters-types-array [list-data-array parameters-types]]
+     parameter-names [[instantiate list-alloc [text]] [half n-of-param-forms]]
+     parameter-names-array [list-data-array parameter-names]
+     parameter-types [[instantiate list-alloc [wtype]] [half n-of-param-forms]]
+     parameter-types-array [list-data-array parameter-types]]
     [if [is-odd n-of-param-forms]
       [push-error gctx [list-get param-list [dec n-of-param-forms]]
         [static-list [text 'functions expect a parameter list with names and type pairs']]]]
@@ -1708,26 +1708,26 @@
         [let
           [lname [form-word-get [list-get param-list i]]
            ltype [form-to-type gctx type-kind-env [list-get param-list [inc i]]]]
-          [passign [pindex parameters-names-array ti] lname]
-          [passign [pindex parameters-types-array ti] ltype]
+          [passign [pindex parameter-names-array ti] lname]
+          [passign [pindex parameter-types-array ti] ltype]
           [continue i [add 2 i] ti [inc ti]]]]]
-    [tuple parameters-names parameters-types]]]
+    [tuple parameter-names parameter-types]]]
 
 [defn push-parameter-forms-local-stack
   [gctx [pmem [global-context]]
    type-kind-env [p-assoc-list [text] [type-kind]]
-   parameters-names [plist [text]]
-   parameters-types [plist [wtype]]
+   parameter-names [plist [text]]
+   parameter-types [plist [wtype]]
    ] []
   [let
-    [n-of-param-forms [list-size parameters-names]
+    [n-of-param-forms [list-size parameter-names]
      stack [deref [pfield gctx local-stack]]
      variables [[instantiate assoc-list-alloc [text] [wtype]] [i32 10]]]
     [when [ne [list-size stack] 0]
       [log-abort [text 'push-parameter-forms-local-stack stack not empty']]]
     [loop [i 0]
       [when [lt-s i n-of-param-forms]
-        [assoc-list-push variables [list-get parameters-names i] [list-get parameters-types i]]
+        [assoc-list-push variables [list-get parameter-names i] [list-get parameter-types i]]
         [continue i [inc i]]]]
     [growable-list-push stack
       [record
