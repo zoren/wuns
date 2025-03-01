@@ -1101,6 +1101,7 @@
                 [pair [list pname] pexp]]
 
               [form/list pname-forms]
+              ; should check for tuple/record destructering
               [let [pnames [list-map pf pname-forms [form-to-name pf]]]
                 [assert [eq [size pnames] [size types]] [identity fw] expected same number of names as types [identity pnames] [identity types]]
                 [for i 0 [size pnames]

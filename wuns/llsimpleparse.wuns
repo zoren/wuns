@@ -1090,12 +1090,25 @@
   [i32]]
 
 [def pattern-var-tag [i32 1]]
+[def pattern-wildcard-tag [i32 3]]
 [def pattern-tuple-tag [i32 2]]
 
 [datatype pattern-var []
   [record
     [tag [exp pattern-var-tag]]
     [name [text]]]]
+
+[datatype pattern-wildcard []
+  [record
+    [tag [exp pattern-wildcard-tag]]
+    [name [text]]]]
+
+[def pattern-wildcard
+  [cast [pmem [pattern-wildcard]]
+    [data mem
+      [record
+        tag [annotation [exp pattern-wildcard-tag] pattern-wildcard-tag]
+        name [static-list [text -]]]]]]
 
 [datatype
   pattern-tuple []
@@ -1106,6 +1119,7 @@
   pattern []
   [union
     [pattern-var]
+    [pattern-wildcard]
     [pattern-tuple]]]
 
 [datatype ppattern [] [pmem [pattern]]]
@@ -2457,13 +2471,14 @@
   [write-text writer lparen]
   [write-text writer [static-list [text param]]]
   [write-text writer space]
-  [write-dollar-id writer pname]
-  [loop [i 0 n [list-size pname-postfixes]]
-    [when [lt-s i n]
-      [write-text writer [static-list [text -]]]
-      [write-text writer [growable-list-get pname-postfixes i]]
-      [continue i [inc i]]]]
-  [write-text writer space]
+  [when [not [is-null pname]]
+    [write-dollar-id writer pname]
+    [loop [i 0 n [list-size pname-postfixes]]
+      [when [lt-s i n]
+        [write-text writer [static-list [text -]]]
+        [write-text writer [growable-list-get pname-postfixes i]]
+        [continue i [inc i]]]]
+    [write-text writer space]]
   [write-text writer type]
   [write-text writer rparen]]
 
@@ -2472,33 +2487,40 @@
     [pat-tag [deref [pfield ppat tag]]
      type-tag [deref [pfield t tag]]]
     [ifs
+      [and [eq type-tag type-tuple-tag]
+        [or [eq pat-tag pattern-var-tag] [eq pat-tag pattern-wildcard-tag]]]
+      [loop [types [deref [pfield [cast [pmem [type-tuple]] t] types]]
+             n-types [list-size types]
+             i 0]
+        [when [lt-s i n-types]
+          [let [txt [integer-to-text [intrinsic i64.extend-i32-s i] false]]
+            [growable-list-push gl txt]
+            [write-func-param-by-type writer ppat gl [list-get types i]]
+            [growable-list-pop gl]
+            [continue i [inc i]]]]]
+
       [eq pat-tag pattern-var-tag]
-      [if [eq type-tag type-tuple-tag]
-        [loop [types [deref [pfield [cast [pmem [type-tuple]] t] types]]
-               n-types [list-size types]
-               i 0]
-          [when [lt-s i n-types]
-            [let [txt [integer-to-text [intrinsic i64.extend-i32-s i] false]]
-              [growable-list-push gl txt]
-              [write-func-param-by-type writer ppat gl [list-get types i]]
-              [growable-list-pop gl]
-              [continue i [inc i]]]]]
-        [let
-          [pp [cast [pmem [pattern-var]] ppat]
-            pname [deref [pfield pp name]]]
-          [write-func-param writer pname gl [type-to-wasm-type t]]]]
+      [let
+        [pp [cast [pmem [pattern-var]] ppat]
+         pname [deref [pfield pp name]]]
+        [write-func-param writer pname gl [type-to-wasm-type t]]]
+
+      [eq pat-tag pattern-wildcard-tag]
+      [write-func-param writer [cast [text] null] gl [type-to-wasm-type t]]
 
       [eq pat-tag pattern-tuple-tag]
       [if [eq type-tag type-tuple-tag]
         [let [ptup [cast [pmem [pattern-tuple]] ppat]
               patterns [deref [pfield ptup patterns]]
               types [deref [pfield [cast [pmem [type-tuple]] t] types]]
-              n-types [list-size types]]
-          [when [ne n-types [list-size patterns]]
+              n-types [list-size types]
+              n-pats [list-size patterns]]
+          [when [lt-s n-types n-pats]
             [log-abort [text 'write-func-param-by-type tuple mismatch']]]
           [loop [i 0]
             [when [lt-s i n-types]
-              [write-func-param-by-type writer [list-get patterns i] gl [list-get types i]]
+              [let [pat [if [lt-s i n-pats] [list-get patterns i] pattern-wildcard]]
+                [write-func-param-by-type writer pat gl [list-get types i]]]
               [continue i [inc i]]]]]
         [let
           [pname [deref [pfield [cast [pmem [pattern-var]] ppat] name]]]
