@@ -885,6 +885,10 @@
         mem [memory 1 9 0]
         import-obj [make-import-object mem]
         inst [wasm-instantiate module import-obj]
+        parse-translate [get-export inst [word parse-translate]]
+        global-context-errors [get-export inst [word global-context-errors]]
+        error-list-get [get-export inst [word error-list-get]]
+        error-get-message [get-export inst [word error-get-message]]
         parse-translate-to-wat [get-export inst [word parse-translate-to-wat]]
         list-size [get-export inst [word list-size]]
         list-data-byte-array [get-export inst [word list-data-byte-array]]
@@ -908,6 +912,13 @@
              sz [js-value-to-i32 [js-app list-size p]]
              ar [byte-array-from-mem mem data sz]]
             [byte-array-to-string ar]]]
+        translate-to-errors
+        [func translate [wuns-string]
+          [let
+           [wuns-text [alloc-text wuns-string]
+            gctx [js-app parse-translate wuns-text]]
+           [js-app text-free wuns-text]
+           [js-app global-context-errors gctx]]]
         translate-to-module
         [func translate [wuns-string]
           [let
@@ -1040,6 +1051,7 @@
            get-tup [get-export inst [word get-tup]]]
           [test-assert-eq [tuple [bigint 67] [i32 4]] [js-app get-tup [i32 4] [bigint 67]]]]
 
+        ; partial projection
         [let
           [inst
             [translate-instantiate
@@ -1061,4 +1073,13 @@
            get-tup [get-export inst [word get-tup]]]
           [test-assert-eq [i32 4] [js-app get-tup [i32 4] [bigint 67] [i32 5]]]]
 
-          ]]]]
+        ; over projection
+        [let
+          [errors
+            [translate-to-errors
+[word '[defn get-tup [[tuple si bi ti] [tuple [i32] [i64]]] [i32] si] [export get-tup]']]]
+          [test-assert-eq [i32 1] [list-size errors]]
+          [let [error [js-app error-list-get errors 0]]
+            [test-assert-eq [word 'no type for pattern'] [js-app ptext-to-string [js-app error-get-message error]]]]
+
+          ]]]]]

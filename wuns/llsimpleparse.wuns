@@ -1170,6 +1170,7 @@
     [exp-local-context [p-assoc-list [pexp] [i32]]]
     [exports [p-assoc-list [text] [pmem [global-desc-kind]]]]
     [local-stack [p-growable-list [local-frame]]]
+    [exp-to-forms [p-assoc-list [pmem -a] [pform]]]
     ]]
 
 [genfn assoc-list-alloc [k datatype v datatype] [sz [i32]] [p-assoc-list k v]
@@ -1185,6 +1186,7 @@
       exp-local-context [[instantiate assoc-list-alloc [pexp] [i32]] [i32 10]]
       exports [[instantiate assoc-list-alloc [text] [pmem [global-desc-kind]]] [i32 10]]
       local-stack [[instantiate growable-list-alloc-init [local-frame]] [i32 10]]
+      exp-to-forms [[instantiate assoc-list-alloc [pmem -a] [pform]] [i32 10]]
 ]]]
 
 [defn global-context-free [gctx [pmem [global-context]]] [tuple]
@@ -1194,9 +1196,21 @@
   [growable-list-free [deref [pfield gctx exp-local-context]]]
   [growable-list-free [deref [pfield gctx exports]]]
   [growable-list-free [deref [pfield gctx local-stack]]]
+  [growable-list-free [deref [pfield gctx exp-to-forms]]]
   [free gctx [size-of-type [global-context]]]]
 
 [export global-context-alloc global-context-free]
+
+[defn global-context-errors [gctx [pmem [global-context]]] [plist [error]]
+  [growable-list-to-list [deref [pfield gctx errors]]]]
+
+[defn error-list-get [errors [plist [error]] i [i32]] [pmem [error]]
+  [list-get-p errors i]]
+
+[defn error-get-message [error [pmem [error]]] [text]
+  [deref [pfield error message]]]
+
+[export global-context-errors error-list-get error-get-message]
 
 [defn local-stack-lookup [gctx [pmem [global-context]] name [text]] [tuple [i32] [wtype]]
   [let
@@ -1235,6 +1249,13 @@
       [record
         message msg
         offset [deref p-offset]]]]]
+
+[defn push-error-exp [gctx [pmem [global-context]] exp [pmem -a] msg [text]] [tuple]
+  [let
+    [form [assoc-list-get-value [deref [pfield gctx exp-to-forms]] exp]]
+    [when [is-null form]
+      [log-abort [text 'push-error-exp form not found in exp-to-forms']]]
+    [push-error gctx [deref form] msg]]]
 
 [defn form-word-get-report [gctx [pmem [global-context]] pf [pform]] [text]
   [if [form-word-is pf]
@@ -1723,14 +1744,19 @@
 
 [def context-kind-func [i32 1]]
 
+[defn add-pattern-to-form [gctx [pmem [global-context]] f [pmem [form]] pat [ppattern]] [ppattern]
+  [assoc-list-push [deref [pfield gctx exp-to-forms]] pat f]
+  pat]
+
 [defn form-to-pattern [gctx [pmem [global-context]] f [pmem [form]]] [ppattern]
   [ifs
     [form-word-is f]
-    [cast [ppattern]
-      [alloc-init
-        [record
-          tag [annotation [exp pattern-var-tag] pattern-var-tag]
-          name [form-word-get f]]]]
+    [add-pattern-to-form gctx f
+      [cast [ppattern]
+        [alloc-init
+          [record
+            tag [annotation [exp pattern-var-tag] pattern-var-tag]
+            name [form-word-get f]]]]]
 
     [form-list-is f]
     [let
@@ -1747,11 +1773,12 @@
               [when [lt-s i n]
                 [list-set patterns [dec i] [form-to-pattern gctx [list-get fl i]]]
                 [continue i [inc i]]]]
-            [cast [ppattern]
-              [alloc-init
-                [record
-                  tag [annotation [exp pattern-tuple-tag] pattern-tuple-tag]
-                  patterns patterns]]]]
+            [add-pattern-to-form gctx f
+              [cast [ppattern]
+                [alloc-init
+                  [record
+                    tag [annotation [exp pattern-tuple-tag] pattern-tuple-tag]
+                    patterns patterns]]]]]
 
           [do
             [log-text fw]
@@ -1800,11 +1827,13 @@
       [let [pvar [cast [pmem [pattern-tuple]] parameter-pattern]]
         [when [ne [deref [pfield parameter-type tag]] type-tuple-tag]
           [log-abort [text 'push-parameter-forms-local-stack tuple type expected']]]
-        [loop [tt [cast [pmem [type-tuple]] parameter-type] i 0]
+        [loop [types [deref [pfield [cast [pmem [type-tuple]] parameter-type] types]]
+               i 0]
           [when [lt-s i [list-size [deref [pfield pvar patterns]]]]
             [let
               [pat [list-get [deref [pfield pvar patterns]] i]
-               ptype [list-get [deref [pfield tt types]] i]]
+               ptype [if [lt-s i [list-size types]] [list-get types i]
+                [do [push-error-exp gctx pat [static-list [text 'no type for pattern']]] type-error]]]
               [push-parameter-local-stack gctx variables pat ptype]
               [continue i [inc i]]]]]]
 
@@ -1989,13 +2018,6 @@
       [when [lt-s i n]
         [form-to-top gctx [growable-list-get forms i]]
         [continue i [inc i]]]]
-    [let [errors [deref [pfield gctx errors]]]
-      [loop [j 0 nerr [list-size errors]]
-        [when [lt-s j nerr]
-          [let [error [growable-list-get-p errors j]]
-            [log-text [deref [pfield error message]]]
-            [log-i32 [deref [pfield error offset]]]
-            [continue j [inc j]]]]]]
     gctx]]
 
 [export parse-translate]
@@ -2513,8 +2535,6 @@
               types [deref [pfield [cast [pmem [type-tuple]] t] types]]
               n-types [list-size types]
               n-pats [list-size patterns]]
-          [when [lt-s n-types n-pats]
-            [log-abort [text 'write-func-param-by-type tuple mismatch']]]
           [loop [i 0]
             [when [lt-s i n-types]
               [let [pat [if [lt-s i n-pats] [list-get patterns i] pattern-wildcard]]
@@ -2660,8 +2680,15 @@
     [gctx [parse-translate bytes]
      errors [deref [pfield gctx errors]]]
     [when [ne [list-size errors] 0]
+      [log-ar [text 'parse-translate-to-wat there were errors']]
       [log-i32 [list-size errors]]
-      [log-abort [text 'parse-translate-to-wat there were errors']]]
+      [loop [j 0 nerr [list-size errors]]
+        [when [lt-s j nerr]
+          [let [error [growable-list-get-p errors j]]
+            [log-text [deref [pfield error message]]]
+            [log-i32 [deref [pfield error offset]]]
+            [continue j [inc j]]]]]
+      [log-abort [text 'parse-translate-to-wat aborting due to errors']]]
     [let
       [writer [[instantiate growable-list-alloc-init [text]] [i32 128]]]
       [write-global-context writer gctx]
