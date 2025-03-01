@@ -611,12 +611,10 @@
   [let
     [cur-size [deref [pfield pglist size]]
      plist [[instantiate list-alloc elem-type] cur-size]]
-    [loop [i 0]
-      [when [lt-s i cur-size]
-        [passign
-          [pindex [pfield plist array] i]
-          [deref [pindex [deref [pfield pglist parray]] i]]]
-        [continue i [inc i]]]]
+    [memory-copy
+      [list-data-array plist]
+      [deref [pfield pglist parray]]
+      [mul cur-size [size-of-type elem-type]]]
     plist]]
 
 [defn growable-list-reset [pglist [p-growable-list -a]] [tuple]
