@@ -1022,7 +1022,7 @@
           [test-assert-eq [i32 1] [js-app not-not [i32 1]]]
           [test-assert-eq [i32 1] [js-app not-not [i32 1337]]]]
 
-
+; tuples
         [let
           [inst
             [translate-instantiate
@@ -1080,6 +1080,56 @@
 [word '[defn get-tup [[tuple si bi ti] [tuple [i32] [i64]]] [i32] si] [export get-tup]']]]
           [test-assert-eq [i32 1] [list-size errors]]
           [let [error [js-app error-list-get errors 0]]
-            [test-assert-eq [word 'no type for pattern'] [js-app ptext-to-string [js-app error-get-message error]]]]
+            [test-assert-eq [word 'no type for pattern'] [js-app ptext-to-string [js-app error-get-message error]]]]]
 
-          ]]]]]
+          ; records
+          [let
+          [inst
+            [translate-instantiate
+[word '[defn get-rec [t [record]] [record] t] [export get-rec]']]
+           get-rec [get-export inst [word get-rec]]]
+          [test-assert-eq true [is-undefined [js-app get-rec]]]]
+
+          [let
+          [inst
+            [translate-instantiate
+[word '[defn get-rec [t [record fn [i32]]] [record fn [i32]] t] [export get-rec]']]
+           get-rec [get-export inst [word get-rec]]]
+          [test-assert-eq 5 [js-app get-rec [i32 5]]]]
+
+          [let
+          [inst
+            [translate-instantiate
+[word '[defn get-rec [t [record fn [i32]]] [record fn [i32]] t] [export get-rec]']]
+           get-rec [get-export inst [word get-rec]]]
+          [test-assert-eq 5 [js-app get-rec [i32 5]]]]
+
+          [let
+          [inst
+            [translate-instantiate
+[word '[defn get-rec [t [record si [i32] bi [i64]]] [record si [i32] bi [i64]] t] [export get-rec]']]
+           get-rec [get-export inst [word get-rec]]]
+          [test-assert-eq [tuple [i32 4] [bigint 67]] [js-app get-rec [i32 4] [bigint 67]]]]
+
+        [let
+          [inst
+            [translate-instantiate
+[word '[defn get-rec [s [i32] b [i64]] [record si [i32] bi [i64]] [record si s bi b]] [export get-rec]']]
+           get-rec [get-export inst [word get-rec]]]
+          [test-assert-eq [tuple [i32 4] [bigint 67]] [js-app get-rec [i32 4] [bigint 67]]]]
+        [let
+          [inst
+            [translate-instantiate
+[word '[defn get-rec [b [i64] s [i32]] [record si [i32] bi [i64]] [record si s bi b]] [export get-rec]']]
+           get-rec [get-export inst [word get-rec]]]
+          [test-assert-eq [tuple [i32 4] [bigint 67]] [js-app get-rec [bigint 67] [i32 4]]]]
+        ; record patterns
+        [let
+          [inst
+            [translate-instantiate
+[word '[defn get-record [[record si s bi b] [record si [i32] bi [i64]]] [record bi [i64] si [i32]] [record bi b si s]] [export get-record]']]
+           get-record [get-export inst [word get-record]]]
+          [test-assert-eq [tuple [bigint 67] [i32 4]] [js-app get-record [i32 4] [bigint 67]]]]
+
+
+          ]]]]
