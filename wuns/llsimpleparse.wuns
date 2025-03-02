@@ -2907,9 +2907,31 @@
 
       [write-text writer rparen]]]]
 
-[defn write-wasm-exp [writer [writer] exp [pwasm-exp]] [tuple]
+[def indent [static-list [text '  ']]]
+
+[defn write-indents [writer [writer] indent-n [i32]] []
+  [write-text writer newline]
+  [loop [i 0]
+    [when [lt-s i indent-n]
+      [write-text writer indent]
+      [continue i [inc i]]]]]
+
+[defn write-wasm-exp [writer [writer] indent-n [i32] exp [pwasm-exp]] [tuple]
   [let [tag [deref [pfield exp tag]]]
-    [ifs
+    [if
+      [eq tag wasm-instructions-tag]
+      [let
+        [cexp [cast [pmem [wasm-instructions]] exp]
+         insts [deref [pfield cexp insts]]]
+        [loop [i 0 n [list-size insts]]
+          [when [lt-s i n]
+            [write-text writer space]
+            [write-wasm-exp writer indent-n [list-get insts i]]
+            [continue i [inc i]]]]]
+
+      [do
+        [write-indents writer indent-n]
+      [ifs
       [eq tag wasm-constant-tag]
       [let [cexp [cast [pmem [wasm-constant]] exp]]
         [write-text writer lparen]
@@ -2934,7 +2956,7 @@
         [loop [i 0 n [list-size args]]
           [when [lt-s i n]
             [write-text writer space]
-            [write-wasm-exp writer [list-get args i]]
+            [write-wasm-exp writer [inc indent-n] [list-get args i]]
             [continue i [inc i]]]]
         [write-text writer rparen]]
 
@@ -2947,31 +2969,24 @@
         [write-results writer [deref [pfield cexp result]]]
 
         [write-text writer space]
-        [write-wasm-exp writer [deref [pfield cexp condition]]]
+        [write-wasm-exp writer [inc indent-n] [deref [pfield cexp condition]]]
         [write-text writer space]
 
+        [write-indents writer [inc indent-n]]
         [write-text writer lparen]
         [write-text writer [static-list [text then]]]
-        [write-wasm-exp writer [deref [pfield cexp true]]]
+        [write-wasm-exp writer [add 2 indent-n] [deref [pfield cexp true]]]
         [write-text writer rparen]
 
         [write-text writer space]
 
+        [write-indents writer [inc indent-n]]
         [write-text writer lparen]
         [write-text writer [static-list [text else]]]
-        [write-wasm-exp writer [deref [pfield cexp false]]]
+        [write-text writer space]
+        [write-wasm-exp writer [add 2 indent-n] [deref [pfield cexp false]]]
         [write-text writer rparen]
         [write-text writer rparen]]
-
-      [eq tag wasm-instructions-tag]
-      [let
-        [cexp [cast [pmem [wasm-instructions]] exp]
-         insts [deref [pfield cexp insts]]]
-        [loop [i 0 n [list-size insts]]
-          [when [lt-s i n]
-            [write-text writer space]
-            [write-wasm-exp writer [list-get insts i]]
-            [continue i [inc i]]]]]
 
       [eq tag wasm-loop-tag]
       [let
@@ -2984,12 +2999,10 @@
         [write-text writer space]
         [write-dollar-id writer label]
         [write-results writer result]
-        [write-wasm-exp writer body]
+        [write-wasm-exp writer [inc indent-n] body]
         [write-text writer rparen]]
 
-      [log-abort [text 'write-wasm-exp unknown tag']]]]]
-
-[def indent [static-list [text '  ']]]
+      [log-abort [text 'write-wasm-exp unknown tag']]]]]]]
 
 [defn write-func-param [writer [writer] pname-postfixes [p-growable-list [text]] pname [text] type [text]] []
   [write-text writer space]
@@ -3103,9 +3116,8 @@
     [loop [i 0 n [list-size body]]
       [when [lt-s i n]
         [let [b [list-get body i]]
-          [write-text writer newline]
           [write-text writer indent]
-          [write-wasm-exp writer [exp-to-wasm-exp gctx b]]
+          [write-wasm-exp writer 1 [exp-to-wasm-exp gctx b]]
           [when [lt-s i [dec n]]
             [let
               [t [type-of gctx b]
@@ -3179,7 +3191,7 @@
                 [write-text writer [type-to-wasm-type [type-of gctx exp]]]]
 
               [write-text writer space]
-              [write-wasm-exp writer [exp-to-wasm-exp gctx exp]]
+              [write-wasm-exp writer 1 [exp-to-wasm-exp gctx exp]]
               [write-text writer rparen]
               [write-text writer newline]]
 
