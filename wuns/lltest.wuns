@@ -6,3 +6,5 @@
         res [intrinsic i32.add res i]
         i [intrinsic i32.sub i [i32 1]]]
       res]]]
+
+[export gauss-loop]

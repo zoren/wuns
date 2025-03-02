@@ -3149,7 +3149,7 @@
 [defn write-global-context [writer [writer] gctx [pmem [global-context]]] []
   [let
     [names [deref [pfield gctx names]]
-     exports [deref [pfield gctx names]]]
+     exports [deref [pfield gctx exports]]]
     [loop
       [n [list-size names]
        i 0]
