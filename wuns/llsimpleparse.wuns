@@ -982,6 +982,7 @@
 [def type-error-tag [i32 3]]
 [def type-function-tag [i32 4]]
 [def type-record-tag [i32 5]]
+[def type-union-tag [i32 6]]
 
 [datatype type-error []
   [record
@@ -1011,15 +1012,40 @@
     [parameters [plist [pmem [wtype-data]]]]
     [result [pmem [wtype-data]]]]
 
+  type-union []
+  [record
+    [tag [exp type-union-tag]]
+    [types [plist [pmem [wtype-data]]]]]
+
   wtype-data []
   [union
     [type-error]
     [type-integer]
     [type-tuple]
     [type-record]
-    [type-function]]]
+    [type-function]
+    [type-union]]]
 
 [datatype wtype [] [pmem [wtype-data]]]
+
+[defn type-empty-is [t [wtype]] [boolean]
+  [and [eq [deref [pfield t tag]] type-union-tag] [list-empty-is [deref [pfield [cast [pmem [type-union]] t] types]]]]]
+
+[def type-union-empty
+  [cast [wtype]
+    [data mem
+      [record
+        tag [annotation [exp type-union-tag] type-union-tag]
+        types [cast [plist [wtype]] empty-list]]]]]
+
+[defn type-union-alloc [types [plist [wtype]]] [wtype]
+  ; todo filter empty types and sort the types to normalize...
+  [if [list-empty-is types]
+    type-union-empty
+    [alloc-init
+      [record
+        tag [annotation [exp type-union-tag] type-union-tag]
+        types types]]]]
 
 [defn write-debug-type [writer [writer] t [wtype]] []
   [let
@@ -1106,6 +1132,7 @@
 [def exp-record-tag [i32 7]]
 [def exp-call-tag [i32 6]]
 [def exp-let-loop-tag [i32 8]]
+[def exp-continue-tag [i32 9]]
 
 [datatype
   wexp-integer []
@@ -1157,6 +1184,11 @@
     [bindings [plist [tuple [ppattern] [pexp]]]]
     [bodies [plist [pexp]]]]
 
+  wexp-continue []
+  [record
+    [tag [exp exp-continue-tag]]
+    [assignments [plist [tuple [text] [pexp]]]]]
+
   pexp [] [pmem [wexp]]
 
   wexp []
@@ -1169,6 +1201,7 @@
     [wexp-tuple]
     [wexp-record]
     [wexp-let-loop]
+    [wexp-continue]
     ]]
 
 [defn wexp-integer-alloc [i [i64] negative [i32] type [wtype]] [pexp]
@@ -1403,16 +1436,16 @@
             [continue i [dec i]]
             [tuple true [deref [pindex ptup [i32 1]]]]]]]]]]
 
-[defn local-stack-enclosing-function [gctx [pmem [global-context]]] [pmem [local-frame]]
+[defn local-stack-first-frame-by-context-kind [gctx [pmem [global-context]] context-kind [i32]] [pmem [local-frame]]
   [let
     [stack [deref [pfield gctx local-stack]]
      stack-size [list-size stack]]
     [loop [i stack-size]
       [if [eq i 0]
-        [log-abort [text 'local-stack-enclosing-function no enclosing function found']]
+        [log-abort [text 'local-stack-first-frame-by-context-kind no enclosing frame found']]
         [let
           [frame [growable-list-get-p stack [dec i]]]
-          [if [eq [deref [pfield frame context-kind]] context-kind-func]
+          [if [eq [deref [pfield frame context-kind]] context-kind]
             frame
             [continue i [dec i]]]]]]]]
 
@@ -1637,6 +1670,9 @@
           type-tuple-empty
           [type-of gctx [list-last bodies]]]]
 
+      [eq tag exp-continue-tag]
+      type-union-empty
+
       [let [exp-types [deref [pfield gctx exp-types]]
             annotated-type [assoc-list-get-value exp-types e]]
         [if [is-null annotated-type]
@@ -1697,7 +1733,11 @@
 [defn common-super-type [t1 [wtype] t2 [wtype]] [wtype]
   [if [eq t1 t2]
     t1
-    [log-abort [text 'common-super-type different types']]]]
+    [ifs
+      [type-empty-is t1] t2
+      [type-empty-is t2] t1
+      [log-abort [text 'common-super-type different types']]]
+    ]]
 
 [defn primitive-int-name-to-signed-size [fw [text]] [tuple [i32] [i64]]
   [ifs
@@ -2026,7 +2066,7 @@
             [if [lt-s n-args 1]
               [log-abort [text 'form-to-exp let/loop expects 1 or more arguments']]]
             [let
-              [enclosing-func-frame [local-stack-enclosing-function gctx]
+              [enclosing-func-frame [local-stack-first-frame-by-context-kind gctx context-kind-func]
                func-local-variables [deref [pfield enclosing-func-frame func-local-variables]]
                bindings-list [form-list-get-report gctx [list-get fl 1]]
                n-bindings [list-size bindings-list]
@@ -2076,6 +2116,32 @@
                     is-let is-let
                     bindings bindings
                     bodies bodies]]]]]
+
+          [text-eq fw [static-list [text continue]]]
+          [do
+            [when [is-odd n-args]
+              [push-error gctx f [static-list [text 'form-to-exp continue expects an even number of arguments']]]]
+            [let
+              [enclosing-loop-frame [local-stack-first-frame-by-context-kind gctx context-kind-loop]
+               loop-variables [deref [pfield enclosing-loop-frame variables]]
+               assignments [[instantiate list-alloc [tuple [text] [pexp]]] [half n-args]]
+               assignments-array [list-data-array assignments]]
+              [loop [fi 1 i 0]
+                [when [lt-s fi n]
+                  [let
+                    [loopvar [form-word-get-report gctx [list-get fl fi]]
+                     bound-exp [form-to-exp gctx [list-get fl [inc fi]]]
+                     bound-type [type-of gctx bound-exp]
+                     loopvar-type [assoc-list-get-value loop-variables loopvar]]
+                    ; [when [not [type-assignable loopvar-type bound-type]]
+                    ;   [push-error gctx f [static-list [text 'continue type mismatch']]]]
+                    [passign [pindex assignments-array i] [tuple loopvar bound-exp]]
+                    [continue i [inc i] fi [add 2 fi]]]]]
+              [cast [pexp]
+                [alloc-init
+                  [record
+                    tag [annotation [exp exp-continue-tag] exp-continue-tag]
+                    assignments assignments]]]]]
 
           [do
             [log-text fw]
@@ -2385,7 +2451,7 @@
     [tag [exp wasm-loop-tag]]
     [label [text]]
     [result [plist [wasm-type]]]
-    [body [plist [pmem [wasm-exp]]]]]
+    [body [pmem [wasm-exp]]]]
 
   wasm-instructions []
   [record
@@ -2724,15 +2790,75 @@
               [growable-list-push ginsts wvalue]
               [pattern-type-to-local-set-drop gctx ginsts pattern [type-of gctx value]]
               [continue i [inc i]]]]]
-        [loop [i 0]
-          [when [lt-s i [list-size bodies]]
-            [growable-list-push ginsts [exp-to-wasm-exp gctx [list-get bodies i]]]
-            [continue i [inc i]]]]
+        [if [deref [pfield iexp is-let]]
+          [loop [i 0]
+            [when [lt-s i [list-size bodies]]
+              [growable-list-push ginsts [exp-to-wasm-exp gctx [list-get bodies i]]]
+              [continue i [inc i]]]]
+          [let [ginsts-body [[instantiate growable-list-alloc-init [pmem [wasm-exp]]] [i32 8]]]
+            [loop [i 0]
+              [when [lt-s i [list-size bodies]]
+                [growable-list-push ginsts-body [exp-to-wasm-exp gctx [list-get bodies i]]]
+                [continue i [inc i]]]]
+            [growable-list-push ginsts
+              [cast [pwasm-exp]
+                [alloc-init
+                  [record
+                    tag [annotation [exp wasm-loop-tag] wasm-loop-tag]
+                    label [static-list [text lab]]
+                    result [type-to-wasm-types [type-of gctx exp]]
+                    body
+                    [cast [pwasm-exp]
+                      [alloc-init
+                        [record
+                          tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
+                          insts [growable-list-to-list ginsts-body]]]]]]]]]]
         [cast [pwasm-exp]
           [alloc-init
             [record
               tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
               insts [growable-list-to-list ginsts]]]]]
+
+      [eq tag exp-continue-tag]
+      [let
+        [cexp [cast [pmem [wexp-continue]] exp]
+         assignments [deref [pfield cexp assignments]]
+         n-ass [list-size assignments]
+         insts [[instantiate list-alloc [pwasm-exp]] [inc n-ass]]]
+        [loop [i 0]
+          [when [lt-s i n-ass]
+            [let
+              [assignment [list-get-p assignments i]
+               loop-var [deref [pindex assignment [i32 0]]]
+               value [deref [pindex assignment [i32 1]]]
+               iargs [[instantiate list-alloc [text]] 1]
+               arguments [[instantiate list-alloc [pwasm-exp]] 1]]
+              [list-set iargs 0 loop-var]
+              [list-set arguments 0 [exp-to-wasm-exp gctx value]]
+              [list-set insts i
+                [cast [pwasm-exp]
+                  [alloc-init
+                    [record
+                      tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+                      name [static-list [text local.set]]
+                      immediate-arguments iargs
+                      arguments arguments]]]]
+              [continue i [inc i]]]]]
+          [let [br-iargs [[instantiate list-alloc [text]] 1]]
+            [list-set br-iargs 0 [static-list [text lab]]]
+            [list-set insts n-ass
+              [cast [pwasm-exp]
+                [alloc-init
+                  [record
+                    tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+                    name [static-list [text br]]
+                    immediate-arguments br-iargs
+                    arguments [cast [plist [pwasm-exp]] empty-list]]]]]]
+        [cast [pwasm-exp]
+          [alloc-init
+            [record
+              tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
+              insts insts]]]]
 
         [do
           [log-i32 tag]
@@ -2831,8 +2957,22 @@
           [when [lt-s i n]
             [write-text writer space]
             [write-wasm-exp writer [list-get insts i]]
-            [continue i [inc i]]]]
-        ]
+            [continue i [inc i]]]]]
+
+      [eq tag wasm-loop-tag]
+      [let
+        [cexp [cast [pmem [wasm-loop]] exp]
+         label [deref [pfield cexp label]]
+         result [deref [pfield cexp result]]
+         body [deref [pfield cexp body]]]
+        [write-text writer lparen]
+        [write-text writer [static-list [text 'loop']]]
+        [write-text writer space]
+        [write-dollar-id writer label]
+        [write-results writer result]
+        [write-text writer space]
+        [write-wasm-exp writer body]
+        [write-text writer rparen]]
 
       [log-abort [text 'write-wasm-exp unknown tag']]]]]
 

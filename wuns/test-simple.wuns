@@ -1190,4 +1190,23 @@
           [let [error [js-app error-list-get errors 0]]
             [test-assert-eq [word 'no type for pattern'] [js-app ptext-to-string [js-app error-get-message error]]]]]
 
-          ]]]]
+
+        ; loop
+        [let
+          [inst
+            [translate-instantiate
+[word '[defn get-loop [] [tuple] [loop [] [if [i32 0] [continue] [let []]]]] [export get-loop]']]
+           get-loop [get-export inst [word get-loop]]]
+          [test-assert-eq true [is-undefined [js-app get-loop]]]]
+
+        [promise-bind
+          [read-file-async [word lltest.wuns]]
+          [func t [test-txt]
+            [let
+          [inst
+            [translate-instantiate test-txt]
+           gauss-loop [get-export inst [word gauss-loop]]]
+          [test-assert-eq [i32 55] [js-app gauss-loop [i32 10]]]
+          [test-assert-eq [i32 5050] [js-app gauss-loop [i32 100]]]
+          [test-assert-eq [i32 500500] [js-app gauss-loop [i32 1000]]]
+          ]]]]]]]

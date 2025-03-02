@@ -1,0 +1,8 @@
+
+[defn gauss-loop [n [i32]] [i32]
+  [loop [res [i32 0] i n]
+    [if i
+      [continue
+        res [intrinsic i32.add res i]
+        i [intrinsic i32.sub i [i32 1]]]
+      res]]]
