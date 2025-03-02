@@ -2994,7 +2994,7 @@
   [write-text writer type]
   [write-text writer rparen]]
 
-[defn write-func-param-by-type [writer [writer] ppat [ppattern] gl [p-growable-list [text]] t [wtype]] []
+[defn write-func-param-by-type [writer [writer] gl [p-growable-list [text]] ppat [ppattern] t [wtype]] []
   [let
     [pat-tag [deref [pfield ppat tag]]
      type-tag [deref [pfield t tag]]]
@@ -3007,7 +3007,7 @@
         [when [lt-s i n-types]
           [let [txt [integer-to-text [intrinsic i64.extend-i32-s i] false]]
             [growable-list-push gl txt]
-            [write-func-param-by-type writer ppat gl [list-get types i]]
+            [write-func-param-by-type writer gl ppat [list-get types i]]
             [growable-list-pop gl]
             [continue i [inc i]]]]]
 
@@ -3021,7 +3021,7 @@
           [let
             [txt [list-get names i]]
             [growable-list-push gl txt]
-            [write-func-param-by-type writer ppat gl [list-get types i]]
+            [write-func-param-by-type writer gl ppat [list-get types i]]
             [growable-list-pop gl]
             [continue i [inc i]]]]]
 
@@ -3044,7 +3044,7 @@
           [loop [i 0]
             [when [lt-s i n-types]
               [let [pat [if [lt-s i n-pats] [list-get patterns i] pattern-wildcard]]
-                [write-func-param-by-type writer pat gl [list-get types i]]]
+                [write-func-param-by-type writer gl pat [list-get types i]]]
               [continue i [inc i]]]]]
         [let
           [pname [deref [pfield [cast [pmem [pattern-var]] ppat] name]]]
@@ -3074,7 +3074,7 @@
         [let
           [ppat [list-get ppats i]
            wuns-type [list-get ptypes i]]
-          [write-func-param-by-type writer ppat gl wuns-type]]
+          [write-func-param-by-type writer gl ppat wuns-type]]
         [continue i [inc i]]]]
     [growable-list-free gl]
 
