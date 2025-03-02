@@ -1160,4 +1160,34 @@
            get-let [get-export inst [word get-let]]]
           [test-assert-eq [i32 5] [js-app get-let]]]
 
+        [let
+          [inst
+            [translate-instantiate
+[word '[defn get-let [] [i32] [let [[tuple x y] [tuple [i32 5] [i64 9]]] x]] [export get-let]']]
+           get-let [get-export inst [word get-let]]]
+          [test-assert-eq [i32 5] [js-app get-let]]]
+        [let
+          [inst
+            [translate-instantiate
+[word '[defn get-let [] [i64] [let [[tuple x y] [tuple [i32 5] [i64 9]]] y]] [export get-let]']]
+           get-let [get-export inst [word get-let]]]
+          [test-assert-eq [bigint 9] [js-app get-let]]]
+
+        ; under projecting
+        [let
+          [inst
+            [translate-instantiate
+[word '[defn get-let [] [i32] [let [[tuple x] [tuple [i32 5] [i64 9]]] x]] [export get-let]']]
+           get-let [get-export inst [word get-let]]]
+          [test-assert-eq [i32 5] [js-app get-let]]]
+
+        ; over projecting
+        [let
+          [errors
+            [translate-to-errors
+[word '[defn get-let [] [i32] [let [[tuple x y z] [tuple [i32 5] [i64 9]]] x]] [export get-let]']]]
+          [test-assert-eq [i32 1] [list-size errors]]
+          [let [error [js-app error-list-get errors 0]]
+            [test-assert-eq [word 'no type for pattern'] [js-app ptext-to-string [js-app error-get-message error]]]]]
+
           ]]]]

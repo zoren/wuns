@@ -2546,6 +2546,54 @@
             immediate-arguments iargs
             arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]]]
 
+[defn pattern-type-to-local-set-drop [gctx [pmem [global-context]]
+    ginsts [p-growable-list [pwasm-exp]] pattern [ppattern] type [wtype]] []
+  [let [tag [deref [pfield pattern tag]]]
+      [ifs
+        [eq tag pattern-var-tag]
+        [let
+          [pp [cast [pmem [pattern-var]] pattern]
+           pname [deref [pfield pp name]]
+           iargs [[instantiate list-alloc [text]] 1]]
+          [list-set iargs 0 pname]
+          [growable-list-push ginsts
+            [cast [pwasm-exp]
+              [alloc-init
+                [record
+                  tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+                  name [static-list [text local.set]]
+                  immediate-arguments iargs
+                  arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]]
+
+        [eq tag pattern-wildcard-tag]
+        [growable-list-push ginsts
+          [cast [pwasm-exp]
+            [alloc-init
+              [record
+                tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+                name [static-list [text drop]]
+                immediate-arguments [[instantiate list-alloc [text]] 0]
+                arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]
+
+        [or [eq tag pattern-tuple-tag] [eq tag pattern-record-tag]]
+        [let [pvar [cast [pmem [pattern-tuple]] pattern]
+              patterns [deref [pfield pvar patterns]]
+              n-pats [list-size patterns]
+              ptype-tag [deref [pfield type tag]]]
+          [when [and [eq tag pattern-tuple-tag] [ne [deref [pfield type tag]] type-tuple-tag]]
+            [log-abort [text 'pattern-type-to-local-set-drop tuple type expected']]]
+          [when [and [eq tag pattern-record-tag] [ne [deref [pfield type tag]] type-record-tag]]
+            [log-abort [text 'pattern-type-to-local-set-drop record type expected']]]
+          [loop [types [deref [pfield [cast [pmem [type-tuple]] type] types]]
+                 i [dec [list-size types]]]
+            [when [le-s 0 i]
+              [let
+                [pat [if [lt-s i n-pats] [list-get patterns i] pattern-wildcard]]
+                [pattern-type-to-local-set-drop gctx ginsts pat [list-get types i]]
+                [continue i [dec i]]]]]]
+
+        [log-abort [text 'pattern kind not implemented yet']]]]]
+
 [defn exp-to-wasm-exp [gctx [pmem [global-context]] exp [pexp]] [pwasm-exp]
   [let [tag [deref [pfield exp tag]]]
     [ifs
@@ -2674,24 +2722,7 @@
                wvalue [exp-to-wasm-exp gctx value]
                pat-tag [deref [pfield pattern tag]]]
               [growable-list-push ginsts wvalue]
-              ; local set variable patterns, drop for wildcard
-              [ifs
-                [eq pat-tag pattern-var-tag]
-                [let
-                  [pp [cast [pmem [pattern-var]] pattern]
-                   pname [deref [pfield pp name]]
-                   iargs [[instantiate list-alloc [text]] 1]]
-                  [list-set iargs 0 pname]
-                  [growable-list-push ginsts
-                    [cast [pwasm-exp]
-                      [alloc-init
-                        [record
-                          tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
-                          name [static-list [text local.set]]
-                          immediate-arguments iargs
-                          arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]]
-
-                [log-abort [text 'pattern kind not implemented yet']]]
+              [pattern-type-to-local-set-drop gctx ginsts pattern [type-of gctx value]]
               [continue i [inc i]]]]]
         [loop [i 0]
           [when [lt-s i [list-size bodies]]
@@ -2803,21 +2834,9 @@
             [continue i [inc i]]]]
         ]
 
-      [log-abort [text 'write-wasm-exp unknown tag']]]]
-
-]
+      [log-abort [text 'write-wasm-exp unknown tag']]]]]
 
 [def indent [static-list [text '  ']]]
-
-[defn wasm-drop [wasme [pwasm-exp]] [pwasm-exp]
-  [let [arguments [[instantiate list-alloc [pmem [wasm-exp]]] 1]]
-    [list-set arguments 0 wasme]
-    [cast [pwasm-exp]
-      [alloc-init
-        [record
-          tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
-          name [static-list [text 'drop']]
-          arguments arguments]]]]]
 
 [defn write-func-param [writer [writer] pname [text] pname-postfixes [p-growable-list [text]] type [text]] []
   [write-text writer space]
