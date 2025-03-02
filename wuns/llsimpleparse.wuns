@@ -2952,7 +2952,6 @@
 
         [write-text writer lparen]
         [write-text writer [static-list [text then]]]
-        [write-text writer space]
         [write-wasm-exp writer [deref [pfield cexp true]]]
         [write-text writer rparen]
 
@@ -2960,7 +2959,6 @@
 
         [write-text writer lparen]
         [write-text writer [static-list [text else]]]
-        [write-text writer space]
         [write-wasm-exp writer [deref [pfield cexp false]]]
         [write-text writer rparen]
         [write-text writer rparen]]
@@ -2986,7 +2984,6 @@
         [write-text writer space]
         [write-dollar-id writer label]
         [write-results writer result]
-        [write-text writer space]
         [write-wasm-exp writer body]
         [write-text writer rparen]]
 
