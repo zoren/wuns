@@ -1131,5 +1131,33 @@
            get-record [get-export inst [word get-record]]]
           [test-assert-eq [tuple [bigint 67] [i32 4]] [js-app get-record [i32 4] [bigint 67]]]]
 
+        ; let
+                [let
+          [inst
+            [translate-instantiate
+[word '[defn get-let [] [tuple] [let []]] [export get-let]']]
+           get-let [get-export inst [word get-let]]]
+          [test-assert-eq true [is-undefined [js-app get-let]]]]
+
+        [let
+          [inst
+            [translate-instantiate
+[word '[defn get-let [] [i32] [let [] [i32 5]]] [export get-let]']]
+           get-let [get-export inst [word get-let]]]
+          [test-assert-eq [i32 5] [js-app get-let]]]
+;[defn get-let [] [i32] [let [x [i32 5]] [i32 5]]]
+        [let
+          [inst
+            [translate-instantiate
+[word '[defn get-let [] [i32] [let [x [i32 5]] [i32 5]]] [export get-let]']]
+           get-let [get-export inst [word get-let]]]
+          [test-assert-eq [i32 5] [js-app get-let]]]
+
+        [let
+          [inst
+            [translate-instantiate
+[word '[defn get-let [] [i32] [let [x [i32 5]] x]] [export get-let]']]
+           get-let [get-export inst [word get-let]]]
+          [test-assert-eq [i32 5] [js-app get-let]]]
 
           ]]]]

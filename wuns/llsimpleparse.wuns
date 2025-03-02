@@ -626,6 +626,70 @@
 [defn log-text [txt [text]] [tuple]
   [log [list-data-array txt] [list-size txt]]]
 
+[datatype writer []
+  [p-growable-list [text]]]
+
+[defn writer-alloc [n [i32]] [writer]
+  [[instantiate growable-list-alloc-init [text]] n]]
+
+[defn writer-total-size [writer [writer]] [i32]
+  [loop [i 0 n [list-size writer] total-size 0]
+    [if [lt-s i n]
+      [continue
+        total-size [add total-size [list-size [growable-list-get writer i]]]
+        i [inc i]]
+      total-size]]]
+
+[defn writer-to-text [writer [writer]] [text]
+  [let
+    [total-size [writer-total-size writer]
+     result [list-alloc-byte total-size]
+     result-data [list-data-array result]]
+    [loop [i 0 n [list-size writer] offset 0]
+      [if [lt-s i n]
+        [let
+          [txt [growable-list-get writer i]
+           txt-size [list-size txt]]
+          [memory-copy [pindex result-data offset] [list-data-array txt] txt-size]
+          [continue
+            offset [add offset txt-size]
+            i [inc i]]]]]
+    result]]
+
+[defn write-text [writer [writer] txt [text]] [tuple]
+  [growable-list-push writer txt]]
+
+[defn integer-to-text [n [i64] negative [i32]] [text]
+  [if [intrinsic i64.eq n [i64 0]]
+    [static-list [text 0]]
+    [let [gl [[instantiate growable-list-alloc-init [i64]] [i32 10]]]
+      [if negative
+        [do
+          [loop [cur n]
+            [when [intrinsic i64.ne cur [i64 0]]
+              [let
+                [rem [intrinsic i64.sub [i64 0] [intrinsic i64.rem-s cur [i64 10]]]]
+                [growable-list-push gl [intrinsic i64.add [i64 48] rem]]
+                [continue cur [intrinsic i64.div-s cur [i64 10]]]]]]
+          [growable-list-push gl [i64 45]]]
+        [do
+          [loop [cur n]
+            [when [intrinsic i64.ne cur [i64 0]]
+              [let [rem [intrinsic i64.rem-s cur [i64 10]]]
+                [growable-list-push gl [intrinsic i64.add [i64 48] rem]]
+                [continue cur [intrinsic i64.div-s cur [i64 10]]]]]]
+          [growable-list-push gl [i64 43]]]]
+      [let
+        [rsz [list-size gl]
+         result [list-alloc-byte rsz]
+         result-data [list-data-array result]]
+        [loop [i 0]
+          [when [lt-s i rsz]
+            [passign [pindex result-data i] [deref [pindex [deref [pfield gl parray]] [dec [sub rsz i]]]]]
+            [continue i [inc i]]]]
+        [growable-list-free gl]
+        result]]]]
+
 [datatype p-assoc-list [key datatype value datatype]
   [p-growable-list [tuple key value]]]
 
@@ -952,9 +1016,87 @@
     [type-error]
     [type-integer]
     [type-tuple]
-    [type-record]]]
+    [type-record]
+    [type-function]]]
 
 [datatype wtype [] [pmem [wtype-data]]]
+
+[defn write-debug-type [writer [writer] t [wtype]] []
+  [let
+    [tag [deref [pfield t tag]]]
+    [ifs
+      [eq tag type-integer-tag]
+      [let
+        [it [cast [pmem [type-integer]] t]
+         n-bytes [deref [pfield it n-bytes]]
+         signed [deref [pfield it signed]]]
+        [write-text writer [static-list [text '[integer ']]]
+        ; [intrinsic i64.extend-i32-s i]
+        [write-text writer [integer-to-text [intrinsic i64.extend-i32-s n-bytes] false]]
+        [write-text writer [static-list [text ' ']]]
+        [write-text writer [integer-to-text [intrinsic i64.extend-i32-s signed] false]]
+        [write-text writer [static-list [text ']']]]
+        ]
+
+      [eq tag type-error-tag]
+      [write-text writer [static-list [text '[error]']]]
+
+      [eq tag type-tuple-tag]
+      [write-text writer [static-list [text '[tuple]']]]
+
+      [eq tag type-record-tag]
+      [write-text writer [static-list [text '[record]']]]
+
+      [eq tag type-function-tag]
+      [write-text writer [static-list [text '[function]']]]
+
+      [do
+        [log-i32 tag]
+        [log-abort [text 'write-debug-type unknown type tag']]]]]]
+
+[def pattern-var-tag [i32 1]]
+[def pattern-wildcard-tag [i32 3]]
+[def pattern-tuple-tag [i32 2]]
+[def pattern-record-tag [i32 4]]
+
+[datatype pattern-var []
+  [record
+    [tag [exp pattern-var-tag]]
+    [name [text]]]]
+
+[datatype pattern-wildcard []
+  [record
+    [tag [exp pattern-wildcard-tag]]
+    [name [text]]]]
+
+[def pattern-wildcard
+  [cast [pmem [pattern-wildcard]]
+    [data mem
+      [record
+        tag [annotation [exp pattern-wildcard-tag] pattern-wildcard-tag]
+        name [static-list [text -]]]]]]
+
+[datatype
+  pattern-tuple []
+  [record
+    [tag [exp pattern-tuple-tag]]
+    [patterns [plist [pmem [pattern]]]]]
+
+  pattern-record []
+  [record
+    [tag [exp pattern-record-tag]]
+    [patterns [plist [pmem [pattern]]]]
+    [names [plist [text]]]]
+
+  pattern []
+  [union
+    [pattern-var]
+    [pattern-wildcard]
+    [pattern-tuple]
+    [pattern-record]
+    ]]
+
+[datatype ppattern [] [pmem [pattern]]]
 
 [def exp-integer-tag [i32 1]]
 [def exp-var-tag [i32 2]]
@@ -963,6 +1105,7 @@
 [def exp-tuple-tag [i32 5]]
 [def exp-record-tag [i32 7]]
 [def exp-call-tag [i32 6]]
+[def exp-let-loop-tag [i32 8]]
 
 [datatype
   wexp-integer []
@@ -1007,6 +1150,13 @@
     [elements [plist [pexp]]]
     [names [plist [text]]]]
 
+  wexp-let-loop []
+  [record
+    [tag [exp exp-let-loop-tag]]
+    [is-let [boolean]]
+    [bindings [plist [tuple [ppattern] [pexp]]]]
+    [bodies [plist [pexp]]]]
+
   pexp [] [pmem [wexp]]
 
   wexp []
@@ -1017,6 +1167,8 @@
     [wexp-intrinsic]
     [wexp-call]
     [wexp-tuple]
+    [wexp-record]
+    [wexp-let-loop]
     ]]
 
 [defn wexp-integer-alloc [i [i64] negative [i32] type [wtype]] [pexp]
@@ -1140,50 +1292,6 @@
 
   [i32]]
 
-[def pattern-var-tag [i32 1]]
-[def pattern-wildcard-tag [i32 3]]
-[def pattern-tuple-tag [i32 2]]
-[def pattern-record-tag [i32 4]]
-
-[datatype pattern-var []
-  [record
-    [tag [exp pattern-var-tag]]
-    [name [text]]]]
-
-[datatype pattern-wildcard []
-  [record
-    [tag [exp pattern-wildcard-tag]]
-    [name [text]]]]
-
-[def pattern-wildcard
-  [cast [pmem [pattern-wildcard]]
-    [data mem
-      [record
-        tag [annotation [exp pattern-wildcard-tag] pattern-wildcard-tag]
-        name [static-list [text -]]]]]]
-
-[datatype
-  pattern-tuple []
-  [record
-    [tag [exp pattern-tuple-tag]]
-    [patterns [plist [pmem [pattern]]]]]
-
-  pattern-record []
-  [record
-    [tag [exp pattern-record-tag]]
-    [patterns [plist [pmem [pattern]]]]
-    [names [plist [text]]]]
-
-  pattern []
-  [union
-    [pattern-var]
-    [pattern-wildcard]
-    [pattern-tuple]
-    [pattern-record]
-    ]]
-
-[datatype ppattern [] [pmem [pattern]]]
-
 [def global-desc-func-tag [i32 2]]
 
 [datatype global-desc-func []
@@ -1193,7 +1301,7 @@
     [parameter-patterns [plist [ppattern]]]
     [parameter-types [plist [wtype]]]
     [result [wtype]]
-    ; [locals [plist [tuple [text] [wtype]]]]
+    [locals [plist [tuple [text] [wtype]]]]
     [body [plist [pexp]]]]]
 
 [def global-desc-def-tag [i32 3]]
@@ -1218,10 +1326,16 @@
 [datatype local-context-kind []
   [i32]]
 
+[def context-kind-func [i32 1]]
+[def context-kind-let [i32 2]]
+[def context-kind-loop [i32 3]]
+
 [datatype local-frame []
   [record
     [context-kind [local-context-kind]]
-    [variables [p-assoc-list [text] [wtype]]]]]
+    [variables [p-assoc-list [text] [wtype]]] ; func parameters/ let-loop bound names
+    [func-local-variables [p-assoc-list [text] [wtype]]] ; for a func, all its locals, not set for let/loop
+    ]]
 
 [datatype global-context []
   [record
@@ -1288,6 +1402,19 @@
           [if [is-null ptup]
             [continue i [dec i]]
             [tuple true [deref [pindex ptup [i32 1]]]]]]]]]]
+
+[defn local-stack-enclosing-function [gctx [pmem [global-context]]] [pmem [local-frame]]
+  [let
+    [stack [deref [pfield gctx local-stack]]
+     stack-size [list-size stack]]
+    [loop [i stack-size]
+      [if [eq i 0]
+        [log-abort [text 'local-stack-enclosing-function no enclosing function found']]
+        [let
+          [frame [growable-list-get-p stack [dec i]]]
+          [if [eq [deref [pfield frame context-kind]] context-kind-func]
+            frame
+            [continue i [dec i]]]]]]]]
 
 [defn log-assoc [pglist [p-assoc-list [pexp] [wtype]]] [tuple]
   [log-i32 [deref [pfield pglist size]]]
@@ -1502,6 +1629,14 @@
                 [continue i [inc i]]]
               [type-record-alloc types names]]]]]
 
+      [eq tag exp-let-loop-tag]
+      [let
+        [exp [cast [pmem [wexp-let-loop]] e]
+         bodies [deref [pfield exp bodies]]]
+        [if [list-empty-is bodies]
+          type-tuple-empty
+          [type-of gctx [list-last bodies]]]]
+
       [let [exp-types [deref [pfield gctx exp-types]]
             annotated-type [assoc-list-get-value exp-types e]]
         [if [is-null annotated-type]
@@ -1607,6 +1742,97 @@
       [tuple true [deref ppdesc]]]]]
 
 [defn half [i [i32]] [i32] [intrinsic i32.shr-s i 1]]
+
+[defn add-pattern-to-form [gctx [pmem [global-context]] f [pmem [form]] pat [ppattern]] [ppattern]
+  [assoc-list-push [deref [pfield gctx exp-to-forms]] pat f]
+  pat]
+
+[defn form-to-pattern [gctx [pmem [global-context]] f [pmem [form]]] [ppattern]
+  [ifs
+    [form-word-is f]
+    [add-pattern-to-form gctx f
+      [cast [ppattern]
+        [alloc-init
+          [record
+            tag [annotation [exp pattern-var-tag] pattern-var-tag]
+            name [form-word-get f]]]]]
+
+    [form-list-is f]
+    [let
+      [fl [form-list-get-report gctx f]
+       n [list-size fl]]
+      [when [eq n 0]
+        [log-abort [text 'empty list not allowed']]]
+      [let [fw [form-word-get-report gctx [list-get fl 0]]]
+        [ifs
+          [text-eq fw [static-list [text tuple]]]
+          [let
+            [patterns [[instantiate list-alloc [ppattern]] [dec n]]]
+            [loop [i 1]
+              [when [lt-s i n]
+                [list-set patterns [dec i] [form-to-pattern gctx [list-get fl i]]]
+                [continue i [inc i]]]]
+            [add-pattern-to-form gctx f
+              [cast [ppattern]
+                [alloc-init
+                  [record
+                    tag [annotation [exp pattern-tuple-tag] pattern-tuple-tag]
+                    patterns patterns]]]]]
+
+          [text-eq fw [static-list [text record]]]
+          [let
+            [patterns [[instantiate list-alloc [ppattern]] [half [dec n]]]
+             names [[instantiate list-alloc [text]] [half [dec n]]]]
+            [loop [fi 1 i 0]
+              [when [lt-s fi n]
+                [list-set names i [form-word-get-report gctx [list-get fl fi]]]
+                [list-set patterns i [form-to-pattern gctx [list-get fl [inc fi]]]]
+                [continue i [inc i] fi [add 2 fi]]]]
+            [add-pattern-to-form gctx f
+              [cast [ppattern]
+                [alloc-init
+                  [record
+                    tag [annotation [exp pattern-record-tag] pattern-record-tag]
+                    patterns patterns
+                    names names]]]]]
+
+          [do
+            [log-text fw]
+            [log-abort [text 'form-to-pattern unknown form-list case']]]]]]
+
+    [log-abort [text 'form-to-pattern unknown form case']]]]
+
+[defn push-pattern-type-local-stack
+  [gctx [pmem [global-context]]
+   variables [p-assoc-list [text] [wtype]]
+   pattern [ppattern]
+   type [wtype]
+   ] []
+  [let
+    [tag [deref [pfield pattern tag]]]
+    [ifs
+      [eq tag pattern-var-tag]
+      [let [pvar [cast [pmem [pattern-var]] pattern]]
+        [assoc-list-push variables [deref [pfield pvar name]] type]]
+
+      [or [eq tag pattern-tuple-tag] [eq tag pattern-record-tag]]
+      [let [pvar [cast [pmem [pattern-tuple]] pattern]
+            ptype-tag [deref [pfield type tag]]]
+        [when [and [eq tag pattern-tuple-tag] [ne [deref [pfield type tag]] type-tuple-tag]]
+          [log-abort [text 'push-pattern-type-local-stack tuple type expected']]]
+        [when [and [eq tag pattern-record-tag] [ne [deref [pfield type tag]] type-record-tag]]
+          [log-abort [text 'push-pattern-type-local-stack record type expected']]]
+        [loop [types [deref [pfield [cast [pmem [type-tuple]] type] types]]
+               i 0]
+          [when [lt-s i [list-size [deref [pfield pvar patterns]]]]
+            [let
+              [pat [list-get [deref [pfield pvar patterns]] i]
+               ptype [if [lt-s i [list-size types]] [list-get types i]
+                [do [push-error-exp gctx pat [static-list [text 'no type for pattern']]] type-error]]]
+              [push-pattern-type-local-stack gctx variables pat ptype]
+              [continue i [inc i]]]]]]
+
+      [log-abort [text 'unknown pattern tag']]]]]
 
 [defn form-to-exp [gctx [pmem [global-context]] f [pmem [form]]] [pexp]
   [ifs
@@ -1795,6 +2021,62 @@
                     [continue i [inc i]]]]]
               [wexp-intrinsic-alloc name args]]]
 
+          [or [text-eq fw [static-list [text let]]] [text-eq fw [static-list [text loop]]]]
+          [do
+            [if [lt-s n-args 1]
+              [log-abort [text 'form-to-exp let/loop expects 1 or more arguments']]]
+            [let
+              [enclosing-func-frame [local-stack-enclosing-function gctx]
+               func-local-variables [deref [pfield enclosing-func-frame func-local-variables]]
+               bindings-list [form-list-get-report gctx [list-get fl 1]]
+               n-bindings [list-size bindings-list]
+               bindings [[instantiate list-alloc [tuple [ppattern] [pexp]]] [half n-bindings]]
+               bindings-array [list-data-array bindings]
+               bodies [[instantiate list-alloc [pexp]] [sub n 2]]
+               variables [[instantiate assoc-list-alloc [text] [wtype]] [i32 8]]
+               stack [deref [pfield gctx local-stack]]
+               is-let [text-eq fw [static-list [text let]]]]
+              [growable-list-push stack
+                [record
+                  context-kind [if is-let context-kind-let context-kind-loop]
+                  variables variables
+                  func-local-variables [cast [p-assoc-list [text] [wtype]] null]]]
+              [when [is-odd n-bindings]
+                [push-error gctx [list-last bindings-list]
+                  [static-list [text 'let/loop expects an even number of bindings, extra is ignored']]]]
+              [loop [fi 0 i 0]
+                [when [lt-s fi n-bindings]
+                  [let
+                    [pat [form-to-pattern gctx [list-get bindings-list fi]]
+                     bound-exp [form-to-exp gctx [list-get bindings-list [inc fi]]]
+                     bound-type [type-of gctx bound-exp]]
+                    [push-pattern-type-local-stack gctx variables pat bound-type]
+                    [passign [pindex bindings-array i] [tuple pat bound-exp]]
+                    [continue fi [add 2 fi] i [inc i]]]]]
+              ; copy local vars to function local vars
+              [loop [i 0 n [list-size variables]]
+                [when [lt-s i n]
+                  [let
+                    [assoc-pair [growable-list-get-p variables i]
+                     name [deref [pindex assoc-pair [i32 0]]]
+                     type [deref [pindex assoc-pair [i32 1]]]]
+                    [when [not [is-null [assoc-list-get-entry func-local-variables name]]]
+                      [log-abort [text 'let/loop local variable already defined']]]
+                    [assoc-list-push func-local-variables name type]
+                    [continue i [inc i]]]]]
+              [loop [fi 2]
+                [when [lt-s fi n]
+                  [list-set bodies [sub fi 2] [form-to-exp gctx [list-get fl fi]]]
+                  [continue fi [inc fi]]]]
+              [growable-list-pop stack]
+              [cast [pexp]
+                [alloc-init
+                  [record
+                    tag [annotation [exp exp-let-loop-tag] exp-let-loop-tag]
+                    is-let is-let
+                    bindings bindings
+                    bodies bodies]]]]]
+
           [do
             [log-text fw]
             [log-abort [text 'form-to-exp unknown form-list case']]]]]]]
@@ -1859,67 +2141,6 @@
 
     [log-abort [text 'form-to-type unknown form case']]]]
 
-[def context-kind-func [i32 1]]
-
-[defn add-pattern-to-form [gctx [pmem [global-context]] f [pmem [form]] pat [ppattern]] [ppattern]
-  [assoc-list-push [deref [pfield gctx exp-to-forms]] pat f]
-  pat]
-
-[defn form-to-pattern [gctx [pmem [global-context]] f [pmem [form]]] [ppattern]
-  [ifs
-    [form-word-is f]
-    [add-pattern-to-form gctx f
-      [cast [ppattern]
-        [alloc-init
-          [record
-            tag [annotation [exp pattern-var-tag] pattern-var-tag]
-            name [form-word-get f]]]]]
-
-    [form-list-is f]
-    [let
-      [fl [form-list-get-report gctx f]
-       n [list-size fl]]
-      [when [eq n 0]
-        [log-abort [text 'empty list not allowed']]]
-      [let [fw [form-word-get-report gctx [list-get fl 0]]]
-        [ifs
-          [text-eq fw [static-list [text tuple]]]
-          [let
-            [patterns [[instantiate list-alloc [ppattern]] [dec n]]]
-            [loop [i 1]
-              [when [lt-s i n]
-                [list-set patterns [dec i] [form-to-pattern gctx [list-get fl i]]]
-                [continue i [inc i]]]]
-            [add-pattern-to-form gctx f
-              [cast [ppattern]
-                [alloc-init
-                  [record
-                    tag [annotation [exp pattern-tuple-tag] pattern-tuple-tag]
-                    patterns patterns]]]]]
-
-          [text-eq fw [static-list [text record]]]
-          [let
-            [patterns [[instantiate list-alloc [ppattern]] [half [dec n]]]
-             names [[instantiate list-alloc [text]] [half [dec n]]]]
-            [loop [fi 1 i 0]
-              [when [lt-s fi n]
-                [list-set names i [form-word-get-report gctx [list-get fl fi]]]
-                [list-set patterns i [form-to-pattern gctx [list-get fl [inc fi]]]]
-                [continue i [inc i] fi [add 2 fi]]]]
-            [add-pattern-to-form gctx f
-              [cast [ppattern]
-                [alloc-init
-                  [record
-                    tag [annotation [exp pattern-record-tag] pattern-record-tag]
-                    patterns patterns
-                    names names]]]]]
-
-          [do
-            [log-text fw]
-            [log-abort [text 'form-to-pattern unknown form-list case']]]]]]
-
-    [log-abort [text 'form-to-pattern unknown form case']]]]
-
 [defn parameter-forms-to-lists
   [gctx [pmem [global-context]]
    type-kind-env [p-assoc-list [text] [type-kind]]
@@ -1943,62 +2164,6 @@
           [passign [pindex parameter-types-array ti] ltype]
           [continue i [add 2 i] ti [inc ti]]]]]
     [tuple parameter-patterns parameter-types]]]
-
-[defn push-parameter-local-stack
-  [gctx [pmem [global-context]]
-   variables [p-assoc-list [text] [wtype]]
-   parameter-pattern [ppattern]
-   parameter-type [wtype]
-   ] []
-  [let
-    [tag [deref [pfield parameter-pattern tag]]]
-    [ifs
-      [eq tag pattern-var-tag]
-      [let [pvar [cast [pmem [pattern-var]] parameter-pattern]]
-        [assoc-list-push variables [deref [pfield pvar name]] parameter-type]]
-
-      [or [eq tag pattern-tuple-tag] [eq tag pattern-record-tag]]
-      [let [pvar [cast [pmem [pattern-tuple]] parameter-pattern]
-            ptype-tag [deref [pfield parameter-type tag]]]
-        [when [and [eq tag pattern-tuple-tag] [ne [deref [pfield parameter-type tag]] type-tuple-tag]]
-          [log-abort [text 'push-parameter-forms-local-stack tuple type expected']]]
-        [when [and [eq tag pattern-record-tag] [ne [deref [pfield parameter-type tag]] type-record-tag]]
-          [log-abort [text 'push-parameter-forms-local-stack record type expected']]]
-        [loop [types [deref [pfield [cast [pmem [type-tuple]] parameter-type] types]]
-               i 0]
-          [when [lt-s i [list-size [deref [pfield pvar patterns]]]]
-            [let
-              [pat [list-get [deref [pfield pvar patterns]] i]
-               ptype [if [lt-s i [list-size types]] [list-get types i]
-                [do [push-error-exp gctx pat [static-list [text 'no type for pattern']]] type-error]]]
-              [push-parameter-local-stack gctx variables pat ptype]
-              [continue i [inc i]]]]]]
-
-      [log-abort [text 'unknown pattern tag']]]]]
-
-[defn push-parameter-forms-local-stack
-  [gctx [pmem [global-context]]
-   type-kind-env [p-assoc-list [text] [type-kind]]
-   parameter-patterns [plist [ppattern]]
-   parameter-types [plist [wtype]]
-   ] []
-  [let
-    [n-of-param-forms [list-size parameter-patterns]
-     stack [deref [pfield gctx local-stack]]
-     variables [[instantiate assoc-list-alloc [text] [wtype]] [i32 10]]]
-    [when [ne [list-size stack] 0]
-      [log-abort [text 'push-parameter-forms-local-stack stack not empty']]]
-    [loop [i 0]
-      [when [lt-s i n-of-param-forms]
-        [let
-          [pat [list-get parameter-patterns i]
-           ptype [list-get parameter-types i]]
-          [push-parameter-local-stack gctx variables pat ptype]]
-        [continue i [inc i]]]]
-    [growable-list-push stack
-      [record
-        context-kind context-kind-func
-        variables variables]]]]
 
 [defn forms-to-type-params [gctx [pmem [global-context]] param-list [plist [pform]]] [plist [tuple [text] [type-kind]]]
   [let
@@ -2065,8 +2230,24 @@
                result-type [form-to-type gctx empty-list [list-get fl 3]]
                fname [form-word-get-report gctx name-form]
                [ppatterns ptypes] [parameter-forms-to-lists gctx empty-list param-list]
-               desc [[instantiate alloc-fn [global-desc-func]]]]
-              [push-parameter-forms-local-stack gctx empty-list ppatterns ptypes]
+               desc [[instantiate alloc-fn [global-desc-func]]]
+               stack [deref [pfield gctx local-stack]]
+               parameter-pat-vars [[instantiate assoc-list-alloc [text] [wtype]] [i32 8]]
+               func-local-variables [[instantiate assoc-list-alloc [text] [wtype]] [i32 8]]]
+              [when [ne [list-size stack] 0]
+                [log-abort [text 'push-parameter-forms-local-stack stack not empty']]]
+              [loop
+                 [n-of-param-forms [list-size ppatterns]
+                  i 0]
+                [when [lt-s i n-of-param-forms]
+                  [push-pattern-type-local-stack gctx parameter-pat-vars
+                    [list-get ppatterns i] [list-get ptypes i]]
+                  [continue i [inc i]]]]
+              [growable-list-push stack
+                [record
+                  context-kind context-kind-func
+                  variables parameter-pat-vars
+                  func-local-variables func-local-variables]]
               [if [assoc-list-get-value [deref [pfield gctx names]] fname]
                 [push-error gctx name-form [static-list [text 'name already defined']]]]
               [passign desc
@@ -2076,11 +2257,13 @@
                   parameter-patterns ppatterns
                   parameter-types ptypes
                   result result-type]]
+              ; push the incomplete desc so its signature is available for recursive calls
               [assoc-list-push [deref [pfield gctx names]] fname desc]
               [let [bodies [forms-to-exps gctx fl 4 n]]
                 [when [not [type-assignable result-type [type-ofs gctx bodies]]]
                   [push-error gctx form [static-list [text 'result type mismatch']]]]
                 [growable-list-pop [deref [pfield gctx local-stack]]]
+                [passign [pfield desc locals] [growable-list-to-list func-local-variables]]
                 [passign [pfield desc body] bodies]]]]
 
           [text-eq fw [static-list [text genfn]]]
@@ -2220,37 +2403,6 @@
 
 [datatype pwasm-exp [] [pmem [wasm-exp]]]
 
-[defn integer-to-text [n [i64] negative [i32]] [text]
-  [if [intrinsic i64.eq n [i64 0]]
-    [static-list [text 0]]
-    [let [gl [[instantiate growable-list-alloc-init [i64]] [i32 10]]]
-      [if negative
-        [do
-          [loop [cur n]
-            [when [intrinsic i64.ne cur [i64 0]]
-              [let
-                [rem [intrinsic i64.sub [i64 0] [intrinsic i64.rem-s cur [i64 10]]]]
-                [growable-list-push gl [intrinsic i64.add [i64 48] rem]]
-                [continue cur [intrinsic i64.div-s cur [i64 10]]]]]]
-          [growable-list-push gl [i64 45]]]
-        [do
-          [loop [cur n]
-            [when [intrinsic i64.ne cur [i64 0]]
-              [let [rem [intrinsic i64.rem-s cur [i64 10]]]
-                [growable-list-push gl [intrinsic i64.add [i64 48] rem]]
-                [continue cur [intrinsic i64.div-s cur [i64 10]]]]]]
-          [growable-list-push gl [i64 43]]]]
-      [let
-        [rsz [list-size gl]
-         result [list-alloc-byte rsz]
-         result-data [list-data-array result]]
-        [loop [i 0]
-          [when [lt-s i rsz]
-            [passign [pindex result-data i] [deref [pindex [deref [pfield gl parray]] [dec [sub rsz i]]]]]
-            [continue i [inc i]]]]
-        [growable-list-free gl]
-        result]]]]
-
 [def i32-text [static-list [text 'i32']]]
 [def i64-text [static-list [text 'i64']]]
 [def f32-text [static-list [text 'f32']]]
@@ -2271,6 +2423,7 @@
           [int-type [cast [pmem [type-integer]] t]]
           [when [not [deref [pfield int-type signed]]]
             [log-i32 [deref [pfield int-type n-bytes]]]
+            [log-i32 [deref [pfield int-type signed]]]
             [log-abort [text 'type-to-wasm-type unsigned integer not supported']]]
           [ifs
             [eq [deref [pfield int-type n-bytes]] [i32 4]]
@@ -2338,33 +2491,6 @@
   [if [eq [deref [pfield exp tag]] exp-var-tag]
     [deref [pfield [cast [pmem [wexp-var]] exp] name]]
     [log-abort [text 'exp-get-var-name not a var']]]]
-
-[datatype writer []
-  [p-growable-list [text]]]
-
-[defn writer-total-size [writer [writer]] [i32]
-  [loop [i 0 n [list-size writer] total-size 0]
-    [if [lt-s i n]
-      [continue
-        total-size [add total-size [list-size [growable-list-get writer i]]]
-        i [inc i]]
-      total-size]]]
-
-[defn writer-to-text [writer [writer]] [text]
-  [let
-    [total-size [writer-total-size writer]
-     result [list-alloc-byte total-size]
-     result-data [list-data-array result]]
-    [loop [i 0 n [list-size writer] offset 0]
-      [if [lt-s i n]
-        [let
-          [txt [growable-list-get writer i]
-           txt-size [list-size txt]]
-          [memory-copy [pindex result-data offset] [list-data-array txt] txt-size]
-          [continue
-            offset [add offset txt-size]
-            i [inc i]]]]]
-    result]]
 
 [defn local-get-param-by-type [gl [p-growable-list [text]] t [wtype]] [pwasm-exp]
   [ifs
@@ -2533,12 +2659,53 @@
                 tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
                 insts insts]]]]]
 
+      [eq tag exp-let-loop-tag]
+      [let
+        [iexp [cast [pmem [wexp-let-loop]] exp]
+         bindings [deref [pfield iexp bindings]]
+         bodies [deref [pfield iexp bodies]]
+         ginsts [[instantiate growable-list-alloc-init [pmem [wasm-exp]]] [i32 10]]]
+        [loop [i 0]
+          [when [lt-s i [list-size bindings]]
+            [let
+              [binding [list-get-p bindings i]
+               pattern [deref [pindex binding [i32 0]]]
+               value [deref [pindex binding [i32 1]]]
+               wvalue [exp-to-wasm-exp gctx value]
+               pat-tag [deref [pfield pattern tag]]]
+              [growable-list-push ginsts wvalue]
+              ; local set variable patterns, drop for wildcard
+              [ifs
+                [eq pat-tag pattern-var-tag]
+                [let
+                  [pp [cast [pmem [pattern-var]] pattern]
+                   pname [deref [pfield pp name]]
+                   iargs [[instantiate list-alloc [text]] 1]]
+                  [list-set iargs 0 pname]
+                  [growable-list-push ginsts
+                    [cast [pwasm-exp]
+                      [alloc-init
+                        [record
+                          tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+                          name [static-list [text local.set]]
+                          immediate-arguments iargs
+                          arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]]
+
+                [log-abort [text 'pattern kind not implemented yet']]]
+              [continue i [inc i]]]]]
+        [loop [i 0]
+          [when [lt-s i [list-size bodies]]
+            [growable-list-push ginsts [exp-to-wasm-exp gctx [list-get bodies i]]]
+            [continue i [inc i]]]]
+        [cast [pwasm-exp]
+          [alloc-init
+            [record
+              tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
+              insts [growable-list-to-list ginsts]]]]]
+
         [do
           [log-i32 tag]
           [log-abort [text 'exp-to-wasm-exp unknown tag']]]]]]
-
-[defn write-text [writer [writer] txt [text]] [tuple]
-  [growable-list-push writer txt]]
 
 [def lparen [static-list [text '(']]]
 [def rparen [static-list [text ')']]]
@@ -2546,11 +2713,6 @@
 [def dquote [static-list [text '"']]]
 [def space [static-list [text ' ']]]
 [def newline [static-list [array [u8] [u8 10]]]]
-
-[defn paren [writer [writer] txt [text]] [tuple]
-  [write-text writer lparen]
-  [write-text writer txt]
-  [write-text writer rparen]]
 
 [defn write-dollar-id [writer [writer] txt [text]] [tuple]
   [write-text writer dollar]
@@ -2761,6 +2923,7 @@
     [ppats [deref [pfield func-desc parameter-patterns]]
      ptypes [deref [pfield func-desc parameter-types]]
      result [deref [pfield func-desc result]]
+     locals [deref [pfield func-desc locals]]
      body [deref [pfield func-desc body]]
      gl [[instantiate growable-list-alloc-init [text]] 8]]
     [loop [i 0 n [list-size ppats]]
@@ -2774,7 +2937,18 @@
 
     [write-results writer [type-to-wasm-types result]]
 
-    ; todo locals here...
+    [loop [i 0 n-locals [list-size locals]]
+      [when [lt-s i n-locals]
+        [let [binding [list-get-p locals i]]
+          [write-text writer space]
+          [write-text writer lparen]
+          [write-text writer [static-list [text local]]]
+          [write-text writer space]
+          [write-dollar-id writer [deref [pindex binding [i32 0]]]]
+          [write-text writer space]
+          [write-text writer [type-to-wasm-type [deref [pindex binding [i32 1]]]]]
+          [write-text writer rparen]
+          [continue i [inc i]]]]]
 
     [loop [i 0 n [list-size body]]
       [when [lt-s i n]
