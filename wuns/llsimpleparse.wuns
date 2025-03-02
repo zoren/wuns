@@ -3027,28 +3027,25 @@
 
       [eq pat-tag pattern-var-tag]
       [let
-        [pp [cast [pmem [pattern-var]] ppat]
-         pname [deref [pfield pp name]]]
+        [pname [deref [pfield [cast [pmem [pattern-var]] ppat] name]]]
         [write-func-param writer pname gl [type-to-wasm-type t]]]
 
       [eq pat-tag pattern-wildcard-tag]
       [write-func-param writer [cast [text] null] gl [type-to-wasm-type t]]
 
-      [or [eq pat-tag pattern-tuple-tag] [eq pat-tag pattern-record-tag]]
-      [if [or [eq type-tag type-tuple-tag] [eq type-tag type-record-tag]]
-        [let [ptup [cast [pmem [pattern-tuple]] ppat]
-              patterns [deref [pfield ptup patterns]]
-              types [deref [pfield [cast [pmem [type-tuple]] t] types]]
-              n-types [list-size types]
-              n-pats [list-size patterns]]
-          [loop [i 0]
-            [when [lt-s i n-types]
-              [let [pat [if [lt-s i n-pats] [list-get patterns i] pattern-wildcard]]
-                [write-func-param-by-type writer gl pat [list-get types i]]]
-              [continue i [inc i]]]]]
-        [let
-          [pname [deref [pfield [cast [pmem [pattern-var]] ppat] name]]]
-          [write-func-param writer pname gl [type-to-wasm-type t]]]]
+      [and
+        [or [eq pat-tag pattern-tuple-tag] [eq pat-tag pattern-record-tag]]
+        [or [eq type-tag type-tuple-tag] [eq type-tag type-record-tag]]]
+      [let [ptup [cast [pmem [pattern-tuple]] ppat]
+            patterns [deref [pfield ptup patterns]]
+            types [deref [pfield [cast [pmem [type-tuple]] t] types]]
+            n-types [list-size types]
+            n-pats [list-size patterns]]
+        [loop [i 0]
+          [when [lt-s i n-types]
+            [let [pat [if [lt-s i n-pats] [list-get patterns i] pattern-wildcard]]
+              [write-func-param-by-type writer gl pat [list-get types i]]]
+            [continue i [inc i]]]]]
 
       [do
         [log-i32 pat-tag]
