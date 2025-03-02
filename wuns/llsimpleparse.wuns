@@ -929,6 +929,17 @@
             [is-whitespace c]
             [continue i [inc i]]
 
+            ; line comment
+            [intrinsic i64.eq c [i64 59]]
+            [let [comment-end
+              [loop [j [inc i]]
+                [if [lt-s j n-of-bytes]
+                  [if [intrinsic i64.eq [i64 10] [list-get bytes j]]
+                    [inc j]
+                    [continue j [inc j]]]
+                  j]]]
+              [continue i comment-end]]
+
             [intrinsic i64.eq c [i64 91]]
             [do
               [if [lt-s stack-size stack-index] [log-abort [text 'stack max depth reached']]]
