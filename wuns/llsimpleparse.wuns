@@ -2612,8 +2612,11 @@
             immediate-arguments iargs
             arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]]]
 
-[defn pattern-type-to-local-set-drop [gctx [pmem [global-context]]
-    ginsts [p-growable-list [pwasm-exp]] pattern [ppattern] type [wtype]] []
+[defn pattern-type-to-local-set-drop
+   [gctx [pmem [global-context]]
+    ginsts [p-growable-list [pwasm-exp]]
+    pattern [ppattern]
+    type [wtype]] []
   [let [tag [deref [pfield pattern tag]]]
       [ifs
         [eq tag pattern-var-tag]
@@ -2978,7 +2981,7 @@
 
 [def indent [static-list [text '  ']]]
 
-[defn write-func-param [writer [writer] pname [text] pname-postfixes [p-growable-list [text]] type [text]] []
+[defn write-func-param [writer [writer] pname-postfixes [p-growable-list [text]] pname [text] type [text]] []
   [write-text writer space]
   [write-text writer lparen]
   [write-text writer [static-list [text param]]]
@@ -3005,11 +3008,10 @@
              n-types [list-size types]
              i 0]
         [when [lt-s i n-types]
-          [let [txt [integer-to-text [intrinsic i64.extend-i32-s i] false]]
-            [growable-list-push gl txt]
-            [write-func-param-by-type writer gl ppat [list-get types i]]
-            [growable-list-pop gl]
-            [continue i [inc i]]]]]
+          [growable-list-push gl [integer-to-text [intrinsic i64.extend-i32-s i] false]]
+          [write-func-param-by-type writer gl ppat [list-get types i]]
+          [growable-list-pop gl]
+          [continue i [inc i]]]]
 
       [and [eq type-tag type-record-tag]
         [or [eq pat-tag pattern-var-tag] [eq pat-tag pattern-wildcard-tag]]]
@@ -3018,20 +3020,18 @@
              n-types [list-size types]
              i 0]
         [when [lt-s i n-types]
-          [let
-            [txt [list-get names i]]
-            [growable-list-push gl txt]
-            [write-func-param-by-type writer gl ppat [list-get types i]]
-            [growable-list-pop gl]
-            [continue i [inc i]]]]]
+          [growable-list-push gl [list-get names i]]
+          [write-func-param-by-type writer gl ppat [list-get types i]]
+          [growable-list-pop gl]
+          [continue i [inc i]]]]
 
       [eq pat-tag pattern-var-tag]
       [let
         [pname [deref [pfield [cast [pmem [pattern-var]] ppat] name]]]
-        [write-func-param writer pname gl [type-to-wasm-type t]]]
+        [write-func-param writer gl pname [type-to-wasm-type t]]]
 
       [eq pat-tag pattern-wildcard-tag]
-      [write-func-param writer [cast [text] null] gl [type-to-wasm-type t]]
+      [write-func-param writer gl [cast [text] null] [type-to-wasm-type t]]
 
       [and
         [or [eq pat-tag pattern-tuple-tag] [eq pat-tag pattern-record-tag]]
