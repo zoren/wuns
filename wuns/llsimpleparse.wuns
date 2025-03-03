@@ -736,6 +736,38 @@
     [form-word]
     [form-list]]]
 
+[datatype
+  eform []
+  [enum [i32]
+    [word
+      pword [text]]
+    [list
+      forms [plist [pmem [eform]]]]]]
+
+[defn form-word-alloc1 [ptext [text]] [pmem [eform]]
+  [alloc-init
+    [enum [eform] word
+      pword ptext]]]
+
+[defn form-word-get1 [pf [pmem [eform]]] [text]
+  [match pf
+    word [deref [pfield pf pword]]
+    [log-abort [text 'form-word-get1 not a form-word']]]]
+
+; [datatype
+;   option [a]
+;   [enum i32
+;     [none]
+;     [some
+;       value a]]]
+
+; [def option-none [data mem [enum option none]]]
+
+; [genfn option-some [a] [value a] [option a]
+;   [alloc-init
+;     [enum option some
+;       value value]]]
+
 [datatype pform []
   [pmem [form]]]
 
@@ -3247,3 +3279,12 @@
         wat]]]]
 
 [export parse-translate-to-wat]
+
+; [defn test-switch [i [i32]] [i64]
+;   [switch i
+;     [i32 0] [i64 10]
+;     [i32 69] [i64 11]
+;     [i32 2] [i64 12]
+;     [i64 100]]]
+
+; [export test-switch]

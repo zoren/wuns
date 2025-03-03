@@ -40,7 +40,11 @@
     [call word [list wat-inst]]
     [instructions [list wat-inst]]
     [loop word [list word] wat-inst]
-    [br word]]]
+    [br word]
+    [br-int i32]
+    [br-table [list word] wat-inst]
+    [block [list word] [list wat-inst]]
+    ]]
 
 [type wat-func []
   [record
@@ -368,6 +372,23 @@
 
     [wat-inst/br w]
     [wat-list [wat/word [word br]] [wat/dollar w]]
+
+    [wat-inst/br-int i]
+    [wat-list [wat/word [word br]] [wat/word [int-to-word i]]]
+
+    [wat-inst/block result-types body]
+    [wat-list
+      [wat/word [word block]]
+      [wat/list
+        [concat [list [wat/word [word result]]]
+          [list-map rt result-types [wat/word rt]]]]
+      [wat/seq [list-map inst body [wat-inst-to-out inst]]]]
+
+    [wat-inst/br-table labels disc]
+    [wat-list
+      [wat/word [word 'br_table']]
+      [wat/seq [list-map label labels [wat/word label]]]
+      [wat-inst-to-out disc]]
 
     [logq-abort wat-inst-to-out unknown instruction [identity i]]]]
 
