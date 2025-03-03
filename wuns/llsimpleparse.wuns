@@ -1050,14 +1050,14 @@
         tag [annotation [exp type-union-tag] type-union-tag]
         types [cast [plist [wtype]] empty-list]]]]]
 
-[defn type-union-alloc [types [plist [wtype]]] [wtype]
-  ; todo filter empty types and sort the types to normalize...
-  [if [list-empty-is types]
-    type-union-empty
-    [alloc-init
-      [record
-        tag [annotation [exp type-union-tag] type-union-tag]
-        types types]]]]
+; [defn type-union-alloc [types [plist [wtype]]] [wtype]
+;   ; todo filter empty types and sort the types to normalize...
+;   [if [list-empty-is types]
+;     type-union-empty
+;     [alloc-init
+;       [record
+;         tag [annotation [exp type-union-tag] type-union-tag]
+;         types types]]]]
 
 [defn write-debug-type [writer [writer] t [wtype]] []
   [let
