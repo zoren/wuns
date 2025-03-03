@@ -1705,7 +1705,15 @@
           src-tag [deref [pfield src tag]]]
       [if [ne dst-tag src-tag]
         false
-        [and
+        [or
+          [and [eq dst-tag type-integer-tag]
+            [let
+              [dst-integer [cast [pmem [type-integer]] dst]
+               src-integer [cast [pmem [type-integer]] src]]
+               [and
+                 [eq [deref [pfield dst-integer n-bytes]] [deref [pfield src-integer n-bytes]]]
+                 [eq [deref [pfield dst-integer signed]] [deref [pfield src-integer signed]]]]]]
+          [and
           [if [or [eq dst-tag type-tuple-tag] [eq dst-tag type-record-tag]]
             [let
               ; here we use that records have the types field at the same offset as tuples do
@@ -1739,7 +1747,7 @@
                       false
                       [continue i [inc i]]]
                     true]]]]
-            true]]]]]]
+            true]]]]]]]
 
 [defn common-super-type [t1 [wtype] t2 [wtype]] [wtype]
   [if [eq t1 t2]
