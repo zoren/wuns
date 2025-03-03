@@ -678,7 +678,8 @@
               [let [rem [intrinsic i64.rem-s cur [i64 10]]]
                 [growable-list-push gl [intrinsic i64.add [i64 48] rem]]
                 [continue cur [intrinsic i64.div-s cur [i64 10]]]]]]
-          [growable-list-push gl [i64 43]]]]
+          ;[growable-list-push gl [i64 43]]
+          ]]
       [let
         [rsz [list-size gl]
          result [list-alloc-byte rsz]
