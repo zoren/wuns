@@ -40,11 +40,14 @@
 [c [qlist [defn f [] [tuple]] [export f]]]
 ]
 
-[defn forms-to-module [forms]
+[defn forms-to-wat-string [forms]
   [let
     [compiler [make-compiler]
-     output [compiler forms]
-     wat-string [byte-array-to-string [wat-to-wat-bytes [output-to-wat output]]]]
+     output [compiler forms]]
+    [byte-array-to-string [wat-to-wat-bytes [output-to-wat output]]]]]
+
+[defn forms-to-module [forms]
+  [let [wat-string [forms-to-wat-string forms]]
 ;    [log wat-string]
     [byte-array-to-wasm-module [wat-to-wasm-byte-array wat-string]]]]
 
@@ -881,7 +884,8 @@
     [read-parse-file-async [word llsimpleparse.wuns]]
     [func t [forms]
       [let
-       [module [forms-to-module forms]
+       [wat-string [forms-to-wat-string forms]
+        module [byte-array-to-wasm-module [wat-to-wasm-byte-array wat-string]]
         mem [memory 1 9 0]
         import-obj [make-import-object mem]
         inst [wasm-instantiate module import-obj]
@@ -890,6 +894,7 @@
         error-list-get [get-export inst [word error-list-get]]
         error-get-message [get-export inst [word error-get-message]]
         parse-translate-to-wat [get-export inst [word parse-translate-to-wat]]
+        ; test-switch [get-export inst [word test-switch]]
         list-size [get-export inst [word list-size]]
         list-data-byte-array [get-export inst [word list-data-byte-array]]
         list-alloc-byte [get-export inst [word list-alloc-byte]]
@@ -924,11 +929,11 @@
           [let
            [wuns-text [alloc-text wuns-string]
             wat-text [js-app parse-translate-to-wat wuns-text]
-            wat-string [ptext-to-string wat-text]]
-           [log wat-string]
+            iwat-string [ptext-to-string wat-text]]
+           [log iwat-string]
            [js-app text-free wuns-text]
            [js-app text-free wat-text]
-           [byte-array-to-wasm-module [wat-to-wasm-byte-array wat-string]]]]
+           [byte-array-to-wasm-module [wat-to-wasm-byte-array iwat-string]]]]
          translate-instantiate
          [func ti [wuns-string]
            [wasm-instantiate [translate-to-module wuns-string] empty-object]]
@@ -943,6 +948,7 @@
              f [get-export sinst [word f]]]
             [test-assert-eq expected [js-app f]]]]
          ]
+        [write-file-async [word 'test-self-translate.wat'] wat-string]
         [test-constant [i32 1337] [word i32] [word '[i32 1337]']]
         [test-constant [i32 -1] [word i32] [word '[i32 -1]']]
         [test-constant [i32 -2147483648] [word i32] [word '[i32 -2147483648]']]
@@ -1209,4 +1215,8 @@
           [test-assert-eq [i32 55] [js-app gauss-loop [i32 10]]]
           [test-assert-eq [i32 5050] [js-app gauss-loop [i32 100]]]
           [test-assert-eq [i32 500500] [js-app gauss-loop [i32 1000]]]
-          ]]]]]]]
+          ]]]
+
+      ; [for i 0 [i32 100]
+      ;   [logq test-switch [identity i] [js-app test-switch i]]]
+          ]]]]

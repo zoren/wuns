@@ -717,70 +717,24 @@
         [continue i [inc i]]]
       [cast [pmem v] [i32 0]]]]]
 
-[def form-word-tag [i32 10]]
-[def form-list-tag [i32 11]]
-
-[datatype form-word []
-  [record
-    [tag [exp form-word-tag]]
-    [pword [text]]]]
-
-[datatype
-  form-list []
-  [record
-    [tag [exp form-list-tag]]
-    [forms [plist [pmem [form]]]]]
-
-  form []
-  [union
-    [form-word]
-    [form-list]]]
-
-[datatype
-  eform []
+[datatype form []
   [enum [i32]
     [word
       pword [text]]
     [list
-      forms [plist [pmem [eform]]]]]]
-
-[defn form-word-alloc1 [ptext [text]] [pmem [eform]]
-  [alloc-init
-    [enum [eform] word
-      pword ptext]]]
-
-[defn form-word-get1 [pf [pmem [eform]]] [text]
-  [match pf
-    word [deref [pfield pf pword]]
-    [log-abort [text 'form-word-get1 not a form-word']]]]
-
-; [datatype
-;   option [a]
-;   [enum i32
-;     [none]
-;     [some
-;       value a]]]
-
-; [def option-none [data mem [enum option none]]]
-
-; [genfn option-some [a] [value a] [option a]
-;   [alloc-init
-;     [enum option some
-;       value value]]]
+      forms [plist [pmem [form]]]]]]
 
 [datatype pform []
   [pmem [form]]]
 
 [defn form-word-alloc [ptext [text]] [pform]
   [alloc-init
-    [record
-      tag [annotation [exp form-word-tag] form-word-tag]
+    [enum [form] word
       pword ptext]]]
 
 [defn form-list-alloc [pfs [plist [pform]]] [pform]
   [alloc-init
-    [record
-      tag [annotation [exp form-list-tag] form-list-tag]
+    [enum [form] list
       forms pfs]]]
 
 [defn form-tag [pf [pform]] [i32]
@@ -789,26 +743,30 @@
 [export form-tag]
 
 [defn form-word-is [pf [pform]] [i32]
-  [eq [deref [pfield pf tag]] form-word-tag]]
+  [match pf
+    word true
+    false]]
 
 [export form-word-is]
 
 [defn form-word-get [pf [pform]] [text]
-  [if [not [form-word-is pf]] [log-abort [text 'form-word-get not a form-word']]]
-  [let [pfw [cast [pmem [form-word]] pf]]
-    [deref [pfield pfw pword]]]]
+  [match pf
+    word [deref [pfield pf pword]]
+    [log-abort [text 'form-word-get not a form word']]]]
 
 [export form-word-get]
 
 [defn form-list-is [pf [pform]] [i32]
-  [eq [deref [pfield pf tag]] form-list-tag]]
+  [match pf
+    list true
+    false]]
 
 [export form-list-is]
 
 [defn form-list-get [pf [pform]] [plist [pform]]
-  [if [not [form-list-is pf]] [log-abort [text 'form-list-get not a form-list']]]
-  [let [pfl [cast [pmem [form-list]] pf]]
-    [deref [pfield pfl forms]]]]
+  [match pf
+    list [deref [pfield pf forms]]
+    [log-abort [text 'form-list-get not a form list']]]]
 
 [export form-list-get]
 
@@ -824,20 +782,20 @@
 
 [defn form-free [pf [pform]] [tuple]
   [if [not [static-is pf]]
-    [ifs
-      [form-word-is pf]
+    [match pf
+      word
       ; we no longer free the word here as they can be shared between forms
-      [free pf [size-of-type [form-word]]]
+      [free pf [size-of-enum [form] word]]
 
-      [form-list-is pf]
-      [let [forms [form-list-get pf]]
+      list
+      [let [forms [deref [pfield pf forms]]]
         [loop [i 0 n [list-size forms]]
           [if [lt-s i n]
             [do
               [form-free [list-get forms i]]
               [continue i [inc i]]]]]
         [list-free forms]
-        [free pf [size-of-type [form-list]]]]
+        [free pf [size-of-enum [form] list]]]
 
       [log-abort [text 'form-free unknown form type']]]]]
 
@@ -1525,18 +1483,16 @@
 
 [defn form-word-get-report [gctx [pmem [global-context]] pf [pform]] [text]
   [if [form-word-is pf]
-    [let [pfw [cast [pmem [form-word]] pf]]
-      [deref [pfield pfw pword]]]
+    [form-word-get pf]
     [do
-      [push-error gctx pf [static-list [text 'not a form-list']]]
+      [push-error gctx pf [static-list [text 'not a form word']]]
       [static-list [text '']]]]]
 
 [defn form-list-get-report [gctx [pmem [global-context]] pf [pform]] [plist [pform]]
   [if [form-list-is pf]
-    [let [pfl [cast [pmem [form-list]] pf]]
-      [deref [pfield pfl forms]]]
+    [form-list-get pf]
     [do
-      [push-error gctx pf [static-list [text 'not a form-list']]]
+      [push-error gctx pf [static-list [text 'not a form list']]]
       [cast [plist [pform]] empty-list]]]]
 
 [defn is-digit [cc [i64]] [i32]
