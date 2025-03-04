@@ -139,6 +139,7 @@
 
     [intrinsic name [list imm-arg] [list exp]]
     [size-of-type type]
+    [size-of-enum type name]
     [size-of-exp exp]
 
     [if exp exp exp]
@@ -320,10 +321,13 @@
       [type/union ts] [for-each tt ts [go tt]]
       [type/apply-custom tn args] [for-each arg args [go arg]]
       [type/func tf] [do [for-each pp [type-func/parameters tf] [go pp]] [go [type-func/result tf]]]
+      [type/enum tag-type ctors]
+      [for-each ctor ctors
+        [for-each field [pair/snd ctor] [go [pair/snd field]]]]
       [logq-abort type-iterate not implemented [identity t]]]]]
 
 [defn type-substitute [type-env outer-t]
-  [[func go [t]
+  [let [go [func go [t]
     [match t
       [type/var tv]
       [if-let [subst-t [try-get type-env [name/word tv]]]
@@ -359,8 +363,17 @@
           [list-map pp [type-func/parameters tf] [go pp]]
           [go [type-func/result tf]]]]
 
-      [logq-abort type-substitute not implemented [identity t]]]]
-    outer-t]]
+      [type/enum tag-type ctors]
+      [type/enum tag-type
+        [list-map ctor ctors
+          [pair [pair/fst ctor]
+            [list-map f [pair/snd ctor]
+              [pair [pair/fst f] [go [pair/snd f]]]]]]]
+
+      [logq-abort type-substitute not implemented [identity t]]]]]
+    [if [eq 0 [kv-map-size type-env]]
+      outer-t
+      [go outer-t]]]]
 
 [type value-kind [] [union [constant] [mutable]]]
 
@@ -591,6 +604,9 @@
         [option/none]]]
     [option/none]]]
 
+[defn eq-name [n1 n2]
+  [eq-word [name/word n1] [name/word n2]]]
+
 [defn mk-exp-i32-mul [a b]
   [exp/intrinsic [name [word i32.mul]] [list] [list a b]]]
 
@@ -632,6 +648,16 @@
 [defn pairwise-pairs-check [l]
   [assert-not [is-odd [size l]] pairwise-pairs-check expected even number of elements]
   [pairwise-pairs l]]
+
+[def drop-inst [wat-inst-word [word drop]]]
+
+[defn translate-literal [pt]
+  [switch pt
+    [[word i32]] wat-inst/i32.const
+    [[word i64]] wat-inst/i64.const
+    [[word f32]] wat-inst/f32.const
+    [[word f64]] wat-inst/f64.const
+    [logq-abort translate-literal not implemented [identity pt]]]]
 
 [defn make-compiler []
 [let
@@ -1016,8 +1042,7 @@
           [pair
             [list
               [form-to-exp-type-kind-env type-kind-env lctx [pair/fst case]]]
-            [form-to-exp-type-kind-env type-kind-env lctx [pair/snd case]]]
-            ]
+            [form-to-exp-type-kind-env type-kind-env lctx [pair/snd case]]]]
         [form-to-exp-type-kind-env type-kind-env lctx [last l]]]]
 
     [[word match]]
@@ -1235,6 +1260,14 @@
     [[word size-of-exp]]
     [exp/size-of-exp [form-to-exp-type-kind-env type-kind-env lctx [second l]]]
 
+    [[word size-of-enum]]
+    [let
+      [et [form-to-type-type-env type-kind-env lctx [second l]]
+       ctor-name [form-to-name [third l]]
+       ctors [pair/snd [get-enum-args et]]]
+      [get-enum-ctor-index-fields ctors ctor-name]
+      [exp/size-of-enum et ctor-name]]
+
     [[word pindex]]
     [exp/pindex
       [form-to-exp-type-kind-env type-kind-env lctx [second l]]
@@ -1296,11 +1329,12 @@
       ; check field types match
       [for i 0 [size field-types]
         [let [ft [at field-types i]
-              fe [at field-exps i]]
+              fe [at field-exps i]
+              vt [type-of [pair/snd fe]]]
           [when-not [eq-word [name/word [pair/fst ft]] [name/word [pair/fst fe]]]
             [logq-abort enum field name mismatch [identity ft] [identity fe]]]
-          [when-not [type-assignable [pair/snd ft] [type-of [pair/snd fe]]]
-            [logq-abort enum field type mismatch [identity ft] [identity fe]]]]]
+          [when-not [type-assignable [pair/snd ft] vt]
+            [logq-abort enum field type mismatch [identity ft] [identity vt] [identity fe]]]]]
       [exp/enum
         enum-type
         ctor-name
@@ -1530,7 +1564,7 @@
         [loop [i 0 n [size sfs] cur-tenv tenv]
           [if [lt-s i n]
             [let [df [at dfs i] sf [at sfs i]]
-              [if [eq-word [name/word [pair/fst df]] [name/word [pair/fst sf]]]
+              [if [eq-name [pair/fst df] [pair/fst sf]]
                 [result-bind
                   [go-tai cur-tenv [pair/snd df] [pair/snd sf]]
                   nenv
@@ -1543,8 +1577,8 @@
 
       [result/error [qlist not a record [identity arg-t]]]]
 
-    [type/enum tag-type ctors]
-    [match arg-t
+    [type/enum dst-tag-type dst-ctors]
+    [match [expand-custom-n arg-t]
       [type/record sfs]
       [let
         [tag-exp-type
@@ -1559,13 +1593,38 @@
           [type/exp tag-exp]
           [match tag-exp
             [exp/integer tag-pt tag-i]
-            [let [ctor [at ctors [bigint-to-i32 tag-i]]]
+            [let [ctor [at dst-ctors [bigint-to-i32 tag-i]]]
               [result/ok tenv]]
 
             [logq-abort enum record not an integer]]
         [logq-abort enum record not an exp]]]
 
-      [result/error [qlist source not a record in enum destination]]]
+      [type/enum src-tag-type src-ctors]
+      [if [is-identical dst-tag-type src-tag-type]
+        [if [eq [size dst-ctors] [size src-ctors]]
+          [loop [n [size dst-ctors] i 0 cur tenv]
+            [if [lt-s i n]
+              [let [dst-ctor [at dst-ctors i] src-ctor [at src-ctors i]]
+                [if [eq-name [pair/fst dst-ctor] [pair/fst src-ctor]]
+                  [let [dfs [pair/snd dst-ctor] sfs [pair/snd src-ctor]]
+                    [loop [j 0 n-fields [size sfs] cur-tenv tenv]
+                      [if [lt-s j n-fields]
+                        [let [df [at dfs j] sf [at sfs j]]
+                          [if [eq-name [pair/fst df] [pair/fst sf]]
+                            [result-bind
+                              [go-tai cur-tenv [pair/snd df] [pair/snd sf]]
+                              nenv
+                              [continue j [inc j] cur-tenv nenv]]
+                            [result/error [qlist not same field names]]]]
+                        [result/ok cur-tenv]]]]
+                  [result/error [qlist enum ctor names do not match]]]]
+              [result/ok cur]]]
+          [result/error [qlist enum tag types do not match]]]
+        [result/error [qlist enum tag types do not match]]]
+
+      [do
+        [logq source not a record in enum destination [identity arg-t]]
+        [result/error [qlist source not a record in enum destination]]]]
 
     [type/apply-custom ptn pargs]
     [match arg-t
@@ -1828,11 +1887,11 @@
 [func enum-instance-type-from-names [enum-type ctor-name]
   [let
     [enum-args [get-enum-args enum-type]
-      ctors [pair/snd enum-args]
-      ctor-index-fields [get-enum-ctor-index-fields ctors ctor-name]
-      ctor-index [pair/fst ctor-index-fields]
-      field-types [pair/snd ctor-index-fields]
-      tag-exp-type [type/exp [exp/integer [pair/fst enum-args] [i32-to-bigint ctor-index]]]]
+     ctors [pair/snd enum-args]
+     ctor-index-fields [get-enum-ctor-index-fields ctors ctor-name]
+     ctor-index [pair/fst ctor-index-fields]
+     field-types [pair/snd ctor-index-fields]
+     tag-exp-type [type/exp [exp/integer [pair/fst enum-args] [i32-to-bigint ctor-index]]]]
     [type/record
       [concat [list [pair enum-tag-name tag-exp-type]] field-types]]]]
 
@@ -1932,6 +1991,9 @@
     type-i32
 
     [exp/size-of-exp -e]
+    type-i32
+
+    [exp/size-of-enum -e -f]
     type-i32
 
     [exp/pindex p-target-exp index-exp]
@@ -2676,6 +2738,14 @@
         [concat-words [word -]
           [word-join [word -] [list-map ta targs [type-to-string ta]]]]]]
 
+    [type/enum tag-type ctors]
+    [concat-words [word enum]
+      [concat-words [primitive-type/name tag-type]
+        [word-join [word -] [list-map ct ctors
+          [concat-words [name/word [pair/fst ct]]
+            [word-join [word -] [list-map fp [pair/snd ct]
+              [concat-words [name/word [pair/fst fp]] [concat-words [word -] [type-to-string [pair/snd fp]]]]]]]]]]]
+
     [logq-abort type-to-string not implemented [identity et]]]]]
 
 [func type-to-wat-types-current [t]
@@ -2870,7 +2940,8 @@
        default-label [int-to-word default-index]
        entries [transient-kv-map]
        glabels [growable-list]
-       max-atom [atom 0]]
+       max-atom [atom 0]
+       drop-result [list-map -rt res-type drop-inst]]
       [loop [i 0]
         [when [lt-s i n-cases]
           [for-each c [pair/fst [at cases i]]
@@ -2894,20 +2965,29 @@
         [i 0
          res
           [wat-inst/block res-type
-            [list
-              [exp-to-inst default]
-              [wat-inst/br-table [clone-growable-to-frozen-list glabels] [exp-to-inst disc]]]]]
+            [concat
+              ; fill up with dummy values
+              [list-map rt res-type
+                [[translate-literal rt] [word 0]]]
+              [list
+                [wat-inst/br-table [clone-growable-to-frozen-list glabels] [exp-to-inst disc]]]]]]
         [if [lt-s i n-cases]
           [let [case [at cases i]]
             [continue
               res
               [wat-inst/block res-type
-                [list
-                  res
-                  [exp-to-inst [pair/snd case]]
-                  [wat-inst/br-int [dec [sub n-cases i]]]]]
+                [concat
+                  [list res]
+                  drop-result
+                  [list
+                    [exp-to-inst [pair/snd case]]
+                    [wat-inst/br-int [sub n-cases i]]]]]
               i [inc i]]]
-          res]]]
+          [wat-inst/block res-type
+            [concat
+              [list res]
+              drop-result
+              [list [exp-to-inst default]]]]]]]
 
     [exp/match discriminator cases default]
     [let
@@ -2934,6 +3014,9 @@
 
     [exp/size-of-exp e]
     [exp-to-inst [type-to-size-of-exp-current-tenv [type-of [get-constant e]]]]
+
+    [exp/size-of-enum t ctor-name]
+    [exp-to-inst [type-to-size-of-exp-current-tenv [enum-instance-type-from-names t ctor-name]]]
 
     [exp/let-loop ll-kind bindings bodies]
     [let
