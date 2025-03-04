@@ -139,7 +139,6 @@
 
     [intrinsic name [list imm-arg] [list exp]]
     [size-of-type type]
-    [size-of-enum type name]
     [size-of-exp exp]
 
     [if exp exp exp]
@@ -1262,14 +1261,6 @@
     [[word size-of-exp]]
     [exp/size-of-exp [form-to-exp-type-kind-env type-kind-env lctx [second l]]]
 
-    [[word size-of-enum]]
-    [let
-      [et [form-to-type-type-env type-kind-env lctx [second l]]
-       ctor-name [form-to-name [third l]]
-       ctors [pair/snd [get-enum-args et]]]
-      [get-enum-ctor-index-fields ctors ctor-name]
-      [exp/size-of-enum et ctor-name]]
-
     [[word pindex]]
     [exp/pindex
       [form-to-exp-type-kind-env type-kind-env lctx [second l]]
@@ -1993,9 +1984,6 @@
     type-i32
 
     [exp/size-of-exp -e]
-    type-i32
-
-    [exp/size-of-enum -e -f]
     type-i32
 
     [exp/pindex p-target-exp index-exp]
@@ -3026,9 +3014,6 @@
 
     [exp/size-of-exp e]
     [exp-to-inst [type-to-size-of-exp-current-tenv [type-of [get-constant e]]]]
-
-    [exp/size-of-enum t ctor-name]
-    [exp-to-inst [type-to-size-of-exp-current-tenv [enum-instance-type-from-names t ctor-name]]]
 
     [exp/let-loop ll-kind bindings bodies]
     [let

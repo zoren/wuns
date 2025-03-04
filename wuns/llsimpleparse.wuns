@@ -788,7 +788,7 @@
     [match pf
       word
       ; we no longer free the word here as they can be shared between forms
-      [free pf [size-of-enum [form] word]]
+      [free pf [size-of-exp [deref pf]]]
 
       list
       [let [forms [deref [pfield pf forms]]]
@@ -798,7 +798,7 @@
               [form-free [list-get forms i]]
               [continue i [inc i]]]]]
         [list-free forms]
-        [free pf [size-of-enum [form] list]]]
+        [free pf [size-of-exp [deref pf]]]]
 
       [log-abort [text 'form-free unknown form type']]]]]
 
