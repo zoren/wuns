@@ -1074,128 +1074,75 @@
       [enum [pattern] wildcard
         name [static-list [text -]]]]]]
 
-[def exp-integer-tag [i32 1]]
-[def exp-var-tag [i32 2]]
-[def exp-if-tag [i32 3]]
-[def exp-intrinsic-tag [i32 4]]
-[def exp-tuple-tag [i32 5]]
-[def exp-record-tag [i32 7]]
-[def exp-call-tag [i32 6]]
-[def exp-let-loop-tag [i32 8]]
-[def exp-continue-tag [i32 9]]
+[datatype wexp []
+  [enum [i32]
+    [integer
+      negative [i32]
+      value [i64]
+      type [wtype]]
+    [var
+      name [text]]
+    [if
+      condition [pexp]
+      true [pexp]
+      false [pexp]]
+    [intrinsic
+      iname [text]
+      arguments [plist [pexp]]]
+    [call
+      func [pexp]
+      arguments [plist [pexp]]]
+    [tuple
+      elements [plist [pexp]]]
+    [record
+      elements [plist [pexp]]
+      names [plist [text]]]
+    [let-loop
+      is-let [boolean]
+      bindings [plist [tuple [ppattern] [pexp]]]
+      bodies [plist [pexp]]]
+    [continue
+      assignments [plist [tuple [text] [pexp]]]]]
 
-[datatype
-  wexp-integer []
-  [record
-    [tag [exp exp-integer-tag]]
-    [negative [i32]]
-    [value [i64]]
-    [type [wtype]]]
-
-  wexp-var []
-  [record
-    [tag [exp exp-var-tag]]
-    [name [text]]]
-
-  wexp-if []
-  [record
-    [tag [exp exp-if-tag]]
-    [condition [pexp]]
-    [true [pexp]]
-    [false [pexp]]]
-
-  wexp-intrinsic []
-  [record
-    [tag [exp exp-intrinsic-tag]]
-    [iname [text]]
-    [arguments [plist [pexp]]]]
-
-  wexp-call []
-  [record
-    [tag [exp exp-call-tag]]
-    [func [pexp]]
-    [arguments [plist [pexp]]]]
-
-  wexp-tuple []
-  [record
-    [tag [exp exp-tuple-tag]]
-    [elements [plist [pexp]]]]
-
-  wexp-record []
-  [record
-    [tag [exp exp-record-tag]]
-    [elements [plist [pexp]]]
-    [names [plist [text]]]]
-
-  wexp-let-loop []
-  [record
-    [tag [exp exp-let-loop-tag]]
-    [is-let [boolean]]
-    [bindings [plist [tuple [ppattern] [pexp]]]]
-    [bodies [plist [pexp]]]]
-
-  wexp-continue []
-  [record
-    [tag [exp exp-continue-tag]]
-    [assignments [plist [tuple [text] [pexp]]]]]
-
-  pexp [] [pmem [wexp]]
-
-  wexp []
-  [union
-    [wexp-integer]
-    [wexp-var]
-    [wexp-if]
-    [wexp-intrinsic]
-    [wexp-call]
-    [wexp-tuple]
-    [wexp-record]
-    [wexp-let-loop]
-    [wexp-continue]
-    ]]
+    pexp []
+    [pmem [wexp]]]
 
 [defn wexp-integer-alloc [i [i64] negative [i32] type [wtype]] [pexp]
   [alloc-init
-    [record
-      tag [annotation [exp exp-integer-tag] exp-integer-tag]
+    [enum [wexp] integer
       negative negative
       value i
       type type]]]
 
 [defn wexp-intrinsic-alloc [name [text] args [plist [pexp]]] [pexp]
   [alloc-init
-    [record
-      tag [annotation [exp exp-intrinsic-tag] exp-intrinsic-tag]
+    [enum [wexp] intrinsic
       iname name
       arguments args]]]
 
 [defn wexp-call-alloc [func [pexp] args [plist [pexp]]] [pexp]
   [alloc-init
-    [record
-      tag [annotation [exp exp-call-tag] exp-call-tag]
+    [enum [wexp] call
       func func
       arguments args]]]
 
 [def exp-tuple-empty
   [cast [pexp]
     [data mem
-      [record
-        tag [annotation [exp exp-tuple-tag] exp-tuple-tag]
+      [enum [wexp] tuple
         elements [cast [plist [pexp]] empty-list]]]]]
 
 [defn wexp-tuple-alloc [elements [plist [pexp]]] [pexp]
   [if [list-empty-is elements]
     exp-tuple-empty
     [alloc-init
-      [record
-        tag [annotation [exp exp-tuple-tag] exp-tuple-tag]
+      [enum [wexp] tuple
         elements elements]]]]
 
 [def exp-record-empty
   [cast [pexp]
     [data mem
-      [record
-        tag [annotation [exp exp-record-tag] exp-record-tag]
+      [enum [wexp] record
         elements [cast [plist [pexp]] empty-list]
         names [cast [plist [text]] empty-list]]]]]
 
@@ -1204,8 +1151,7 @@
     exp-record-empty
     [cast [pexp]
       [alloc-init
-        [record
-          tag [annotation [exp exp-record-tag] exp-record-tag]
+        [enum [wexp] record
           elements elements
           names names]]]]]
 
@@ -1551,34 +1497,28 @@
 
 [defn type-of [gctx [pmem [global-context]] e [pexp]] [wtype]
   [let [tag [deref [pfield e tag]]]
-    [ifs
-      [eq tag exp-integer-tag]
-      [let
-        [exp [cast [pmem [wexp-integer]] e]]
-        [deref [pfield exp type]]]
+    [match e
+      integer
+      [deref [pfield e type]]
 
-      [eq tag exp-intrinsic-tag]
+      intrinsic
       [let
-        [intr [cast [pmem [wexp-intrinsic]] e]
-         intrinsic-info [get-intrinsic-by-name [deref [pfield intr iname]]]]
+        [intrinsic-info [get-intrinsic-by-name [deref [pfield e iname]]]]
         [when [is-null intrinsic-info]
-          [log-text [deref [pfield intr iname]]]
+          [log-text [deref [pfield e iname]]]
           [log-abort [text 'type-of not found intrinsic-info']]]
         [deref [pfield intrinsic-info result]]]
 
-      [eq tag exp-call-tag]
-      [let
-        [exp [cast [pmem [wexp-call]] e]
-         tf [type-of gctx [deref [pfield exp func]]]]
+      call
+      [let [tf [type-of gctx [deref [pfield e func]]]]
         [match tf
           function [deref [pfield tf result]]
           [log-abort [text 'type-of not a function type']]]]
 
-      [eq tag exp-tuple-tag]
+      tuple
       [let
-        [exp [cast [pmem [wexp-tuple]] e]
-          elements [deref [pfield exp elements]]
-          n [list-size elements]]
+        [elements [deref [pfield e elements]]
+         n [list-size elements]]
         [if [eq n 0]
           type-tuple-empty
           [loop [types [[instantiate list-alloc [wtype]] n]
@@ -1589,11 +1529,10 @@
                 [continue i [inc i]]]
               [type-tuple-alloc types]]]]]
 
-      [eq tag exp-record-tag]
+      record
       [let
-        [exp [cast [pmem [wexp-record]] e]
-         elements [deref [pfield exp elements]]
-         names [deref [pfield exp names]]
+        [elements [deref [pfield e elements]]
+         names [deref [pfield e names]]
          n [list-size elements]]
         [if [eq n 0]
           type-record-empty
@@ -1605,15 +1544,14 @@
                 [continue i [inc i]]]
               [type-record-alloc types names]]]]]
 
-      [eq tag exp-let-loop-tag]
+      let-loop
       [let
-        [exp [cast [pmem [wexp-let-loop]] e]
-         bodies [deref [pfield exp bodies]]]
+        [bodies [deref [pfield e bodies]]]
         [if [list-empty-is bodies]
           type-tuple-empty
           [type-of gctx [list-last bodies]]]]
 
-      [eq tag exp-continue-tag]
+      continue
       type-union-empty
 
       [let [exp-types [deref [pfield gctx exp-types]]
@@ -1870,8 +1808,7 @@
                 type-error]]]]
        exp
        [alloc-init
-        [record
-          tag [annotation [exp exp-var-tag] exp-var-tag]
+        [enum [wexp] var
           name w]]]
       ; todo maybe drop the type annotation as the type can be gotten from lctx
       [annotate gctx exp var-type]
@@ -1952,8 +1889,7 @@
                e [form-to-exp gctx [list-get fl 3]]
                if-exp
                [alloc-init
-                [record
-                  tag [annotation [exp exp-if-tag] exp-if-tag]
+                [enum [wexp] if
                   condition c
                   true t
                   false e]]
@@ -2076,8 +2012,7 @@
               [growable-list-pop stack]
               [cast [pexp]
                 [alloc-init
-                  [record
-                    tag [annotation [exp exp-let-loop-tag] exp-let-loop-tag]
+                  [enum [wexp] let-loop
                     is-let is-let
                     bindings bindings
                     bodies bodies]]]]]
@@ -2106,8 +2041,7 @@
                     [continue i [inc i] fi [add 2 fi]]]]]
               [cast [pexp]
                 [alloc-init
-                  [record
-                    tag [annotation [exp exp-continue-tag] exp-continue-tag]
+                  [enum [wexp] continue
                     assignments assignments]]]]]
 
           [do
@@ -2518,8 +2452,8 @@
     wasm-types]]
 
 [defn exp-get-var-name [exp [pexp]] [text]
-  [if [eq [deref [pfield exp tag]] exp-var-tag]
-    [deref [pfield [cast [pmem [wexp-var]] exp] name]]
+  [match exp
+    var [deref [pfield exp name]]
     [log-abort [text 'exp-get-var-name not a var']]]]
 
 [defn local-get-param-by-type [gl [p-growable-list [text]] t [wtype]] [pwasm-exp]
@@ -2638,211 +2572,217 @@
 
         [log-abort [text 'pattern-type-to-local-set-drop record type expected']]]]
 
-    [log-abort [text 'pattern kind not implemented yet']]]]]
+    [log-abort [text 'pattern kind not implemented yet']]]]
 
 [defn exp-to-wasm-exp [gctx [pmem [global-context]] exp [pexp]] [pwasm-exp]
-  [let [tag [deref [pfield exp tag]]]
-    [ifs
-      [eq tag exp-integer-tag]
-      [let
-        [iexp [cast [pmem [wexp-integer]] exp]
-         negative [deref [pfield iexp negative]]
-         value [deref [pfield iexp value]]
-         type [deref [pfield iexp type]]
-         txt [integer-to-text value negative]]
-        [cast [pwasm-exp]
-          [alloc-init
-            [record
-              tag [annotation [exp wasm-constant-tag] wasm-constant-tag]
-              type type
-              value txt]]]]
+  [match exp
+    integer
+    [let
+      [negative [deref [pfield exp negative]]
+       value [deref [pfield exp value]]
+       type [deref [pfield exp type]]
+       txt [integer-to-text value negative]]
+      [cast [pwasm-exp]
+        [alloc-init
+          [record
+            tag [annotation [exp wasm-constant-tag] wasm-constant-tag]
+            type type
+            value txt]]]]
 
-      [eq tag exp-var-tag]
-      [let
-        [iexp [cast [pmem [wexp-var]] exp]
-         name [deref [pfield iexp name]]
-         is-local [assoc-list-get-value [deref [pfield gctx exp-local-context]] exp]]
-        [if is-local
-          [let [gl [[instantiate growable-list-alloc-init [text]] [i32 10]]]
-            [growable-list-push gl name]
-            [local-get-param-by-type gl [type-of gctx exp]]]
-          [let
-            [iargs [[instantiate list-alloc [text]] 1]]
-            [list-set iargs 0 name]
-            [alloc-init
-              [record
-                tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
-                name
-                [static-list [text global.get]]
-                immediate-arguments iargs
-                arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]]
-
-      [eq tag exp-intrinsic-tag]
-      [let
-        [iexp [cast [pmem [wexp-intrinsic]] exp]
-         iname [deref [pfield iexp iname]]
-         arguments [deref [pfield iexp arguments]]
-         nargs [list-size arguments]
-         warguments [[instantiate list-alloc [pmem [wasm-exp]]] nargs]]
-        [loop [i 0]
-          [when [lt-s i nargs]
-            [list-set warguments i [exp-to-wasm-exp gctx [list-get arguments i]]]
-            [continue i [inc i]]]]
-        [cast [pwasm-exp]
+    var
+    [let
+      [name [deref [pfield exp name]]
+       is-local [assoc-list-get-value [deref [pfield gctx exp-local-context]] exp]]
+      [if is-local
+        [let [gl [[instantiate growable-list-alloc-init [text]] [i32 10]]]
+          [growable-list-push gl name]
+          [local-get-param-by-type gl [type-of gctx exp]]]
+        [let
+          [iargs [[instantiate list-alloc [text]] 1]]
+          [list-set iargs 0 name]
           [alloc-init
             [record
               tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
-              name iname
-              immediate-arguments [cast [plist [text]] empty-list]
-              arguments warguments]]]]
-
-      [eq tag exp-call-tag]
-      [let
-        [iexp [cast [pmem [wexp-call]] exp]
-         func [deref [pfield iexp func]]
-         arguments [deref [pfield iexp arguments]]
-         nargs [list-size arguments]
-         iargs [[instantiate list-alloc [text]] 1]
-         warguments [[instantiate list-alloc [pmem [wasm-exp]]] nargs]]
-        [list-set iargs 0 [exp-get-var-name func]]
-        [loop [i 0]
-          [when [lt-s i nargs]
-            [list-set warguments i [exp-to-wasm-exp gctx [list-get arguments i]]]
-            [continue i [inc i]]]]
-        [cast [pwasm-exp]
-          [alloc-init
-            [record
-              tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
-              name [static-list [text call]]
+              name
+              [static-list [text global.get]]
               immediate-arguments iargs
-              arguments warguments]]]]
+              arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]]
 
-      [eq tag exp-if-tag]
-      [let
-        [iexp [cast [pmem [wexp-if]] exp]
-         condition [deref [pfield iexp condition]]
-         true [deref [pfield iexp true]]
-         false [deref [pfield iexp false]]
-         econd [exp-to-wasm-exp gctx condition]
-         etrue [exp-to-wasm-exp gctx true]
-         efalse [exp-to-wasm-exp gctx false]
-         tif [type-of gctx exp]]
-        [cast [pwasm-exp]
-          [alloc-init
-            [record
-              tag [annotation [exp wasm-if-tag] wasm-if-tag]
-              result [type-to-wasm-types tif]
-              condition econd
-              true etrue
-              false efalse]]]]
+    intrinsic
+    [let
+      [iname [deref [pfield exp iname]]
+       arguments [deref [pfield exp arguments]]
+       nargs [list-size arguments]
+       warguments [[instantiate list-alloc [pmem [wasm-exp]]] nargs]]
+      [loop [i 0]
+        [when [lt-s i nargs]
+          [list-set warguments i [exp-to-wasm-exp gctx [list-get arguments i]]]
+          [continue i [inc i]]]]
+      [cast [pwasm-exp]
+        [alloc-init
+          [record
+            tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+            name iname
+            immediate-arguments [cast [plist [text]] empty-list]
+            arguments warguments]]]]
 
-      [or [eq tag exp-tuple-tag] [eq tag exp-record-tag]]
-      [loop
-        [i 0
-         exp-tuple [cast [pmem [wexp-tuple]] exp]
-         elements [deref [pfield exp-tuple elements]]
-         n [list-size elements]
-         insts [[instantiate list-alloc [pmem [wasm-exp]]] n]]
-        [if [lt-s i n]
-          [do
-            [list-set insts i [exp-to-wasm-exp gctx [list-get elements i]]]
-            [continue i [inc i]]]
-          [cast [pwasm-exp]
-            [alloc-init
-              [record
-                tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
-                insts insts]]]]]
+    call
+    [let
+      [func [deref [pfield exp func]]
+       arguments [deref [pfield exp arguments]]
+       nargs [list-size arguments]
+       iargs [[instantiate list-alloc [text]] 1]
+       warguments [[instantiate list-alloc [pmem [wasm-exp]]] nargs]]
+      [list-set iargs 0 [exp-get-var-name func]]
+      [loop [i 0]
+        [when [lt-s i nargs]
+          [list-set warguments i [exp-to-wasm-exp gctx [list-get arguments i]]]
+          [continue i [inc i]]]]
+      [cast [pwasm-exp]
+        [alloc-init
+          [record
+            tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+            name [static-list [text call]]
+            immediate-arguments iargs
+            arguments warguments]]]]
 
-      [eq tag exp-let-loop-tag]
-      [let
-        [iexp [cast [pmem [wexp-let-loop]] exp]
-         bindings [deref [pfield iexp bindings]]
-         bodies [deref [pfield iexp bodies]]
-         ginsts [[instantiate growable-list-alloc-init [pmem [wasm-exp]]] [i32 10]]]
-        [loop [i 0]
-          [when [lt-s i [list-size bindings]]
-            [let
-              [binding [list-get-p bindings i]
-               pattern [deref [pindex binding [i32 0]]]
-               value [deref [pindex binding [i32 1]]]
-               wvalue [exp-to-wasm-exp gctx value]
-               pat-tag [deref [pfield pattern tag]]]
-              [growable-list-push ginsts wvalue]
-              [pattern-type-to-local-set-drop gctx ginsts pattern [type-of gctx value]]
-              [continue i [inc i]]]]]
-        [if [deref [pfield iexp is-let]]
-          [loop [i 0]
-            [when [lt-s i [list-size bodies]]
-              [growable-list-push ginsts [exp-to-wasm-exp gctx [list-get bodies i]]]
-              [continue i [inc i]]]]
-          [let [ginsts-body [[instantiate growable-list-alloc-init [pmem [wasm-exp]]] [i32 8]]]
-            [loop [i 0]
-              [when [lt-s i [list-size bodies]]
-                [growable-list-push ginsts-body [exp-to-wasm-exp gctx [list-get bodies i]]]
-                [continue i [inc i]]]]
-            [growable-list-push ginsts
-              [cast [pwasm-exp]
-                [alloc-init
-                  [record
-                    tag [annotation [exp wasm-loop-tag] wasm-loop-tag]
-                    label [static-list [text lab]]
-                    result [type-to-wasm-types [type-of gctx exp]]
-                    body
-                    [cast [pwasm-exp]
-                      [alloc-init
-                        [record
-                          tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
-                          insts [growable-list-to-list ginsts-body]]]]]]]]]]
+    if
+    [let
+      [condition [deref [pfield exp condition]]
+       true [deref [pfield exp true]]
+       false [deref [pfield exp false]]
+       econd [exp-to-wasm-exp gctx condition]
+       etrue [exp-to-wasm-exp gctx true]
+       efalse [exp-to-wasm-exp gctx false]
+       tif [type-of gctx exp]]
+      [cast [pwasm-exp]
+        [alloc-init
+          [record
+            tag [annotation [exp wasm-if-tag] wasm-if-tag]
+            result [type-to-wasm-types tif]
+            condition econd
+            true etrue
+            false efalse]]]]
+
+    tuple
+    [loop
+      [i 0
+       elements [deref [pfield exp elements]]
+       n [list-size elements]
+       insts [[instantiate list-alloc [pmem [wasm-exp]]] n]]
+      [if [lt-s i n]
+        [do
+          [list-set insts i [exp-to-wasm-exp gctx [list-get elements i]]]
+          [continue i [inc i]]]
         [cast [pwasm-exp]
           [alloc-init
             [record
               tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
-              insts [growable-list-to-list ginsts]]]]]
+              insts insts]]]]]
 
-      [eq tag exp-continue-tag]
-      [let
-        [cexp [cast [pmem [wexp-continue]] exp]
-         assignments [deref [pfield cexp assignments]]
-         n-ass [list-size assignments]
-         insts [[instantiate list-alloc [pwasm-exp]] [inc n-ass]]]
+    ; identical to tuple, use multiple match...
+    record
+    [loop
+      [i 0
+       elements [deref [pfield exp elements]]
+       n [list-size elements]
+       insts [[instantiate list-alloc [pmem [wasm-exp]]] n]]
+      [if [lt-s i n]
+        [do
+          [list-set insts i [exp-to-wasm-exp gctx [list-get elements i]]]
+          [continue i [inc i]]]
+        [cast [pwasm-exp]
+          [alloc-init
+            [record
+              tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
+              insts insts]]]]]
+
+    let-loop
+    [let
+      [bindings [deref [pfield exp bindings]]
+       bodies [deref [pfield exp bodies]]
+       ginsts [[instantiate growable-list-alloc-init [pmem [wasm-exp]]] [i32 10]]]
+      [loop [i 0]
+        [when [lt-s i [list-size bindings]]
+          [let
+            [binding [list-get-p bindings i]
+              pattern [deref [pindex binding [i32 0]]]
+              value [deref [pindex binding [i32 1]]]
+              wvalue [exp-to-wasm-exp gctx value]
+              pat-tag [deref [pfield pattern tag]]]
+            [growable-list-push ginsts wvalue]
+            [pattern-type-to-local-set-drop gctx ginsts pattern [type-of gctx value]]
+            [continue i [inc i]]]]]
+      [if [deref [pfield exp is-let]]
         [loop [i 0]
-          [when [lt-s i n-ass]
-            [let
-              [assignment [list-get-p assignments i]
-               loop-var [deref [pindex assignment [i32 0]]]
-               value [deref [pindex assignment [i32 1]]]
-               iargs [[instantiate list-alloc [text]] 1]
-               arguments [[instantiate list-alloc [pwasm-exp]] 1]]
-              [list-set iargs 0 loop-var]
-              [list-set arguments 0 [exp-to-wasm-exp gctx value]]
-              [list-set insts i
-                [cast [pwasm-exp]
-                  [alloc-init
-                    [record
-                      tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
-                      name [static-list [text local.set]]
-                      immediate-arguments iargs
-                      arguments arguments]]]]
-              [continue i [inc i]]]]]
-          [let [br-iargs [[instantiate list-alloc [text]] 1]]
-            [list-set br-iargs 0 [static-list [text lab]]]
-            [list-set insts n-ass
+          [when [lt-s i [list-size bodies]]
+            [growable-list-push ginsts [exp-to-wasm-exp gctx [list-get bodies i]]]
+            [continue i [inc i]]]]
+        [let [ginsts-body [[instantiate growable-list-alloc-init [pmem [wasm-exp]]] [i32 8]]]
+          [loop [i 0]
+            [when [lt-s i [list-size bodies]]
+              [growable-list-push ginsts-body [exp-to-wasm-exp gctx [list-get bodies i]]]
+              [continue i [inc i]]]]
+          [growable-list-push ginsts
+            [cast [pwasm-exp]
+              [alloc-init
+                [record
+                  tag [annotation [exp wasm-loop-tag] wasm-loop-tag]
+                  label [static-list [text lab]]
+                  result [type-to-wasm-types [type-of gctx exp]]
+                  body
+                  [cast [pwasm-exp]
+                    [alloc-init
+                      [record
+                        tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
+                        insts [growable-list-to-list ginsts-body]]]]]]]]]]
+      [cast [pwasm-exp]
+        [alloc-init
+          [record
+            tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
+            insts [growable-list-to-list ginsts]]]]]
+
+    continue
+    [let
+      [assignments [deref [pfield exp assignments]]
+       n-ass [list-size assignments]
+       insts [[instantiate list-alloc [pwasm-exp]] [inc n-ass]]]
+      [loop [i 0]
+        [when [lt-s i n-ass]
+          [let
+            [assignment [list-get-p assignments i]
+              loop-var [deref [pindex assignment [i32 0]]]
+              value [deref [pindex assignment [i32 1]]]
+              iargs [[instantiate list-alloc [text]] 1]
+              arguments [[instantiate list-alloc [pwasm-exp]] 1]]
+            [list-set iargs 0 loop-var]
+            [list-set arguments 0 [exp-to-wasm-exp gctx value]]
+            [list-set insts i
               [cast [pwasm-exp]
                 [alloc-init
                   [record
                     tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
-                    name [static-list [text br]]
-                    immediate-arguments br-iargs
-                    arguments [cast [plist [pwasm-exp]] empty-list]]]]]]
-        [cast [pwasm-exp]
-          [alloc-init
-            [record
-              tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
-              insts insts]]]]
+                    name [static-list [text local.set]]
+                    immediate-arguments iargs
+                    arguments arguments]]]]
+            [continue i [inc i]]]]]
+        [let [br-iargs [[instantiate list-alloc [text]] 1]]
+          [list-set br-iargs 0 [static-list [text lab]]]
+          [list-set insts n-ass
+            [cast [pwasm-exp]
+              [alloc-init
+                [record
+                  tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+                  name [static-list [text br]]
+                  immediate-arguments br-iargs
+                  arguments [cast [plist [pwasm-exp]] empty-list]]]]]]
+      [cast [pwasm-exp]
+        [alloc-init
+          [record
+            tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
+            insts insts]]]]
 
-        [do
-          [log-i32 tag]
-          [log-abort [text 'exp-to-wasm-exp unknown tag']]]]]]
+      [log-abort [text 'exp-to-wasm-exp unknown tag']]]]
 
 [def lparen [static-list [text '(']]]
 [def rparen [static-list [text ')']]]
