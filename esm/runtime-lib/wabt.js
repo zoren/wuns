@@ -1,8 +1,8 @@
 import wabtProm from 'wabt'
 const wabt = await wabtProm()
 
-const wat_to_wasm_byte_array = (inputBuffer) => {
-  if (typeof inputBuffer !== 'string') throw new Error('expects string')
+const wat_to_wasm_byte_array = (inputString) => {
+  if (typeof inputString !== 'string') throw new Error('expects string')
   try {
     /**
      * @typedef {import('wabt')} PWabtModule
@@ -11,18 +11,25 @@ const wat_to_wasm_byte_array = (inputBuffer) => {
      * @typedef {Parameters<WabtModule2['parseWat']>} ParseWatParams
      * @typedef {NonNullable<ParseWatParams[2]>} ParseWatOptions
      * @type {ParseWatOptions}
-    */
+     */
     const wasmFeatures = {
       multi_memory: true,
       memory64: true,
     }
-    const module = wabt.parseWat('', inputBuffer, wasmFeatures)
+    const module = wabt.parseWat('', inputString, wasmFeatures)
     module.resolveNames()
     // todo maybe do this for debug symbols?
     // module.generateNames()
     // warning the types for wabt does not reflect that validate also needs wasmFeatures
     // todo report this to wabt
-    module.validate(wasmFeatures)
+    try {
+      module.validate(wasmFeatures)
+      // console.log(inputString)
+    } catch (e) {
+      console.error(e)
+      console.error(inputString)
+      throw e
+    }
     const { buffer, log } = module.toBinary({
       // log: true,
       write_debug_names: true,
@@ -31,7 +38,7 @@ const wat_to_wasm_byte_array = (inputBuffer) => {
     return buffer
   } catch (e) {
     console.error(e)
-    console.error(new TextDecoder().decode(inputBuffer))
+    console.error(new TextDecoder().decode(inputString))
     throw e
   }
 }
