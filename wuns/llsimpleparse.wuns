@@ -2311,62 +2311,27 @@
 
 [datatype wasm-type [] [text]]
 
-[def wasm-constant-tag [i32 1]]
-
-[datatype wasm-constant []
-  [record
-    [tag [exp wasm-constant-tag]]
-    [type [wasm-type]]
-    [value [text]]]]
-
-[def wasm-intrinsic-tag [i32 2]]
-[def wasm-call-tag [i32 3]]
-[def wasm-if-tag [i32 4]]
-[def wasm-loop-tag [i32 5]]
-[def wasm-instructions-tag [i32 6]]
-
 [datatype
-  wasm-intrinsic []
-  [record
-    [tag [exp wasm-intrinsic-tag]]
-    [name [text]]
-    [immediate-arguments [plist [text]]]
-    [arguments [plist [pmem [wasm-exp]]]]]
-
-  wasm-call []
-  [record
-    [tag [exp wasm-call-tag]]
-    [name [text]]
-    [arguments [plist [pmem [wasm-exp]]]]]
-
-  wasm-if []
-  [record
-    [tag [exp wasm-if-tag]]
-    [result [plist [wasm-type]]]
-    [condition [pmem [wasm-exp]]]
-    [true [pmem [wasm-exp]]]
-    [false [pmem [wasm-exp]]]]
-
-  wasm-loop []
-  [record
-    [tag [exp wasm-loop-tag]]
-    [label [text]]
-    [result [plist [wasm-type]]]
-    [body [pmem [wasm-exp]]]]
-
-  wasm-instructions []
-  [record
-    [tag [exp wasm-instructions-tag]]
-    [insts [plist [pmem [wasm-exp]]]]]
-
   wasm-exp []
-  [union
-    [wasm-constant]
-    [wasm-intrinsic]
-    [wasm-call]
-    [wasm-if]
-    [wasm-instructions]
-      ]]
+  [enum [i32]
+    [constant
+      type [wasm-type]
+      value [text]]
+    [intrinsic
+      name [text]
+      immediate-arguments [plist [text]]
+      arguments [plist [pmem [wasm-exp]]]]
+    [if
+      result [plist [wasm-type]]
+      condition [pmem [wasm-exp]]
+      true [pmem [wasm-exp]]
+      false [pmem [wasm-exp]]]
+    [loop
+      label [text]
+      result [plist [wasm-type]]
+      body [pmem [wasm-exp]]]
+    [instructions
+      insts [plist [pmem [wasm-exp]]]]]]
 
 [datatype pwasm-exp [] [pmem [wasm-exp]]]
 
@@ -2383,23 +2348,22 @@
     [eq t type-i64]
     i64-text
 
-    [let [tag [deref [pfield t tag]]]
-      [match t
-        integer
-        [do
-          [when [not [deref [pfield t signed]]]
-            [log-i32 [deref [pfield t n-bytes]]]
-            [log-i32 [deref [pfield t signed]]]
-            [log-abort [text 'type-to-wasm-type unsigned integer not supported']]]
-          [ifs
-            [eq [deref [pfield t n-bytes]] [i32 4]]
-            i32-text
+    [match t
+      integer
+      [do
+        [when [not [deref [pfield t signed]]]
+          [log-i32 [deref [pfield t n-bytes]]]
+          [log-i32 [deref [pfield t signed]]]
+          [log-abort [text 'type-to-wasm-type unsigned integer not supported']]]
+        [ifs
+          [eq [deref [pfield t n-bytes]] [i32 4]]
+          i32-text
 
-            [eq [deref [pfield t n-bytes]] [i32 8]]
-            i64-text
+          [eq [deref [pfield t n-bytes]] [i32 8]]
+          i64-text
 
-            [log-abort [text 'type-to-wasm-type integer not supported']]]]
-        [log-abort [text 'type-to-wasm-type non-integer not supported']]]]]]
+          [log-abort [text 'type-to-wasm-type integer not supported']]]]
+      [log-abort [text 'type-to-wasm-type non-integer not supported']]]]]
 
 [defn wuns-type-to-num-of-primitives [t [wtype]] [i32]
   [match t
@@ -2473,8 +2437,7 @@
           [continue i [inc i]]]
         [cast [pwasm-exp]
           [alloc-init
-            [record
-              tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
+            [enum [wasm-exp] instructions
               insts insts]]]]]
 
     record
@@ -2494,8 +2457,7 @@
           [continue i [inc i]]]
         [cast [pwasm-exp]
           [alloc-init
-            [record
-              tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
+            [enum [wasm-exp] instructions
               insts insts]]]]]
 
     [let
@@ -2504,8 +2466,7 @@
       [list-set iargs 0 concatted-name]
       [cast [pwasm-exp]
         [alloc-init
-          [record
-            tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+          [enum [wasm-exp] intrinsic
             name [static-list [text local.get]]
             immediate-arguments iargs
             arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]]]
@@ -2524,8 +2485,7 @@
       [growable-list-push ginsts
         [cast [pwasm-exp]
           [alloc-init
-            [record
-              tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+            [enum [wasm-exp] intrinsic
               name [static-list [text local.set]]
               immediate-arguments iargs
               arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]]
@@ -2534,8 +2494,7 @@
     [growable-list-push ginsts
       [cast [pwasm-exp]
         [alloc-init
-          [record
-            tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+          [enum [wasm-exp] intrinsic
             name [static-list [text drop]]
             immediate-arguments [[instantiate list-alloc [text]] 0]
             arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]
@@ -2584,9 +2543,8 @@
        txt [integer-to-text value negative]]
       [cast [pwasm-exp]
         [alloc-init
-          [record
-            tag [annotation [exp wasm-constant-tag] wasm-constant-tag]
-            type type
+          [enum [wasm-exp] constant
+            type [type-to-wasm-type type]
             value txt]]]]
 
     var
@@ -2601,10 +2559,8 @@
           [iargs [[instantiate list-alloc [text]] 1]]
           [list-set iargs 0 name]
           [alloc-init
-            [record
-              tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
-              name
-              [static-list [text global.get]]
+            [enum [wasm-exp] intrinsic
+              name [static-list [text global.get]]
               immediate-arguments iargs
               arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]]
 
@@ -2620,8 +2576,7 @@
           [continue i [inc i]]]]
       [cast [pwasm-exp]
         [alloc-init
-          [record
-            tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+          [enum [wasm-exp] intrinsic
             name iname
             immediate-arguments [cast [plist [text]] empty-list]
             arguments warguments]]]]
@@ -2640,8 +2595,7 @@
           [continue i [inc i]]]]
       [cast [pwasm-exp]
         [alloc-init
-          [record
-            tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+          [enum [wasm-exp] intrinsic
             name [static-list [text call]]
             immediate-arguments iargs
             arguments warguments]]]]
@@ -2657,8 +2611,7 @@
        tif [type-of gctx exp]]
       [cast [pwasm-exp]
         [alloc-init
-          [record
-            tag [annotation [exp wasm-if-tag] wasm-if-tag]
+          [enum [wasm-exp] if
             result [type-to-wasm-types tif]
             condition econd
             true etrue
@@ -2676,8 +2629,7 @@
           [continue i [inc i]]]
         [cast [pwasm-exp]
           [alloc-init
-            [record
-              tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
+            [enum [wasm-exp] instructions
               insts insts]]]]]
 
     ; identical to tuple, use multiple match...
@@ -2693,8 +2645,7 @@
           [continue i [inc i]]]
         [cast [pwasm-exp]
           [alloc-init
-            [record
-              tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
+            [enum [wasm-exp] instructions
               insts insts]]]]]
 
     let-loop
@@ -2726,20 +2677,17 @@
           [growable-list-push ginsts
             [cast [pwasm-exp]
               [alloc-init
-                [record
-                  tag [annotation [exp wasm-loop-tag] wasm-loop-tag]
+                [enum [wasm-exp] loop
                   label [static-list [text lab]]
                   result [type-to-wasm-types [type-of gctx exp]]
                   body
                   [cast [pwasm-exp]
                     [alloc-init
-                      [record
-                        tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
+                      [enum [wasm-exp] instructions
                         insts [growable-list-to-list ginsts-body]]]]]]]]]]
       [cast [pwasm-exp]
         [alloc-init
-          [record
-            tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
+          [enum [wasm-exp] instructions
             insts [growable-list-to-list ginsts]]]]]
 
     continue
@@ -2760,8 +2708,7 @@
             [list-set insts i
               [cast [pwasm-exp]
                 [alloc-init
-                  [record
-                    tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+                  [enum [wasm-exp] intrinsic
                     name [static-list [text local.set]]
                     immediate-arguments iargs
                     arguments arguments]]]]
@@ -2771,15 +2718,13 @@
           [list-set insts n-ass
             [cast [pwasm-exp]
               [alloc-init
-                [record
-                  tag [annotation [exp wasm-intrinsic-tag] wasm-intrinsic-tag]
+                [enum [wasm-exp] intrinsic
                   name [static-list [text br]]
                   immediate-arguments br-iargs
                   arguments [cast [plist [pwasm-exp]] empty-list]]]]]]
       [cast [pwasm-exp]
         [alloc-init
-          [record
-            tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
+          [enum [wasm-exp] instructions
             insts insts]]]]
 
       [log-abort [text 'exp-to-wasm-exp unknown tag']]]]
@@ -2821,92 +2766,87 @@
       [continue i [inc i]]]]]
 
 [defn write-wasm-exp [writer [writer] indent-n [i32] exp [pwasm-exp]] [tuple]
-  [let [tag [deref [pfield exp tag]]]
-    [if
-      [eq tag wasm-instructions-tag]
-      [let
-        [cexp [cast [pmem [wasm-instructions]] exp]
-         insts [deref [pfield cexp insts]]]
-        [loop [i 0 n [list-size insts]]
-          [when [lt-s i n]
-            [write-text writer space]
-            [write-wasm-exp writer indent-n [list-get insts i]]
-            [continue i [inc i]]]]]
+  [match exp
+    instructions
+    [let
+      [insts [deref [pfield exp insts]]]
+      [loop [i 0 n [list-size insts]]
+        [when [lt-s i n]
+          [write-text writer space]
+          [write-wasm-exp writer indent-n [list-get insts i]]
+          [continue i [inc i]]]]]
 
-      [do
-        [write-indents writer indent-n]
-      [ifs
-      [eq tag wasm-constant-tag]
-      [let [cexp [cast [pmem [wasm-constant]] exp]]
-        [write-text writer lparen]
-        [write-text writer [type-to-wasm-type [deref [pfield cexp type]]]]
-        [write-text writer [static-list [text '.const']]]
-        [write-text writer space]
-        [write-text writer [deref [pfield cexp value]]]
-        [write-text writer rparen]]
+    [do
+      [write-indents writer indent-n]
+      [match exp
+        constant
+        [do
+          [write-text writer lparen]
+          [write-text writer [deref [pfield exp type]]]
+          [write-text writer [static-list [text '.const']]]
+          [write-text writer space]
+          [write-text writer [deref [pfield exp value]]]
+          [write-text writer rparen]]
 
-      [eq tag wasm-intrinsic-tag]
-      [let
-        [cexp [cast [pmem [wasm-intrinsic]] exp]
-         iargs [deref [pfield cexp immediate-arguments]]
-         args [deref [pfield cexp arguments]]]
-        [write-text writer lparen]
-        [write-text writer [deref [pfield cexp name]]]
-        [loop [i 0 n [list-size iargs]]
-          [when [lt-s i n]
-            [write-text writer space]
-            [write-dollar-id writer [list-get iargs i]]
-            [continue i [inc i]]]]
-        [loop [i 0 n [list-size args]]
-          [when [lt-s i n]
-            [write-text writer space]
-            [write-wasm-exp writer [inc indent-n] [list-get args i]]
-            [continue i [inc i]]]]
-        [write-text writer rparen]]
+        intrinsic
+        [let
+          [iargs [deref [pfield exp immediate-arguments]]
+          args [deref [pfield exp arguments]]]
+          [write-text writer lparen]
+          [write-text writer [deref [pfield exp name]]]
+          [loop [i 0 n [list-size iargs]]
+            [when [lt-s i n]
+              [write-text writer space]
+              [write-dollar-id writer [list-get iargs i]]
+              [continue i [inc i]]]]
+          [loop [i 0 n [list-size args]]
+            [when [lt-s i n]
+              [write-text writer space]
+              [write-wasm-exp writer [inc indent-n] [list-get args i]]
+              [continue i [inc i]]]]
+          [write-text writer rparen]]
 
-      [eq tag wasm-if-tag]
-      [let
-        [cexp [cast [pmem [wasm-if]] exp]]
-        [write-text writer lparen]
-        [write-text writer [static-list [text 'if']]]
+        if
+        [do
+          [write-text writer lparen]
+          [write-text writer [static-list [text 'if']]]
 
-        [write-results writer [deref [pfield cexp result]]]
+          [write-results writer [deref [pfield exp result]]]
 
-        [write-text writer space]
-        [write-wasm-exp writer [inc indent-n] [deref [pfield cexp condition]]]
-        [write-text writer space]
+          [write-text writer space]
+          [write-wasm-exp writer [inc indent-n] [deref [pfield exp condition]]]
+          [write-text writer space]
 
-        [write-indents writer [inc indent-n]]
-        [write-text writer lparen]
-        [write-text writer [static-list [text then]]]
-        [write-wasm-exp writer [add 2 indent-n] [deref [pfield cexp true]]]
-        [write-text writer rparen]
+          [write-indents writer [inc indent-n]]
+          [write-text writer lparen]
+          [write-text writer [static-list [text then]]]
+          [write-wasm-exp writer [add 2 indent-n] [deref [pfield exp true]]]
+          [write-text writer rparen]
 
-        [write-text writer space]
+          [write-text writer space]
 
-        [write-indents writer [inc indent-n]]
-        [write-text writer lparen]
-        [write-text writer [static-list [text else]]]
-        [write-text writer space]
-        [write-wasm-exp writer [add 2 indent-n] [deref [pfield cexp false]]]
-        [write-text writer rparen]
-        [write-text writer rparen]]
+          [write-indents writer [inc indent-n]]
+          [write-text writer lparen]
+          [write-text writer [static-list [text else]]]
+          [write-text writer space]
+          [write-wasm-exp writer [add 2 indent-n] [deref [pfield exp false]]]
+          [write-text writer rparen]
+          [write-text writer rparen]]
 
-      [eq tag wasm-loop-tag]
-      [let
-        [cexp [cast [pmem [wasm-loop]] exp]
-         label [deref [pfield cexp label]]
-         result [deref [pfield cexp result]]
-         body [deref [pfield cexp body]]]
-        [write-text writer lparen]
-        [write-text writer [static-list [text 'loop']]]
-        [write-text writer space]
-        [write-dollar-id writer label]
-        [write-results writer result]
-        [write-wasm-exp writer [inc indent-n] body]
-        [write-text writer rparen]]
+        loop
+        [let
+          [label [deref [pfield exp label]]
+          result [deref [pfield exp result]]
+          body [deref [pfield exp body]]]
+          [write-text writer lparen]
+          [write-text writer [static-list [text 'loop']]]
+          [write-text writer space]
+          [write-dollar-id writer label]
+          [write-results writer result]
+          [write-wasm-exp writer [inc indent-n] body]
+          [write-text writer rparen]]
 
-      [log-abort [text 'write-wasm-exp unknown tag']]]]]]]
+        [log-abort [text 'write-wasm-exp unknown tag']]]]]]
 
 [defn write-func-param [writer [writer] pname-postfixes [p-growable-list [text]] pname [text] type [text]] []
   [write-text writer space]
