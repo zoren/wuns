@@ -717,6 +717,9 @@
         [continue i [inc i]]]
       [cast [pmem v] [i32 0]]]]]
 
+[genfn assoc-list-alloc [k datatype v datatype] [sz [i32]] [p-assoc-list k v]
+  [[instantiate growable-list-alloc-init [tuple k v]] sz]]
+
 [datatype form []
   [enum [i32]
     [word
@@ -1207,30 +1210,15 @@
 
   [i32]]
 
-[def global-desc-func-tag [i32 2]]
-
-[datatype global-desc-func []
-  [record
-    [tag [exp global-desc-func-tag]]
-    [parameter-patterns [plist [ppattern]]]
-    [parameter-types [plist [wtype]]]
-    [result [wtype]]
-    [locals [plist [tuple [text] [wtype]]]]
-    [body [plist [pexp]]]]]
-
-[def global-desc-def-tag [i32 3]]
-
-[datatype global-desc-def []
-  [record
-    [tag [exp global-desc-def-tag]]
-    [exp [pexp]]
-    [mutable [i32]]]]
-
 [datatype global-desc-kind []
-  [union
-    [global-desc-func]
-    [global-desc-def]
-    ]]
+  [enum [i32]
+    [func
+      parameter-patterns [plist [ppattern]]
+      parameter-types [plist [wtype]]
+      result [wtype]]
+    [def
+      exp [pexp]
+      mutable [i32]]]]
 
 [datatype error []
   [record
@@ -1251,6 +1239,11 @@
     [func-local-variables [p-assoc-list [text] [wtype]]] ; for a func, all its locals, not set for let/loop
     ]]
 
+[datatype function-body []
+  [record
+    [locals [plist [tuple [text] [wtype]]]]
+    [body [plist [pexp]]]]]
+
 [datatype global-context []
   [record
     [errors [p-growable-list [error]]]
@@ -1261,10 +1254,8 @@
     [exports [p-assoc-list [text] [pmem [global-desc-kind]]]]
     [local-stack [p-growable-list [local-frame]]]
     [exp-to-forms [p-assoc-list [pmem -a] [pform]]]
+    [function-bodies [p-assoc-list [pmem [global-desc-kind]] [pmem [function-body]]]]
     ]]
-
-[genfn assoc-list-alloc [k datatype v datatype] [sz [i32]] [p-assoc-list k v]
-  [[instantiate growable-list-alloc-init [tuple k v]] sz]]
 
 [defn global-context-alloc [form-offsets [p-assoc-list [pform] [i32]]] [pmem [global-context]]
   [alloc-init
@@ -1277,6 +1268,7 @@
       exports [[instantiate assoc-list-alloc [text] [pmem [global-desc-kind]]] [i32 10]]
       local-stack [[instantiate growable-list-alloc-init [local-frame]] [i32 10]]
       exp-to-forms [[instantiate assoc-list-alloc [pmem -a] [pform]] [i32 10]]
+      function-bodies [[instantiate assoc-list-alloc [pmem [global-desc-kind]] [pmem [function-body]]] [i32 8]]
 ]]]
 
 [defn global-context-free [gctx [pmem [global-context]]] [tuple]
@@ -1766,37 +1758,39 @@
     [form-word-is f]
     [let
       [w [form-word-get-report gctx f]
-       [found lvar-type] [local-stack-lookup gctx w]
+       [lfound lvar-type] [local-stack-lookup gctx w]
        var-type
-        [if found
+       [if lfound
           lvar-type
           [let [[gfound pdesc] [lookup-global gctx w]]
-            [ifs
+            [if
               [not gfound]
               [do
                 [log-text w]
                 [push-error gctx f [static-list [text 'variable not found']]]
                 type-error]
 
-              [eq [deref [pfield pdesc tag]] global-desc-def-tag]
-              [type-of gctx [deref [pfield [cast [pmem [global-desc-def]] pdesc] exp]]]
+              [match pdesc
+                def
+                [type-of gctx [deref [pfield pdesc exp]]]
 
-              [eq [deref [pfield pdesc tag]] global-desc-func-tag]
-              [let [fdesc [cast [pmem [global-desc-func]] pdesc]]
+                func
                 [type-function-alloc
-                  [deref [pfield fdesc parameter-types]]
-                  [deref [pfield fdesc result]]]]
+                  [deref [pfield pdesc parameter-types]]
+                  [deref [pfield pdesc result]]]
 
-              [do
-                [push-error gctx f [static-list [text 'global variable has unknown tag']]]
-                type-error]]]]
+                [do
+                  [push-error gctx f [static-list [text 'global variable has unknown tag']]]
+                  type-error]]]]]
        exp
        [alloc-init
         [enum [wexp] var
           name w]]]
+      [when [eq 0 [list-size w]]
+        [log-abort [text 'form-to-exp empty word']]]
       ; todo maybe drop the type annotation as the type can be gotten from lctx
       [annotate gctx exp var-type]
-      [when found
+      [when lfound
         [annotate-local gctx exp]]
       exp]
 
@@ -2180,7 +2174,6 @@
                result-type [form-to-type gctx empty-list [list-get fl 3]]
                fname [form-word-get-report gctx name-form]
                [ppatterns ptypes] [parameter-forms-to-lists gctx empty-list param-list]
-               desc [[instantiate alloc-fn [global-desc-func]]]
                stack [deref [pfield gctx local-stack]]
                parameter-pat-vars [[instantiate assoc-list-alloc [text] [wtype]] [i32 8]]
                func-local-variables [[instantiate assoc-list-alloc [text] [wtype]] [i32 8]]]
@@ -2200,20 +2193,25 @@
                   func-local-variables func-local-variables]]
               [if [assoc-list-get-value [deref [pfield gctx names]] fname]
                 [push-error gctx name-form [static-list [text 'name already defined']]]]
-              [passign desc
-                [record
-                  tag [annotation [exp global-desc-func-tag] global-desc-func-tag]
-                  parameter-patterns ppatterns
-                  parameter-types ptypes
-                  result result-type]]
-              ; push the incomplete desc so its signature is available for recursive calls
-              [assoc-list-push [deref [pfield gctx names]] fname desc]
-              [let [bodies [forms-to-exps gctx fl 4 n]]
-                [when [not [type-assignable result-type [type-ofs gctx bodies]]]
-                  [push-error gctx form [static-list [text 'result type mismatch']]]]
-                [growable-list-pop [deref [pfield gctx local-stack]]]
-                [passign [pfield desc locals] [growable-list-to-list func-local-variables]]
-                [passign [pfield desc body] bodies]]]]
+              [let
+                [desc
+                  [alloc-init
+                    [enum [global-desc-kind] func
+                      parameter-patterns ppatterns
+                      parameter-types ptypes
+                      result result-type]]]
+                ; push the desc before processing the body so its signature is available for recursive calls
+                [assoc-list-push [deref [pfield gctx names]] fname desc]
+                [let [bodies [forms-to-exps gctx fl 4 n]]
+                  [when [not [type-assignable result-type [type-ofs gctx bodies]]]
+                    [push-error gctx form [static-list [text 'result type mismatch']]]]
+                  [growable-list-pop [deref [pfield gctx local-stack]]]
+                  [assoc-list-push [deref [pfield gctx function-bodies]]
+                    desc
+                    [alloc-init
+                      [record
+                        locals [growable-list-to-list func-local-variables]
+                        body bodies]]]]]]]
 
           [text-eq fw [static-list [text genfn]]]
           [do
@@ -2237,8 +2235,7 @@
                exp [form-to-exp gctx [list-get fl 2]]
                def-desc
                [alloc-init
-                [record
-                  tag [annotation [exp global-desc-def-tag] global-desc-def-tag]
+                [enum [global-desc-kind] def
                   exp exp
                   mutable [text-eq fw [static-list [text mutable]]]]]]
               [assoc-list-push [deref [pfield gctx names]] dname def-desc]]]
@@ -2629,10 +2626,10 @@
         [when [lt-s i [list-size bindings]]
           [let
             [binding [list-get-p bindings i]
-              pattern [deref [pindex binding [i32 0]]]
-              value [deref [pindex binding [i32 1]]]
-              wvalue [exp-to-wasm-exp gctx value]
-              pat-tag [deref [pfield pattern tag]]]
+             pattern [deref [pindex binding [i32 0]]]
+             value [deref [pindex binding [i32 1]]]
+             wvalue [exp-to-wasm-exp gctx value]
+             pat-tag [deref [pfield pattern tag]]]
             [growable-list-push ginsts wvalue]
             [pattern-type-to-local-set-drop gctx ginsts pattern [type-of gctx value]]
             [continue i [inc i]]]]]
@@ -2668,10 +2665,10 @@
         [when [lt-s i n-ass]
           [let
             [assignment [list-get-p assignments i]
-              loop-var [deref [pindex assignment [i32 0]]]
-              value [deref [pindex assignment [i32 1]]]
-              iargs [[instantiate list-alloc [text]] 1]
-              arguments [[instantiate list-alloc [pwasm-exp]] 1]]
+             loop-var [deref [pindex assignment [i32 0]]]
+             value [deref [pindex assignment [i32 1]]]
+             iargs [[instantiate list-alloc [text]] 1]
+             arguments [[instantiate list-alloc [pwasm-exp]] 1]]
             [list-set iargs 0 loop-var]
             [list-set arguments 0 [exp-to-wasm-exp gctx value]]
             [list-set insts i
@@ -2896,64 +2893,6 @@
 
       [log-abort [text 'write-func-param-by-type unknown tag']]]]]
 
-[defn write-func-desc-to-wasm [writer [writer] gctx [pmem [global-context]] fname [text] func-desc [pmem [global-desc-func]]] []
-  [write-text writer lparen]
-  [write-text writer [static-list [text func]]]
-  [write-text writer space]
-
-  [write-dollar-id writer fname]
-
-  [let
-    [ppats [deref [pfield func-desc parameter-patterns]]
-     ptypes [deref [pfield func-desc parameter-types]]
-     result [deref [pfield func-desc result]]
-     locals [deref [pfield func-desc locals]]
-     body [deref [pfield func-desc body]]
-     gl [[instantiate growable-list-alloc-init [text]] 8]]
-    [loop [i 0 n [list-size ppats]]
-      [when [lt-s i n]
-        [let
-          [ppat [list-get ppats i]
-           wuns-type [list-get ptypes i]]
-          [write-func-param-by-type writer gl ppat wuns-type]]
-        [continue i [inc i]]]]
-    [growable-list-free gl]
-
-    [write-results writer [type-to-wasm-types result]]
-
-    [loop [i 0 n-locals [list-size locals]]
-      [when [lt-s i n-locals]
-        [let [binding [list-get-p locals i]]
-          [write-text writer space]
-          [write-text writer lparen]
-          [write-text writer [static-list [text local]]]
-          [write-text writer space]
-          [write-dollar-id writer [deref [pindex binding [i32 0]]]]
-          [write-text writer space]
-          [write-text writer [type-to-wasm-type [deref [pindex binding [i32 1]]]]]
-          [write-text writer rparen]
-          [continue i [inc i]]]]]
-
-    [loop [i 0 n [list-size body]]
-      [when [lt-s i n]
-        [let [b [list-get body i]]
-          [write-text writer indent]
-          [write-wasm-exp writer 1 [exp-to-wasm-exp gctx b]]
-          [when [lt-s i [dec n]]
-            [let
-              [t [type-of gctx b]
-               n-prim [wuns-type-to-num-of-primitives t]]
-              [loop [j 0]
-                [when [lt-s j n-prim]
-                  [write-text writer [static-list [text ' (drop)']]]
-                  [continue j [inc j]]]]]]
-          [continue i [inc i]]]]]
-          ]
-
-  [write-text writer rparen]
-  [write-text writer newline]
-  ]
-
 [defn write-export [writer [writer] export-name [text] export-kind [text] internal-name [text]] [tuple]
   [write-text writer lparen]
   [write-text writer [static-list [text 'export']]]
@@ -2989,22 +2928,75 @@
         [let
           [assoc-pair [growable-list-get-p names i]
            name [deref [pindex assoc-pair [i32 0]]]
-           desc [deref [pindex assoc-pair [i32 1]]]
-           tag [deref [pfield desc tag]]]
-          [ifs
-            [eq tag global-desc-func-tag]
-            [write-func-desc-to-wasm writer gctx name desc]
+           desc [deref [pindex assoc-pair [i32 1]]]]
+          [match desc
+            func
+            [do
+              [write-text writer lparen]
+              [write-text writer [static-list [text func]]]
+              [write-text writer space]
 
-            [eq tag global-desc-def-tag]
-            [let
-              [dd [cast [pmem [global-desc-def]] desc]
-               exp [deref [pfield dd exp]]]
+              [write-dollar-id writer name]
+
+              [let
+                [ppats [deref [pfield desc parameter-patterns]]
+                 ptypes [deref [pfield desc parameter-types]]
+                 result [deref [pfield desc result]]
+                 gl [[instantiate growable-list-alloc-init [text]] 8]]
+                [loop [i 0 n [list-size ppats]]
+                  [when [lt-s i n]
+                    [let
+                      [ppat [list-get ppats i]
+                      wuns-type [list-get ptypes i]]
+                      [write-func-param-by-type writer gl ppat wuns-type]]
+                    [continue i [inc i]]]]
+                [growable-list-free gl]
+
+                [write-results writer [type-to-wasm-types result]]
+                [let
+                  [fbody [deref [assoc-list-get-value [deref [pfield gctx function-bodies]] desc]]
+                   locals [deref [pfield fbody locals]]
+                   body [deref [pfield fbody body]]]
+                  [loop [n-locals [list-size locals] i 0]
+                    [when [lt-s i n-locals]
+                      [let [binding [list-get-p locals i]]
+                        [write-text writer space]
+                        [write-text writer lparen]
+                        [write-text writer [static-list [text local]]]
+                        [write-text writer space]
+                        [write-dollar-id writer [deref [pindex binding [i32 0]]]]
+                        [write-text writer space]
+                        [write-text writer [type-to-wasm-type [deref [pindex binding [i32 1]]]]]
+                        [write-text writer rparen]
+                        [continue i [inc i]]]]]
+
+                  [loop [i 0 n [list-size body]]
+                    [when [lt-s i n]
+                      [let [b [list-get body i]]
+                        [write-text writer indent]
+                        [write-wasm-exp writer 1 [exp-to-wasm-exp gctx b]]
+                        [when [lt-s i [dec n]]
+                          [let
+                            [t [type-of gctx b]
+                             n-prim [wuns-type-to-num-of-primitives t]]
+                            [loop [j 0]
+                              [when [lt-s j n-prim]
+                                [write-text writer [static-list [text ' (drop)']]]
+                                [continue j [inc j]]]]]]
+                        [continue i [inc i]]]]]]]
+
+              [write-text writer rparen]
+              [write-text writer newline]
+            ]
+
+            def
+            [let [exp [deref [pfield desc exp]]]
               [write-text writer lparen]
               [write-text writer [static-list [text global]]]
               [write-text writer space]
               [write-dollar-id writer name]
               [write-text writer space]
-              [if [deref [pfield dd mutable]]
+              [if [deref [pfield desc mutable]]
                 [do
                   [write-text writer [static-list [text '(mut ']]]
                   [write-text writer [type-to-wasm-type [type-of gctx exp]]]
@@ -3025,10 +3017,9 @@
         [let
           [assoc-pair [growable-list-get-p exports i]
            name [deref [pindex assoc-pair [i32 0]]]
-           desc [deref [pindex assoc-pair [i32 1]]]
-           tag [deref [pfield desc tag]]]
-          [ifs
-            [eq tag global-desc-func-tag]
+           desc [deref [pindex assoc-pair [i32 1]]]]
+          [match desc
+            func
             [write-export writer name [static-list [text 'func']] name]
 
             [log-ar [text 'write-global-context export ignoring unknown tag']]]
