@@ -979,65 +979,36 @@
         [intrinsic i64.eq [i64 0] [memory-compare [list-data-array w1] [list-data-array w2] n1]]
         false]]]]
 
-[def type-integer-tag [i32 1]]
-[def type-tuple-tag [i32 2]]
-[def type-error-tag [i32 3]]
-[def type-function-tag [i32 4]]
-[def type-record-tag [i32 5]]
-[def type-union-tag [i32 6]]
-
-[datatype type-error []
-  [record
-    [tag [exp type-error-tag]]]]
-
-[datatype type-integer []
-  [record
-    [tag [exp type-integer-tag]]
-    [n-bytes [i32]]
-    [signed [boolean]]]]
-
 [datatype
-  type-tuple []
-  [record
-    [tag [exp type-tuple-tag]]
-    [types [plist [pmem [wtype-data]]]]]
-
-  type-record []
-  [record
-    [tag [exp type-record-tag]]
-    [types [plist [pmem [wtype-data]]]]
-    [names [plist [text]]]]
-
-  type-function []
-  [record
-    [tag [exp type-function-tag]]
-    [parameters [plist [pmem [wtype-data]]]]
-    [result [pmem [wtype-data]]]]
-
-  type-union []
-  [record
-    [tag [exp type-union-tag]]
-    [types [plist [pmem [wtype-data]]]]]
-
   wtype-data []
-  [union
-    [type-error]
-    [type-integer]
-    [type-tuple]
-    [type-record]
-    [type-function]
-    [type-union]]]
+  [enum [i32]
+    [error]
+    [integer
+      n-bytes [i32]
+      signed [boolean]]
+    [tuple
+      types [plist [pmem [wtype-data]]]]
+    [record
+      types [plist [pmem [wtype-data]]]
+      names [plist [text]]]
+    [function
+      parameters [plist [pmem [wtype-data]]]
+      result [pmem [wtype-data]]]
+    [union
+      types [plist [pmem [wtype-data]]]]
+]]
 
 [datatype wtype [] [pmem [wtype-data]]]
 
 [defn type-empty-is [t [wtype]] [boolean]
-  [and [eq [deref [pfield t tag]] type-union-tag] [list-empty-is [deref [pfield [cast [pmem [type-union]] t] types]]]]]
+  [match t
+    union [list-empty-is [deref [pfield t types]]]
+    false]]
 
 [def type-union-empty
   [cast [wtype]
     [data mem
-      [record
-        tag [annotation [exp type-union-tag] type-union-tag]
+      [enum [wtype-data] union
         types [cast [plist [wtype]] empty-list]]]]]
 
 ; [defn type-union-alloc [types [plist [wtype]]] [wtype]
@@ -1049,38 +1020,38 @@
 ;         tag [annotation [exp type-union-tag] type-union-tag]
 ;         types types]]]]
 
-[defn write-debug-type [writer [writer] t [wtype]] []
-  [let
-    [tag [deref [pfield t tag]]]
-    [ifs
-      [eq tag type-integer-tag]
-      [let
-        [it [cast [pmem [type-integer]] t]
-         n-bytes [deref [pfield it n-bytes]]
-         signed [deref [pfield it signed]]]
-        [write-text writer [static-list [text '[integer ']]]
-        ; [intrinsic i64.extend-i32-s i]
-        [write-text writer [integer-to-text [intrinsic i64.extend-i32-s n-bytes] false]]
-        [write-text writer [static-list [text ' ']]]
-        [write-text writer [integer-to-text [intrinsic i64.extend-i32-s signed] false]]
-        [write-text writer [static-list [text ']']]]
-        ]
+; [defn write-debug-type [writer [writer] t [wtype]] []
+;   [let
+;     [tag [deref [pfield t tag]]]
+;     [ifs
+;       [eq tag type-integer-tag]
+;       [let
+;         [it [cast [pmem [type-integer]] t]
+;          n-bytes [deref [pfield it n-bytes]]
+;          signed [deref [pfield it signed]]]
+;         [write-text writer [static-list [text '[integer ']]]
+;         ; [intrinsic i64.extend-i32-s i]
+;         [write-text writer [integer-to-text [intrinsic i64.extend-i32-s n-bytes] false]]
+;         [write-text writer [static-list [text ' ']]]
+;         [write-text writer [integer-to-text [intrinsic i64.extend-i32-s signed] false]]
+;         [write-text writer [static-list [text ']']]]
+;         ]
 
-      [eq tag type-error-tag]
-      [write-text writer [static-list [text '[error]']]]
+;       [eq tag type-error-tag]
+;       [write-text writer [static-list [text '[error]']]]
 
-      [eq tag type-tuple-tag]
-      [write-text writer [static-list [text '[tuple]']]]
+;       [eq tag type-tuple-tag]
+;       [write-text writer [static-list [text '[tuple]']]]
 
-      [eq tag type-record-tag]
-      [write-text writer [static-list [text '[record]']]]
+;       [eq tag type-record-tag]
+;       [write-text writer [static-list [text '[record]']]]
 
-      [eq tag type-function-tag]
-      [write-text writer [static-list [text '[function]']]]
+;       [eq tag type-function-tag]
+;       [write-text writer [static-list [text '[function]']]]
 
-      [do
-        [log-i32 tag]
-        [log-abort [text 'write-debug-type unknown type tag']]]]]]
+;       [do
+;         [log-i32 tag]
+;         [log-abort [text 'write-debug-type unknown type tag']]]]]]
 
 [def pattern-var-tag [i32 1]]
 [def pattern-wildcard-tag [i32 2]]
@@ -1263,40 +1234,40 @@
 
 [def type-i32
   [cast [wtype]
-    [data mem [record
-      tag [annotation [exp type-integer-tag] type-integer-tag]
-      n-bytes 4
-      signed true]]]]
+    [data mem
+      [enum [wtype-data] integer
+        n-bytes 4
+        signed true]]]]
 
 [def type-i64
   [cast [wtype]
-    [data mem [record
-      tag [annotation [exp type-integer-tag] type-integer-tag]
-      n-bytes 8
-      signed true]]]]
+    [data mem
+      [enum [wtype-data] integer
+        n-bytes 8
+        signed true]]]]
 
-[def type-error [cast [wtype] [data mem [record tag [annotation [exp type-error-tag] type-error-tag]]]]]
+[def type-error
+  [cast [wtype]
+    [data mem
+      [enum [wtype-data] error]]]]
 
 [def type-tuple-empty
   [cast [wtype]
     [data mem
-      [record
-        tag [annotation [exp type-tuple-tag] type-tuple-tag]
+      [enum [wtype-data] tuple
         types [cast [plist [wtype]] empty-list]]]]]
 
 [defn type-tuple-alloc [types [plist [wtype]]] [wtype]
   [if [list-empty-is types]
     type-tuple-empty
     [alloc-init
-      [record
-        tag [annotation [exp type-tuple-tag] type-tuple-tag]
+      [enum [wtype-data] tuple
         types types]]]]
 
 [def type-record-empty
   [cast [wtype]
     [data mem
-      [record
-        tag [annotation [exp type-record-tag] type-record-tag]
+      [enum [wtype-data] record
         types [cast [plist [wtype]] empty-list]
         names [cast [plist [text]] empty-list]]]]]
 
@@ -1307,16 +1278,14 @@
     type-record-empty
     [cast [wtype]
       [alloc-init
-        [record
-          tag [annotation [exp type-record-tag] type-record-tag]
+        [enum [wtype-data] record
           types types
           names names]]]]]
 
 [defn type-function-alloc [parameters [plist [wtype]] result [wtype]] [wtype]
   [cast [wtype]
     [alloc-init
-    [record
-      tag [annotation [exp type-function-tag] type-function-tag]
+    [enum [wtype-data] function
       parameters parameters
       result result]]]]
 
@@ -1623,13 +1592,10 @@
       [eq tag exp-call-tag]
       [let
         [exp [cast [pmem [wexp-call]] e]
-         tf [type-of gctx [deref [pfield exp func]]]
-         type-tag [deref [pfield tf tag]]]
-        [if [eq type-tag type-function-tag]
-          [deref [pfield [cast [pmem [type-function]] tf] result]]
-          [do
-            [log-i32 type-tag]
-            [log-abort [text 'type-of not a function type']]]]]
+         tf [type-of gctx [deref [pfield exp func]]]]
+        [match tf
+          function [deref [pfield tf result]]
+          [log-abort [text 'type-of not a function type']]]]
 
       [eq tag exp-tuple-tag]
       [let
@@ -1695,48 +1661,53 @@
       [if [ne dst-tag src-tag]
         false
         [or
-          [and [eq dst-tag type-integer-tag]
+          [match dst
+            integer
             [let
-              [dst-integer [cast [pmem [type-integer]] dst]
-               src-integer [cast [pmem [type-integer]] src]]
-               [and
-                 [eq [deref [pfield dst-integer n-bytes]] [deref [pfield src-integer n-bytes]]]
-                 [eq [deref [pfield dst-integer signed]] [deref [pfield src-integer signed]]]]]]
-          [and
-          [if [or [eq dst-tag type-tuple-tag] [eq dst-tag type-record-tag]]
-            [let
-              ; here we use that records have the types field at the same offset as tuples do
-              [dst-tuple [cast [pmem [type-tuple]] dst]
-               src-tuple [cast [pmem [type-tuple]] src]
-               dst-types [deref [pfield dst-tuple types]]
-               src-types [deref [pfield src-tuple types]]
-               n [list-size dst-types]]
-              [if [ne n [list-size src-types]]
-                false
-                [loop [i 0]
-                  [if [lt-s i n]
-                    [if [not [type-assignable [list-get dst-types i] [list-get src-types i]]]
-                      false
-                      [continue i [inc i]]]
-                    true]]]]
-              true]
+              [dn [deref [pfield dst n-bytes]]
+               ds [deref [pfield dst signed]]]
+              [match src
+                integer
+                [and
+                  [eq dn [deref [pfield src n-bytes]]]
+                  [eq ds [deref [pfield src signed]]]]
+                false]]
 
-          [if [eq dst-tag type-record-tag]
-            [let
-              [dst-record [cast [pmem [type-record]] dst]
-               src-record [cast [pmem [type-record]] src]
-               dst-names [deref [pfield dst-record names]]
-               src-names [deref [pfield src-record names]]
-               n [list-size dst-names]]
-              [if [ne n [list-size src-names]]
-                false
-                [loop [i 0]
-                  [if [lt-s i n]
-                    [if [not [type-assignable [list-get dst-names i] [list-get src-names i]]]
-                      false
-                      [continue i [inc i]]]
-                    true]]]]
-            true]]]]]]]
+            tuple
+            [match src
+              tuple
+              [let
+                [dst-types [deref [pfield dst types]]
+                 src-types [deref [pfield src types]]
+                 n [list-size dst-types]]
+                [if [ne n [list-size src-types]]
+                  false
+                  [loop [i 0]
+                    [if [lt-s i n]
+                      [if [not [type-assignable [list-get dst-types i] [list-get src-types i]]]
+                        false
+                        [continue i [inc i]]]
+                      true]]]]
+              false]
+
+            record
+            [match src
+              record
+              [let
+                [dst-types [deref [pfield dst types]]
+                 src-types [deref [pfield src types]]
+                 n [list-size dst-types]]
+                [if [ne n [list-size src-types]]
+                  false
+                  [loop [i 0]
+                    [if [lt-s i n]
+                      [if [not [type-assignable [list-get dst-types i] [list-get src-types i]]]
+                        false
+                        [continue i [inc i]]]
+                      true]]]]
+              false]
+
+            false]]]]]]
 
 [defn common-super-type [t1 [wtype] t2 [wtype]] [wtype]
   [if [eq t1 t2]
@@ -1864,23 +1835,40 @@
         [assoc-list-push variables [deref [pfield pvar name]] type]]
 
       [or [eq tag pattern-tuple-tag] [eq tag pattern-record-tag]]
-      [let [pvar [cast [pmem [pattern-tuple]] pattern]
-            ptype-tag [deref [pfield type tag]]]
-        [when [and [eq tag pattern-tuple-tag] [ne [deref [pfield type tag]] type-tuple-tag]]
-          [log-abort [text 'push-pattern-type-local-stack tuple type expected']]]
-        [when [and [eq tag pattern-record-tag] [ne [deref [pfield type tag]] type-record-tag]]
-          [log-abort [text 'push-pattern-type-local-stack record type expected']]]
-        [loop [types [deref [pfield [cast [pmem [type-tuple]] type] types]]
-               i 0]
-          [when [lt-s i [list-size [deref [pfield pvar patterns]]]]
+      [match type
+        tuple
+        [do
+          [when [ne tag pattern-tuple-tag]
+            [log-abort [text 'push-pattern-type-local-stack tuple pattern expected']]]
+          [loop [patterns [deref [pfield [cast [pmem [pattern-tuple]] pattern] patterns]]
+                 types [deref [pfield type types]]
+                 i 0]
+            [when [lt-s i [list-size patterns]]
+              [let
+                [pat [list-get patterns i]
+                 ptype [if [lt-s i [list-size types]] [list-get types i]
+                  [do [push-error-exp gctx pat [static-list [text 'no type for pattern']]] type-error]]]
+                [push-pattern-type-local-stack gctx variables pat ptype]
+                [continue i [inc i]]]]]]
+
+        record
+        [do
+          [when [ne tag pattern-record-tag]
+            [log-abort [text 'push-pattern-type-local-stack record pattern expected']]]
+          [loop [patterns [deref [pfield [cast [pmem [pattern-record]] pattern] patterns]]
+                 types [deref [pfield type types]]
+                 i 0]
+          [when [lt-s i [list-size patterns]]
             [let
-              [pat [list-get [deref [pfield pvar patterns]] i]
+              [pat [list-get patterns i]
                ptype [if [lt-s i [list-size types]] [list-get types i]
                 [do [push-error-exp gctx pat [static-list [text 'no type for pattern']]] type-error]]]
               [push-pattern-type-local-stack gctx variables pat ptype]
               [continue i [inc i]]]]]]
 
-      [log-abort [text 'unknown pattern tag']]]]]
+        [log-abort [text 'push-pattern-type-local-stack unknown type tag']]]
+
+      [log-abort [text 'push-pattern-type-local-stack unknown pattern tag']]]]]
 
 [defn form-to-exp [gctx [pmem [global-context]] f [pmem [form]]] [pexp]
   [ifs
@@ -2493,62 +2481,59 @@
     i64-text
 
     [let [tag [deref [pfield t tag]]]
-      [ifs
-        [eq tag type-integer-tag]
-        [let
-          [int-type [cast [pmem [type-integer]] t]]
-          [when [not [deref [pfield int-type signed]]]
-            [log-i32 [deref [pfield int-type n-bytes]]]
-            [log-i32 [deref [pfield int-type signed]]]
+      [match t
+        integer
+        [do
+          [when [not [deref [pfield t signed]]]
+            [log-i32 [deref [pfield t n-bytes]]]
+            [log-i32 [deref [pfield t signed]]]
             [log-abort [text 'type-to-wasm-type unsigned integer not supported']]]
           [ifs
-            [eq [deref [pfield int-type n-bytes]] [i32 4]]
+            [eq [deref [pfield t n-bytes]] [i32 4]]
             i32-text
 
-            [eq [deref [pfield int-type n-bytes]] [i32 8]]
+            [eq [deref [pfield t n-bytes]] [i32 8]]
             i64-text
 
             [log-abort [text 'type-to-wasm-type integer not supported']]]]
-        [do
-          [log-i32 tag]
-          [log-abort [text 'type-to-wasm-type non-integer not supported']]]]]]]
+        [log-abort [text 'type-to-wasm-type non-integer not supported']]]]]]
 
 [defn wuns-type-to-num-of-primitives [t [wtype]] [i32]
-  [let [tag [deref [pfield t tag]]]
-    [if [eq tag type-tuple-tag]
-      [let
-        [types [deref [pfield [cast [pmem [type-tuple]] t] types]]
-         n-types [list-size types]]
-        [loop [i 0 res 0]
-          [if [lt-s i n-types]
-            [continue
-              res [add res [wuns-type-to-num-of-primitives [list-get types i]]]
-              i [inc i]]
-            res]]]
-      [i32 1]]]]
+  [match t
+    tuple
+    [let
+      [types [deref [pfield t types]]
+        n-types [list-size types]]
+      [loop [i 0 res 0]
+        [if [lt-s i n-types]
+          [continue
+            res [add res [wuns-type-to-num-of-primitives [list-get types i]]]
+            i [inc i]]
+          res]]]
+    ; todo handle record
+    [i32 1]]]
 
 [defn flatten-wuns-type [gl [p-growable-list [wtype]] t [wtype]] []
-  [let [tag [deref [pfield t tag]]]
-    [ifs
-      [eq tag type-tuple-tag]
-      [let
-        [types [deref [pfield [cast [pmem [type-tuple]] t] types]]
-         n-types [list-size types]]
-        [loop [i 0]
-          [when [lt-s i n-types]
-            [flatten-wuns-type gl [list-get types i]]
-            [continue i [inc i]]]]]
+  [match t
+    tuple
+    [let
+      [types [deref [pfield t types]]
+       n-types [list-size types]]
+      [loop [i 0]
+        [when [lt-s i n-types]
+          [flatten-wuns-type gl [list-get types i]]
+          [continue i [inc i]]]]]
 
-      [eq tag type-record-tag]
-      [let
-        [types [deref [pfield [cast [pmem [type-record]] t] types]]
-         n-types [list-size types]]
-        [loop [i 0]
-          [when [lt-s i n-types]
-            [flatten-wuns-type gl [list-get types i]]
-            [continue i [inc i]]]]]
+    record
+    [let
+      [types [deref [pfield t types]]
+       n-types [list-size types]]
+      [loop [i 0]
+        [when [lt-s i n-types]
+          [flatten-wuns-type gl [list-get types i]]
+          [continue i [inc i]]]]]
 
-      [growable-list-push gl t]]]]
+    [growable-list-push gl t]]]
 
 [defn type-to-wasm-types [t [wtype]] [plist [wasm-type]]
   [let
@@ -2569,9 +2554,9 @@
     [log-abort [text 'exp-get-var-name not a var']]]]
 
 [defn local-get-param-by-type [gl [p-growable-list [text]] t [wtype]] [pwasm-exp]
-  [ifs
-    [eq [deref [pfield t tag]] type-tuple-tag]
-    [loop [types [deref [pfield [cast [pmem [type-tuple]] t] types]]
+  [match t
+    tuple
+    [loop [types [deref [pfield t types]]
            n-types [list-size types]
            insts [[instantiate list-alloc [pwasm-exp]] n-types]
            i 0]
@@ -2589,9 +2574,9 @@
               tag [annotation [exp wasm-instructions-tag] wasm-instructions-tag]
               insts insts]]]]]
 
-    [eq [deref [pfield t tag]] type-record-tag]
-    [loop [types [deref [pfield [cast [pmem [type-record]] t] types]]
-           names [deref [pfield [cast [pmem [type-record]] t] names]]
+    record
+    [loop [types [deref [pfield t types]]
+           names [deref [pfield t names]]
            n-types [list-size types]
            insts [[instantiate list-alloc [pwasm-exp]] n-types]
            i 0]
@@ -2654,22 +2639,39 @@
                 immediate-arguments [[instantiate list-alloc [text]] 0]
                 arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]
 
-        [or [eq tag pattern-tuple-tag] [eq tag pattern-record-tag]]
+        [eq tag pattern-tuple-tag]
         [let [pvar [cast [pmem [pattern-tuple]] pattern]
               patterns [deref [pfield pvar patterns]]
               n-pats [list-size patterns]
               ptype-tag [deref [pfield type tag]]]
-          [when [and [eq tag pattern-tuple-tag] [ne [deref [pfield type tag]] type-tuple-tag]]
-            [log-abort [text 'pattern-type-to-local-set-drop tuple type expected']]]
-          [when [and [eq tag pattern-record-tag] [ne [deref [pfield type tag]] type-record-tag]]
-            [log-abort [text 'pattern-type-to-local-set-drop record type expected']]]
-          [loop [types [deref [pfield [cast [pmem [type-tuple]] type] types]]
-                 i [dec [list-size types]]]
-            [when [le-s 0 i]
-              [let
-                [pat [if [lt-s i n-pats] [list-get patterns i] pattern-wildcard]]
-                [pattern-type-to-local-set-drop gctx ginsts pat [list-get types i]]
-                [continue i [dec i]]]]]]
+          [match type
+            tuple
+            [loop [types [deref [pfield type types]]
+                   i [dec [list-size types]]]
+              [when [le-s 0 i]
+                [let
+                  [pat [if [lt-s i n-pats] [list-get patterns i] pattern-wildcard]]
+                  [pattern-type-to-local-set-drop gctx ginsts pat [list-get types i]]
+                  [continue i [dec i]]]]]
+
+            [log-abort [text 'pattern-type-to-local-set-drop tuple type expected']]]]
+
+        [eq tag pattern-record-tag]
+        [let [pvar [cast [pmem [pattern-tuple]] pattern]
+              patterns [deref [pfield pvar patterns]]
+              n-pats [list-size patterns]
+              ptype-tag [deref [pfield type tag]]]
+          [match type
+            record
+            [loop [types [deref [pfield type types]]
+                   i [dec [list-size types]]]
+              [when [le-s 0 i]
+                [let
+                  [pat [if [lt-s i n-pats] [list-get patterns i] pattern-wildcard]]
+                  [pattern-type-to-local-set-drop gctx ginsts pat [list-get types i]]
+                  [continue i [dec i]]]]]
+
+            [log-abort [text 'pattern-type-to-local-set-drop record type expected']]]]
 
         [log-abort [text 'pattern kind not implemented yet']]]]]
 
@@ -3021,56 +3023,74 @@
   [let
     [pat-tag [deref [pfield ppat tag]]
      type-tag [deref [pfield t tag]]]
-    [ifs
-      [and [eq type-tag type-tuple-tag]
-        [or [eq pat-tag pattern-var-tag] [eq pat-tag pattern-wildcard-tag]]]
-      [loop [types [deref [pfield [cast [pmem [type-tuple]] t] types]]
-             n-types [list-size types]
-             i 0]
-        [when [lt-s i n-types]
-          [growable-list-push gl [integer-to-text [intrinsic i64.extend-i32-s i] false]]
-          [write-func-param-by-type writer gl ppat [list-get types i]]
-          [growable-list-pop gl]
-          [continue i [inc i]]]]
-
-      [and [eq type-tag type-record-tag]
-        [or [eq pat-tag pattern-var-tag] [eq pat-tag pattern-wildcard-tag]]]
-      [loop [types [deref [pfield [cast [pmem [type-record]] t] types]]
-             names [deref [pfield [cast [pmem [type-record]] t] names]]
-             n-types [list-size types]
-             i 0]
-        [when [lt-s i n-types]
-          [growable-list-push gl [list-get names i]]
-          [write-func-param-by-type writer gl ppat [list-get types i]]
-          [growable-list-pop gl]
-          [continue i [inc i]]]]
-
-      [eq pat-tag pattern-var-tag]
-      [let
-        [pname [deref [pfield [cast [pmem [pattern-var]] ppat] name]]]
-        [write-func-param writer gl pname [type-to-wasm-type t]]]
-
-      [eq pat-tag pattern-wildcard-tag]
-      [write-func-param writer gl [cast [text] null] [type-to-wasm-type t]]
-
-      [and
-        [or [eq pat-tag pattern-tuple-tag] [eq pat-tag pattern-record-tag]]
-        [or [eq type-tag type-tuple-tag] [eq type-tag type-record-tag]]]
-      [let [ptup [cast [pmem [pattern-tuple]] ppat]
-            patterns [deref [pfield ptup patterns]]
-            types [deref [pfield [cast [pmem [type-tuple]] t] types]]
-            n-types [list-size types]
-            n-pats [list-size patterns]]
-        [loop [i 0]
+    [match t
+      tuple
+      [ifs
+        [or [eq pat-tag pattern-var-tag] [eq pat-tag pattern-wildcard-tag]]
+        [loop [types [deref [pfield t types]]
+               n-types [list-size types]
+               i 0]
           [when [lt-s i n-types]
-            [let [pat [if [lt-s i n-pats] [list-get patterns i] pattern-wildcard]]
-              [write-func-param-by-type writer gl pat [list-get types i]]]
-            [continue i [inc i]]]]]
+            [growable-list-push gl [integer-to-text [intrinsic i64.extend-i32-s i] false]]
+            [write-func-param-by-type writer gl ppat [list-get types i]]
+            [growable-list-pop gl]
+            [continue i [inc i]]]]
 
-      [do
-        [log-i32 pat-tag]
-        [log-i32 type-tag]
-        [log-abort [text 'write-func-param-by-type unknown tag']]]]]]
+        [eq pat-tag pattern-tuple-tag]
+        [let [ptup [cast [pmem [pattern-tuple]] ppat]
+              patterns [deref [pfield ptup patterns]]
+              types [deref [pfield t types]]
+              n-types [list-size types]
+              n-pats [list-size patterns]]
+          [loop [i 0]
+            [when [lt-s i n-types]
+              [let [pat [if [lt-s i n-pats] [list-get patterns i] pattern-wildcard]]
+                [write-func-param-by-type writer gl pat [list-get types i]]]
+              [continue i [inc i]]]]]
+
+        [log-abort [text 'unexpected pattern for tuple']]
+        ]
+
+      record
+      [ifs
+        [or [eq pat-tag pattern-var-tag] [eq pat-tag pattern-wildcard-tag]]
+        [loop [types [deref [pfield t types]]
+              names [deref [pfield t names]]
+              n-types [list-size types]
+              i 0]
+          [when [lt-s i n-types]
+            [growable-list-push gl [list-get names i]]
+            [write-func-param-by-type writer gl ppat [list-get types i]]
+            [growable-list-pop gl]
+            [continue i [inc i]]]]
+
+        [eq pat-tag pattern-record-tag]
+        [let [ptup [cast [pmem [pattern-tuple]] ppat]
+              patterns [deref [pfield ptup patterns]]
+              types [deref [pfield t types]]
+              n-types [list-size types]
+              n-pats [list-size patterns]]
+          [loop [i 0]
+            [when [lt-s i n-types]
+              [let [pat [if [lt-s i n-pats] [list-get patterns i] pattern-wildcard]]
+                [write-func-param-by-type writer gl pat [list-get types i]]]
+              [continue i [inc i]]]]]
+
+        [log-abort [text 'unexpected pattern for record']]]
+
+      [ifs
+        [eq pat-tag pattern-var-tag]
+        [let
+          [pname [deref [pfield [cast [pmem [pattern-var]] ppat] name]]]
+          [write-func-param writer gl pname [type-to-wasm-type t]]]
+
+        [eq pat-tag pattern-wildcard-tag]
+        [write-func-param writer gl [cast [text] null] [type-to-wasm-type t]]
+
+        [do
+          [log-i32 pat-tag]
+          [log-i32 type-tag]
+          [log-abort [text 'write-func-param-by-type unknown tag']]]]]]]
 
 [defn write-func-desc-to-wasm [writer [writer] gctx [pmem [global-context]] fname [text] func-desc [pmem [global-desc-func]]] []
   [write-text writer lparen]
