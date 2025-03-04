@@ -2597,9 +2597,19 @@
               [exp/record fields]
               [for-each field fields [e2b [pair/snd field]]]
 
+              [exp/enum enum-type ctor-name fields]
+              [let
+                [enum-args [get-enum-args enum-type]
+                 ctors [pair/snd enum-args]
+                 ctor-index-fields [get-enum-ctor-index-fields ctors ctor-name]
+                 ctor-index [pair/fst ctor-index-fields]
+                 n-bytes [primitive-type/bytes [pair/fst enum-args]]]
+                [print-bigint bprinter n-bytes [i32-to-bigint ctor-index]]
+                [for-each field fields [e2b [pair/snd field]]]]
+
               [if-let [c [ee e]]
                 [e2b c]
-                [logq-abort not a constant [identity e]]]]]
+                [logq-abort data not a constant [identity e]]]]]
          - [exp-to-bytes data-exp]
          bytes [printer-to-byte-array bprinter]
          n-of-bytes [byte-array-size bytes]
