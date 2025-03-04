@@ -2435,10 +2435,9 @@
           [growable-list-pop gl]
           [growable-list-pop gl]
           [continue i [inc i]]]
-        [cast [pwasm-exp]
-          [alloc-init
-            [enum [wasm-exp] instructions
-              insts insts]]]]]
+        [alloc-init
+          [enum [wasm-exp] instructions
+            insts insts]]]]
 
     record
     [loop [types [deref [pfield t types]]
@@ -2455,10 +2454,9 @@
           [growable-list-pop gl]
           [growable-list-pop gl]
           [continue i [inc i]]]
-        [cast [pwasm-exp]
-          [alloc-init
-            [enum [wasm-exp] instructions
-              insts insts]]]]]
+        [alloc-init
+          [enum [wasm-exp] instructions
+            insts insts]]]]
 
     [let
       [iargs [[instantiate list-alloc [text]] 1]
@@ -2483,21 +2481,19 @@
         iargs [[instantiate list-alloc [text]] 1]]
       [list-set iargs 0 pname]
       [growable-list-push ginsts
-        [cast [pwasm-exp]
-          [alloc-init
-            [enum [wasm-exp] intrinsic
-              name [static-list [text local.set]]
-              immediate-arguments iargs
-              arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]]
+        [alloc-init
+          [enum [wasm-exp] intrinsic
+            name [static-list [text local.set]]
+            immediate-arguments iargs
+            arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]
 
     wildcard
     [growable-list-push ginsts
-      [cast [pwasm-exp]
-        [alloc-init
-          [enum [wasm-exp] intrinsic
-            name [static-list [text drop]]
-            immediate-arguments [[instantiate list-alloc [text]] 0]
-            arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]
+      [alloc-init
+        [enum [wasm-exp] intrinsic
+          name [static-list [text drop]]
+          immediate-arguments [[instantiate list-alloc [text]] 0]
+          arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]
 
     tuple
     [let [patterns [deref [pfield pattern patterns]]
@@ -2541,11 +2537,10 @@
        value [deref [pfield exp value]]
        type [deref [pfield exp type]]
        txt [integer-to-text value negative]]
-      [cast [pwasm-exp]
-        [alloc-init
-          [enum [wasm-exp] constant
-            type [type-to-wasm-type type]
-            value txt]]]]
+      [alloc-init
+        [enum [wasm-exp] constant
+          type [type-to-wasm-type type]
+          value txt]]]
 
     var
     [let
@@ -2574,12 +2569,11 @@
         [when [lt-s i nargs]
           [list-set warguments i [exp-to-wasm-exp gctx [list-get arguments i]]]
           [continue i [inc i]]]]
-      [cast [pwasm-exp]
-        [alloc-init
-          [enum [wasm-exp] intrinsic
-            name iname
-            immediate-arguments [cast [plist [text]] empty-list]
-            arguments warguments]]]]
+      [alloc-init
+        [enum [wasm-exp] intrinsic
+          name iname
+          immediate-arguments [cast [plist [text]] empty-list]
+          arguments warguments]]]
 
     call
     [let
@@ -2593,12 +2587,11 @@
         [when [lt-s i nargs]
           [list-set warguments i [exp-to-wasm-exp gctx [list-get arguments i]]]
           [continue i [inc i]]]]
-      [cast [pwasm-exp]
-        [alloc-init
-          [enum [wasm-exp] intrinsic
-            name [static-list [text call]]
-            immediate-arguments iargs
-            arguments warguments]]]]
+      [alloc-init
+        [enum [wasm-exp] intrinsic
+          name [static-list [text call]]
+          immediate-arguments iargs
+          arguments warguments]]]
 
     if
     [let
@@ -2609,13 +2602,12 @@
        etrue [exp-to-wasm-exp gctx true]
        efalse [exp-to-wasm-exp gctx false]
        tif [type-of gctx exp]]
-      [cast [pwasm-exp]
-        [alloc-init
-          [enum [wasm-exp] if
-            result [type-to-wasm-types tif]
-            condition econd
-            true etrue
-            false efalse]]]]
+      [alloc-init
+        [enum [wasm-exp] if
+          result [type-to-wasm-types tif]
+          condition econd
+          true etrue
+          false efalse]]]
 
     tuple
     [loop
@@ -2627,10 +2619,9 @@
         [do
           [list-set insts i [exp-to-wasm-exp gctx [list-get elements i]]]
           [continue i [inc i]]]
-        [cast [pwasm-exp]
-          [alloc-init
-            [enum [wasm-exp] instructions
-              insts insts]]]]]
+        [alloc-init
+          [enum [wasm-exp] instructions
+            insts insts]]]]
 
     ; identical to tuple, use multiple match...
     record
@@ -2643,10 +2634,9 @@
         [do
           [list-set insts i [exp-to-wasm-exp gctx [list-get elements i]]]
           [continue i [inc i]]]
-        [cast [pwasm-exp]
-          [alloc-init
-            [enum [wasm-exp] instructions
-              insts insts]]]]]
+        [alloc-init
+          [enum [wasm-exp] instructions
+            insts insts]]]]
 
     let-loop
     [let
@@ -2675,20 +2665,17 @@
               [growable-list-push ginsts-body [exp-to-wasm-exp gctx [list-get bodies i]]]
               [continue i [inc i]]]]
           [growable-list-push ginsts
-            [cast [pwasm-exp]
-              [alloc-init
-                [enum [wasm-exp] loop
-                  label [static-list [text lab]]
-                  result [type-to-wasm-types [type-of gctx exp]]
-                  body
-                  [cast [pwasm-exp]
-                    [alloc-init
-                      [enum [wasm-exp] instructions
-                        insts [growable-list-to-list ginsts-body]]]]]]]]]]
-      [cast [pwasm-exp]
-        [alloc-init
-          [enum [wasm-exp] instructions
-            insts [growable-list-to-list ginsts]]]]]
+            [alloc-init
+              [enum [wasm-exp] loop
+                label [static-list [text lab]]
+                result [type-to-wasm-types [type-of gctx exp]]
+                body
+                [alloc-init
+                  [enum [wasm-exp] instructions
+                    insts [growable-list-to-list ginsts-body]]]]]]]]
+      [alloc-init
+        [enum [wasm-exp] instructions
+          insts [growable-list-to-list ginsts]]]]
 
     continue
     [let
@@ -2706,26 +2693,23 @@
             [list-set iargs 0 loop-var]
             [list-set arguments 0 [exp-to-wasm-exp gctx value]]
             [list-set insts i
-              [cast [pwasm-exp]
-                [alloc-init
-                  [enum [wasm-exp] intrinsic
-                    name [static-list [text local.set]]
-                    immediate-arguments iargs
-                    arguments arguments]]]]
+              [alloc-init
+                [enum [wasm-exp] intrinsic
+                  name [static-list [text local.set]]
+                  immediate-arguments iargs
+                  arguments arguments]]]
             [continue i [inc i]]]]]
         [let [br-iargs [[instantiate list-alloc [text]] 1]]
           [list-set br-iargs 0 [static-list [text lab]]]
           [list-set insts n-ass
-            [cast [pwasm-exp]
-              [alloc-init
-                [enum [wasm-exp] intrinsic
-                  name [static-list [text br]]
-                  immediate-arguments br-iargs
-                  arguments [cast [plist [pwasm-exp]] empty-list]]]]]]
-      [cast [pwasm-exp]
-        [alloc-init
-          [enum [wasm-exp] instructions
-            insts insts]]]]
+            [alloc-init
+              [enum [wasm-exp] intrinsic
+                name [static-list [text br]]
+                immediate-arguments br-iargs
+                arguments [cast [plist [pwasm-exp]] empty-list]]]]]
+      [alloc-init
+        [enum [wasm-exp] instructions
+          insts insts]]]
 
       [log-abort [text 'exp-to-wasm-exp unknown tag']]]]
 
