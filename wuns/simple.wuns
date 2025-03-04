@@ -1055,8 +1055,10 @@
        ctors [pair/snd enum-args]
        disc-name [match discriminator [exp/var n] n [logq-abort match not a var]]
        disc-word [name/word disc-name]
-       cases [pairwise-pairs [slice l 2 [size l]]]
-       ]
+       cases [pairwise-pairs [slice l 2 [size l]]]]
+      [when-not [is-odd [size l]]
+        [log-location [last l]]
+        [logq-abort match requires an even number of arguments]]
       [exp/match
         discriminator
         [list-map case-pair cases
@@ -1083,7 +1085,7 @@
           [quote [i32 1]]
           [loop
             [i [dec s]
-            res [at clauses -1]]
+             res [at clauses -1]]
             [if [eq i 0]
               res
               [continue
