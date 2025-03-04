@@ -3,7 +3,7 @@
     [word word]
     [list [list form]]]]
 
-[import ./runtime-lib/host.js concat [type-scheme [a] [func [[list a] [list a]] [list a]]]]
+[import ./runtime-lib/host.js concat [type-scheme [a] [func [.. [list a]] [list a]]]]
 
 [import ./runtime-lib/host.js concat-lists [type-scheme [a] [func [[list [list a]]] [list a]]]]
 

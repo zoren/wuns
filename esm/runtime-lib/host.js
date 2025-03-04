@@ -267,16 +267,19 @@ export { code_point_to_string as 'code-point-to-string' }
 const concat_lists = (lists) => {
   const l = []
   for (const list of lists) {
-    if (!isList(list)) throw new Error('concat expects list')
+    if (!isList(list)) throw new Error('concat-lists expects list')
     l.push(...list)
   }
   return arrayToList(l)
 }
 export { concat_lists as 'concat-lists' }
-export const concat = (l1, l2) => {
-  if (!isList(l1)) throw new Error('concat expects frozen list')
-  if (!isList(l2)) throw new Error('concat expects frozen list')
-  return arrayToList([...l1, ...l2])
+export const concat = (...lists) => {
+  const l = []
+  for (const list of lists) {
+    if (!isList(list)) throw new Error('concat expects list')
+    l.push(...list)
+  }
+  return arrayToList(l)
 }
 const int_to_word = (i) => {
   if (!isSigned32BitInteger(i)) throw new Error('int-to-word expects number: ' + i)
