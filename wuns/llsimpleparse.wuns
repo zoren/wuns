@@ -1006,10 +1006,9 @@
     false]]
 
 [def type-union-empty
-  [cast [wtype]
-    [data mem
-      [enum [wtype-data] union
-        types [cast [plist [wtype]] empty-list]]]]]
+  [data mem
+    [enum [wtype-data] union
+      types [cast [plist [wtype]] empty-list]]]]
 
 ; [defn type-union-alloc [types [plist [wtype]]] [wtype]
 ;   ; todo filter empty types and sort the types to normalize...
@@ -1069,10 +1068,9 @@
 [datatype ppattern [] [pmem [pattern]]]
 
 [def pattern-wildcard
-  [cast [ppattern]
-    [data mem
-      [enum [pattern] wildcard
-        name [static-list [text -]]]]]]
+  [data mem
+    [enum [pattern] wildcard
+      name [static-list [text -]]]]]
 
 [datatype wexp []
   [enum [i32]
@@ -1127,10 +1125,9 @@
       arguments args]]]
 
 [def exp-tuple-empty
-  [cast [pexp]
-    [data mem
-      [enum [wexp] tuple
-        elements [cast [plist [pexp]] empty-list]]]]]
+  [data mem
+    [enum [wexp] tuple
+      elements [cast [plist [pexp]] empty-list]]]]
 
 [defn wexp-tuple-alloc [elements [plist [pexp]]] [pexp]
   [if [list-empty-is elements]
@@ -1140,45 +1137,39 @@
         elements elements]]]]
 
 [def exp-record-empty
-  [cast [pexp]
-    [data mem
-      [enum [wexp] record
-        elements [cast [plist [pexp]] empty-list]
-        names [cast [plist [text]] empty-list]]]]]
+  [data mem
+    [enum [wexp] record
+      elements [cast [plist [pexp]] empty-list]
+      names [cast [plist [text]] empty-list]]]]
 
 [defn wexp-record-alloc [elements [plist [pexp]] names [plist [text]]] [pexp]
   [if [list-empty-is elements]
     exp-record-empty
-    [cast [pexp]
-      [alloc-init
-        [enum [wexp] record
-          elements elements
-          names names]]]]]
+    [alloc-init
+      [enum [wexp] record
+        elements elements
+        names names]]]]
 
 [def type-i32
-  [cast [wtype]
-    [data mem
-      [enum [wtype-data] integer
-        n-bytes 4
-        signed true]]]]
+  [data mem
+    [enum [wtype-data] integer
+      n-bytes 4
+      signed true]]]
 
 [def type-i64
-  [cast [wtype]
-    [data mem
-      [enum [wtype-data] integer
-        n-bytes 8
-        signed true]]]]
+  [data mem
+    [enum [wtype-data] integer
+      n-bytes 8
+      signed true]]]
 
 [def type-error
-  [cast [wtype]
-    [data mem
-      [enum [wtype-data] error]]]]
+  [data mem
+    [enum [wtype-data] error]]]
 
 [def type-tuple-empty
-  [cast [wtype]
-    [data mem
-      [enum [wtype-data] tuple
-        types [cast [plist [wtype]] empty-list]]]]]
+  [data mem
+    [enum [wtype-data] tuple
+      types [cast [plist [wtype]] empty-list]]]]
 
 [defn type-tuple-alloc [types [plist [wtype]]] [wtype]
   [if [list-empty-is types]
@@ -1188,29 +1179,26 @@
         types types]]]]
 
 [def type-record-empty
-  [cast [wtype]
-    [data mem
-      [enum [wtype-data] record
-        types [cast [plist [wtype]] empty-list]
-        names [cast [plist [text]] empty-list]]]]]
+  [data mem
+    [enum [wtype-data] record
+      types [cast [plist [wtype]] empty-list]
+      names [cast [plist [text]] empty-list]]]]
 
 [defn type-record-alloc [types [plist [wtype]] names [plist [text]]] [wtype]
   [when [ne [list-size types] [list-size names]]
     [log-abort [text 'type-record-alloc types and names size mismatch']]]
   [if [and [list-empty-is types] [list-empty-is names]]
     type-record-empty
-    [cast [wtype]
-      [alloc-init
-        [enum [wtype-data] record
-          types types
-          names names]]]]]
+    [alloc-init
+      [enum [wtype-data] record
+        types types
+        names names]]]]
 
 [defn type-function-alloc [parameters [plist [wtype]] result [wtype]] [wtype]
-  [cast [wtype]
-    [alloc-init
+  [alloc-init
     [enum [wtype-data] function
       parameters parameters
-      result result]]]]
+      result result]]]
 
 [datatype type-kind []
   ; datatype
@@ -1685,10 +1673,9 @@
   [ifs
     [form-word-is f]
     [add-pattern-to-form gctx f
-      [cast [ppattern]
-        [alloc-init
-          [enum [pattern] var
-            name [form-word-get f]]]]]
+      [alloc-init
+        [enum [pattern] var
+          name [form-word-get f]]]]
 
     [form-list-is f]
     [let
@@ -1706,10 +1693,9 @@
                 [list-set patterns [dec i] [form-to-pattern gctx [list-get fl i]]]
                 [continue i [inc i]]]]
             [add-pattern-to-form gctx f
-              [cast [ppattern]
-                [alloc-init
-                  [enum [pattern] tuple
-                    patterns patterns]]]]]
+              [alloc-init
+                [enum [pattern] tuple
+                  patterns patterns]]]]
 
           [text-eq fw [static-list [text record]]]
           [let
@@ -1721,11 +1707,10 @@
                 [list-set patterns i [form-to-pattern gctx [list-get fl [inc fi]]]]
                 [continue i [inc i] fi [add 2 fi]]]]
             [add-pattern-to-form gctx f
-              [cast [ppattern]
-                [alloc-init
-                  [enum [pattern] record
-                    patterns patterns
-                    names names]]]]]
+              [alloc-init
+                [enum [pattern] record
+                  patterns patterns
+                  names names]]]]
 
           [do
             [log-text fw]
@@ -2010,12 +1995,11 @@
                   [list-set bodies [sub fi 2] [form-to-exp gctx [list-get fl fi]]]
                   [continue fi [inc fi]]]]
               [growable-list-pop stack]
-              [cast [pexp]
-                [alloc-init
-                  [enum [wexp] let-loop
-                    is-let is-let
-                    bindings bindings
-                    bodies bodies]]]]]
+              [alloc-init
+                [enum [wexp] let-loop
+                  is-let is-let
+                  bindings bindings
+                  bodies bodies]]]]
 
           [text-eq fw [static-list [text continue]]]
           [do
