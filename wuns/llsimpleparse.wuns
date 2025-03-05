@@ -1557,36 +1557,16 @@
         [or
           [match dst
             integer
-            [let
-              [dn [deref [pfield dst n-bytes]]
-               ds [deref [pfield dst signed]]]
-              [match src
-                integer
-                [and
-                  [eq dn [deref [pfield src n-bytes]]]
-                  [eq ds [deref [pfield src signed]]]]
-                false]]
-
-            tuple
             [match src
-              tuple
-              [let
-                [dst-types [deref [pfield dst types]]
-                 src-types [deref [pfield src types]]
-                 n [list-size dst-types]]
-                [if [ne n [list-size src-types]]
-                  false
-                  [loop [i 0]
-                    [if [lt-s i n]
-                      [if [not [type-assignable [list-get dst-types i] [list-get src-types i]]]
-                        false
-                        [continue i [inc i]]]
-                      true]]]]
+              integer
+              [and
+                [eq [deref [pfield dst n-bytes]] [deref [pfield src n-bytes]]]
+                [eq [deref [pfield dst signed]] [deref [pfield src signed]]]]
               false]
 
-            record
+            [tuple record]
             [match src
-              record
+              [tuple record]
               [let
                 [dst-types [deref [pfield dst types]]
                  src-types [deref [pfield src types]]
@@ -1716,25 +1696,9 @@
     var
     [assoc-list-push variables [deref [pfield pattern name]] type]
 
-    tuple
+    [tuple record]
     [match type
-      tuple
-      [loop [patterns [deref [pfield pattern patterns]]
-             types [deref [pfield type types]]
-             i 0]
-        [when [lt-s i [list-size patterns]]
-          [let
-            [pat [list-get patterns i]
-              ptype [if [lt-s i [list-size types]] [list-get types i]
-              [do [push-error-exp gctx pat [static-list [text 'no type for pattern']]] type-error]]]
-            [push-pattern-type-local-stack gctx variables pat ptype]
-            [continue i [inc i]]]]]
-
-      [log-abort [text 'push-pattern-type-local-stack unknown type tag']]]
-
-    record
-    [match type
-      record
+      [tuple record]
       [loop [patterns [deref [pfield pattern patterns]]
              types [deref [pfield type types]]
              i 0]
@@ -2342,31 +2306,22 @@
 
 [defn wuns-type-to-num-of-primitives [t [wtype]] [i32]
   [match t
-    tuple
+    [tuple record]
     [let
       [types [deref [pfield t types]]
-        n-types [list-size types]]
+       n-types [list-size types]]
       [loop [i 0 res 0]
         [if [lt-s i n-types]
           [continue
             res [add res [wuns-type-to-num-of-primitives [list-get types i]]]
             i [inc i]]
           res]]]
-    ; todo handle record
+
     [i32 1]]]
 
 [defn flatten-wuns-type [gl [p-growable-list [wtype]] t [wtype]] []
   [match t
-    tuple
-    [let
-      [types [deref [pfield t types]]
-       n-types [list-size types]]
-      [loop [i 0]
-        [when [lt-s i n-types]
-          [flatten-wuns-type gl [list-get types i]]
-          [continue i [inc i]]]]]
-
-    record
+    [tuple record]
     [let
       [types [deref [pfield t types]]
        n-types [list-size types]]
@@ -2470,37 +2425,21 @@
           immediate-arguments [[instantiate list-alloc [text]] 0]
           arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]
 
-    tuple
+    [tuple record]
     [let [patterns [deref [pfield pattern patterns]]
           n-pats [list-size patterns]
           ptype-tag [deref [pfield type tag]]]
       [match type
-        tuple
+        [tuple record]
         [loop [types [deref [pfield type types]]
-                i [dec [list-size types]]]
+               i [dec [list-size types]]]
           [when [le-s 0 i]
             [let
               [pat [if [lt-s i n-pats] [list-get patterns i] pattern-wildcard]]
               [pattern-type-to-local-set-drop gctx ginsts pat [list-get types i]]
               [continue i [dec i]]]]]
 
-        [log-abort [text 'pattern-type-to-local-set-drop tuple type expected']]]]
-
-    record
-    [let [patterns [deref [pfield pattern patterns]]
-          n-pats [list-size patterns]
-          ptype-tag [deref [pfield type tag]]]
-      [match type
-        record
-        [loop [types [deref [pfield type types]]
-                i [dec [list-size types]]]
-          [when [le-s 0 i]
-            [let
-              [pat [if [lt-s i n-pats] [list-get patterns i] pattern-wildcard]]
-              [pattern-type-to-local-set-drop gctx ginsts pat [list-get types i]]
-              [continue i [dec i]]]]]
-
-        [log-abort [text 'pattern-type-to-local-set-drop record type expected']]]]
+        [log-abort [text 'pattern-type-to-local-set-drop tuple/record type expected']]]]
 
     [log-abort [text 'pattern kind not implemented yet']]]]
 
@@ -2584,22 +2523,7 @@
           true etrue
           false efalse]]]
 
-    tuple
-    [loop
-      [i 0
-       elements [deref [pfield exp elements]]
-       n [list-size elements]
-       insts [[instantiate list-alloc [pmem [wasm-exp]]] n]]
-      [if [lt-s i n]
-        [do
-          [list-set insts i [exp-to-wasm-exp gctx [list-get elements i]]]
-          [continue i [inc i]]]
-        [alloc-init
-          [enum [wasm-exp] instructions
-            insts insts]]]]
-
-    ; identical to tuple, use multiple match...
-    record
+    [tuple record]
     [loop
       [i 0
        elements [deref [pfield exp elements]]
@@ -2727,8 +2651,7 @@
 [defn write-wasm-exp [writer [writer] indent-n [i32] exp [pwasm-exp]] [tuple]
   [match exp
     instructions
-    [let
-      [insts [deref [pfield exp insts]]]
+    [let [insts [deref [pfield exp insts]]]
       [loop [i 0 n [list-size insts]]
         [when [lt-s i n]
           [write-text writer space]
@@ -2807,12 +2730,7 @@
 
         [log-abort [text 'write-wasm-exp unknown tag']]]]]]
 
-[defn pattern-var-wildcard-is [ppat [ppattern]] [boolean]
-  [match ppat
-    var true
-    wildcard true
-    false]]
-
+; todo case on pattern first
 [defn write-func-param-by-type [writer [writer] gl [p-growable-list [text]] ppat [ppattern] t [wtype]] []
   [match t
     tuple
@@ -2828,16 +2746,17 @@
               [write-func-param-by-type writer gl pat [list-get types i]]]
             [continue i [inc i]]]]]
 
-      [if [pattern-var-wildcard-is ppat]
-        [loop [types [deref [pfield t types]]
-               n-types [list-size types]
-               i 0]
-          [when [lt-s i n-types]
-            [growable-list-push gl [integer-to-text [intrinsic i64.extend-i32-s i] false]]
-            [write-func-param-by-type writer gl ppat [list-get types i]]
-            [growable-list-pop gl]
-            [continue i [inc i]]]]
-        [log-abort [text 'unexpected pattern for tuple']]]]
+      [var wildcard]
+      [loop [types [deref [pfield t types]]
+              n-types [list-size types]
+              i 0]
+        [when [lt-s i n-types]
+          [growable-list-push gl [integer-to-text [intrinsic i64.extend-i32-s i] false]]
+          [write-func-param-by-type writer gl ppat [list-get types i]]
+          [growable-list-pop gl]
+          [continue i [inc i]]]]
+
+      [log-abort [text 'unexpected pattern for tuple']]]
 
     record
     [match ppat
@@ -2852,17 +2771,18 @@
               [write-func-param-by-type writer gl pat [list-get types i]]]
             [continue i [inc i]]]]]
 
-      [if [pattern-var-wildcard-is ppat]
-        [loop [types [deref [pfield t types]]
-               names [deref [pfield t names]]
-               n-types [list-size types]
-               i 0]
-          [when [lt-s i n-types]
-            [growable-list-push gl [list-get names i]]
-            [write-func-param-by-type writer gl ppat [list-get types i]]
-            [growable-list-pop gl]
-            [continue i [inc i]]]]
-        [log-abort [text 'unexpected pattern for record']]]]
+      [var wildcard]
+      [loop [types [deref [pfield t types]]
+             names [deref [pfield t names]]
+             n-types [list-size types]
+             i 0]
+        [when [lt-s i n-types]
+          [growable-list-push gl [list-get names i]]
+          [write-func-param-by-type writer gl ppat [list-get types i]]
+          [growable-list-pop gl]
+          [continue i [inc i]]]]
+
+        [log-abort [text 'unexpected pattern for record']]]
 
     [match ppat
       var
