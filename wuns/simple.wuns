@@ -166,6 +166,7 @@
     [cast type exp]
     [annotation type exp]
     [pointer-value exp]
+    [pointer type type exp]
 
     [deref exp]
 
@@ -1136,6 +1137,12 @@
     [[word pointer-value]]
     [exp/pointer-value [form-to-exp-type-kind-env type-kind-env lctx [second l]]]
 
+    [[word pointer]]
+    [exp/pointer
+      [form-to-type-type-env type-kind-env lctx [second l]]
+      [form-to-type-type-env type-kind-env lctx [third l]]
+      [form-to-exp-type-kind-env type-kind-env lctx [fourth l]]]
+
     [[word annotation]]
     [exp/annotation [form-to-type-type-env type-kind-env lctx [second l]] [form-to-exp-type-kind-env type-kind-env lctx [third l]]]
 
@@ -1986,6 +1993,9 @@
     [type/primitive
       [get-memory-pointer-type
        [pair/fst [get-pointer-args [type-of e]]]]]
+
+    [exp/pointer mt vt -e]
+    [type/pointer mt vt]
 
     [exp/var n]
     [name-desc/type [get-name-desc-from-name n]]
@@ -3297,6 +3307,9 @@
     [exp-to-inst e]
 
     [exp/pointer-value e]
+    [exp-to-inst e]
+
+    [exp/pointer -mt -vt e]
     [exp-to-inst e]
 
     [logq-abort exp-to-inst not implemented [identity exp]]]]

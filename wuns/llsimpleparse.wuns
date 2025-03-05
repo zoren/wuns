@@ -109,7 +109,7 @@
 [defn memory-size-bytes [] [i32]
   [intrinsic i32.shl [intrinsic memory.size mem] [i32 16]]]
 
-[def null [cast [pmem -a] [i32 0]]]
+[def null [pointer [exp mem] -a [i32 0]]]
 
 [defn is-null [p [pmem -a]] [i32]
   [eq [pointer-value p] 0]]
@@ -164,7 +164,7 @@
      realloc-size [deref [pfield pframe realloc-size]]
      byte-aligned-size [deref [pfield pframe byte-aligned-size]]
      abandoned [deref [pfield pframe abandoned]]
-     pframe-sized [cast [pmem [alloc-stack-frame [exp byte-aligned-size]]] pframe]
+     pframe-sized [pointer [exp mem] [alloc-stack-frame [exp byte-aligned-size]] pframe]
      canary [deref [pfield pframe-sized canary]]
      frame-size-end [deref [pfield pframe-sized frame-size-end]]]
   [log-ar [text 'alloc-frame-log']]
@@ -190,7 +190,7 @@
      realloc-size [deref [pfield pframe realloc-size]]
      byte-aligned-size [deref [pfield pframe byte-aligned-size]]
      abandoned [deref [pfield pframe abandoned]]
-     pframe-sized [cast [pmem [alloc-stack-frame [exp byte-aligned-size]]] pframe]
+     pframe-sized [pointer [exp mem] [alloc-stack-frame [exp byte-aligned-size]] pframe]
      canary [deref [pfield pframe-sized canary]]
      frame-size-end [deref [pfield pframe-sized frame-size-end]]]
     [if [lt-s frame-size [size-of-type [alloc-stack-frame [exp 0]]]]
@@ -213,7 +213,7 @@
      n-frames 0]
     [if [lt-s i cur-top]
       [let
-        [pframe [cast [pmem [alloc-stack-frame -a]] i]
+        [pframe [pointer [exp mem] [alloc-stack-frame -a] i]
          frame-size [deref [pfield pframe frame-size]]]
         [alloc-frame-validate pframe]
         [continue i [add i frame-size] n-frames [inc n-frames]]]
@@ -229,7 +229,7 @@
     [byte-aligned-size [mem-align byte-size]
      frame-size [size-of-type [alloc-stack-frame [exp byte-aligned-size]]]
      cur-top [get-top]
-     pframe [cast [pmem [alloc-stack-frame [exp byte-aligned-size]]] cur-top]
+     pframe [pointer [exp mem] [alloc-stack-frame [exp byte-aligned-size]] cur-top]
      frame-data [pfield pframe data]]
     [resize-mem frame-size]
     [passign pframe
@@ -252,7 +252,7 @@
   [let
     [old-frame-size [deref [pfield pframe frame-size]]
      byte-aligned-size [mem-align new-byte-size]
-     pframe-sized [cast [pmem [alloc-stack-frame [exp byte-aligned-size]]] pframe]
+     pframe-sized [pointer [exp mem] [alloc-stack-frame [exp byte-aligned-size]] pframe]
      frame-size [size-of-type [alloc-stack-frame [exp byte-aligned-size]]]
      frame-data [pfield pframe data]]
     [resize-mem [sub frame-size old-frame-size]]
@@ -288,11 +288,11 @@
 [defn get-top-frame [] [pmem [alloc-stack-frame -a]]
   [let [cur-top [get-top]]
     [if [eq cur-top static-mem-top]
-      [cast [pmem [alloc-stack-frame -a]] null]
+      [pointer [exp mem] [alloc-stack-frame -a] null]
       [let
-        [pframe-size [cast [pmem [i32]] [sub cur-top [size-of-type [i32]]]]
+        [pframe-size [pointer [exp mem] [i32] [sub cur-top [size-of-type [i32]]]]
          frame-size [deref pframe-size]
-         pframe [cast [pmem [alloc-stack-frame -a]] [sub cur-top frame-size]]]
+         pframe [pointer [exp mem] [alloc-stack-frame -a] [sub cur-top frame-size]]]
         [alloc-frame-validate pframe]
         pframe]]]]
 
@@ -332,7 +332,7 @@
       ; todo check if old-p is a valid pointer first, non static and within memory bounds
       ; find the frame from the data pointer
       [pframe-i [sub [pointer-value old-p] [offset-of [alloc-stack-frame -a] data]]
-       pframe [cast [pmem [alloc-stack-frame -a]] pframe-i]
+       pframe [pointer [exp mem] [alloc-stack-frame -a] pframe-i]
        frame-end [add pframe-i [deref [pfield pframe frame-size]]]]
       [alloc-frame-validate pframe]
       [if [eq [deref [pfield pframe abandoned]] 1]
@@ -383,11 +383,11 @@
             [if [lt-s old-n-bytes new-n-bytes]
               ; zero new memory area
               [memory-zero
-                [cast [pmem -a] [add [pfield pframe data] old-n-bytes]]
+                [pointer [exp mem] -a [add [pfield pframe data] old-n-bytes]]
                 [sub new-n-bytes old-n-bytes]]
               ; overwrite now unused parts of the data area to avoid dangling pointers using it
               [memory-overwrite
-                [cast [pmem -a] [add [pfield pframe data] new-n-bytes]]
+                [pointer [exp mem] -a [add [pfield pframe data] new-n-bytes]]
                 [sub old-n-bytes new-n-bytes]]]
             old-p]
           ; else, allocate a new frame copying over old data, then abandon the old frame
@@ -423,17 +423,17 @@
         [if [lt-u old-n-aligned new-n-aligned]
           [do
             [resize-mem [sub new-n-aligned old-n-aligned]]
-            [memory-zero [cast [pmem -a] [add old-pi old-n-bytes]] [sub new-n-bytes old-n-bytes]]
-            [memory-overwrite [cast [pmem -a] [add old-pi new-n-bytes]] [sub new-n-aligned new-n-bytes]]]]
+            [memory-zero [pointer [exp mem] -a [add old-pi old-n-bytes]] [sub new-n-bytes old-n-bytes]]
+            [memory-overwrite [pointer [exp mem] -a [add old-pi new-n-bytes]] [sub new-n-aligned new-n-bytes]]]]
         old-p]
       [if [le-u new-n-bytes old-n-bytes]
         ; not the top frame but smaller than before
         [do
           ; overwrite now unused parts of the data area to avoid dangling pointers using it
-          [memory-overwrite [cast [pmem -a] [add old-pi new-n-bytes]] [sub old-n-bytes new-n-bytes]]
+          [memory-overwrite [pointer [exp mem] -a [add old-pi new-n-bytes]] [sub old-n-bytes new-n-bytes]]
           old-p]
         ; else allocating a new frame
-        [let [new-p [cast [pmem -a] cur-top]]
+        [let [new-p [pointer [exp mem] -a cur-top]]
           [resize-mem new-n-aligned]
           ; copy old data to new location
           [memory-copy new-p old-p old-n-bytes]
@@ -456,7 +456,7 @@
   [do]]
 
 [genfn alloc-fn [t datatype] [] [pmem t]
-  [alloc-bytes [size-of-type t]]]
+  [pointer [exp mem] t [alloc-bytes [size-of-type t]]]]
 
 [genfn alloc-init [t datatype] [v t] [pmem t]
   [let [p [[instantiate alloc-fn t]]]
@@ -493,7 +493,7 @@
       size [reify sz]
       array array]]]
 
-[def list-empty [cast [plist -a] [static-list [array [union]]]]]
+[def list-empty [static-list [array [union]]]]
 
 [defn list-size [pvec [pmem [record [size [i32]]]]] [i32]
   [deref [pfield pvec size]]]
@@ -506,7 +506,7 @@
 [genfn list-alloc [elem-type datatype] [lafn-sz [i32]] [plist elem-type]
   ; return empty list if size is 0
   [if [eq lafn-sz 0]
-    list-empty
+    [pointer [exp mem] [list-data elem-type -a] list-empty]
     [let [p [[instantiate alloc-fn [list-data elem-type [exp lafn-sz]]]]]
       [passign [pfield p size] lafn-sz]
       p]]]
@@ -577,7 +577,7 @@
       [log-abort [text 'growable-list-resize new-capacity < cur-size']]]
     [passign [pfield pglist capacity] new-capacity]
     [passign [pfield pglist parray]
-      [cast [pmem [array elem-type]]
+      [pointer [exp mem] [array elem-type]
         [realloc
           [deref [pfield pglist parray]]
           [size-of-type [array elem-type [exp cur-capacity]]]
@@ -710,7 +710,7 @@
       [if [eq [deref [pindex [pindex [deref [pfield pglist parray]] i] [i32 0]]] key]
         [tuple true [deref [pindex [pindex [deref [pfield pglist parray]] i] [i32 1]]]]
         [continue i [inc i]]]
-      [tuple false [cast [pmem v] [i32 0]]]]]]
+      [tuple false [pointer [exp mem] v [i32 0]]]]]]
 
 [genfn assoc-list-has [k datatype v datatype] [pglist [p-assoc-list k v] key k] [boolean]
   [let [[found -] [assoc-list-try-get-value pglist key]]
@@ -873,7 +873,7 @@
             cur-txt
             [continue txts-i [inc txts-i]]]
           [continue txts-i [inc txts-i]]]]
-      [cast [text] [i32 0]]]]]
+      [pointer [exp mem] [list-data [u8] -size] [i32 0]]]]]
 
 [defn parse-n [bytes [text]]
   [tuple
@@ -901,7 +901,7 @@
             [let
               [word-end [scan-word-end bytes [inc i]]
                word-size [sub word-end i]
-               p [cast [pmem [array [u8]]] [pindex bytes-array i]]
+               p [pointer [exp mem] [array [u8]] [pindex bytes-array i]]
                w-opt [text-intern texts p word-size]
                w
                [if [eq w-opt [i32 0]]
@@ -1010,7 +1010,7 @@
 [def type-union-empty
   [data mem
     [enum [wtype-data] union
-      types [cast [plist [wtype]] list-empty]]]]
+      types list-empty]]]
 
 ; [defn type-union-alloc [types [plist [wtype]]] [wtype]
 ;   ; todo filter empty types and sort the types to normalize...
@@ -1129,7 +1129,7 @@
 [def exp-tuple-empty
   [data mem
     [enum [wexp] tuple
-      elements [cast [plist [pexp]] list-empty]]]]
+      elements list-empty]]]
 
 [defn wexp-tuple-alloc [elements [plist [pexp]]] [pexp]
   [if [list-empty-is elements]
@@ -1141,8 +1141,8 @@
 [def exp-record-empty
   [data mem
     [enum [wexp] record
-      elements [cast [plist [pexp]] list-empty]
-      names [cast [plist [text]] list-empty]]]]
+      elements list-empty
+      names list-empty]]]
 
 [defn wexp-record-alloc [elements [plist [pexp]] names [plist [text]]] [pexp]
   [if [list-empty-is elements]
@@ -1171,7 +1171,7 @@
 [def type-tuple-empty
   [data mem
     [enum [wtype-data] tuple
-      types [cast [plist [wtype]] list-empty]]]]
+      types list-empty]]]
 
 [defn type-tuple-alloc [types [plist [wtype]]] [wtype]
   [if [list-empty-is types]
@@ -1183,8 +1183,8 @@
 [def type-record-empty
   [data mem
     [enum [wtype-data] record
-      types [cast [plist [wtype]] list-empty]
-      names [cast [plist [text]] list-empty]]]]
+      types list-empty
+      names list-empty]]]
 
 [defn type-record-alloc [types [plist [wtype]] names [plist [text]]] [wtype]
   [when [ne [list-size types] [list-size names]]
@@ -1306,7 +1306,7 @@
      stack-size [list-size stack]]
     [loop [i stack-size]
       [if [eq i 0]
-        [tuple false [cast [wtype] 0]]
+        [tuple false [pointer [exp mem] [wtype-data] 0]]
         [let
           [frame [growable-list-get-p stack [dec i]]
            locals [deref [pfield frame variables]]
@@ -1490,7 +1490,7 @@
         [if [text-eq [deref [pfield pintrin name]] name]
           [tuple true pintrin]
           [continue i [inc i]]]]
-      [tuple false [cast [pmem [intrinsic-info]] [i32 0]]]]]]
+      [tuple false [pointer [exp mem] [intrinsic-info] [i32 0]]]]]]
 
 [defn type-of [gctx [pmem [global-context]] e [pexp]] [wtype]
   [let [tag [deref [pfield e tag]]]
