@@ -697,16 +697,6 @@
 [genfn assoc-list-push [k datatype v datatype] [pglist [p-assoc-list k v] key k value v] [tuple]
   [growable-list-push pglist [tuple key value]]]
 
-[genfn assoc-list-get-entry [k datatype v datatype] [pglist [p-assoc-list k v] key k] [pmem [tuple k v]]
-  [loop
-    [cur-size [deref [pfield pglist size]]
-     i 0]
-    [if [lt-s i cur-size]
-      [if [eq [deref [pindex [pindex [deref [pfield pglist parray]] i] [i32 0]]] key]
-        [pindex [deref [pfield pglist parray]] i]
-        [continue i [inc i]]]
-      [cast [pmem [tuple k v]] [i32 0]]]]]
-
 [genfn assoc-list-get-value [k datatype v datatype] [pglist [p-assoc-list k v] key k] [pmem v]
   [loop
     [cur-size [deref [pfield pglist size]]
@@ -1304,10 +1294,10 @@
         [let
           [frame [growable-list-get-p stack [dec i]]
            locals [deref [pfield frame variables]]
-           ptup [assoc-list-get-entry locals name]]
-          [if [is-null ptup]
+           pval [assoc-list-get-value locals name]]
+          [if [is-null pval]
             [continue i [dec i]]
-            [tuple true [deref [pindex ptup [i32 1]]]]]]]]]]
+            [tuple true [deref pval]]]]]]]]
 
 [defn local-stack-first-frame-by-context-kind [gctx [pmem [global-context]] context-kind [i32]] [pmem [local-frame]]
   [let
@@ -1979,7 +1969,7 @@
                     [assoc-pair [growable-list-get-p variables i]
                      name [deref [pindex assoc-pair [i32 0]]]
                      type [deref [pindex assoc-pair [i32 1]]]]
-                    [when [not [is-null [assoc-list-get-entry func-local-variables name]]]
+                    [when [not [is-null [assoc-list-get-value func-local-variables name]]]
                       [log-abort [text 'let/loop local variable already defined']]]
                     [assoc-list-push func-local-variables name type]
                     [continue i [inc i]]]]]
