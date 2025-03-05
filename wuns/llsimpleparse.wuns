@@ -1202,13 +1202,6 @@
       parameters parameters
       result result]]]
 
-[datatype type-kind []
-  ; datatype
-  ; func
-  ; exp type
-
-  [i32]]
-
 [datatype global-desc-kind []
   [enum tag [i32]
     [func
@@ -2080,35 +2073,6 @@
           [passign [pindex parameter-types-array ti] ltype]
           [continue i [add 2 i] ti [inc ti]]]]]
     [tuple parameter-patterns parameter-types]]]
-
-[defn forms-to-type-params [gctx [pmem [global-context]] param-list [plist [pform]]] [plist [tuple [text] [type-kind]]]
-  [let
-    [n-of-param-forms [list-size param-list]
-     result [[instantiate list-alloc [tuple [text] [type-kind]]] [half n-of-param-forms]]
-     darray [list-data-array result]]
-    [if [is-odd n-of-param-forms]
-      [push-error gctx [list-get param-list [dec n-of-param-forms]]
-        [static-list [text 'expects a type parameter list with names and kind pairs']]]]
-    [loop [i 0 ti 0]
-      [when [lt-s i [dec n-of-param-forms]]
-        [let
-          [name-form [list-get param-list i]
-           kind-form [list-get param-list [inc i]]
-           name [form-word-get-report gctx name-form]
-           kind
-           [ifs
-            [form-word-is kind-form]
-            [let [kind-w [form-word-get kind-form]]
-              [ifs [text-eq kind-w [static-list [text datatype]]]
-                [i32 1]
-                [log-abort [text 'forms-to-type-params unknown type-kind']]]]
-
-            [log-abort [text 'forms-to-type-params unknown type-kind']]]]
-          [passign
-            [pindex darray ti]
-            [tuple name kind]]
-          [continue i [add 2 i] ti [inc ti]]]]]
-    [[instantiate list-alloc [tuple [text] [type-kind]]] 0]]]
 
 [defn forms-to-exps [gctx [pmem [global-context]]
                      fl [plist [pform]]
