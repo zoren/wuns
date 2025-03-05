@@ -1364,7 +1364,7 @@
     [form-list-get pf]
     [do
       [push-error gctx pf [static-list [text 'not a form list']]]
-      [cast [plist [pform]] empty-list]]]]
+      [[instantiate list-alloc [pform]] 0]]]]
 
 [defn is-digit [cc [i64]] [i32]
   [is-between-inclusive [i64 48] cc [i64 57]]]
@@ -1910,7 +1910,7 @@
                [if [is-null intrinsic-info]
                 [do
                   [push-error gctx [list-get fl 1] [static-list [text 'intrinsic not found']]]
-                  [cast [plist [wtype]] empty-list]]
+                  [[instantiate list-alloc [wtype]] 0]]
                 [let [params [deref [pfield intrinsic-info parameters]]]
                   [when [ne [list-size params] n-intrinsic-args]
                     [push-error gctx f [static-list [text 'form-to-exp intrinsic expects the right number of arguments']]]]
@@ -2027,16 +2027,12 @@
 
     [log-abort [text 'form-to-exp unknown form case']]]]
 
-[defn form-to-type [gctx [pmem [global-context]] type-kind-env [p-assoc-list [text] [type-kind]] f [pmem [form]]] [wtype]
+[defn form-to-type [gctx [pmem [global-context]] f [pmem [form]]] [wtype]
   [ifs
     [form-word-is f]
     [let
-      [var-name [form-word-get f]
-       kind [assoc-list-get-value type-kind-env var-name]]
-      [when [is-null kind]
-        [log-assoc type-kind-env]
-        [log-text var-name]
-        [push-error gctx f [static-list [text 'unknown type var']]]]
+      [var-name [form-word-get f]]
+      [push-error gctx f [static-list [text 'unknown type var']]]
       type-error]
 
     [form-list-is f]
@@ -2065,7 +2061,7 @@
               [let [ts [[instantiate list-alloc [wtype]] n-args]]
                 [loop [i 1]
                   [when [lt-s i n]
-                    [list-set ts [dec i] [form-to-type gctx type-kind-env [list-get fl i]]]
+                    [list-set ts [dec i] [form-to-type gctx [list-get fl i]]]
                     [continue i [inc i]]]]
                 [type-tuple-alloc ts]]]
 
@@ -2077,7 +2073,7 @@
                 [loop [fi 1 i 0]
                   [when [lt-s fi n]
                     [list-set ns i [form-word-get-report gctx [list-get fl fi]]]
-                    [list-set ts i [form-to-type gctx type-kind-env [list-get fl [inc fi]]]]
+                    [list-set ts i [form-to-type gctx [list-get fl [inc fi]]]]
                     [continue i [inc i] fi [add 2 fi]]]]
                 [type-record-alloc ts ns]]]
 
@@ -2087,7 +2083,6 @@
 
 [defn parameter-forms-to-lists
   [gctx [pmem [global-context]]
-   type-kind-env [p-assoc-list [text] [type-kind]]
    param-list [plist [pform]]]
    [tuple [plist [ppattern]] [plist [wtype]]]
   [let
@@ -2103,7 +2098,7 @@
       [when [lt-s i n-of-param-forms]
         [let
           [lpat [form-to-pattern gctx [list-get param-list i]]
-           ltype [form-to-type gctx type-kind-env [list-get param-list [inc i]]]]
+           ltype [form-to-type gctx [list-get param-list [inc i]]]]
           [passign [pindex parameter-patterns-array ti] lpat]
           [passign [pindex parameter-types-array ti] ltype]
           [continue i [add 2 i] ti [inc ti]]]]]
@@ -2136,7 +2131,7 @@
             [pindex darray ti]
             [tuple name kind]]
           [continue i [add 2 i] ti [inc ti]]]]]
-    [cast [plist [tuple [text] [type-kind]]] empty-list]]]
+    [[instantiate list-alloc [tuple [text] [type-kind]]] 0]]]
 
 [defn forms-to-exps [gctx [pmem [global-context]]
                      fl [plist [pform]]
@@ -2171,9 +2166,9 @@
             [let
               [name-form [list-get fl 1]
                param-list [form-list-get-report gctx [list-get fl 2]]
-               result-type [form-to-type gctx empty-list [list-get fl 3]]
+               result-type [form-to-type gctx [list-get fl 3]]
                fname [form-word-get-report gctx name-form]
-               [ppatterns ptypes] [parameter-forms-to-lists gctx empty-list param-list]
+               [ppatterns ptypes] [parameter-forms-to-lists gctx param-list]
                stack [deref [pfield gctx local-stack]]
                parameter-pat-vars [[instantiate assoc-list-alloc [text] [wtype]] [i32 8]]
                func-local-variables [[instantiate assoc-list-alloc [text] [wtype]] [i32 8]]]
@@ -2551,7 +2546,7 @@
       [alloc-init
         [enum [wasm-exp] intrinsic
           name iname
-          immediate-arguments [cast [plist [text]] empty-list]
+          immediate-arguments [[instantiate list-alloc [text]] 0]
           arguments warguments]]]
 
     call
@@ -2685,7 +2680,7 @@
               [enum [wasm-exp] intrinsic
                 name [static-list [text br]]
                 immediate-arguments br-iargs
-                arguments [cast [plist [pwasm-exp]] empty-list]]]]]
+                arguments [[instantiate list-alloc [pwasm-exp]] 0]]]]]
       [alloc-init
         [enum [wasm-exp] instructions
           insts insts]]]
