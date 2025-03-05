@@ -707,6 +707,16 @@
         [continue i [inc i]]]
       [cast [pmem v] [i32 0]]]]]
 
+[genfn assoc-list-has [k datatype v datatype] [pglist [p-assoc-list k v] key k] [boolean]
+  [loop
+    [cur-size [deref [pfield pglist size]]
+     i 0]
+    [if [lt-s i cur-size]
+      [if [eq [deref [pindex [pindex [deref [pfield pglist parray]] i] [i32 0]]] key]
+        true
+        [continue i [inc i]]]
+      false]]]
+
 [genfn assoc-list-alloc [k datatype v datatype] [sz [i32]] [p-assoc-list k v]
   [[instantiate growable-list-alloc-init [tuple k v]] sz]]
 
@@ -1969,7 +1979,7 @@
                     [assoc-pair [growable-list-get-p variables i]
                      name [deref [pindex assoc-pair [i32 0]]]
                      type [deref [pindex assoc-pair [i32 1]]]]
-                    [when [not [is-null [assoc-list-get-value func-local-variables name]]]
+                    [when [assoc-list-has func-local-variables name]
                       [log-abort [text 'let/loop local variable already defined']]]
                     [assoc-list-push func-local-variables name type]
                     [continue i [inc i]]]]]
@@ -2176,7 +2186,7 @@
                   context-kind context-kind-func
                   variables parameter-pat-vars
                   func-local-variables func-local-variables]]
-              [if [assoc-list-get-value [deref [pfield gctx names]] fname]
+              [if [assoc-list-has [deref [pfield gctx names]] fname]
                 [push-error gctx name-form [static-list [text 'name already defined']]]]
               [let
                 [desc
@@ -2509,7 +2519,7 @@
     var
     [let
       [name [deref [pfield exp name]]
-       is-local [assoc-list-get-value [deref [pfield gctx exp-local-context]] exp]]
+       is-local [assoc-list-has [deref [pfield gctx exp-local-context]] exp]]
       [if is-local
         [let [gl [[instantiate growable-list-alloc-init [text]] [i32 10]]]
           [growable-list-push gl name]
