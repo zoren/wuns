@@ -1371,7 +1371,7 @@
     [form-list-get pf]
     [do
       [push-error gctx pf [static-list [text 'not a form list']]]
-      [[instantiate list-alloc [pform]] 0]]]]
+      list-empty]]]
 
 [defn is-digit [cc [i64]] [i32]
   [is-between-inclusive [i64 48] cc [i64 57]]]
@@ -1776,7 +1776,7 @@
           n [list-size fl]
           n-args [dec n]]
       [if [eq n 0]
-        [wexp-tuple-alloc [[instantiate list-alloc [pexp]] 0]]
+        exp-tuple-empty
       [let [ff [list-get fl 0]
             fw [form-word-get-report gctx ff]
             [lfound ltype] [local-stack-lookup gctx fw]
@@ -1885,7 +1885,7 @@
                [if [not found]
                 [do
                   [push-error gctx [list-get fl 1] [static-list [text 'intrinsic not found']]]
-                  [[instantiate list-alloc [wtype]] 0]]
+                  list-empty]
                 [let [params [deref [pfield intrinsic-info parameters]]]
                   [when [ne [list-size params] n-intrinsic-args]
                     [push-error gctx f [static-list [text 'form-to-exp intrinsic expects the right number of arguments']]]]
@@ -2400,7 +2400,7 @@
           [enum [wasm-exp] intrinsic
             name [static-list [text local.get]]
             immediate-arguments iargs
-            arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]]]
+            arguments list-empty]]]]]]
 
 [defn pattern-type-to-local-set-drop
    [gctx [pmem [global-context]]
@@ -2418,15 +2418,15 @@
           [enum [wasm-exp] intrinsic
             name [static-list [text local.set]]
             immediate-arguments iargs
-            arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]
+            arguments list-empty]]]]
 
     wildcard
     [growable-list-push ginsts
       [alloc-init
         [enum [wasm-exp] intrinsic
           name [static-list [text drop]]
-          immediate-arguments [[instantiate list-alloc [text]] 0]
-          arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]
+          immediate-arguments list-empty
+          arguments list-empty]]]
 
     [tuple record]
     [let [patterns [deref [pfield pattern patterns]]
@@ -2474,7 +2474,7 @@
             [enum [wasm-exp] intrinsic
               name [static-list [text global.get]]
               immediate-arguments iargs
-              arguments [[instantiate list-alloc [pmem [wasm-exp]]] 0]]]]]]
+              arguments list-empty]]]]]
 
     intrinsic
     [let
@@ -2489,7 +2489,7 @@
       [alloc-init
         [enum [wasm-exp] intrinsic
           name iname
-          immediate-arguments [[instantiate list-alloc [text]] 0]
+          immediate-arguments list-empty
           arguments warguments]]]
 
     call
@@ -2608,7 +2608,7 @@
               [enum [wasm-exp] intrinsic
                 name [static-list [text br]]
                 immediate-arguments br-iargs
-                arguments [[instantiate list-alloc [pwasm-exp]] 0]]]]]
+                arguments list-empty]]]]
       [alloc-init
         [enum [wasm-exp] instructions
           insts insts]]]
