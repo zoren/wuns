@@ -1107,50 +1107,16 @@
     pexp []
     [pmem [wexp]]]
 
-[defn wexp-integer-alloc [i [i64] negative [i32] type [wtype]] [pexp]
-  [alloc-init
-    [enum [wexp] integer
-      negative negative
-      value i
-      type type]]]
-
-[defn wexp-intrinsic-alloc [name [text] args [plist [pexp]]] [pexp]
-  [alloc-init
-    [enum [wexp] intrinsic
-      iname name
-      arguments args]]]
-
-[defn wexp-call-alloc [func [pexp] args [plist [pexp]]] [pexp]
-  [alloc-init
-    [enum [wexp] call
-      func func
-      arguments args]]]
-
 [def exp-tuple-empty
   [data mem
     [enum [wexp] tuple
       elements list-empty]]]
-
-[defn wexp-tuple-alloc [elements [plist [pexp]]] [pexp]
-  [if [list-empty-is elements]
-    exp-tuple-empty
-    [alloc-init
-      [enum [wexp] tuple
-        elements elements]]]]
 
 [def exp-record-empty
   [data mem
     [enum [wexp] record
       elements list-empty
       names list-empty]]]
-
-[defn wexp-record-alloc [elements [plist [pexp]] names [plist [text]]] [pexp]
-  [if [list-empty-is elements]
-    exp-record-empty
-    [alloc-init
-      [enum [wexp] record
-        elements elements
-        names names]]]]
 
 [def type-i32
   [data mem
@@ -1785,7 +1751,10 @@
               [when [lt-s i n]
                 [list-set args [sub i 1] [form-to-exp gctx [list-get fl i]]]
                 [continue i [inc i]]]]
-            [wexp-call-alloc fexp args]]
+            [alloc-init
+              [enum [wexp] call
+                func fexp
+                arguments args]]]
 
           [or
             [text-eq fw [static-list [text i8]]]  [text-eq fw [static-list [text u8]]]
@@ -1823,7 +1792,11 @@
                 [let [unsigned-upper [intrinsic i64.shl [i64 1] bit-size]]
                   [when [intrinsic i64.le-s unsigned-upper value]
                     [push-error gctx f [static-list [text 'unsigned value out of range']]]]]]]
-            [wexp-integer-alloc value negative type]]
+            [alloc-init
+              [enum [wexp] integer
+                negative negative
+                value value
+                type type]]]
 
           [text-eq fw [static-list [text if]]]
           [do
@@ -1847,23 +1820,35 @@
               if-exp]]
 
           [text-eq fw [static-list [text tuple]]]
-          [let [exps [[instantiate list-alloc [pexp]] n-args]]
-            [loop [i 1]
-              [when [lt-s i n]
-                [list-set exps [dec i] [form-to-exp gctx [list-get fl i]]]
-                [continue i [inc i]]]]
-            [wexp-tuple-alloc exps]]
+          [if [eq n-args 0]
+            exp-tuple-empty
+            [let [exps [[instantiate list-alloc [pexp]] n-args]]
+              [loop [i 1]
+                [when [lt-s i n]
+                  [list-set exps [dec i] [form-to-exp gctx [list-get fl i]]]
+                  [continue i [inc i]]]]
+              [alloc-init
+                [enum [wexp] tuple
+                  elements exps]]]]
 
           [text-eq fw [static-list [text record]]]
-          [let
-            [exps [[instantiate list-alloc [pexp]] [half n-args]]
-             names [[instantiate list-alloc [text]] [half n-args]]]
-            [loop [fi 1 i 0]
-              [when [lt-s fi n]
-                [list-set names i [form-word-get-report gctx [list-get fl fi]]]
-                [list-set exps i [form-to-exp gctx [list-get fl [inc fi]]]]
-                [continue fi [add 2 fi] i [inc i]]]]
-            [wexp-record-alloc exps names]]
+          [let [n-fields [half n-args]]
+            [when [is-odd n-args]
+              [push-error gctx f [static-list [text 'record expects an even number of arguments, extra is ignored']]]]
+            [if [eq n-fields 0]
+              exp-record-empty
+              [let
+                [names [[instantiate list-alloc [text]] n-fields]
+                 exps [[instantiate list-alloc [pexp]] n-fields]]
+                [loop [fi 1 i 0]
+                  [when [lt-s fi n]
+                    [list-set names i [form-word-get-report gctx [list-get fl fi]]]
+                    [list-set exps i [form-to-exp gctx [list-get fl [inc fi]]]]
+                    [continue fi [add 2 fi] i [inc i]]]]
+                [alloc-init
+                  [enum [wexp] record
+                    elements exps
+                    names names]]]]]
 
           [text-eq fw [static-list [text intrinsic]]]
           [do
@@ -1906,7 +1891,10 @@
                       [push-error gctx [list-get fl [inc i]] [static-list [text 'intrinsic argument type mismatch']]]]
                     ; todo check type
                     [continue i [inc i]]]]]
-              [wexp-intrinsic-alloc name args]]]
+              [alloc-init
+                [enum [wexp] intrinsic
+                  iname name
+                  arguments args]]]]
 
           [or [text-eq fw [static-list [text let]]] [text-eq fw [static-list [text loop]]]]
           [do
