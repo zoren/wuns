@@ -152,7 +152,7 @@
     [match
       exp ; the name of a pointer to an enum
       [list [pair [list name] exp]] ; the match cases, allowing multiple tags for a single case
-      exp ; the default case
+      [option exp] ; the default case
       ]
     [do [list exp]]
 
@@ -440,6 +440,9 @@
         [option/some names]
 
         [local-context-kind/let]
+        [continue cur outer]
+
+        [local-context-kind/match]
         [continue cur outer]
 
         [local-context-kind/func -]
@@ -1055,9 +1058,6 @@
        disc-name [match discriminator [exp/var n] n [logq-abort match not a var]]
        disc-word [name/word disc-name]
        cases [pairwise-pairs [slice l 2 [size l]]]]
-      [when-not [is-odd [size l]]
-        [log-location [last l]]
-        [logq-abort match requires an even number of arguments]]
       [exp/match
         discriminator
         [list-map case-pair cases
@@ -1073,7 +1073,10 @@
             [pair
               [list destructor-name]
               [form-to-exp-type-kind-env type-kind-env branch-ctx branch-exp-form]]]]
-        [form-to-exp-type-kind-env type-kind-env lctx [last l]]]]
+        [if [is-odd [size l]]
+          [option/some [form-to-exp-type-kind-env type-kind-env lctx [last l]]]
+          [option/none]
+          ]]]
 
     [[word and]]
     [let
@@ -1910,10 +1913,10 @@
           i [inc i]]
         cur-type]]
 
-    [exp/match - branches default]
+    [exp/match - branches opt-default]
     [loop
       [n [size branches]
-       cur-type [type-of default]
+       cur-type [if-let [default opt-default] [type-of default] type-empty]
        i 0]
       [if [lt-s i n]
         [continue
@@ -2989,7 +2992,7 @@
               drop-result
               [list [exp-to-inst default]]]]]]]
 
-    [exp/match discriminator cases default]
+    [exp/match discriminator cases opt-default]
     [let
       [pargs [get-pointer-args [type-of discriminator]]
        mem-type [pair/fst pargs]
@@ -3004,7 +3007,9 @@
               [list-map dtor [pair/fst case]
                 [mk-exp-i32-i32 [pair/fst [get-enum-ctor-index-fields ctors dtor]]]]
               [pair/snd case]]]
-          default]]]
+          [if-let [default opt-default]
+            default
+            [exp/intrinsic [name [word unreachable]] [list] [list]]]]]]
 
     [exp/do es]
     [exps-to-inst es]
