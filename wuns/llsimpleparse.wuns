@@ -488,7 +488,7 @@
       size [reify sz]
       array array]]]
 
-[def list-empty [cast [plist -a] [static-list [array [i32]]]]]
+[def list-empty [cast [plist -a] [static-list [array [union]]]]]
 
 [defn list-size [pvec [pmem [record [size [i32]]]]] [i32]
   [deref [pfield pvec size]]]
