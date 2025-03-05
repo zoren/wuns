@@ -1064,19 +1064,27 @@
           [let
             [destructor-form [pair/fst case-pair]
              branch-exp-form [pair/snd case-pair]
-             destructor-name [form-to-name destructor-form] ; only allow one dtor now
+             destructor-names
+             [match destructor-form
+              [form/word -] [list [form-to-name destructor-form]]
+              [form/list l] [list-map f l [form-to-name f]]]
              vars [transient-kv-map]
              branch-ctx [local-context-make lctx vars [local-context-kind/match]]
-             index-fields [get-enum-ctor-index-fields ctors destructor-name]
-             disc-type [type/pointer mem-type [enum-instance-type-from-names enum-type destructor-name]]]
-            [set-kv-map vars disc-word [local-var-desc disc-type disc-word]]
+             common-type
+             [loop [n [size destructor-names] res type-empty i 0]
+              [if [lt-s i n]
+                [let
+                  [destructor-name [at destructor-names i]
+                   index-fields [get-enum-ctor-index-fields ctors destructor-name]]
+                  [common-super-type res [enum-instance-type-from-names enum-type destructor-name]]]
+                res]]]
+            [set-kv-map vars disc-word [local-var-desc [type/pointer mem-type common-type] disc-word]]
             [pair
-              [list destructor-name]
+              destructor-names
               [form-to-exp-type-kind-env type-kind-env branch-ctx branch-exp-form]]]]
         [if [is-odd [size l]]
           [option/some [form-to-exp-type-kind-env type-kind-env lctx [last l]]]
-          [option/none]
-          ]]]
+          [option/none]]]]
 
     [[word and]]
     [let
