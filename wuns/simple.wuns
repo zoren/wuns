@@ -1232,22 +1232,27 @@
       [exp/let-loop
         [if is-let [let-or-loop/let] [let-or-loop/loop]]
         [list-map p [pairwise-pairs-check [get-list [second l]]]
-          [let [pexp [form-to-exp-type-kind-env type-kind-env let-loop-ctx [pair/snd p]]
-                types [get-tuple-type-elements [type-of pexp]]]
-            [match [pair/fst p]
-              [form/word -]
-              [let [pname [form-to-name [pair/fst p]]]
-                [assert [eq [size types] 1] [identity fw] expected 1 element tuple [identity pname]]
-                [add-var pname [first types]]
-                [pair [list pname] pexp]]
+          [let
+            [go
+             [func go [form-pat type]
+              [match form-pat
+                [form/word -]
+                [let [pname [form-to-name form-pat]]
+                  [add-var pname type]
+                  [pattern/var pname]]
 
-              [form/list pname-forms]
-              ; should check for tuple/record destructering
-              [let [pnames [list-map pf pname-forms [form-to-name pf]]]
-                [assert [eq [size pnames] [size types]] [identity fw] expected same number of names as types [identity pnames] [identity types]]
-                [for i 0 [size pnames]
-                  [add-var [at pnames i] [at types i]]]
-                [pair pnames pexp]]]]]
+                [form/list pname-forms]
+                [let
+                  [types [get-tuple-type-elements type]
+                   gpatterns [growable-list]]
+                  [assert [eq [size pname-forms] [size types]] [identity fw] expected same number of names as types]
+                  [loop [n [size types] i 0]
+                    [when [lt-s i n]
+                      [push gpatterns [go [at pname-forms i] [at types i]]]
+                      [continue i [inc i]]]]
+                  [pattern/tuple [clone-growable-to-frozen-list gpatterns]]]]]
+              pexp [form-to-exp-type-kind-env type-kind-env let-loop-ctx [pair/snd p]]]
+            [pair [go [pair/fst p] [type-of pexp]] pexp]]]
         [list-map b [slice l 2 [size l]] [form-to-exp-type-kind-env type-kind-env let-loop-ctx b]]]]
 
     [[word continue]]
@@ -3072,19 +3077,25 @@
     [let
       [bind-insts
        [list-map b bindings
-        [let [ns [pair/fst b]
+        [let [pattern [pair/fst b]
               e [pair/snd b]
-              gset-insts [growable-list]]
-          [for i 0 [size ns]
-            [push glocals
-              [let
-                [n [at ns i]
-                 ndesc [get-name-desc-from-name n]
-                 ldesc [get-local-desc-from-name-desc ndesc]
-                 wat-name [local-var-desc/wat-name [local-name-desc/desc ldesc]]
-                 t [name-desc/type ndesc]]
-                [push gset-insts [wat-inst/local.set-no wat-name]]
-                [pair wat-name [type-to-wat-type [type-substitute type-env t]]]]]]
+              gset-insts [growable-list]
+              gpairs [growable-list]
+              gop
+              [func gop [pattern]
+                [match pattern
+                  [pattern/var n]
+                  [let
+                    [ndesc [get-name-desc-from-name n]
+                     ldesc [get-local-desc-from-name-desc ndesc]
+                     wat-name [local-var-desc/wat-name [local-name-desc/desc ldesc]]]
+                    [push gset-insts [wat-inst/local.set-no wat-name]]
+                    [push glocals
+                      [pair wat-name [type-to-wat-type [type-substitute type-env [name-desc/type ndesc]]]]]]
+
+                  [pattern/tuple pats]
+                  [for-each pat pats [gop pat]]]]]
+          [gop pattern]
           [wat-inst/instructions
             [concat
               [list [exp-to-inst e]]
