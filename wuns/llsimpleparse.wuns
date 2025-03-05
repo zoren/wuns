@@ -697,25 +697,19 @@
 [genfn assoc-list-push [k datatype v datatype] [pglist [p-assoc-list k v] key k value v] [tuple]
   [growable-list-push pglist [tuple key value]]]
 
-[genfn assoc-list-get-value [k datatype v datatype] [pglist [p-assoc-list k v] key k] [pmem v]
+[genfn assoc-list-try-get-value [k datatype v datatype] [pglist [p-assoc-list k v] key k] [tuple [boolean] v]
   [loop
     [cur-size [deref [pfield pglist size]]
      i 0]
     [if [lt-s i cur-size]
       [if [eq [deref [pindex [pindex [deref [pfield pglist parray]] i] [i32 0]]] key]
-        [pindex [pindex [deref [pfield pglist parray]] i] [i32 1]]
+        [tuple true [deref [pindex [pindex [deref [pfield pglist parray]] i] [i32 1]]]]
         [continue i [inc i]]]
-      [cast [pmem v] [i32 0]]]]]
+      [tuple false [cast [pmem v] [i32 0]]]]]]
 
 [genfn assoc-list-has [k datatype v datatype] [pglist [p-assoc-list k v] key k] [boolean]
-  [loop
-    [cur-size [deref [pfield pglist size]]
-     i 0]
-    [if [lt-s i cur-size]
-      [if [eq [deref [pindex [pindex [deref [pfield pglist parray]] i] [i32 0]]] key]
-        true
-        [continue i [inc i]]]
-      false]]]
+  [let [[found -] [assoc-list-try-get-value pglist key]]
+    found]]
 
 [genfn assoc-list-alloc [k datatype v datatype] [sz [i32]] [p-assoc-list k v]
   [[instantiate growable-list-alloc-init [tuple k v]] sz]]
@@ -1304,10 +1298,10 @@
         [let
           [frame [growable-list-get-p stack [dec i]]
            locals [deref [pfield frame variables]]
-           pval [assoc-list-get-value locals name]]
-          [if [is-null pval]
-            [continue i [dec i]]
-            [tuple true [deref pval]]]]]]]]
+           [found val] [assoc-list-try-get-value locals name]]
+          [if found
+            [tuple true val]
+            [continue i [dec i]]]]]]]]
 
 [defn local-stack-first-frame-by-context-kind [gctx [pmem [global-context]] context-kind [i32]] [pmem [local-frame]]
   [let
@@ -1335,22 +1329,23 @@
 [defn push-error [gctx [pmem [global-context]] form [pform] msg [text]] [tuple]
   [let
     [errors [deref [pfield gctx errors]]
-     p-offset [assoc-list-get-value [deref [pfield gctx form-offsets]] form]]
-    [when [is-null p-offset]
-      [log-i32 [list-size [deref [pfield gctx form-offsets]]]]
-      [log-assoc [deref [pfield gctx form-offsets]]]
-      [log-abort [text 'push-error form not found in form-offsets']]]
-    [growable-list-push errors
-      [record
-        message msg
-        offset [deref p-offset]]]]]
+     [found offset] [assoc-list-try-get-value [deref [pfield gctx form-offsets]] form]]
+    [if found
+      [growable-list-push errors
+        [record
+          message msg
+          offset offset]]
+      [do
+        [log-i32 [list-size [deref [pfield gctx form-offsets]]]]
+        [log-assoc [deref [pfield gctx form-offsets]]]
+        [log-abort [text 'push-error form not found in form-offsets']]]]]]
 
 [defn push-error-exp [gctx [pmem [global-context]] exp [pmem -a] msg [text]] [tuple]
   [let
-    [form [assoc-list-get-value [deref [pfield gctx exp-to-forms]] exp]]
-    [when [is-null form]
+    [[found form] [assoc-list-try-get-value [deref [pfield gctx exp-to-forms]] exp]]
+    [when [not found]
       [log-abort [text 'push-error-exp form not found in exp-to-forms']]]
-    [push-error gctx [deref form] msg]]]
+    [push-error gctx form msg]]]
 
 [defn form-word-get-report [gctx [pmem [global-context]] pf [pform]] [text]
   [if [form-word-is pf]
@@ -1534,14 +1529,12 @@
       type-union-empty
 
       [let [exp-types [deref [pfield gctx exp-types]]
-            annotated-type [assoc-list-get-value exp-types e]]
-        [if [is-null annotated-type]
-          [do
-            [log-i32 tag]
-            [log-i32 annotated-type]
-            [log-i32 [list-size exp-types]]
-            [log-abort [text 'type-of not annotated']]]
-          [deref annotated-type]]]]]]
+            [found annotated-type] [assoc-list-try-get-value exp-types e]]
+        [when [not found]
+          [log-i32 tag]
+          [log-i32 [list-size exp-types]]
+          [log-abort [text 'type-of not annotated']]]
+        annotated-type]]]]
 
 [defn type-ofs [gctx [pmem [global-context]] es [plist [pexp]]] [wtype]
   [if [list-empty-is es]
@@ -1649,10 +1642,10 @@
   [assoc-list-push [deref [pfield gctx exp-local-context]] exp [i32 1]]]
 
 [defn lookup-global [gctx [pmem [global-context]] w [text]] [tuple [boolean] [pmem [global-desc-kind]]]
-  [let [ppdesc [assoc-list-get-value [deref [pfield gctx names]] w]]
-    [if [is-null ppdesc]
-      [tuple false [cast [pmem [global-desc-kind]] null]]
-      [tuple true [deref ppdesc]]]]]
+  [let [[found ppdesc] [assoc-list-try-get-value [deref [pfield gctx names]] w]]
+    [if found
+      [tuple true ppdesc]
+      [tuple false [cast [pmem [global-desc-kind]] null]]]]]
 
 [defn half [i [i32]] [i32] [intrinsic i32.shr-s i 1]]
 
@@ -1874,7 +1867,7 @@
                tc [type-of gctx c]]
               [when [not [type-assignable type-i32 tc]]
                 [log-i32 tc]
-                [push-error gctx [list-get fl 1] [static-list [text 'if condition not i32']]]]
+                [push-error gctx [list-get fl 1] [static-list [text 'if condition not i32 here']]]]
               [annotate gctx if-exp [common-super-type [type-of gctx t] [type-of gctx e]]]
               if-exp]]
 
@@ -2009,10 +2002,10 @@
                     [loopvar [form-word-get-report gctx [list-get fl fi]]
                      bound-exp [form-to-exp gctx [list-get fl [inc fi]]]
                      bound-type [type-of gctx bound-exp]
-                     ploopvar-type [assoc-list-get-value loop-variables loopvar]]
-                    [when [is-null ploopvar-type]
+                     [found ploopvar-type] [assoc-list-try-get-value loop-variables loopvar]]
+                    [when [not found]
                       [push-error gctx f [static-list [text 'continue variable not found']]]]
-                    [when [not [type-assignable [deref ploopvar-type] bound-type]]
+                    [when [not [type-assignable ploopvar-type bound-type]]
                       [push-error gctx f [static-list [text 'continue type mismatch']]]]
                     [passign [pindex assignments-array i] [tuple loopvar bound-exp]]
                     [continue i [inc i] fi [add 2 fi]]]]]
@@ -2257,10 +2250,10 @@
                   [let
                     [ef [list-get fl k]
                      export-name [form-word-get-report gctx ef]
-                     edesc [assoc-list-get-value names export-name]]
-                    [if [is-null edesc]
+                     [found edesc] [assoc-list-try-get-value names export-name]]
+                    [if [not found]
                       [push-error gctx ef [static-list [text 'export name not found']]]
-                      [assoc-list-push exports export-name [deref edesc]]]
+                      [assoc-list-push exports export-name edesc]]
                     [continue k [inc k]]]]]]]
 
           [do
@@ -2949,7 +2942,8 @@
 
                 [write-results writer [type-to-wasm-types result]]
                 [let
-                  [fbody [deref [assoc-list-get-value [deref [pfield gctx function-bodies]] desc]]
+                  [[found fbody] [assoc-list-try-get-value [deref [pfield gctx function-bodies]] desc]
+                   [] [when [not found] [log-abort [text 'write-global-context function body not found']]]
                    locals [deref [pfield fbody locals]]
                    body [deref [pfield fbody body]]]
                   [loop [n-locals [list-size locals] i 0]
