@@ -1479,19 +1479,17 @@
           [type-tuple-alloc types]]]
 
       record
-      [let
+      [loop
         [elements [deref [pfield e elements]]
          names [deref [pfield e names]]
-         n [list-size elements]]
-        [if [eq n 0]
-          type-record-empty
-          [loop [types [[instantiate list-alloc [wtype]] n]
-                 i 0]
-            [if [lt-s i n]
-              [do
-                [list-set types i [type-of gctx [list-get elements i]]]
-                [continue i [inc i]]]
-              [type-record-alloc types names]]]]]
+         n [list-size elements]
+         types [[instantiate list-alloc [wtype]] n]
+         i 0]
+        [if [lt-s i n]
+          [do
+            [list-set types i [type-of gctx [list-get elements i]]]
+            [continue i [inc i]]]
+          [type-record-alloc types names]]]
 
       let-loop
       [let
@@ -2015,16 +2013,20 @@
                 [type-tuple-alloc ts]]]
 
             [text-eq fw [static-list [text record]]]
-            [if [eq n-args 0]
-              type-record-empty
-              [let [ts [[instantiate list-alloc [wtype]] [half n-args]]
-                    ns [[instantiate list-alloc [text]] [half n-args]]]
+            [do
+              [when [is-odd n-args]
+                [push-error gctx f [static-list [text 'record expects an even number of arguments, extra is ignored']]]]
+              [loop
+                [n-fields [half n-args]
+                 ns [[instantiate list-alloc [text]] n-fields]
+                 ts [[instantiate list-alloc [wtype]] n-fields]]
                 [loop [fi 1 i 0]
-                  [when [lt-s fi n]
-                    [list-set ns i [form-word-get-report gctx [list-get fl fi]]]
-                    [list-set ts i [form-to-type gctx [list-get fl [inc fi]]]]
-                    [continue i [inc i] fi [add 2 fi]]]]
-                [type-record-alloc ts ns]]]
+                  [if [lt-s fi n]
+                    [do
+                      [list-set ns i [form-word-get-report gctx [list-get fl fi]]]
+                      [list-set ts i [form-to-type gctx [list-get fl [inc fi]]]]
+                      [continue i [inc i] fi [add 2 fi]]]
+                    [type-record-alloc ts ns]]]]]
 
             [log-abort [text 'form-to-type unknown form-list case']]]]]]
 
