@@ -488,7 +488,7 @@
       size [reify sz]
       array array]]]
 
-[def empty-list [cast [plist -a] [static-list [array [i32]]]]]
+[def list-empty [cast [plist -a] [static-list [array [i32]]]]]
 
 [defn list-size [pvec [pmem [record [size [i32]]]]] [i32]
   [deref [pfield pvec size]]]
@@ -501,7 +501,7 @@
 [genfn list-alloc [elem-type datatype] [lafn-sz [i32]] [plist elem-type]
   ; return empty list if size is 0
   [if [eq lafn-sz 0]
-    empty-list
+    list-empty
     [let [p [[instantiate alloc-fn [list-data elem-type [exp lafn-sz]]]]]
       [passign [pfield p size] lafn-sz]
       p]]]
@@ -1011,7 +1011,7 @@
 [def type-union-empty
   [data mem
     [enum [wtype-data] union
-      types [cast [plist [wtype]] empty-list]]]]
+      types [cast [plist [wtype]] list-empty]]]]
 
 ; [defn type-union-alloc [types [plist [wtype]]] [wtype]
 ;   ; todo filter empty types and sort the types to normalize...
@@ -1130,7 +1130,7 @@
 [def exp-tuple-empty
   [data mem
     [enum [wexp] tuple
-      elements [cast [plist [pexp]] empty-list]]]]
+      elements [cast [plist [pexp]] list-empty]]]]
 
 [defn wexp-tuple-alloc [elements [plist [pexp]]] [pexp]
   [if [list-empty-is elements]
@@ -1142,8 +1142,8 @@
 [def exp-record-empty
   [data mem
     [enum [wexp] record
-      elements [cast [plist [pexp]] empty-list]
-      names [cast [plist [text]] empty-list]]]]
+      elements [cast [plist [pexp]] list-empty]
+      names [cast [plist [text]] list-empty]]]]
 
 [defn wexp-record-alloc [elements [plist [pexp]] names [plist [text]]] [pexp]
   [if [list-empty-is elements]
@@ -1172,7 +1172,7 @@
 [def type-tuple-empty
   [data mem
     [enum [wtype-data] tuple
-      types [cast [plist [wtype]] empty-list]]]]
+      types [cast [plist [wtype]] list-empty]]]]
 
 [defn type-tuple-alloc [types [plist [wtype]]] [wtype]
   [if [list-empty-is types]
@@ -1184,8 +1184,8 @@
 [def type-record-empty
   [data mem
     [enum [wtype-data] record
-      types [cast [plist [wtype]] empty-list]
-      names [cast [plist [text]] empty-list]]]]
+      types [cast [plist [wtype]] list-empty]
+      names [cast [plist [text]] list-empty]]]]
 
 [defn type-record-alloc [types [plist [wtype]] names [plist [text]]] [wtype]
   [when [ne [list-size types] [list-size names]]
