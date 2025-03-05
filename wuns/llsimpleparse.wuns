@@ -984,7 +984,6 @@
 [datatype
   wtype-data []
   [enum tag [i32]
-    [error]
     [integer
       n-bytes [i32]
       signed [boolean]]
@@ -1129,10 +1128,6 @@
     [enum [wtype-data] integer
       n-bytes 8
       signed true]]]
-
-[def type-error
-  [data mem
-    [enum [wtype-data] error]]]
 
 [def type-tuple-empty
   [data mem
@@ -1681,7 +1676,7 @@
           [let
             [pat [list-get patterns i]
              ptype [if [lt-s i [list-size types]] [list-get types i]
-              [do [push-error-exp gctx pat [static-list [text 'no type for pattern']]] type-error]]]
+              [do [push-error-exp gctx pat [static-list [text 'no type for pattern']]] type-union-empty]]]
             [push-pattern-type-local-stack gctx variables pat ptype]
             [continue i [inc i]]]]]
 
@@ -1704,7 +1699,7 @@
               [do
                 [log-text w]
                 [push-error gctx f [static-list [text 'variable not found']]]
-                type-error]
+                type-union-empty]
 
               [match pdesc
                 def
@@ -1717,7 +1712,7 @@
 
                 [do
                   [push-error gctx f [static-list [text 'global variable has unknown tag']]]
-                  type-error]]]]]
+                  type-union-empty]]]]]
        exp
        [alloc-init
         [enum [wexp] var
@@ -1991,7 +1986,7 @@
     [let
       [var-name [form-word-get f]]
       [push-error gctx f [static-list [text 'unknown type var']]]
-      type-error]
+      type-union-empty]
 
     [form-list-is f]
     [let [fl [form-list-get-report gctx f]
