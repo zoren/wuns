@@ -1568,7 +1568,7 @@
       [type/apply-custom stn sargs]
       [go-tai tenv param-t [expand-custom-1 stn sargs]]
 
-      [result/error [qlist not a record [identity arg-t]]]]
+      [result/error [qlist not a record]]]
 
     [type/enum dst-tag-type dst-ctors]
     [match [expand-custom-n arg-t]
