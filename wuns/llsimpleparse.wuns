@@ -1792,9 +1792,7 @@
           n [list-size fl]
           n-args [dec n]]
       [if [eq n 0]
-        [do
-          [push-error gctx f [static-list [text 'empty list not allowed']]]
-          [cast [pexp] null]]
+        [wexp-tuple-alloc [[instantiate list-alloc [pexp]] 0]]
       [let [ff [list-get fl 0]
             fw [form-word-get-report gctx ff]
             [lfound ltype] [local-stack-lookup gctx fw]
