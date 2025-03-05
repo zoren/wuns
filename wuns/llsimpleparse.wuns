@@ -67,7 +67,7 @@
 [def static-mem-top [memory-static-top mem]]
 
 [defn static-is [p [pmem -a]] [i32]
-  [lt-s [cast [i32] p] static-mem-top]]
+  [lt-s [pointer-value p] static-mem-top]]
 
 [mutable mem-top [memory-static-top mem]]
 
@@ -89,13 +89,13 @@
   [eq p [mem-align p]]]
 
 [defn memory-fill [p [pmem -a] value [i32] n-bytes [i32]] [tuple]
-  [intrinsic memory.fill mem [cast [i32] p] value n-bytes]]
+  [intrinsic memory.fill mem [pointer-value p] value n-bytes]]
 
 [defn memory-zero [p [pmem -a] n-bytes [i32]] [tuple]
   [memory-fill p 0 n-bytes]]
 
 [defn memory-copy [pdst [pmem -a] psrc [pmem -a] n-bytes [i32]] [tuple]
-  [intrinsic memory.copy mem [cast [i32] pdst] [cast [i32] psrc] n-bytes]]
+  [intrinsic memory.copy mem [pointer-value pdst] [pointer-value psrc] n-bytes]]
 
 [defn memory-compare [p1 [pmem [array [u8]]] p2 [pmem [array [u8]]] n-bytes [i32]] [i64]
   [loop [i 0]
@@ -112,7 +112,7 @@
 [def null [cast [pmem -a] [i32 0]]]
 
 [defn is-null [p [pmem -a]] [i32]
-  [eq [cast [i32] p] 0]]
+  [eq [pointer-value p] 0]]
 
 [defn resize-mem-to-fit [new-top [i32]] [tuple]
   [let
@@ -182,7 +182,7 @@
   ; todo check if top is within memory bounds
   [if [static-is pframe]
     [log-abort [text 'alloc-frame-validate pframe points to static mem']]]
-  [if [lt-s [memory-size-bytes] [add [cast [i32] pframe] [size-of-type [alloc-stack-frame [exp [mem-align 1]]]]]]
+  [if [lt-s [memory-size-bytes] [add [pointer-value pframe] [size-of-type [alloc-stack-frame [exp [mem-align 1]]]]]]
     [log-abort [text 'alloc-frame-validate memory-size-bytes < frame-size']]]
   [let
     [frame-size [deref [pfield pframe frame-size]]
@@ -308,7 +308,7 @@
   [let [pframe [get-top-frame]]
     [if [is-null pframe]
       [log-abort [text 'alloc-stack-pop stack empty']]]
-    [set-top [cast [i32] pframe]]
+    [set-top [pointer-value pframe]]
     [assign num-of-frames [dec num-of-frames]]
     [memory-zero pframe [deref [pfield pframe frame-size]]]]]
 
@@ -325,13 +325,13 @@
 
     [eq old-n-bytes 0]
     [do
-      [if [ne [cast [i32] old-p] 0] [log-abort [text 'realloc old-n-bytes == 0 && old-p != 0']]]
+      [if [ne [pointer-value old-p] 0] [log-abort [text 'realloc old-n-bytes == 0 && old-p != 0']]]
       [alloc-stack-frame-push new-n-bytes]]
 
     [let
       ; todo check if old-p is a valid pointer first, non static and within memory bounds
       ; find the frame from the data pointer
-      [pframe-i [sub [cast [i32] old-p] [offset-of [alloc-stack-frame -a] data]]
+      [pframe-i [sub [pointer-value old-p] [offset-of [alloc-stack-frame -a] data]]
        pframe [cast [pmem [alloc-stack-frame -a]] pframe-i]
        frame-end [add pframe-i [deref [pfield pframe frame-size]]]]
       [alloc-frame-validate pframe]
@@ -402,18 +402,18 @@
 [defn pointer-dynamic-is [p [pmem -a]] [i32]
   [if [is-null p]
     1
-    [let [pi [cast [i32] p]]
+    [let [pi [pointer-value p]]
       [if [lt-u pi static-mem-top]
       0
       [lt-u pi [memory-size-bytes]]]]]]
 
 [defn realloc-production [old-p [pmem -a] old-n-bytes [i32] new-n-bytes [i32]] [pmem -a]
-  [if [not [mem-align-is [cast [i32] old-p]]] [log-abort [text 'realloc-production old-p not aligned']]]
+  [if [not [mem-align-is [pointer-value old-p]]] [log-abort [text 'realloc-production old-p not aligned']]]
   [if [not [pointer-dynamic-is old-p]] [log-abort [text 'realloc-production old-p not dynamic']]]
   [let
     [old-n-aligned [mem-align old-n-bytes]
      new-n-aligned [mem-align new-n-bytes]
-     old-pi [cast [i32] old-p]
+     old-pi [pointer-value old-p]
      old-end [add old-pi old-n-aligned]
      cur-top [get-top]]
     [if [eq old-end cur-top]
