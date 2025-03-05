@@ -467,7 +467,9 @@
   [bitwise-and [intrinsic i64.le-s lower c] [intrinsic i64.le-s c upper]]]
 
 [defn is-whitespace [c [i64]] [i32]
-  [bitwise-ior [intrinsic i64.eq c [i64 32]] [intrinsic i64.eq c [i64 10]]]]
+  [or
+    [intrinsic i64.eq c [i64 32]]
+    [intrinsic i64.eq c [i64 10]]]]
 
 [defn is-word-char [c [i64]] [i32]
   [or
@@ -1435,13 +1437,25 @@
     [result [wtype]]
     ]]
 
+[def type-boolean type-i32]
+
 [def intrinsics
   [static-list
     [array [intrinsic-info]
-      [record name [static-list [text i32.eqz]] parameters i32-singleton result type-i32]
+      [record name [static-list [text i32.eqz]] parameters i32-singleton result type-boolean]
 
-      [record name [static-list [text i32.eq]] parameters i32i32 result type-i32]
-      [record name [static-list [text i32.ne]] parameters i32i32 result type-i32]
+      [record name [static-list [text i32.eq]] parameters i32i32 result type-boolean]
+      [record name [static-list [text i32.ne]] parameters i32i32 result type-boolean]
+
+      [record name [static-list [text 'i32.lt_s']] parameters i32i32 result type-boolean]
+      [record name [static-list [text 'i32.lt_u']] parameters i32i32 result type-boolean]
+      [record name [static-list [text 'i32.gt_s']] parameters i32i32 result type-boolean]
+      [record name [static-list [text 'i32.gt_u']] parameters i32i32 result type-boolean]
+
+      [record name [static-list [text 'i32.le_s']] parameters i32i32 result type-boolean]
+      [record name [static-list [text 'i32.le_u']] parameters i32i32 result type-boolean]
+      [record name [static-list [text 'i32.ge_s']] parameters i32i32 result type-boolean]
+      [record name [static-list [text 'i32.ge_u']] parameters i32i32 result type-boolean]
 
       ; lt gt and friends...
 
@@ -1458,12 +1472,11 @@
       [record name [static-list [text i32.xor]] parameters i32i32 result type-i32]
 
       [record name [static-list [text i32.shl]] parameters i32i32 result type-i32]
-      ; [record name [static-list [text i32.shr-s]] parameters i32i32 result type-i32]
-      ; [record name [static-list [text i32.shr-u]] parameters i32i32 result type-i32]
+      [record name [static-list [text 'i32.shr_s']] parameters i32i32 result type-i32]
+      [record name [static-list [text 'i32.shr_u']] parameters i32i32 result type-i32]
 
       [record name [static-list [text i32.rotl]] parameters i32i32 result type-i32]
       [record name [static-list [text i32.rotr]] parameters i32i32 result type-i32]
-
 
       ]]]
 
