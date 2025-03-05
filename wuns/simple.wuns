@@ -1524,9 +1524,11 @@
       [type/pointer smem starget]
       [result-bind [go-tai tenv dmem smem] nenv [go-tai nenv dtarget starget]]
 
-      [do
-        [logq type-assignable-infer not a pointer but a [expand-custom-n arg-t]]
-        [result/error [qlist type-assignable-infer not a pointer]]]]
+      [if [type-empty-is arg-t]
+        [result/ok tenv]
+        [do
+          [logq type-assignable-infer not a pointer but a [expand-custom-n arg-t]]
+          [result/error [qlist type-assignable-infer not a pointer]]]]]
 
     [type/exp e]
     [match [expand-custom-if-non-rec arg-t]
