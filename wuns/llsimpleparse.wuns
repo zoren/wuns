@@ -1230,8 +1230,12 @@
   [record
     [context-kind [local-context-kind]]
     [variables [p-assoc-list [text] [wtype]]] ; func parameters/ let-loop bound names
-    [func-local-variables [p-assoc-list [text] [wtype]]] ; for a func, all its locals, not set for let/loop
     ]]
+
+[datatype function-frame []
+  [record
+    [func-local-variables [p-assoc-list [text] [wtype]]] ; all local vars declared in function
+  ]]
 
 [datatype function-body []
   [record
@@ -1249,6 +1253,7 @@
     [local-stack [p-growable-list [local-frame]]]
     [exp-to-forms [p-assoc-list [pmem -a] [pform]]]
     [function-bodies [p-assoc-list [pmem [global-desc-kind]] [pmem [function-body]]]]
+    [function-stack [p-growable-list [function-frame]]]
     ]]
 
 [defn global-context-alloc [form-offsets [p-assoc-list [pform] [i32]]] [pmem [global-context]]
@@ -1263,6 +1268,8 @@
       local-stack [[instantiate growable-list-alloc-init [local-frame]] [i32 10]]
       exp-to-forms [[instantiate assoc-list-alloc [pmem -a] [pform]] [i32 10]]
       function-bodies [[instantiate assoc-list-alloc [pmem [global-desc-kind]] [pmem [function-body]]] [i32 8]]
+      ; as do not have local functions yet the stack can only be empty or have one frame
+      function-stack [[instantiate growable-list-alloc-init [function-frame]] [i32 1]]
 ]]]
 
 [defn global-context-free [gctx [pmem [global-context]]] [tuple]
@@ -1933,7 +1940,10 @@
             [if [lt-s n-args 1]
               [log-abort [text 'form-to-exp let/loop expects 1 or more arguments']]]
             [let
-              [enclosing-func-frame [local-stack-first-frame-by-context-kind gctx context-kind-func]
+              [func-stack [deref [pfield gctx function-stack]]
+               [] [when [list-empty-is func-stack]
+                    [log-abort [text 'let/loop outside of function']]]
+               enclosing-func-frame [growable-list-get-p func-stack [dec [list-size func-stack]]]
                func-local-variables [deref [pfield enclosing-func-frame func-local-variables]]
                bindings-list [form-list-get-report gctx [list-get fl 1]]
                n-bindings [list-size bindings-list]
@@ -1946,8 +1956,7 @@
               [growable-list-push stack
                 [record
                   context-kind [if is-let context-kind-let context-kind-loop]
-                  variables variables
-                  func-local-variables [cast [p-assoc-list [text] [wtype]] null]]]
+                  variables variables]]
               [when [is-odd n-bindings]
                 [push-error gctx [list-last bindings-list]
                   [static-list [text 'let/loop expects an even number of bindings, extra is ignored']]]]
@@ -2157,10 +2166,11 @@
                result-type [form-to-type gctx [list-get fl 3]]
                fname [form-word-get-report gctx name-form]
                [ppatterns ptypes] [parameter-forms-to-lists gctx param-list]
-               stack [deref [pfield gctx local-stack]]
+               local-stack [deref [pfield gctx local-stack]]
+               function-stack [deref [pfield gctx function-stack]]
                parameter-pat-vars [[instantiate assoc-list-alloc [text] [wtype]] [i32 8]]
                func-local-variables [[instantiate assoc-list-alloc [text] [wtype]] [i32 8]]]
-              [when [ne [list-size stack] 0]
+              [when [ne [list-size local-stack] 0]
                 [log-abort [text 'push-parameter-forms-local-stack stack not empty']]]
               [loop
                  [n-of-param-forms [list-size ppatterns]
@@ -2169,10 +2179,12 @@
                   [push-pattern-type-local-stack gctx parameter-pat-vars
                     [list-get ppatterns i] [list-get ptypes i]]
                   [continue i [inc i]]]]
-              [growable-list-push stack
+              [growable-list-push local-stack
                 [record
                   context-kind context-kind-func
-                  variables parameter-pat-vars
+                  variables parameter-pat-vars]]
+              [growable-list-push function-stack
+                [record
                   func-local-variables func-local-variables]]
               [if [assoc-list-has [deref [pfield gctx names]] fname]
                 [push-error gctx name-form [static-list [text 'name already defined']]]]
@@ -2188,7 +2200,8 @@
                 [let [bodies [forms-to-exps gctx fl 4 n]]
                   [when [not [type-assignable result-type [type-ofs gctx bodies]]]
                     [push-error gctx form [static-list [text 'result type mismatch']]]]
-                  [growable-list-pop [deref [pfield gctx local-stack]]]
+                  [growable-list-pop local-stack]
+                  [growable-list-pop function-stack]
                   [assoc-list-push [deref [pfield gctx function-bodies]]
                     desc
                     [alloc-init
