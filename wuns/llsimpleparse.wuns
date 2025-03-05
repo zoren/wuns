@@ -1467,18 +1467,16 @@
           [log-abort [text 'type-of not a function type']]]]
 
       tuple
-      [let
+      [loop
         [elements [deref [pfield e elements]]
-         n [list-size elements]]
-        [if [eq n 0]
-          type-tuple-empty
-          [loop [types [[instantiate list-alloc [wtype]] n]
-                 i 0]
-            [if [lt-s i n]
-              [do
-                [list-set types i [type-of gctx [list-get elements i]]]
-                [continue i [inc i]]]
-              [type-tuple-alloc types]]]]]
+         n [list-size elements]
+         types [[instantiate list-alloc [wtype]] n]
+         i 0]
+        [if [lt-s i n]
+          [do
+            [list-set types i [type-of gctx [list-get elements i]]]
+            [continue i [inc i]]]
+          [type-tuple-alloc types]]]
 
       record
       [let
@@ -2009,13 +2007,11 @@
               type-i64]
 
             [text-eq fw [static-list [text tuple]]]
-            [if [eq n-args 0]
-              type-tuple-empty
-              [let [ts [[instantiate list-alloc [wtype]] n-args]]
-                [loop [i 1]
-                  [when [lt-s i n]
-                    [list-set ts [dec i] [form-to-type gctx [list-get fl i]]]
-                    [continue i [inc i]]]]
+            [loop [ts [[instantiate list-alloc [wtype]] n-args] i 1]
+              [if [lt-s i n]
+                [do
+                  [list-set ts [dec i] [form-to-type gctx [list-get fl i]]]
+                  [continue i [inc i]]]
                 [type-tuple-alloc ts]]]
 
             [text-eq fw [static-list [text record]]]
