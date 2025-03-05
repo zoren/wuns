@@ -4,7 +4,7 @@ export const langUndefined = undefined
 
 export const isSigned32BitInteger = (n) => (n | 0) === n
 
-const wordRegex = /^[-./0-9a-z]+$/
+const wordRegex = /^[-./0-9a-zA-Z_]+$/
 export const isWord = (s) => typeof s === 'string' && s.length > 0 && wordRegex.test(s)
 
 export const emptyList = Object.freeze([])

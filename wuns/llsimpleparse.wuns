@@ -470,9 +470,12 @@
   [bitwise-ior [intrinsic i64.eq c [i64 32]] [intrinsic i64.eq c [i64 10]]]]
 
 [defn is-word-char [c [i64]] [i32]
-  [bitwise-ior
-    [is-between-inclusive [i64 97] c [i64 122]]
-    [is-between-inclusive [i64 45] c [i64 57]]]]
+  [or
+    [is-between-inclusive [i64 97] c [i64 122]] ; a - z
+    [is-between-inclusive [i64 45] c [i64 57]]  ; - . / 0 - 9
+    [is-between-inclusive [i64 65] c [i64 90]]  ; A - Z
+    [intrinsic i64.eq c [i64 95]]               ; _
+    ]]
 
 [datatype list-data [a datatype size [exp [i32]]]
   [record
