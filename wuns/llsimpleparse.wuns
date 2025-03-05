@@ -1457,7 +1457,7 @@
 
       ]]]
 
-[defn get-intrinsic-by-name [name [text]] [pmem [intrinsic-info]]
+[defn get-intrinsic-by-name [name [text]] [tuple [boolean] [pmem [intrinsic-info]]]
   [loop
     [cur-size [list-size intrinsics]
      arr [list-data-array intrinsics]
@@ -1465,9 +1465,9 @@
     [if [lt-s i cur-size]
       [let [pintrin [pindex arr i]]
         [if [text-eq [deref [pfield pintrin name]] name]
-          pintrin
+          [tuple true pintrin]
           [continue i [inc i]]]]
-      [cast [pmem [intrinsic-info]] [i32 0]]]]]
+      [tuple false [cast [pmem [intrinsic-info]] [i32 0]]]]]]
 
 [defn type-of [gctx [pmem [global-context]] e [pexp]] [wtype]
   [let [tag [deref [pfield e tag]]]
@@ -1477,8 +1477,8 @@
 
       intrinsic
       [let
-        [intrinsic-info [get-intrinsic-by-name [deref [pfield e iname]]]]
-        [when [is-null intrinsic-info]
+        [[found intrinsic-info] [get-intrinsic-by-name [deref [pfield e iname]]]]
+        [when [not found]
           [log-text [deref [pfield e iname]]]
           [log-abort [text 'type-of not found intrinsic-info']]]
         [deref [pfield intrinsic-info result]]]
@@ -1896,11 +1896,11 @@
               [log-abort [text 'form-to-exp intrinsic expects at least a name argument']]]
             [let
               [name [form-word-get-report gctx [list-get fl 1]]
-               intrinsic-info [get-intrinsic-by-name name]
+               [found intrinsic-info] [get-intrinsic-by-name name]
                n-intrinsic-args [dec n-args]
                args [[instantiate list-alloc [pexp]] n-intrinsic-args]
                params
-               [if [is-null intrinsic-info]
+               [if [not found]
                 [do
                   [push-error gctx [list-get fl 1] [static-list [text 'intrinsic not found']]]
                   [[instantiate list-alloc [wtype]] 0]]
@@ -2799,22 +2799,6 @@
 
         [log-abort [text 'write-wasm-exp unknown tag']]]]]]
 
-[defn write-func-param [writer [writer] pname-postfixes [p-growable-list [text]] pname [text] type [text]] []
-  [write-text writer space]
-  [write-text writer lparen]
-  [write-text writer [static-list [text param]]]
-  [write-text writer space]
-  [when [not [is-null pname]]
-    [write-dollar-id writer pname]
-    [loop [i 0 n [list-size pname-postfixes]]
-      [when [lt-s i n]
-        [write-text writer [static-list [text -]]]
-        [write-text writer [growable-list-get pname-postfixes i]]
-        [continue i [inc i]]]]
-    [write-text writer space]]
-  [write-text writer type]
-  [write-text writer rparen]]
-
 [defn pattern-var-wildcard-is [ppat [ppattern]] [boolean]
   [match ppat
     var true
@@ -2874,10 +2858,32 @@
 
     [match ppat
       var
-      [write-func-param writer gl [deref [pfield ppat name]] [type-to-wasm-type t]]
+      [do
+        [write-text writer space]
+        [write-text writer lparen]
+        [write-text writer [static-list [text param]]]
+        [write-text writer space]
+
+        [write-dollar-id writer [deref [pfield ppat name]]]
+        [loop [i 0 n [list-size gl]]
+          [when [lt-s i n]
+            [write-text writer [static-list [text -]]]
+            [write-text writer [growable-list-get gl i]]
+            [continue i [inc i]]]]
+        [write-text writer space]
+
+        [write-text writer [type-to-wasm-type t]]
+        [write-text writer rparen]]
 
       wildcard
-      [write-func-param writer gl [cast [text] null] [type-to-wasm-type t]]
+      [do
+        [write-text writer space]
+        [write-text writer lparen]
+        [write-text writer [static-list [text param]]]
+        [write-text writer space]
+
+        [write-text writer [type-to-wasm-type t]]
+        [write-text writer rparen]]
 
       [log-abort [text 'write-func-param-by-type unknown tag']]]]]
 
