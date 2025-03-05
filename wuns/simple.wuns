@@ -90,6 +90,13 @@
 [type imm-arg []
   [union [memory name]]]
 
+[type pattern []
+  [union
+    [var name]
+    [tuple [list pattern]]
+    [record [list [pair name pattern]]]
+    ]]
+
 [type
   type []
   [union
@@ -149,7 +156,7 @@
     [size-of-exp exp]
 
     [if exp exp exp]
-    [let-loop let-or-loop [list [pair [list name] exp]] [list exp]]
+    [let-loop let-or-loop [list [pair pattern exp]] [list exp]]
     [continue [list [pair name exp]]]
     [switch
       exp ; an i32 exp
@@ -1242,15 +1249,24 @@
                   [pattern/var pname]]
 
                 [form/list pname-forms]
-                [let
-                  [types [get-tuple-type-elements type]
-                   gpatterns [growable-list]]
-                  [assert [eq [size pname-forms] [size types]] [identity fw] expected same number of names as types]
-                  [loop [n [size types] i 0]
-                    [when [lt-s i n]
-                      [push gpatterns [go [at pname-forms i] [at types i]]]
-                      [continue i [inc i]]]]
-                  [pattern/tuple [clone-growable-to-frozen-list gpatterns]]]]]
+                [if [is-empty pname-forms]
+                  [pattern/tuple [list]]
+                  [let [fw [form-to-word-report [first pname-forms]]]
+                    [ifs
+                      [eq-word fw [word tuple]]
+                      [let
+                        [types [get-tuple-type-elements type]
+                         gpatterns [growable-list]]
+                        [assert [eq [dec [size pname-forms]] [size types]] [identity fw] expected same number of names as types]
+                        [loop [n [size types] i 0]
+                          [when [lt-s i n]
+                            [push gpatterns [go [at pname-forms [inc i]] [at types i]]]
+                            [continue i [inc i]]]]
+                        [pattern/tuple [clone-growable-to-frozen-list gpatterns]]]
+
+                      [do
+                        [log-location form-pat]
+                        [logq-abort not a tuple records not supported yet]]]]]]]
               pexp [form-to-exp-type-kind-env type-kind-env let-loop-ctx [pair/snd p]]]
             [pair [go [pair/fst p] [type-of pexp]] pexp]]]
         [list-map b [slice l 2 [size l]] [form-to-exp-type-kind-env type-kind-env let-loop-ctx b]]]]

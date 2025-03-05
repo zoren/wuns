@@ -713,7 +713,7 @@
       [tuple false [pointer [exp mem] v [i32 0]]]]]]
 
 [genfn assoc-list-has [k datatype v datatype] [pglist [p-assoc-list k v] key k] [boolean]
-  [let [[found -] [assoc-list-try-get-value pglist key]]
+  [let [[tuple found -] [assoc-list-try-get-value pglist key]]
     found]]
 
 [genfn assoc-list-alloc [k datatype v datatype] [sz [i32]] [p-assoc-list k v]
@@ -963,7 +963,7 @@
 
 [defn parse-all-forms [bytes [text]] [plist [pform]]
   [let
-    [[gforms gtexts gform-offsets] [parse-n bytes]
+    [[tuple gforms gtexts gform-offsets] [parse-n bytes]
      forms [growable-list-to-list gforms]]
     [growable-list-free gtexts]
     [growable-list-free gforms]
@@ -1264,7 +1264,7 @@
         [let
           [frame [growable-list-get-p stack [dec i]]
            locals [deref [pfield frame variables]]
-           [found val] [assoc-list-try-get-value locals name]]
+           [tuple found val] [assoc-list-try-get-value locals name]]
           [if found
             [tuple true val]
             [continue i [dec i]]]]]]]]
@@ -1295,7 +1295,7 @@
 [defn push-error [gctx [pmem [global-context]] form [pform] msg [text]] [tuple]
   [let
     [errors [deref [pfield gctx errors]]
-     [found offset] [assoc-list-try-get-value [deref [pfield gctx form-offsets]] form]]
+     [tuple found offset] [assoc-list-try-get-value [deref [pfield gctx form-offsets]] form]]
     [if found
       [growable-list-push errors
         [record
@@ -1308,7 +1308,7 @@
 
 [defn push-error-exp [gctx [pmem [global-context]] exp [pmem -a] msg [text]] [tuple]
   [let
-    [[found form] [assoc-list-try-get-value [deref [pfield gctx exp-to-forms]] exp]]
+    [[tuple found form] [assoc-list-try-get-value [deref [pfield gctx exp-to-forms]] exp]]
     [when [not found]
       [log-abort [text 'push-error-exp form not found in exp-to-forms']]]
     [push-error gctx form msg]]]
@@ -1454,7 +1454,7 @@
 
       intrinsic
       [let
-        [[found intrinsic-info] [get-intrinsic-by-name [deref [pfield e iname]]]]
+        [[tuple found intrinsic-info] [get-intrinsic-by-name [deref [pfield e iname]]]]
         [when [not found]
           [log-text [deref [pfield e iname]]]
           [log-abort [text 'type-of not found intrinsic-info']]]
@@ -1502,7 +1502,7 @@
       type-union-empty
 
       [let [exp-types [deref [pfield gctx exp-types]]
-            [found annotated-type] [assoc-list-try-get-value exp-types e]]
+            [tuple found annotated-type] [assoc-list-try-get-value exp-types e]]
         [when [not found]
           [log-i32 tag]
           [log-i32 [list-size exp-types]]
@@ -1685,11 +1685,11 @@
     [form-word-is f]
     [let
       [w [form-word-get-report gctx f]
-       [lfound lvar-type] [local-stack-lookup gctx w]
+       [tuple lfound lvar-type] [local-stack-lookup gctx w]
        var-type
        [if lfound
           lvar-type
-          [let [[gfound pdesc] [lookup-global gctx w]]
+          [let [[tuple gfound pdesc] [lookup-global gctx w]]
             [if
               [not gfound]
               [do
@@ -1729,8 +1729,8 @@
         exp-tuple-empty
       [let [ff [list-get fl 0]
             fw [form-word-get-report gctx ff]
-            [lfound ltype] [local-stack-lookup gctx fw]
-            [gfound gdesc] [lookup-global gctx fw]]
+            [tuple lfound ltype] [local-stack-lookup gctx fw]
+            [tuple gfound gdesc] [lookup-global gctx fw]]
         [when lfound
           [log-abort [text 'calling a local variable as a function not yet supported']]]
         [ifs
@@ -1753,9 +1753,9 @@
             [text-eq fw [static-list [text i32]]] [text-eq fw [static-list [text u32]]]
             [text-eq fw [static-list [text i64]]] [text-eq fw [static-list [text u64]]]]
           [let
-            [[signed byte-size] [primitive-int-name-to-signed-size fw]
+            [[tuple signed byte-size] [primitive-int-name-to-signed-size fw]
               bit-size [intrinsic i64.mul byte-size [i64 8]]
-             [negative value]
+             [tuple negative value]
              [if [ne n-args 1]
               [do
                 [push-error gctx f [static-list [text 'expects one argument']]]
@@ -1847,7 +1847,7 @@
               [log-abort [text 'form-to-exp intrinsic expects at least a name argument']]]
             [let
               [name [form-word-get-report gctx [list-get fl 1]]
-               [found intrinsic-info] [get-intrinsic-by-name name]
+               [tuple found intrinsic-info] [get-intrinsic-by-name name]
                n-intrinsic-args [dec n-args]
                args [[instantiate list-alloc [pexp]] n-intrinsic-args]
                params
@@ -1958,7 +1958,7 @@
                     [loopvar [form-word-get-report gctx [list-get fl fi]]
                      bound-exp [form-to-exp gctx [list-get fl [inc fi]]]
                      bound-type [type-of gctx bound-exp]
-                     [found ploopvar-type] [assoc-list-try-get-value loop-variables loopvar]]
+                     [tuple found ploopvar-type] [assoc-list-try-get-value loop-variables loopvar]]
                     [when [not found]
                       [push-error gctx f [static-list [text 'continue variable not found']]]]
                     [when [not [type-assignable ploopvar-type bound-type]]
@@ -2090,7 +2090,7 @@
                param-list [form-list-get-report gctx [list-get fl 2]]
                result-type [form-to-type gctx [list-get fl 3]]
                fname [form-word-get-report gctx name-form]
-               [ppatterns ptypes] [parameter-forms-to-lists gctx param-list]
+               [tuple ppatterns ptypes] [parameter-forms-to-lists gctx param-list]
                local-stack [deref [pfield gctx local-stack]]
                function-stack [deref [pfield gctx function-stack]]
                parameter-pat-vars [[instantiate assoc-list-alloc [text] [wtype]] [i32 8]]
@@ -2183,7 +2183,7 @@
                   [let
                     [ef [list-get fl k]
                      export-name [form-word-get-report gctx ef]
-                     [found edesc] [assoc-list-try-get-value names export-name]]
+                     [tuple found edesc] [assoc-list-try-get-value names export-name]]
                     [if [not found]
                       [push-error gctx ef [static-list [text 'export name not found']]]
                       [assoc-list-push exports export-name edesc]]
@@ -2199,7 +2199,7 @@
 
 [defn parse-translate [bytes [text]] [pmem [global-context]]
   [let
-    [[forms texts form-offsets] [parse-n bytes]
+    [[tuple forms texts form-offsets] [parse-n bytes]
      gctx [global-context-alloc form-offsets]]
     [loop [i 0 n [list-size forms]]
       [when [lt-s i n]
@@ -2808,7 +2808,7 @@
 
                 [write-results writer [type-to-wasm-types result]]
                 [let
-                  [[found fbody] [assoc-list-try-get-value [deref [pfield gctx function-bodies]] desc]
+                  [[tuple found fbody] [assoc-list-try-get-value [deref [pfield gctx function-bodies]] desc]
                    [] [when [not found] [log-abort [text 'write-global-context function body not found']]]
                    locals [deref [pfield fbody locals]]
                    body [deref [pfield fbody body]]]

@@ -343,11 +343,11 @@
             [tuple x y]]
 
           [defn proj1 [] [i32]
-            [let [[a b] [tup [i32 4] [i32 5]]]
+            [let [[tuple a b] [tup [i32 4] [i32 5]]]
               a]]
 
           [defn proj2 [] [i32]
-            [let [[a b] [tup [i32 4] [i32 5]]]
+            [let [[tuple a b] [tup [i32 4] [i32 5]]]
               b]]
 
           [export proj1 proj2]]
@@ -361,11 +361,11 @@
   [let [forms
         [qlist
           [defn proj1 [t [tuple [i32] [i32]]] [i32]
-            [let [[a b] t]
+            [let [[tuple a b] t]
               a]]
 
           [defn proj2 [t [tuple [i32] [i32]]] [i32]
-            [let [[a b] t]
+            [let [[tuple a b] t]
               b]]
 
           [defn main [] [i32]
