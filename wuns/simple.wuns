@@ -105,19 +105,26 @@
     [record [list [pair name type]]]
 
     [union [list type]]
-    [enum
-      primitive-type ; tag type
-      [list
-        [pair
-          name ; ctor name
-          [list [pair name type]] ; ctor fields
-          ]]]
+    [enum type-enum]
 
     [exp exp]
 
     [func type-func]
     [functor [list [pair name type-kind]] type]
     [apply-custom name [list type]]]
+
+  type-enum []
+  [record
+    [tag-name name]
+    [tag-type primitive-type]
+    [ctors
+      [list
+        [pair name ; ctor name
+          [list
+            [pair
+              name ; field name
+              type ; field type
+              ]]]]]]
 
   type-func []
   [record
@@ -203,8 +210,6 @@
     [type type-func]
     [parameters [list name]]
     [bodies [list exp]]]]
-
-[def enum-tag-name [name [word tag]]]
 
 [defn may-side-effect [e]
   [match e
@@ -320,8 +325,8 @@
       [type/union ts] [for-each tt ts [go tt]]
       [type/apply-custom tn args] [for-each arg args [go arg]]
       [type/func tf] [do [for-each pp [type-func/parameters tf] [go pp]] [go [type-func/result tf]]]
-      [type/enum tag-type ctors]
-      [for-each ctor ctors
+      [type/enum te]
+      [for-each ctor [type-enum/ctors te]
         [for-each field [pair/snd ctor] [go [pair/snd field]]]]
       [logq-abort type-iterate not implemented [identity t]]]]]
 
@@ -362,12 +367,15 @@
           [list-map pp [type-func/parameters tf] [go pp]]
           [go [type-func/result tf]]]]
 
-      [type/enum tag-type ctors]
-      [type/enum tag-type
-        [list-map ctor ctors
-          [pair [pair/fst ctor]
-            [list-map f [pair/snd ctor]
-              [pair [pair/fst f] [go [pair/snd f]]]]]]]
+      [type/enum te]
+      [type/enum
+        [type-enum
+          [type-enum/tag-name te]
+          [type-enum/tag-type te]
+          [list-map ctor [type-enum/ctors te]
+            [pair [pair/fst ctor]
+              [list-map f [pair/snd ctor]
+                [pair [pair/fst f] [go [pair/snd f]]]]]]]]
 
       [logq-abort type-substitute not implemented [identity t]]]]]
     [if [eq 0 [kv-map-size type-env]]
@@ -927,9 +935,10 @@
 
             [[word enum]]
             [let
-              [tag-type [go-f2t-te [second l]]
+              [tag-name [form-to-name [second l]]
+               tag-type [go-f2t-te [third l]]
                ctors
-               [list-map ctor-form [slice l 2 [size l]]
+               [list-map ctor-form [slice l 3 [size l]]
                 [let
                   [ctor-list [form-to-list ctor-form]
                    ctor-name [form-to-name [first ctor-list]]
@@ -937,7 +946,7 @@
                   [pair ctor-name [list-map pf ctor-fields [pair [form-to-name [pair/fst pf]] [go-f2t-te [pair/snd pf]]]]]]]]
               [match tag-type
                 [type/primitive ptt]
-                [type/enum ptt ctors]
+                [type/enum [type-enum tag-name ptt ctors]]
 
                 [logq-abort enum expected primitive type [identity tag-type]]]]
 
@@ -1001,7 +1010,6 @@
           tt [type-of t]
           te [type-of e]]
       [when-not [type-assignable type-i32 [type-of c]] [logq-abort if condition not i32]]
-      [logq form-special-to-exp common-super-type [identity fw] [identity c] [identity t] [identity e]]
       [common-super-type tt te]
       [exp/if c t e]]
 
@@ -1054,7 +1062,7 @@
        mem-type [pair/fst pargs]
        enum-type [pair/snd pargs]
        enum-args [get-enum-args enum-type]
-       ctors [pair/snd enum-args]
+       ctors [type-enum/ctors enum-args]
        disc-name [match discriminator [exp/var n] n [logq-abort match not a var]]
        disc-word [name/word disc-name]
        cases [pairwise-pairs [slice l 2 [size l]]]]
@@ -1325,7 +1333,7 @@
       [enum-type [form-to-type-type-env type-kind-env lctx [second l]]
        enum-args [get-enum-args enum-type]
        ctor-name [form-to-name [third l]]
-       ctor-index-fields [get-enum-ctor-index-fields [pair/snd enum-args] ctor-name]
+       ctor-index-fields [get-enum-ctor-index-fields [type-enum/ctors enum-args] ctor-name]
        field-types [pair/snd ctor-index-fields]
        field-exps
        [list-map p [pairwise-pairs-check [slice l 3 [size l]]]
@@ -1581,8 +1589,11 @@
 
       [result/error [qlist not a record]]]
 
-    [type/enum dst-tag-type dst-ctors]
-    [match [expand-custom-n arg-t]
+    [type/enum dst-te]
+    [let
+      [dst-ctors [type-enum/ctors dst-te]
+       enum-tag-name [type-enum/tag-name dst-te]]
+      [match [expand-custom-n arg-t]
       [type/record sfs]
       [let
         [tag-exp-type
@@ -1603,10 +1614,13 @@
             [logq-abort enum record not an integer]]
         [logq-abort enum record not an exp]]]
 
-      [type/enum src-tag-type src-ctors]
-      [if [is-identical dst-tag-type src-tag-type]
-        [if [eq [size dst-ctors] [size src-ctors]]
-          [loop [n [size dst-ctors] i 0 cur tenv]
+      [type/enum src-te]
+      [if
+        [and
+          [is-identical [type-enum/tag-name dst-te] [type-enum/tag-name src-te]]
+          [is-identical [type-enum/tag-type dst-te] [type-enum/tag-type src-te]]]
+        [if [eq [size dst-ctors] [size [type-enum/ctors src-te]]]
+          [loop [n [size dst-ctors] i 0 cur tenv src-ctors [type-enum/ctors src-te]]
             [if [lt-s i n]
               [let [dst-ctor [at dst-ctors i] src-ctor [at src-ctors i]]
                 [if [eq-name [pair/fst dst-ctor] [pair/fst src-ctor]]
@@ -1628,7 +1642,7 @@
 
       [do
         [logq source not a record in enum destination [identity arg-t]]
-        [result/error [qlist source not a record in enum destination]]]]
+        [result/error [qlist source not a record in enum destination]]]]]
 
     [type/apply-custom ptn pargs]
     [match arg-t
@@ -1825,9 +1839,9 @@
               i [inc i]]]
           field-type]]]
 
-    [type/enum tag-type -]
-    [if [eq-word field-name-word [name/word enum-tag-name]]
-      [type/primitive tag-type]
+    [type/enum te]
+    [if [eq-word field-name-word [name/word [type-enum/tag-name te]]]
+      [type/primitive [type-enum/tag-type te]]
       [logq-abort get-field-type enum not a tag [identity field-name-word]]]
 
     [type/apply-custom tn args]
@@ -1859,8 +1873,8 @@
 
 [func get-enum-args [t]
   [match [expand-custom-n t]
-    [type/enum tag-type ctors]
-    [pair tag-type ctors]
+    [type/enum te]
+    te
 
     [logq-abort get-enum-args not a enum [identity t]]]]
 
@@ -1891,13 +1905,13 @@
 [func enum-instance-type-from-names [enum-type ctor-name]
   [let
     [enum-args [get-enum-args enum-type]
-     ctors [pair/snd enum-args]
+     ctors [type-enum/ctors enum-args]
      ctor-index-fields [get-enum-ctor-index-fields ctors ctor-name]
      ctor-index [pair/fst ctor-index-fields]
      field-types [pair/snd ctor-index-fields]
-     tag-exp-type [type/exp [exp/integer [pair/fst enum-args] [i32-to-bigint ctor-index]]]]
+     tag-exp-type [type/exp [exp/integer [type-enum/tag-type enum-args] [i32-to-bigint ctor-index]]]]
     [type/record
-      [concat [list [pair enum-tag-name tag-exp-type]] field-types]]]]
+      [concat [list [pair [type-enum/tag-name enum-args] tag-exp-type]] field-types]]]]
 
 [func type-of [exp]
   [match exp
@@ -2156,13 +2170,16 @@
       ; merge union of unions, and sort the types...
       [type/union [list-map ut utypes [go-ecnr ut]]]
 
-      [type/enum tag-type ctors]
-      [type/enum tag-type
-        [list-map ct ctors
-          [pair
-            [pair/fst ct]
-            [list-map fp [pair/snd ct]
-              [pair [pair/fst fp] [go-ecnr [pair/snd fp]]]]]]]
+      [type/enum te]
+      [type/enum
+        [type-enum
+          [type-enum/tag-name te]
+          [type-enum/tag-type te]
+          [list-map ct [type-enum/ctors te]
+            [pair
+              [pair/fst ct]
+              [list-map fp [pair/snd ct]
+                [pair [pair/fst fp] [go-ecnr [pair/snd fp]]]]]]]]
 
       [type/exp -]
       t
@@ -2601,10 +2618,10 @@
               [exp/enum enum-type ctor-name fields]
               [let
                 [enum-args [get-enum-args enum-type]
-                 ctors [pair/snd enum-args]
+                 ctors [type-enum/ctors enum-args]
                  ctor-index-fields [get-enum-ctor-index-fields ctors ctor-name]
                  ctor-index [pair/fst ctor-index-fields]
-                 n-bytes [primitive-type/bytes [pair/fst enum-args]]]
+                 n-bytes [primitive-type/bytes [type-enum/tag-type enum-args]]]
                 [print-bigint bprinter n-bytes [i32-to-bigint ctor-index]]
                 [for-each field fields [e2b [pair/snd field]]]]
 
@@ -2666,8 +2683,8 @@
               [continue i [inc i]]]
             first-offset]]]]
 
-    [type/enum tag-type -]
-    [if [eq-word field-name-word [name/word enum-tag-name]]
+    [type/enum te]
+    [if [eq-word field-name-word [name/word [type-enum/tag-name te]]]
       int-const-0
       [logq-abort calc-field-offset enum not a tag [identity field-name-word]]]
 
@@ -2749,10 +2766,12 @@
         [concat-words [word -]
           [word-join [word -] [list-map ta targs [type-to-string ta]]]]]]
 
-    [type/enum tag-type ctors]
+    [type/enum te]
     [concat-words [word enum]
-      [concat-words [primitive-type/name tag-type]
-        [word-join [word -] [list-map ct ctors
+      [concat-words
+        [name/word [type-enum/tag-name te]]
+        [primitive-type/name [type-enum/tag-type te]]
+        [word-join [word -] [list-map ct [type-enum/ctors te]
           [concat-words [name/word [pair/fst ct]]
             [word-join [word -] [list-map fp [pair/snd ct]
               [concat-words [name/word [pair/fst fp]] [concat-words [word -] [type-to-string [pair/snd fp]]]]]]]]]]]
@@ -3006,10 +3025,10 @@
        mem-type [pair/fst pargs]
        enum-type [pair/snd pargs]
        enum-args [get-enum-args enum-type]
-       ctors [pair/snd enum-args]]
+       ctors [type-enum/ctors enum-args]]
       [exp-to-inst
         [exp/switch
-          [exp/deref [exp/pfield discriminator enum-tag-name]]
+          [exp/deref [exp/pfield discriminator [type-enum/tag-name enum-args]]]
           [list-map case cases
             [pair
               [list-map dtor [pair/fst case]
@@ -3084,10 +3103,10 @@
     [exp/enum enum-type ctor-name fields]
     [let
       [enum-args [get-enum-args enum-type]
-       index [pair/fst [get-enum-ctor-index-fields [pair/snd enum-args] ctor-name]]]
+       index [pair/fst [get-enum-ctor-index-fields [type-enum/ctors enum-args] ctor-name]]]
       [wat-inst/instructions
         [concat
-          [list [exp-to-inst [exp/integer [pair/fst enum-args] [i32-to-bigint index]]]]
+          [list [exp-to-inst [exp/integer [type-enum/tag-type enum-args] [i32-to-bigint index]]]]
           [list-map field fields [exp-to-inst [pair/snd field]]]]]]
 
     [exp/pfield p-target-exp field-name]

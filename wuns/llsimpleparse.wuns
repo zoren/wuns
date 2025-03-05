@@ -715,7 +715,7 @@
   [[instantiate growable-list-alloc-init [tuple k v]] sz]]
 
 [datatype form []
-  [enum [i32]
+  [enum tag [i32]
     [word
       pword [text]]
     [list
@@ -978,7 +978,7 @@
 
 [datatype
   wtype-data []
-  [enum [i32]
+  [enum tag [i32]
     [error]
     [integer
       n-bytes [i32]
@@ -1051,7 +1051,7 @@
 
 [datatype
   pattern []
-  [enum [i32]
+  [enum tag [i32]
     [var
       name [text]]
     [wildcard
@@ -1070,7 +1070,7 @@
       name [static-list [text -]]]]]
 
 [datatype wexp []
-  [enum [i32]
+  [enum tag [i32]
     [integer
       negative [i32]
       value [i64]
@@ -1205,7 +1205,7 @@
   [i32]]
 
 [datatype global-desc-kind []
-  [enum [i32]
+  [enum tag [i32]
     [func
       parameter-patterns [plist [ppattern]]
       parameter-types [plist [wtype]]
@@ -2252,7 +2252,7 @@
 
 [datatype
   wasm-exp []
-  [enum [i32]
+  [enum tag [i32]
     [constant
       type [wasm-type]
       value [text]]
