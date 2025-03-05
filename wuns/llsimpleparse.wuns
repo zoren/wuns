@@ -1642,10 +1642,7 @@
   [assoc-list-push [deref [pfield gctx exp-local-context]] exp [i32 1]]]
 
 [defn lookup-global [gctx [pmem [global-context]] w [text]] [tuple [boolean] [pmem [global-desc-kind]]]
-  [let [[found ppdesc] [assoc-list-try-get-value [deref [pfield gctx names]] w]]
-    [if found
-      [tuple true ppdesc]
-      [tuple false [cast [pmem [global-desc-kind]] null]]]]]
+  [assoc-list-try-get-value [deref [pfield gctx names]] w]]
 
 [defn half [i [i32]] [i32] [intrinsic i32.shr-s i 1]]
 
