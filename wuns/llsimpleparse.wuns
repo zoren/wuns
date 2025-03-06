@@ -1073,7 +1073,8 @@
     [enum [pattern] wildcard
       name [static-list [text -]]]]]
 
-[datatype wexp []
+[datatype
+  wexp []
   [enum tag [i32]
     [integer
       negative [i32]
@@ -1099,6 +1100,8 @@
     [let-loop
       is-let [boolean]
       bindings [plist [tuple [ppattern] [pexp]]]
+      bodies [plist [pexp]]]
+    [do
       bodies [plist [pexp]]]
     [continue
       assignments [plist [tuple [text] [pexp]]]]]
@@ -1886,6 +1889,17 @@
                 [enum [wexp] intrinsic
                   iname name
                   arguments args]]]]
+
+          [text-eq fw [static-list [text do]]]
+          [let
+            [bodies [[instantiate list-alloc [pexp]] [sub n 2]]]
+            [loop [fi 2]
+              [when [lt-s fi n]
+                [list-set bodies [sub fi 2] [form-to-exp gctx [list-get fl fi]]]
+                [continue fi [inc fi]]]]
+            [alloc-init
+              [enum [wexp] do
+                bodies bodies]]]
 
           [or [text-eq fw [static-list [text let]]] [text-eq fw [static-list [text loop]]]]
           [do
