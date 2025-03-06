@@ -912,6 +912,30 @@
                 fw]
               [continue i word-end]]
 
+            ; single quoted string
+            [intrinsic i64.eq c [i64 39]]
+            [let
+              [string-end
+                [loop [j [inc i]]
+                  [if [lt-s j n-of-bytes]
+                    [if [intrinsic i64.eq [list-get bytes j] [i64 39]]
+                      j
+                      [continue j [inc j]]]
+                    j]]
+               string-size [sub string-end [inc i]]
+               [] [when [lt-s string-size 0] [log-abort [text 'unexpected string size']]]
+               [] [when [lt-s [i32 128] string-size] [log-abort [text 'unexpected string size']]]
+               p [pointer [exp mem] [array [u8]] [pindex bytes-array [inc i]]]
+               s [text-intern texts p string-size]
+               fs [form-word-alloc s]]
+              [assoc-list-push form-offsets fs i]
+              [growable-list-push
+                [if [is-negative stack-index]
+                  result
+                  [deref [pindex stack stack-index]]]
+                fs]
+              [continue i [inc string-end]]]
+
             [is-whitespace c]
             [continue i [inc i]]
 

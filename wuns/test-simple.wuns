@@ -724,6 +724,7 @@
               [pair [qlist [[]]] [word '[ [ ']]
               [pair [qlist abc xyz] [word 'abc xyz']]
               [pair [qlist abc [i32 789]] [word 'abc [i32 789]']]
+              [pair [qlist abc [i32 789]] [word "'abc' [i32 789]"]]
               ]]
           [for-each test tests
             [let
@@ -740,7 +741,22 @@
                 [test-assert-form-eq [at expected i] [at actual i]]]]
               [js-app list-forms-free fl]
               [js-app text-free w]]]]
-
+        [let
+          [tests
+            [list
+              [pair [word 'abc def'] [word "'abc def'"]]
+              [pair [word 'abc DEF-[]'] [word "'abc DEF-[]'"]]]]
+          [for-each test tests
+            [let
+              [expected [pair/fst test]
+               w [alloc-word [pair/snd test]]
+               fl [js-app parse-all-forms w]
+               sz [js-value-to-i32 [js-app list-size fl]]
+               pform [js-app list-get-form fl 0]
+               actual [ptext-to-string [js-app form-word-get pform]]]
+              [test-assert-eq expected actual]
+              [js-app list-forms-free fl]
+              [js-app text-free w]]]]
         [let
           [tests
             [list
