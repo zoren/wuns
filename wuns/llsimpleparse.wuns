@@ -811,14 +811,6 @@
 
 [export form-free list-forms-free]
 
-[defn scan-word-end [bytes [plist [u8]] start [i32]] [i32]
-  [loop [i start n-of-bytes [list-size bytes]]
-    [if [lt-s i n-of-bytes]
-      [if [is-word-char [list-get bytes i]]
-        [continue i [inc i]]
-        i]
-      i]]]
-
 [defn make-stack [stack-size [i32] init-capacity [i32]] [pmem [array [p-growable-list [pform]]]]
   [if [le-s init-capacity 0] [log-abort [text 'make-stack init-capacity <= 0']]]
   [let [parray [[instantiate alloc-fn [array [p-growable-list [pform]] [exp stack-size]]]]]
@@ -901,7 +893,13 @@
           [ifs
             [is-word-char c]
             [let
-              [word-end [scan-word-end bytes [inc i]]
+              [word-end
+               [loop [j [inc i] n-of-bytes [list-size bytes]]
+                [if [lt-s j n-of-bytes]
+                  [if [is-word-char [list-get bytes j]]
+                    [continue j [inc j]]
+                    j]
+                  j]]
                word-size [sub word-end i]
                p [pointer [exp mem] [array [u8]] [pindex bytes-array i]]
                w [text-intern texts p word-size]
