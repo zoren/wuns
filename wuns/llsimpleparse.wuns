@@ -873,7 +873,9 @@
             cur-txt
             [continue txts-i [inc txts-i]]]
           [continue txts-i [inc txts-i]]]]
-      [pointer [exp mem] [list-data [u8] -size] [i32 0]]]]]
+      [let [new-word [list-slice-byte-array pw word-size]]
+        [growable-list-push texts new-word]
+        new-word]]]]
 
 [defn parse-n [bytes [text]]
   [tuple
@@ -902,14 +904,7 @@
               [word-end [scan-word-end bytes [inc i]]
                word-size [sub word-end i]
                p [pointer [exp mem] [array [u8]] [pindex bytes-array i]]
-               w-opt [text-intern texts p word-size]
-               w
-               [if [eq w-opt [i32 0]]
-                [let
-                  [new-word [list-slice-byte-array p word-size]]
-                  [growable-list-push texts new-word]
-                  new-word]
-                  w-opt]
+               w [text-intern texts p word-size]
                fw [form-word-alloc w]]
               [assoc-list-push form-offsets fw i]
               [growable-list-push
