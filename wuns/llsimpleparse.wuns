@@ -2229,6 +2229,23 @@
                   [let [desc-kind-pair [growable-list-get-p names [dec [list-size names]]]]
                     [assoc-list-push [deref [pfield gctx import-module-names]] desc-kind-pair mod-name]]]]]]
 
+          [text-eq fw [static-list [text memory]]]
+          [do
+            [if [ne n-args 3]
+              [log-abort [text 'form-to-top memory expects 3 arguments']]]
+            [let
+              [mem-name [form-word-get-report gctx [list-get fl 1]]
+               pointer-type [form-to-type gctx [list-get fl 2]]
+               size-form [list-get fl 3]
+              [tuple negative value] [dec-word-to-i64-signed gctx size-form]]
+              [when negative
+                [push-error gctx size-form [static-list [text 'import memory size cannot be negative']]]]
+              [assoc-list-push [deref [pfield gctx names]] mem-name
+                [alloc-init
+                  [enum [global-desc-kind] memory
+                    pointer-type pointer-type
+                    init-size value]]]]]
+
           [text-eq fw [static-list [text export]]]
           [do
             [if [lt-s n-args 1]
@@ -2880,6 +2897,7 @@
       [when [lt-s i n]
         [let
           [assoc-pair [growable-list-get-p names i]
+           is-imported [assoc-list-has imports assoc-pair]
            name [deref [pindex assoc-pair [i32 0]]]
            desc [deref [pindex assoc-pair [i32 1]]]]
           [match desc
@@ -2963,9 +2981,17 @@
               [write-text writer newline]]
 
             memory
-            [do
-              ; check it is not imported
-              ]
+            [when [not is-imported]
+              [write-text writer lparen]
+              [write-text writer [static-list [text memory]]]
+              [write-text writer space]
+              [write-dollar-id writer name]
+              [write-text writer space]
+              [write-text writer [type-to-wasm-type [deref [pfield desc pointer-type]]]]
+              [write-text writer space]
+              [write-text writer [integer-to-text [deref [pfield desc init-size]] false]]
+              [write-text writer rparen]
+              [write-text writer newline]]
 
             [log-ar [text 'write-global-context ignoring unknown tag']]]
           [continue i [inc i]]]]]
