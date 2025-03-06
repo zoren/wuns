@@ -1174,7 +1174,12 @@
       result [wtype]]
     [def
       exp [pexp]
-      mutable [i32]]]]
+      mutable [i32]]
+    [memory
+      pointer-type [wtype]
+      init-size [i64]
+      ; max-size [i32]
+      ]]]
 
 [datatype error []
   [record
@@ -1216,6 +1221,7 @@
     [exp-to-forms [p-assoc-list [pmem -a] [pform]]]
     [function-bodies [p-assoc-list [pmem [global-desc-kind]] [pmem [function-body]]]]
     [function-stack [p-growable-list [function-frame]]]
+    [import-module-names [p-assoc-list [pmem [tuple [text] [pmem [global-desc-kind]]]] [text]]]
     ]]
 
 [defn global-context-alloc [form-offsets [p-assoc-list [pform] [i32]]] [pmem [global-context]]
@@ -1232,7 +1238,8 @@
       function-bodies [[instantiate assoc-list-alloc [pmem [global-desc-kind]] [pmem [function-body]]] [i32 8]]
       ; as do not have local functions yet the stack can only be empty or have one frame
       function-stack [[instantiate growable-list-alloc-init [function-frame]] [i32 1]]
-]]]
+      import-module-names [[instantiate assoc-list-alloc [pmem [tuple [text] [pmem [global-desc-kind]]]] [text]] 8]
+      ]]]
 
 [defn global-context-free [gctx [pmem [global-context]]] [tuple]
   [growable-list-free [deref [pfield gctx errors]]]
@@ -1242,6 +1249,9 @@
   [growable-list-free [deref [pfield gctx exports]]]
   [growable-list-free [deref [pfield gctx local-stack]]]
   [growable-list-free [deref [pfield gctx exp-to-forms]]]
+  [growable-list-free [deref [pfield gctx function-bodies]]]
+  [growable-list-free [deref [pfield gctx function-stack]]]
+  [growable-list-free [deref [pfield gctx import-module-names]]]
   [free gctx [size-of-type [global-context]]]]
 
 [export global-context-alloc global-context-free]
@@ -1330,11 +1340,11 @@
       [push-error gctx pf [static-list [text 'not a form list']]]
       list-empty]]]
 
-[defn is-digit [cc [i64]] [i32]
+[defn is-digit [cc [i64]] [boolean]
   [is-between-inclusive [i64 48] cc [i64 57]]]
 
 ; https://github.com/skeeto/scratch/blob/master/parsers/strtonum.c
-[defn dec-word-to-i64-signed [gctx [pmem [global-context]] word-form [pform]] [tuple [i32] [i64]]
+[defn dec-word-to-i64-signed [gctx [pmem [global-context]] word-form [pform]] [tuple [boolean] [i64]]
   [let
     [w [form-word-get-report gctx word-form]
      ws [list-size w]
@@ -1413,8 +1423,6 @@
       [record name [static-list [text 'i32.le_u']] parameters i32i32 result type-boolean]
       [record name [static-list [text 'i32.ge_s']] parameters i32i32 result type-boolean]
       [record name [static-list [text 'i32.ge_u']] parameters i32i32 result type-boolean]
-
-      ; lt gt and friends...
 
       [record name [static-list [text i32.clz]] parameters i32-singleton result type-i32]
       [record name [static-list [text i32.ctz]] parameters i32-singleton result type-i32]
@@ -1602,11 +1610,11 @@
 
 [defn half [i [i32]] [i32] [intrinsic i32.shr-s i 1]]
 
-[defn add-pattern-to-form [gctx [pmem [global-context]] f [pmem [form]] pat [ppattern]] [ppattern]
+[defn add-pattern-to-form [gctx [pmem [global-context]] f [pform] pat [ppattern]] [ppattern]
   [assoc-list-push [deref [pfield gctx exp-to-forms]] pat f]
   pat]
 
-[defn form-to-pattern [gctx [pmem [global-context]] f [pmem [form]]] [ppattern]
+[defn form-to-pattern [gctx [pmem [global-context]] f [pform]] [ppattern]
   [ifs
     [form-word-is f]
     [add-pattern-to-form gctx f
@@ -1683,7 +1691,7 @@
 
     [log-abort [text 'push-pattern-type-local-stack unknown pattern tag']]]]
 
-[defn form-to-exp [gctx [pmem [global-context]] f [pmem [form]]] [pexp]
+[defn form-to-exp [gctx [pmem [global-context]] f [pform]] [pexp]
   [ifs
     [form-word-is f]
     [let
@@ -1990,7 +1998,7 @@
 
     [log-abort [text 'form-to-exp unknown form case']]]]
 
-[defn form-to-type [gctx [pmem [global-context]] f [pmem [form]]] [wtype]
+[defn form-to-type [gctx [pmem [global-context]] f [pform]] [wtype]
   [ifs
     [form-word-is f]
     [let
@@ -2081,7 +2089,32 @@
         [continue j [inc j]]]
       bodies]]]
 
-[defn form-to-top [gctx [pmem [global-context]] form [pmem [form]]] [tuple]
+[defn form-to-desc-kind [gctx [pmem [global-context]] form [pform]] [pmem [global-desc-kind]]
+  [let [imp-list [form-list-get-report gctx form]]
+    [when [list-empty-is imp-list]
+      [push-error gctx form [static-list [text 'form-to-import-kind expected non-empty list']]]]
+    [let [imp-word [form-word-get-report gctx [list-get imp-list 0]]]
+      [ifs
+        [text-eq imp-word [static-list [text memory]]]
+        [do
+          [when [ne [list-size imp-list] 3]
+            [push-error gctx form [static-list [text 'import memory expects 2 arguments']]]]
+          [let
+            [pointer-type [form-to-type gctx [list-get imp-list 1]]
+             size-form [list-get imp-list 2]
+             [tuple negative value] [dec-word-to-i64-signed gctx size-form]]
+            [when negative
+              [push-error gctx size-form [static-list [text 'import memory size cannot be negative']]]]
+            [alloc-init
+              [enum [global-desc-kind] memory
+                pointer-type pointer-type
+                init-size value]]]]
+
+        [do
+          [log-text imp-word]
+          [log-abort [text 'import kind not implemented']]]]]]]
+
+[defn form-to-top [gctx [pmem [global-context]] form [pform]] [tuple]
   [ifs
     [form-word-is form]
     [do
@@ -2181,9 +2214,20 @@
           ]
 
           [text-eq fw [static-list [text import]]]
-          [do
-           [log-abort [text 'form-to-top import not implemented']]
-          ]
+          [let
+            [names [deref [pfield gctx names]]
+             mod-name [form-word-get-report gctx [list-get fl 1]]]
+            [loop [n [list-size fl] i 2]
+              [when [lt-s i n]
+                [let
+                  [import-list [form-list-get-report gctx [list-get fl i]]
+                   imp-name [form-word-get-report gctx [list-get import-list 0]]
+                   desc-kind [form-to-desc-kind gctx [list-get import-list 1]]]
+                  [when [ne 2 [list-size import-list]]
+                    [push-error gctx [list-get import-list 1] [static-list [text 'import expects 2 arguments']]]]
+                  [assoc-list-push names imp-name desc-kind]
+                  [let [desc-kind-pair [growable-list-get-p names [dec [list-size names]]]]
+                    [assoc-list-push [deref [pfield gctx import-module-names]] desc-kind-pair mod-name]]]]]]
 
           [text-eq fw [static-list [text export]]]
           [do
@@ -2761,14 +2805,17 @@
 
       [log-abort [text 'write-func-param-by-type unknown tag']]]]]
 
+[defn write-dqstring [writer [writer] txt [text]] []
+  [write-text writer dquote]
+  [write-text writer txt]
+  [write-text writer dquote]]
+
 [defn write-export [writer [writer] export-name [text] export-kind [text] internal-name [text]] [tuple]
   [write-text writer lparen]
   [write-text writer [static-list [text 'export']]]
   [write-text writer space]
 
-  [write-text writer dquote]
-  [write-text writer export-name]
-  [write-text writer dquote]
+  [write-dqstring writer export-name]
 
   [write-text writer space]
 
@@ -2787,8 +2834,46 @@
 
 [defn write-global-context [writer [writer] gctx [pmem [global-context]]] []
   [let
-    [names [deref [pfield gctx names]]
+    [imports [deref [pfield gctx import-module-names]]
+     names [deref [pfield gctx names]]
      exports [deref [pfield gctx exports]]]
+    [loop
+      [n [list-size imports]
+       i 0]
+      [when [lt-s i n]
+       [let
+        [assoc-pair [growable-list-get-p imports i]
+         name-desc-pair [deref [pindex assoc-pair [i32 0]]]
+         mod-name [deref [pindex assoc-pair [i32 1]]]
+         imp-name [deref [pindex name-desc-pair [i32 0]]]
+         imp-desc [deref [pindex name-desc-pair [i32 1]]]]
+        [write-text writer lparen]
+        [write-text writer [static-list [text import]]]
+        [write-text writer space]
+        [write-dqstring writer mod-name]
+        [write-text writer space]
+        [write-dqstring writer imp-name]
+        [write-text writer space]
+
+        ;(import "env" "mem" (memory $mem i32 1))
+        [match imp-desc
+          memory
+          [do
+            [write-text writer lparen]
+            [write-text writer [static-list [text memory]]]
+            [write-text writer space]
+            [write-dollar-id writer imp-name]
+            [write-text writer space]
+            [write-text writer [type-to-wasm-type [deref [pfield imp-desc pointer-type]]]]
+            [write-text writer space]
+            [write-text writer [integer-to-text [deref [pfield imp-desc init-size]] false]]
+            [write-text writer rparen]]
+
+          [log-abort [text 'write-global-context unknown import tag']]]
+
+        [write-text writer rparen]
+        [write-text writer newline]
+        [continue i [inc i]]]]]
     [loop
       [n [list-size names]
        i 0]
@@ -2876,6 +2961,11 @@
               [write-wasm-exp writer 1 [exp-to-wasm-exp gctx exp]]
               [write-text writer rparen]
               [write-text writer newline]]
+
+            memory
+            [do
+              ; check it is not imported
+              ]
 
             [log-ar [text 'write-global-context ignoring unknown tag']]]
           [continue i [inc i]]]]]
