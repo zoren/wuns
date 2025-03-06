@@ -1115,6 +1115,18 @@
       elements list-empty
       names list-empty]]]
 
+[def type-i8
+  [data mem
+    [enum [wtype-data] integer
+      n-bytes 1
+      signed true]]]
+
+[def type-i16
+  [data mem
+    [enum [wtype-data] integer
+      n-bytes 2
+      signed true]]]
+
 [def type-i32
   [data mem
     [enum [wtype-data] integer
@@ -1126,6 +1138,30 @@
     [enum [wtype-data] integer
       n-bytes 8
       signed true]]]
+
+[def type-u8
+  [data mem
+    [enum [wtype-data] integer
+      n-bytes 1
+      signed false]]]
+
+[def type-u16
+  [data mem
+    [enum [wtype-data] integer
+      n-bytes 2
+      signed false]]]
+
+[def type-u32
+  [data mem
+    [enum [wtype-data] integer
+      n-bytes 4
+      signed false]]]
+
+[def type-u64
+  [data mem
+    [enum [wtype-data] integer
+      n-bytes 8
+      signed false]]]
 
 [def type-tuple-empty
   [data mem
@@ -1564,35 +1600,33 @@
       [log-abort [text 'common-super-type different types']]]
     ]]
 
-[defn primitive-int-name-to-signed-size [fw [text]] [tuple [i32] [i64]]
+[defn try-get-primitive-from-name [fw [text]] [tuple [boolean] [wtype]]
   [ifs
     [text-eq fw [static-list [text i8]]]
-    [tuple true [i64 1]]
+    [tuple true type-i8]
 
     [text-eq fw [static-list [text u8]]]
-    [tuple false [i64 1]]
+    [tuple true type-u8]
 
     [text-eq fw [static-list [text i16]]]
-    [tuple true [i64 2]]
+    [tuple true type-i16]
 
     [text-eq fw [static-list [text u16]]]
-    [tuple false [i64 2]]
+    [tuple true type-u16]
 
     [text-eq fw [static-list [text i32]]]
-    [tuple true [i64 4]]
+    [tuple true type-i32]
 
     [text-eq fw [static-list [text u32]]]
-    [tuple false [i64 4]]
+    [tuple true type-u32]
 
     [text-eq fw [static-list [text i64]]]
-    [tuple true [i64 8]]
+    [tuple true type-i64]
 
     [text-eq fw [static-list [text u64]]]
-    [tuple false [i64 8]]
+    [tuple true type-u64]
 
-    [do
-      [log-text fw]
-      [log-abort [text 'primitive-int-name-to-signed-size unknown word']]]]]
+    [tuple false [pointer [exp mem] [wtype-data] 0]]]]
 
 [defn annotate [gctx [pmem [global-context]] exp [pexp] t [wtype]] [tuple]
   [assoc-list-push [deref [pfield gctx exp-types]] exp t]]
@@ -1736,7 +1770,8 @@
       [let [ff [list-get fl 0]
             fw [form-word-get-report gctx ff]
             [tuple lfound ltype] [local-stack-lookup gctx fw]
-            [tuple gfound gdesc] [lookup-global gctx fw]]
+            [tuple gfound gdesc] [lookup-global gctx fw]
+            [tuple prim-found prim-type] [try-get-primitive-from-name fw]]
         [when lfound
           [log-abort [text 'calling a local variable as a function not yet supported']]]
         [ifs
@@ -1753,47 +1788,38 @@
                 func fexp
                 arguments args]]]
 
-          [or
-            [text-eq fw [static-list [text i8]]]  [text-eq fw [static-list [text u8]]]
-            [text-eq fw [static-list [text i16]]] [text-eq fw [static-list [text u16]]]
-            [text-eq fw [static-list [text i32]]] [text-eq fw [static-list [text u32]]]
-            [text-eq fw [static-list [text i64]]] [text-eq fw [static-list [text u64]]]]
-          [let
-            [[tuple signed byte-size] [primitive-int-name-to-signed-size fw]
-              bit-size [intrinsic i64.mul byte-size [i64 8]]
-             [tuple negative value]
-             [if [ne n-args 1]
-              [do
-                [push-error gctx f [static-list [text 'expects one argument']]]
-                [tuple [i32 0] [i64 0]]]
-              [dec-word-to-i64-signed gctx [list-get fl 1]]]
-              type
-              [ifs
-                [text-eq fw [static-list [text i32]]] type-i32
-                [text-eq fw [static-list [text i64]]] type-i64
+          prim-found
+          [match prim-type
+            integer
+            [let
+              [byte-size [deref [pfield prim-type n-bytes]]
+               bit-size [intrinsic i64.mul [intrinsic i64.extend-i32-s byte-size] [i64 8]]
+               [tuple negative value]
+               [if [ne n-args 1]
                 [do
-                  [log-text fw]
-                  [log-abort [text 'form-to-exp primitive-int-name-to-signed-size unknown word']]]]]
-            [if signed
-              [let
-                [pow2 [intrinsic i64.shl [i64 1] [intrinsic i64.sub bit-size [i64 1]]]
-                 lower [intrinsic i64.sub [i64 0] pow2]
-                 upper [intrinsic i64.sub pow2 [i64 1]]]
-                [when [intrinsic i64.lt-s value lower]
-                  [push-error gctx f [static-list [text 'signed value out of range, too low']]]]
-                [when [intrinsic i64.lt-s upper value]
-                  [push-error gctx f [static-list [text 'signed value out of range, too high']]]]]
-              [do
-                [when negative
-                  [push-error gctx f [static-list [text 'negative value for unsigned type']]]]
-                [let [unsigned-upper [intrinsic i64.shl [i64 1] bit-size]]
-                  [when [intrinsic i64.le-s unsigned-upper value]
-                    [push-error gctx f [static-list [text 'unsigned value out of range']]]]]]]
-            [alloc-init
-              [enum [wexp] integer
-                negative negative
-                value value
-                type type]]]
+                  [push-error gctx f [static-list [text 'expects one argument']]]
+                  [tuple [i32 0] [i64 0]]]
+                [dec-word-to-i64-signed gctx [list-get fl 1]]]]
+              [if [deref [pfield prim-type signed]]
+                [let
+                  [pow2 [intrinsic i64.shl [i64 1] [intrinsic i64.sub bit-size [i64 1]]]
+                   lower [intrinsic i64.sub [i64 0] pow2]
+                   upper [intrinsic i64.sub pow2 [i64 1]]]
+                  [when [intrinsic i64.lt-s value lower]
+                    [push-error gctx f [static-list [text 'signed value out of range, too low']]]]
+                  [when [intrinsic i64.lt-s upper value]
+                    [push-error gctx f [static-list [text 'signed value out of range, too high']]]]]
+                [do
+                  [when negative
+                    [push-error gctx f [static-list [text 'negative value for unsigned type']]]]
+                  [let [unsigned-upper [intrinsic i64.shl [i64 1] bit-size]]
+                    [when [intrinsic i64.le-s unsigned-upper value]
+                      [push-error gctx f [static-list [text 'unsigned value out of range']]]]]]]
+              [alloc-init
+                [enum [wexp] integer
+                  negative negative
+                  value value
+                  type prim-type]]]]
 
           [text-eq fw [static-list [text if]]]
           [do
