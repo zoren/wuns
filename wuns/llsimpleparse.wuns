@@ -2865,6 +2865,52 @@
   [write-text writer newline]
   ]
 
+[defn write-import [writer [writer] imp-name [text] imp-desc [pmem [global-desc-kind]]] []
+  [match imp-desc
+    ; (import "env" "mem" (memory $mem i32 1))
+    memory
+    [do
+      [write-text writer lparen]
+      [write-text writer [static-list [text memory]]]
+      [write-text writer space]
+      [write-dollar-id writer imp-name]
+      [write-text writer space]
+      [write-text writer [type-to-wasm-type [deref [pfield imp-desc pointer-type]]]]
+      [write-text writer space]
+      [write-text writer [integer-to-text [deref [pfield imp-desc init-size]] false]]
+      [write-text writer rparen]]
+
+    ; (import "wasi_snapshot_preview1" "fd_close" (func  $__wasi_fd_close  (param i32 i64 i32) (result i64)))
+    func
+    [do
+      [write-text writer lparen]
+      [write-text writer [static-list [text func]]]
+      [write-text writer space]
+      [write-dollar-id writer imp-name]
+      [write-text writer space]
+
+      [write-text writer lparen]
+      [write-text writer [static-list [text param]]]
+      [loop [param-types [deref [pfield imp-desc parameter-types]]
+              n [list-size param-types]
+              i 0]
+        [when [lt-s i n]
+          [write-text writer space]
+          [write-text writer [type-to-wasm-type [list-get param-types i]]]
+          [continue i [inc i]]]]
+      [write-text writer rparen]
+
+      [write-text writer space]
+
+      [write-text writer lparen]
+      [write-text writer [static-list [text result]]]
+      [write-results writer [type-to-wasm-types [deref [pfield imp-desc result]]]]
+      [write-text writer rparen]
+
+      [write-text writer rparen]]
+
+    [log-abort [text 'write-global-context unknown import tag']]]]
+
 [defn write-global-context [writer [writer] gctx [pmem [global-context]]] []
   [let
     [imports [deref [pfield gctx import-module-names]]
@@ -2888,50 +2934,7 @@
         [write-dqstring writer imp-name]
         [write-text writer space]
 
-        ; (import "env" "mem" (memory $mem i32 1))
-        [match imp-desc
-          memory
-          [do
-            [write-text writer lparen]
-            [write-text writer [static-list [text memory]]]
-            [write-text writer space]
-            [write-dollar-id writer imp-name]
-            [write-text writer space]
-            [write-text writer [type-to-wasm-type [deref [pfield imp-desc pointer-type]]]]
-            [write-text writer space]
-            [write-text writer [integer-to-text [deref [pfield imp-desc init-size]] false]]
-            [write-text writer rparen]]
-
-          ; (import "wasi_snapshot_preview1" "fd_close" (func  $__wasi_fd_close  (param i32 i64 i32) (result i64)))
-          func
-          [do
-            [write-text writer lparen]
-            [write-text writer [static-list [text func]]]
-            [write-text writer space]
-            [write-dollar-id writer imp-name]
-            [write-text writer space]
-
-            [write-text writer lparen]
-            [write-text writer [static-list [text param]]]
-            [loop [param-types [deref [pfield imp-desc parameter-types]]
-                   n [list-size param-types]
-                   i 0]
-              [when [lt-s i n]
-                [write-text writer space]
-                [write-text writer [type-to-wasm-type [list-get param-types i]]]
-                [continue i [inc i]]]]
-            [write-text writer rparen]
-
-            [write-text writer space]
-
-            [write-text writer lparen]
-            [write-text writer [static-list [text result]]]
-            [write-results writer [type-to-wasm-types [deref [pfield imp-desc result]]]]
-            [write-text writer rparen]
-
-            [write-text writer rparen]]
-
-          [log-abort [text 'write-global-context unknown import tag']]]
+        [write-import writer imp-name imp-desc]
 
         [write-text writer rparen]
         [write-text writer newline]
