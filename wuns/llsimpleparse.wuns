@@ -1163,6 +1163,30 @@
       n-bytes 8
       signed false]]]
 
+[def primitive-types-by-name
+  [static-list
+    [array [tuple [text] [wtype]]
+      [tuple [static-list [text i8]] type-i8]
+      [tuple [static-list [text u8]] type-u8]
+      [tuple [static-list [text i16]] type-i16]
+      [tuple [static-list [text u16]] type-u16]
+      [tuple [static-list [text i32]] type-i32]
+      [tuple [static-list [text u32]] type-u32]
+      [tuple [static-list [text i64]] type-i64]
+      [tuple [static-list [text u64]] type-u64]]]]
+
+[defn try-get-primitive-from-name [name [text]] [tuple [boolean] [wtype]]
+  [loop
+    [cur-size [list-size primitive-types-by-name]
+     arr [list-data-array primitive-types-by-name]
+     i 0]
+    [if [lt-s i cur-size]
+      [let [ptup [pindex arr i]]
+        [if [text-eq [deref [pindex ptup [i32 0]]] name]
+          [tuple true [deref [pindex ptup [i32 1]]]]
+          [continue i [inc i]]]]
+      [tuple false [pointer [exp mem] [wtype-data] [i32 0]]]]]]
+
 [def type-tuple-empty
   [data mem
     [enum [wtype-data] tuple
@@ -1599,34 +1623,6 @@
       [type-empty-is t2] t1
       [log-abort [text 'common-super-type different types']]]
     ]]
-
-[defn try-get-primitive-from-name [fw [text]] [tuple [boolean] [wtype]]
-  [ifs
-    [text-eq fw [static-list [text i8]]]
-    [tuple true type-i8]
-
-    [text-eq fw [static-list [text u8]]]
-    [tuple true type-u8]
-
-    [text-eq fw [static-list [text i16]]]
-    [tuple true type-i16]
-
-    [text-eq fw [static-list [text u16]]]
-    [tuple true type-u16]
-
-    [text-eq fw [static-list [text i32]]]
-    [tuple true type-i32]
-
-    [text-eq fw [static-list [text u32]]]
-    [tuple true type-u32]
-
-    [text-eq fw [static-list [text i64]]]
-    [tuple true type-i64]
-
-    [text-eq fw [static-list [text u64]]]
-    [tuple true type-u64]
-
-    [tuple false [pointer [exp mem] [wtype-data] 0]]]]
 
 [defn annotate [gctx [pmem [global-context]] exp [pexp] t [wtype]] [tuple]
   [assoc-list-push [deref [pfield gctx exp-types]] exp t]]
