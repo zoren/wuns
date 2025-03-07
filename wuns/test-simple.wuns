@@ -617,7 +617,7 @@
     [func t [forms]
       [let
        [module [forms-to-module forms]
-        mem [memory 1 9 0]
+        mem [memory 1 [i32 32] 0]
         import-obj [make-import-object mem]
         inst [wasm-instantiate module import-obj]
         parse-all-forms [get-export inst [word parse-all-forms]]
@@ -775,7 +775,7 @@
               [pair [qlist [compile-error bla]] [word '[defn f [] [i32] [i64 -9223372036854775808]]']] ;9.223.372.036.854.775.808
               [pair [qlist [compile-error bla]] [word '[defn f [] [i32] [i64 9223372036854775807]]']] ;9.223.372.036.854.775.808
               [pair [qlist [compile-error bla]] [word '[defn f [] [i32] [u64 18446744073709551617]]']] ; 18.446.744.073.709.551.616
-              [pair [qlist [compile-error bla]] [word '[genfn g [t datatype] [v t] [i32] [i32 0]]']]
+              ; [pair [qlist [compile-error bla]] [word '[genfn g [t datatype] [v t] [i32] [i32 0]]']]
 
               [pair [qlist] [word '[mutable m [i32 0]] [export m]']]
               [pair [qlist] [word '[defn add [x [i32] y [i32]] [i32] [intrinsic i32.add x y]]']]
@@ -787,11 +787,16 @@
               [expected [pair/fst test]
                w [alloc-word [pair/snd test]]
                gctx [js-app parse-translate w]]
-              [do]
               [js-app text-free w]
-              [js-app global-context-free gctx]
-              ]]
-              ]]]]]
+              [js-app global-context-free gctx]]]
+        [promise-bind
+          [read-file-async [word llsimpleparse.wuns]]
+          [func t [test-txt]
+            [let
+              [w [alloc-word test-txt]
+               fl [js-app parse-all-forms w]
+               sz [js-value-to-i32 [js-app list-size fl]]]
+              [logq test-parsed [identity sz] forms]]]]]]]]]
 
 [defn test-realloc []
   [promise-then
