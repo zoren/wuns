@@ -22,14 +22,9 @@ const wat_to_wasm_byte_array = (inputString) => {
     // module.generateNames()
     // warning the types for wabt does not reflect that validate also needs wasmFeatures
     // todo report this to wabt
-    try {
-      module.validate(wasmFeatures)
-      // console.log(inputString)
-    } catch (e) {
-      console.error(e)
-      console.error(inputString)
-      throw e
-    }
+    module.validate(wasmFeatures)
+    // console.log(inputString)
+
     const { buffer, log } = module.toBinary({
       // log: true,
       write_debug_names: true,
@@ -38,7 +33,7 @@ const wat_to_wasm_byte_array = (inputString) => {
     return buffer
   } catch (e) {
     console.error(e)
-    console.error(new TextDecoder().decode(inputString))
+    console.error(inputString)
     throw e
   }
 }
