@@ -2253,10 +2253,9 @@
 
       [logq-abort expand-custom-non-rec not implemented [identity t]]]]]
 
-[func forms-function-def [fkind name-form type-params-list params-list return-type-form bodies]
+[func forms-function-def-sig [fname type-params-list params-list return-type-form]
   [let
-    [fname [form-to-name name-form]
-     tparam-ctx [transient-kv-map]
+    [tparam-ctx [transient-kv-map]
      tparameters
      [list-map p [pairwise-pairs-check type-params-list]
        [let [pname [form-to-name [pair/fst p]]
@@ -2264,7 +2263,6 @@
        [set-kv-map tparam-ctx [name/word pname] pkind]
        [pair pname pkind]]]
      param-pairs [pairwise-pairs-check params-list]
-     param-names [list-map p param-pairs [form-to-name [pair/fst p]]]
      param-types [list-map p param-pairs [form-to-type-type-env tparam-ctx local-context-empty [pair/snd p]]]
      return-type [form-to-type-type-env tparam-ctx local-context-empty return-type-form]
      tf [type-func tparameters param-types return-type]]
@@ -2273,20 +2271,36 @@
       [top-desc
         [top-desc-kind/value [value-desc value-kind-constant]]
         [imported-or-here/here]]]
-    [let [param-ctx [transient-kv-map]]
-      [for i 0 [size param-pairs]
-        [let [w [name/word [at param-names i]]]
-          [set-kv-map param-ctx w [local-var-desc [at param-types i] w]]]]
-      [let
-        [lctx [local-context-make-func param-ctx]
-         cbodies [list-map body bodies [form-to-exp-type-kind-env tparam-ctx lctx body]]
-         inferred-return-type [type-ofs cbodies]
-         exp-func [exp-function fkind [option/some fname] tf param-names cbodies]]
-        [set-kv-map top-funcs [name/word fname] exp-func]
-        [match [go-tai [transient-kv-map] return-type inferred-return-type]
-          [result/ok -] [do]
-          [result/error error] [do [log error] [logq-abort error in function return type]]]
-        exp-func]]]]
+    [pair tf [list-map p param-pairs [form-to-name [pair/fst p]]]]]]
+
+[func forms-function-def-body [fkind fname tf-param-names bodies]
+  [let
+    [tf [pair/fst tf-param-names]
+     param-names [pair/snd tf-param-names]
+     param-types [type-func/parameters tf]
+     param-ctx [transient-kv-map]
+     tparam-ctx [transient-kv-map]]
+    [for i 0 [size param-names]
+      [let [w [name/word [at param-names i]]]
+        [set-kv-map param-ctx w [local-var-desc [at param-types i] w]]]]
+    [for-each tp [type-func/type-parameters tf]
+      [set-kv-map tparam-ctx [name/word [pair/fst tp]] [pair/snd tp]]]
+    [let
+      [lctx [local-context-make-func param-ctx]
+       cbodies [list-map body bodies [form-to-exp-type-kind-env tparam-ctx lctx body]]
+       inferred-return-type [type-ofs cbodies]
+       exp-func [exp-function fkind [option/some fname] tf param-names cbodies]]
+      [set-kv-map top-funcs [name/word fname] exp-func]
+      [match [go-tai [transient-kv-map] [type-func/result tf] inferred-return-type]
+        [result/ok -] [do]
+        [result/error error] [do [log error] [logq-abort error in function return type]]]
+      exp-func]]]
+
+[func forms-function-def [fkind name-form type-params-list params-list return-type-form bodies]
+  [let
+    [fname [form-to-name name-form]
+     tf-param-names [forms-function-def-sig fname type-params-list params-list return-type-form]]
+    [forms-function-def-body fkind fname tf-param-names bodies]]]
 
 [func top-forms-to-top-decls [forms]
   [let
@@ -2437,6 +2451,29 @@
                return-type-form [at l 4]
                -exp-func [forms-function-def fw name-form type-params-list params-list return-type-form
                 [slice l 5 [size l]]]]]]
+
+          [[word mutual-recursion]]
+          [let
+            [sigs
+              [list-map func-form [rest l]
+                [let
+                  [fl [get-list func-form]
+                   name-form [second fl]
+                   type-params-list [list]
+                   params-list [get-list [third fl]]
+                   return-type-form [fourth fl]
+                   fname [form-to-name name-form]]
+                  [pair fname [forms-function-def-sig fname type-params-list params-list return-type-form]]]]]
+              [for i 1 [size l]
+                [let
+                  [fl [get-list [at l i]]
+                   fkind [form-to-word [first fl]]
+                   bodies [slice fl 4 [size fl]]
+                   sig [at sigs [dec i]]
+                   fname [pair/fst sig]
+                   tf-param-names [pair/snd sig]
+                   exp-func [forms-function-def-body fkind fname tf-param-names bodies]]
+                  [push top-decls [top-decl/function exp-func]]]]]
 
           [logq-abort not implemented [identity fw]]]]]]]
     [clone-growable-to-frozen-list top-decls]]]

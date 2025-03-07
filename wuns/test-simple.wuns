@@ -558,6 +558,38 @@
     [test-assert-eq [i32 2] [js-app test-locals]]
     ]]
 
+[defn test-mutual-recursion []
+  [let
+    [forms
+      [qlist
+[mutual-recursion
+  [defn even [n [i64]] [i32]
+    [if [intrinsic i64.eq [i64 0] n]
+      [i32 1]
+      [odd [intrinsic i64.sub n [i64 1]]]]]
+
+  [defn odd [n [i64]] [i32]
+    [if [intrinsic i64.eq [i64 0] n]
+      [i32 0]
+      [even [intrinsic i64.sub n [i64 1]]]]]]
+
+[export even odd]]
+     inst [forms-to-inst forms]
+     even [get-export inst [word even]]
+     odd [get-export inst [word odd]]]
+
+    [test-assert-eq [i32 1] [js-app even [bigint 0]]]
+    [test-assert-eq [i32 0] [js-app even [bigint 1]]]
+    [test-assert-eq [i32 1] [js-app even [bigint 2]]]
+    [test-assert-eq [i32 1] [js-app even [bigint 78]]]
+    [test-assert-eq [i32 0] [js-app even [bigint 79]]]
+
+    [test-assert-eq [i32 0] [js-app odd [bigint 0]]]
+    [test-assert-eq [i32 1] [js-app odd [bigint 1]]]
+    [test-assert-eq [i32 0] [js-app odd [bigint 2]]]
+    [test-assert-eq [i32 0] [js-app odd [bigint 78]]]
+    [test-assert-eq [i32 1] [js-app odd [bigint 79]]]]]
+
 [defn test-all []
   [test-arithmetic]
   [test-tuple-return]
@@ -573,6 +605,7 @@
   [test-tuple-parameters]
   [test-func-exp]
   [test-local-vars]
+  [test-mutual-recursion]
   ]
 
 ; [func wasm-dump-mem [p n]
