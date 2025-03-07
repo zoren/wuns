@@ -136,14 +136,14 @@
 
 [datatype alloc-stack-frame [byte-aligned-size [exp [i32]]]
   [record
-    [frame-size [i32]]
-    [byte-size [i32]]
-    [byte-aligned-size [i32]]
-    [realloc-size [i32]] ; a size less than equal to the original for when the block is reallocated to a smaller size in place
-    [abandoned [i32]] ; when the block could not be reallocated in place
-    [data [array [u8] byte-aligned-size]]
-    [canary [i64]]
-    [frame-size-end [i32]]
+    frame-size [i32]
+    byte-size [i32]
+    byte-aligned-size [i32]
+    realloc-size [i32] ; a size less than equal to the original for when the block is reallocated to a smaller size in place
+    abandoned [i32] ; when the block could not be reallocated in place
+    data [array [u8] byte-aligned-size]
+    canary [i64]
+    frame-size-end [i32]
     ]]
 
 ; cacacadeadbeef in little endian
@@ -479,8 +479,8 @@
 
 [datatype list-data [a datatype size [exp [i32]]]
   [record
-    [size [i32]]
-    [array [array a size]]]]
+    size [i32]
+    array [array a size]]]
 
 [datatype plist [vp datatype]
   [pmem [list-data vp -size]]]
@@ -493,12 +493,12 @@
 
 [def list-empty [static-list [array [union]]]]
 
-[defn list-size [pvec [pmem [record [size [i32]]]]] [i32]
+[defn list-size [pvec [pmem [record size [i32]]]] [i32]
   [deref [pfield pvec size]]]
 
 [export list-size]
 
-[defn list-empty-is [pvec [pmem [record [size [i32]]]]] [i32]
+[defn list-empty-is [pvec [pmem [record size [i32]]]] [i32]
   [eq [i32 0] [list-size pvec]]]
 
 [genfn list-alloc [elem-type datatype] [lafn-sz [i32]] [plist elem-type]
@@ -545,12 +545,22 @@
 
 [datatype growable-list [a datatype]
   [record
-    [size [i32]]
-    [capacity [i32]]
-    [parray [pmem [array a]]]]]
+    size [i32]
+    capacity [i32]
+    parray [pmem [array a]]]]
 
 [datatype p-growable-list [a datatype]
   [pmem [growable-list a]]]
+
+[genfn growable-list-validate [elem-type datatype] [pglist [p-growable-list elem-type]] [tuple]
+  [when [is-null pglist]
+    [log-abort [text 'growable-list-validate points to 0']]]
+  [when [lt-u [memory-size-bytes] pglist]
+    [log-i32 pglist]
+    [log-abort [text 'growable-list-validate points beyond mem']]]
+  [when [static-is pglist]
+    [log-i32 pglist]
+    [log-abort [text 'growable-list-validate p-growable-list points to static mem']]]]
 
 [genfn growable-list-alloc-init [elem-type datatype] [init-capacity [i32]] [p-growable-list elem-type]
   [when [le-s init-capacity 0]
@@ -1262,8 +1272,8 @@
 
 [datatype error []
   [record
-    [message [text]]
-    [offset [i32]]]]
+    message [text]
+    offset [i32]]]
 
 [datatype local-context-kind []
   [i32]]
@@ -1274,33 +1284,33 @@
 
 [datatype local-frame []
   [record
-    [context-kind [local-context-kind]]
-    [variables [p-assoc-list [text] [wtype]]] ; func parameters/ let-loop bound names
+    context-kind [local-context-kind]
+    variables [p-assoc-list [text] [wtype]] ; func parameters/ let-loop bound names
     ]]
 
 [datatype function-frame []
   [record
-    [func-local-variables [p-assoc-list [text] [wtype]]] ; all local vars declared in function
+    func-local-variables [p-assoc-list [text] [wtype]] ; all local vars declared in function
   ]]
 
 [datatype function-body []
   [record
-    [locals [plist [tuple [text] [wtype]]]]
-    [body [plist [pexp]]]]]
+    locals [plist [tuple [text] [wtype]]]
+    body [plist [pexp]]]]
 
 [datatype global-context []
   [record
-    [errors [p-growable-list [error]]]
-    [names [p-assoc-list [text] [pmem [global-desc-kind]]]]
-    [form-offsets [p-assoc-list [pform] [i32]]]
-    [exp-types [p-assoc-list [pexp] [wtype]]]
-    [exp-local-context [p-assoc-list [pexp] [i32]]]
-    [exports [p-assoc-list [text] [pmem [global-desc-kind]]]]
-    [local-stack [p-growable-list [local-frame]]]
-    [exp-to-forms [p-assoc-list [pmem -a] [pform]]]
-    [function-bodies [p-assoc-list [pmem [global-desc-kind]] [pmem [function-body]]]]
-    [function-stack [p-growable-list [function-frame]]]
-    [import-module-names [p-assoc-list [pmem [tuple [text] [pmem [global-desc-kind]]]] [text]]]
+    errors [p-growable-list [error]]
+    names [p-assoc-list [text] [pmem [global-desc-kind]]]
+    form-offsets [p-assoc-list [pform] [i32]]
+    exp-types [p-assoc-list [pexp] [wtype]]
+    exp-local-context [p-assoc-list [pexp] [i32]]
+    exports [p-assoc-list [text] [pmem [global-desc-kind]]]
+    local-stack [p-growable-list [local-frame]]
+    exp-to-forms [p-assoc-list [pmem -a] [pform]]
+    function-bodies [p-assoc-list [pmem [global-desc-kind]] [pmem [function-body]]]
+    function-stack [p-growable-list [function-frame]]
+    import-module-names [p-assoc-list [pmem [tuple [text] [pmem [global-desc-kind]]]] [text]]
     ]]
 
 [defn global-context-alloc [form-offsets [p-assoc-list [pform] [i32]]] [pmem [global-context]]
@@ -1478,10 +1488,9 @@
 
 [datatype intrinsic-info []
   [record
-    [name [text]]
-    [parameters [plist [wtype]]]
-    [result [wtype]]
-    ]]
+    name [text]
+    parameters [plist [wtype]]
+    result [wtype]]]
 
 [def type-boolean type-i32]
 

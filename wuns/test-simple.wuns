@@ -251,15 +251,15 @@
       [qlist
 [memory mem [i32] 1]
 
-[defn make-record [n [i32]] [pointer [exp mem] [record [f [f64]] [i [i32]]]]
-  [let [p [cast [pointer [exp mem] [record [f [f64]] [i [i32]]]] [i32 16]]]
+[defn make-record [n [i32]] [pointer [exp mem] [record f [f64] i [i32]]]
+  [let [p [cast [pointer [exp mem] [record f [f64] i [i32]]] [i32 16]]]
     [passign p [record f [f64 1.1] i n]]
     p]]
 
-[defn get-f [p [pointer [exp mem] [record [f [f64]] [i [i32]]]]] [f64]
+[defn get-f [p [pointer [exp mem] [record f [f64] i [i32]]]] [f64]
   [deref [pfield p f]]]
 
-[defn get-i [p [pointer [exp mem] [record [f [f64]] [i [i32]]]]] [i32]
+[defn get-i [p [pointer [exp mem] [record f [f64] i [i32]]]] [i32]
   [deref [pfield p i]]]
 
 [export make-record get-f get-i]]
@@ -502,9 +502,9 @@
 
 [datatype growable-list [a datatype]
   [record
-    [size [i32]]
-    [capacity [i32]]
-    [parray [pmem [array a]]]]]
+    size [i32]
+    capacity [i32]
+    parray [pmem [array a]]]]
 
 [functor growable-list-alloc-init [elem-type datatype]
   [func [init-capacity [i32]] [pmem [growable-list elem-type]]

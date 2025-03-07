@@ -935,9 +935,8 @@
 
             [[word record]]
             [type/record
-              [list-map pf [rest l]
-                [let [p [get-list pf]]
-                  [pair [form-to-name [first p]] [go-f2t-te [second p]]]]]]
+              [list-map p [pairwise-pairs-check [rest l]]
+                [pair [form-to-name [pair/fst p]] [go-f2t-te [pair/snd p]]]]]
 
             [[word union]]
             [type/union [list-map a [rest l] [go-f2t-te a]]]
