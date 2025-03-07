@@ -1566,7 +1566,8 @@
           [continue i [inc i]]]]
       [tuple false [pointer [exp mem] [intrinsic-info] [i32 0]]]]]]
 
-[defn alloc-type-primitive [pt [pmem [primitive-type]]] [wtype]
+[defn type-primitive-alloc [pt [pmem [primitive-type]]] [wtype]
+  ; we could keep a map so we do not allocate unnecessary types
   [alloc-init
     [enum [wtype-data] primitive
       type pt]]]
@@ -1575,7 +1576,7 @@
   [let [tag [deref [pfield e tag]]]
     [match e
       integer
-      [alloc-type-primitive [deref [pfield e type]]]
+      [type-primitive-alloc [deref [pfield e type]]]
 
       intrinsic
       [let
@@ -2123,7 +2124,7 @@
             [do
               [if [ne n-args 0]
                 [log-abort [text 'form-to-type primitive expects no arguments']]]
-              [alloc-type-primitive pt]]
+              [type-primitive-alloc pt]]
 
             [text-eq fw [static-list [text tuple]]]
             [loop [ts [[instantiate list-alloc [wtype]] n-args] i 1]
@@ -2591,7 +2592,7 @@
       [negative [deref [pfield exp negative]]
        value [deref [pfield exp value]]
        ptype [deref [pfield exp type]]
-       type [alloc-type-primitive ptype]
+       type [type-primitive-alloc ptype]
        txt [integer-to-text value negative]]
       [alloc-init
         [enum [wasm-exp] constant
