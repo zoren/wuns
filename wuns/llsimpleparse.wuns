@@ -1011,11 +1011,18 @@
         false]]]]
 
 [datatype
-  wtype-data []
-  [enum tag [i32]
+  primitive-type []
+  [enum
+    tag [i32]
     [integer
       n-bytes [i32]
-      signed [boolean]]
+      signed [boolean]]]]
+
+[datatype
+  wtype-data []
+  [enum tag [i32]
+    [primitive
+      type [pmem [primitive-type]]]
     [tuple
       types [plist [pmem [wtype-data]]]]
     [record
@@ -1049,38 +1056,42 @@
 ;         tag [annotation [exp type-union-tag] type-union-tag]
 ;         types types]]]]
 
-; [defn write-debug-type [writer [writer] t [wtype]] []
-;   [let
-;     [tag [deref [pfield t tag]]]
-;     [ifs
-;       [eq tag type-integer-tag]
-;       [let
-;         [it [cast [pmem [type-integer]] t]
-;          n-bytes [deref [pfield it n-bytes]]
-;          signed [deref [pfield it signed]]]
-;         [write-text writer [static-list [text '[integer ']]]
-;         ; [intrinsic i64.extend-i32-s i]
-;         [write-text writer [integer-to-text [intrinsic i64.extend-i32-s n-bytes] false]]
-;         [write-text writer [static-list [text ' ']]]
-;         [write-text writer [integer-to-text [intrinsic i64.extend-i32-s signed] false]]
-;         [write-text writer [static-list [text ']']]]
-;         ]
+[defn write-debug-type [writer [writer] t [wtype]] []
+  [do
+    [match t
+      primitive
+      [let [pt [deref [pfield t type]]]
+        [match pt
+          integer
+          [let
+            [n-bytes [deref [pfield pt n-bytes]]
+             signed [deref [pfield pt signed]]]
+            [write-text writer [static-list [text '[integer ']]]
+            ; [intrinsic i64.extend-i32-s i]
+            [write-text writer [integer-to-text [intrinsic i64.extend-i32-s n-bytes] false]]
+            [write-text writer [static-list [text ' ']]]
+            [write-text writer [integer-to-text [intrinsic i64.extend-i32-s signed] false]]
+            [write-text writer [static-list [text ']']]]
+            ]]]
 
-;       [eq tag type-error-tag]
-;       [write-text writer [static-list [text '[error]']]]
+      tuple
+      [write-text writer [static-list [text '[tuple]']]]
 
-;       [eq tag type-tuple-tag]
-;       [write-text writer [static-list [text '[tuple]']]]
+      record
+      [write-text writer [static-list [text '[record]']]]
 
-;       [eq tag type-record-tag]
-;       [write-text writer [static-list [text '[record]']]]
+      function
+      [write-text writer [static-list [text '[function]']]]
 
-;       [eq tag type-function-tag]
-;       [write-text writer [static-list [text '[function]']]]
+      [do
+        [log-abort [text 'write-debug-type unknown type tag']]]]]]
 
-;       [do
-;         [log-i32 tag]
-;         [log-abort [text 'write-debug-type unknown type tag']]]]]]
+[defn log-type [t [wtype]] []
+  [let [w [writer-alloc [i32 8]]]
+    [write-debug-type w t]
+    [let [txt [writer-to-text w]]
+      [log-text txt]
+      [text-free txt]]]]
 
 [datatype
   pattern []
@@ -1108,7 +1119,7 @@
     [integer
       negative [i32]
       value [i64]
-      type [wtype]]
+      type [pmem [primitive-type]]]
     [var
       name [text]]
     [if
@@ -1149,67 +1160,77 @@
       elements list-empty
       names list-empty]]]
 
-[def type-i8
+[def ptype-i8
   [data mem
-    [enum [wtype-data] integer
+    [enum [primitive-type] integer
       n-bytes 1
       signed true]]]
 
-[def type-i16
+[def ptype-i16
   [data mem
-    [enum [wtype-data] integer
+    [enum [primitive-type] integer
       n-bytes 2
       signed true]]]
+
+[def ptype-i32
+  [data mem
+    [enum [primitive-type] integer
+      n-bytes 4
+      signed true]]]
+
+[def ptype-i64
+  [data mem
+    [enum [primitive-type] integer
+      n-bytes 8
+      signed true]]]
+
+[def ptype-u8
+  [data mem
+    [enum [primitive-type] integer
+      n-bytes 1
+      signed false]]]
+
+[def ptype-u16
+  [data mem
+    [enum [primitive-type] integer
+      n-bytes 2
+      signed false]]]
+
+[def ptype-u32
+  [data mem
+    [enum [primitive-type] integer
+      n-bytes 4
+      signed false]]]
+
+[def ptype-u64
+  [data mem
+    [enum [primitive-type] integer
+      n-bytes 8
+      signed false]]]
 
 [def type-i32
   [data mem
-    [enum [wtype-data] integer
-      n-bytes 4
-      signed true]]]
+    [enum [wtype-data] primitive
+      type ptype-i32]]]
 
 [def type-i64
   [data mem
-    [enum [wtype-data] integer
-      n-bytes 8
-      signed true]]]
-
-[def type-u8
-  [data mem
-    [enum [wtype-data] integer
-      n-bytes 1
-      signed false]]]
-
-[def type-u16
-  [data mem
-    [enum [wtype-data] integer
-      n-bytes 2
-      signed false]]]
-
-[def type-u32
-  [data mem
-    [enum [wtype-data] integer
-      n-bytes 4
-      signed false]]]
-
-[def type-u64
-  [data mem
-    [enum [wtype-data] integer
-      n-bytes 8
-      signed false]]]
+    [enum [wtype-data] primitive
+      type ptype-i64]]]
 
 [def primitive-types-by-name
   [static-list
-    [array [tuple [text] [wtype]]
-      [tuple [static-list [text i8]] type-i8]
-      [tuple [static-list [text u8]] type-u8]
-      [tuple [static-list [text i16]] type-i16]
-      [tuple [static-list [text u16]] type-u16]
-      [tuple [static-list [text i32]] type-i32]
-      [tuple [static-list [text u32]] type-u32]
-      [tuple [static-list [text i64]] type-i64]
-      [tuple [static-list [text u64]] type-u64]]]]
+    [array [tuple [text] [pmem [primitive-type]]]
+      [tuple [static-list [text i8]]  ptype-i8]
+      [tuple [static-list [text u8]]  ptype-u8]
+      [tuple [static-list [text i16]] ptype-i16]
+      [tuple [static-list [text u16]] ptype-u16]
+      [tuple [static-list [text i32]] ptype-i32]
+      [tuple [static-list [text u32]] ptype-u32]
+      [tuple [static-list [text i64]] ptype-i64]
+      [tuple [static-list [text u64]] ptype-u64]]]]
 
-[defn try-get-primitive-from-name [name [text]] [tuple [boolean] [wtype]]
+[defn try-get-primitive-from-name [name [text]] [tuple [boolean] [pmem [primitive-type]]]
   [loop
     [cur-size [list-size primitive-types-by-name]
      arr [list-data-array primitive-types-by-name]
@@ -1219,7 +1240,7 @@
         [if [text-eq [deref [pindex ptup [i32 0]]] name]
           [tuple true [deref [pindex ptup [i32 1]]]]
           [continue i [inc i]]]]
-      [tuple false [pointer [exp mem] [wtype-data] [i32 0]]]]]]
+      [tuple false [pointer [exp mem] [primitive-type] [i32 0]]]]]]
 
 [def type-tuple-empty
   [data mem
@@ -1545,11 +1566,16 @@
           [continue i [inc i]]]]
       [tuple false [pointer [exp mem] [intrinsic-info] [i32 0]]]]]]
 
+[defn alloc-type-primitive [pt [pmem [primitive-type]]] [wtype]
+  [alloc-init
+    [enum [wtype-data] primitive
+      type pt]]]
+
 [defn type-of [gctx [pmem [global-context]] e [pexp]] [wtype]
   [let [tag [deref [pfield e tag]]]
     [match e
       integer
-      [deref [pfield e type]]
+      [alloc-type-primitive [deref [pfield e type]]]
 
       intrinsic
       [let
@@ -1613,6 +1639,16 @@
     type-tuple-empty
     [type-of gctx [list-last es]]]]
 
+[defn primitive-type-equals [pt1 [pmem [primitive-type]] pt2 [pmem [primitive-type]]] [boolean]
+  [or [eq pt1 pt2]
+    [match pt1
+      integer
+      [match pt2
+        integer
+        [and
+          [eq [deref [pfield pt1 n-bytes]] [deref [pfield pt2 n-bytes]]]
+          [eq [deref [pfield pt1 signed]] [deref [pfield pt2 signed]]]]]]]]
+
 [defn type-assignable [dst [wtype] src [wtype]] [i32]
   [or [eq dst src]
     [let [dst-tag [deref [pfield dst tag]]
@@ -1621,12 +1657,15 @@
         false
         [or
           [match dst
-            integer
+            primitive
             [match src
-              integer
-              [and
-                [eq [deref [pfield dst n-bytes]] [deref [pfield src n-bytes]]]
-                [eq [deref [pfield dst signed]] [deref [pfield src signed]]]]
+              primitive
+              [let
+                [dst-pt [deref [pfield dst type]]
+                 src-pt [deref [pfield src type]]]
+                [or
+                  [eq dst-pt src-pt]
+                  [primitive-type-equals dst-pt src-pt]]]
               false]
 
             [tuple record]
@@ -1654,8 +1693,20 @@
     [ifs
       [type-empty-is t1] t2
       [type-empty-is t2] t1
-      [log-abort [text 'common-super-type different types']]]
-    ]]
+
+      [match t1
+        primitive
+        [match t2
+          primitive
+          [if [primitive-type-equals [deref [pfield t1 type]] [deref [pfield t2 type]]]
+            t1
+            [log-abort [text 'common-super-type different types']]]
+          [log-abort [text 'common-super-type different types']]]
+
+        [do
+        [log-type t1]
+        [log-type t2]
+        [log-abort [text 'common-super-type different types']]]]]]]
 
 [defn annotate [gctx [pmem [global-context]] exp [pexp] t [wtype]] [tuple]
   [assoc-list-push [deref [pfield gctx exp-types]] exp t]]
@@ -1848,7 +1899,9 @@
                 [enum [wexp] integer
                   negative negative
                   value value
-                  type prim-type]]]]
+                  type prim-type]]]
+
+              [log-abort [text 'unknown prim type']]]
 
           [text-eq fw [static-list [text if]]]
           [do
@@ -2062,19 +2115,15 @@
           n-args [dec n]]
       [if [eq n 0]
         type-tuple-empty
-        [let [fw [form-word-get-report gctx [list-get fl 0]]]
+        [let
+          [fw [form-word-get-report gctx [list-get fl 0]]
+           [tuple prim-found pt] [try-get-primitive-from-name fw]]
           [ifs
-            [text-eq fw [static-list [text i32]]]
+            prim-found
             [do
               [if [ne n-args 0]
-                [log-abort [text 'form-to-type i32 expects no arguments']]]
-              type-i32]
-
-            [text-eq fw [static-list [text i64]]]
-            [do
-              [if [ne n-args 0]
-                [log-abort [text 'form-to-type i64 expects no arguments']]]
-              type-i64]
+                [log-abort [text 'form-to-type primitive expects no arguments']]]
+              [alloc-type-primitive pt]]
 
             [text-eq fw [static-list [text tuple]]]
             [loop [ts [[instantiate list-alloc [wtype]] n-args] i 1]
@@ -2234,8 +2283,10 @@
                       result result-type]]]
                 ; push the desc before processing the body so its signature is available for recursive calls
                 [assoc-list-push [deref [pfield gctx names]] fname desc]
-                [let [bodies [forms-to-exps gctx fl 4 n]]
-                  [when [not [type-assignable result-type [type-ofs gctx bodies]]]
+                [let
+                  [bodies [forms-to-exps gctx fl 4 n]
+                   inferred-result-type [type-ofs gctx bodies]]
+                  [when [not [type-assignable result-type inferred-result-type]]
                     [push-error gctx form [static-list [text 'result type mismatch']]]]
                   [growable-list-pop local-stack]
                   [growable-list-pop function-stack]
@@ -2390,20 +2441,21 @@
     i64-text
 
     [match t
-      integer
-      [do
-        [when [not [deref [pfield t signed]]]
-          [log-i32 [deref [pfield t n-bytes]]]
-          [log-i32 [deref [pfield t signed]]]
-          [log-abort [text 'type-to-wasm-type unsigned integer not supported']]]
-        [ifs
-          [eq [deref [pfield t n-bytes]] [i32 4]]
-          i32-text
+      primitive
+      [let [pt [deref [pfield t type]]]
+        [match pt
+          integer
+          [do
+          [when [not [deref [pfield pt signed]]]
+            [log-abort [text 'type-to-wasm-type unsigned integer not supported']]]
+          [ifs
+            [eq [deref [pfield pt n-bytes]] [i32 4]]
+            i32-text
 
-          [eq [deref [pfield t n-bytes]] [i32 8]]
-          i64-text
+            [eq [deref [pfield pt n-bytes]] [i32 8]]
+            i64-text
 
-          [log-abort [text 'type-to-wasm-type integer not supported']]]]
+            [log-abort [text 'type-to-wasm-type integer not supported']]]]]]
       [log-abort [text 'type-to-wasm-type non-integer not supported']]]]]
 
 [defn wuns-type-to-num-of-primitives [t [wtype]] [i32]
@@ -2538,7 +2590,8 @@
     [let
       [negative [deref [pfield exp negative]]
        value [deref [pfield exp value]]
-       type [deref [pfield exp type]]
+       ptype [deref [pfield exp type]]
+       type [alloc-type-primitive ptype]
        txt [integer-to-text value negative]]
       [alloc-init
         [enum [wasm-exp] constant
