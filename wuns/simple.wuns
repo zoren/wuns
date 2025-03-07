@@ -855,7 +855,8 @@
         [do
           [log t1]
           [log t2]
-          [logq-abort common-super-type not implemented e3]]
+          ; [logq-abort common-super-type not implemented e3]
+          type-empty]
           ]]]]
 
 [func form-to-type [outer-form]
@@ -1633,7 +1634,7 @@
           [loop [i 0 n [size sfs]]
             [if [lt-s i n]
               [let [field [at sfs i]]
-                [if [is-identical enum-tag-name [pair/fst field]]
+                [if [eq-name enum-tag-name [pair/fst field]]
                   [pair/snd field]
                   [continue i [inc i]]]]
               [logq-abort enum record no tag field]]]]
