@@ -1251,13 +1251,13 @@
                 [form/list pname-forms]
                 [if [is-empty pname-forms]
                   [pattern/tuple [list]]
-                  [let [fw [form-to-word-report [first pname-forms]]]
+                  [let [pat-fw [form-to-word-report [first pname-forms]]]
                     [ifs
-                      [eq-word fw [word tuple]]
+                      [eq-word pat-fw [word tuple]]
                       [let
                         [types [get-tuple-type-elements type]
                          gpatterns [growable-list]]
-                        [assert [eq [dec [size pname-forms]] [size types]] [identity fw] expected same number of names as types]
+                        [assert [eq [dec [size pname-forms]] [size types]] [identity pat-fw] expected same number of names as types]
                         [loop [n [size types] i 0]
                           [when [lt-s i n]
                             [push gpatterns [go [at pname-forms [inc i]] [at types i]]]
