@@ -16,7 +16,13 @@
 [defn get-i32 [] [i32]
   [deref p-i32]]
 
+[defn set-i32 [x [i32]] []
+  [passign p-i32 x]]
+
 [def p-i64 [pointer [exp mem] [i64] [i32 16]]]
 
 [defn get-i64 [] [i64]
   [deref p-i64]]
+
+[defn set-i64 [x [i64]] []
+  [passign p-i64 x]]
