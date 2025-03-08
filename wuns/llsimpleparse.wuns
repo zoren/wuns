@@ -1019,6 +1019,62 @@
       signed [boolean]]]]
 
 [datatype
+  pattern []
+  [enum tag [i32]
+    [var
+      name [text]]
+    [wildcard
+      name [text]]
+    [tuple
+      patterns [plist [pmem [pattern]]]]
+    [record
+      patterns [plist [pmem [pattern]]]
+      names [plist [text]]]]]
+
+[datatype ppattern [] [pmem [pattern]]]
+
+[datatype
+  wexp []
+  [enum tag [i32]
+    [integer
+      negative [i32]
+      value [i64]
+      type [pmem [primitive-type]]]
+    [var
+      name [text]]
+    [if
+      condition [pexp]
+      true [pexp]
+      false [pexp]]
+    [intrinsic
+      iname [text]
+      arguments [plist [pexp]]]
+    [call
+      func [pexp]
+      arguments [plist [pexp]]]
+    [tuple
+      elements [plist [pexp]]]
+    [record
+      elements [plist [pexp]]
+      names [plist [text]]]
+    [let-loop
+      is-let [boolean]
+      bindings [plist [tuple [ppattern] [pexp]]]
+      bodies [plist [pexp]]]
+    [do
+      bodies [plist [pexp]]]
+    [continue
+      assignments [plist [tuple [text] [pexp]]]]
+    [pointer
+      memory-type [pmem [wtype-data]]
+      target-type [pmem [wtype-data]]
+      value [pexp]]
+    [deref
+      value [pexp]]]
+
+  pexp []
+    [pmem [wexp]]
+
   wtype-data []
   [enum tag [i32]
     [primitive
@@ -1033,6 +1089,13 @@
       result [pmem [wtype-data]]]
     [union
       types [plist [pmem [wtype-data]]]]
+    [memory
+      pointer-type [pmem [wtype-data]]]
+    [exp
+      exp [pexp]]
+    [pointer
+      memory [pmem [wtype-data]]
+      target [pmem [wtype-data]]]
 ]]
 
 [datatype wtype [] [pmem [wtype-data]]]
@@ -1093,61 +1156,10 @@
       [log-text txt]
       [text-free txt]]]]
 
-[datatype
-  pattern []
-  [enum tag [i32]
-    [var
-      name [text]]
-    [wildcard
-      name [text]]
-    [tuple
-      patterns [plist [pmem [pattern]]]]
-    [record
-      patterns [plist [pmem [pattern]]]
-      names [plist [text]]]]]
-
-[datatype ppattern [] [pmem [pattern]]]
-
 [def pattern-wildcard
   [data mem
     [enum [pattern] wildcard
       name [static-list [text -]]]]]
-
-[datatype
-  wexp []
-  [enum tag [i32]
-    [integer
-      negative [i32]
-      value [i64]
-      type [pmem [primitive-type]]]
-    [var
-      name [text]]
-    [if
-      condition [pexp]
-      true [pexp]
-      false [pexp]]
-    [intrinsic
-      iname [text]
-      arguments [plist [pexp]]]
-    [call
-      func [pexp]
-      arguments [plist [pexp]]]
-    [tuple
-      elements [plist [pexp]]]
-    [record
-      elements [plist [pexp]]
-      names [plist [text]]]
-    [let-loop
-      is-let [boolean]
-      bindings [plist [tuple [ppattern] [pexp]]]
-      bodies [plist [pexp]]]
-    [do
-      bodies [plist [pexp]]]
-    [continue
-      assignments [plist [tuple [text] [pexp]]]]]
-
-    pexp []
-    [pmem [wexp]]]
 
 [def exp-tuple-empty
   [data mem
@@ -1275,6 +1287,11 @@
     [enum [wtype-data] function
       parameters parameters
       result result]]]
+
+[defn type-memory-alloc [pointer-type [wtype]] [wtype]
+  [alloc-init
+    [enum [wtype-data] memory
+      pointer-type pointer-type]]]
 
 [datatype global-desc-kind []
   [enum tag [i32]
@@ -1627,6 +1644,18 @@
       continue
       type-union-empty
 
+      pointer
+      [alloc-init
+        [enum [wtype-data] pointer
+          memory [deref [pfield e memory-type]]
+          target [deref [pfield e target-type]]]]
+
+      deref
+      [let [tpointer [type-of gctx [deref [pfield e value]]]]
+        [match tpointer
+          pointer [deref [pfield tpointer target]]
+          [log-abort [text 'type-of deref of a non-pointer type']]]]
+
       [let [exp-types [deref [pfield gctx exp-types]]
             [tuple found annotated-type] [assoc-list-try-get-value exp-types e]]
         [when [not found]
@@ -1801,6 +1830,8 @@
 
     [log-abort [text 'push-pattern-type-local-stack unknown pattern tag']]]]
 
+[mutual-recursion
+
 [defn form-to-exp [gctx [pmem [global-context]] f [pform]] [pexp]
   [ifs
     [form-word-is f]
@@ -1826,6 +1857,10 @@
                 [type-function-alloc
                   [deref [pfield pdesc parameter-types]]
                   [deref [pfield pdesc result]]]
+
+                memory
+                [type-memory-alloc
+                  [deref [pfield pdesc pointer-type]]]
 
                 [do
                   [push-error gctx f [static-list [text 'global variable has unknown tag']]]
@@ -2091,10 +2126,29 @@
                       [push-error gctx f [static-list [text 'continue type mismatch']]]]
                     [passign [pindex assignments-array i] [tuple loopvar bound-exp]]
                     [continue i [inc i] fi [add 2 fi]]]]]
-              [cast [pexp]
-                [alloc-init
-                  [enum [wexp] continue
-                    assignments assignments]]]]]
+              [alloc-init
+                [enum [wexp] continue
+                  assignments assignments]]]]
+
+          [text-eq fw [static-list [text pointer]]]
+          [do
+            [if [ne n-args 3]
+              [log-abort [text 'form-to-exp pointer expects 1 or more arguments']]]
+            [cast [pexp]
+              [alloc-init
+                [enum [wexp] pointer
+                  memory-type [form-to-type gctx [list-get fl 1]]
+                  target-type [form-to-type gctx [list-get fl 2]]
+                  value [form-to-exp gctx [list-get fl 3]]]]]]
+
+          [text-eq fw [static-list [text deref]]]
+          [do
+            [if [ne n-args 1]
+              [log-abort [text 'form-to-exp deref expects one argument']]]
+            [cast [pexp]
+              [alloc-init
+                [enum [wexp] deref
+                  value [form-to-exp gctx [list-get fl 1]]]]]]
 
           [do
             [log-text fw]
@@ -2150,9 +2204,30 @@
                       [continue i [inc i] fi [add 2 fi]]]
                     [type-record-alloc ts ns]]]]]
 
+            [text-eq fw [static-list [text exp]]]
+            [do
+              [if [ne n-args 1]
+                [log-abort [text 'form-to-type exp expects one argument']]]
+              [alloc-init
+                [enum [wtype-data] exp
+                  ; we will need the local context here eventually
+                  exp [form-to-exp gctx [list-get fl 1]]]]]
+
+            [text-eq fw [static-list [text pointer]]]
+            [do
+              [if [ne n-args 2]
+                [log-abort [text 'form-to-type pointer expects one argument']]]
+              [cast [wtype]
+                [alloc-init
+                [enum [wtype-data] pointer
+                  memory [form-to-type gctx [list-get fl 1]]
+                  target [form-to-type gctx [list-get fl 2]]]]]]
+
             [log-abort [text 'form-to-type unknown form-list case']]]]]]
 
     [log-abort [text 'form-to-type unknown form case']]]]
+
+] ; end form-to-type form-to-exp mutual-recursion block
 
 [defn parameter-forms-to-lists
   [gctx [pmem [global-context]]
@@ -2457,6 +2532,11 @@
             i64-text
 
             [log-abort [text 'type-to-wasm-type integer not supported']]]]]]
+
+      pointer
+      [let []
+        i32-text]
+
       [log-abort [text 'type-to-wasm-type non-integer not supported']]]]]
 
 [defn wuns-type-to-num-of-primitives [t [wtype]] [i32]
@@ -2752,6 +2832,40 @@
       [alloc-init
         [enum [wasm-exp] instructions
           insts insts]]]
+
+      pointer
+      [exp-to-wasm-exp gctx [deref [pfield exp value]]]
+
+      deref
+      [let
+        [value [deref [pfield exp value]]
+         tpointer [type-of gctx value]
+         ttarget
+         [match tpointer
+          pointer [deref [pfield tpointer target]]
+          [log-abort [text 'type-of deref of a non-pointer type']]]
+         warguments [[instantiate list-alloc [pmem [wasm-exp]]] 1]
+         inst-name
+         [match ttarget
+          primitive
+          [let [pt [deref [pfield ttarget type]]]
+            [match pt
+              integer
+              [ifs
+                [eq pt ptype-i32] [static-list [text i32.load]]
+                [eq pt ptype-i64] [static-list [text i64.load]]
+                [log-abort [text 'exp-to-wasm-exp deref type not yet implemented']]]
+              ]]
+          [do
+            [log-type ttarget]
+            [log-abort [text 'exp-to-wasm-exp deref type not yet implemented']]]]]
+        [list-set warguments 0 [exp-to-wasm-exp gctx value]]
+
+        [alloc-init
+          [enum [wasm-exp] intrinsic
+            name inst-name
+            immediate-arguments list-empty
+            arguments warguments]]]
 
       [log-abort [text 'exp-to-wasm-exp unknown tag']]]]
 
