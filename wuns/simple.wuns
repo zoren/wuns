@@ -1074,6 +1074,10 @@
        ctors [type-enum/ctors enum-args]
        disc-name [match discriminator [exp/var n] n [logq-abort match not a var]]
        disc-word [name/word disc-name]
+       disc-wat-word
+       [match [name-desc/kind [option-get [try-get-name lctx disc-word]]]
+        [desc-kind/local ldesc] [local-var-desc/wat-name [local-name-desc/desc ldesc]]
+        [logq-abort unexpected global desc]]
        cases [pairwise-pairs [slice l 2 [size l]]]]
       [exp/match
         discriminator
@@ -1095,7 +1099,7 @@
                    index-fields [get-enum-ctor-index-fields ctors destructor-name]]
                   [common-super-type res [enum-instance-type-from-names enum-type destructor-name]]]
                 res]]]
-            [set-kv-map vars disc-word [local-var-desc [type/pointer mem-type common-type] disc-word]]
+            [set-kv-map vars disc-word [local-var-desc [type/pointer mem-type common-type] disc-wat-word]]
             [pair
               destructor-names
               [form-to-exp-type-kind-env type-kind-env branch-ctx branch-exp-form]]]]
