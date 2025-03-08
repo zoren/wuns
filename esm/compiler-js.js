@@ -6,9 +6,7 @@ import {
   makeTaggedValue,
   parseString,
   wordToI32,
-  makeFormList,
   getLocationFromForm,
-  print,
 } from './core.js'
 import { intrinsicsInfo } from './intrinsics.js'
 import { escapeIdentifier, jsExpToString, jsStmtToString } from './runtime-lib/js.js'
@@ -150,11 +148,6 @@ const compFunc = (tail, ctx, topContext) => {
   const arrow = jsArrowStmt(jsParameters, restOption, jsBlock(compBodiesToStmts(topContext, newCtx, bodies, true)))
   return jsIIFE([jsConstDecl(name, arrow), jsReturn(jsVar(name))])
 }
-
-const typeVar = (name) => Object.freeze({ typeKind: 'var', name })
-const typeInst = (typeName, ...args) => Object.freeze({ typeKind: 'inst', typeName, args })
-const typeFunc = (parameters, restParameter, result) =>
-  Object.freeze({ typeKind: 'func', parameters, restParameter, result })
 
 const expSpecialFormsExp = {
   i32: (tail) => {
