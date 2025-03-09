@@ -179,6 +179,7 @@
 
     [pindex exp exp]
     [pfield exp name]
+    [field exp name]
 
     [offset-of type name]
 
@@ -229,6 +230,7 @@
     [exp/annotation - e] [may-side-effect e]
     [exp/pindex t i] [or [may-side-effect t] [may-side-effect i]]
     [exp/pfield t -] [may-side-effect t]
+    [exp/field t -] [may-side-effect t]
     [exp/offset-of - --] false
     [exp/intrinsic n - args]
     [or
@@ -278,12 +280,18 @@
      [word i32.gt-u] [word i32.ge-u]]
     [intrinsic-type [list] [list type-i32 type-i32] type-i32]
 
+    [[word i32.eqz]]
+    [intrinsic-type [list] [list type-i32] type-i32]
+
     [[word i64.add] [word i64.sub] [word i64.mul]
      [word i64.and] [word i64.or] [word i64.xor]
      [word i64.shl] [word i64.shr-s] [word i64.shr-u]
      [word i64.div-s] [word i64.div-u] [word i64.rem-s] [word i64.rem-u]
      ]
     [intrinsic-type [list] [list type-i64 type-i64] type-i64]
+
+    [[word i64.eqz]]
+    [intrinsic-type [list] [list type-i64] type-i32]
 
     [[word i64.eq]   [word i64.ne]
      [word i64.lt-s] [word i64.le-s]
@@ -1324,7 +1332,14 @@
     [[word pfield]]
     [let [pexp [form-to-exp-type-kind-env type-kind-env lctx [second l]]
           field-name [form-to-name [third l]]]
+      ; todo type check...
       [exp/pfield pexp field-name]]
+
+    [[word field]]
+    [let [pexp [form-to-exp-type-kind-env type-kind-env lctx [second l]]
+          field-name [form-to-name [third l]]]
+      ; todo type check...
+      [exp/field pexp field-name]]
 
     [[word offset-of]]
     [let [t [form-to-type-type-env type-kind-env lctx [second l]]
@@ -1855,9 +1870,19 @@
 
 [func get-field-type [t field-name-word]
   [match t
+    [type/tuple elem-types]
+    [loop [n [size elem-types]
+           i 0]
+      [if [lt-s i n]
+        [let [fp [at elem-types i]]
+          [if [eq-word [int-to-word i] field-name-word]
+            fp
+            [continue i [inc i]]]]
+        [logq-abort elem not found [identity field-name-word] [identity elem-types]]]]
+
     [type/record field-types]
     [loop [n [size field-types]
-            i 0]
+           i 0]
       [if [lt-s i n]
         [let [fp [at field-types i]]
           [if [eq-word [name/word [pair/fst fp]] field-name-word]
@@ -2066,6 +2091,9 @@
     [let
       [pp [get-pointer-args [type-of p-rec-exp]]]
       [type/pointer [pair/fst pp] [get-field-type [pair/snd pp] [name/word field-name]]]]
+
+    [exp/field tup-rec-exp field-name]
+    [get-field-type [type-of tup-rec-exp] [name/word field-name]]
 
     [exp/offset-of -t -field-name]
     type-i32
@@ -3182,6 +3210,43 @@
     [let
       [pp [get-pointer-args [type-of p-target-exp]]]
       [exp-to-inst [int-exp-add p-target-exp [calc-field-offset [pair/snd pp] [name/word field-name]]]]]
+
+    [exp/field target-exp field-name]
+    [let
+      [tt [type-of target-exp]
+       ft [get-field-type tt [name/word field-name]]]
+      [match target-exp
+        [exp/var n]
+        [let
+          [ndesc [get-name-desc-from-name n]
+           ntype [name-desc/type ndesc]]
+           [match [name-desc/kind ndesc]
+            [desc-kind/top td]
+            [match [top-desc/kind td]
+              [top-desc-kind/value vd]
+              [do
+                [match ntype
+                  [type/func -]
+                  [logq-abort not allowed function as value]
+
+                  [type/tuple ts]
+                  [logq-abort not implemented global tuples]
+
+                  [do]]
+                [wat-inst/global.get [name/word n]]]
+
+              [logq-abort not implemented exp-to-inst var [identity n] [identity td]]]
+
+            [desc-kind/local ldesc]
+            [let
+              [wat-name [local-var-desc/wat-name [local-name-desc/desc ldesc]]]
+              [match ntype
+                [type/tuple ts]
+                [wat-inst/local.get [concat-words wat-name [name/word field-name]]]
+
+                [wat-inst/local.get wat-name]]]]]
+
+        ]]
 
     [exp/offset-of t-rec field-name]
     [exp-to-inst [calc-field-offset t-rec [name/word field-name]]]

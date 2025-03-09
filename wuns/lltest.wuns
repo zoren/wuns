@@ -26,3 +26,47 @@
 
 [defn set-i64 [x [i64]] []
   [passign p-i64 x]]
+
+[def p-u8 [pointer [exp mem] [u8] [i32 16]]]
+
+[defn get-u8 [] [u8]
+  [deref p-u8]]
+
+[defn set-u8 [x [u8]] []
+  [passign p-u8 x]]
+
+[def p-i8 [pointer [exp mem] [i8] [i32 16]]]
+
+[defn get-i8 [] [i8]
+  [deref p-i8]]
+
+[defn set-i8 [x [i8]] []
+  [passign p-i8 x]]
+
+[def p-tuple [pointer [exp mem] [tuple [i64] [i32]] [i32 16]]]
+
+[defn get-tuple [] [tuple [i64] [i32]]
+  [deref p-tuple]]
+
+[defn set-tuple [x [tuple [i64] [i32]]] []
+  [passign p-tuple x]]
+
+[defn swap-tuple [x [tuple [i64] [i32]]] [tuple [i32] [i64]]
+  [tuple [field x 1] [field x 0]]]
+
+[defn set-lit-tuple [] []
+  [passign p-tuple [tuple [i64 3] [i32 4]]]]
+
+; todo change type so order is checked
+[def p-tuple2 [pointer [exp mem] [tuple [tuple [i64] [i32]] [i32]] [i32 16]]]
+
+[defn get-tuple2 [] [tuple [tuple [i64] [i32]] [i32]]
+  [deref p-tuple2]]
+
+[def p-rec [pointer [exp mem] [record bi [i64] si [i32]] [i32 16]]]
+
+[defn get-rec [] [record bi [i64] si [i32]]
+  [deref p-rec]]
+
+[defn set-rec [x [record bi [i64] si [i32]]] []
+  [passign p-rec x]]

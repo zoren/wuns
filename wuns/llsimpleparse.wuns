@@ -1063,6 +1063,9 @@
       bodies [plist [pexp]]]
     [continue
       assignments [plist [tuple [text] [pexp]]]]
+    [field
+      target [pexp]
+      name [text]]
     [pointer
       memory-type [pmem [wtype-data]]
       target-type [pmem [wtype-data]]
@@ -1098,6 +1101,11 @@
       memory [pmem [wtype-data]]
       target [pmem [wtype-data]]]
 ]]
+
+[defn exp-may-side-effect [exp [pexp]] [boolean]
+  [match exp
+    [integer var pointer] false
+    true]]
 
 [datatype wtype [] [pmem [wtype-data]]]
 
@@ -1526,7 +1534,7 @@
                   [i64 0]]
                 [let
                   [n [intrinsic i64.mul res [i64 10]]
-                  s [intrinsic i64.add n [intrinsic i64.sub cc [i64 48]]]]
+                   s [intrinsic i64.add n [intrinsic i64.sub cc [i64 48]]]]
                   [if [intrinsic i64.lt-u s n]
                     [do
                       [push-error gctx word-form [static-list [text 'i64 overflow']]]
@@ -1607,6 +1615,12 @@
     [enum [wtype-data] primitive
       type pt]]]
 
+[defn get-tuple-record-name [t [wtype] i [i32]] [text]
+  [match t
+    tuple [integer-to-text [intrinsic i64.extend-i32-s i] false]
+    record [list-get [deref [pfield t names]] i]
+    [log-abort [text 'get-tuple-record-name unknown tag']]]]
+
 [defn type-of [gctx [pmem [global-context]] e [pexp]] [wtype]
   [let [tag [deref [pfield e tag]]]
     [match e
@@ -1676,6 +1690,20 @@
 
       passign
       type-tuple-empty
+
+      field
+      [let [name [deref [pfield e name]]
+            tt [type-of gctx [deref [pfield e target]]]]
+        [match tt
+          [tuple record]
+          [loop [types [deref [pfield tt types]] n [list-size types] i 0]
+            [if [lt-s i n]
+              [if [text-eq [get-tuple-record-name tt i] name]
+                [list-get types i]
+                [continue i [inc i]]]
+              [log-abort [text 'type-of field not found']]]]
+
+          [log-abort [text 'type-of field of a non-record type']]]]
 
       [let [exp-types [deref [pfield gctx exp-types]]
             [tuple found annotated-type] [assoc-list-try-get-value exp-types e]]
@@ -2154,6 +2182,16 @@
                 [enum [wexp] continue
                   assignments assignments]]]]
 
+          [text-eq fw [static-list [text field]]]
+          [do
+            [if [ne n-args 2]
+              [log-abort [text 'form-to-exp field expects 2 arguments']]]
+            [cast [pexp]
+              [alloc-init
+                [enum [wexp] field
+                  target [form-to-exp gctx [list-get fl 1]]
+                  name [form-word-get-report gctx [list-get fl 2]]]]]]
+
           [text-eq fw [static-list [text pointer]]]
           [do
             [if [ne n-args 3]
@@ -2576,8 +2614,8 @@
         [match pt
           integer
           [do
-          [when [not [deref [pfield pt signed]]]
-            [log-abort [text 'type-to-wasm-type unsigned integer not supported']]]
+          ; [when [not [deref [pfield pt signed]]]
+          ;   [log-abort [text 'type-to-wasm-type unsigned integer not supported']]]
           [ifs
             [eq [deref [pfield pt n-bytes]] [i32 4]]
             i32-text
@@ -2585,7 +2623,14 @@
             [eq [deref [pfield pt n-bytes]] [i32 8]]
             i64-text
 
-            [log-abort [text 'type-to-wasm-type integer not supported']]]]]]
+            [eq [deref [pfield pt n-bytes]] [i32 1]]
+            i64-text
+
+            ; [we know how to do this in debug writer]
+
+            [do
+              [log-type t]
+              [log-abort [text 'type-to-wasm-type integer not supported']]]]]]]
 
       pointer
       [let []
@@ -2639,11 +2684,10 @@
     var [deref [pfield exp name]]
     [log-abort [text 'exp-get-var-name not a var']]]]
 
-[defn get-tuple-record-name [t [wtype] i [i32]] [text]
-  [match t
-    tuple [integer-to-text [intrinsic i64.extend-i32-s i] false]
-    record [list-get [deref [pfield t names]] i]
-    [log-abort [text 'get-tuple-record-name unknown tag']]]]
+[defn wasm-instructions-alloc [insts [plist [pwasm-exp]]] [pwasm-exp]
+  [alloc-init
+    [enum [wasm-exp] instructions
+      insts insts]]]
 
 [defn local-get-param-by-type [gl [p-growable-list [text]] t [wtype]] [pwasm-exp]
   [match t
@@ -2718,6 +2762,195 @@
         [log-abort [text 'pattern-type-to-local-set-drop tuple/record type expected']]]]
 
     [log-abort [text 'pattern kind not implemented yet']]]]
+
+[defn exp-intrinsic-binary-alloc [iname [text] a0 [pexp] a1 [pexp]] [pexp]
+  [let [args [[instantiate list-alloc [pexp]] 2]]
+    [list-set args 0 a0]
+    [list-set args 1 a1]
+    [alloc-init
+      [enum [wexp] intrinsic
+        iname iname
+        arguments args]]]]
+
+[defn exp-try-get-non-negative-integer-constant [exp [pexp]] [tuple [boolean] [i64]]
+  [match exp
+    integer
+    [do
+      [when [deref [pfield exp negative]]
+        [log-abort [text 'found a negative integer']]]
+      [tuple true [deref [pfield exp value]]]]
+    [tuple false [i64 0]]]]]
+
+[defn add-i64-unsigned-add-safe [a0 [i64] a1 [i64]] [i64]
+  [let [sum [intrinsic i64.add a0 a1]]
+    [when [intrinsic i64.lt-s sum a0]
+      [log-abort [text 'add-i64-unsigned-add-safe overflow']]]
+    sum]]
+
+[defn integer-non-negative-alloc [type [pmem [primitive-type]] value [i64]] [pexp]
+  [alloc-init
+    [enum [wexp] integer
+      negative false
+      value value
+      type type]]]
+
+[defn exp-unsigned-add-safe [result-type [pmem [primitive-type]] a0 [pexp] a1 [pexp]] [pexp]
+  [let
+    [[tuple is-const0 cval0] [exp-try-get-non-negative-integer-constant a0]
+     [tuple is-const1 cval1] [exp-try-get-non-negative-integer-constant a1]]
+    [ifs
+      [and is-const0 is-const1]
+      [integer-non-negative-alloc result-type [add-i64-unsigned-add-safe cval0 cval1]]
+
+      [and is-const0 [intrinsic i64.eqz cval0]]
+      a1
+
+      [and is-const1 [intrinsic i64.eqz cval1]]
+      a0
+
+      [exp-intrinsic-binary-alloc [static-list [text i32.add]] a0 a1]]]]
+
+[defn type-to-size-exp [result-type [pmem [primitive-type]] type [wtype]] [pexp]
+  [match type
+    primitive
+    [let
+      [pt [deref [pfield type type]]]
+      [match pt
+        integer
+        [integer-non-negative-alloc result-type [intrinsic i64.extend-i32-s [deref [pfield pt n-bytes]]]]
+        ]]
+
+    tuple
+    [let
+      [types [deref [pfield type types]]
+       n [list-size types]]
+      [loop [cur-sz [integer-non-negative-alloc result-type [i64 0]] i 0]
+        [if [lt-s i n]
+          [let
+            [t [list-get types i]
+             sz-exp [exp-unsigned-add-safe result-type cur-sz [type-to-size-exp result-type t]]]
+            [continue cur-sz sz-exp i [inc i]]]]
+          cur-sz]]
+
+    [do
+      [log-type type]
+      [log-abort [text 'type-to-size-exp type not yet implemented']]]]]
+
+[mutual-recursion
+
+[defn deref-to-wasm-exp
+  [gctx [pmem [global-context]]
+   result-type [pmem [primitive-type]]
+   pointer-exp [pexp]
+   ttarget [wtype]] [pwasm-exp]
+  [match ttarget
+    primitive
+    [let
+      [pt [deref [pfield ttarget type]]
+       warguments [[instantiate list-alloc [pmem [wasm-exp]]] 1]
+       inst-name
+        [match pt
+          integer
+          [ifs
+            [primitive-type-equals pt ptype-i32] [static-list [text i32.load]]
+            [primitive-type-equals pt ptype-i64] [static-list [text i64.load]]
+            [primitive-type-equals pt ptype-u8] [static-list [text 'i64.load8_u']]
+            [primitive-type-equals pt ptype-i8] [static-list [text 'i64.load8_s']]
+            [primitive-type-equals pt ptype-u16] [static-list [text 'i64.load16_u']]
+            [primitive-type-equals pt ptype-i16] [static-list [text 'i64.load16_s']]
+            [log-abort [text 'exp-to-wasm-exp deref primitive type not yet implemented']]]]]
+      [list-set warguments 0 [exp-to-wasm-exp gctx pointer-exp]]
+      [alloc-init
+        [enum [wasm-exp] intrinsic
+          name inst-name
+          immediate-arguments list-empty
+          arguments warguments]]]
+
+    [tuple record]
+    [let
+      [types [deref [pfield ttarget types]]
+       n [list-size types]
+       insts [[instantiate list-alloc [pmem [wasm-exp]]] n]]
+      [loop [cur-sz pointer-exp i 0]
+        [when [lt-s i n]
+          [let
+            [tt [list-get types i]
+             sz-exp [type-to-size-exp result-type tt]]
+            [list-set insts i [deref-to-wasm-exp gctx result-type cur-sz tt]]
+            [continue
+              cur-sz [exp-unsigned-add-safe result-type cur-sz sz-exp]
+              i [inc i]]]]]
+      [wasm-instructions-alloc insts]]
+
+    [do
+      [log-type ttarget]
+      [log-abort [text 'exp-to-wasm-exp deref type not yet implemented']]]]]
+
+[defn passign-to-wasm-exp
+  [gctx [pmem [global-context]]
+   result-type [pmem [primitive-type]]
+   pointer-exp [pexp]
+   ttarget [wtype]
+   value-exp [pexp]] [pwasm-exp]
+  [match ttarget
+    primitive
+    [let [target-pt [deref [pfield ttarget type]]]
+      [match target-pt
+        integer
+        [let
+          [inst-name
+            [ifs
+              [primitive-type-equals target-pt ptype-i32] [static-list [text i32.store]]
+              [primitive-type-equals target-pt ptype-i64] [static-list [text i64.store]]
+              [or [primitive-type-equals target-pt ptype-u8] [primitive-type-equals target-pt ptype-i8]]
+              [static-list [text 'i64.store8']]
+              [or [primitive-type-equals target-pt ptype-u16] [primitive-type-equals target-pt ptype-i16]]
+              [static-list [text 'i64.store16']]
+              [do
+                [log-abort [text 'exp-to-wasm-exp passign integer type not yet implemented']]]]
+            warguments [[instantiate list-alloc [pmem [wasm-exp]]] 2]]
+          [list-set warguments 0 [exp-to-wasm-exp gctx pointer-exp]]
+          [list-set warguments 1 [exp-to-wasm-exp gctx value-exp]]
+          [alloc-init
+            [enum [wasm-exp] intrinsic
+              name inst-name
+              immediate-arguments list-empty
+              arguments warguments]]]]]
+
+    [tuple record]
+    [let
+      [types [deref [pfield ttarget types]]
+       n [list-size types]
+       insts [[instantiate list-alloc [pmem [wasm-exp]]] n]]
+      [match value-exp
+        var
+        [loop [vn [deref [pfield value-exp name]] cur-sz pointer-exp i 0]
+          [when [lt-s i n]
+            [let
+              [tt [list-get types i]
+               proj-exp
+               [alloc-init
+                [enum [wexp] field
+                  target value-exp
+                  name [get-tuple-record-name ttarget i]]]
+               sz-exp [type-to-size-exp result-type tt]]
+              [list-set insts i [passign-to-wasm-exp gctx result-type cur-sz tt proj-exp]]
+              [continue
+                cur-sz [exp-unsigned-add-safe result-type cur-sz sz-exp]
+                i [inc i]]]]]
+
+        [tuple record]
+        [loop [exps [deref [pfield value-exp elements]] cur-sz pointer-exp i 0]
+          [when [lt-s i n]
+            [let
+              [tt [list-get types i]
+               te [list-get exps i]
+               sz-exp [type-to-size-exp result-type tt]]
+              [list-set insts i [passign-to-wasm-exp gctx result-type cur-sz tt te]]
+              [continue
+                cur-sz [exp-unsigned-add-safe result-type cur-sz sz-exp]
+                i [inc i]]]]]]
+      [wasm-instructions-alloc insts]]]]
 
 [defn exp-to-wasm-exp [gctx [pmem [global-context]] exp [pexp]] [pwasm-exp]
   [match exp
@@ -2897,33 +3130,9 @@
          [tuple tmemory ttarget]
          [match tpointer
           pointer [tuple [deref [pfield tpointer memory]] [deref [pfield tpointer target]]]
-          [log-abort [text 'exp-to-wasm-exp deref of a non-pointer type']]]
-        ;  mem-name
-        ;  [match tmemory
-        ;   exp
-        ;   [let [e [deref [pfield tmemory exp]]]
-        ;     [match e
-        ;       var [deref [pfield e name]]]]]
-         inst-name
-         [match ttarget
-          primitive
-          [let [pt [deref [pfield ttarget type]]]
-            [match pt
-              integer
-              [ifs
-                [primitive-type-equals pt ptype-i32] [static-list [text i32.load]]
-                [primitive-type-equals pt ptype-i64] [static-list [text i64.load]]
-                [log-abort [text 'exp-to-wasm-exp deref type not yet implemented']]]]]
-          [do
-            [log-type ttarget]
-            [log-abort [text 'exp-to-wasm-exp deref type not yet implemented']]]]
-         warguments [[instantiate list-alloc [pmem [wasm-exp]]] 1]]
-        [list-set warguments 0 [exp-to-wasm-exp gctx pointer]]
-        [alloc-init
-          [enum [wasm-exp] intrinsic
-            name inst-name
-            immediate-arguments list-empty
-            arguments warguments]]]
+          [log-abort [text 'exp-to-wasm-exp deref of a non-pointer type']]]]
+        ;; todo use the mem pointer type here
+        [deref-to-wasm-exp gctx ptype-i32 pointer ttarget]]
 
       passign
       [let
@@ -2933,30 +3142,45 @@
          ttarget
          [match tpointer
           pointer [deref [pfield tpointer target]]
-          [log-abort [text 'exp-to-wasm-exp passign of a non-pointer type']]]
-         inst-name
-         [match ttarget
-          primitive
-          [let [pt [deref [pfield ttarget type]]]
-            [match pt
-              integer
-              [ifs
-                [primitive-type-equals pt ptype-i32] [static-list [text i32.store]]
-                [primitive-type-equals pt ptype-i64] [static-list [text i64.store]]
-                [do
-                  [log-abort [text 'exp-to-wasm-exp passign integer type not yet implemented']]]]]]
-          [do
-            [log-abort [text 'exp-to-wasm-exp passign type not yet implemented']]]]
-         warguments [[instantiate list-alloc [pmem [wasm-exp]]] 2]]
-        [list-set warguments 0 [exp-to-wasm-exp gctx pointer]]
-        [list-set warguments 1 [exp-to-wasm-exp gctx value]]
-        [alloc-init
-          [enum [wasm-exp] intrinsic
-            name inst-name
-            immediate-arguments list-empty
-            arguments warguments]]]
+          [log-abort [text 'exp-to-wasm-exp passign of a non-pointer type']]]]
+        [passign-to-wasm-exp
+          gctx
+          ptype-i32
+          pointer
+          ttarget
+          value]]
+
+      field
+      [let
+        [target [deref [pfield exp target]]
+         field-name [deref [pfield exp name]]]
+        [match target
+          var
+          [let
+            [var-name [deref [pfield target name]]
+             is-local [assoc-list-has [deref [pfield gctx exp-local-context]] target]]
+            [if is-local
+              [let [gl [[instantiate growable-list-alloc-init [text]] [i32 10]]]
+                ; todo should be wat-name...
+                [growable-list-push gl var-name]
+                [growable-list-push gl [static-list [text -]]]
+                [growable-list-push gl field-name]
+                [let
+                  [iargs [[instantiate list-alloc [text]] 1]
+                   concatted-name [writer-to-text gl]]
+                  [list-set iargs 0 concatted-name]
+                  [cast [pwasm-exp]
+                    [alloc-init
+                      [enum [wasm-exp] intrinsic
+                        name [static-list [text local.get]]
+                        immediate-arguments iargs
+                        arguments list-empty]]]]]
+              [log-abort [text 'global tuple/record not yet implemented']]]]
+          ]]
 
       [log-abort [text 'exp-to-wasm-exp unknown tag']]]]
+
+]
 
 [def lparen [static-list [text '(']]]
 [def rparen [static-list [text ')']]]

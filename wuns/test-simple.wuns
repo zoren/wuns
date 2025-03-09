@@ -940,7 +940,7 @@
       [let
        [wat-string [forms-to-wat-string forms]
         module [byte-array-to-wasm-module [wat-to-wasm-byte-array wat-string]]
-        mem [memory 1 9 0]
+        mem [memory 1 [i32 16] 0]
         import-obj [make-import-object mem]
         inst [wasm-instantiate module import-obj]
         parse-translate [get-export inst [word parse-translate]]
