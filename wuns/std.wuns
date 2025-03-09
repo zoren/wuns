@@ -558,7 +558,6 @@
     [func then [content] [parse-string content file-name]]]]
 
 [import ./runtime-lib/host.js apply [type-scheme [a b] [func [[func [.. a] b] [list a]] b]]]
-[import ./runtime-lib/host.js parse-function-parameters [type-scheme [a b] [func [[func [.. a] b] [list a]] [list string]]]]
 
 [defn log-fn [forms]
   [apply console-log [list-map f forms [print f]]]]

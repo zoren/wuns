@@ -42,22 +42,6 @@ const syntax_node_content_name = ({ contentObj }) => contentObj.contentName
 
 export { syntax_node_content_name as 'syntax-node-content-name' }
 
-// const get_syntax_node_location = ({ contentObj, byteOffset }) => {
-//   // calculate row and column from byteOffset
-//   const content = contentObj.content
-//   for (let row = 0, column = 0, i = 0; i < byteOffset; i++) {
-//     if (content[i] === '\n') {
-//       row++
-//       column = 0
-//     } else {
-//       column++
-//     }
-//   }
-//   return makeRecordFromObj('syntax-node-location', { row, column })
-// }
-
-// export { get_syntax_node_location as 'get-syntax-node-location' }
-
 const get_syntax_node_location_as_string = (info) => {
   return getFormPositionAsString(info)
 }
@@ -66,12 +50,6 @@ export const apply = (fn, args) => {
   checkArity(fn, args)
   return fn(...args)
 }
-
-const parse_function_parameters = (fn) => {
-  if (typeof fn !== 'function') throw new Error('parse-function-parameters expects function')
-  return parseFunctionParameters(fn)
-}
-export { parse_function_parameters as 'parse-function-parameters' }
 
 const word_byte_size = (word) => {
   if (typeof word !== 'string') throw new Error('word-byte-size expects string')
