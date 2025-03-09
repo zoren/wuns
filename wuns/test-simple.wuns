@@ -1010,10 +1010,17 @@
         ; [test-constant [i32 4294967295] [word i32] [word '[i32 4294967295]']] fails
 
         [test-constant [bigint 4294967296] [word i64] [word '[i64 4294967296]']]
+        ; 2**63 = 9.223.372.036.854.775.808
+
         [test-constant [bigint 9223372036854775807] [word i64] [word '[i64 9223372036854775807]']]
         [test-constant [bigint -9223372036854775808] [word i64] [word '[i64 -9223372036854775808]']]
-        ;  [test-constant [bigint 9223372036854775808] [word i64] [word '[i64 9223372036854775808]']] fails!
-        ;  [test-constant [bigint 18446744073709551617] [word i64] [word '[i64 18446744073709551617]']] fails
+        ; js api wraps around at 2**63
+        [test-constant [bigint -9223372036854775808] [word i64] [word '[i64 9223372036854775808]']]
+
+        ; 2**64 = 18.446.744.073.709.551.616
+        [test-constant [bigint -1] [word i64] [word '[i64 18446744073709551615]']]
+        ; should fail to compile due to overflow
+        ;[test-constant [bigint -1] [word i64] [word '[i64 18446744073709551616]']]
 
         [test-constant [i32 1337] [word i32] [word '[intrinsic i32.add [i32 1] [i32 1336]]']]
         [test-constant [i32 1337] [word i32] [word '[intrinsic i32.sub [i32 1] [i32 -1336]]']]
