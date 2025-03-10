@@ -35,6 +35,17 @@
 
 [defn is-odd [x [i32]] [i32] [bitwise-and x 1]]
 
+[defn align [p [i32] x [i32]] [i32]
+  [bitwise-and
+    [add x [dec p]]
+    [bitwise-xor [i32 -1] [dec p]]]]
+
+[defn mem-align [p [i32]] [i32]
+  [align [i32 16] p]]
+
+[defn mem-align-is [p [i32]] [i32]
+  [eq p [mem-align p]]]
+
 [import env
   [mem [memory [i32] 1]]]
 
@@ -47,17 +58,6 @@
 
 [defn set-top [new-top [i32]] [tuple]
   [assign mem-top new-top]]
-
-[defn align [p [i32] x [i32]] [i32]
-  [bitwise-and
-    [add x [dec p]]
-    [bitwise-xor [i32 -1] [dec p]]]]
-
-[defn mem-align [p [i32]] [i32]
-  [align [i32 16] p]]
-
-[defn mem-align-is [p [i32]] [i32]
-  [eq p [mem-align p]]]
 
 [datatype pmem [a datatype]
   [pointer [exp mem] a]]
@@ -1108,6 +1108,9 @@
     [pointer
       memory [pmem [wtype-data]]
       target [pmem [wtype-data]]]
+    [custom
+      name [text]
+      arguments [plist [pmem [wtype-data]]]]
 ]]
 
 [defn exp-may-side-effect [exp [pexp]] [boolean]
@@ -1370,6 +1373,17 @@
     locals [plist [tuple [text] [wtype]]]
     body [plist [pexp]]]]
 
+[datatype type-kind []
+  [enum tag [i32]
+    [datatype]
+    [exp
+      type [wtype]]
+    ; maybe non-datatype for funcs
+    ]]
+
+[datatype type-signature []
+  [p-assoc-list [text] [pmem [type-kind]]]]
+
 [datatype global-context []
   [record
     errors [p-growable-list [error]]
@@ -1383,6 +1397,7 @@
     function-bodies [p-assoc-list [pmem [global-desc-kind]] [pmem [function-body]]]
     function-stack [p-growable-list [function-frame]]
     import-module-names [p-assoc-list [pmem [tuple [text] [pmem [global-desc-kind]]]] [text]]
+    custom-type-signatures [p-assoc-list [text] [type-signature]]
     ]]
 
 [defn global-context-alloc [form-offsets [p-assoc-list [pform] [i32]]] [pmem [global-context]]
@@ -1400,6 +1415,7 @@
       ; as do not have local functions yet the stack can only be empty or have one frame
       function-stack [[instantiate growable-list-alloc-init [function-frame]] [i32 1]]
       import-module-names [[instantiate assoc-list-alloc [pmem [tuple [text] [pmem [global-desc-kind]]]] [text]] 8]
+      custom-type-signatures [[instantiate assoc-list-alloc [text] [type-signature]] [i32 8]]
       ]]]
 
 [defn global-context-free [gctx [pmem [global-context]]] [tuple]
@@ -1413,6 +1429,7 @@
   [growable-list-free [deref [pfield gctx function-bodies]]]
   [growable-list-free [deref [pfield gctx function-stack]]]
   [growable-list-free [deref [pfield gctx import-module-names]]]
+  [growable-list-free [deref [pfield gctx custom-type-signatures]]]
   [free gctx [size-of-type [global-context]]]]
 
 [export global-context-alloc global-context-free]
@@ -2370,9 +2387,23 @@
                   memory [form-to-type gctx [list-get fl 1]]
                   target [form-to-type gctx [list-get fl 2]]]]]]
 
-            [do
-              [log-text fw]
-              [log-abort [text 'form-to-type unknown form-list case']]]]]]]
+            [let [[tuple custom-found ctype-sig] [assoc-list-try-get-value [deref [pfield gctx custom-type-signatures]] fw]]
+              [if custom-found
+                [let [arguments [[instantiate list-alloc [wtype]] n-args]]
+                  [when [ne [list-size ctype-sig] [list-size n-args]]
+                    [push-error gctx f [static-list [text 'custom type signature arity mismatch']]]]
+                  [loop [i 1]
+                    [when [lt-s i n]
+                      [list-set arguments [dec i] [form-to-type gctx [list-get fl i]]]
+                      [continue i [inc i]]]]
+                  [cast [wtype]
+                    [alloc-init
+                      [enum [wtype-data] custom
+                        name fw
+                        arguments arguments]]]]
+                [do
+                  [log-text fw]
+                  [log-abort [text 'form-to-type unknown form-list case']]]]]]]]]
 
     [log-abort [text 'form-to-type unknown form case']]]]
 
@@ -2550,8 +2581,20 @@
               [assoc-list-push [deref [pfield gctx names]] dname def-desc]]]
 
           [text-eq fw [static-list [text datatype]]]
-          [do
-            [log-abort [text 'form-to-top datatype not implemented']]
+          [let [signatures [deref [pfield gctx custom-type-signatures]]]
+            [when [intrinsic i32.rem_s n-args 3]
+              [log-abort [text 'form-to-top datatype expects arguments in triples']]]
+            [loop [fi 1]
+              [when [lt-s fi n]
+                [let
+                  [type-name [form-word-get-report gctx [list-get fl fi]]
+                   type-param-list [form-list-get-report gctx [list-get fl [inc fi]]]
+                   type-params [[instantiate assoc-list-alloc [text] [pmem [type-kind]]] [half [list-size type-param-list]]]]
+                  [if [assoc-list-has signatures type-name]
+                    [push-error gctx [list-get fl fi] [static-list [text 'datatype already defined']]]
+                    [assoc-list-push signatures type-name type-params]]
+                  [continue fi [add 3 fi]]]]]
+            ; [log-abort [text 'form-to-top datatype not implemented']]
           ]
 
           [text-eq fw [static-list [text import]]]

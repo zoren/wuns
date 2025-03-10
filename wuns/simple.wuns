@@ -271,6 +271,7 @@
 [defn intrinsic-type-from-name [n]
   [switch n
     [[word i32.add] [word i32.sub] [word i32.mul]
+     [word i32.div_s] [word i32.div_u] [word i32.rem_s] [word i32.rem_u]
      [word i32.and] [word i32.or] [word i32.xor]
      [word i32.shl] [word i32.shr-s] [word i32.shr-u]
 
