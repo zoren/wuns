@@ -184,6 +184,7 @@
     [offset-of type name]
 
     [array type [list exp]]
+    [text word]
     [tuple [list exp]]
     [record [list [pair name exp]]]
     [enum
@@ -1364,11 +1365,7 @@
             ee]]]]
 
     [[word text]]
-    [let [gl [growable-list]
-          w [form-to-word-report [second l]]]
-      [for i 0 [word-byte-size w]
-        [push gl [exp/integer type-primitive-u8 [i32-to-bigint [char-code-at w i]]]]]
-      [exp/array type-u8 [clone-growable-to-frozen-list gl]]]
+    [exp/text [form-to-word-report [second l]]]
 
     [[word tuple]]
     [exp/tuple
@@ -2103,6 +2100,11 @@
       elem-type
       [option/some [type/exp [exp/integer type-primitive-i32 [i32-to-bigint [size elems]]]]]]
 
+    [exp/text w]
+    [type/array
+      type-u8
+      [option/some [type/exp [exp/integer type-primitive-i32 [i32-to-bigint [word-byte-size w]]]]]]
+
     [exp/tuple elems]
     [if [eq [size elems] 1]
       [type-of [first elems]]
@@ -2700,6 +2702,10 @@
               [exp/array - es]
               ; todo we should check that the element size will make the array aligned
               [for-each elem es [e2b elem]]
+
+              [exp/text w]
+              [for i 0 [word-byte-size w]
+                [print-byte bprinter [char-code-at w i]]]
 
               [exp/tuple es]
               [for-each elem es [e2b elem]]
