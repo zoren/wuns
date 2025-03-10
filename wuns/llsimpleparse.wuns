@@ -1583,42 +1583,55 @@
 
 [def type-boolean type-i32]
 
+[comptimefn intrinsic-no-imm [sz [exp [i32]]]
+  [name [array [u8] sz]
+   parameters [plist [wtype]]
+   result [wtype]] [intrinsic-info]
+  [record
+    name
+    [data mem
+      [record
+        size [reify sz]
+        array name]]
+    parameters parameters
+    result result]]
+
 [def intrinsics
   [static-list
     [array [intrinsic-info]
-      [record name [static-list [text i32.eqz]] parameters i32-singleton result type-boolean]
+      [intrinsic-no-imm [text i32.eqz] i32-singleton type-boolean]
 
-      [record name [static-list [text i32.eq]] parameters i32i32 result type-boolean]
-      [record name [static-list [text i32.ne]] parameters i32i32 result type-boolean]
+      [intrinsic-no-imm [text i32.eq] i32i32 type-boolean]
+      [intrinsic-no-imm [text i32.ne] i32i32 type-boolean]
 
-      [record name [static-list [text 'i32.lt_s']] parameters i32i32 result type-boolean]
-      [record name [static-list [text 'i32.lt_u']] parameters i32i32 result type-boolean]
-      [record name [static-list [text 'i32.gt_s']] parameters i32i32 result type-boolean]
-      [record name [static-list [text 'i32.gt_u']] parameters i32i32 result type-boolean]
+      [intrinsic-no-imm [text i32.lt_s] i32i32 type-boolean]
+      [intrinsic-no-imm [text i32.lt_u] i32i32 type-boolean]
+      [intrinsic-no-imm [text i32.gt_s] i32i32 type-boolean]
+      [intrinsic-no-imm [text i32.gt_u] i32i32 type-boolean]
 
-      [record name [static-list [text 'i32.le_s']] parameters i32i32 result type-boolean]
-      [record name [static-list [text 'i32.le_u']] parameters i32i32 result type-boolean]
-      [record name [static-list [text 'i32.ge_s']] parameters i32i32 result type-boolean]
-      [record name [static-list [text 'i32.ge_u']] parameters i32i32 result type-boolean]
+      [intrinsic-no-imm [text i32.le_s] i32i32 type-boolean]
+      [intrinsic-no-imm [text i32.le_u] i32i32 type-boolean]
+      [intrinsic-no-imm [text i32.ge_s] i32i32 type-boolean]
+      [intrinsic-no-imm [text i32.ge_u] i32i32 type-boolean]
 
-      [record name [static-list [text i32.clz]] parameters i32-singleton result type-i32]
-      [record name [static-list [text i32.ctz]] parameters i32-singleton result type-i32]
-      [record name [static-list [text i32.popcnt]] parameters i32-singleton result type-i32]
+      [intrinsic-no-imm [text i32.clz] i32-singleton type-i32]
+      [intrinsic-no-imm [text i32.ctz] i32-singleton type-i32]
+      [intrinsic-no-imm [text i32.popcnt] i32-singleton type-i32]
 
-      [record name [static-list [text i32.add]] parameters i32i32 result type-i32]
-      [record name [static-list [text i32.sub]] parameters i32i32 result type-i32]
-      [record name [static-list [text i32.mul]] parameters i32i32 result type-i32]
+      [intrinsic-no-imm [text i32.add] i32i32 type-i32]
+      [intrinsic-no-imm [text i32.sub] i32i32 type-i32]
+      [intrinsic-no-imm [text i32.mul] i32i32 type-i32]
 
-      [record name [static-list [text i32.and]] parameters i32i32 result type-i32]
-      [record name [static-list [text i32.or]] parameters i32i32 result type-i32]
-      [record name [static-list [text i32.xor]] parameters i32i32 result type-i32]
+      [intrinsic-no-imm [text i32.and] i32i32 type-i32]
+      [intrinsic-no-imm [text i32.or] i32i32 type-i32]
+      [intrinsic-no-imm [text i32.xor] i32i32 type-i32]
 
-      [record name [static-list [text i32.shl]] parameters i32i32 result type-i32]
-      [record name [static-list [text 'i32.shr_s']] parameters i32i32 result type-i32]
-      [record name [static-list [text 'i32.shr_u']] parameters i32i32 result type-i32]
+      [intrinsic-no-imm [text i32.shl] i32i32 type-i32]
+      [intrinsic-no-imm [text i32.shr_s] i32i32 type-i32]
+      [intrinsic-no-imm [text i32.shr_u] i32i32 type-i32]
 
-      [record name [static-list [text i32.rotl]] parameters i32i32 result type-i32]
-      [record name [static-list [text i32.rotr]] parameters i32i32 result type-i32]
+      [intrinsic-no-imm [text i32.rotl] i32i32 type-i32]
+      [intrinsic-no-imm [text i32.rotr] i32i32 type-i32]
 
       ]]]
 
