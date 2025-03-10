@@ -2655,6 +2655,17 @@
 
           [option/none]]]
 
+      [exp/record fields]
+      [loop [i 0 n [size fields] res [growable-list]]
+        [if [lt-s i n]
+          [let [p [at fields i]]
+            [if-let [ne [ee [pair/snd p]]]
+            [do
+              [push res [pair [pair/fst p] ne]]
+              [continue i [inc i]]]
+            [option/none]]]
+          [option/some [exp/record [clone-growable-to-frozen-list res]]]]]
+
       [exp/call fexp args]
       [let
         [tenv [infer-type-env-from-args fexp type-env args]
@@ -2728,6 +2739,27 @@
                  n-bytes [primitive-type/bytes [type-enum/tag-type enum-args]]]
                 [print-bigint bprinter n-bytes [i32-to-bigint ctor-index]]
                 [for-each field fields [e2b [pair/snd field]]]]
+
+              [exp/call fexp args]
+              [let
+                [tenv [infer-type-env-from-args fexp type-env args]
+                 efunc [get top-funcs [get-exp-var fexp]]]
+                [if [eq-word [word comptimefn] [exp-function/kind efunc]]
+                  [let [params [exp-function/parameters efunc]
+                        param-env [transient-kv-map]]
+                    [assert [eq [size params] [size args]] call expected same number of arguments]
+                    [for i 0 [size args]
+                      [set-kv-map param-env [name/word [at params i]] [at args i]]]
+                    [let
+                      [nee [exp-eval tenv param-env]
+                       bodies [exp-function/bodies efunc]]
+                      [assert [eq 1 [size bodies]] only allow single body comp func]
+                      [if-let [res [nee [first bodies]]]
+                        [e2b res]
+                        [logq-abort could not eval]]
+                      ]]
+                  ; not comp time
+                  [logq-abort not a comptime func]]]
 
               [if-let [c [ee e]]
                 [e2b c]
