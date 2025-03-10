@@ -1757,7 +1757,12 @@
           memory [deref [pfield e memory-type]]
           target [deref [pfield e target-type]]]]
 
+      pointer-value
+      ; todo should be the pointer type of the memory
+      type-i32
+
       memory-static-top
+      ; todo should be the pointer type of the memory
       type-i32
 
       deref
@@ -2283,6 +2288,15 @@
                   memory-type [form-to-type gctx [list-get fl 1]]
                   target-type [form-to-type gctx [list-get fl 2]]
                   value [form-to-exp gctx [list-get fl 3]]]]]]
+
+          [text-eq fw [static-list [text pointer-value]]]
+          [do
+            [if [ne n-args 1]
+              [log-abort [text 'form-to-exp pointer-value expects one argument']]]
+            [cast [pexp]
+              [alloc-init
+                [enum [wexp] pointer-value
+                  value [form-to-exp gctx [list-get fl 1]]]]]]
 
           [text-eq fw [static-list [text deref]]]
           [do
