@@ -971,6 +971,7 @@
             [intrinsic i64.eq c [i64 93]]
             [do
               [when [is-negative stack-index]
+                [log-i32 i]
                 [log-abort [text 'unmatched end bracket']]]
               [let [glist [deref [pindex stack stack-index]]
                     form-list [growable-list-to-list glist]]
@@ -1074,9 +1075,14 @@
       value [pexp]]
     [deref
       target [pexp]]
+    [assign
+      target [pexp]
+      value [pexp]]
     [passign
       target [pexp]
-      value [pexp]]]
+      value [pexp]]
+    [memory-static-top
+      memory-name [pexp]]]
 
   pexp []
     [pmem [wexp]]
@@ -1684,11 +1690,17 @@
           memory [deref [pfield e memory-type]]
           target [deref [pfield e target-type]]]]
 
+      memory-static-top
+      type-i32
+
       deref
       [let [tpointer [type-of gctx [deref [pfield e target]]]]
         [match tpointer
           pointer [deref [pfield tpointer target]]
           [log-abort [text 'type-of deref of a non-pointer type']]]]
+
+      assign
+      type-tuple-empty
 
       passign
       type-tuple-empty
@@ -2222,6 +2234,38 @@
                   [enum [wexp] deref
                     target pointer]]]]]
 
+          [text-eq fw [static-list [text assign]]]
+          [do
+            [if [ne n-args 2]
+              [log-abort [text 'form-to-exp passign expects one argument']]]
+            [let
+              [mutable-exp [form-to-exp gctx [list-get fl 1]]
+               value [form-to-exp gctx [list-get fl 2]]
+               tmutable [type-of gctx mutable-exp]
+               tvalue [type-of gctx value]]
+              [when [not [type-assignable tmutable tvalue]]
+                [push-error gctx f [static-list [text 'assign not assignable to target']]]]
+              [match mutable-exp
+                var
+                [let
+                  [name [deref [pfield mutable-exp name]]
+                   [tuple lfound lvar-type] [local-stack-lookup gctx name]]
+                  [if lfound
+                    [push-error gctx f [static-list [text 'assign on local var']]]
+                    [let [[tuple gfound gdesc] [lookup-global gctx name]]
+                      [if gfound
+                        [match gdesc
+                          def
+                          [when [not [deref [pfield gdesc mutable]]]
+                            [push-error gctx f [static-list [text 'assign on non-mutable var']]]]
+                          [push-error gctx f [static-list [text 'assign on non-var']]]]]]]]
+                [push-error gctx f [static-list [text 'assign on non-var type']]]]
+              [cast [pexp]
+                [alloc-init
+                  [enum [wexp] assign
+                    target mutable-exp
+                    value value]]]]]
+
           [text-eq fw [static-list [text passign]]]
           [do
             [if [ne n-args 2]
@@ -2231,8 +2275,8 @@
                value [form-to-exp gctx [list-get fl 2]]
                tpointer [type-of gctx pointer]
                tvalue [type-of gctx value]]
-              [when [is-null tpointer]
-                [push-error gctx f [static-list [text 'passign target not typeable']]]]
+              ; [when [is-null tpointer]
+              ;   [push-error gctx f [static-list [text 'passign target not typeable']]]]
               [match tpointer
                 pointer
                 [when [not [type-assignable [deref [pfield tpointer target]] tvalue]]
@@ -2243,6 +2287,15 @@
                   [enum [wexp] passign
                     target pointer
                     value value]]]]]
+
+          [text-eq fw [static-list [text memory-static-top]]]
+          [do
+            [if [ne n-args 1]
+              [log-abort [text 'form-to-exp memory-static-top expects one argument']]]
+            [cast [pexp]
+              [alloc-init
+                [enum [wexp] memory-static-top
+                  memory-name [form-to-exp gctx [list-get fl 1]]]]]]
 
           [do
             [log-text fw]
@@ -2317,7 +2370,9 @@
                   memory [form-to-type gctx [list-get fl 1]]
                   target [form-to-type gctx [list-get fl 2]]]]]]
 
-            [log-abort [text 'form-to-type unknown form-list case']]]]]]
+            [do
+              [log-text fw]
+              [log-abort [text 'form-to-type unknown form-list case']]]]]]]
 
     [log-abort [text 'form-to-type unknown form case']]]]
 
@@ -2781,7 +2836,7 @@
       [when [deref [pfield exp negative]]
         [log-abort [text 'found a negative integer']]]
       [tuple true [deref [pfield exp value]]]]
-    [tuple false [i64 0]]]]]
+    [tuple false [i64 0]]]]
 
 [defn add-i64-unsigned-add-safe [a0 [i64] a1 [i64]] [i64]
   [let [sum [intrinsic i64.add a0 a1]]

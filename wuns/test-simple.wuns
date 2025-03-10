@@ -932,7 +932,6 @@
             [js-app realloc big [i32 65536] 0]]
           [logq n-frames [js-app alloc-frames-validate-all]]]]]]
 
-
 [defn test-self-translate []
   [promise-then
     [read-parse-file-async [word llsimpleparse.wuns]]
@@ -948,7 +947,6 @@
         error-list-get [get-export inst [word error-list-get]]
         error-get-message [get-export inst [word error-get-message]]
         parse-translate-to-wat [get-export inst [word parse-translate-to-wat]]
-        ; test-switch [get-export inst [word test-switch]]
         list-size [get-export inst [word list-size]]
         list-data-byte-array [get-export inst [word list-data-byte-array]]
         list-alloc-byte [get-export inst [word list-alloc-byte]]
@@ -1276,8 +1274,65 @@
           [test-assert-eq [i32 55] [js-app gauss-loop [i32 10]]]
           [test-assert-eq [i32 5050] [js-app gauss-loop [i32 100]]]
           [test-assert-eq [i32 500500] [js-app gauss-loop [i32 1000]]]
-          ]]]
+          ]]]]]]]
 
-      ; [for i 0 [i32 100]
-      ;   [logq test-switch [identity i] [js-app test-switch i]]]
+[defn test-self-translate-self []
+  [promise-then
+    [read-parse-file-async [word llsimpleparse.wuns]]
+    [func t [forms]
+      [let
+       [wat-string [forms-to-wat-string forms]
+        module [byte-array-to-wasm-module [wat-to-wasm-byte-array wat-string]]
+        mem [memory 1 [i32 32] 0]
+        import-obj [make-import-object mem]
+        inst [wasm-instantiate module import-obj]
+        global-context-errors [get-export inst [word global-context-errors]]
+        error-list-get [get-export inst [word error-list-get]]
+        error-get-message [get-export inst [word error-get-message]]
+        parse-translate-to-wat [get-export inst [word parse-translate-to-wat]]
+        ; test-switch [get-export inst [word test-switch]]
+        list-size [get-export inst [word list-size]]
+        list-data-byte-array [get-export inst [word list-data-byte-array]]
+        list-alloc-byte [get-export inst [word list-alloc-byte]]
+        alloc-text
+        [func at [w]
+          [let
+            [src [word-to-byte-array w]
+             sz [byte-array-size src]
+             vec [js-app list-alloc-byte sz]
+             data [js-value-to-i32 [js-app list-data-byte-array vec]]
+             dst [byte-array-from-mem mem data sz]]
+            [for i 0 sz
+              [byte-array-set dst i [byte-array-get src i]]]
+            vec]]
+        text-free [get-export inst [word text-free]]
+        ptext-to-string
+        [func p2s [p]
+          [let
+            [data [js-value-to-i32 [js-app list-data-byte-array p]]
+             sz [js-value-to-i32 [js-app list-size p]]
+             ar [byte-array-from-mem mem data sz]]
+            [byte-array-to-string ar]]]
+        translate-to-module
+        [func translate [wuns-string]
+          [let
+           [wuns-text [alloc-text wuns-string]
+            wat-text [js-app parse-translate-to-wat wuns-text]
+            iwat-string [ptext-to-string wat-text]]
+           [log iwat-string]
+           [js-app text-free wuns-text]
+           [js-app text-free wat-text]
+           [byte-array-to-wasm-module [wat-to-wasm-byte-array iwat-string]]]]
+         translate-instantiate
+         [func ti [wuns-string]
+           [wasm-instantiate [translate-to-module wuns-string] empty-object]]
+         ]
+        [promise-bind
+          [read-file-async [word llsimpleparse.wuns]]
+          [func t [test-txt]
+            [let
+              [inst [translate-instantiate test-txt]
+               ]
+              [logq test-self-translate-self on llsimpleparse.wuns done]]]]
+
           ]]]]
