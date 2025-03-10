@@ -1073,6 +1073,8 @@
       memory-type [pmem [wtype-data]]
       target-type [pmem [wtype-data]]
       value [pexp]]
+    [pointer-value
+      value [pexp]]
     [deref
       target [pexp]]
     [assign
@@ -1575,13 +1577,42 @@
 [def i32i32
   [static-list [array [wtype] type-i32 type-i32]]]
 
+[def i32i32i32
+  [static-list [array [wtype] type-i32 type-i32 type-i32]]]
+
+[datatype immediate-type []
+  [enum tag [i32]
+    [memory]
+    [other]]]
+
+[def immediate-parameter-memory-singleton
+  [static-list
+    [array [immediate-type]
+      [enum [immediate-type] memory]]]]
+
 [datatype intrinsic-info []
   [record
     name [text]
+    immediate-parameters [plist [immediate-type]]
     parameters [plist [wtype]]
     result [wtype]]]
 
 [def type-boolean type-i32]
+
+[comptimefn intrinsic-imm [sz [exp [i32]]]
+  [name [array [u8] sz]
+   immediate-parameters [plist [immediate-type]]
+   parameters [plist [wtype]]
+   result [wtype]] [intrinsic-info]
+  [record
+    name
+    [data mem
+      [record
+        size [reify sz]
+        array name]]
+    immediate-parameters immediate-parameters
+    parameters parameters
+    result result]]
 
 [comptimefn intrinsic-no-imm [sz [exp [i32]]]
   [name [array [u8] sz]
@@ -1593,6 +1624,7 @@
       [record
         size [reify sz]
         array name]]
+    immediate-parameters [cast [plist [immediate-type]] list-empty]
     parameters parameters
     result result]]
 
@@ -1632,6 +1664,11 @@
 
       [intrinsic-no-imm [text i32.rotl] i32i32 type-i32]
       [intrinsic-no-imm [text i32.rotr] i32i32 type-i32]
+
+      [intrinsic-imm [text memory.size] immediate-parameter-memory-singleton list-empty type-i32]
+      [intrinsic-imm [text memory.grow] immediate-parameter-memory-singleton i32-singleton type-i32]
+      [intrinsic-imm [text memory.copy] immediate-parameter-memory-singleton i32i32i32 type-tuple-empty]
+      [intrinsic-imm [text memory.fill] immediate-parameter-memory-singleton i32i32i32 type-tuple-empty]
 
       ]]]
 
