@@ -278,7 +278,12 @@
      [word i32.lt-s] [word i32.le-s]
      [word i32.gt-s] [word i32.ge-s]
      [word i32.lt-u] [word i32.le-u]
-     [word i32.gt-u] [word i32.ge-u]]
+     [word i32.gt-u] [word i32.ge-u]
+     [word i32.lt_s] [word i32.le_s]
+     [word i32.gt_s] [word i32.ge_s]
+     [word i32.lt_u] [word i32.le_u]
+     [word i32.gt_u] [word i32.ge_u]
+     ]
     [intrinsic-type [list] [list type-i32 type-i32] type-i32]
 
     [[word i32.eqz]]
